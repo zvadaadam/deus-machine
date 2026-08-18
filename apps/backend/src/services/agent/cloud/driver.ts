@@ -17,6 +17,7 @@ import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
+import { CloudEnvStateSchema, type CloudEnvEvent } from "@shared/events";
 import { getCloudConfig } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
@@ -97,21 +98,20 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
   invalidate(["workspaces", "stats"], {});
 }
 
-/** Push the raw environment event to connected clients (q:event "cloud:env").
+/** Push the environment event to connected clients (q:event "cloud:env").
  *  Ephemeral on purpose: the chat shows a live provisioning/wake progress
- *  stack from these; nothing is persisted and a refresh clears them. */
-function broadcastCloudEnv(session: CloudSession, data: Record<string, unknown>): void {
-  broadcast(
-    JSON.stringify({
-      type: "q:event",
-      event: "cloud:env",
-      data: {
-        workspaceId: session.deusWorkspaceId,
-        sessionId: session.deusSessionId,
-        data,
-      },
-    })
-  );
+ *  stack from these; nothing is persisted and a refresh clears them.
+ *  Validated at this seam — a malformed platform frame is dropped here, not
+ *  shipped to the UI (the workspace-row update above has its own tolerance). */
+function broadcastCloudEnv(session: CloudSession, data: unknown): void {
+  const parsed = CloudEnvStateSchema.safeParse(data);
+  if (!parsed.success) return;
+  const payload: CloudEnvEvent = {
+    workspaceId: session.deusWorkspaceId,
+    sessionId: session.deusSessionId,
+    data: parsed.data,
+  };
+  broadcast(JSON.stringify({ type: "q:event", event: "cloud:env", data: payload }));
 }
 
 // ---- Frame dispatch ----

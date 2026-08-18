@@ -9,9 +9,11 @@
  */
 
 import { create } from "zustand";
+import { CloudEnvEventSchema } from "@shared/events";
 import { onEvent } from "@/platform/ws/query-protocol-client";
 
-export interface CloudEnvEvent {
+/** One received environment event, as the chat stack consumes it. */
+export interface CloudEnvEntry {
   id: number;
   /** agnt workspace status: provisioning | running | paused | stopped | error */
   status: string;
@@ -26,7 +28,7 @@ export interface CloudEnvEvent {
 }
 
 interface CloudEnvStore {
-  byWorkspace: Record<string, CloudEnvEvent[]>;
+  byWorkspace: Record<string, CloudEnvEntry[]>;
   clearWorkspace: (workspaceId: string) => void;
 }
 
@@ -44,14 +46,14 @@ export const useCloudEnvStore = create<CloudEnvStore>()((set) => ({
     }),
 }));
 
-function append(workspaceId: string, event: Omit<CloudEnvEvent, "id" | "at">): void {
+function append(workspaceId: string, event: Omit<CloudEnvEntry, "id" | "at">): void {
   useCloudEnvStore.setState((state) => {
     const existing = state.byWorkspace[workspaceId] ?? [];
     // Reconnects can re-announce the current state — an identical
     // status/step to the latest entry adds nothing to the stack.
     const last = existing[existing.length - 1];
     if (last && last.status === event.status && last.step === event.step) return state;
-    const entry: CloudEnvEvent = { ...event, id: nextId++, at: Date.now() };
+    const entry: CloudEnvEntry = { ...event, id: nextId++, at: Date.now() };
     return {
       byWorkspace: {
         ...state.byWorkspace,
@@ -71,29 +73,14 @@ export function ensureCloudEnvSubscription(): void {
 
   onEvent((event, raw) => {
     if (event !== "cloud:env") return;
-    const payload = raw as {
-      workspaceId?: string;
-      data?: {
-        status?: string;
-        step?: string;
-        reason?: string;
-        errorMessage?: string;
-        snapshotRestored?: boolean;
-      };
-    } | null;
-    if (!payload || typeof payload.workspaceId !== "string") return;
-    const data = payload.data;
-    if (!data || typeof data.status !== "string") return;
+    const parsed = CloudEnvEventSchema.safeParse(raw);
+    if (!parsed.success) return;
+    const { workspaceId, data } = parsed.data;
 
-    append(payload.workspaceId, {
+    append(workspaceId, {
       status: data.status,
-      step: typeof data.step === "string" ? data.step : null,
-      reason:
-        typeof data.errorMessage === "string"
-          ? data.errorMessage
-          : typeof data.reason === "string"
-            ? data.reason
-            : null,
+      step: data.step ?? null,
+      reason: data.errorMessage ?? data.reason ?? null,
       snapshotRestored: data.snapshotRestored === true,
     });
   });

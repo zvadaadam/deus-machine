@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/utils";
 import {
   useCloudEnvStore,
   ensureCloudEnvSubscription,
-  type CloudEnvEvent,
+  type CloudEnvEntry,
 } from "../store/cloudEnvStore";
 
 /** How long the all-green "Environment ready" stack lingers before fading. */
@@ -48,7 +48,7 @@ interface Line {
   tone?: "ready" | "muted" | "error";
 }
 
-function buildLines(entries: CloudEnvEvent[]): Line[] {
+function buildLines(entries: CloudEnvEntry[]): Line[] {
   const latest = entries[entries.length - 1];
   if (!latest) return [];
 

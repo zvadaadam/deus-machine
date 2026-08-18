@@ -203,6 +203,15 @@ describe("cloud driver frame → fold contract", () => {
       },
     });
   });
+
+  it("drops malformed workspace.state data at the broadcast seam", () => {
+    mockBroadcast.mockClear();
+    mockRun.mockClear();
+    capturedOnFrame!({ type: "workspace.state", data: { step: 42 } });
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    // The row update has its own tolerance and still runs.
+    expect(mockRun).toHaveBeenCalled();
+  });
 });
 
 describe("cloud driver session lifecycle", () => {
