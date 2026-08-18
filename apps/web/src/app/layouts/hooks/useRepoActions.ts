@@ -102,18 +102,6 @@ export function useRepoActions({
     [createWorkspaceAndSelect, selectWorkspace]
   );
 
-  /** Create workspace from the new-workspace modal (validates repo selection). */
-  async function createWorkspaceFromModal(location?: "local" | "cloud") {
-    if (!selectedRepoId) {
-      toast.error("Please select a repository");
-      return;
-    }
-    const repoIdToCreate = selectedRepoId;
-    setSelectedRepoId("");
-    closeNewWorkspaceModal();
-    await createAndSelectWorkspace(repoIdToCreate, location);
-  }
-
   /** Handle "New Workspace" — open the prompt-first modal (repo preselected
    *  when opened from a repo row). Same surface as the Home composer: prompt,
    *  branch, and the cloud toggle, with the prompt riding as turn one. */
@@ -178,7 +166,6 @@ export function useRepoActions({
     selectedRepoId,
     setSelectedRepoId,
     creating,
-    createWorkspaceFromModal,
     createAndSelectWorkspace,
     handleNewWorkspace,
     handleNewWorkspaceFromGitHub,
