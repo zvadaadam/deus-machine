@@ -370,6 +370,29 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     );
   }
 
+  // Resolve the workspace server-side: it decides the TRANSPORT (local
+  // agent-server vs cloud driver) and, for local, the authoritative cwd —
+  // caller-provided values are ignored. Resolved before ANY write below so
+  // lane validation can reject without touching state.
+  const workspace = session ? getWorkspaceForMiddleware(db, session.workspace_id) : undefined;
+  const isCloud = workspace?.kind === "cloud";
+  let cwd: string | undefined;
+  if (workspace && !isCloud) {
+    cwd = computeWorkspacePath(workspace) ?? undefined;
+  }
+
+  // The cloud sidecar runs the claude-code harness only (it deliberately
+  // never installs the Codex SDK) — reject other harnesses up front with a
+  // real explanation instead of a provider-session error mid-connect. This
+  // MUST precede every write below: after the harness persist it would leave
+  // a rejected harness on the row; after the working flip it would strand
+  // the session in "working" with no turn to ever end it.
+  if (isCloud && agentHarness !== "claude-code") {
+    throw new Error(
+      "Codex isn't available in cloud workspaces yet — the sandbox runs Claude only. Pick a Claude model, or use a local workspace for Codex."
+    );
+  }
+
   // New sessions default to Claude at creation time because the user may pick
   // the actual harness in the composer before the first send. Persist that
   // first-send choice so follow-up turns route to the same agent process.
@@ -407,28 +430,6 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
         );
       }
     }
-  }
-
-  // Resolve the workspace server-side: it decides the TRANSPORT (local
-  // agent-server vs cloud driver) and, for local, the authoritative cwd —
-  // caller-provided values are ignored. Resolved BEFORE the optimistic
-  // status flip so lane validation can reject without touching state.
-  const workspace = session ? getWorkspaceForMiddleware(db, session.workspace_id) : undefined;
-  const isCloud = workspace?.kind === "cloud";
-  let cwd: string | undefined;
-  if (workspace && !isCloud) {
-    cwd = computeWorkspacePath(workspace) ?? undefined;
-  }
-
-  // The cloud sidecar runs the claude-code harness only (it deliberately
-  // never installs the Codex SDK) — reject other harnesses up front with a
-  // real explanation instead of a provider-session error mid-connect. This
-  // MUST precede the working flip below: a throw after it would strand the
-  // session in "working" with no turn to ever end it.
-  if (isCloud && agentHarness !== "claude-code") {
-    throw new Error(
-      "Codex isn't available in cloud workspaces yet — the sandbox runs Claude only. Pick a Claude model, or use a local workspace for Codex."
-    );
   }
 
   // 1. Flip the session to "working" optimistically. The user's MESSAGE row is
