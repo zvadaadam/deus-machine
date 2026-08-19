@@ -35,7 +35,7 @@ describe("environmentNameForRepo", () => {
   // sides, so any drift between the two implementations breaks the product.
   it("derives the same identity regardless of .git suffix or trailing slash", async () => {
     const { environmentNameForRepo } =
-      await import("../../../src/services/cloud-workspace-init.service");
+      await import("../../../src/services/cloud-environment.service");
     const a = await environmentNameForRepo("https://github.com/zvadaadam/deus-machine.git");
     const b = await environmentNameForRepo("https://github.com/zvadaadam/deus-machine");
     expect(a).toBe(b);
@@ -45,7 +45,7 @@ describe("environmentNameForRepo", () => {
 
   it("distinguishes same-name repos under different owners", async () => {
     const { environmentNameForRepo } =
-      await import("../../../src/services/cloud-workspace-init.service");
+      await import("../../../src/services/cloud-environment.service");
     expect(await environmentNameForRepo("https://github.com/alice/app")).not.toBe(
       await environmentNameForRepo("https://github.com/bob/app")
     );
