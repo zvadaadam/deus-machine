@@ -32,6 +32,8 @@ export function useCloudEnvEntries(workspaceId?: string | null): CloudEnvEntry[]
   );
 }
 
+// Deliberately an OPEN dictionary (string keys): steps are an open platform
+// vocabulary, looked up with arbitrary runtime strings and humanized on miss.
 const STEP_LABELS: Record<string, string> = {
   initializing: "Initializing sandbox",
   installing_packages: "Installing packages",
