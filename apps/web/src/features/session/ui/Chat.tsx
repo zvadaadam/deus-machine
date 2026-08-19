@@ -16,7 +16,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-import { CloudEnvProgress, CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
+import { CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
 import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
@@ -113,10 +113,8 @@ export function Chat({
   });
 
   // Cloud setup story — spliced into the timeline chronologically (after the
-  // send that triggered it, before the reply). Also decides whether the empty
-  // state shows the hero or the live stack. Empty array for local workspaces.
+  // send that triggered it, before the reply). Empty for local workspaces.
   const cloudEnvEntries = useCloudEnvEntries(workspaceId);
-  const hasCloudEnv = cloudEnvEntries.length > 0;
 
   // Everything derived from the rows: which ones render, the turns they group
   // into, the compaction markers between them, each slot's padding, and what
@@ -237,21 +235,17 @@ export function Chat({
             <Skeleton className="h-4 w-[90%]" />
             <Skeleton className="h-4 w-[80%]" />
           </div>
-        ) : messages.length === 0 ? (
-          // A fresh cloud workspace provisions before any message exists —
-          // when that setup story is live, IT is the chat content (top of the
-          // flow, like a first agent turn); the centered hero yields to it.
-          // Local workspaces never have env events, so they keep the hero.
-          hasCloudEnv ? (
-            <CloudEnvProgress workspaceId={workspaceId} />
-          ) : (
-            <WorkspaceEmptyState
-              repoName={workspaceRepoName}
-              parentBranch={workspaceParentBranch}
-              isFirstSession={isFirstSession}
-              kind={workspaceKind}
-            />
-          )
+        ) : timeline.length === 0 ? (
+          // Empty means NOTHING to show — no messages AND no env markers. A
+          // fresh cloud workspace provisioning before its first message has a
+          // timeline (the spliced cloudEnv item), so it renders through the
+          // one virtualized flow below, top-of-flow like a first agent turn.
+          <WorkspaceEmptyState
+            repoName={workspaceRepoName}
+            parentBranch={workspaceParentBranch}
+            isFirstSession={isFirstSession}
+            kind={workspaceKind}
+          />
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">

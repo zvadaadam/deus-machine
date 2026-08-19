@@ -21,12 +21,6 @@ import {
   type CloudEnvEntry,
 } from "../store/cloudEnvStore";
 
-/** Whether this workspace has any environment events — layout hook for the
- *  empty state (the hero hides while the setup story is the chat content). */
-export function useHasCloudEnv(workspaceId?: string | null): boolean {
-  return useCloudEnvStore((s) => ((workspaceId ? s.byWorkspace[workspaceId]?.length : 0) ?? 0) > 0);
-}
-
 /** Live entries for the timeline build. Stable EMPTY when none. */
 const NO_ENTRIES: CloudEnvEntry[] = [];
 export function useCloudEnvEntries(workspaceId?: string | null): CloudEnvEntry[] {
@@ -222,22 +216,5 @@ export function CloudEnvGroup({ entries }: { entries: CloudEnvEntry[] }) {
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-/** Standalone placement for the EMPTY chat — a fresh cloud workspace
- *  provisioning before any message exists renders the story top-of-flow. */
-export function CloudEnvProgress({ workspaceId }: { workspaceId?: string | null }) {
-  const entries = useCloudEnvEntries(workspaceId);
-  if (entries.length === 0) return null;
-  return (
-    <m.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.25, ease: [0.215, 0.61, 0.355, 1] }}
-      className="pt-2"
-    >
-      <CloudEnvGroup entries={entries} />
-    </m.div>
   );
 }

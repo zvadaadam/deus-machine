@@ -274,14 +274,10 @@ export function insertCompactions(
   const anchorByTurnId = new Map<string, number>();
   const turnEndedAt: number[] = [];
   turns.forEach((turn, index) => {
-    let endedAt = Number.NaN;
     for (const message of turn.type === "user" ? [turn.message] : turn.messages) {
       if (message.turn_id) anchorByTurnId.set(message.turn_id, index);
-      const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;
-      if (Number.isFinite(sentAt))
-        endedAt = Number.isFinite(endedAt) ? Math.max(endedAt, sentAt) : sentAt;
     }
-    turnEndedAt.push(endedAt);
+    turnEndedAt.push(itemEndTime(turn));
   });
 
   // Turn index → markers emitted after it. -1 means "above the first turn".
@@ -325,16 +321,7 @@ export function insertCloudEnv(
 ): ChatTimelineItem[] {
   if (entries.length === 0) return items;
 
-  const itemEndedAt = items.map((item) => {
-    if (item.type === "compaction" || item.type === "cloudEnv") return Number.NaN;
-    let endedAt = Number.NaN;
-    for (const message of item.type === "user" ? [item.message] : item.messages) {
-      const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;
-      if (Number.isFinite(sentAt))
-        endedAt = Number.isFinite(endedAt) ? Math.max(endedAt, sentAt) : sentAt;
-    }
-    return endedAt;
-  });
+  const itemEndedAt = items.map(itemEndTime);
 
   const afterItem = new Map<number, CloudEnvEntry[]>();
   for (const entry of entries) {
@@ -360,6 +347,20 @@ export function insertCloudEnv(
     emit(index);
   });
   return timeline;
+}
+
+/** When an item "ended": the max sent_at across its messages. NaN for
+ *  markers (they carry no message clock) and for turns with no timestamps —
+ *  time-anchoring passes skip NaN slots. */
+function itemEndTime(item: ChatTimelineItem): number {
+  if (item.type === "compaction" || item.type === "cloudEnv") return Number.NaN;
+  let endedAt = Number.NaN;
+  for (const message of item.type === "user" ? [item.message] : item.messages) {
+    const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;
+    if (Number.isFinite(sentAt))
+      endedAt = Number.isFinite(endedAt) ? Math.max(endedAt, sentAt) : sentAt;
+  }
+  return endedAt;
 }
 
 function byCreatedAt(a: Compaction, b: Compaction): number {

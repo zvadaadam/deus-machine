@@ -24,7 +24,7 @@ import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import { getCloudConfig } from "./agent/cloud/config";
-import { ensureCloudSession } from "./agent/cloud/driver";
+import { ensureCloudSession, announceCloudEnv } from "./agent/cloud/driver";
 
 const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as const;
 
@@ -121,6 +121,65 @@ export async function getCloudWorkspaceStatus(providerWorkspaceId: string): Prom
   } catch {
     return null;
   }
+}
+
+/**
+ * The explicit wake (chip click). Every outcome must be VISIBLE — a wake that
+ * does nothing reads as broken — so each path announces itself on the chat's
+ * ephemeral cloud:env pipe and moves the row's init_stage (the header chip):
+ *
+ *   paused  → "resuming" line + resume; failure reverts honestly to paused
+ *   stopped → no doomed resume (agnt only resumes PAUSED); the line says a
+ *             message-send restarts it (requestConnection re-provisions)
+ *   running/provisioning/unknown → nothing to resume; reconnect refreshes truth
+ */
+export async function wakeCloudWorkspaceWithFeedback(workspace: {
+  id: string;
+  provider_workspace_id: string;
+  current_session_id: string | null;
+}): Promise<{ ok: boolean; status: string }> {
+  const db = getDatabase();
+  const sessionId = workspace.current_session_id;
+  const announce = (data: Record<string, unknown>) => {
+    if (sessionId) announceCloudEnv(workspace.id, sessionId, data);
+  };
+  const setStage = (stage: string | null) => {
+    db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspace.id);
+    invalidate(["workspaces", "stats"], {});
+  };
+
+  const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
+
+  if (status === "stopped") {
+    setStage("stopped");
+    announce({ status: "stopped", reason: "send a message to restart it" });
+    return { ok: true, status: "stopped" };
+  }
+
+  if (status === "paused" || status === null) {
+    setStage("resuming");
+    announce({ status: "resuming" });
+    try {
+      await wakeCloudWorkspace(workspace.provider_workspace_id);
+    } catch (err) {
+      console.warn(`[WORKSPACE] cloud wake resume failed: ${err}`);
+      setStage("paused");
+      announce({ status: "paused", reason: "resume failed — try again or send a message" });
+      return { ok: false, status: "paused" };
+    }
+  }
+
+  if (sessionId) {
+    try {
+      await ensureCloudSession(sessionId);
+    } catch (err) {
+      // The resume may have succeeded; the channel reconnects on the next
+      // send — a transient connect failure must not fail the wake.
+      console.warn(`[WORKSPACE] cloud wake reconnect failed (continuing): ${err}`);
+    }
+  }
+  invalidate(["workspaces", "stats"], {});
+  return { ok: true, status: status ?? "unknown" };
 }
 
 /** Wake a paused sandbox (explicit resume; sends also auto-resume). */
