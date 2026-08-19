@@ -495,6 +495,12 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     </>
                   )}
 
+                  {workspaceKind === "cloud" && (
+                    <CloudEnvSetupChip
+                      repositoryId={workspaceRepositoryId}
+                      onSend={(content) => void composerRef.current?.sendMessage(content)}
+                    />
+                  )}
                   <SessionComposer
                     ref={composerRef}
                     sessionId={sessionId}

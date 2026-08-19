@@ -29,6 +29,10 @@ export function CloudEnvSetupChip({
     queryFn: () => apiClient.get<CloudEnvironmentInfo>(`/repos/${repositoryId}/cloud-environment`),
     enabled: Boolean(repositoryId),
     staleTime: 60_000,
+    // Poll gently only while UNCONFIGURED and mounted: the agent configures
+    // the environment out-of-band (its tool call never touches deus), so
+    // this is how the chip learns to disappear.
+    refetchInterval: (query) => (query.state.data?.configured ? false : 20_000),
     retry: false,
   });
 

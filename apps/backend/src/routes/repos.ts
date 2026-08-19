@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 import { getGitRemoteUrlSync } from "../lib/git-remotes";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
-import { getCloudEnvironmentInfo } from "../services/cloud-workspace-init.service";
+import { getCloudEnvironmentInfo } from "../services/cloud-environment.service";
 import { AppError, ValidationError, ConflictError, NotFoundError } from "../lib/errors";
 import { parseBody, CreateRepoBody, InitProjectBody } from "../lib/schemas";
 import { detectDefaultBranch } from "../services/git.service";

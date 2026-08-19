@@ -17,7 +17,6 @@ import {
   stopWorkspace as agntStopWorkspace,
   resumeWorkspace as agntResumeWorkspace,
   getWorkspace as agntGetWorkspace,
-  getEnvironment as agntGetEnvironment,
   createSecret as agntCreateSecret,
   listSecrets as agntListSecrets,
   Environment,
@@ -28,6 +27,7 @@ import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import { getCloudConfig } from "./agent/cloud/config";
 import { ensureCloudSession, announceCloudEnv } from "./agent/cloud/driver";
+import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 
 const execFileAsync = promisify(execFile);
 
@@ -47,62 +47,6 @@ export function httpsOrigin(url: string): string {
   const ssh = /^ssh:\/\/(?:git@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
   return url;
-}
-
-/**
- * Deterministic org-unique environment name for a repository — MUST match
- * agnt's environmentNameForRepo byte for byte (the name IS the repo→env
- * link; both sides derive it independently, no mapping table anywhere).
- * Shape: repo-<slug>-<hash8> over the https-normalized origin.
- */
-export async function environmentNameForRepo(repoRef: string): Promise<string> {
-  const normalized = repoRef
-    .trim()
-    .toLowerCase()
-    .replace(/\.git$/, "")
-    .replace(/\/+$/, "");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
-  const hash8 = [...new Uint8Array(digest)]
-    .slice(0, 4)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  const tail = normalized.split("/").filter(Boolean).slice(-2).join("-");
-  const slug = tail
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return `repo-${slug ? `${slug}-` : ""}${hash8}`.slice(0, 128);
-}
-
-export interface CloudEnvironmentInfo {
-  /** A specialized environment exists for this repo on the platform. */
-  configured: boolean;
-  name: string;
-  environmentId?: string;
-  /** Env var NAMES the environment declares it needs (values = secrets). */
-  requiredEnv?: string[];
-}
-
-/** Platform lookup of the repo's specialized environment (by derived name). */
-export async function getCloudEnvironmentInfo(
-  repoOriginUrl: string
-): Promise<CloudEnvironmentInfo> {
-  const name = await environmentNameForRepo(httpsOrigin(repoOriginUrl));
-  const config = getCloudConfig();
-  if (!config) return { configured: false, name };
-  try {
-    const env = await agntGetEnvironment(name, { baseUrl: config.baseUrl, apiKey: config.apiKey });
-    const envConfig = (env?.config ?? {}) as { requiredEnv?: string[] };
-    return {
-      configured: true,
-      name,
-      environmentId: env.id,
-      ...(Array.isArray(envConfig.requiredEnv) ? { requiredEnv: envConfig.requiredEnv } : {}),
-    };
-  } catch {
-    // Not found (or platform unreachable) — the inline default is the fallback.
-    return { configured: false, name };
-  }
 }
 
 export interface CreateCloudWorkspaceParams {
