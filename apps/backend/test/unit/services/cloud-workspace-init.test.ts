@@ -28,3 +28,26 @@ describe("httpsOrigin", () => {
     );
   });
 });
+
+describe("environmentNameForRepo", () => {
+  // These vectors are PINNED IDENTICALLY in agnt's environment-update tests —
+  // the name is the repo→environment link, derived independently on both
+  // sides, so any drift between the two implementations breaks the product.
+  it("derives the same identity regardless of .git suffix or trailing slash", async () => {
+    const { environmentNameForRepo } =
+      await import("../../../src/services/cloud-workspace-init.service");
+    const a = await environmentNameForRepo("https://github.com/zvadaadam/deus-machine.git");
+    const b = await environmentNameForRepo("https://github.com/zvadaadam/deus-machine");
+    expect(a).toBe(b);
+    expect(a).toMatch(/^[a-z][a-z0-9-]*$/);
+    expect(a).toContain("deus-machine");
+  });
+
+  it("distinguishes same-name repos under different owners", async () => {
+    const { environmentNameForRepo } =
+      await import("../../../src/services/cloud-workspace-init.service");
+    expect(await environmentNameForRepo("https://github.com/alice/app")).not.toBe(
+      await environmentNameForRepo("https://github.com/bob/app")
+    );
+  });
+});

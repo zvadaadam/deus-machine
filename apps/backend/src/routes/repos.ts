@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 import { getGitRemoteUrlSync } from "../lib/git-remotes";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
+import { getCloudEnvironmentInfo } from "../services/cloud-workspace-init.service";
 import { AppError, ValidationError, ConflictError, NotFoundError } from "../lib/errors";
 import { parseBody, CreateRepoBody, InitProjectBody } from "../lib/schemas";
 import { detectDefaultBranch } from "../services/git.service";
@@ -188,6 +189,16 @@ app.post("/repos", async (c) => {
   );
   invalidate(["stats"] as QueryResource[]);
   return c.json(repo, 201);
+});
+
+// Does this repo have a specialized cloud environment on the platform?
+// Drives the "Set up cloud environment" quick action in cloud workspaces.
+app.get("/repos/:id/cloud-environment", async (c) => {
+  const db = getDatabase();
+  const repo = getRepositoryById(db, c.req.param("id"));
+  if (!repo) throw new NotFoundError("Repository not found");
+  if (!repo.git_origin_url) return c.json({ configured: false, name: null });
+  return c.json(await getCloudEnvironmentInfo(repo.git_origin_url));
 });
 
 app.post("/repos/inspect", async (c) => {
