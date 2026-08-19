@@ -1,10 +1,9 @@
-import { useState, useCallback, useRef, useMemo, useEffect, createElement } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUp,
   ChevronDown,
   Check,
-  Cloud,
   FolderGit2,
   FolderOpen,
   GitBranch,
@@ -13,19 +12,9 @@ import {
 } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
 import { cn } from "@/shared/lib/utils";
-import { getAgentLogo } from "@/assets/agents";
-import {
-  DEFAULT_MODEL,
-  getModelLabel,
-  getModelOption,
-  resolveModelSelection,
-  MODEL_OPTIONS,
-  MODEL_PICKER_GROUPS,
-  type AgentHarness,
-} from "@/shared/agents";
+import { DEFAULT_MODEL, resolveModelSelection } from "@/shared/agents";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
-import { BranchSelector } from "@/features/workspace/ui/BranchSelector";
 import {
   Sheet,
   SheetContent,
@@ -33,13 +22,12 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
 import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces";
+import { ModelPicker, CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";
@@ -108,17 +96,6 @@ interface HomeViewProps {
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
-}
-
-// ── Agent Logo Helper ───────────────────────────────────────────────
-// Render agent logo by type. Uses createElement to avoid React Compiler's
-// static-components rule (dynamic <Logo /> references are flagged).
-function AgentLogo({ type, className }: { type: AgentHarness; className?: string }) {
-  const Logo = getAgentLogo(type);
-  if (!Logo) {
-    return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", className)} />;
-  }
-  return createElement(Logo, { className: cn("flex-shrink-0", className) });
 }
 
 // ── Path Utility ────────────────────────────────────────────────────
@@ -259,28 +236,9 @@ export function HomeView({
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
-  // ── Model picker dropdown ───────────────────────────────────────
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const modelPickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isMobile || !modelPickerOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
-        setModelPickerOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [isMobile, modelPickerOpen]);
-
-  const modelLabel = getModelLabel(model);
-  const selectedModelOption = getModelOption(model);
-
   const handleSelectModel = useCallback((value: string) => {
     setModel(value);
     setStoredModel(value);
-    setModelPickerOpen(false);
   }, []);
 
   // ── Send ────────────────────────────────────────────────────────
@@ -691,10 +649,10 @@ export function HomeView({
               )}
 
               {/* Branch picker — beside the repo it belongs to */}
-              {hasRepos && (
-                <BranchSelector
+              {hasRepos && selectedRepoId && (
+                <BranchPickerButton
                   repoId={selectedRepoId}
-                  currentBranch={displayBranch}
+                  displayBranch={displayBranch}
                   onBranchSelect={(name) => {
                     if (name === selectedRepo?.git_default_branch) {
                       setBranchSelection(null);
@@ -702,49 +660,13 @@ export function HomeView({
                       setBranchSelection({ repoId: selectedRepoId, branch: name });
                     }
                   }}
-                >
-                  <button
-                    type="button"
-                    className="text-text-disabled hover:text-text-muted flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
-                  >
-                    <GitBranch className="size-3 shrink-0" />
-                    <span className="max-w-[120px] truncate">{displayBranch}</span>
-                    <ChevronDown className="size-2.5" />
-                  </button>
-                </BranchSelector>
+                />
               )}
             </div>
 
             {/* Cloud toggle (right) — off by default; on = agnt sandbox */}
             {hasRepos && (
-              <Tooltip delayDuration={200}>
-                <TooltipTrigger asChild>
-                  <label
-                    className={cn(
-                      "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150 select-none",
-                      location === "cloud"
-                        ? "text-text-secondary"
-                        : "text-text-disabled hover:text-text-muted"
-                    )}
-                  >
-                    <Cloud className="size-3 shrink-0" />
-                    <span>Cloud</span>
-                    <Switch
-                      checked={location === "cloud"}
-                      onCheckedChange={(on) => setLocation(on ? "cloud" : "local")}
-                      className="scale-75"
-                      aria-label="Run in a cloud sandbox"
-                    />
-                  </label>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="text-xs">
-                    {location === "cloud"
-                      ? "Runs in a cloud sandbox (clones the repo's origin)"
-                      : "Off — runs in a git worktree on this Mac"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
+              <CloudToggle location={location} onLocationChange={setLocation} withTooltip />
             )}
           </div>
 
@@ -800,134 +722,7 @@ export function HomeView({
 
             {/* Bottom toolbar — model picker (left) + send button (right) */}
             <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
-              {/* Model picker */}
-              <div ref={modelPickerRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setModelPickerOpen(!modelPickerOpen)}
-                  className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
-                >
-                  <AgentLogo
-                    type={selectedModelOption?.agentHarness ?? "claude-code"}
-                    className="h-3 w-3"
-                  />
-                  <span className="font-medium">{modelLabel}</span>
-                  <ChevronDown
-                    className={cn(
-                      "text-text-disabled size-3 transition-transform duration-200",
-                      modelPickerOpen && "rotate-180"
-                    )}
-                  />
-                </button>
-
-                {/* Mobile: bottom sheet */}
-                {isMobile ? (
-                  <Sheet open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
-                    <SheetContent side="bottom" className="rounded-t-xl px-0">
-                      <SheetHeader className="px-4 pb-0">
-                        <SheetTitle className="text-sm">Select model</SheetTitle>
-                        <SheetDescription className="sr-only">
-                          Choose an AI model for your workspace
-                        </SheetDescription>
-                      </SheetHeader>
-                      <div className="max-h-[50vh] overflow-y-auto p-2">
-                        {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-                          <div key={agentConfig.id}>
-                            {groupIdx > 0 && <div className="bg-border/70 mx-2 my-2 h-px" />}
-                            <div className="text-text-muted/90 px-2 py-1.5 text-xs font-normal tracking-wide">
-                              {agentConfig.label}
-                            </div>
-                            {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
-                              (option) => {
-                                const isSelected = selectedModelOption?.value === option.value;
-                                return (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => handleSelectModel(option.value)}
-                                    className={cn(
-                                      "flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm transition-colors duration-100",
-                                      "hover:bg-bg-raised/45",
-                                      isSelected ? "text-text-primary" : "text-text-secondary"
-                                    )}
-                                  >
-                                    <AgentLogo type={option.agentHarness} className="h-4 w-4" />
-                                    <span className="font-normal">{option.label}</span>
-                                    {option.isNew && (
-                                      <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                                        New
-                                      </span>
-                                    )}
-                                    <span className="ml-auto">
-                                      {isSelected && (
-                                        <Check className="text-text-primary size-3.5" />
-                                      )}
-                                    </span>
-                                  </button>
-                                );
-                              }
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                ) : (
-                  /* Desktop: animated dropdown */
-                  <AnimatePresence>
-                    {modelPickerOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                        transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-                        className={cn(
-                          "absolute top-full left-0 z-50 mt-1 w-56 overflow-hidden rounded-xl border p-1.5",
-                          "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                          "shadow-[var(--shadow-elevated)]"
-                        )}
-                      >
-                        {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-                          <div key={agentConfig.id}>
-                            {groupIdx > 0 && <div className="bg-border/70 mx-1 my-1.5 h-px" />}
-                            <div className="text-text-muted/90 text-2xs px-2 py-1 font-normal tracking-wide">
-                              {agentConfig.label}
-                            </div>
-                            {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map(
-                              (option) => {
-                                const isSelected = selectedModelOption?.value === option.value;
-                                return (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => handleSelectModel(option.value)}
-                                    className={cn(
-                                      "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-100",
-                                      "hover:bg-bg-raised/45",
-                                      isSelected ? "text-text-primary" : "text-text-secondary"
-                                    )}
-                                  >
-                                    <AgentLogo type={option.agentHarness} className="h-3.5 w-3.5" />
-                                    <span className="font-normal">{option.label}</span>
-                                    {option.isNew && (
-                                      <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                                        New
-                                      </span>
-                                    )}
-                                    <span className="ml-auto">
-                                      {isSelected && <Check className="text-text-primary size-3" />}
-                                    </span>
-                                  </button>
-                                );
-                              }
-                            )}
-                          </div>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                )}
-              </div>
+              <ModelPicker model={model} onModelChange={handleSelectModel} />
 
               {/* Send button */}
               <button
