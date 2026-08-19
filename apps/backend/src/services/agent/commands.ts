@@ -446,6 +446,15 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   const turnId = readString(params, "turnId") ?? uuidv7();
 
   if (isCloud) {
+    // The cloud sidecar runs the claude-code harness only (it deliberately
+    // never installs the Codex SDK) — reject other harnesses up front with a
+    // real explanation instead of a provider-session error mid-connect.
+    if (agentHarness !== "claude-code") {
+      throw new Error(
+        "Codex isn't available in cloud workspaces yet — the sandbox runs Claude only. Pick a Claude model, or use a local workspace for Codex."
+      );
+    }
+
     // Cloud lane. agnt queues overlapping sends instead of rejecting, so the
     // driver enforces deus's one-live-turn contract itself; every throw here
     // answers `accepted: false` — the same rejection contract as the wire path

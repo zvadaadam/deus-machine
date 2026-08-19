@@ -40,8 +40,10 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
   }),
 }));
 
+const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
 vi.mock("@deus-hq/sdk", () => ({
   createSessionToken: vi.fn(async () => ({ token: "session-jwt" })),
+  createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
 }));
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
@@ -65,8 +67,9 @@ vi.mock("../../../src/services/ws.service", () => ({
 }));
 
 const mockRun = vi.fn();
+const mockGet = vi.fn(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: () => ({ prepare: () => ({ run: mockRun }) }),
+  getDatabase: () => ({ prepare: () => ({ run: mockRun, get: mockGet }) }),
 }));
 
 vi.mock("../../../src/db", () => ({
@@ -236,6 +239,25 @@ describe("cloud driver frame → fold contract", () => {
 });
 
 describe("cloud driver session lifecycle", () => {
+  it("lazily creates the agnt session for a bare new-tab session row", async () => {
+    // New chat tabs insert plain session rows with no provider twin — the
+    // driver must create one on first cloud contact, not error out.
+    const { getSessionRaw } = await import("../../../src/db");
+    vi.mocked(getSessionRaw).mockReturnValueOnce({
+      id: "deus-session-lazy",
+      workspace_id: "deus-ws-1",
+      provider_session_id: null,
+    } as never);
+    mockCreateSession.mockClear();
+    mockRun.mockClear();
+    await ensureCloudSession("deus-session-lazy");
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "agnt-ws-1", sessionId: "deus-session-lazy" })
+    );
+    // The created provider id is persisted onto the deus row.
+    expect(mockRun).toHaveBeenCalledWith("agnt-lazy-1", "deus-session-lazy");
+  });
+
   it("dedupes concurrent connects — a lost race would double-deliver frames", async () => {
     // Fresh driver state, then race two ensures for the same session: they
     // must share ONE socket connect (createSessionToken awaits, so the

@@ -12,7 +12,7 @@
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
 
-import { createSessionToken } from "@deus-hq/sdk";
+import { createSession, createSessionToken } from "@deus-hq/sdk";
 import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
@@ -349,7 +349,29 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
   const row = getSessionRaw(db, deusSessionId);
   if (!row) throw new Error(`Session not found: ${deusSessionId}`);
   if (!row.provider_session_id) {
-    throw new Error(`Session ${deusSessionId} has no cloud provider session`);
+    // New chat tabs create bare deus session rows (the generic session route
+    // knows nothing about lanes) — the agnt twin is created lazily on first
+    // cloud contact. The deus id doubles as the client-supplied id, so a
+    // retried create converges instead of duplicating platform sessions.
+    const workspace = db
+      .prepare("SELECT kind, provider_workspace_id FROM workspaces WHERE id = ?")
+      .get(row.workspace_id) as
+      | { kind?: string; provider_workspace_id?: string | null }
+      | undefined;
+    if (workspace?.kind !== "cloud" || !workspace.provider_workspace_id) {
+      throw new Error(`Session ${deusSessionId} has no cloud provider session`);
+    }
+    const created = await createSession({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      workspaceId: workspace.provider_workspace_id,
+      sessionId: deusSessionId,
+    });
+    db.prepare("UPDATE sessions SET provider_session_id = ? WHERE id = ?").run(
+      created.id,
+      deusSessionId
+    );
+    row.provider_session_id = created.id;
   }
 
   const { token } = await createSessionToken(row.provider_session_id, {
