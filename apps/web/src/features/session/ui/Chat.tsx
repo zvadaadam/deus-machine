@@ -16,7 +16,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-import { CloudEnvProgress } from "./CloudEnvProgress";
+import { CloudEnvProgress, useHasCloudEnv } from "./CloudEnvProgress";
 import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
@@ -111,6 +111,10 @@ export function Chat({
     status: sessionStatus,
     latestMessageSentAt,
   });
+
+  // Cloud setup story presence — decides whether the empty state shows the
+  // hero or the live environment stack.
+  const hasCloudEnv = useHasCloudEnv(workspaceId);
 
   // Everything derived from the rows: which ones render, the turns they group
   // into, the compaction markers between them, each slot's padding, and what
@@ -230,19 +234,20 @@ export function Chat({
             <Skeleton className="h-4 w-[80%]" />
           </div>
         ) : messages.length === 0 ? (
-          // Column so the cloud env progress stack can ride below the empty
-          // state — a fresh cloud workspace provisions before any message
-          // exists, and that setup must be visible (renders null for local).
-          <div className="flex h-full flex-col">
+          // A fresh cloud workspace provisions before any message exists —
+          // when that setup story is live, IT is the chat content (top of the
+          // flow, like a first agent turn); the centered hero yields to it.
+          // Local workspaces never have env events, so they keep the hero.
+          hasCloudEnv ? (
+            <CloudEnvProgress workspaceId={workspaceId} />
+          ) : (
             <WorkspaceEmptyState
               repoName={workspaceRepoName}
               parentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
               kind={workspaceKind}
-              className="min-h-0 flex-1"
             />
-            <CloudEnvProgress workspaceId={workspaceId} />
-          </div>
+          )
         ) : (
           <>
             <div className="flex min-h-0 min-w-0 flex-col pb-32">

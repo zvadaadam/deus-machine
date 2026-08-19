@@ -3,9 +3,11 @@
  * "Provisioning… / Cloning repository… / Restoring session state…" stack.
  *
  * Renders the ephemeral q:event "cloud:env" stream (agnt workspace.state
- * passthrough) for this chat's workspace. Nothing is persisted: a refresh
- * clears it, and a completed provisioning fades out after a beat. Local
- * workspaces never receive these events, so this renders nothing for them.
+ * passthrough) for this chat's workspace, as part of the conversation flow:
+ * top of an empty chat, under the latest message otherwise. Deliberately
+ * sticky — finished setup stays visible like transcript history (per Cursor);
+ * nothing is persisted, so a refresh clears it. Local workspaces never
+ * receive these events, so this renders nothing for them.
  */
 
 import { useEffect, useMemo } from "react";
@@ -18,8 +20,11 @@ import {
   type CloudEnvEntry,
 } from "../store/cloudEnvStore";
 
-/** How long the all-green "Environment ready" stack lingers before fading. */
-const READY_LINGER_MS = 3500;
+/** Whether this workspace has any environment events — layout hook for the
+ *  empty state (the hero hides while the setup story is the chat content). */
+export function useHasCloudEnv(workspaceId?: string | null): boolean {
+  return useCloudEnvStore((s) => ((workspaceId ? s.byWorkspace[workspaceId]?.length : 0) ?? 0) > 0);
+}
 
 const STEP_LABELS: Record<string, string> = {
   initializing: "Initializing sandbox",
@@ -125,21 +130,10 @@ function LineIcon({ icon }: { icon: Line["icon"] }) {
 
 export function CloudEnvProgress({ workspaceId }: { workspaceId?: string | null }) {
   const entries = useCloudEnvStore((s) => (workspaceId ? s.byWorkspace[workspaceId] : undefined));
-  const clearWorkspace = useCloudEnvStore((s) => s.clearWorkspace);
 
   useEffect(() => {
     ensureCloudEnvSubscription();
   }, []);
-
-  const latest = entries?.[entries.length - 1];
-
-  // A finished provisioning lingers briefly, then the whole stack fades.
-  useEffect(() => {
-    if (!workspaceId || latest?.status !== "running") return;
-    const elapsed = Date.now() - latest.at;
-    const t = setTimeout(() => clearWorkspace(workspaceId), Math.max(READY_LINGER_MS - elapsed, 0));
-    return () => clearTimeout(t);
-  }, [workspaceId, latest, clearWorkspace]);
 
   const lines = useMemo(() => buildLines(entries ?? []), [entries]);
 

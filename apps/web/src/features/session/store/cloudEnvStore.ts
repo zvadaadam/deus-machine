@@ -23,27 +23,19 @@ export interface CloudEnvEntry {
   reason: string | null;
   /** running events only: the sandbox came back with session state restored. */
   snapshotRestored: boolean;
-  /** Arrival time — lets the UI skip rendering stale, already-settled stacks. */
+  /** Arrival time (debugging/future ordering; the UI renders insertion order). */
   at: number;
 }
 
 interface CloudEnvStore {
   byWorkspace: Record<string, CloudEnvEntry[]>;
-  clearWorkspace: (workspaceId: string) => void;
 }
 
 const MAX_EVENTS_PER_WORKSPACE = 16;
 let nextId = 1;
 
-export const useCloudEnvStore = create<CloudEnvStore>()((set) => ({
+export const useCloudEnvStore = create<CloudEnvStore>()(() => ({
   byWorkspace: {},
-
-  clearWorkspace: (workspaceId) =>
-    set((state) => {
-      if (!state.byWorkspace[workspaceId]) return state;
-      const { [workspaceId]: _, ...rest } = state.byWorkspace;
-      return { byWorkspace: rest };
-    }),
 }));
 
 function append(workspaceId: string, event: Omit<CloudEnvEntry, "id" | "at">): void {
