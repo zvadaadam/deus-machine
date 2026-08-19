@@ -25,6 +25,7 @@ import {
   createCloudWorkspace,
   stopCloudWorkspace,
   wakeCloudWorkspaceWithFeedback,
+  deleteCloudWipRef,
 } from "../services/cloud-workspace-init.service";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
@@ -137,6 +138,12 @@ app.patch("/workspaces/:id", async (c) => {
         void stopCloudWorkspace(archived.provider_workspace_id).catch((err) => {
           console.warn(`[WORKSPACE] cloud stop failed for ${id} (continuing):`, err);
         });
+        // The hidden durability ref has served its purpose — archive means
+        // the user is done with this workspace's work-in-progress.
+        const archivedRepo = getRepositoryById(db, archived.repository_id);
+        if (archivedRepo?.git_origin_url) {
+          void deleteCloudWipRef(archivedRepo.git_origin_url, archived.provider_workspace_id);
+        }
       }
 
       // Run archive lifecycle hook (best-effort)

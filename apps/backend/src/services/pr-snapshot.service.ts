@@ -13,7 +13,9 @@
  * globally so N agents finishing together can't spawn N gh chains at once.
  */
 import { getDatabase } from "../lib/database";
-import { getPrStatus, type PrStatusResponse } from "./gh.service";
+import { getPrStatus, getPrStatusForRemoteBranch, type PrStatusResponse } from "./gh.service";
+import { httpsOrigin } from "./cloud-workspace-init.service";
+import { getRepositoryById } from "../db";
 import { getSessionById, getWorkspaceById } from "../db/queries";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { autoProgressStatus } from "./workspace-status.service";
@@ -122,6 +124,25 @@ const MAX_CONCURRENT_REFRESHES = 3;
 let activeRefreshes = 0;
 const lastRefreshAt = new Map<string, number>();
 const trailingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Cloud workspaces have no local checkout — query gh by repo + branch name
+ *  from the DB instead of a worktree. Local workspaces keep the path-based
+ *  lookup (fork detection needs the remotes). */
+async function lookupPrStatus(
+  workspaceId: string,
+  workspacePath: string
+): Promise<PrStatusResponse> {
+  const db = getDatabase();
+  const workspace = getWorkspaceById(db, workspaceId);
+  if (workspace?.kind === "cloud") {
+    const repo = getRepositoryById(db, workspace.repository_id);
+    if (!repo?.git_origin_url || !workspace.git_branch) {
+      return { has_pr: false, conclusive: false, error: null };
+    }
+    return getPrStatusForRemoteBranch(httpsOrigin(repo.git_origin_url), workspace.git_branch);
+  }
+  return getPrStatus(workspacePath);
+}
+
 /** One gh lookup per workspace at a time — concurrent callers share it. */
 const inFlightFetch = new Map<string, Promise<PrStatusResponse>>();
 
@@ -139,7 +160,7 @@ export function fetchAndApplyPrStatus(
   if (existing) return existing;
 
   const fetch = (async () => {
-    const result = await getPrStatus(workspacePath);
+    const result = await lookupPrStatus(workspaceId, workspacePath);
     lastRefreshAt.set(workspaceId, Date.now());
     applyPrStatusSideEffects(workspaceId, result);
     return result;
@@ -195,7 +216,7 @@ async function runWorkspaceRefresh(workspaceId: string): Promise<void> {
   if (!workspace || workspace.state === "archived") return;
 
   const workspacePath = computeWorkspacePath(workspace);
-  if (!workspacePath) return;
+  if (!workspacePath && workspace.kind !== "cloud") return;
 
   activeRefreshes++;
   try {
