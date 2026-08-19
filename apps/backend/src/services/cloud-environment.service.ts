@@ -30,11 +30,14 @@ export async function environmentNameForRepo(repoRef: string): Promise<string> {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
   const tail = normalized.split("/").filter(Boolean).slice(-2).join("-");
+  // Truncate the SLUG, never the hash — a tail-truncated name would let two
+  // long same-prefix repos collide on one environment. 5+100+1+8 ≤ 128.
   const slug = tail
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return `repo-${slug ? `${slug}-` : ""}${hash8}`.slice(0, 128);
+    .replace(/^-|-$/g, "")
+    .slice(0, 100);
+  return `repo-${slug ? `${slug}-` : ""}${hash8}`;
 }
 
 export interface CloudEnvironmentInfo {

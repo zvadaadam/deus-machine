@@ -43,6 +43,15 @@ describe("environmentNameForRepo", () => {
     expect(a).toContain("deus-machine");
   });
 
+  it("keeps the hash when the slug is truncated at the name limit", async () => {
+    const { environmentNameForRepo } =
+      await import("../../../src/services/cloud-environment.service");
+    const a = await environmentNameForRepo("https://github.com/owner/" + "a".repeat(200));
+    const b = await environmentNameForRepo("https://github.com/owner/" + "a".repeat(201));
+    expect(a.length).toBeLessThanOrEqual(128);
+    expect(a).not.toBe(b);
+  });
+
   it("distinguishes same-name repos under different owners", async () => {
     const { environmentNameForRepo } =
       await import("../../../src/services/cloud-environment.service");
