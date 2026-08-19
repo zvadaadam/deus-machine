@@ -199,6 +199,12 @@ export const PROTOCOL_EVENTS = [
   //   apps:stopped  — tabs pointing at the url are closed (the port is dead)
   "apps:launched",
   "apps:stopped",
+  // Cloud sandbox environment progress (workspace.state passthrough from the
+  // agnt session socket). Ephemeral by design: the chat renders these as a
+  // live provisioning/wake progress stack and nothing is persisted — a
+  // refresh clears them. Payload: { workspaceId, sessionId, data } where data
+  // is agnt's WorkspaceStateData ({ status, step?, reason?, ... }).
+  "cloud:env",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
@@ -212,6 +218,35 @@ export const WorkspaceProgressSchema = z.object({
   label: z.string(),
 });
 export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
+
+/**
+ * Cloud sandbox state, as passed through from the platform's workspace.state
+ * events ("cloud:env"). Deliberately lenient — `status` is an open string and
+ * unknown fields pass through — so a newer platform can add statuses without
+ * breaking older clients; the UI treats unknown statuses as in-flight.
+ */
+export const CloudEnvStateSchema = z
+  .object({
+    /** provisioning | running | paused | stopped | error (open set) */
+    status: z.string(),
+    /** Provisioning step label (e.g. "cloning_repository"). */
+    step: z.string().optional(),
+    /** Pause/stop/error detail, when the platform sends one. */
+    reason: z.string().optional(),
+    /** Error detail (status "error" only). */
+    errorMessage: z.string().optional(),
+    /** running only: the sandbox came back with session state restored. */
+    snapshotRestored: z.boolean().optional(),
+  })
+  .loose();
+export type CloudEnvState = z.infer<typeof CloudEnvStateSchema>;
+
+export const CloudEnvEventSchema = z.object({
+  workspaceId: z.string(),
+  sessionId: z.string(),
+  data: CloudEnvStateSchema,
+});
+export type CloudEnvEvent = z.infer<typeof CloudEnvEventSchema>;
 
 export const FileChangeSchema = z.object({
   workspace_path: z.string(),

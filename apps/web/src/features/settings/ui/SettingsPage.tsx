@@ -15,6 +15,7 @@ import {
   GitHubSection,
   BrowserSection,
   AISection,
+  CloudSection,
   EnvironmentSection,
   ExperimentalSection,
   AccessSection,
@@ -26,6 +27,7 @@ const SECTION_LABELS: Record<string, string> = {
   github: "GitHub",
   browser: "Browser",
   ai: "AI Providers",
+  cloud: "Cloud",
   environment: "Environment",
   experimental: "Experimental",
   access: "Remote Access",
@@ -97,6 +99,7 @@ export function SettingsPage() {
       .with("github", () => <GitHubSection />)
       .with("browser", () => <BrowserSection />)
       .with("ai", () => <AISection {...sectionProps} />)
+      .with("cloud", () => <CloudSection />)
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
       .with("access", () => <AccessSection {...sectionProps} />)

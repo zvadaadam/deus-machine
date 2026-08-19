@@ -296,6 +296,8 @@ type CreateWorkspaceParams =
   | string
   | {
       repositoryId: string;
+      /** 'cloud' provisions an agnt sandbox instead of a local worktree. */
+      location?: "local" | "cloud";
       source_branch?: string;
       pr_number?: number;
       pr_url?: string;
@@ -314,6 +316,7 @@ export function useCreateWorkspace() {
         typeof params === "string"
           ? undefined
           : {
+              location: params.location,
               source_branch: params.source_branch,
               pr_number: params.pr_number,
               pr_url: params.pr_url,

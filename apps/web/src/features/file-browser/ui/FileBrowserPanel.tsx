@@ -213,7 +213,10 @@ export function FileBrowserPanel({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const workspaceId = selectedWorkspace?.id ?? null;
-  const { data, isLoading, error, refetch } = useFiles(workspaceId);
+  // Cloud workspaces have no local tree — do not run the scan query at all.
+  const { data, isLoading, error, refetch } = useFiles(
+    selectedWorkspace?.kind === "cloud" ? null : workspaceId
+  );
 
   const handleFileClick = (path: string) => {
     onFileClickProp?.(path);
@@ -307,6 +310,28 @@ export function FileBrowserPanel({
             <FileCode className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
           </div>
           <p className="text-muted-foreground/60 text-xs">Select a workspace to view files</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Cloud workspace — the files live in the sandbox; the tree API arrives in
+  // a later sprint. Honest placeholder instead of an empty scan of "".
+  if (selectedWorkspace.kind === "cloud") {
+    return (
+      <div className="flex h-full flex-col overflow-hidden">
+        {headerSlot}
+        <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+            <FileCode className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+          </div>
+          <p className="text-muted-foreground/70 text-xs font-medium">
+            Files live in the cloud sandbox
+          </p>
+          <p className="text-muted-foreground/50 max-w-[260px] text-xs">
+            The Changes tab shows everything the agent modifies, live. Browsing the full remote tree
+            is coming — for now, ask the agent to inspect files.
+          </p>
         </div>
       </div>
     );

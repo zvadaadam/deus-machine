@@ -114,6 +114,7 @@ export function MobileLayout({
           repositoryName={workspace.repo_name}
           branch={workspace.git_branch ?? undefined}
           workspacePath={workspace.workspace_path}
+          kind={workspace.kind}
           setupStatus={workspace.setup_status}
           setupError={workspace.error_message}
           onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}

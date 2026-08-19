@@ -3,6 +3,7 @@ export { GeneralSection } from "./GeneralSection";
 export { GitHubSection } from "./GitHubSection";
 export { BrowserSection } from "./BrowserSection";
 export { AISection } from "./AISection";
+export { CloudSection } from "./CloudSection";
 export { EnvironmentSection } from "./EnvironmentSection";
 export { ExperimentalSection } from "./ExperimentalSection";
 export { AccessSection } from "./AccessSection";

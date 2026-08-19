@@ -61,8 +61,16 @@ export function useRepoActions({
   }
 
   /** Create a workspace for the given repo, select it, and expand the sidebar. */
-  async function createWorkspaceAndSelect(repoId: string) {
-    const workspace = await createWorkspaceMutation.mutateAsync(repoId);
+  async function createWorkspaceAndSelect(
+    repoId: string,
+    location?: "local" | "cloud",
+    branch?: string
+  ) {
+    const workspace = await createWorkspaceMutation.mutateAsync(
+      location === "cloud" || branch
+        ? { repositoryId: repoId, location, source_branch: branch }
+        : repoId
+    );
     selectWorkspace(workspace.id);
     expandRepo(workspace.repository_id);
   }
@@ -85,10 +93,10 @@ export function useRepoActions({
 
   /** Create a workspace with loading state and error handling. */
   const createAndSelectWorkspace = useCallback(
-    async (repoId: string) => {
+    async (repoId: string, location?: "local" | "cloud", branch?: string) => {
       setCreating(true);
       try {
-        await createWorkspaceAndSelect(repoId);
+        await createWorkspaceAndSelect(repoId, location, branch);
       } catch (error) {
         selectWorkspace(null);
         console.error("Error creating workspace:", error);
@@ -100,28 +108,15 @@ export function useRepoActions({
     [createWorkspaceAndSelect, selectWorkspace]
   );
 
-  /** Create workspace from the new-workspace modal (validates repo selection). */
-  async function createWorkspaceFromModal() {
-    if (!selectedRepoId) {
-      toast.error("Please select a repository");
-      return;
-    }
-    const repoIdToCreate = selectedRepoId;
-    setSelectedRepoId("");
-    closeNewWorkspaceModal();
-    await createAndSelectWorkspace(repoIdToCreate);
-  }
-
-  /** Handle "New Workspace" — if repoId is provided, create directly; otherwise open modal. */
+  /** Handle "New Workspace" — open the prompt-first modal (repo preselected
+   *  when opened from a repo row). Same surface as the Home composer: prompt,
+   *  branch, and the cloud toggle, with the prompt riding as turn one. */
   const handleNewWorkspace = useCallback(
     async (repoId?: string) => {
-      if (repoId) {
-        await createAndSelectWorkspace(repoId);
-        return;
-      }
+      if (repoId) setSelectedRepoId(repoId);
       openNewWorkspaceModal();
     },
-    [openNewWorkspaceModal, createAndSelectWorkspace]
+    [openNewWorkspaceModal]
   );
 
   // ── Open local project ───────────────────────────────────────
@@ -177,7 +172,7 @@ export function useRepoActions({
     selectedRepoId,
     setSelectedRepoId,
     creating,
-    createWorkspaceFromModal,
+    createAndSelectWorkspace,
     handleNewWorkspace,
     handleNewWorkspaceFromGitHub,
 

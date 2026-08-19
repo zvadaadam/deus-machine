@@ -25,6 +25,14 @@ export type MessageRole = z.infer<typeof MessageRoleSchema>;
 
 // ── Workspace ────────────────────────────────────────────────────────────
 
+/**
+ * Where a workspace's files live. `worktree` = local git worktree under
+ * {repo}/.deus/{slug}; `cloud` = an agnt-managed sandbox (files remote,
+ * provider ids on the row).
+ */
+export const WorkspaceKindSchema = z.enum(["worktree", "cloud"]);
+export type WorkspaceKind = z.infer<typeof WorkspaceKindSchema>;
+
 /** Workspace lifecycle states (git worktree). */
 export const WorkspaceStateSchema = z.enum(["ready", "initializing", "archived", "error"]);
 export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;

@@ -34,6 +34,10 @@ export interface WorkspaceRow {
   title: string | null;
   git_branch: string | null;
   git_target_branch: string | null;
+  /** Where the files live: 'worktree' (local) | 'cloud' (agnt sandbox). */
+  kind: string;
+  /** agnt workspace id backing a cloud workspace (null for local). */
+  provider_workspace_id: string | null;
   state: string;
   status: string;
   current_session_id: string | null;
@@ -60,6 +64,10 @@ export interface WorkspaceWithDetailsRow {
   title: string | null;
   git_branch: string | null;
   git_target_branch: string | null;
+  /** Where the files live: 'worktree' (local) | 'cloud' (agnt sandbox). */
+  kind: string;
+  /** agnt workspace id backing a cloud workspace (null for local). */
+  provider_workspace_id: string | null;
   state: string;
   status: string;
   current_session_id: string | null;
@@ -101,6 +109,8 @@ export interface SessionRow {
   workspace_id: string;
   agent_harness: string;
   agent_session_id: string | null;
+  /** agnt session id for cloud-workspace sessions (null for local). */
+  provider_session_id: string | null;
   title: string | null;
   status: string;
   message_count: number;

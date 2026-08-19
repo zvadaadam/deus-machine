@@ -83,6 +83,8 @@ export const WorkspaceService = {
   create: async (
     repositoryId: string,
     options?: {
+      /** 'cloud' provisions an agnt sandbox instead of a local worktree. */
+      location?: "local" | "cloud";
       source_branch?: string;
       pr_number?: number;
       pr_url?: string;

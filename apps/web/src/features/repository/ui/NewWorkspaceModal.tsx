@@ -30,8 +30,9 @@ interface NewWorkspaceModalProps {
 }
 
 /**
- * Modal for creating a new workspace
- * User selects a repository and the system creates a git worktree with a city name
+ * Repo picker step for the "from GitHub PR/branch" flow — choose a repository,
+ * then the GitHub picker takes over. Plain creation lives in
+ * NewWorkspacePromptModal (prompt-first, with the Local/Cloud choice).
  */
 export function NewWorkspaceModal({
   show,
@@ -41,21 +42,14 @@ export function NewWorkspaceModal({
   onClose,
   onRepoChange,
   onCreate,
-  mode = "default",
 }: NewWorkspaceModalProps) {
-  const isFromGitHub = mode === "from-github";
-
   return (
     <Dialog open={show} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>
-            {isFromGitHub ? "New Workspace from\u2026" : "Create New Workspace"}
-          </DialogTitle>
+          <DialogTitle>New Workspace from{"…"}</DialogTitle>
           <DialogDescription>
-            {isFromGitHub
-              ? "Select a repository, then choose a pull request or branch."
-              : "A new workspace will be created with an auto-generated name (city name) and git worktree."}
+            Select a repository, then choose a pull request or branch.
           </DialogDescription>
         </DialogHeader>
 
@@ -85,8 +79,8 @@ export function NewWorkspaceModal({
             Cancel
           </Button>
           <Button onClick={onCreate} disabled={creating || !selectedRepoId} className="gap-2">
-            {creating ? "⟳" : isFromGitHub ? "→" : "+"}
-            {creating ? "Creating..." : isFromGitHub ? "Continue" : "Create Workspace"}
+            {creating ? "⟳" : "→"}
+            {creating ? "Creating..." : "Continue"}
           </Button>
         </DialogFooter>
       </DialogContent>

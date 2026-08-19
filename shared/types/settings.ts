@@ -61,6 +61,7 @@ export type SettingsSection =
   | "github"
   | "browser"
   | "ai"
+  | "cloud"
   | "environment"
   | "experimental"
   | "access";

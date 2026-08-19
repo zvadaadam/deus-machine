@@ -23,6 +23,7 @@ import type { ConversationState } from "@shared/protocol-types";
 import { cn } from "@/shared/lib/utils";
 import { conversationView } from "./conversationView";
 import type { Compaction, Message, MessageRole } from "../types";
+import type { CloudEnvEntry } from "../store/cloudEnvStore";
 
 export type UserTurn = {
   type: "user";
@@ -45,7 +46,16 @@ export type CompactionMarker = {
   compaction: Compaction;
 };
 
-export type ChatTimelineItem = Turn | CompactionMarker;
+/** A run of cloud environment events (provision/wake/pause), anchored where
+ *  they happened chronologically — after the send that triggered them, before
+ *  the reply that followed. Ephemeral: sourced from the cloudEnv store, never
+ *  persisted, gone on refresh. */
+export type CloudEnvMarker = {
+  type: "cloudEnv";
+  entries: CloudEnvEntry[];
+};
+
+export type ChatTimelineItem = Turn | CompactionMarker | CloudEnvMarker;
 
 /** Everything the chat needs to render one session's transcript. */
 export interface ChatTimeline {
@@ -71,11 +81,15 @@ export interface ChatTimeline {
 export function buildChatTimeline(
   messages: Message[],
   compactions: readonly Compaction[],
-  working: boolean
+  working: boolean,
+  envEntries: readonly CloudEnvEntry[] = []
 ): ChatTimeline {
   const rendered = renderableMessages(messages);
   const conversation = conversationView(rendered, working);
-  const items = insertCompactions(groupTurns(conversation, rendered), compactions);
+  const items = insertCloudEnv(
+    insertCompactions(groupTurns(conversation, rendered), compactions),
+    envEntries
+  );
 
   return {
     items,
@@ -203,6 +217,13 @@ function turnSpacingClasses(
     // Compaction divider: breathing room on both sides, it IS the seam.
     if (turn.type === "compaction") return isFirst ? "pt-6" : "pt-4";
 
+    // Env group: tight under the user send that triggered it, a small gap
+    // elsewhere (top of an empty-ish chat, after a finished reply).
+    if (turn.type === "cloudEnv") {
+      if (isFirst) return "pt-2";
+      return prevTurn?.type === "user" ? "pt-0" : "pt-2";
+    }
+
     if (isUser) {
       if (isFirst) return "pt-8";
       if (prevTurn?.type === "user") return "pt-0";
@@ -213,11 +234,13 @@ function turnSpacingClasses(
     // Assistant turn
     if (isFirst) return "pt-1";
     if (prevTurn?.type === "compaction") return "pt-2";
+    if (prevTurn?.type === "cloudEnv") return "pt-2";
     return "pt-0";
   })();
 
   const bottomClass = (() => {
     if (turn.type === "compaction") return "pb-0";
+    if (turn.type === "cloudEnv") return "pb-0";
     if (isUser) return USER_PADDING_CLASS;
     // Assistant turn
     if (nextTurn?.type === "user") return "pb-0";
@@ -251,14 +274,10 @@ export function insertCompactions(
   const anchorByTurnId = new Map<string, number>();
   const turnEndedAt: number[] = [];
   turns.forEach((turn, index) => {
-    let endedAt = Number.NaN;
     for (const message of turn.type === "user" ? [turn.message] : turn.messages) {
       if (message.turn_id) anchorByTurnId.set(message.turn_id, index);
-      const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;
-      if (Number.isFinite(sentAt))
-        endedAt = Number.isFinite(endedAt) ? Math.max(endedAt, sentAt) : sentAt;
     }
-    turnEndedAt.push(endedAt);
+    turnEndedAt.push(itemEndTime(turn));
   });
 
   // Turn index → markers emitted after it. -1 means "above the first turn".
@@ -285,6 +304,63 @@ export function insertCompactions(
     emit(index);
   });
   return timeline;
+}
+
+/**
+ * Splice cloud environment event runs in by TIME: an entry belongs after the
+ * last turn that finished before it arrived — the send that woke the sandbox,
+ * not the reply that followed. Entries sharing an anchor render as ONE
+ * collapsible group; -1 anchors above the first turn (fresh provisioning in
+ * an empty chat). Env timestamps are local arrival clocks and message times
+ * are DB clocks — same machine, so ordering holds; an entry older than every
+ * turn lands at the top rather than being dropped.
+ */
+export function insertCloudEnv(
+  items: ChatTimelineItem[],
+  entries: readonly CloudEnvEntry[]
+): ChatTimelineItem[] {
+  if (entries.length === 0) return items;
+
+  const itemEndedAt = items.map(itemEndTime);
+
+  const afterItem = new Map<number, CloudEnvEntry[]>();
+  for (const entry of entries) {
+    let anchor = -1;
+    for (let index = 0; index < itemEndedAt.length; index++) {
+      const endedAt = itemEndedAt[index];
+      if (Number.isFinite(endedAt) && endedAt <= entry.at) anchor = index;
+    }
+    const bucket = afterItem.get(anchor);
+    if (bucket) bucket.push(entry);
+    else afterItem.set(anchor, [entry]);
+  }
+
+  const timeline: ChatTimelineItem[] = [];
+  const emit = (index: number) => {
+    const bucket = afterItem.get(index);
+    if (bucket) timeline.push({ type: "cloudEnv", entries: bucket });
+  };
+
+  emit(-1);
+  items.forEach((item, index) => {
+    timeline.push(item);
+    emit(index);
+  });
+  return timeline;
+}
+
+/** When an item "ended": the max sent_at across its messages. NaN for
+ *  markers (they carry no message clock) and for turns with no timestamps —
+ *  time-anchoring passes skip NaN slots. */
+function itemEndTime(item: ChatTimelineItem): number {
+  if (item.type === "compaction" || item.type === "cloudEnv") return Number.NaN;
+  let endedAt = Number.NaN;
+  for (const message of item.type === "user" ? [item.message] : item.messages) {
+    const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;
+    if (Number.isFinite(sentAt))
+      endedAt = Number.isFinite(endedAt) ? Math.max(endedAt, sentAt) : sentAt;
+  }
+  return endedAt;
 }
 
 function byCreatedAt(a: Compaction, b: Compaction): number {

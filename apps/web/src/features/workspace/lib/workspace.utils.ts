@@ -36,6 +36,8 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     title: null,
     git_branch: null,
     git_target_branch: null,
+    kind: "worktree",
+    provider_workspace_id: null,
     state: "initializing",
     status: "in-progress",
     current_session_id: null,

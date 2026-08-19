@@ -17,7 +17,9 @@
  * - useKeyboardShortcuts: Cmd+\ toggles session panel
  */
 
-import { useRef, useCallback, useMemo, useEffect } from "react";
+import { useRef, useCallback, useEffect } from "react";
+import { apiClient } from "@/shared/api/client";
+import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
 import { HomeView, type Repository } from "@/features/repository";
@@ -41,7 +43,6 @@ import { PanelLeft } from "lucide-react";
 import type { Workspace, RepoGroup, PRStatus, GhCliStatus } from "@/shared/types";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
-import { native } from "@/platform";
 import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
@@ -67,7 +68,13 @@ interface MainContentProps {
   repoGroups: RepoGroup[];
   /** Handler for sending the first message from the home screen.
    *  Creates workspace + selects it + queues the first message. */
-  onStartWorkspace: (repoId: string, message: string, model: string, branch?: string) => void;
+  onStartWorkspace: (
+    repoId: string,
+    message: string,
+    model: string,
+    branch?: string,
+    location?: "local" | "cloud"
+  ) => void;
   onWorkspaceClick: (workspace: Workspace) => void;
 }
 
@@ -373,6 +380,20 @@ export function MainContent({
                         repositoryName={selectedWorkspace.repo_name}
                         branch={selectedWorkspace.git_branch ?? undefined}
                         workspacePath={selectedWorkspace.workspace_path}
+                        kind={selectedWorkspace.kind}
+                        cloudAsleep={
+                          selectedWorkspace.kind === "cloud" &&
+                          cloudPresence(selectedWorkspace.init_stage) === "asleep"
+                        }
+                        cloudWaking={
+                          selectedWorkspace.kind === "cloud" &&
+                          cloudPresence(selectedWorkspace.init_stage) === "waking"
+                        }
+                        onCloudWake={() => {
+                          void apiClient
+                            .post(`/workspaces/${selectedWorkspace.id}/cloud-wake`)
+                            .catch(() => {});
+                        }}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}
                         onSendAgentMessage={

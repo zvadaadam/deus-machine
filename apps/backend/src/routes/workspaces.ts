@@ -21,6 +21,12 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
+import {
+  createCloudWorkspace,
+  stopCloudWorkspace,
+  wakeCloudWorkspaceWithFeedback,
+} from "../services/cloud-workspace-init.service";
+import { ensureCloudSession } from "../services/agent/cloud/driver";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
   getAllWorkspaces,
@@ -63,6 +69,51 @@ app.get("/workspaces/:id", (c) => {
   return c.json({ ...workspace, workspace_path: computeWorkspacePath(workspace) });
 });
 
+// Wake a paused cloud sandbox and reopen its session channel. Sends also
+// auto-resume; this is the explicit "click the cloud icon" path, and the
+// reconnected socket's workspace.state events refresh the row's truth.
+app.post("/workspaces/:id/cloud-wake", async (c) => {
+  const db = getDatabase();
+  const workspace = getWorkspaceById(db, c.req.param("id"));
+  if (!workspace) throw new NotFoundError("Workspace not found");
+  if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
+    throw new ValidationError("Not a cloud workspace");
+  }
+  if (workspace.state === "archived") {
+    // Archive already stopped the sandbox; waking it would silently restart
+    // the meter on a workspace the UI presents as closed.
+    throw new ValidationError("Workspace is archived — unarchive it first");
+  }
+  const result = await wakeCloudWorkspaceWithFeedback({
+    id: workspace.id,
+    provider_workspace_id: workspace.provider_workspace_id,
+    current_session_id: workspace.current_session_id,
+  });
+  return c.json(result);
+});
+
+// Open the session channel WITHOUT waking the sandbox. The channel terminates
+// on the platform's Durable Object — reachable while the VM sleeps — and its
+// snapshot carries the session status, which is how deus learns "paused"
+// after a backend restart. The VM itself only wakes on a send or an explicit
+// cloud-wake; attaching a client is free. Fire-and-forget: the snapshot's
+// truth lands via invalidation, not this response.
+app.post("/workspaces/:id/cloud-connect", (c) => {
+  const db = getDatabase();
+  const workspace = getWorkspaceById(db, c.req.param("id"));
+  if (!workspace) throw new NotFoundError("Workspace not found");
+  if (workspace.kind !== "cloud" || workspace.state === "archived") {
+    return c.json({ ok: false });
+  }
+  const sessionId = workspace.current_session_id;
+  if (sessionId) {
+    void ensureCloudSession(sessionId).catch((err) => {
+      console.warn(`[WORKSPACE] cloud channel connect failed for ${workspace.id}: ${err}`);
+    });
+  }
+  return c.json({ ok: true });
+});
+
 app.patch("/workspaces/:id", async (c) => {
   const db = getDatabase();
   const id = c.req.param("id");
@@ -77,6 +128,16 @@ app.patch("/workspaces/:id", async (c) => {
 
     if (state === "archived") {
       autoProgressStatus(id, "done", { force: true });
+
+      // Cloud workspace: stop the sandbox (best-effort) so archiving ends the
+      // meter instead of waiting out the idle TTL. The mirror/checkpoint story
+      // (Sprint 2) is what makes this safe to do eagerly.
+      const archived = getWorkspaceById(db, id);
+      if (archived?.kind === "cloud" && archived.provider_workspace_id) {
+        void stopCloudWorkspace(archived.provider_workspace_id).catch((err) => {
+          console.warn(`[WORKSPACE] cloud stop failed for ${id} (continuing):`, err);
+        });
+      }
 
       // Run archive lifecycle hook (best-effort)
       try {
@@ -130,13 +191,23 @@ app.patch("/workspaces/:id", async (c) => {
 // Create workspace
 app.post("/workspaces", async (c) => {
   const db = getDatabase();
-  const { repository_id, source_branch, pr_number, pr_url, pr_title, target_branch } = parseBody(
-    CreateWorkspaceBody,
-    await c.req.json()
-  );
+  const { repository_id, location, source_branch, pr_number, pr_url, pr_title, target_branch } =
+    parseBody(CreateWorkspaceBody, await c.req.json());
 
   const repo = getRepositoryById(db, repository_id);
   if (!repo) throw new NotFoundError("Repository not found");
+
+  // Cloud lane: row now, agnt sandbox in the background; progress rides
+  // workspace.state events through the cloud driver instead of the local
+  // worktree pipeline below.
+  if (location === "cloud") {
+    const { workspaceId } = createCloudWorkspace({
+      repositoryId: repository_id,
+      sourceBranch: source_branch,
+    });
+    const created = getWorkspaceById(db, workspaceId);
+    return c.json(created, 201);
+  }
 
   const workspace_name = generateUniqueName(db);
   const parent_branch = source_branch || repo.git_default_branch || "main";

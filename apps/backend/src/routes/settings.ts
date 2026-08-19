@@ -3,6 +3,11 @@ import { getAllSettings, saveSetting } from "../services/settings.service";
 import { parseBody, SaveSettingBody } from "../lib/schemas";
 import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
 import { checkAuth, isConnected, getAgents } from "../services/agent";
+import {
+  getCloudSettingsStatus,
+  saveCloudGithubToken,
+} from "../services/cloud-workspace-init.service";
+import { ValidationError } from "../lib/errors";
 import type { AgentHarness } from "@shared/enums";
 
 const app = new Hono();
@@ -61,6 +66,20 @@ app.get("/settings/agent-auth", async (c) => {
         ? codexResult.value
         : { error: String(codexResult.reason) },
   });
+});
+
+// ── Cloud workspaces ────────────────────────────────────────────────
+
+app.get("/settings/cloud", async (c) => {
+  return c.json(await getCloudSettingsStatus());
+});
+
+app.post("/settings/cloud/github-token", async (c) => {
+  const body = (await c.req.json()) as { token?: string };
+  const token = body.token?.trim();
+  if (!token) throw new ValidationError("token is required");
+  await saveCloudGithubToken(token);
+  return c.json({ ok: true });
 });
 
 export default app;

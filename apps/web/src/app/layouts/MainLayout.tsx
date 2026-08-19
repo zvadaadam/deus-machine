@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { apiClient } from "@/shared/api/client";
 import type { SessionPanelRef } from "@/features/session";
 import {
   NewWorkspaceModal,
+  NewWorkspacePromptModal,
   CloneRepositoryModal,
   StartNewProjectModal,
 } from "@/features/repository";
@@ -117,6 +119,19 @@ export function MainLayout() {
     selectedWorkspaceIdRef.current = selectedWorkspaceId;
   });
 
+  // Opening a cloud workspace attaches its session channel (Durable Object
+  // side — does NOT wake the VM). The snapshot that comes back is how deus
+  // learns an old sandbox is paused: the row updates and the chat shows
+  // "Sandbox paused — wakes on your next message". Idempotent server-side.
+  const selectedCloudWorkspaceId =
+    selectedWorkspace?.kind === "cloud" ? selectedWorkspace.id : null;
+  useEffect(() => {
+    if (!selectedCloudWorkspaceId) return;
+    apiClient.post(`/workspaces/${selectedCloudWorkspaceId}/cloud-connect`).catch(() => {
+      // Best-effort — an unreachable platform just means no truth refresh.
+    });
+  }, [selectedCloudWorkspaceId]);
+
   // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
 
@@ -173,10 +188,18 @@ export function MainLayout() {
   } | null>(null);
 
   const handleStartWorkspace = useCallback(
-    async (repoId: string, message: string, model: string, branch?: string) => {
+    async (
+      repoId: string,
+      message: string,
+      model: string,
+      branch?: string,
+      location?: "local" | "cloud"
+    ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
-          branch ? { repositoryId: repoId, source_branch: branch } : repoId
+          branch || location === "cloud"
+            ? { repositoryId: repoId, source_branch: branch, location }
+            : repoId
         );
         // Store pending message — will be sent when workspace gets a session
         pendingWelcomeMessageRef.current = {
@@ -440,24 +463,40 @@ export function MainLayout() {
       )}
 
       {/* Modals */}
-      <NewWorkspaceModal
-        show={showNewWorkspaceModal}
-        repos={repos}
-        selectedRepoId={repoActions.selectedRepoId}
-        creating={repoActions.creating}
-        onClose={closeNewWorkspaceModal}
-        onRepoChange={repoActions.setSelectedRepoId}
-        onCreate={
-          newWorkspaceMode === "from-github"
-            ? () => {
-                const repoId = repoActions.selectedRepoId;
-                closeNewWorkspaceModal();
-                if (repoId) setGithubPickerRepoId(repoId);
-              }
-            : repoActions.createWorkspaceFromModal
-        }
-        mode={newWorkspaceMode}
-      />
+      {newWorkspaceMode === "from-github" ? (
+        <NewWorkspaceModal
+          show={showNewWorkspaceModal}
+          repos={repos}
+          selectedRepoId={repoActions.selectedRepoId}
+          creating={repoActions.creating}
+          onClose={closeNewWorkspaceModal}
+          onRepoChange={repoActions.setSelectedRepoId}
+          onCreate={() => {
+            const repoId = repoActions.selectedRepoId;
+            closeNewWorkspaceModal();
+            if (repoId) setGithubPickerRepoId(repoId);
+          }}
+          mode="from-github"
+        />
+      ) : (
+        <NewWorkspacePromptModal
+          show={showNewWorkspaceModal}
+          repos={repos}
+          selectedRepoId={repoActions.selectedRepoId}
+          creating={repoActions.creating}
+          onClose={closeNewWorkspaceModal}
+          onRepoChange={repoActions.setSelectedRepoId}
+          onSubmit={({ repoId, prompt, branch, location, model }) => {
+            closeNewWorkspaceModal();
+            if (prompt) {
+              // Composer semantics: create, then the prompt rides as turn one.
+              void handleStartWorkspace(repoId, prompt, model, branch, location);
+            } else {
+              void repoActions.createAndSelectWorkspace(repoId, location, branch);
+            }
+          }}
+        />
+      )}
 
       <SystemPromptModal
         show={showSystemPromptModal && !!selectedWorkspace}

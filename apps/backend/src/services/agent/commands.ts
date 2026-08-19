@@ -31,6 +31,7 @@ import {
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
+import { startCloudTurn, cancelCloudTurn, isCloudSession } from "./cloud/driver";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
@@ -146,6 +147,8 @@ export async function runCommand(
       .with("createWorkspace", async () => {
         const repositoryId = requireParam(params, "repository_id", "createWorkspace");
         const body: Record<string, unknown> = { repository_id: repositoryId };
+        const location = readString(params, "location");
+        if (location) body.location = location;
         const sourceBranch = readString(params, "source_branch");
         const prUrl = readString(params, "pr_url");
         const prTitle = readString(params, "pr_title");
@@ -367,6 +370,29 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     );
   }
 
+  // Resolve the workspace server-side: it decides the TRANSPORT (local
+  // agent-server vs cloud driver) and, for local, the authoritative cwd —
+  // caller-provided values are ignored. Resolved before ANY write below so
+  // lane validation can reject without touching state.
+  const workspace = session ? getWorkspaceForMiddleware(db, session.workspace_id) : undefined;
+  const isCloud = workspace?.kind === "cloud";
+  let cwd: string | undefined;
+  if (workspace && !isCloud) {
+    cwd = computeWorkspacePath(workspace) ?? undefined;
+  }
+
+  // The cloud sidecar runs the claude-code harness only (it deliberately
+  // never installs the Codex SDK) — reject other harnesses up front with a
+  // real explanation instead of a provider-session error mid-connect. This
+  // MUST precede every write below: after the harness persist it would leave
+  // a rejected harness on the row; after the working flip it would strand
+  // the session in "working" with no turn to ever end it.
+  if (isCloud && agentHarness !== "claude-code") {
+    throw new Error(
+      "Codex isn't available in cloud workspaces yet — the sandbox runs Claude only. Pick a Claude model, or use a local workspace for Codex."
+    );
+  }
+
   // New sessions default to Claude at creation time because the user may pick
   // the actual harness in the composer before the first send. Persist that
   // first-send choice so follow-up turns route to the same agent process.
@@ -427,89 +453,99 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   // half-accepting it.
   const existingAgentSessionId = session?.agent_session_id ?? null;
 
-  // Resolve cwd server-side from session → workspace → repo.
-  // The server is authoritative; caller-provided values are ignored.
-  let cwd: string | undefined;
-  if (session) {
-    const workspace = getWorkspaceForMiddleware(db, session.workspace_id);
-    if (workspace) {
-      cwd = computeWorkspacePath(workspace) ?? undefined;
-    }
-  }
-
   // The turn id is the frontend's correlation key: it seeds the optimistic
-  // bubble and matches the engine's user echo when it arrives.
+  // bubble and matches the engine's user echo when it arrives. The cloud lane
+  // passes it through message.send so agnt derives the SAME echo ids.
   const turnId = readString(params, "turnId") ?? uuidv7();
 
-  // No engine turn can be admitted from here. Flipping the session to "error"
-  // is only half the job: this handler's return value IS the q:command_ack, so
-  // returning normally would answer `accepted: true` for a turn that never ran.
-  // The user's prompt exists in exactly one place at this moment — the
-  // frontend's optimistic bubble — because the backend never writes the user
-  // row (the engine's echo is the single persistence path). A false accept
-  // therefore strands that bubble on screen forever, durable nowhere. Throw so
-  // handleCommand answers `accepted: false` and the composer's rollback runs.
-  if (!agentService.isConnected()) {
-    const err = new Error("Agent server is disconnected");
-    handleAgentError(sessionId, err);
-    throw err;
-  }
-  if (!cwd) {
-    const err = new Error("Session has no resolvable workspace");
-    handleAgentError(sessionId, err);
-    throw err;
-  }
-
-  // Admission is AWAITED, and that is the whole point. `turn/start` is a
-  // quick-ack: the server answers the moment it admits the turn — before the
-  // harness has run a step (it acks, then `void executeTurn`) — so this waits
-  // for a verdict, never for the turn. The streaming half stays where it
-  // belongs, on the event channel.
-  //
-  // The guards above only close the SYNCHRONOUS half of the lost-prompt hole.
-  // Admission can also fail asynchronously: a turnActive race with a second
-  // client, a server shutting down, a harness that will not spawn. Answering
-  // the command before that verdict arrives reports `accepted: true` for a
-  // turn the server then refuses — and the prompt exists in exactly one place
-  // right now, the frontend's optimistic bubble, because the backend never
-  // writes the user row (the engine's echo is the single persistence path).
-  // So every rejection rethrows: handleCommand turns a throw into
-  // `accepted: false`, which is the only answer that runs the composer's
-  // rollback. Nothing can arrive here AFTER admission — the promise settles on
-  // the ack — so there is no post-ack failure left to handle in the
-  // background.
-  try {
-    await agentService.startTurn(sessionId, turnId, agentHarness, content, {
-      cwd,
-      model,
-      thinkingLevel: readThinkingLevel(params.thinkingLevel),
-      permissionMode: readPermissionMode(params.permissionMode),
-      maxTurns: readNumber(params, "maxTurns"),
-      additionalDirectories: Array.isArray(params.additionalDirectories)
-        ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")
-        : undefined,
-      resume: existingAgentSessionId || readString(params, "resume"),
-      resumeSessionAt: readString(params, "resumeSessionAt"),
-    });
-  } catch (err) {
-    if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
-      // The session is legitimately mid-turn — another client won the race
-      // between the status guard above and the wire. That RUNNING turn is
-      // fine, it just is not ours, so the session must NOT be flipped to an
-      // error status. Reject the send and leave the status alone; the wording
-      // matches the synchronous guard, since to the user it is the same "wait
-      // your turn" and the wire's own message leaks a session id.
-      console.warn(
-        `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
-      );
-      throw new Error("The agent is still working — wait for the current turn to finish.");
+  if (isCloud) {
+    // Cloud lane. agnt queues overlapping sends instead of rejecting, so the
+    // driver enforces deus's one-live-turn contract itself; every throw here
+    // answers `accepted: false` — the same rejection contract as the wire path
+    // below, for the same lost-prompt reason.
+    try {
+      // permissionMode/maxTurns/additionalDirectories/resume have no cloud
+      // channel equivalent (permissions auto-allow like the local policy;
+      // resume is agnt-internal) — model and thinking DO travel.
+      await startCloudTurn(sessionId, turnId, content, {
+        model,
+        thinkingLevel: readThinkingLevel(params.thinkingLevel),
+      });
+    } catch (err) {
+      handleAgentError(sessionId, err);
+      throw err;
     }
-    // Every other rejection — harness unavailable, shutting down, invalid
-    // params, a transport that died mid-request — means no turn was admitted,
-    // so the session must not be left sitting on "working".
-    if (err instanceof WireRequestError) handleAgentRejection(sessionId, err.message);
-    else handleAgentError(sessionId, err);
-    throw err;
+  } else {
+    // No engine turn can be admitted from here. Flipping the session to "error"
+    // is only half the job: this handler's return value IS the q:command_ack, so
+    // returning normally would answer `accepted: true` for a turn that never ran.
+    // The user's prompt exists in exactly one place at this moment — the
+    // frontend's optimistic bubble — because the backend never writes the user
+    // row (the engine's echo is the single persistence path). A false accept
+    // therefore strands that bubble on screen forever, durable nowhere. Throw so
+    // handleCommand answers `accepted: false` and the composer's rollback runs.
+    if (!agentService.isConnected()) {
+      const err = new Error("Agent server is disconnected");
+      handleAgentError(sessionId, err);
+      throw err;
+    }
+    if (!cwd) {
+      const err = new Error("Session has no resolvable workspace");
+      handleAgentError(sessionId, err);
+      throw err;
+    }
+
+    // Admission is AWAITED, and that is the whole point. `turn/start` is a
+    // quick-ack: the server answers the moment it admits the turn — before the
+    // harness has run a step (it acks, then `void executeTurn`) — so this waits
+    // for a verdict, never for the turn. The streaming half stays where it
+    // belongs, on the event channel.
+    //
+    // The guards above only close the SYNCHRONOUS half of the lost-prompt hole.
+    // Admission can also fail asynchronously: a turnActive race with a second
+    // client, a server shutting down, a harness that will not spawn. Answering
+    // the command before that verdict arrives reports `accepted: true` for a
+    // turn the server then refuses — and the prompt exists in exactly one place
+    // right now, the frontend's optimistic bubble, because the backend never
+    // writes the user row (the engine's echo is the single persistence path).
+    // So every rejection rethrows: handleCommand turns a throw into
+    // `accepted: false`, which is the only answer that runs the composer's
+    // rollback. Nothing can arrive here AFTER admission — the promise settles on
+    // the ack — so there is no post-ack failure left to handle in the
+    // background.
+    try {
+      await agentService.startTurn(sessionId, turnId, agentHarness, content, {
+        cwd,
+        model,
+        thinkingLevel: readThinkingLevel(params.thinkingLevel),
+        permissionMode: readPermissionMode(params.permissionMode),
+        maxTurns: readNumber(params, "maxTurns"),
+        additionalDirectories: Array.isArray(params.additionalDirectories)
+          ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")
+          : undefined,
+        resume: existingAgentSessionId || readString(params, "resume"),
+        resumeSessionAt: readString(params, "resumeSessionAt"),
+      });
+    } catch (err) {
+      if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
+        // The session is legitimately mid-turn — another client won the race
+        // between the status guard above and the wire. That RUNNING turn is
+        // fine, it just is not ours, so the session must NOT be flipped to an
+        // error status. Reject the send and leave the status alone; the wording
+        // matches the synchronous guard, since to the user it is the same "wait
+        // your turn" and the wire's own message leaks a session id.
+        console.warn(
+          `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
+        );
+        throw new Error("The agent is still working — wait for the current turn to finish.");
+      }
+      // Every other rejection — harness unavailable, shutting down, invalid
+      // params, a transport that died mid-request — means no turn was admitted,
+      // so the session must not be left sitting on "working".
+      if (err instanceof WireRequestError) handleAgentRejection(sessionId, err.message);
+      else handleAgentError(sessionId, err);
+      throw err;
+    }
   }
 
   // 3. The turn is admitted, so the send is real — and only now is the send
@@ -561,7 +597,15 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   if (!session) throw new Error("Session not found");
 
   let confirmed = true;
-  if (agentService.isConnected()) {
+  if (isCloudSession(sessionId)) {
+    try {
+      const result = await cancelCloudTurn(sessionId);
+      confirmed = result.outcome !== "unconfirmed";
+    } catch (err) {
+      console.error("[CommandHandler] Failed to cancel cloud turn:", err);
+      // The channel itself failed; nothing is going to deliver a turn.ended.
+    }
+  } else if (agentService.isConnected()) {
     try {
       const result = await agentService.stopSession({ sessionId });
       confirmed = result.outcome !== "unconfirmed";

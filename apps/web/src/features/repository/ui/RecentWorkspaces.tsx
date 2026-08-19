@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Cloud } from "lucide-react";
 import { CircularPixelGrid } from "@/features/session/ui/CircularPixelGrid";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "@/features/sidebar/lib/utils";
@@ -177,13 +178,21 @@ export function RecentWorkspaces({
                     </span>
 
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span
-                        className={cn(
-                          "truncate text-sm font-medium",
-                          isActive ? "text-text-primary" : "text-text-secondary"
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "truncate text-sm font-medium",
+                            isActive ? "text-text-primary" : "text-text-secondary"
+                          )}
+                        >
+                          {displayName}
+                        </span>
+                        {workspace.kind === "cloud" && (
+                          <Cloud
+                            className="text-text-muted h-3 w-3 shrink-0"
+                            aria-label="Cloud workspace"
+                          />
                         )}
-                      >
-                        {displayName}
                       </span>
                       <span className="text-text-disabled truncate text-xs">{meta}</span>
                     </span>

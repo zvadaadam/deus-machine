@@ -30,7 +30,8 @@ import type {
  */
 const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
-    w.git_target_branch, w.state, w.status, w.current_session_id,
+    w.git_target_branch, w.kind, w.provider_workspace_id,
+    w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
     w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
     w.setup_status, w.error_message, w.init_stage,
@@ -140,7 +141,8 @@ export function getWorkspacesBySessionIds(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.state, w.status, w.current_session_id,
+      w.git_target_branch, w.kind, w.provider_workspace_id,
+      w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
       w.setup_status, w.error_message, w.init_stage,
