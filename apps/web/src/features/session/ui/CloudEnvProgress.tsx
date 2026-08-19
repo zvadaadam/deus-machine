@@ -1,18 +1,19 @@
 /**
- * Live cloud environment progress inside the chat — the Cursor-style
- * "Provisioning… / Cloning repository… / Restoring session state…" stack.
+ * Cloud environment progress — the Cursor-style setup story in the chat.
  *
  * Renders the ephemeral q:event "cloud:env" stream (agnt workspace.state
- * passthrough) for this chat's workspace, as part of the conversation flow:
- * top of an empty chat, under the latest message otherwise. Deliberately
- * sticky — finished setup stays visible like transcript history (per Cursor);
- * nothing is persisted, so a refresh clears it. Local workspaces never
- * receive these events, so this renders nothing for them.
+ * passthrough) as a COLLAPSED one-liner in the transcript, matching the
+ * tool-call group pattern: the summary line is the live truth (active step
+ * spinning while in flight, "Environment ready" when done, "Sandbox paused"
+ * when asleep), and the chevron expands the full step list. Groups are
+ * spliced into the timeline chronologically (chatTimeline.insertCloudEnv),
+ * so a wake reads: your message → setup lines → the reply. Nothing is
+ * persisted — a refresh clears the story.
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { Check, Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import {
   useCloudEnvStore,
@@ -24,6 +25,17 @@ import {
  *  empty state (the hero hides while the setup story is the chat content). */
 export function useHasCloudEnv(workspaceId?: string | null): boolean {
   return useCloudEnvStore((s) => ((workspaceId ? s.byWorkspace[workspaceId]?.length : 0) ?? 0) > 0);
+}
+
+/** Live entries for the timeline build. Stable EMPTY when none. */
+const NO_ENTRIES: CloudEnvEntry[] = [];
+export function useCloudEnvEntries(workspaceId?: string | null): CloudEnvEntry[] {
+  useEffect(() => {
+    ensureCloudEnvSubscription();
+  }, []);
+  return useCloudEnvStore(
+    (s) => (workspaceId ? s.byWorkspace[workspaceId] : undefined) ?? NO_ENTRIES
+  );
 }
 
 const STEP_LABELS: Record<string, string> = {
@@ -49,7 +61,7 @@ function stepLabel(step: string | null): string {
 interface Line {
   key: string;
   label: string;
-  icon: "done" | "active" | "cloud" | "asleep" | "error";
+  icon: "done" | "active" | "asleep" | "error";
   tone?: "ready" | "muted" | "error";
 }
 
@@ -90,7 +102,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
     ];
   }
 
-  // In-flight (or just-finished) provisioning: one line per step, the latest
+  // In-flight (or finished) provisioning: one line per step, the latest
   // still spinning, earlier ones checked off.
   const lines: Line[] = [];
   for (const entry of entries) {
@@ -123,58 +135,109 @@ function LineIcon({ icon }: { icon: Line["icon"] }) {
       return <CloudOff className="text-text-disabled h-3 w-3 flex-shrink-0" />;
     case "error":
       return <TriangleAlert className="text-destructive/80 h-3 w-3 flex-shrink-0" />;
-    case "cloud":
-      return <Cloud className="text-text-muted h-3 w-3 flex-shrink-0" />;
   }
 }
 
-export function CloudEnvProgress({ workspaceId }: { workspaceId?: string | null }) {
-  const entries = useCloudEnvStore((s) => (workspaceId ? s.byWorkspace[workspaceId] : undefined));
+function lineTextClass(tone: Line["tone"]): string {
+  return cn(
+    "font-mono text-xs tracking-tight",
+    tone === "error"
+      ? "text-destructive/80"
+      : tone === "ready"
+        ? "text-text-secondary"
+        : "text-text-muted"
+  );
+}
 
-  useEffect(() => {
-    ensureCloudEnvSubscription();
-  }, []);
+/** One collapsible environment group — a run of events at one point in the
+ *  transcript. Collapsed by default to its latest/live line. */
+export function CloudEnvGroup({ entries }: { entries: CloudEnvEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = useMemo(() => buildLines(entries), [entries]);
+  if (lines.length === 0) return null;
 
-  const lines = useMemo(() => buildLines(entries ?? []), [entries]);
+  const summary = lines[lines.length - 1];
+  const detail = lines.slice(0, -1);
+  const hasDetail = detail.length > 0;
 
   return (
-    <AnimatePresence>
-      {lines.length > 0 && (
-        <m.div
-          key="cloud-env-progress"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.25, ease: [0.215, 0.61, 0.355, 1] }}
-          role="status"
-          aria-live="polite"
-          className="mr-auto flex flex-col gap-1 px-2 py-1.5"
-        >
-          {lines.map((line) => (
-            <m.div
-              key={line.key}
-              initial={{ opacity: 0, y: 2 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
-              className="flex items-center gap-2"
-            >
-              <LineIcon icon={line.icon} />
-              <span
-                className={cn(
-                  "font-mono text-xs tracking-tight",
-                  line.tone === "error"
-                    ? "text-destructive/80"
-                    : line.tone === "ready"
-                      ? "text-text-secondary"
-                      : "text-text-muted"
-                )}
-              >
-                {line.label}
-              </span>
-            </m.div>
-          ))}
-        </m.div>
-      )}
-    </AnimatePresence>
+    <div className="flex w-full min-w-0 flex-col" role="status" aria-live="polite">
+      <button
+        type="button"
+        onClick={() => hasDetail && setExpanded(!expanded)}
+        disabled={!hasDetail}
+        aria-expanded={hasDetail ? expanded : undefined}
+        className={cn(
+          "group flex w-full items-center gap-2 px-2 py-1 text-left",
+          hasDetail && "cursor-pointer",
+          "transition-opacity duration-150 ease-out",
+          hasDetail && "opacity-90 hover:opacity-100",
+          "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
+        )}
+      >
+        <div className="relative h-3 w-3 flex-shrink-0">
+          <div
+            className={cn(
+              "absolute top-0 left-0 transition-opacity duration-150 ease-out",
+              hasDetail && (expanded ? "opacity-0" : "opacity-100 group-hover:opacity-0")
+            )}
+          >
+            <LineIcon icon={summary.icon} />
+          </div>
+          {hasDetail && (
+            <ChevronRight
+              className={cn(
+                "text-muted-foreground/50 absolute top-0 left-0 h-3 w-3 transition-[transform,opacity] duration-150 ease-out",
+                expanded && "rotate-90",
+                expanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              )}
+              aria-hidden="true"
+            />
+          )}
+        </div>
+        <span className={lineTextClass(summary.tone)}>{summary.label}</span>
+        {hasDetail && (
+          <span className="text-muted-foreground/40 font-mono text-xs" aria-hidden="true">
+            · {detail.length + 1} steps
+          </span>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {expanded && hasDetail && (
+          <m.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+            className="flex flex-col overflow-hidden"
+          >
+            {detail.map((line) => (
+              <div key={line.key} className="flex items-center gap-2 px-2 py-0.5 pl-7">
+                <LineIcon icon={line.icon} />
+                <span className={lineTextClass(line.tone)}>{line.label}</span>
+              </div>
+            ))}
+          </m.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Standalone placement for the EMPTY chat — a fresh cloud workspace
+ *  provisioning before any message exists renders the story top-of-flow. */
+export function CloudEnvProgress({ workspaceId }: { workspaceId?: string | null }) {
+  const entries = useCloudEnvEntries(workspaceId);
+  if (entries.length === 0) return null;
+  return (
+    <m.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25, ease: [0.215, 0.61, 0.355, 1] }}
+      className="pt-2"
+    >
+      <CloudEnvGroup entries={entries} />
+    </m.div>
   );
 }

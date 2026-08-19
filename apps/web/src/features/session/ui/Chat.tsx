@@ -16,7 +16,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
-import { CloudEnvProgress, useHasCloudEnv } from "./CloudEnvProgress";
+import { CloudEnvProgress, CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
 import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
@@ -112,9 +112,11 @@ export function Chat({
     latestMessageSentAt,
   });
 
-  // Cloud setup story presence — decides whether the empty state shows the
-  // hero or the live environment stack.
-  const hasCloudEnv = useHasCloudEnv(workspaceId);
+  // Cloud setup story — spliced into the timeline chronologically (after the
+  // send that triggered it, before the reply). Also decides whether the empty
+  // state shows the hero or the live stack. Empty array for local workspaces.
+  const cloudEnvEntries = useCloudEnvEntries(workspaceId);
+  const hasCloudEnv = cloudEnvEntries.length > 0;
 
   // Everything derived from the rows: which ones render, the turns they group
   // into, the compaction markers between them, each slot's padding, and what
@@ -125,8 +127,8 @@ export function Chat({
     activity,
     lastRole,
   } = useMemo(
-    () => buildChatTimeline(messages, compactions, sessionStatus === "working"),
-    [messages, compactions, sessionStatus]
+    () => buildChatTimeline(messages, compactions, sessionStatus === "working", cloudEnvEntries),
+    [messages, compactions, sessionStatus, cloudEnvEntries]
   );
 
   /**
@@ -182,6 +184,7 @@ export function Chat({
       const turn = timeline[index];
       if (!turn) return 100;
       if (turn.type === "compaction") return 36;
+      if (turn.type === "cloudEnv") return 32; // collapsed one-liner
       if (turn.type === "user") return 60;
       // Scale estimate with message count — collapsed turns with many hidden
       // messages show a compact header + summary, while expanded turns (latest)
@@ -199,6 +202,7 @@ export function Chat({
       const item = timeline[index];
       if (!item) return index;
       if (item.type === "compaction") return `compaction:${item.compaction.compaction_id}`;
+      if (item.type === "cloudEnv") return `cloudEnv:${item.entries[0]?.id ?? index}`;
       return item.type === "user" ? item.message.id : item.messages[0].id;
     },
     [timeline]
@@ -299,11 +303,12 @@ export function Chat({
                       turnIndex > maxAnimatedTurnIndex.current) ||
                     animatedTurnsRef.current.has(turnIndex);
 
-                  // A compaction is not a message — it gets no message id.
+                  // Markers (compaction, env story) are not messages — no id.
                   const messageId = match(turn)
                     .with({ type: "user" }, (t) => t.message.id)
                     .with({ type: "assistant" }, (t) => t.messages[0].id)
                     .with({ type: "compaction" }, () => undefined)
+                    .with({ type: "cloudEnv" }, () => undefined)
                     .exhaustive();
 
                   return (
@@ -342,6 +347,7 @@ export function Chat({
                           .with({ type: "compaction" }, (t) => (
                             <CompactionChip compaction={t.compaction} />
                           ))
+                          .with({ type: "cloudEnv" }, (t) => <CloudEnvGroup entries={t.entries} />)
                           .exhaustive()}
                       </div>
                     </div>
@@ -509,7 +515,6 @@ export function Chat({
                   </m.div>
                 )}
               </AnimatePresence>
-              <CloudEnvProgress workspaceId={workspaceId} />
               <AnimatePresence>
                 {sessionStatus === "working" && (
                   <m.div
