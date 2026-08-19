@@ -461,6 +461,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     contextLost={contextLost}
                     onDismissContextLost={dismissContextLost}
                     userSendCount={userSendCount}
+                    workspaceId={workspaceId ?? null}
+                    workspaceKind={workspaceKind}
                   />
 
                   {/* Agent-initiated interaction overlays — appear above the

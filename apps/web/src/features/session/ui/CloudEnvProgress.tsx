@@ -115,6 +115,11 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
     });
   } else if (lines.length > 0) {
     lines[lines.length - 1].icon = "active";
+  } else {
+    // Unknown status from a newer platform — the schema is an open set by
+    // contract ("treat unknown statuses as in-flight"), so show it spinning
+    // with a humanized label rather than vanishing the marker.
+    lines.push({ key: `status-${latest.id}`, label: stepLabel(latest.status), icon: "active" });
   }
   return lines;
 }

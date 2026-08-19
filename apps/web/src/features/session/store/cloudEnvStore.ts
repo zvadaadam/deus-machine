@@ -41,10 +41,19 @@ export const useCloudEnvStore = create<CloudEnvStore>()(() => ({
 function append(workspaceId: string, event: Omit<CloudEnvEntry, "id" | "at">): void {
   useCloudEnvStore.setState((state) => {
     const existing = state.byWorkspace[workspaceId] ?? [];
-    // Reconnects can re-announce the current state — an identical
-    // status/step to the latest entry adds nothing to the stack.
+    // Reconnects can re-announce the current state — an entry identical in
+    // EVERY consumed field adds nothing. Compare them all: a repeated
+    // "running" that now carries snapshotRestored, or a paused/error with a
+    // new reason, is fresh information the chat must not drop.
     const last = existing[existing.length - 1];
-    if (last && last.status === event.status && last.step === event.step) return state;
+    if (
+      last &&
+      last.status === event.status &&
+      last.step === event.step &&
+      last.reason === event.reason &&
+      last.snapshotRestored === event.snapshotRestored
+    )
+      return state;
     const entry: CloudEnvEntry = { ...event, id: nextId++, at: Date.now() };
     return {
       byWorkspace: {
