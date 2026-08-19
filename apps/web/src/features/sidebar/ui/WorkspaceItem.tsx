@@ -5,6 +5,7 @@ import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
+import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { apiClient } from "@/shared/api/client";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
@@ -40,7 +41,11 @@ import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
  * reopens its channel; sending a message also wakes it.
  */
 function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["workspace"] }) {
-  const asleep = ["paused", "stopped", "resuming"].includes(workspace.init_stage ?? "");
+  const presence = cloudPresence(workspace.init_stage);
+  if (presence === "waking") {
+    return <Loader2 className="text-text-muted h-3 w-3 shrink-0 animate-spin" />;
+  }
+  const asleep = presence === "asleep";
   return (
     <button
       type="button"

@@ -109,7 +109,7 @@ export async function stopCloudWorkspace(providerWorkspaceId: string): Promise<v
 }
 
 /** Platform-truth status of the sandbox ("paused" | "stopped" | "running" | ...), null if unreachable. */
-export async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<string | null> {
+async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<string | null> {
   const config = getCloudConfig();
   if (!config) return null;
   try {
@@ -183,7 +183,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
 }
 
 /** Wake a paused sandbox (explicit resume; sends also auto-resume). */
-export async function wakeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
+async function wakeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
   const config = getCloudConfig();
   if (!config) throw new Error("Cloud workspaces are not configured");
   await agntResumeWorkspace(providerWorkspaceId, {

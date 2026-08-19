@@ -65,6 +65,35 @@ lifecycle problems, and breaks the Mac-off story.
   the real REST+`q:` surface against a live sandbox (create → provision →
   chat → echo-matches-turnId → diff routes serve an agent-written file).
 
+### Also shipped (post-review hardening, same PR)
+
+- **Environment story in the chat** (`cloud:env`): the driver passes
+  `workspace.state` through as an ephemeral `q:event`; the chat splices the
+  events into the timeline chronologically (compaction-marker mechanism) as a
+  collapsed, tool-call-style group — live step spinning, expandable checklist,
+  sticky like transcript history, gone on refresh. Contract:
+  `CloudEnvStateSchema` in `shared/events.ts` is deliberately LOOSE (open
+  status set, unknown fields pass through) with a contract test pinning the
+  superset + tolerant-reader properties against the pinned `@deus-hq/api`.
+- **Asleep/wake truth**: opening a cloud workspace attaches the session
+  channel (DO-side, never wakes the VM); the connect snapshot's session
+  status syncs paused/stopped/provisioning into the row AND the chat.
+  `wakeCloudWorkspaceWithFeedback` (service layer) reads platform status
+  first: paused → optimistic "resuming" + resume (honest revert on failure);
+  stopped → no doomed resume, "send a message to restart it" (agnt's resume
+  API only accepts PAUSED; message-send re-provisions). One presence
+  vocabulary (`cloudPresence`: awake/asleep/waking) drives the sidebar icon
+  and the header chip (dashed "Asleep" click-to-wake / spinning "Waking").
+- **Sessions**: new chat tabs lazily create the agnt twin on first cloud
+  contact (deus session id = client-supplied id, retry-safe). Codex is
+  REJECTED up front for cloud — the sidecar pins the claude-code harness and
+  never installs the Codex SDK — with lane validation ordered BEFORE any
+  state write (harness persist, working flip) so a rejection touches nothing.
+- **Model passthrough**: the composer's pick rides `message.send`
+  options.model (the sidecar honors it); socket hardening (handshake + ready
+  deadlines); shared composer controls (`ModelPicker`/`CloudToggle`/
+  `BranchPickerButton`) used by HomeView and the prompt-first modal.
+
 ## Work packages
 
 ### D1 — Deus Cloud auth handshake (next)
@@ -121,6 +150,16 @@ Web/phone direct-to-agnt mode (deus SQLite becomes a projection of agnt PG for
 cloud sessions — reconnect = snapshot diff by engine ids + idempotent upserts);
 ACP-shaped `fs/*` + `terminal/*` on the sidecar (tmux-backed); `fs/list` file
 tree; port forwarding for localhost previews.
+
+### Codex in the cloud (agnt-side, whenever wanted)
+
+Three parts, all mechanisms exist: unpin the sidecar's `HARNESS =
+"claude-code"` (the `@zvada/agent-server` engine already ships the codex
+adapter — mostly installing `@openai/codex-sdk` in the E2B template), thread
+an OpenAI key through the same secret/turn-option plumbing as the Anthropic
+key, and have deus pass `agent: "codex"` on session create (the API field
+already exists). Until then deus rejects codex sends to cloud workspaces up
+front with an honest message.
 
 ## Weakness register → resolutions
 

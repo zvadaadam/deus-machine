@@ -17,8 +17,9 @@
  * - useKeyboardShortcuts: Cmd+\ toggles session panel
  */
 
-import { useRef, useCallback, useMemo, useEffect } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { apiClient } from "@/shared/api/client";
+import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
 import { HomeView, type Repository } from "@/features/repository";
@@ -42,7 +43,6 @@ import { PanelLeft } from "lucide-react";
 import type { Workspace, RepoGroup, PRStatus, GhCliStatus } from "@/shared/types";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
-import { native } from "@/platform";
 import { track } from "@/platform/analytics";
 import { ConnectionBanner, useConnectionState } from "@/features/connection";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
@@ -383,11 +383,11 @@ export function MainContent({
                         kind={selectedWorkspace.kind}
                         cloudAsleep={
                           selectedWorkspace.kind === "cloud" &&
-                          ["paused", "stopped"].includes(selectedWorkspace.init_stage ?? "")
+                          cloudPresence(selectedWorkspace.init_stage) === "asleep"
                         }
                         cloudWaking={
                           selectedWorkspace.kind === "cloud" &&
-                          selectedWorkspace.init_stage === "resuming"
+                          cloudPresence(selectedWorkspace.init_stage) === "waking"
                         }
                         onCloudWake={() => {
                           void apiClient
