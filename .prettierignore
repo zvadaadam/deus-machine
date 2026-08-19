@@ -1,5 +1,4 @@
 # Dependencies & build output
-tools/oxlint/anti-slop/
 node_modules/
 dist/
 out/
