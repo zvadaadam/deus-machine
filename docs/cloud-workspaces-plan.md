@@ -308,6 +308,30 @@ those subscriptions — and it is the reason the Settings story needs one
 - ChatGPT plan limits pool across local + cloud (5-hour window + weekly),
   same as Claude — set that expectation in the UI copy.
 
+**Enterprise secrets posture (Expo/EAS prior art, teardown 2026-08-20 —
+their production code, file-level evidence in session notes):**
+
+- Adopt cheaply now: ciphertext blobs carry their own `{method, keyName}`
+  metadata (enables key/provider migration with zero schema change — agnt's
+  encrypted values today have no self-description); a DB CHECK encoding the
+  tier↔storage invariant when we grow visibility tiers; write-only secret
+  values with a one-way ratchet (never downgrade a secret to readable).
+- Adopt at D1/team era: audit rows that record THAT a sensitive field
+  changed, never the value (`was_sensitive_field_changed` — the exact right
+  primitive); per-data-class encryption keys (env secrets vs github tokens
+  vs model tokens — one compromised class doesn't open the rest); their
+  encrypted-job cache + retry-window TTL reaper is the answer shape for our
+  DO execute-queue token exposure (redact/reap after dispatch).
+- Adopt with turn logs: their scrubbing stack — secrets replaced in raw +
+  base64 forms, a branded type + lint rule making unscrubbed persistence a
+  compile error, and a mutation validator that BLOCKS writes containing
+  secret strings.
+- Consciously rejected from their design: SENSITIVE-tier plaintext at rest
+  (tier ≠ encryption there; ours stays encrypted for everything),
+  read-requires-deploy-rights (anyone who can publish reads all values —
+  our user-scoped values are the better boundary), and their unimplemented
+  key rotation (if we add KMS, set rotation from day one).
+
 **Custom provider (both agents, later):** a base-URL + key form.
 Claude: `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` — our per-turn
 `baseUrl` option already rides the wire, so OpenRouter/Vercel-gateway is
