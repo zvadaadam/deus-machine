@@ -268,9 +268,20 @@ those subscriptions — and it is the reason the Settings story needs one
   runtime.env backfill must not fight it). Because WE pick the per-turn
   credential, deus controls subscription-vs-key precedence explicitly —
   no silent env-order surprises like the raw CLI.
-- **Storage:** local-first like today's key (deus backend settings), sent
-  per turn; post-D1 consider a user-scoped agnt secret as the multi-device
-  sync home. Never into workspace secrets (Lane A fans every secret into
+- **Storage — decided 2026-08-20 (the phone test):** the token's canonical
+  home is a **user-scoped agnt secret** (encrypted at rest), because
+  device-local storage breaks the Mac-off/phone story — Conductor stores
+  cloud credentials server-side for exactly this reason (their iOS app
+  drives cloud computers with the laptop closed). The difference we keep:
+  it is a **turn credential, never an environment secret** — structurally
+  excluded from the sandbox env fan-out (reserved-name rule, like the E2B
+  key strip) and resolved by the SESSION DO at turn start into
+  `{authKind: oauth}` toward the sidecar proxy. A client-supplied per-turn
+  credential (desktop) wins; absent one (phone-direct), the platform
+  fills. Desktop's safeStorage vault becomes a cache; connect-once syncs
+  every device. Conductor parity on availability, minus their two
+  weaknesses (durable plaintext env config; agent-readable token in the
+  VM). Never into ordinary workspace secrets (Lane A fans those into
   sandbox env AND /home/user/.env plaintext — agent-visible).
 - **Ship-before hardening (agnt, one line):** the pause/resume agent
   snapshot tars ~/.claude into R2 WITHOUT excluding `.credentials.json` —
