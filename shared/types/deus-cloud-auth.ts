@@ -4,6 +4,8 @@ export interface DeusCloudSessionStatus {
   expiresAt: string | null;
   tokenType: "Bearer" | null;
   cloudUrl: string;
+  /** This device holds a minted agnt platform key (D1 handshake complete). */
+  hasPlatformKey: boolean;
 }
 
 export interface DeusCloudAuthResult {

@@ -7,6 +7,7 @@ const WEB_SESSION: DeusCloudSessionStatus = {
   expiresAt: null,
   tokenType: null,
   cloudUrl: "https://cloud.deusmachine.ai",
+  hasPlatformKey: false,
 };
 
 export async function getSession(): Promise<DeusCloudSessionStatus> {

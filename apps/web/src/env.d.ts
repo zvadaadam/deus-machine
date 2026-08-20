@@ -45,6 +45,7 @@ interface Window {
       expiresAt: string | null;
       tokenType: "Bearer" | null;
       cloudUrl: string;
+      hasPlatformKey: boolean;
     }>;
     startDeusCloudLogin: () => Promise<{
       success: boolean;
@@ -54,6 +55,7 @@ interface Window {
         expiresAt: string | null;
         tokenType: "Bearer" | null;
         cloudUrl: string;
+        hasPlatformKey: boolean;
       };
       error?: string;
     }>;
@@ -65,6 +67,7 @@ interface Window {
         expiresAt: string | null;
         tokenType: "Bearer" | null;
         cloudUrl: string;
+        hasPlatformKey: boolean;
       };
       error?: string;
     }>;
@@ -75,6 +78,7 @@ interface Window {
         expiresAt: string | null;
         tokenType: "Bearer" | null;
         cloudUrl: string;
+        hasPlatformKey: boolean;
       }) => void
     ) => () => void;
     on: (event: string, callback: (...args: unknown[]) => void) => () => void;

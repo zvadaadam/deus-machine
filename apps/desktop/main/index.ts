@@ -28,7 +28,13 @@ import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
-import { registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
+import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
+import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
+import {
+  applyCloudCredentialsToEnv,
+  provisionAfterLogin,
+  pushCloudCredentialsToBackend,
+} from "./deus-cloud-provision";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -270,6 +276,9 @@ app.whenReady().then(async () => {
   // Spawn runtime children as child processes
   logMainProcess("[main] Spawning runtime stack...");
   try {
+    // Stored cloud credentials ride the spawn env (the boring path); the
+    // runtime credentials route covers keys minted after this point.
+    await applyCloudCredentialsToEnv().catch(() => {});
     const { port: backendPort, authToken } = await spawnBackend({
       onStdoutLine: (source, line) => {
         if (source === "backend" && line.startsWith("DEUS_WORKSPACE_PROGRESS:")) {
@@ -289,6 +298,17 @@ app.whenReady().then(async () => {
     // Expose backend connection info so IPC handlers can return it to renderer
     process.env.DEUS_BACKEND_PORT = String(backendPort);
     process.env.DEUS_AUTH_TOKEN = authToken;
+
+    // D1 handshake, startup edition: signed-in & keyless → mint this device's
+    // platform key; otherwise just hand any stored credentials to the backend.
+    void (async () => {
+      const token = await getStoredDeusCloudSessionToken().catch(() => null);
+      if (token) {
+        await provisionAfterLogin(token, resolveDeusCloudUrl());
+      } else {
+        await pushCloudCredentialsToBackend();
+      }
+    })();
 
     // System tray icon with backend health status
     setupTray(backendPort);

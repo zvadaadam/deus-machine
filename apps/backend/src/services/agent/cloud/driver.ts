@@ -434,7 +434,16 @@ export async function startCloudTurn(
   const registered = handler.beginTurn(deusSessionId, turnId);
   try {
     const wsOptions: Record<string, unknown> = {};
-    if (config.anthropicApiKey) wsOptions.apiKey = config.anthropicApiKey;
+    // Deus picks the per-turn credential EXPLICITLY — subscription first,
+    // API key fallback. No env-ordering accidents like the raw CLI (where a
+    // stray ANTHROPIC_API_KEY silently outranks the subscription token).
+    // The oauth branch requires agnt's authKind-aware sidecar (engine 0.3.1).
+    if (config.claudeOauthToken) {
+      wsOptions.apiKey = config.claudeOauthToken;
+      wsOptions.authKind = "oauth";
+    } else if (config.anthropicApiKey) {
+      wsOptions.apiKey = config.anthropicApiKey;
+    }
     if (options.model) wsOptions.model = options.model;
     if (options.thinkingLevel) wsOptions.thinkingLevel = options.thinkingLevel;
     session.socket.send({

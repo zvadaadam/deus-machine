@@ -4,6 +4,8 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "../../../shared/types";
+import { getCloudCredentialsStatus } from "./cloud-credentials";
+import { provisionAfterLogin, revokeDeviceKey } from "./deus-cloud-provision";
 import {
   buildDesktopLoginUrl,
   createDesktopPkcePair,
@@ -94,6 +96,7 @@ function toPublicStatus(
       expiresAt: null,
       tokenType: null,
       cloudUrl,
+      hasPlatformKey: false,
     };
   }
 
@@ -103,7 +106,16 @@ function toPublicStatus(
     expiresAt: stored.expiresAt,
     tokenType: stored.tokenType,
     cloudUrl: stored.cloudUrl,
+    hasPlatformKey: false,
   };
+}
+
+/** Overlay device-key presence onto a session status (never the value). */
+async function enrichWithCredentialStatus(
+  status: DeusCloudSessionStatus
+): Promise<DeusCloudSessionStatus> {
+  const creds = await getCloudCredentialsStatus().catch(() => null);
+  return { ...status, hasPlatformKey: creds?.hasPlatformKey ?? false };
 }
 
 function requireSafeStorage(): void {
@@ -371,7 +383,7 @@ function finishPendingLogin(
 }
 
 export async function getDeusCloudSessionStatus(): Promise<DeusCloudSessionStatus> {
-  return toPublicStatus(await readStoredSession());
+  return enrichWithCredentialStatus(toPublicStatus(await readStoredSession()));
 }
 
 export async function getStoredDeusCloudSessionToken(): Promise<string | null> {
@@ -391,6 +403,11 @@ export async function signOutDeusCloud(): Promise<DeusCloudAuthResult> {
   if (pending) {
     finishPendingLogin(new Error("Deus Cloud sign-in was cancelled"), undefined, pending);
   }
+
+  // Revoke THIS device's platform key while the session can still authorize
+  // it; local deletion inside also locks the device out even when offline.
+  const sessionToken = await getStoredDeusCloudSessionToken().catch(() => null);
+  await revokeDeviceKey(sessionToken).catch(() => {});
 
   await clearStoredSession();
   const session = await getDeusCloudSessionStatus();
@@ -502,9 +519,18 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
     if (pendingLogin !== pending) return;
 
     await writeStoredSession(stored);
-    const session = toPublicStatus(stored);
+    const session = await enrichWithCredentialStatus(toPublicStatus(stored));
     broadcastAuthChanged(session);
     finishPendingLogin(null, session, pending);
+
+    // The D1 handshake: mint this device's platform key and hand credentials
+    // to the backend, then re-broadcast so Settings flips to "key active".
+    void (async () => {
+      const token = await getStoredDeusCloudSessionToken();
+      if (!token) return;
+      await provisionAfterLogin(token, stored.cloudUrl);
+      broadcastAuthChanged(await getDeusCloudSessionStatus());
+    })();
   } catch (error) {
     const normalized = error instanceof Error ? error : new Error("Deus Cloud sign-in failed");
     finishPendingLogin(normalized, undefined, activePending ?? undefined);

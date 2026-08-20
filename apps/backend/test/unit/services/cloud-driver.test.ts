@@ -37,6 +37,7 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
     baseUrl: "http://agnt.test",
     apiKey: "agnt_sk_test_x",
     anthropicApiKey: "sk-ant-test",
+    claudeOauthToken: null,
   }),
 }));
 

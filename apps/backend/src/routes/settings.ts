@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getAllSettings, saveSetting } from "../services/settings.service";
-import { parseBody, SaveSettingBody } from "../lib/schemas";
+import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas";
+import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
 import { checkAuth, isConnected, getAgents } from "../services/agent";
 import {
@@ -80,6 +81,16 @@ app.post("/settings/cloud/github-token", async (c) => {
   if (!token) throw new ValidationError("token is required");
   await saveCloudGithubToken(token);
   return c.json({ ok: true });
+});
+
+// Runtime credential handoff from the desktop main process (D1 handshake):
+// the per-device agnt key minted after sign-in, and agent credentials saved
+// in Settings. Values live in memory only — durable storage is main's
+// safeStorage, never this process or the DB.
+app.post("/settings/cloud/credentials", async (c) => {
+  const body = parseBody(CloudCredentialsBody, await c.req.json());
+  setCloudRuntimeCredentials(body);
+  return c.json({ ok: true, configured: getCloudConfig() !== null });
 });
 
 export default app;
