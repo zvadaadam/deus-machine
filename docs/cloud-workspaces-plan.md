@@ -132,12 +132,42 @@ lifecycle problems, and breaks the Mac-off story.
 
 ### D1 — Deus Cloud auth handshake (next)
 
-Desktop: route the existing WorkOS PKCE token (deus-cloud-auth.ts, currently
-consumed by nothing) to the backend → `POST /auth/desktop/exchange` (already
-deployed; `"deus-machine-desktop"` already whitelisted in the JWT schema) →
-first login auto-creates the org → mint a **per-device** agnt API key
-(`POST /dashboard/api-keys`; label = hostname, revocable) → keychain. Replaces
-the env vars; unlocks production `api.deusmachine.ai`.
+Desktop: route the existing WorkOS PKCE session token (deus-cloud-auth.ts —
+the full loopback flow is built, hardened, and tested; the stored token has
+zero consumers) to the mint flow → per-device agnt API key → safeStorage →
+backend. Verified against the live services 2026-08-20:
+
+- `cloud.deusmachine.ai` (deus-cloud, NOT api.\* — that is the agnt backend)
+  is deployed with WorkOS configured in production: `/auth/desktop/config`
+  serves the real client id, `/auth/desktop/exchange` validates codes,
+  `"deus-machine-desktop"` is enforced by the session-claims schema, and
+  first login auto-creates the org in WorkOS + mirrors it into the shared
+  Postgres cache.
+- The mint endpoint EXISTS but lives on the agnt backend at
+  `POST /dashboard/orgs/:orgId/api-keys` (not deus-cloud, not
+  `/dashboard/api-keys`): deus-cloud-session-JWT guarded, returns the
+  `agnt_sk_live_*` key once, hash-only storage, list + soft-revoke
+  included. No SDK helper — hand-rolled fetch. Desktop tokens pass its
+  guard today only because `claims.client` is never checked — PIN this
+  (explicit allow + test) as part of the sprint, don't leave it accidental.
+- The build is the missing middle, all deus-side: main-process mint flow
+  (`GET /me`/orgs with the session token → mint with label=hostname →
+  safeStorage, copying the session-file pattern), main→backend credential
+  handoff (the `AUTH_TOKEN` spawn-env precedent + a runtime path, since
+  keys mint after the backend starts), an invalidation seam for
+  `getCloudConfig`'s module-level memo (the landmine — 11 call sites read
+  a once-per-process cache), and joining the Settings Account (IPC) and
+  Cloud (HTTP) silos into one signed-in story. Loopback stays; no deus://
+  protocol, no login BrowserWindow (nav policy forbids both, deliberately).
+- Cheap identity unlock while there: `api_keys.createdBy` already records
+  the minting account — populating `AuthContext.userId` from it in agnt's
+  auth middleware turns every per-device key into a VERIFIED user identity
+  (today `userId` on workspace/secret calls is caller-asserted). That is
+  the honest foundation for the per-user secrets below.
+
+Replaces the env vars; the desktop then talks to production with no manual
+configuration. The only interactive step is the user clicking through the
+WorkOS sign-in once.
 
 Identity also activates the TEAM half of environments (decided 2026-08-20,
 schema already supports all of it — zero agnt migrations):
@@ -163,7 +193,19 @@ Two options side by side in Settings (Conductor's model): **Deus GitHub App
 - Register the App (Contents R/W, Metadata R; webhook → deus-cloud). Public
   identifiers may live in this repo; the **private key never leaves deus-cloud**
   (an OSS desktop binary cannot hold a key that mints tokens for every
-  installation).
+  installation). Registration is a HUMAN step (GitHub UI, under the org) —
+  the one true external blocker of this package; everything else is code.
+- Verified 2026-08-20: this package is greenfield in code (zero octokit /
+  installations / webhook-signature hits anywhere in agnt), but a full
+  written spec already exists at `apps/deus-cloud/GITHUB_TODO.md` (data
+  model, routes incl. install-url + callback + webhook, event list,
+  security rules, 6-PR breakdown) — build from that, don't re-derive.
+- agnt git-auth needs NO step change for fetched tokens: the single
+  injection point is the workspace secrets map (`github_token`) merged in
+  create-workspace, and the credentials file already uses the
+  `x-access-token` App convention. The real gap is refresh: a 1h token is
+  captured once at provision — resume/long-lived sandboxes need the
+  credential-helper-calls-sidecar refinement below.
 - deus-cloud: install callback, `installations` table (installation_id ↔ org),
   mint endpoint (App JWT → 1h installation token), service-to-service auth to
   agnt via the existing shared JWT_SECRET pattern.
