@@ -148,6 +148,34 @@ export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): P
   return true;
 }
 
+/**
+ * Sync the Claude subscription token's CANONICAL copy to the platform (a
+ * user-scoped agnt secret, applies_to_all=false — a turn credential the
+ * session DO resolves; never fanned into sandbox env). This is what makes
+ * the phone work with the Mac closed. `null` deletes. Best-effort: without
+ * a device key (not signed in yet) the token stays local until the next
+ * sign-in re-syncs it.
+ */
+export async function syncClaudeTokenToPlatform(value: string | null): Promise<boolean> {
+  const apiKey = await getCloudCredential("agntApiKey");
+  if (!apiKey) return false;
+  const url = `${resolveAgntBaseUrl()}/secrets/CLAUDE_CODE_OAUTH_TOKEN`;
+  const headers = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
+  try {
+    const response =
+      value === null
+        ? await fetch(url, { method: "DELETE", headers })
+        : await fetch(url, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ value, appliesToAll: false }),
+          });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Post-login hook: mint if needed, then hand credentials to the backend. */
 export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
   try {
@@ -157,6 +185,10 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
       `[deus-cloud] device key provisioning failed: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+  // A token connected before sign-in was local-only — the device key now
+  // exists, so the platform copy can catch up.
+  const storedToken = await getCloudCredential("claudeOauthToken").catch(() => null);
+  if (storedToken) await syncClaudeTokenToPlatform(storedToken);
   await pushCloudCredentialsToBackend();
 }
 

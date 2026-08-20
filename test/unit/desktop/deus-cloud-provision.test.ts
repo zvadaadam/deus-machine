@@ -173,3 +173,39 @@ describe("revokeDeviceKey", () => {
     expect(await getCloudCredential("agntApiKey")).toBeNull();
   });
 });
+
+describe("syncClaudeTokenToPlatform", () => {
+  it("PUTs the token as a non-fanout secret with the device key", async () => {
+    const { syncClaudeTokenToPlatform } =
+      await import("../../../apps/desktop/main/deus-cloud-provision");
+    await setCloudCredential("agntApiKey", "agnt_sk_live_x");
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    expect(await syncClaudeTokenToPlatform("sk-ant-oat01-secret")).toBe(true);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://agnt.test/secrets/CLAUDE_CODE_OAUTH_TOKEN");
+    expect(init.method).toBe("PUT");
+    expect(init.headers.authorization).toBe("Bearer agnt_sk_live_x");
+    // applies_to_all=false is the load-bearing bit: a TURN credential the
+    // session DO resolves — never fanned into sandbox env.
+    expect(JSON.parse(init.body)).toEqual({ value: "sk-ant-oat01-secret", appliesToAll: false });
+  });
+
+  it("DELETEs the platform copy on disconnect (null)", async () => {
+    const { syncClaudeTokenToPlatform } =
+      await import("../../../apps/desktop/main/deus-cloud-provision");
+    await setCloudCredential("agntApiKey", "agnt_sk_live_x");
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    expect(await syncClaudeTokenToPlatform(null)).toBe(true);
+    expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
+  });
+
+  it("is a quiet no-op before a device key exists (local-only until sign-in)", async () => {
+    const { syncClaudeTokenToPlatform } =
+      await import("../../../apps/desktop/main/deus-cloud-provision");
+    expect(await syncClaudeTokenToPlatform("sk-ant-oat01-secret")).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

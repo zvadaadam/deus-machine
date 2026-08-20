@@ -16,7 +16,7 @@ import {
   getCloudCredentialsStatus,
   setCloudCredential,
 } from "./cloud-credentials";
-import { pushCloudCredentialsToBackend } from "./deus-cloud-provision";
+import { pushCloudCredentialsToBackend, syncClaudeTokenToPlatform } from "./deus-cloud-provision";
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +40,8 @@ async function statusResult(error?: string): Promise<ClaudeSubscriptionResult> {
 
 async function storeToken(token: string): Promise<ClaudeSubscriptionResult> {
   await setCloudCredential("claudeOauthToken", token);
+  // Local vault = cache; the platform secret is canonical (phone/Mac-off).
+  await syncClaudeTokenToPlatform(token);
   await pushCloudCredentialsToBackend();
   return statusResult();
 }
@@ -95,6 +97,7 @@ export async function connectClaudeSubscriptionAssisted(): Promise<ClaudeSubscri
 
 export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionResult> {
   await deleteCloudCredential("claudeOauthToken");
+  await syncClaudeTokenToPlatform(null);
   await pushCloudCredentialsToBackend();
   return statusResult();
 }
