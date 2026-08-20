@@ -210,7 +210,12 @@ tree; port forwarding for localhost previews.
   config (setup, packages, requiredEnv), human-editable — transparency and
   manual override for what the tool wrote. The `requiredEnv` names render
   as value inputs → stored via the existing secrets API (env-scoped;
-  user-scoped once D1 lands).
+  user-scoped once D1 lands). Decided 2026-08-20: environment rows stay
+  LAZY — never auto-created as a side effect of opening a cloud workspace
+  ("row exists" IS the chip's configured signal; no junk rows; agnt keeps
+  the inline-config shape for other consumers anyway). If this card wants
+  to attach a value before the environment exists, first value-write
+  creates the row — a deliberate act, not a side effect.
 - **Setup-failure → reconfigure**: when provisioning fails in
   `running_setup_commands`, resurface the setup chip on that workspace
   ("environment setup failed — re-run setup") so drift self-heals through
