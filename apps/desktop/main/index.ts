@@ -47,12 +47,17 @@ import { resolveDefaultDataDir } from "../../../shared/runtime";
 // Single Instance Lock
 // ---------------------------------------------------------------------------
 
-const canonicalUserDataPath = resolveDefaultDataDir({
-  platform: process.platform,
-  homeDir: process.env.HOME || homedir(),
-  appData: process.env.APPDATA,
-  xdgDataHome: process.env.XDG_DATA_HOME,
-});
+// DEUS_USER_DATA_DIR isolates a whole app instance (dev parallel instances,
+// e2e runs) WITHOUT overriding HOME — a HOME override breaks macOS Keychain
+// resolution and with it safeStorage, which the credential vault requires.
+const canonicalUserDataPath =
+  process.env.DEUS_USER_DATA_DIR ||
+  resolveDefaultDataDir({
+    platform: process.platform,
+    homeDir: process.env.HOME || homedir(),
+    appData: process.env.APPDATA,
+    xdgDataHome: process.env.XDG_DATA_HOME,
+  });
 app.setPath("userData", canonicalUserDataPath);
 
 if (!app.requestSingleInstanceLock()) {
