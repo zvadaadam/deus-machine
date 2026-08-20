@@ -19,6 +19,16 @@ export const COMPACT_CONVERSATION = "/compact";
 // Pull request actions
 // ---------------------------------------------------------------------------
 
+/** Cloud quick action: agent explores, VERIFIES setup by running it, then
+ *  persists it with the agnt_configure_environment tool (platform-side). */
+export const CONFIGURE_CLOUD_ENV = [
+  "Set up this repository's cloud environment so future cloud workspaces start ready to work:",
+  "1. Explore the repo (lockfiles, manifests, README/AGENTS.md) and work out how to install dependencies and prepare it.",
+  "2. RUN the setup here in this sandbox and verify it succeeds — fix your commands until they do.",
+  "3. Persist the verified configuration with the agnt_configure_environment tool: setup commands, any apt packages, and the NAMES of env vars the repo needs (never values).",
+  "4. Tell me what you configured and which env var values I still need to provide.",
+].join("\n");
+
 /** Instructs the agent to create a PR targeting the given branch */
 export function createPRPrompt(targetBranch = "main"): string {
   return `Create a PR onto ${targetBranch}`;

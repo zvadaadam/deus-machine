@@ -8,6 +8,8 @@
 // wait-for-ready here — the sandbox may still be provisioning when the user
 // sends the first prompt; agnt queues it and runs it when the sidecar is up.
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 import {
   createWorkspace as agntCreateWorkspace,
@@ -25,6 +27,9 @@ import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import { getCloudConfig } from "./agent/cloud/config";
 import { ensureCloudSession, announceCloudEnv } from "./agent/cloud/driver";
+import { getCloudEnvironmentInfo } from "./cloud-environment.service";
+
+const execFileAsync = promisify(execFile);
 
 const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as const;
 
@@ -77,25 +82,59 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
 
   const workspaceId = uuidv7();
   const slug = generateUniqueName(db);
-  const branch = params.sourceBranch || repo.git_default_branch || "main";
+  const sourceBranch = params.sourceBranch || repo.git_default_branch || "main";
+  // The sandbox works on its OWN branch off the source (parity with local
+  // worktrees): PRs need head ≠ base, and the turn-end wip snapshots hang off
+  // this branch's history.
+  const workBranch = slug;
 
   db.prepare(
     `INSERT INTO workspaces (
        id, repository_id, slug, kind, git_branch, git_target_branch,
        state, init_stage, updated_at
      ) VALUES (?, ?, ?, 'cloud', ?, ?, 'initializing', 'creating cloud workspace', datetime('now'))`
-  ).run(workspaceId, params.repositoryId, slug, branch, branch);
+  ).run(workspaceId, params.repositoryId, slug, workBranch, sourceBranch);
   invalidate([...WORKSPACE_RESOURCES], {});
 
   void provisionInBackground(
     workspaceId,
     httpsOrigin(repo.git_origin_url),
-    branch,
+    { source: sourceBranch, work: workBranch },
     config.baseUrl,
     config.apiKey
   );
 
   return { workspaceId, slug };
+}
+
+/**
+ * Delete the hidden durability ref (refs/agnt/wip/<providerWorkspaceId>) from
+ * the repo's origin. Archive-time hygiene: the sandbox is being stopped, the
+ * workspace is closed — nothing should linger in the user's repository. Runs
+ * through the LOCAL gh auth (works when the sandbox is already dead) and is
+ * strictly best-effort: a missing ref or missing gh is not an error.
+ */
+export async function deleteCloudWipRef(
+  originUrl: string,
+  providerWorkspaceId: string
+): Promise<void> {
+  const m = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(httpsOrigin(originUrl));
+  if (!m) return;
+  const [, owner, repoName] = m;
+  try {
+    await execFileAsync(
+      "gh",
+      [
+        "api",
+        "-X",
+        "DELETE",
+        `repos/${owner}/${repoName}/git/refs/agnt/wip/${providerWorkspaceId}`,
+      ],
+      { timeout: 15_000 }
+    );
+  } catch {
+    // Ref never existed (no turns ran), token lacks scope, or gh is absent.
+  }
 }
 
 /** Stop the agnt sandbox behind an archived cloud workspace (best-effort). */
@@ -242,14 +281,26 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
 async function provisionInBackground(
   workspaceId: string,
   originUrl: string,
-  branch: string,
+  branch: { source: string; work: string },
   baseUrl: string,
   apiKey: string
 ): Promise<void> {
   const db = getDatabase();
   try {
-    const environment = Environment.from("agnt-base").repo(originUrl, branch);
-    const provider = await agntCreateWorkspace({ baseUrl, apiKey, environment });
+    // A specialized environment (agent-authored via agnt_configure_environment,
+    // resolved by the derived repo name) wins; absence of one IS the default —
+    // the inline recipe below, exactly as before.
+    const envInfo = await getCloudEnvironmentInfo(originUrl);
+    const environment = envInfo.configured
+      ? envInfo.name
+      : Environment.from("agnt-base").repo(originUrl, branch.source);
+    const provider = await agntCreateWorkspace({
+      baseUrl,
+      apiKey,
+      environment,
+      // New branch off the source — the sandbox's whole life happens here.
+      checkout: { branch: branch.work, from: branch.source },
+    });
     db.prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session' WHERE id = ?"
     ).run(provider.id, workspaceId);

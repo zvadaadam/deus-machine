@@ -94,6 +94,40 @@ lifecycle problems, and breaks the Mac-off story.
   deadlines); shared composer controls (`ModelPicker`/`CloudToggle`/
   `BranchPickerButton`) used by HomeView and the prompt-first modal.
 
+### Also shipped (Sprint 2 + environments — AGNT #143, deus #311)
+
+- **Durability without a mirror** (the planned mirror design below was
+  simplified away): after every turn the sidecar snapshots the work tree
+  through a temp index into `refs/agnt/wip/<agntWorkspaceId>` on the user's
+  OWN origin — hidden from branch listings and PRs, parent chain carries the
+  agent's real commits, recovery is one fetch from anywhere. Snapshot
+  identity is the (HEAD, tree) pair with pinned commit dates, so unchanged
+  turns push nothing. `git.finalize` (client command → DO → sidecar) turns
+  protected work into real pushed commits for a PR. Deus consumes: cloud
+  workspaces work on their own slug branch via `checkout {branch, from}`
+  (PRs possible — the agent-driven PR button just works), PR status resolves
+  by repo URL + branch with no local checkout, archive deletes the wip ref
+  via local gh auth.
+- **Agent-authored environments**: the repo→environment link is a NAMING
+  CONVENTION (`repo-<slug≤100>-<hash8>` over the https origin), derived
+  independently by deus and the platform — no mapping table, nothing
+  machine-local, portable across computers by construction (parity vectors
+  pinned in both repos' tests). A "Set up your cloud environment" chip
+  (shown only while unconfigured, both composer paths, 20s poll to learn
+  the out-of-band success) sends the explore → RUN-to-verify → persist
+  prompt; the sandbox agent persists via the `agnt_configure_environment`
+  MCP tool on the sidecar's internal server. The call rides the session WS
+  to the AgentSession DO (the sidecar has no REST credential by design);
+  the DO derives the target from the workspace's own repo, upserts
+  org-scoped, stamps the repo binding itself, and re-validates the merged
+  config with the full schema. The patch is a restricted subset: setup
+  steps, apt packages, timeout, names-only `requiredEnv` — env VALUES are
+  structurally unreachable through the agent. Org applies-to-all secrets
+  now resolve for inline-config workspaces too (this is what makes
+  git-auth/pushes work at all); post-clone setup executes in the project
+  dir. Live-proven 10/10: configure on a fresh repo → second workspace
+  provisions FROM the environment with deps preinstalled.
+
 ## Work packages
 
 ### D1 — Deus Cloud auth handshake (next)
@@ -104,6 +138,22 @@ deployed; `"deus-machine-desktop"` already whitelisted in the JWT schema) →
 first login auto-creates the org → mint a **per-device** agnt API key
 (`POST /dashboard/api-keys`; label = hostname, revocable) → keychain. Replaces
 the env vars; unlocks production `api.deusmachine.ai`.
+
+Identity also activates the TEAM half of environments (decided 2026-08-20,
+schema already supports all of it — zero agnt migrations):
+
+- **Environments stay org-scoped** (repo knowledge is shared; the tool
+  already writes `__org__` scope). Personal variants: user-scoped
+  environments shadow org ones by name in the resolver — already works.
+- **Secret VALUES go user-scoped**: deus passes `userId` on workspace and
+  secret calls; resolution precedence (user+env-linked > org+env-linked >
+  user-wide > org-wide) then gives each member their own `DATABASE_URL` on
+  the shared environment. Never link personal values at org level once
+  there is more than one human.
+- **Shared-config safety**: env version history + one-click rollback
+  (Devin's model — cheapest form: keep prior config JSONs), plus a chat
+  notice when the shared environment changes. Last-writer-wins stays the
+  write semantic.
 
 ### D1.5 — GitHub App (bundled with D1; same identity plumbing)
 
@@ -123,15 +173,16 @@ Two options side by side in Settings (Conductor's model): **Deus GitHub App
   sidecar → backend → deus-cloud for a fresh token on demand, so >1h-old
   workspaces never push with expired credentials.
 
-### Sprint 2 — durability rails (agnt-heavy)
+### Sprint 2 — durability rails — SHIPPED (simplified; see "Also shipped")
 
-Universal git mirror for every deus cloud workspace (managed mirror remote even
-for GitHub-sourced repos); rolling-wip autosave (ONE amended commit at the tip,
-force-push-with-lease **only to the agnt mirror**, paused while a PR is open);
-hidden checkpoint refs (`refs/agnt/checkpoints/<turnId>`, invisible to GitHub)
-pushed at turn end; size guard (~25MB/file, event + .gitignore suggestions);
-tiered GC (20 turns / daily 30d / pinned); `turn.ended.gitSync` gains
-`checkpoint: pushed|pending|skipped`.
+The mirror design originally planned here was cut: one wip ref on the user's
+own origin gives the same guarantee with zero new infrastructure. Remaining
+OPTIONAL follow-ups when justified by usage: per-turn checkpoint HISTORY refs
+(`refs/agnt/checkpoints/<turnId>` — only if Sprint 3's restore-to-turn wants
+origin-side history), push size guard + .gitignore suggestions, wip-ref GC
+for orphans (repo URL renames leave old-name refs behind), and a durability
+indicator in the workspace UI ("work protected Ns ago" from the turn's
+gitSync summary — today failures are sidecar-log-only).
 
 ### Sprint 3 — the handoffs (deus-heavy)
 
@@ -142,7 +193,9 @@ baseCheckpoint}` entry in agnt's execute queue — serialized with turns, `git
 apply --3way`, conflicts surfaced scoped), **Continue locally / Send back**
 (kind flip; the home moves, never syncs). Committed content then serves diffs
 from local objects (latency win); the opt-in folder auto-mirror later is this
-primitive + a timer.
+primitive + a timer. Plus the durability payoff surface: when a sandbox is
+dead but `refs/agnt/wip/<id>` exists, the workspace offers **Recover work**
+(branch from the wip SHA via gh api, or fetch + materialize locally).
 
 ### Sprint 4 — the reach
 
@@ -150,6 +203,36 @@ Web/phone direct-to-agnt mode (deus SQLite becomes a projection of agnt PG for
 cloud sessions — reconnect = snapshot diff by engine ids + idempotent upserts);
 ACP-shaped `fs/*` + `terminal/*` on the sidecar (tmux-backed); `fs/list` file
 tree; port forwarding for localhost previews.
+
+### Environment follow-ups (deus-heavy, small pieces, any order)
+
+- **Settings → per-repo Cloud environment card**: show the agent-authored
+  config (setup, packages, requiredEnv), human-editable — transparency and
+  manual override for what the tool wrote. The `requiredEnv` names render
+  as value inputs → stored via the existing secrets API (env-scoped;
+  user-scoped once D1 lands). Decided 2026-08-20: environment rows stay
+  LAZY — never auto-created as a side effect of opening a cloud workspace
+  ("row exists" IS the chip's configured signal; no junk rows; agnt keeps
+  the inline-config shape for other consumers anyway). If this card wants
+  to attach a value before the environment exists, first value-write
+  creates the row — a deliberate act, not a side effect.
+- **Setup-failure → reconfigure**: when provisioning fails in
+  `running_setup_commands`, resurface the setup chip on that workspace
+  ("environment setup failed — re-run setup") so drift self-heals through
+  the same verified loop instead of a dead error state.
+- **Warm-start cache** (agnt, the speed play, from the exploration):
+  content-addressed post-setup project tar in R2 keyed on
+  `hash(setup + lockfiles)` (`deriveSnapshotKey` exists unused), captured
+  on first green setup, restored parallel to clone + idempotent re-run on
+  top; needs sidecar-streamed R2 transfer (Workers memory cap). Never
+  snapshot a used agent sandbox — always build clean from the recipe.
+- **Polish**: display-label mapping for internal sidecar MCP tools (the
+  transcript shows `mcp____agnt_sidecar_tools__agnt_configure_environment`;
+  should read "Configure environment" like the Ask User block); env row GC
+  when a repo is removed from deus (best-effort delete by derived name).
+- Recorded postures: Codex-style setup-only secret scrubbing (values exist
+  during setup, scrubbed before the agent phase) as a future agnt change;
+  devcontainer.json as a read-only detector feeding the same recipe.
 
 ### Codex in the cloud (agnt-side, whenever wanted)
 

@@ -44,7 +44,7 @@ function ghChildEnv(): NodeJS.ProcessEnv {
 // Helper: run gh CLI command with timeout, explicit error classification
 export async function runGh(
   args: string[],
-  options: { cwd: string; timeoutMs?: number }
+  options: { cwd?: string; timeoutMs?: number }
 ): Promise<
   | { success: true; stdout: string }
   | {
@@ -195,6 +195,27 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
   if (isFork) attempts.push({ repoArg: upstreamUrl, headArg: headBranch });
   attempts.push({ repoArg: originUrl, headArg: headBranch });
 
+  return queryPrStatus(attempts, workspacePath);
+}
+
+/**
+ * PR status for a branch known only by name + remote — cloud workspaces have
+ * no local checkout, but the DB carries the workspace branch and the repo's
+ * origin URL, which is all `gh pr list --repo` needs.
+ */
+export async function getPrStatusForRemoteBranch(
+  originUrl: string,
+  headBranch: string
+): Promise<PrStatusResponse> {
+  if (!headBranch) return { has_pr: false, conclusive: false, error: null };
+  return queryPrStatus([{ repoArg: originUrl, headArg: headBranch }], undefined);
+}
+
+/** The shared gh lookup: try each repo in order, first PR found wins. */
+async function queryPrStatus(
+  attempts: { repoArg: string | null; headArg: string }[],
+  workspacePath: string | undefined
+): Promise<PrStatusResponse> {
   let lastError: string | null = null;
   let hadSuccessfulResponse = false;
   let allAttemptsSucceeded = true;
