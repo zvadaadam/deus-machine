@@ -215,6 +215,99 @@ Two options side by side in Settings (Conductor's model): **Deus GitHub App
   sidecar → backend → deus-cloud for a fresh token on demand, so >1h-old
   workspaces never push with expired credentials.
 
+### Cloud agent auth — BYO subscription + the Cloud setup page (with D1)
+
+Researched in depth 2026-08-20 (Conductor teardown + vendor docs + full
+credential-path trace). Today the cloud lane runs ONLY on a raw
+`ANTHROPIC_API_KEY`; most users' buying power is their Claude Pro/Max or
+ChatGPT subscription. This package is what makes cloud workspaces run on
+those subscriptions — and it is the reason the Settings story needs one
+"Cloud setup" page (Conductor's model, mapped from their live UI):
+
+1. **Deus Cloud account** — the D1 sign-in (WorkOS) + connection status.
+2. **Agents** — per-agent rows ("Connected via subscription ✓" / "Set up"),
+   each opening a 3-option card: Subscription / API key / Custom provider.
+3. **GitHub** — App (recommended, D1.5) with the per-repo "Install app"
+   missing-access list; PAT stays as fallback.
+
+**Claude Code subscription — the mechanics (all verified):**
+
+- `claude setup-token` mints a ONE-YEAR bearer token (`sk-ant-oat01-…`);
+  the CLI and the Agent SDK honor `CLAUDE_CODE_OAUTH_TOKEN` (grep-verified
+  in our pinned SDK). Headless consumption is its documented purpose. No
+  refresh; re-mint at expiry. No list/revoke API exists — a leaked token
+  means containment, so server-side storage must be encrypted and
+  disconnect = delete + advise rotating.
+- **Policy posture (the load-bearing constraint):** Anthropic sanctions the
+  USER minting the token on their own machine and pasting it into a
+  product; a product performing claude.ai OAuth on users' behalf is
+  prohibited text (enforcement paused — the $20/$100/$200 Agent SDK
+  monthly credit was announced then paused 2026-06-15; Anthropic promised
+  advance notice). Deus advantage inside that boundary: we SHIP the claude
+  CLI, so "Connect subscription" can spawn `claude setup-token` in a local
+  PTY (the gh-CLI-auth precedent) and capture the token — the mint still
+  happens on the user's machine via Anthropic's own CLI + browser; paste
+  stays as fallback. Ship API-key and gateway fallbacks alongside; policy
+  volatility is the top product risk here.
+- **Transport (the design decision):** deus already sends the Anthropic
+  credential PER TURN, and the sandbox's loopback proxy keeps the real
+  value out of the agent's env (placeholder key + rewritten upstream
+  headers). Extend that, don't bypass it: per-turn options gain
+  `{authKind: "oauth", token}` (schema gate in shared agent.ts), the
+  engine's ApiKeyStore learns a credential kind, and the proxy branches to
+  `Authorization: Bearer` + the `anthropic-beta` OAuth capability instead
+  of `x-api-key` — an UPSTREAM @zvada/agent-server change (proxy is
+  x-api-key-only today and deletes Authorization; that one line is the
+  whole blocker). Anthropic shape-checks OAuth traffic, so if header
+  surgery fights enforcement the fallback is handing
+  `CLAUDE_CODE_OAUTH_TOKEN` directly to the child env for oauth turns
+  (forfeits the no-exfiltration property — proxy path preferred). Note the
+  CLI's own precedence trap: an env `ANTHROPIC_API_KEY` silently outranks
+  the subscription token, so oauth turns must guarantee no API key reaches
+  the child env (engine needs explicit unset semantics; Lane A's
+  runtime.env backfill must not fight it). Because WE pick the per-turn
+  credential, deus controls subscription-vs-key precedence explicitly —
+  no silent env-order surprises like the raw CLI.
+- **Storage:** local-first like today's key (deus backend settings), sent
+  per turn; post-D1 consider a user-scoped agnt secret as the multi-device
+  sync home. Never into workspace secrets (Lane A fans every secret into
+  sandbox env AND /home/user/.env plaintext — agent-visible).
+- **Ship-before hardening (agnt, one line):** the pause/resume agent
+  snapshot tars ~/.claude into R2 WITHOUT excluding `.credentials.json` —
+  harmless today (no login creds exist in sandboxes) but must be excluded
+  before subscription tokens ever touch a sandbox filesystem.
+
+**Codex subscription — different shape, harder constraint:**
+
+- Subscription auth lives in `~/.codex/auth.json` (`auth_mode: "chatgpt"`,
+  access + REFRESH tokens; ~8-day staleness window, auto-refresh, file
+  rewritten in place). OpenAI sanctions copying it into private automation
+  with hard rules — and **refresh tokens are single-use**: one auth.json
+  fanned out to N concurrent sandboxes 401s on the second refresh
+  ("refresh token has already been used", closed not-planned). That
+  collides head-on with deus's parallel-workspaces model. Consequences:
+  per-sandbox seeding via the DEVICE-CODE flow (`codex login
+--device-auth`, needs the user's ChatGPT security toggle; the
+  three-step + poll UI in Conductor's modal) or a persist-after-run
+  auth.json lineage per workspace — never one shared seed.
+- Order of work: API-key path FIRST (trivial — the engine's codex adapter
+  maps `apiKey → CODEX_API_KEY`; rides the same per-turn plumbing), device
+  flow after, as its own iteration. Both need the codex-in-cloud package
+  below (binary in template, CODEX_HOME, sidecar unpin) regardless.
+- ChatGPT plan limits pool across local + cloud (5-hour window + weekly),
+  same as Claude — set that expectation in the UI copy.
+
+**Custom provider (both agents, later):** a base-URL + key form.
+Claude: `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` — our per-turn
+`baseUrl` option already rides the wire, so OpenRouter/Vercel-gateway is
+nearly free. Codex: `model_providers` in config.toml (`wire_api = "chat"`
+for most gateways) or `OPENAI_BASE_URL`.
+
+**Sprint fit:** the Cloud setup page + Claude subscription path belong in
+D1 (the page is where D1's sign-in lands anyway; one settings story, not
+two). Codex auth ships with the codex-in-cloud package. Custom providers
+whenever a user asks.
+
 ### Sprint 2 — durability rails — SHIPPED (simplified; see "Also shipped")
 
 The mirror design originally planned here was cut: one wip ref on the user's
@@ -284,7 +377,11 @@ adapter — mostly installing `@openai/codex-sdk` in the E2B template), thread
 an OpenAI key through the same secret/turn-option plumbing as the Anthropic
 key, and have deus pass `agent: "codex"` on session create (the API field
 already exists). Until then deus rejects codex sends to cloud workspaces up
-front with an honest message.
+front with an honest message. Auth comes from the BYO-subscription package
+above: API key first (`CODEX_API_KEY` via the per-turn plumbing; note the
+codex-app-server harness takes env only — no per-turn key — so the sdk
+harness is the BYOK-friendly one), device-code auth.json seeding after,
+one per sandbox (single-use refresh tokens — never share a seed).
 
 ## Weakness register → resolutions
 
