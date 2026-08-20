@@ -38,6 +38,10 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "deus_cloud:get_session",
   "deus_cloud:start_login",
   "deus_cloud:sign_out",
+  "deus_cloud:claude_sub_status",
+  "deus_cloud:claude_sub_connect",
+  "deus_cloud:claude_sub_save_token",
+  "deus_cloud:claude_sub_disconnect",
   "get_installed_apps",
   "open_in_app",
 
@@ -170,6 +174,14 @@ const electronAPI = {
   getDeusCloudSession: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:get_session"),
   startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
+  getClaudeSubscriptionStatus: (): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:claude_sub_status"),
+  connectClaudeSubscription: (): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:claude_sub_connect"),
+  saveClaudeSubscriptionToken: (token: string): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:claude_sub_save_token", token),
+  disconnectClaudeSubscription: (): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:claude_sub_disconnect"),
   onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
     ipcRenderer.on("deus_cloud:changed", listener);

@@ -45,6 +45,26 @@ interface Window {
       session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
+    getClaudeSubscriptionStatus: () => Promise<{
+      success: boolean;
+      hasClaudeSubscription: boolean;
+      error?: string;
+    }>;
+    connectClaudeSubscription: () => Promise<{
+      success: boolean;
+      hasClaudeSubscription: boolean;
+      error?: string;
+    }>;
+    saveClaudeSubscriptionToken: (token: string) => Promise<{
+      success: boolean;
+      hasClaudeSubscription: boolean;
+      error?: string;
+    }>;
+    disconnectClaudeSubscription: () => Promise<{
+      success: boolean;
+      hasClaudeSubscription: boolean;
+      error?: string;
+    }>;
     signOutDeusCloud: () => Promise<{
       success: boolean;
       session: import("@shared/types").DeusCloudSessionStatus;

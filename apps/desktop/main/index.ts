@@ -31,6 +31,7 @@ import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { applyCloudCredentialsToEnv, provisionAtStartup } from "./deus-cloud-provision";
+import { registerClaudeSubscriptionHandlers } from "./claude-subscription";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -330,6 +331,7 @@ app.whenReady().then(async () => {
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
+  registerClaudeSubscriptionHandlers();
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers();

@@ -49,3 +49,43 @@ export function onAuthChanged(callback: (session: DeusCloudSessionStatus) => voi
 
   return window.electronAPI.onDeusCloudAuthChanged(callback);
 }
+
+export interface ClaudeSubscriptionState {
+  success: boolean;
+  hasClaudeSubscription: boolean;
+  error?: string;
+}
+
+const WEB_SUBSCRIPTION: ClaudeSubscriptionState = {
+  success: false,
+  hasClaudeSubscription: false,
+  error: "Claude subscription connect requires the desktop app",
+};
+
+export async function getClaudeSubscriptionStatus(): Promise<ClaudeSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.getClaudeSubscriptionStatus) {
+    return { ...WEB_SUBSCRIPTION, success: true, error: undefined };
+  }
+  return window.electronAPI.getClaudeSubscriptionStatus();
+}
+
+export async function connectClaudeSubscription(): Promise<ClaudeSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.connectClaudeSubscription) {
+    return WEB_SUBSCRIPTION;
+  }
+  return window.electronAPI.connectClaudeSubscription();
+}
+
+export async function saveClaudeSubscriptionToken(token: string): Promise<ClaudeSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.saveClaudeSubscriptionToken) {
+    return WEB_SUBSCRIPTION;
+  }
+  return window.electronAPI.saveClaudeSubscriptionToken(token);
+}
+
+export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.disconnectClaudeSubscription) {
+    return WEB_SUBSCRIPTION;
+  }
+  return window.electronAPI.disconnectClaudeSubscription();
+}
