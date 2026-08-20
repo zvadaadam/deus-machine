@@ -1,13 +1,17 @@
 // Durable home for cloud credentials on this device: the per-device agnt
 // platform key (minted after Deus Cloud sign-in) and the Claude subscription
-// token (Settings → Agents). Same posture as the WorkOS session file:
-// safeStorage-encrypted values inside a 0600 JSON in userData. The renderer
-// never sees values — only presence/meta; the backend receives them at spawn
-// (env) and at runtime (local credentials route).
+// token (Settings → Agents). Built on the shared safeStorage-file primitive;
+// the renderer never sees values — only presence/meta. The backend receives
+// them at spawn (env) and at runtime (local credentials route).
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { app, safeStorage } from "electron";
+import {
+  decryptSecret,
+  encryptSecret,
+  readJsonFile,
+  removeFile,
+  userDataFilePath,
+  writeJsonFile,
+} from "./safe-storage-file";
 
 const CREDENTIALS_FILE_NAME = "deus-cloud-credentials.json";
 
@@ -39,43 +43,14 @@ export interface CloudCredentialsStatus {
   hasClaudeSubscription: boolean;
 }
 
-function getCredentialsFilePath(): string {
-  return join(app.getPath("userData"), CREDENTIALS_FILE_NAME);
-}
-
-function requireSafeStorage(): void {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("Secure credential storage is unavailable on this device");
-  }
-}
-
-function encryptValue(value: string): string {
-  requireSafeStorage();
-  return safeStorage.encryptString(value).toString("base64");
-}
-
-function decryptValue(encrypted: string): string {
-  requireSafeStorage();
-  return safeStorage.decryptString(Buffer.from(encrypted, "base64"));
-}
+const filePath = () => userDataFilePath(CREDENTIALS_FILE_NAME);
 
 async function readStore(): Promise<StoredCredentialsFile> {
-  try {
-    const raw = await readFile(getCredentialsFilePath(), "utf8");
-    const parsed = JSON.parse(raw) as StoredCredentialsFile;
-    if (parsed?.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null) {
-      return { version: 1, entries: {} };
-    }
-    return parsed;
-  } catch {
+  const parsed = await readJsonFile<StoredCredentialsFile>(filePath());
+  if (parsed?.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null) {
     return { version: 1, entries: {} };
   }
-}
-
-async function writeStore(store: StoredCredentialsFile): Promise<void> {
-  const filePath = getCredentialsFilePath();
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+  return parsed;
 }
 
 export async function setCloudCredential(
@@ -85,11 +60,11 @@ export async function setCloudCredential(
 ): Promise<void> {
   const store = await readStore();
   store.entries[name] = {
-    encryptedValue: encryptValue(value),
+    encryptedValue: encryptSecret(value),
     createdAt: new Date().toISOString(),
     ...meta,
   };
-  await writeStore(store);
+  await writeJsonFile(filePath(), store);
 }
 
 export async function getCloudCredential(name: CloudCredentialName): Promise<string | null> {
@@ -97,7 +72,7 @@ export async function getCloudCredential(name: CloudCredentialName): Promise<str
   const entry = store.entries[name];
   if (!entry) return null;
   try {
-    return decryptValue(entry.encryptedValue);
+    return decryptSecret(entry.encryptedValue);
   } catch {
     // Encryption key changed (OS reinstall, keychain reset) — the entry is
     // unrecoverable; drop it so status reads honestly disconnected.
@@ -121,10 +96,10 @@ export async function deleteCloudCredential(name: CloudCredentialName): Promise<
   if (!store.entries[name]) return;
   delete store.entries[name];
   if (Object.keys(store.entries).length === 0) {
-    await rm(getCredentialsFilePath(), { force: true });
+    await removeFile(filePath());
     return;
   }
-  await writeStore(store);
+  await writeJsonFile(filePath(), store);
 }
 
 /** Presence/meta only — safe for the renderer; values never cross IPC. */

@@ -1,10 +1,16 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { BrowserWindow, ipcMain, shell } from "electron";
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { dirname, join } from "node:path";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "../../../shared/types";
 import { getCloudCredentialsStatus } from "./cloud-credentials";
+import {
+  decryptSecret,
+  encryptSecret,
+  readJsonFile,
+  removeFile,
+  userDataFilePath,
+  writeJsonFile,
+} from "./safe-storage-file";
 import { provisionAfterLogin, revokeDeviceKey } from "./deus-cloud-provision";
 import {
   buildDesktopLoginUrl,
@@ -82,7 +88,7 @@ function cloudEndpointUrl(cloudUrl: string, path: string): URL {
 }
 
 function getSessionFilePath(): string {
-  return join(app.getPath("userData"), SESSION_FILE_NAME);
+  return userDataFilePath(SESSION_FILE_NAME);
 }
 
 function toPublicStatus(
@@ -116,12 +122,6 @@ async function enrichWithCredentialStatus(
 ): Promise<DeusCloudSessionStatus> {
   const creds = await getCloudCredentialsStatus().catch(() => null);
   return { ...status, hasPlatformKey: creds?.hasPlatformKey ?? false };
-}
-
-function requireSafeStorage(): void {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("Secure credential storage is unavailable on this device");
-  }
 }
 
 function respondHtml(res: ServerResponse, status: number, message: string): void {
@@ -213,8 +213,8 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
 
 async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
   try {
-    const raw = await readFile(getSessionFilePath(), "utf8");
-    const parsed = JSON.parse(raw) as Partial<StoredDeusCloudSession>;
+    const parsed =
+      (await readJsonFile<Partial<StoredDeusCloudSession>>(getSessionFilePath())) ?? {};
     if (
       parsed.version !== SESSION_FILE_VERSION ||
       typeof parsed.accountId !== "string" ||
@@ -247,25 +247,15 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
 }
 
 async function writeStoredSession(session: StoredDeusCloudSession): Promise<void> {
-  const filePath = getSessionFilePath();
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(session, null, 2)}\n`, { mode: 0o600 });
-  await chmod(filePath, 0o600);
+  await writeJsonFile(getSessionFilePath(), session);
 }
 
 async function clearStoredSession(): Promise<void> {
-  await rm(getSessionFilePath(), { force: true });
+  await removeFile(getSessionFilePath());
 }
 
-function encryptSessionToken(token: string): string {
-  requireSafeStorage();
-  return safeStorage.encryptString(token).toString("base64");
-}
-
-function decryptSessionToken(encryptedToken: string): string {
-  requireSafeStorage();
-  return safeStorage.decryptString(Buffer.from(encryptedToken, "base64"));
-}
+const encryptSessionToken = encryptSecret;
+const decryptSessionToken = decryptSecret;
 
 function parseDesktopAuthConfig(body: DesktopAuthConfigResponse | null): DesktopAuthConfig {
   if (

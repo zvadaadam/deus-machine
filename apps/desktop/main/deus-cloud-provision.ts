@@ -161,6 +161,25 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
 }
 
 /**
+ * Startup, after the backend is up: signed-in & keyless → mint this device's
+ * platform key; otherwise just hand any stored credentials to the backend.
+ * Fire-and-forget by design — startup must never block on the cloud.
+ */
+export function provisionAtStartup(
+  getSessionToken: () => Promise<string | null>,
+  cloudUrl: string
+): void {
+  void (async () => {
+    const token = await getSessionToken().catch(() => null);
+    if (token) {
+      await provisionAfterLogin(token, cloudUrl);
+    } else {
+      await pushCloudCredentialsToBackend();
+    }
+  })();
+}
+
+/**
  * Startup: surface the stored key to the backend the boring way — the spawn
  * env. Must run BEFORE spawnBackend (the child copies process.env).
  */

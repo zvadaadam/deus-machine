@@ -39,47 +39,19 @@ interface Window {
     confirm: (message: string, detail?: string) => Promise<boolean>;
     startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;
-    getDeusCloudSession: () => Promise<{
-      signedIn: boolean;
-      accountId: string | null;
-      expiresAt: string | null;
-      tokenType: "Bearer" | null;
-      cloudUrl: string;
-      hasPlatformKey: boolean;
-    }>;
+    getDeusCloudSession: () => Promise<import("@shared/types").DeusCloudSessionStatus>;
     startDeusCloudLogin: () => Promise<{
       success: boolean;
-      session: {
-        signedIn: boolean;
-        accountId: string | null;
-        expiresAt: string | null;
-        tokenType: "Bearer" | null;
-        cloudUrl: string;
-        hasPlatformKey: boolean;
-      };
+      session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
     signOutDeusCloud: () => Promise<{
       success: boolean;
-      session: {
-        signedIn: boolean;
-        accountId: string | null;
-        expiresAt: string | null;
-        tokenType: "Bearer" | null;
-        cloudUrl: string;
-        hasPlatformKey: boolean;
-      };
+      session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
     onDeusCloudAuthChanged: (
-      callback: (session: {
-        signedIn: boolean;
-        accountId: string | null;
-        expiresAt: string | null;
-        tokenType: "Bearer" | null;
-        cloudUrl: string;
-        hasPlatformKey: boolean;
-      }) => void
+      callback: (session: import("@shared/types").DeusCloudSessionStatus) => void
     ) => () => void;
     on: (event: string, callback: (...args: unknown[]) => void) => () => void;
     invoke: (channel: string, args?: unknown) => Promise<unknown>;
