@@ -209,6 +209,27 @@ Two options side by side in Settings (Conductor's model): **Deus GitHub App
 - deus-cloud: install callback, `installations` table (installation_id ↔ org),
   mint endpoint (App JWT → 1h installation token), service-to-service auth to
   agnt via the existing shared JWT_SECRET pattern.
+- **Expo/EAS prior art (teardown 2026-08-20, file-level evidence):** their
+  rule is "store the POINTER, mint the credential, let GitHub be the
+  authority." Installations table = `(account_id, installation_identifier
+BIGINT, registration_id)` and nothing else — NO tokens at rest, NO status
+  column (suspended/uninstalled is read LIVE from GitHub per request), repo
+  rows only for explicitly linked repos. Tokens are minted on demand via
+  octokit's App auth and **down-scoped at mint time to ONE repo + ONE
+  permission** (`repositoryIds: [id], permissions: {contents: write}`) into
+  an `x-access-token` clone URL — revocation is GitHub rejecting the next
+  mint, so there is no permission cache to invalidate. Webhooks:
+  timing-safe HMAC verification, unknown-app and bad-signature responses
+  deliberately identical (no oracle), inbound anonymous events downgraded
+  to a per-installation robot actor before any write. Their TWO mistakes we
+  must not copy: the installation-ownership (anti-takeover) check lives
+  only in a client-facing endpoint while the link mutation accepts ANY
+  installation id — ours goes server-side in the link handler (verify the
+  caller's GitHub identity owns or admins the installation's org); and
+  their webhook uninstall path leaks robot actors — our cleanup must be
+  one complete path. Their registration layer (per-account custom apps /
+  GHES with an all-zeros sentinel row for the shared default) is the
+  BYO-app tenancy shape if enterprise ever asks — noted, not built.
 - agnt `git-auth`: accept a _fetched_ token (mint per provision/resume) in
   addition to the stored-secret path. Nothing long-lived is stored.
 - Later refinement: a git credential helper in the sandbox that calls
