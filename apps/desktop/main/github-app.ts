@@ -35,7 +35,11 @@ export async function getGithubAppState(): Promise<GithubAppState> {
     const res = await fetch(`${resolveDeusCloudUrl()}/orgs/${context.orgId}/github/installation`, {
       headers: { authorization: `Bearer ${context.token}` },
     });
-    if (res.status === 503) return { configured: false, signedIn: true, installations: [] };
+    // 503 = App not registered; 404 = routes not deployed — both read as
+    // not-configured (nothing actionable for the user yet).
+    if (res.status === 503 || res.status === 404) {
+      return { configured: false, signedIn: true, installations: [] };
+    }
     if (!res.ok) {
       return {
         configured: true,
@@ -60,7 +64,7 @@ export async function startGithubAppInstall(): Promise<{ ok: boolean; error?: st
     const res = await fetch(`${resolveDeusCloudUrl()}/orgs/${context.orgId}/github/install-url`, {
       headers: { authorization: `Bearer ${context.token}` },
     });
-    if (res.status === 503) {
+    if (res.status === 503 || res.status === 404) {
       return { ok: false, error: "The Deus GitHub App isn't registered yet" };
     }
     if (!res.ok) return { ok: false, error: `install-url failed (${res.status})` };
