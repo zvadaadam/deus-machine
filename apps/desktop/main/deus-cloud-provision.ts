@@ -157,9 +157,22 @@ export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): P
  * sign-in re-syncs it.
  */
 export async function syncClaudeTokenToPlatform(value: string | null): Promise<boolean> {
+  return syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", value);
+}
+
+/**
+ * Sync any agent turn-credential's CANONICAL platform copy (an UNLINKED
+ * secret — applies_to_all=false, zero environment links: resolvable only by
+ * name-targeted turn lookups, never fanned into sandbox env). `null`
+ * deletes. Best-effort without a device key.
+ */
+export async function syncAgentSecretToPlatform(
+  name: string,
+  value: string | null
+): Promise<boolean> {
   const apiKey = await getCloudCredential("agntApiKey");
   if (!apiKey) return false;
-  const url = `${resolveAgntBaseUrl()}/secrets/CLAUDE_CODE_OAUTH_TOKEN`;
+  const url = `${resolveAgntBaseUrl()}/secrets/${name}`;
   const headers = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
   try {
     const response =

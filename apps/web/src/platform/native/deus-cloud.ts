@@ -92,12 +92,20 @@ export interface GithubAppState {
   configured: boolean;
   signedIn: boolean;
   installations: Array<{ installationId: number; accountLogin: string }>;
+  appSlug: string | null;
+  accessibleRepos: string[];
   error?: string;
 }
 
 export async function getGithubAppStatus(): Promise<GithubAppState> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.getGithubAppStatus) {
-    return { configured: false, signedIn: false, installations: [] };
+    return {
+      configured: false,
+      signedIn: false,
+      installations: [],
+      appSlug: null,
+      accessibleRepos: [],
+    };
   }
   return window.electronAPI.getGithubAppStatus();
 }
@@ -107,4 +115,33 @@ export async function installGithubApp(): Promise<{ ok: boolean; error?: string 
     return { ok: false, error: "Installing the GitHub App requires the desktop app" };
   }
   return window.electronAPI.installGithubApp();
+}
+
+export type CodexSubscriptionState = import("@shared/types").CodexSubscriptionResult;
+
+const WEB_CODEX: CodexSubscriptionState = {
+  success: false,
+  hasCodexSubscription: false,
+  error: "Codex subscription connect requires the desktop app",
+};
+
+export async function getCodexSubscriptionStatus(): Promise<CodexSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.getCodexSubscriptionStatus) {
+    return { ...WEB_CODEX, success: true, error: undefined };
+  }
+  return window.electronAPI.getCodexSubscriptionStatus();
+}
+
+export async function importCodexAuth(): Promise<CodexSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.importCodexAuth) {
+    return WEB_CODEX;
+  }
+  return window.electronAPI.importCodexAuth();
+}
+
+export async function disconnectCodexSubscription(): Promise<CodexSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.disconnectCodexSubscription) {
+    return WEB_CODEX;
+  }
+  return window.electronAPI.disconnectCodexSubscription();
 }

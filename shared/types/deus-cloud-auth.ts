@@ -19,3 +19,10 @@ export interface ClaudeSubscriptionResult {
   hasClaudeSubscription: boolean;
   error?: string;
 }
+
+export interface CodexSubscriptionResult {
+  success: boolean;
+  hasCodexSubscription: boolean;
+  accountEmail?: string;
+  error?: string;
+}

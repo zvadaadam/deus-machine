@@ -44,6 +44,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "deus_cloud:claude_sub_disconnect",
   "deus_cloud:github_app_status",
   "deus_cloud:github_app_install",
+  "deus_cloud:codex_sub_status",
+  "deus_cloud:codex_sub_import",
+  "deus_cloud:codex_sub_disconnect",
   "get_installed_apps",
   "open_in_app",
 
@@ -186,6 +189,11 @@ const electronAPI = {
     ipcRenderer.invoke("deus_cloud:claude_sub_disconnect"),
   getGithubAppStatus: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_status"),
   installGithubApp: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_install"),
+  getCodexSubscriptionStatus: (): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:codex_sub_status"),
+  importCodexAuth: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:codex_sub_import"),
+  disconnectCodexSubscription: (): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:codex_sub_disconnect"),
   onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
     ipcRenderer.on("deus_cloud:changed", listener);

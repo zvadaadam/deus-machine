@@ -9,8 +9,11 @@ import { cn } from "@/shared/lib/utils";
 import {
   type ClaudeSubscriptionState,
   disconnectClaudeSubscription,
+  disconnectCodexSubscription,
   getClaudeSubscriptionStatus,
+  getCodexSubscriptionStatus,
   getGithubAppStatus,
+  importCodexAuth,
   installGithubApp,
   openAgentSetupTerminal,
   saveClaudeSubscriptionToken,
@@ -26,6 +29,7 @@ const AGENT_SUBSCRIPTIONS = [
     id: "claude-code",
     name: "Claude Code",
     available: true,
+    kind: "paste" as const,
     command: "claude setup-token",
     placeholder: "sk-ant-oat…",
     instructions:
@@ -34,11 +38,12 @@ const AGENT_SUBSCRIPTIONS = [
   {
     id: "codex",
     name: "Codex",
-    available: false,
-    command: null,
+    available: true,
+    kind: "import" as const,
+    command: "codex login --device-auth",
     placeholder: null,
     instructions:
-      "ChatGPT subscription auth is a device-code flow: enable device authorization in ChatGPT security settings, then approve a code per cloud environment (OpenAI allows one credential seat per sandbox). Ships with Codex cloud support.",
+      "Enable device authorization in ChatGPT security settings, run this in a terminal and approve the code, then import the credential it writes. Stored encrypted; cloud turns activate with Codex cloud support.",
   },
 ] as const;
 
@@ -66,6 +71,31 @@ export function CloudSection() {
     retry: false,
   });
 
+  const codexSub = useQuery({
+    queryKey: ["settings", "codex-subscription"],
+    queryFn: getCodexSubscriptionStatus,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const codexAction = useMutation({
+    mutationFn: async (action: { kind: "import" } | { kind: "disconnect" }) => {
+      const result =
+        action.kind === "import" ? await importCodexAuth() : await disconnectCodexSubscription();
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: async (result) => {
+      toast.success(
+        result.hasCodexSubscription
+          ? "Codex subscription imported — activates with Codex cloud support"
+          : "Codex subscription disconnected"
+      );
+      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex action failed"),
+  });
+
   const subAction = useMutation({
     mutationFn: async (action: { kind: "disconnect" } | { kind: "paste"; token: string }) => {
       const result: ClaudeSubscriptionState =
@@ -87,6 +117,13 @@ export function CloudSection() {
     },
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Subscription action failed"),
+  });
+
+  const localRepos = useQuery({
+    queryKey: ["repos"],
+    queryFn: () => apiClient.get<Array<{ id: string; git_origin_url: string | null }>>("/repos"),
+    staleTime: 60_000,
+    retry: false,
   });
 
   const githubApp = useQuery({
@@ -249,27 +286,38 @@ export function CloudSection() {
                         <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
                       </Button>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        aria-label={`${agent.name} subscription token`}
-                        type="password"
-                        value={subToken}
-                        onChange={(e) => setSubToken(e.target.value)}
-                        placeholder={agent.placeholder ?? ""}
-                        className="max-w-md text-sm"
-                        disabled={subAction.isPending}
-                      />
+                    {agent.kind === "paste" ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          aria-label={`${agent.name} subscription token`}
+                          type="password"
+                          value={subToken}
+                          onChange={(e) => setSubToken(e.target.value)}
+                          placeholder={agent.placeholder ?? ""}
+                          className="max-w-md text-sm"
+                          disabled={subAction.isPending}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            subToken.trim() &&
+                            subAction.mutate({ kind: "paste", token: subToken.trim() })
+                          }
+                          disabled={!subToken.trim() || subAction.isPending}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    ) : (
                       <Button
                         size="sm"
-                        onClick={() =>
-                          subToken.trim() &&
-                          subAction.mutate({ kind: "paste", token: subToken.trim() })
-                        }
-                        disabled={!subToken.trim() || subAction.isPending}
+                        className="self-start"
+                        onClick={() => codexAction.mutate({ kind: "import" })}
+                        disabled={codexAction.isPending}
                       >
-                        Save
+                        {codexAction.isPending ? "Importing…" : "Import credential"}
                       </Button>
-                    </div>
+                    )}
                   </div>
                 ))}
             </div>
@@ -314,6 +362,43 @@ export function CloudSection() {
             </span>
           )}
         </div>
+        {(() => {
+          const state = githubApp.data;
+          if (!state?.installations.length || !state.appSlug) return null;
+          const accessible = new Set(state.accessibleRepos.map((r) => r.toLowerCase()));
+          const missing = (localRepos.data ?? [])
+            .map((r) => r.git_origin_url ?? "")
+            .filter((u) => u.includes("github.com"))
+            .map((u) =>
+              u
+                .replace(/^git@github\.com:/, "")
+                .replace(/^https?:\/\/github\.com\//, "")
+                .replace(/\.git$/, "")
+            )
+            .filter((full) => full.includes("/") && !accessible.has(full.toLowerCase()));
+          if (missing.length === 0) return null;
+          return (
+            <div className="mb-3">
+              <p className="text-text-muted mb-1 text-xs">Missing GitHub access</p>
+              {missing.map((full) => (
+                <div
+                  key={full}
+                  className="border-border-subtle flex items-center justify-between border-b py-2 last:border-b-0"
+                >
+                  <span className="text-text-secondary truncate text-sm">{full}</span>
+                  <a
+                    className="text-text-primary border-border-subtle hover:bg-surface-secondary ml-3 shrink-0 rounded-md border px-2.5 py-1 text-xs"
+                    href={`https://github.com/apps/${state.appSlug}/installations/new`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Install app ↗
+                  </a>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {step(s?.hasGithubToken, "GitHub — repo access for sandboxes")}
         <p className="text-text-muted mb-3 text-sm">
           Sandboxes clone over https. A fine-grained personal access token (contents read/write on

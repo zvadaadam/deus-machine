@@ -14,8 +14,18 @@ export interface GithubAppState {
   configured: boolean;
   signedIn: boolean;
   installations: Array<{ installationId: number; accountLogin: string }>;
+  /** App slug for install deep links (null until registered). */
+  appSlug: string | null;
+  /** owner/name list the installations can access (live from GitHub). */
+  accessibleRepos: string[];
   error?: string;
 }
+
+const EMPTY_STATE: Omit<GithubAppState, "configured" | "signedIn"> = {
+  installations: [],
+  appSlug: null,
+  accessibleRepos: [],
+};
 
 async function orgContext(): Promise<{ token: string; orgId: string } | null> {
   const [token, meta] = await Promise.all([
@@ -29,31 +39,41 @@ async function orgContext(): Promise<{ token: string; orgId: string } | null> {
 export async function getGithubAppState(): Promise<GithubAppState> {
   const context = await orgContext();
   if (!context) {
-    return { configured: false, signedIn: false, installations: [] };
+    return { ...EMPTY_STATE, configured: false, signedIn: false };
   }
+  const base = `${resolveDeusCloudUrl()}/orgs/${context.orgId}/github`;
+  const headers = { authorization: `Bearer ${context.token}` };
   try {
-    const res = await fetch(`${resolveDeusCloudUrl()}/orgs/${context.orgId}/github/installation`, {
-      headers: { authorization: `Bearer ${context.token}` },
-    });
+    const res = await fetch(`${base}/installation`, { headers });
     // 503 = App not registered; 404 = routes not deployed — both read as
     // not-configured (nothing actionable for the user yet).
     if (res.status === 503 || res.status === 404) {
-      return { configured: false, signedIn: true, installations: [] };
+      return { ...EMPTY_STATE, configured: false, signedIn: true };
     }
     if (!res.ok) {
-      return {
-        configured: true,
-        signedIn: true,
-        installations: [],
-        error: `status ${res.status}`,
-      };
+      return { ...EMPTY_STATE, configured: true, signedIn: true, error: `status ${res.status}` };
     }
     const body = (await res.json()) as {
       installations?: Array<{ installationId: number; accountLogin: string }>;
+      appSlug?: string | null;
     };
-    return { configured: true, signedIn: true, installations: body.installations ?? [] };
+    const installations = body.installations ?? [];
+    let accessibleRepos: string[] = [];
+    if (installations.length > 0) {
+      const reposRes = await fetch(`${base}/accessible-repos`, { headers }).catch(() => null);
+      if (reposRes?.ok) {
+        accessibleRepos = ((await reposRes.json()) as { repos?: string[] }).repos ?? [];
+      }
+    }
+    return {
+      configured: Boolean(body.appSlug),
+      signedIn: true,
+      installations,
+      appSlug: body.appSlug ?? null,
+      accessibleRepos,
+    };
   } catch {
-    return { configured: false, signedIn: true, installations: [], error: "offline" };
+    return { ...EMPTY_STATE, configured: false, signedIn: true, error: "offline" };
   }
 }
 

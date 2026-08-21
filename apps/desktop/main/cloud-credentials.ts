@@ -15,7 +15,7 @@ import {
 
 const CREDENTIALS_FILE_NAME = "deus-cloud-credentials.json";
 
-export type CloudCredentialName = "agntApiKey" | "claudeOauthToken";
+export type CloudCredentialName = "agntApiKey" | "claudeOauthToken" | "codexAuthJson";
 
 export interface CloudCredentialMeta {
   /** agnt-side key id — needed to revoke the device key on sign-out. */
@@ -41,6 +41,7 @@ export interface CloudCredentialsStatus {
   platformKeyLabel: string | null;
   platformOrgId: string | null;
   hasClaudeSubscription: boolean;
+  hasCodexSubscription: boolean;
 }
 
 const filePath = () => userDataFilePath(CREDENTIALS_FILE_NAME);
@@ -111,5 +112,6 @@ export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatu
     platformKeyLabel: key?.label ?? null,
     platformOrgId: key?.orgId ?? null,
     hasClaudeSubscription: Boolean(store.entries.claudeOauthToken),
+    hasCodexSubscription: Boolean(store.entries.codexAuthJson),
   };
 }

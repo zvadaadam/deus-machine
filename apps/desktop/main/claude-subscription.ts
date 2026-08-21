@@ -30,6 +30,7 @@ const OAUTH_TOKEN_RE = /sk-ant-oat[a-zA-Z0-9_-]+/;
  */
 const AGENT_SETUP_COMMANDS: Record<string, string> = {
   "claude-code": "claude setup-token",
+  codex: "codex login --device-auth",
 };
 
 /** Open the user's terminal with the agent's mint command typed in and run. */

@@ -27,6 +27,7 @@ export type { Settings, SettingsSection } from "./settings";
 // Deus Cloud auth
 export type {
   ClaudeSubscriptionResult,
+  CodexSubscriptionResult,
   DeusCloudAuthResult,
   DeusCloudSessionStatus,
 } from "./deus-cloud-auth";

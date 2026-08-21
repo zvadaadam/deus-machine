@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -313,19 +314,54 @@ export function GitHubSection() {
       </div>
 
       {/* Cloud access — the App handles sandboxes; the account above is local. */}
-      <div className="border-border-subtle mt-4 flex items-center justify-between rounded-lg border border-dashed px-4 py-3">
-        <div>
-          <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
-          <p className="text-text-muted mt-0.5 text-xs">
-            Gives cloud workspaces per-repo access with server-minted, single-repo tokens — install
-            once, no personal token needed. Until it ships, cloud repos use the token in Settings →
-            Cloud.
-          </p>
-        </div>
-        <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
-          Coming soon
-        </span>
+      <GithubAppCard />
+    </div>
+  );
+}
+
+/** Live Deus GitHub App card — same states as Settings → Cloud. */
+function GithubAppCard() {
+  const state = useQuery({
+    queryKey: ["settings", "github-app"],
+    queryFn: getGithubAppStatus,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const data = state.data;
+  return (
+    <div
+      className={
+        "border-border-subtle mt-4 flex items-center justify-between rounded-lg border px-4 py-3" +
+        (data?.configured ? "" : " border-dashed")
+      }
+    >
+      <div>
+        <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
+        <p className="text-text-muted mt-0.5 text-xs">
+          {data?.installations.length
+            ? `Installed for ${data.installations.map((i) => i.accountLogin).join(", ")} — cloud workspaces get server-minted, single-repo tokens. Manage repo access in Settings → Cloud.`
+            : "Gives cloud workspaces per-repo access with server-minted, single-repo tokens — install once, no personal token needed."}
+        </p>
       </div>
+      {data?.installations.length ? (
+        <span className="text-accent-green shrink-0 text-sm">Installed ✓</span>
+      ) : data?.configured ? (
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={async () => {
+            const res = await installGithubApp();
+            if (!res.ok) toast.error(res.error ?? "Could not start the install");
+            else toast.info("Complete the install on GitHub, then come back");
+          }}
+        >
+          Install
+        </Button>
+      ) : (
+        <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
+          Awaiting App registration
+        </span>
+      )}
     </div>
   );
 }
