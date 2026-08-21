@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Cloud, Copy, TerminalSquare } from "lucide-react";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
+import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
 import { Button } from "@/components/ui/button";
@@ -61,8 +62,12 @@ interface CloudSettings {
  */
 export function CloudSection() {
   const queryClient = useQueryClient();
+  const reducedMotion = useReducedMotion();
   const [token, setToken] = useState("");
   const [subToken, setSubToken] = useState("");
+  // One agent row expanded at a time — compact list, setup opens inline.
+  const [openAgent, setOpenAgent] = useState<string | null>(null);
+  const [openGithub, setOpenGithub] = useState<"app" | "pat" | null>(null);
 
   const sub = useQuery({
     queryKey: ["settings", "claude-subscription"],
@@ -252,206 +257,323 @@ export function CloudSection() {
           by you, in your terminal — Deus only stores the result (encrypted, streamed per turn,
           never visible to the agent).
         </p>
-        <div className="flex flex-col gap-3">
-          {AGENT_SUBSCRIPTIONS.map((agent) => (
-            <div key={agent.id} className="border-border-subtle rounded-lg border px-4 py-3">
-              <div className="flex items-center justify-between">
-                <span className="text-text-primary text-sm font-medium">{agent.name}</span>
-                {agent.available ? (
-                  agentConnected(agent.id) ? (
-                    <span className="text-accent-green flex items-center gap-1.5 text-sm">
-                      <Check className="h-3.5 w-3.5" /> Connected via subscription
-                    </span>
-                  ) : (
-                    <span className="text-text-muted text-xs">Not connected</span>
-                  )
-                ) : (
-                  <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
-                    Coming soon
-                  </span>
-                )}
-              </div>
-              <p className="text-text-muted mt-1 text-xs">{agent.instructions}</p>
-              {agent.available &&
-                (agentConnected(agent.id) ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-2"
-                    onClick={() =>
-                      agent.id === "codex"
-                        ? codexAction.mutate({ kind: "disconnect" })
-                        : subAction.mutate({ kind: "disconnect" })
-                    }
-                    disabled={agent.id === "codex" ? codexAction.isPending : subAction.isPending}
-                  >
-                    Disconnect
-                  </Button>
-                ) : (
-                  <div className="mt-2 flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                      <code className="bg-surface-secondary text-text-secondary rounded px-2 py-1 text-xs">
-                        {agent.command}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label="Copy command"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(agent.command ?? "");
-                          toast.success("Command copied");
-                        }}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          const res = await openAgentSetupTerminal(agent.id);
-                          if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
-                        }}
-                      >
-                        <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
-                      </Button>
-                    </div>
-                    {agent.kind === "paste" ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          aria-label={`${agent.name} subscription token`}
-                          type="password"
-                          value={subToken}
-                          onChange={(e) => setSubToken(e.target.value)}
-                          placeholder={agent.placeholder ?? ""}
-                          className="max-w-md text-sm"
-                          disabled={subAction.isPending}
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            subToken.trim() &&
-                            subAction.mutate({ kind: "paste", token: subToken.trim() })
-                          }
-                          disabled={!subToken.trim() || subAction.isPending}
-                        >
-                          Save
-                        </Button>
-                      </div>
+        <div className="border-border-subtle divide-border-subtle divide-y rounded-lg border">
+          {AGENT_SUBSCRIPTIONS.map((agent) => {
+            const connected = agentConnected(agent.id);
+            const open = openAgent === agent.id;
+            return (
+              <div key={agent.id}>
+                <button
+                  type="button"
+                  disabled={!agent.available}
+                  onClick={() => setOpenAgent(open ? null : agent.id)}
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-left"
+                  aria-expanded={open}
+                >
+                  <span className="text-text-primary text-sm font-medium">{agent.name}</span>
+                  <span className="flex items-center gap-2">
+                    {agent.available ? (
+                      connected ? (
+                        <span className="text-accent-green flex items-center gap-1.5 text-xs">
+                          <Check className="h-3.5 w-3.5" /> Connected
+                        </span>
+                      ) : (
+                        <span className="text-text-muted text-xs">Not connected</span>
+                      )
                     ) : (
-                      <Button
-                        size="sm"
-                        className="self-start"
-                        onClick={() => codexAction.mutate({ kind: "import" })}
-                        disabled={codexAction.isPending}
-                      >
-                        {codexAction.isPending ? "Importing…" : "Import credential"}
-                      </Button>
+                      <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
+                        Coming soon
+                      </span>
                     )}
-                  </div>
-                ))}
-            </div>
-          ))}
+                    {agent.available && (
+                      <ChevronDown
+                        className={cn(
+                          "text-text-muted h-3.5 w-3.5 transition-transform duration-200",
+                          open && "rotate-180"
+                        )}
+                      />
+                    )}
+                  </span>
+                </button>
+                <AnimatePresence initial={false}>
+                  {open && agent.available && (
+                    <m.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={
+                        reducedMotion
+                          ? { duration: 0 }
+                          : { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }
+                      }
+                      className="overflow-hidden"
+                    >
+                      <div className="flex flex-col gap-2 px-4 pb-3">
+                        <p className="text-text-muted text-xs">{agent.instructions}</p>
+                        {connected ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="self-start"
+                            onClick={() =>
+                              agent.id === "codex"
+                                ? codexAction.mutate({ kind: "disconnect" })
+                                : subAction.mutate({ kind: "disconnect" })
+                            }
+                            disabled={
+                              agent.id === "codex" ? codexAction.isPending : subAction.isPending
+                            }
+                          >
+                            Disconnect
+                          </Button>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <code className="bg-surface-secondary text-text-secondary rounded px-2 py-1 text-xs">
+                                {agent.command}
+                              </code>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                aria-label="Copy command"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(agent.command ?? "");
+                                  toast.success("Command copied");
+                                }}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  const res = await openAgentSetupTerminal(agent.id);
+                                  if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
+                                }}
+                              >
+                                <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
+                              </Button>
+                            </div>
+                            {agent.kind === "paste" ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  aria-label={`${agent.name} subscription token`}
+                                  type="password"
+                                  value={subToken}
+                                  onChange={(e) => setSubToken(e.target.value)}
+                                  placeholder={agent.placeholder ?? ""}
+                                  className="max-w-md text-sm"
+                                  disabled={subAction.isPending}
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    subToken.trim() &&
+                                    subAction.mutate({ kind: "paste", token: subToken.trim() })
+                                  }
+                                  disabled={!subToken.trim() || subAction.isPending}
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="self-start"
+                                onClick={() => codexAction.mutate({ kind: "import" })}
+                                disabled={codexAction.isPending}
+                              >
+                                {codexAction.isPending ? "Importing…" : "Import credential"}
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </m.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="mb-2">
-        <div
-          className={cn(
-            "border-border-subtle mb-3 flex items-center justify-between rounded-lg border px-4 py-3",
-            !githubApp.data?.configured && "border-dashed"
-          )}
-        >
-          <div>
-            <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
-            <p className="text-text-muted mt-0.5 text-xs">
-              {githubApp.data?.installations.length
-                ? `Installed for ${githubApp.data.installations.map((i) => i.accountLogin).join(", ")} — sandboxes get server-minted tokens scoped to one repo.`
-                : "Install once, per-repo access, tokens minted server-side and scoped to a single repository — replaces the token below."}
-            </p>
-          </div>
-          {githubApp.data?.installations.length ? (
-            <span className="flex shrink-0 items-center gap-3">
-              <span className="text-accent-green flex items-center gap-1.5 text-sm">
-                <Check className="h-3.5 w-3.5" /> Installed
-              </span>
-              {githubApp.data.appSlug && (
-                <a
-                  className="text-text-primary border-border-subtle hover:bg-surface-secondary rounded-md border px-2.5 py-1 text-xs"
-                  href={`https://github.com/apps/${githubApp.data.appSlug}/installations/new`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Manage repos ↗
-                </a>
-              )}
-            </span>
-          ) : githubApp.data?.configured ? (
-            <Button
-              size="sm"
-              className="shrink-0"
-              onClick={async () => {
-                const res = await installGithubApp();
-                if (!res.ok) toast.error(res.error ?? "Could not start the install");
-                else toast.info("Complete the install on GitHub, then come back");
-              }}
-            >
-              Install
-            </Button>
-          ) : (
-            <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
-              Awaiting App registration
-            </span>
-          )}
-        </div>
-        {(() => {
-          const state = githubApp.data;
-          if (!state?.installations.length || !state.appSlug) return null;
-          if (missingRepos.length === 0) return null;
-          return (
-            <div className="mb-3">
-              <p className="text-text-muted mb-1 text-xs">Missing GitHub access</p>
-              {missingRepos.map((full) => (
-                <div
-                  key={full}
-                  className="border-border-subtle flex items-center justify-between border-b py-2 last:border-b-0"
-                >
-                  <span className="text-text-secondary truncate text-sm">{full}</span>
-                  <a
-                    className="text-text-primary border-border-subtle hover:bg-surface-secondary ml-3 shrink-0 rounded-md border px-2.5 py-1 text-xs"
-                    href={`https://github.com/apps/${state.appSlug}/installations/new`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Install app ↗
-                  </a>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
         {step(s?.hasGithubToken || appCoversRepos, "GitHub — repo access for sandboxes")}
         <p className="text-text-muted mb-3 text-sm">
-          Sandboxes clone over https. A fine-grained personal access token (contents read/write on
-          the repos you'll use) lets cloud workspaces clone and push private repositories. Stored
-          encrypted on the Deus platform.
+          Sandboxes clone over https. The GitHub App mints short-lived, single-repo tokens
+          server-side; a fine-grained personal access token is the fallback for anything it doesn't
+          cover.
         </p>
-        <div className="flex items-center gap-2">
-          <Input
-            aria-label="GitHub token for private repositories"
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="github_pat_..."
-            className="max-w-md text-sm"
-            disabled={!s?.enabled || saveToken.isPending}
-          />
-          <Button
-            size="sm"
-            onClick={() => token.trim() && saveToken.mutate(token.trim())}
-            disabled={!s?.enabled || !token.trim() || saveToken.isPending}
-          >
-            {saveToken.isPending ? "Saving..." : s?.hasGithubToken ? "Replace" : "Save"}
-          </Button>
+        <div className="border-border-subtle divide-border-subtle divide-y rounded-lg border">
+          {/* Deus GitHub App row */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setOpenGithub(openGithub === "app" ? null : "app")}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-left"
+              aria-expanded={openGithub === "app"}
+            >
+              <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
+              <span className="flex items-center gap-2">
+                {githubApp.data?.installations.length ? (
+                  <span className="text-accent-green flex items-center gap-1.5 text-xs">
+                    <Check className="h-3.5 w-3.5" /> Installed
+                    {missingRepos.length > 0 && (
+                      <span className="text-text-muted font-normal">
+                        · {missingRepos.length} repo{missingRepos.length > 1 ? "s" : ""} missing
+                      </span>
+                    )}
+                  </span>
+                ) : githubApp.data?.configured ? (
+                  <span className="text-text-muted text-xs">Not installed</span>
+                ) : (
+                  <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
+                    Awaiting App registration
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "text-text-muted h-3.5 w-3.5 transition-transform duration-200",
+                    openGithub === "app" && "rotate-180"
+                  )}
+                />
+              </span>
+            </button>
+            <AnimatePresence initial={false}>
+              {openGithub === "app" && (
+                <m.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={
+                    reducedMotion
+                      ? { duration: 0 }
+                      : { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }
+                  }
+                  className="overflow-hidden"
+                >
+                  <div className="flex flex-col gap-2 px-4 pb-3">
+                    <p className="text-text-muted text-xs">
+                      {githubApp.data?.installations.length
+                        ? `Installed for ${githubApp.data.installations.map((i) => i.accountLogin).join(", ")} — repo selection lives on GitHub.`
+                        : "Install once, pick repos on GitHub — tokens are minted server-side and scoped to a single repository. Replaces the personal token."}
+                    </p>
+                    {githubApp.data?.installations.length && githubApp.data.appSlug ? (
+                      <a
+                        className="text-text-primary border-border-subtle hover:bg-surface-secondary self-start rounded-md border px-2.5 py-1 text-xs"
+                        href={`https://github.com/apps/${githubApp.data.appSlug}/installations/new`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Manage repos ↗
+                      </a>
+                    ) : githubApp.data?.configured ? (
+                      <Button
+                        size="sm"
+                        className="self-start"
+                        onClick={async () => {
+                          const res = await installGithubApp();
+                          if (!res.ok) toast.error(res.error ?? "Could not start the install");
+                          else toast.info("Complete the install on GitHub, then come back");
+                        }}
+                      >
+                        Install
+                      </Button>
+                    ) : null}
+                    {githubApp.data?.appSlug && missingRepos.length > 0 && (
+                      <div>
+                        <p className="text-text-muted mb-1 text-xs">Missing GitHub access</p>
+                        {missingRepos.map((full) => (
+                          <div
+                            key={full}
+                            className="border-border-subtle flex items-center justify-between border-b py-1.5 last:border-b-0"
+                          >
+                            <span className="text-text-secondary truncate text-sm">{full}</span>
+                            <a
+                              className="text-text-primary border-border-subtle hover:bg-surface-secondary ml-3 shrink-0 rounded-md border px-2.5 py-1 text-xs"
+                              href={`https://github.com/apps/${githubApp.data.appSlug}/installations/new`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Install app ↗
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </m.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Personal access token row */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setOpenGithub(openGithub === "pat" ? null : "pat")}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-left"
+              aria-expanded={openGithub === "pat"}
+            >
+              <span className="text-text-primary text-sm font-medium">Personal access token</span>
+              <span className="flex items-center gap-2">
+                {s?.hasGithubToken ? (
+                  <span className="text-accent-green flex items-center gap-1.5 text-xs">
+                    <Check className="h-3.5 w-3.5" /> Saved
+                  </span>
+                ) : (
+                  <span className="text-text-muted text-xs">Not set</span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "text-text-muted h-3.5 w-3.5 transition-transform duration-200",
+                    openGithub === "pat" && "rotate-180"
+                  )}
+                />
+              </span>
+            </button>
+            <AnimatePresence initial={false}>
+              {openGithub === "pat" && (
+                <m.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={
+                    reducedMotion
+                      ? { duration: 0 }
+                      : { duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }
+                  }
+                  className="overflow-hidden"
+                >
+                  <div className="flex flex-col gap-2 px-4 pb-3">
+                    <p className="text-text-muted text-xs">
+                      Fine-grained token with contents read/write on the repos you'll use. Stored
+                      encrypted on the Deus platform.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-label="GitHub token for private repositories"
+                        type="password"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        placeholder="github_pat_..."
+                        className="max-w-md text-sm"
+                        disabled={!s?.enabled || saveToken.isPending}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => token.trim() && saveToken.mutate(token.trim())}
+                        disabled={!s?.enabled || !token.trim() || saveToken.isPending}
+                      >
+                        {saveToken.isPending ? "Saving..." : s?.hasGithubToken ? "Replace" : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                </m.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>
