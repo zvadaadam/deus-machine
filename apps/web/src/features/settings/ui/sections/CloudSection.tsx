@@ -153,6 +153,27 @@ export function CloudSection() {
 
   const s = status.data;
 
+  const agentConnected = (id: string) =>
+    id === "codex" ? codexSub.data?.hasCodexSubscription : sub.data?.hasClaudeSubscription;
+
+  // Repos the installed GitHub App cannot reach — drives the missing-access
+  // list and, when empty, lets the App satisfy the repo-access step without a PAT.
+  const accessible = new Set((githubApp.data?.accessibleRepos ?? []).map((r) => r.toLowerCase()));
+  const missingRepos = (localRepos.data ?? [])
+    .map((r) => r.git_origin_url ?? "")
+    .filter((u) => u.includes("github.com"))
+    .map((u) =>
+      u
+        .replace(/^git@github\.com:/, "")
+        .replace(/^https?:\/\/github\.com\//, "")
+        .replace(/\.git$/, "")
+    )
+    .filter((full) => full.includes("/") && !accessible.has(full.toLowerCase()));
+  const appCoversRepos =
+    Boolean(githubApp.data?.installations.length) &&
+    localRepos.data !== undefined &&
+    missingRepos.length === 0;
+
   const step = (done: boolean | undefined, title: string) => (
     <h3 className="text-text-primary mb-1 flex items-center gap-2 text-sm font-medium">
       <span
@@ -194,8 +215,10 @@ export function CloudSection() {
             {
               [
                 s?.enabled,
-                s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
-                s?.hasGithubToken,
+                s?.hasAnthropicKey ||
+                  sub.data?.hasClaudeSubscription ||
+                  codexSub.data?.hasCodexSubscription,
+                s?.hasGithubToken || appCoversRepos,
               ].filter(Boolean).length
             }
             /3
@@ -219,7 +242,9 @@ export function CloudSection() {
 
       <div className="mb-8">
         {step(
-          s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
+          s?.hasAnthropicKey ||
+            sub.data?.hasClaudeSubscription ||
+            codexSub.data?.hasCodexSubscription,
           "Agents — run on your own subscriptions"
         )}
         <p className="text-text-muted mb-3 text-sm">
@@ -233,7 +258,7 @@ export function CloudSection() {
               <div className="flex items-center justify-between">
                 <span className="text-text-primary text-sm font-medium">{agent.name}</span>
                 {agent.available ? (
-                  sub.data?.hasClaudeSubscription ? (
+                  agentConnected(agent.id) ? (
                     <span className="text-accent-green flex items-center gap-1.5 text-sm">
                       <Check className="h-3.5 w-3.5" /> Connected via subscription
                     </span>
@@ -248,13 +273,17 @@ export function CloudSection() {
               </div>
               <p className="text-text-muted mt-1 text-xs">{agent.instructions}</p>
               {agent.available &&
-                (sub.data?.hasClaudeSubscription ? (
+                (agentConnected(agent.id) ? (
                   <Button
                     size="sm"
                     variant="outline"
                     className="mt-2"
-                    onClick={() => subAction.mutate({ kind: "disconnect" })}
-                    disabled={subAction.isPending}
+                    onClick={() =>
+                      agent.id === "codex"
+                        ? codexAction.mutate({ kind: "disconnect" })
+                        : subAction.mutate({ kind: "disconnect" })
+                    }
+                    disabled={agent.id === "codex" ? codexAction.isPending : subAction.isPending}
                   >
                     Disconnect
                   </Button>
@@ -365,22 +394,11 @@ export function CloudSection() {
         {(() => {
           const state = githubApp.data;
           if (!state?.installations.length || !state.appSlug) return null;
-          const accessible = new Set(state.accessibleRepos.map((r) => r.toLowerCase()));
-          const missing = (localRepos.data ?? [])
-            .map((r) => r.git_origin_url ?? "")
-            .filter((u) => u.includes("github.com"))
-            .map((u) =>
-              u
-                .replace(/^git@github\.com:/, "")
-                .replace(/^https?:\/\/github\.com\//, "")
-                .replace(/\.git$/, "")
-            )
-            .filter((full) => full.includes("/") && !accessible.has(full.toLowerCase()));
-          if (missing.length === 0) return null;
+          if (missingRepos.length === 0) return null;
           return (
             <div className="mb-3">
               <p className="text-text-muted mb-1 text-xs">Missing GitHub access</p>
-              {missing.map((full) => (
+              {missingRepos.map((full) => (
                 <div
                   key={full}
                   className="border-border-subtle flex items-center justify-between border-b py-2 last:border-b-0"
@@ -399,7 +417,7 @@ export function CloudSection() {
             </div>
           );
         })()}
-        {step(s?.hasGithubToken, "GitHub — repo access for sandboxes")}
+        {step(s?.hasGithubToken || appCoversRepos, "GitHub — repo access for sandboxes")}
         <p className="text-text-muted mb-3 text-sm">
           Sandboxes clone over https. A fine-grained personal access token (contents read/write on
           the repos you'll use) lets cloud workspaces clone and push private repositories. Stored
