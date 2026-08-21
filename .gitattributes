@@ -16,6 +16,11 @@
 *.yaml text eol=lf
 *.sh text eol=lf
 
+# Pencil design files are encrypted UTF-8 payloads. They must never be
+# eol-converted (`* text=auto` above would corrupt them on a CRLF checkout)
+# and they are not meaningfully diffable.
+*.pen binary
+
 # Binary files
 *.png binary
 *.jpg binary
