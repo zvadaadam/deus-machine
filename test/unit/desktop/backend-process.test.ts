@@ -147,9 +147,7 @@ describe("desktop backend process", () => {
     expect(options.env.DEUS_RESOURCES_PATH).toBe(resourcesPath);
     expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBe(runtimePath);
     expect(options.env.DEUS_BUNDLED_BIN_DIR).toBe(path.join(resourcesPath, "bin"));
-    expect(options.env.DATABASE_PATH).toBe(
-      "/Users/test/Library/Application Support/Deus/deus.db"
-    );
+    expect(options.env.DATABASE_PATH).toBe("/Users/test/Library/Application Support/Deus/deus.db");
     expect(options.env.AUTH_TOKEN).toBe(result.authToken);
     expect(options.env.AUTH_TOKEN).not.toBe("stale-auth-token");
     expect(options.env.PATH).toBe(

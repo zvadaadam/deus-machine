@@ -88,7 +88,8 @@ describe("desktop CLI tools", () => {
       platform: "darwin",
       resourcesPath: "/Applications/Deus.app/Contents/Resources",
     });
-    process.env.PATH = "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+    process.env.PATH =
+      "/Applications/Deus.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
     await expect(checkCliTool("gh")).resolves.toEqual({ installed: false, path: null });
     expect(mockSyncShellEnvironment).not.toHaveBeenCalled();

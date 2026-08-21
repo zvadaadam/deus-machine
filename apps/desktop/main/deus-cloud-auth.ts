@@ -3,6 +3,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "../../../shared/types";
 import { getCloudCredentialsStatus } from "./cloud-credentials";
+import { logMainProcess } from "./startup-diagnostics";
 import {
   decryptSecret,
   encryptSecret,
@@ -44,6 +45,10 @@ interface StoredDeusCloudSession {
   tokenType: "Bearer";
   expiresAt: string;
   encryptedSessionToken: string;
+  /** WorkOS refresh token (rotating), encrypted like the session itself.
+   *  Absent for sessions stored before refresh existed — those simply expire
+   *  the old way and the user signs in once more. */
+  encryptedRefreshToken?: string;
   cloudUrl: string;
   createdAt: string;
 }
@@ -53,6 +58,7 @@ interface DesktopExchangeResponse {
   token_type?: string;
   expires_in_seconds?: number;
   account_id?: string;
+  refresh_token?: string;
 }
 
 interface DesktopAuthConfigResponse {
@@ -290,7 +296,12 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
   };
 }
 
-async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
+/** Renew this far ahead of expiry, so a session is never used near its edge. */
+const SESSION_REFRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/** Read + structurally validate the file. Expiry is NOT judged here: an
+ *  expired session with a refresh token is still renewable. */
+async function readSessionFile(): Promise<StoredDeusCloudSession | null> {
   try {
     const parsed =
       (await readJsonFile<Partial<StoredDeusCloudSession>>(getSessionFilePath())) ?? {};
@@ -305,23 +316,108 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
     ) {
       return null;
     }
-
-    const expiresAt = parseTimestamp(parsed.expiresAt);
-    if (!expiresAt || expiresAt <= Date.now()) {
-      await clearStoredSession();
-      return null;
-    }
-
     try {
       decryptSessionToken(parsed.encryptedSessionToken);
     } catch {
       await clearStoredSession();
       return null;
     }
-
     return parsed as StoredDeusCloudSession;
   } catch {
     return null;
+  }
+}
+
+/** In-flight refresh, so concurrent callers share one round-trip (and one
+ *  use of the rotating token — WorkOS invalidates it on first use). */
+let refreshInFlight: Promise<StoredDeusCloudSession | null> | null = null;
+
+async function refreshStoredSession(
+  stored: StoredDeusCloudSession
+): Promise<StoredDeusCloudSession | null> {
+  if (!stored.encryptedRefreshToken) return null;
+  let refreshToken: string;
+  try {
+    refreshToken = decryptSessionToken(stored.encryptedRefreshToken);
+  } catch {
+    return null;
+  }
+
+  const response = await fetch(`${stored.cloudUrl}/auth/desktop/refresh`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (response.status === 401) {
+    // Revoked, expired, or already rotated — the only honest outcome is to
+    // sign out rather than keep a session that cannot be renewed.
+    await clearStoredSession();
+    return null;
+  }
+  if (!response.ok) {
+    // Server-side problem (503 CONFIG_ERROR, network): keep what we have.
+    throw new Error(`session refresh failed (${response.status})`);
+  }
+
+  const body = (await response.json()) as DesktopExchangeResponse;
+  if (!body.session_token || typeof body.expires_in_seconds !== "number") {
+    throw new Error("Deus Cloud returned an invalid refreshed session");
+  }
+
+  const next: StoredDeusCloudSession = {
+    ...stored,
+    expiresAt: new Date(Date.now() + body.expires_in_seconds * 1000).toISOString(),
+    encryptedSessionToken: encryptSessionToken(body.session_token),
+    ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
+      ? { encryptedRefreshToken: encryptSessionToken(body.refresh_token) }
+      : {}),
+  };
+  await writeStoredSession(next);
+  logMainProcess("[deus-cloud] session refreshed");
+  return next;
+}
+
+/**
+ * The session every caller should read. Renews silently when it is close to
+ * expiry (or already past it) so a signed-in machine stays signed in — a
+ * desktop app that logs you out daily is the thing this avoids.
+ */
+async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
+  const stored = await readSessionFile();
+  if (!stored) return null;
+
+  const expiresAt = parseTimestamp(stored.expiresAt);
+  const expired = !expiresAt || expiresAt <= Date.now();
+  const nearExpiry = expiresAt !== null && expiresAt - Date.now() <= SESSION_REFRESH_WINDOW_MS;
+
+  if (!expired && !nearExpiry) return stored;
+
+  if (!stored.encryptedRefreshToken) {
+    // Pre-refresh session (or the token was never issued): old behaviour.
+    if (expired) {
+      await clearStoredSession();
+      return null;
+    }
+    return stored;
+  }
+
+  refreshInFlight ??= refreshStoredSession(stored).finally(() => {
+    refreshInFlight = null;
+  });
+
+  try {
+    const refreshed = await refreshInFlight;
+    if (refreshed) return refreshed;
+    return null; // 401 path already cleared the session
+  } catch (error) {
+    logMainProcess(
+      `[deus-cloud] session refresh failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    // Transient failure: a still-valid session keeps working; an expired one
+    // cannot be used, but is kept on disk so the next attempt can retry.
+    return expired ? null : stored;
   }
 }
 
@@ -416,6 +512,9 @@ async function exchangeDesktopCode(input: {
     accountId: body.account_id,
     ...(profile.name ? { accountName: profile.name } : {}),
     ...(profile.email ? { accountEmail: profile.email } : {}),
+    ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
+      ? { encryptedRefreshToken: encryptSessionToken(body.refresh_token) }
+      : {}),
     tokenType: "Bearer",
     expiresAt: new Date(Date.now() + body.expires_in_seconds * 1000).toISOString(),
     encryptedSessionToken: encryptSessionToken(body.session_token),
