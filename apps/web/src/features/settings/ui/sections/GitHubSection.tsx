@@ -363,8 +363,19 @@ function GithubAppCard() {
           className="shrink-0"
           onClick={async () => {
             const res = await installGithubApp();
-            if (!res.ok) toast.error(res.error ?? "Could not start the install");
-            else toast.info("Complete the install on GitHub, then come back");
+            if (!res.ok) {
+              toast.error(res.error ?? "Could not start the install");
+              return;
+            }
+            toast.info("Complete the install on GitHub, then come back");
+            // The install completes out-of-band in the browser, so nothing
+            // else invalidates this card — refetch when focus returns instead
+            // of leaving it on "Not installed" until the settings remount.
+            const refresh = () => {
+              void state.refetch();
+              window.removeEventListener("focus", refresh);
+            };
+            window.addEventListener("focus", refresh);
           }}
         >
           Install
