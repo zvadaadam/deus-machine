@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Cloud, Copy, KeyRound, Sparkles, TerminalSquare } from "lucide-react";
+import { Check, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,22 @@ export function CloudSection() {
 
   const s = status.data;
 
+  const step = (done: boolean | undefined, title: string) => (
+    <h3 className="text-text-primary mb-1 flex items-center gap-2 text-sm font-medium">
+      <span
+        className={cn(
+          "flex h-4 w-4 items-center justify-center rounded-full",
+          done
+            ? "bg-accent-green/15 text-accent-green"
+            : "border-border-subtle text-text-faint border border-dashed"
+        )}
+      >
+        {done && <Check className="h-3 w-3" />}
+      </span>
+      {title}
+    </h3>
+  );
+
   const row = (label: string, ok: boolean | undefined, okText: string, missingText: string) => (
     <div className="border-border-subtle flex items-center justify-between border-b py-3 last:border-b-0">
       <span className="text-text-secondary text-sm">{label}</span>
@@ -127,7 +143,17 @@ export function CloudSection() {
       <div className="mb-6">
         <h2 className="text-text-primary mb-1 flex items-center gap-2 text-base font-semibold">
           <Cloud className="h-4 w-4" />
-          Cloud
+          Cloud setup{" "}
+          <span className="text-text-muted text-sm font-normal">
+            {
+              [
+                s?.enabled,
+                s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
+                s?.hasGithubToken,
+              ].filter(Boolean).length
+            }
+            /3
+          </span>
         </h2>
         <p className="text-text-muted text-sm">
           Cloud workspaces run in sandboxes on the Deus platform — the agent and files live
@@ -136,26 +162,20 @@ export function CloudSection() {
       </div>
 
       <div className="mb-8">
+        {step(s?.enabled, "Deus Cloud account")}
         {row(
           "Connection",
           s?.enabled,
           s?.baseUrl ? `Connected · ${s.baseUrl.replace(/^https?:\/\//, "")}` : "Connected",
           "Not connected — sign in under Account"
         )}
-        {row(
-          "Claude credential (runs the agent)",
-          s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
-          sub.data?.hasClaudeSubscription ? "Connected via subscription" : "API key configured",
-          "Missing"
-        )}
-        {row("GitHub token (private repos)", s?.hasGithubToken, "Configured", "Not set")}
       </div>
 
       <div className="mb-8">
-        <h3 className="text-text-primary mb-1 flex items-center gap-2 text-sm font-medium">
-          <Sparkles className="h-3.5 w-3.5" />
-          Agents — run on your own subscriptions
-        </h3>
+        {step(
+          s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
+          "Agents — run on your own subscriptions"
+        )}
         <p className="text-text-muted mb-3 text-sm">
           Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
           by you, in your terminal — Deus only stores the result (encrypted, streamed per turn,
@@ -261,10 +281,7 @@ export function CloudSection() {
             Coming soon
           </span>
         </div>
-        <h3 className="text-text-primary mb-1 flex items-center gap-2 text-sm font-medium">
-          <KeyRound className="h-3.5 w-3.5" />
-          GitHub token for private repos
-        </h3>
+        {step(s?.hasGithubToken, "GitHub — repo access for sandboxes")}
         <p className="text-text-muted mb-3 text-sm">
           Sandboxes clone over https. A fine-grained personal access token (contents read/write on
           the repos you'll use) lets cloud workspaces clone and push private repositories. Stored

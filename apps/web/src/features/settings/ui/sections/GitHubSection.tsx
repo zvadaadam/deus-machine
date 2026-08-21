@@ -311,6 +311,21 @@ export function GitHubSection() {
           </>
         )}
       </div>
+
+      {/* Cloud access — the App handles sandboxes; the account above is local. */}
+      <div className="border-border-subtle mt-4 flex items-center justify-between rounded-lg border border-dashed px-4 py-3">
+        <div>
+          <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
+          <p className="text-text-muted mt-0.5 text-xs">
+            Gives cloud workspaces per-repo access with server-minted, single-repo tokens — install
+            once, no personal token needed. Until it ships, cloud repos use the token in Settings →
+            Cloud.
+          </p>
+        </div>
+        <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
+          Coming soon
+        </span>
+      </div>
     </div>
   );
 }

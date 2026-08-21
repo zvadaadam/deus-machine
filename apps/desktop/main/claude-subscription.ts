@@ -69,17 +69,51 @@ async function storeToken(token: string): Promise<ClaudeSubscriptionResult> {
   return statusResult();
 }
 
-/** Paste fallback — accepts a token the user minted themselves. */
+/**
+ * Prove the token actually authenticates before we ever call it connected:
+ * a minimal real request in the exact shape the sandbox proxy sends
+ * (Bearer + the OAuth beta capability). 401 = rejected. Non-auth failures
+ * (rate limit, overload, offline) do NOT block saving — auth is checked
+ * first upstream, so any non-401 response means the token authenticated.
+ */
+async function validateClaudeToken(token: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "anthropic-beta": "oauth-2025-04-20",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      return "Anthropic rejected this token — run `claude setup-token` again and paste the fresh one.";
+    }
+    return null;
+  } catch {
+    return null; // offline — don't block; the first turn surfaces real issues
+  }
+}
+
+/** Paste flow — accepts a token the user minted themselves, verified live. */
 export async function saveClaudeSubscriptionToken(
   rawToken: string
 ): Promise<ClaudeSubscriptionResult> {
-  const token = rawToken.trim();
-  if (!OAUTH_TOKEN_RE.test(token)) {
+  const token = rawToken.trim().match(OAUTH_TOKEN_RE)?.[0];
+  if (!token) {
     return statusResult(
       "That doesn't look like a Claude subscription token (expected sk-ant-oat…). Run `claude setup-token` and paste its output."
     );
   }
-  return storeToken(token.match(OAUTH_TOKEN_RE)![0]);
+  const invalid = await validateClaudeToken(token);
+  if (invalid) return statusResult(invalid);
+  return storeToken(token);
 }
 
 export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionResult> {
