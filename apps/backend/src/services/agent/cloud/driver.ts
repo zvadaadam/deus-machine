@@ -203,9 +203,31 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "workspace.state": {
-      const data = (frame.data ?? {}) as { status?: string; step?: string };
+      const data = (frame.data ?? {}) as { status?: string; step?: string; reason?: string };
       updateCloudWorkspace(session.deusWorkspaceId, data);
       broadcastCloudEnv(session, data);
+      // A sandbox that dies mid-turn strands the spinner: agnt keeps the
+      // execute queued for replay, but a stopped/errored VM replays nothing
+      // until a wake — so the live turn must FAIL VISIBLY here, not hang.
+      // (Real case: sidecar dies on a credential error → clean WS close →
+      // workspace 'stopped', and the only trace was an ephemeral env line.)
+      if (data.status === "stopped" || data.status === "error") {
+        const live = handler?.liveTurnId(session.deusSessionId);
+        if (live) {
+          const detail = data.reason ?? data.step;
+          dispatchFrame(session, {
+            type: "turn.ended",
+            sessionId: session.providerSessionId,
+            turnId: live,
+            stopReason: "error",
+            error: {
+              category: "internal",
+              message: `Sandbox ${data.status}${detail ? ` — ${detail}` : ""}. Send again to restart it.`,
+            },
+            timestamp: Date.now(),
+          });
+        }
+      }
       return;
     }
 
