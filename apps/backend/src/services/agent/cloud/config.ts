@@ -47,6 +47,17 @@ const runtime: { [K in keyof CloudRuntimeCredentials]: string | undefined } = {}
 
 let cached: CloudConfig | null | undefined;
 
+/**
+ * `DEUS_CLOUD_ENV=local` targets a locally-running platform. The desktop main
+ * process honours the same switch and the backend inherits its environment, so
+ * one variable moves BOTH — previously `dev:cloud-local` pointed main at
+ * localhost while the backend (which makes the actual workspace calls) kept
+ * talking to production.
+ */
+const LOCAL_AGNT_URL = "http://127.0.0.1:8788";
+const LOCAL_DEUS_CLOUD_URL = "http://127.0.0.1:5788";
+const isLocalCloudEnv = (): boolean => process.env.DEUS_CLOUD_ENV === "local";
+
 /** Read the cloud config (memoized until credentials change). `null` = lane disabled. */
 export function getCloudConfig(): CloudConfig | null {
   if (cached !== undefined) return cached;
@@ -61,7 +72,7 @@ export function getCloudConfig(): CloudConfig | null {
       runtime.baseUrl ??
       process.env.DEUS_CLOUD_AGNT_URL ??
       process.env.AGNT_BASE_URL ??
-      "https://api.deusmachine.ai"
+      (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
     ).replace(/\/$/, ""),
     apiKey,
     anthropicApiKey:
@@ -70,7 +81,10 @@ export function getCloudConfig(): CloudConfig | null {
       process.env.ANTHROPIC_API_KEY ??
       null,
     claudeOauthToken: runtime.claudeOauthToken ?? null,
-    deusCloudUrl: runtime.deusCloudUrl ?? process.env.DEUS_CLOUD_URL ?? null,
+    deusCloudUrl:
+      runtime.deusCloudUrl ??
+      process.env.DEUS_CLOUD_URL ??
+      (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null),
     deusCloudSessionToken: runtime.deusCloudSessionToken ?? null,
     orgId: runtime.orgId ?? null,
   };

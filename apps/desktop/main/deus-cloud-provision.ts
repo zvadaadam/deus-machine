@@ -176,10 +176,34 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
  * an existing stored key wins (revocation is handled by the 401 path — agnt
  * rejects a revoked key and Settings offers re-provisioning via sign-in).
  */
+/**
+ * Cheapest authenticated probe agnt offers (metadata only, never values).
+ * ONLY an explicit 401/403 counts as revoked — a timeout or an offline
+ * laptop must not throw away a perfectly good key.
+ */
+async function deviceKeyStillValid(apiKey: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${resolveAgntBaseUrl()}/secrets`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
+    });
+    return !(response.status === 401 || response.status === 403);
+  } catch {
+    return true;
+  }
+}
+
 export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): Promise<boolean> {
   const existing = await getCloudCredential("agntApiKey");
-  if (existing) {
+  if (existing && (await deviceKeyStillValid(existing))) {
     return true;
+  }
+  if (existing) {
+    // Revoked from the dashboard (or on another device). Without this the
+    // stale key survives every restart and each platform call 401s silently
+    // forever — the only recovery was a manual sign-out/sign-in.
+    logMainProcess("[deus-cloud] stored device key rejected by platform — re-minting");
+    await deleteCloudCredential("agntApiKey");
   }
 
   const org = await fetchFirstOrg(sessionToken, cloudUrl);
@@ -253,10 +277,16 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
     setPlatformKeyError(message);
     logMainProcess(`[deus-cloud] device key provisioning failed: ${message}`);
   }
-  // A token connected before sign-in was local-only — the device key now
-  // exists, so the platform copy can catch up.
-  const storedToken = await getCloudCredential("claudeOauthToken").catch(() => null);
-  if (storedToken) await syncClaudeTokenToPlatform(storedToken);
+  // Credentials connected before sign-in were local-only — the device key now
+  // exists, so the platform copies can catch up. BOTH agents: syncing only
+  // Claude leaves a Codex login connected pre-sign-in invisible to the cloud
+  // forever (nothing else re-runs this).
+  const [storedClaude, storedCodex] = await Promise.all([
+    getCloudCredential("claudeOauthToken").catch(() => null),
+    getCloudCredential("codexAuthJson").catch(() => null),
+  ]);
+  if (storedClaude) await syncClaudeTokenToPlatform(storedClaude);
+  if (storedCodex) await syncAgentSecretToPlatform("CODEX_AUTH_JSON", storedCodex);
   await pushCloudCredentialsToBackend();
 }
 

@@ -12,6 +12,8 @@ const ENV_KEYS = [
   "AGNT_BASE_URL",
   "DEUS_CLOUD_ANTHROPIC_KEY",
   "ANTHROPIC_API_KEY",
+  "DEUS_CLOUD_URL",
+  "DEUS_CLOUD_ENV",
 ] as const;
 
 const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -89,5 +91,36 @@ describe("cloud config runtime credentials", () => {
     expect(config?.apiKey).toBe("agnt_sk_x");
     expect(config?.claudeOauthToken).toBe("sk-ant-oat01-abc");
     expect(config?.anthropicApiKey).toBe("sk-ant-key");
+  });
+});
+
+describe("DEUS_CLOUD_ENV=local", () => {
+  it("points BOTH platform URLs at localhost", () => {
+    // `bun run dev:cloud-local` sets this once; the desktop main process and
+    // the backend both inherit it. The backend ignoring it is what made the
+    // local script a half-switch — main hit localhost, the backend (which
+    // makes the actual workspace calls) still hit production.
+    process.env.DEUS_CLOUD_ENV = "local";
+    setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
+
+    const config = getCloudConfig();
+    expect(config?.baseUrl).toBe("http://127.0.0.1:8788");
+    expect(config?.deusCloudUrl).toBe("http://127.0.0.1:5788");
+  });
+
+  it("yields to an explicit URL override", () => {
+    process.env.DEUS_CLOUD_ENV = "local";
+    process.env.DEUS_CLOUD_AGNT_URL = "https://staging.example";
+    setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
+
+    expect(getCloudConfig()?.baseUrl).toBe("https://staging.example");
+  });
+
+  it("leaves production alone when unset", () => {
+    setCloudRuntimeCredentials({ apiKey: "agnt_sk_test" });
+
+    const config = getCloudConfig();
+    expect(config?.baseUrl).toBe("https://api.deusmachine.ai");
+    expect(config?.deusCloudUrl).toBeNull();
   });
 });

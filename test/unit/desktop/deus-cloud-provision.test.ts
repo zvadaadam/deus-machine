@@ -109,15 +109,44 @@ describe("ensureDeviceKey", () => {
     });
   });
 
-  it("is idempotent: an existing stored key skips all network calls", async () => {
+  it("is idempotent: an existing stored key validates, then skips the mint", async () => {
     await setCloudCredential("agntApiKey", "agnt_sk_existing");
+    fetchMock.mockResolvedValueOnce(jsonResponse({ items: [] }));
+
     await ensureDeviceKey("session-jwt", "https://cloud.test");
-    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Exactly one call — the validation probe. No org lookup, no mint.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/secrets");
+    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_existing");
+  });
+
+  it("keeps the stored key when the validation probe cannot reach the platform", async () => {
+    await setCloudCredential("agntApiKey", "agnt_sk_existing");
+    fetchMock.mockRejectedValueOnce(new Error("ENOTFOUND"));
+
+    await ensureDeviceKey("session-jwt", "https://cloud.test");
+
+    // Offline is not revoked: no re-mint, key survives.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_existing");
+  });
+
+  it("re-mints when the stored key was revoked server-side", async () => {
+    await setCloudCredential("agntApiKey", "agnt_sk_revoked");
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: "UNAUTHORIZED" }, 401))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: "org_1" }] }))
+      .mockResolvedValueOnce(jsonResponse({ id: "key_2", key: "agnt_sk_fresh", label: "Mac" }));
+
+    await ensureDeviceKey("session-jwt", "https://cloud.test");
+
+    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_fresh");
   });
 
   it("surfaces a mint failure without storing anything", async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse([{ id: "org_1" }]))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: "org_1" }] }))
       .mockResolvedValueOnce(jsonResponse({ error: "FORBIDDEN" }, 403));
 
     await expect(ensureDeviceKey("session-jwt", "https://cloud.test")).rejects.toThrow("403");

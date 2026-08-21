@@ -13,7 +13,16 @@ import { ProjectSelectionStep } from "./steps/ProjectSelectionStep";
 import type { OnboardingStep } from "../types";
 
 const TOTAL_STEPS = 6;
-const STEP_NAMES = ["welcome", "github", "ai-tools", "project-selection", "finish"];
+// Order must match the step switch below — analytics reads it by index, so a
+// step inserted without updating this silently mislabels every later step.
+const STEP_NAMES = [
+  "welcome",
+  "cloud-sign-in",
+  "github",
+  "ai-tools",
+  "project-selection",
+  "finish",
+];
 
 /** Full-screen onboarding view — dark, grain-textured, CLI-inspired. */
 export function OnboardingOverlay() {
