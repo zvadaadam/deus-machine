@@ -50,11 +50,7 @@ export function onAuthChanged(callback: (session: DeusCloudSessionStatus) => voi
   return window.electronAPI.onDeusCloudAuthChanged(callback);
 }
 
-export interface ClaudeSubscriptionState {
-  success: boolean;
-  hasClaudeSubscription: boolean;
-  error?: string;
-}
+export type ClaudeSubscriptionState = import("@shared/types").ClaudeSubscriptionResult;
 
 const WEB_SUBSCRIPTION: ClaudeSubscriptionState = {
   success: false,

@@ -18,16 +18,12 @@ import {
 } from "./cloud-credentials";
 import { pushCloudCredentialsToBackend, syncClaudeTokenToPlatform } from "./deus-cloud-provision";
 
+import type { ClaudeSubscriptionResult } from "../../../shared/types";
+
 const execFileAsync = promisify(execFile);
 
 /** `claude setup-token` prints a one-year OAuth bearer with this prefix. */
 const OAUTH_TOKEN_RE = /sk-ant-oat[a-zA-Z0-9_-]+/;
-
-export interface ClaudeSubscriptionResult {
-  success: boolean;
-  hasClaudeSubscription: boolean;
-  error?: string;
-}
 
 async function statusResult(error?: string): Promise<ClaudeSubscriptionResult> {
   const status = await getCloudCredentialsStatus().catch(() => null);

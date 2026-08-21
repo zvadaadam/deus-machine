@@ -13,3 +13,9 @@ export interface DeusCloudAuthResult {
   session: DeusCloudSessionStatus;
   error?: string;
 }
+
+export interface ClaudeSubscriptionResult {
+  success: boolean;
+  hasClaudeSubscription: boolean;
+  error?: string;
+}
