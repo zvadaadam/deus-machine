@@ -199,6 +199,9 @@ export const CloudCredentialsBody = z.object({
   baseUrl: z.string().url().nullish(),
   anthropicApiKey: z.string().min(1).nullish(),
   claudeOauthToken: z.string().min(1).nullish(),
+  deusCloudUrl: z.string().url().nullish(),
+  deusCloudSessionToken: z.string().min(1).nullish(),
+  orgId: z.string().min(1).nullish(),
 });
 
 // ============================================================================

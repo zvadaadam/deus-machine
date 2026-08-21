@@ -339,12 +339,24 @@ function GithubAppCard() {
         <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
         <p className="text-text-muted mt-0.5 text-xs">
           {data?.installations.length
-            ? `Installed for ${data.installations.map((i) => i.accountLogin).join(", ")} — cloud workspaces get server-minted, single-repo tokens. Manage repo access in Settings → Cloud.`
+            ? `Installed for ${data.installations.map((i) => i.accountLogin).join(", ")} — cloud workspaces get server-minted, single-repo tokens. Repo selection lives on GitHub.`
             : "Gives cloud workspaces per-repo access with server-minted, single-repo tokens — install once, no personal token needed."}
         </p>
       </div>
-      {data?.installations.length ? (
-        <span className="text-accent-green shrink-0 text-sm">Installed ✓</span>
+      {data?.installations.length && data.appSlug ? (
+        <span className="flex shrink-0 items-center gap-3">
+          <span className="text-accent-green text-sm">Installed ✓</span>
+          {/* GitHub owns the repo picker: this lands on the account's existing
+              installation ("Configure"), where repos are added or removed. */}
+          <a
+            className="text-text-primary border-border-subtle hover:bg-surface-secondary rounded-md border px-2.5 py-1 text-xs"
+            href={`https://github.com/apps/${data.appSlug}/installations/new`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Manage repos ↗
+          </a>
+        </span>
       ) : data?.configured ? (
         <Button
           size="sm"

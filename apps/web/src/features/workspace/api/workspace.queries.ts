@@ -22,7 +22,9 @@ import { track } from "@/platform/analytics";
  * HTTP queryFn is fallback for initial load before WS connects.
  * Event-driven invalidation via IPC events also works (both paths coexist).
  */
-export function useWorkspacesByRepo(state: string = "ready,initializing") {
+// 'error' is part of the default view: a failed cloud provision must stay
+// visible in the sidebar (red state + message) instead of silently vanishing.
+export function useWorkspacesByRepo(state: string = "ready,initializing,error") {
   useQuerySubscription("workspaces", {
     queryKey: queryKeys.workspaces.byRepo(state),
     params: { state },

@@ -13,6 +13,8 @@ import {
   getCloudCredentialMeta,
   setCloudCredential,
 } from "./cloud-credentials";
+import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
+import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { logMainProcess } from "./startup-diagnostics";
 
 /** agnt platform base URL — same precedence the backend's cloud config uses. */
@@ -102,9 +104,11 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
   const authToken = process.env.DEUS_AUTH_TOKEN;
   if (!port || !authToken) return false;
 
-  const [apiKey, claudeOauthToken] = await Promise.all([
+  const [apiKey, claudeOauthToken, sessionToken, keyMeta] = await Promise.all([
     getCloudCredential("agntApiKey"),
     getCloudCredential("claudeOauthToken"),
+    getStoredDeusCloudSessionToken().catch(() => null),
+    getCloudCredentialMeta("agntApiKey").catch(() => null),
   ]);
 
   try {
@@ -117,6 +121,12 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
       body: JSON.stringify({
         apiKey: apiKey ?? null,
         claudeOauthToken: claudeOauthToken ?? null,
+        // deus-cloud mint context: lets the backend request per-repo GitHub
+        // App installation tokens at workspace-provision time. Session-token
+        // auth — expiry just disables the mint until the next push.
+        deusCloudUrl: resolveDeusCloudUrl(),
+        deusCloudSessionToken: sessionToken,
+        orgId: keyMeta?.orgId ?? null,
       }),
     });
     return response.ok;

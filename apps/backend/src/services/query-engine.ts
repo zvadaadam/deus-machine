@@ -216,7 +216,7 @@ function pushWorkspaceDelta(
 ): boolean {
   try {
     const db = getDatabase();
-    const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing";
+    const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing,error";
     const allowedStates = new Set(stateFilter.split(",").map((s) => s.trim()));
     const changed = getWorkspacesBySessionIds(db, sessionIds).filter((ws) =>
       allowedStates.has(ws.state)
@@ -414,7 +414,9 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
   return (
     match(resource)
       .with("workspaces", () => {
-        const state = readStringParam(params, "state") ?? "ready,initializing";
+        // 'error' is in the default: a failed provision must stay VISIBLE
+        // (red state + error message), not silently vanish from the sidebar.
+        const state = readStringParam(params, "state") ?? "ready,initializing,error";
         return groupWorkspacesByRepo(getWorkspacesByRepo(db, state), getAllRepositorySummaries(db));
       })
       .with("stats", () => getStats(db))

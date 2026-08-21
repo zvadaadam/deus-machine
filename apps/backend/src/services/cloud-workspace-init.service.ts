@@ -278,6 +278,41 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
   });
 }
 
+/**
+ * Mint a per-repo GitHub App installation token via deus-cloud (1-hour,
+ * down-scoped to exactly this repository). Best-effort by design: missing
+ * mint context, an expired session, an uncovered repo, or an unregistered
+ * App all resolve to null — the workspace then rides the org PAT secret
+ * (or clones anonymously when the repo is public).
+ */
+async function mintRepoInstallationToken(originUrl: string): Promise<string | null> {
+  const config = getCloudConfig();
+  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return null;
+  const m = /github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/.exec(originUrl);
+  if (!m) return null;
+  try {
+    const res = await fetch(
+      `${config.deusCloudUrl}/orgs/${config.orgId}/github/installation-token`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.deusCloudSessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ repository: m[1] }),
+      }
+    );
+    if (!res.ok) {
+      console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${m[1]}`);
+      return null;
+    }
+    const body = (await res.json()) as { token?: string };
+    return body.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function provisionInBackground(
   workspaceId: string,
   originUrl: string,
@@ -291,9 +326,21 @@ async function provisionInBackground(
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
-    const environment = envInfo.configured
-      ? envInfo.name
-      : Environment.from("agnt-base").repo(originUrl, branch.source);
+    let environment: string | InstanceType<typeof Environment>;
+    if (envInfo.configured) {
+      // Named environments carry their own secret set on the platform; the
+      // create API rejects inline secrets alongside them by design.
+      environment = envInfo.name;
+    } else {
+      let recipe = Environment.from("agnt-base").repo(originUrl, branch.source);
+      // Per-repo App token (short-lived, this repo only) rides as a request
+      // secret: it drives agnt's git-auth step and NEVER lands in pg — the
+      // DO refreshes secrets on every ensure, so each provision gets a
+      // fresh mint instead of replaying a stale one.
+      const githubToken = await mintRepoInstallationToken(originUrl);
+      if (githubToken) recipe = recipe.secrets({ github_token: githubToken });
+      environment = recipe;
+    }
     const provider = await agntCreateWorkspace({
       baseUrl,
       apiKey,

@@ -370,8 +370,20 @@ export function CloudSection() {
             </p>
           </div>
           {githubApp.data?.installations.length ? (
-            <span className="text-accent-green flex shrink-0 items-center gap-1.5 text-sm">
-              <Check className="h-3.5 w-3.5" /> Installed
+            <span className="flex shrink-0 items-center gap-3">
+              <span className="text-accent-green flex items-center gap-1.5 text-sm">
+                <Check className="h-3.5 w-3.5" /> Installed
+              </span>
+              {githubApp.data.appSlug && (
+                <a
+                  className="text-text-primary border-border-subtle hover:bg-surface-secondary rounded-md border px-2.5 py-1 text-xs"
+                  href={`https://github.com/apps/${githubApp.data.appSlug}/installations/new`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Manage repos ↗
+                </a>
+              )}
             </span>
           ) : githubApp.data?.configured ? (
             <Button

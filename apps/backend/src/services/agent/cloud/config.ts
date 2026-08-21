@@ -21,6 +21,15 @@ export interface CloudConfig {
    * env-ordering accident.
    */
   claudeOauthToken: string | null;
+  /**
+   * deus-cloud mint context (per-repo GitHub App installation tokens at
+   * provision time). All three or nothing — a partial set disables the mint.
+   * The session token expires; the desktop re-pushes on auth changes, and a
+   * stale token just means no mint (PAT/org-secret path still applies).
+   */
+  deusCloudUrl: string | null;
+  deusCloudSessionToken: string | null;
+  orgId: string | null;
 }
 
 /** Runtime credential handoff shape. `null` clears a value (falls back to env). */
@@ -29,6 +38,9 @@ export interface CloudRuntimeCredentials {
   baseUrl?: string | null;
   anthropicApiKey?: string | null;
   claudeOauthToken?: string | null;
+  deusCloudUrl?: string | null;
+  deusCloudSessionToken?: string | null;
+  orgId?: string | null;
 }
 
 const runtime: { [K in keyof CloudRuntimeCredentials]: string | undefined } = {};
@@ -58,6 +70,9 @@ export function getCloudConfig(): CloudConfig | null {
       process.env.ANTHROPIC_API_KEY ??
       null,
     claudeOauthToken: runtime.claudeOauthToken ?? null,
+    deusCloudUrl: runtime.deusCloudUrl ?? process.env.DEUS_CLOUD_URL ?? null,
+    deusCloudSessionToken: runtime.deusCloudSessionToken ?? null,
+    orgId: runtime.orgId ?? null,
   };
   return cached;
 }
@@ -68,7 +83,15 @@ export function getCloudConfig(): CloudConfig | null {
  * reads the memo, so busting it here is the entire invalidation story.
  */
 export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): void {
-  for (const key of ["apiKey", "baseUrl", "anthropicApiKey", "claudeOauthToken"] as const) {
+  for (const key of [
+    "apiKey",
+    "baseUrl",
+    "anthropicApiKey",
+    "claudeOauthToken",
+    "deusCloudUrl",
+    "deusCloudSessionToken",
+    "orgId",
+  ] as const) {
     const value = update[key];
     if (value === undefined) continue;
     runtime[key] = value === null ? undefined : value;
