@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "../../../shared/types";
@@ -137,12 +137,74 @@ async function enrichWithCredentialStatus(
   return { ...status, hasPlatformKey: creds?.hasPlatformKey ?? false };
 }
 
-function respondHtml(res: ServerResponse, status: number, message: string): void {
+/**
+ * The loopback page the browser lands on after WorkOS redirects back. It is
+ * the last thing a user sees during sign-in, and a bare Times New Roman
+ * sentence on 127.0.0.1 reads like something broke. Self-contained (no
+ * network, no assets — this server dies seconds later) and dark-first, since
+ * it is only ever shown for a moment before focus returns to the app.
+ */
+/** Bring the Deus window to the front (post-sign-in, from the loopback server). */
+function focusMainWindow(): void {
+  try {
+    app.focus({ steal: true });
+    const [win] = BrowserWindow.getAllWindows();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  } catch {
+    // Focus is a courtesy; never let it break a completed sign-in.
+  }
+}
+
+function respondHtml(res: ServerResponse, status: number, message: string, ok = false): void {
   res.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
   });
-  res.end(`<!doctype html><title>Deus</title><body>${message}</body>`);
+  const mark = ok
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>`;
+  res.end(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Deus</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0a0a0a; color: #fafafa;
+    font: 400 15px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card { text-align: center; padding: 40px 32px; max-width: 380px; }
+  .badge {
+    width: 48px; height: 48px; margin: 0 auto 20px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: ${ok ? "rgba(52,199,89,.12)" : "rgba(255,255,255,.06)"};
+    color: ${ok ? "#34c759" : "rgba(250,250,250,.55)"};
+  }
+  .badge svg { width: 24px; height: 24px; }
+  h1 { margin: 0 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; font-size: 14px; color: rgba(250,250,250,.5); }
+  @media (prefers-color-scheme: light) {
+    body { background: #fafafa; color: #0a0a0a; }
+    p { color: rgba(10,10,10,.5); }
+  }
+</style></head>
+<body><div class="card">
+  <div class="badge">${mark}</div>
+  <h1>${message}</h1>
+  <p>You can close this tab and return to Deus.</p>
+</div>
+<script>
+  // Best-effort: only works for script-opened windows, so the copy above
+  // never depends on it.
+  setTimeout(() => { try { window.close(); } catch (_) {} }, 1200);
+</script>
+</body></html>`);
 }
 
 async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
@@ -170,7 +232,7 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
     }
 
     if (settled) {
-      respondHtml(res, 409, "This Deus sign-in request was already handled.");
+      respondHtml(res, 409, "This sign-in link was already used");
       return;
     }
 
@@ -188,11 +250,15 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
       }
 
       settled = true;
-      respondHtml(res, 200, "You can return to Deus.");
+      respondHtml(res, 200, "Signed in to Deus Cloud", true);
+      // Pull the app forward: the user's attention is in the browser, and
+      // window.close() only works for script-opened tabs, so without this
+      // they are left looking at a success page wondering what happens next.
+      focusMainWindow();
       resolveCallback(callback);
     } catch (error) {
       settled = true;
-      respondHtml(res, 400, "Deus sign-in failed.");
+      respondHtml(res, 400, "Sign-in failed");
       rejectCallback(error instanceof Error ? error : new Error("Deus Cloud sign-in failed"));
     }
   });
