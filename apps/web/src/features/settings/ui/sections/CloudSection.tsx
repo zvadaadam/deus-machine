@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Cloud, KeyRound, Sparkles } from "lucide-react";
+import { Check, Cloud, Copy, KeyRound, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,37 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import {
   type ClaudeSubscriptionState,
-  connectClaudeSubscription,
   disconnectClaudeSubscription,
   getClaudeSubscriptionStatus,
+  openAgentSetupTerminal,
   saveClaudeSubscriptionToken,
 } from "@/platform/native/deus-cloud";
+
+/**
+ * Agent subscription setups. One entry per agent — adding an agent here
+ * (plus its mint command in the main-process registry and a credential slot)
+ * is the whole cost of a new personal-plan integration.
+ */
+const AGENT_SUBSCRIPTIONS = [
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    available: true,
+    command: "claude setup-token",
+    placeholder: "sk-ant-oat…",
+    instructions:
+      "Run this in a terminal, approve in the browser, then paste the token it prints. One-year token, stored encrypted, streamed per turn — the cloud agent never sees it.",
+  },
+  {
+    id: "codex",
+    name: "Codex",
+    available: false,
+    command: null,
+    placeholder: null,
+    instructions:
+      "ChatGPT subscription auth is a device-code flow: enable device authorization in ChatGPT security settings, then approve a code per cloud environment (OpenAI allows one credential seat per sandbox). Ships with Codex cloud support.",
+  },
+] as const;
 
 interface CloudSettings {
   enabled: boolean;
@@ -39,15 +65,11 @@ export function CloudSection() {
   });
 
   const subAction = useMutation({
-    mutationFn: async (
-      action: { kind: "connect" | "disconnect" } | { kind: "paste"; token: string }
-    ) => {
+    mutationFn: async (action: { kind: "disconnect" } | { kind: "paste"; token: string }) => {
       const result: ClaudeSubscriptionState =
-        action.kind === "connect"
-          ? await connectClaudeSubscription()
-          : action.kind === "paste"
-            ? await saveClaudeSubscriptionToken(action.token)
-            : await disconnectClaudeSubscription();
+        action.kind === "paste"
+          ? await saveClaudeSubscriptionToken(action.token)
+          : await disconnectClaudeSubscription();
       if (result.error) throw new Error(result.error);
       return result;
     },
@@ -132,68 +154,113 @@ export function CloudSection() {
       <div className="mb-8">
         <h3 className="text-text-primary mb-1 flex items-center gap-2 text-sm font-medium">
           <Sparkles className="h-3.5 w-3.5" />
-          Claude Code — cloud authentication
+          Agents — run on your own subscriptions
         </h3>
         <p className="text-text-muted mb-3 text-sm">
-          Run cloud agents on your Claude Pro/Max subscription. Deus runs{" "}
-          <code className="text-text-secondary">claude setup-token</code> for you — approve in the
-          browser and the one-year token is stored encrypted on this device, streamed per turn,
-          never visible to the agent.
+          Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
+          by you, in your terminal — Deus only stores the result (encrypted, streamed per turn,
+          never visible to the agent).
         </p>
-        {sub.data?.hasClaudeSubscription ? (
-          <div className="flex items-center gap-3">
-            <span className="text-accent-green flex items-center gap-1.5 text-sm">
-              <Check className="h-3.5 w-3.5" /> Connected via subscription
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => subAction.mutate({ kind: "disconnect" })}
-              disabled={subAction.isPending}
-            >
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={() => subAction.mutate({ kind: "connect" })}
-                disabled={subAction.isPending}
-              >
-                {subAction.isPending ? "Waiting for approval…" : "Connect subscription"}
-              </Button>
-              <span className="text-text-muted text-xs">
-                or paste a token from <code>claude setup-token</code>
-              </span>
+        <div className="flex flex-col gap-3">
+          {AGENT_SUBSCRIPTIONS.map((agent) => (
+            <div key={agent.id} className="border-border-subtle rounded-lg border px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-text-primary text-sm font-medium">{agent.name}</span>
+                {agent.available ? (
+                  sub.data?.hasClaudeSubscription ? (
+                    <span className="text-accent-green flex items-center gap-1.5 text-sm">
+                      <Check className="h-3.5 w-3.5" /> Connected via subscription
+                    </span>
+                  ) : (
+                    <span className="text-text-muted text-xs">Not connected</span>
+                  )
+                ) : (
+                  <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
+                    Coming soon
+                  </span>
+                )}
+              </div>
+              <p className="text-text-muted mt-1 text-xs">{agent.instructions}</p>
+              {agent.available &&
+                (sub.data?.hasClaudeSubscription ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={() => subAction.mutate({ kind: "disconnect" })}
+                    disabled={subAction.isPending}
+                  >
+                    Disconnect
+                  </Button>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <code className="bg-surface-secondary text-text-secondary rounded px-2 py-1 text-xs">
+                        {agent.command}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Copy command"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(agent.command ?? "");
+                          toast.success("Command copied");
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          const res = await openAgentSetupTerminal(agent.id);
+                          if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
+                        }}
+                      >
+                        <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-label={`${agent.name} subscription token`}
+                        type="password"
+                        value={subToken}
+                        onChange={(e) => setSubToken(e.target.value)}
+                        placeholder={agent.placeholder ?? ""}
+                        className="max-w-md text-sm"
+                        disabled={subAction.isPending}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          subToken.trim() &&
+                          subAction.mutate({ kind: "paste", token: subToken.trim() })
+                        }
+                        disabled={!subToken.trim() || subAction.isPending}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                ))}
             </div>
-            <div className="flex items-center gap-2">
-              <Input
-                aria-label="Claude subscription token"
-                type="password"
-                value={subToken}
-                onChange={(e) => setSubToken(e.target.value)}
-                placeholder="sk-ant-oat…"
-                className="max-w-md text-sm"
-                disabled={subAction.isPending}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  subToken.trim() && subAction.mutate({ kind: "paste", token: subToken.trim() })
-                }
-                disabled={!subToken.trim() || subAction.isPending}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       <div className="mb-2">
+        <div className="border-border-subtle mb-3 flex items-center justify-between rounded-lg border border-dashed px-4 py-3">
+          <div>
+            <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
+            <p className="text-text-muted mt-0.5 text-xs">
+              Install once, per-repo access, tokens minted server-side and scoped to a single
+              repository — replaces the token below. Recommended when it ships.
+            </p>
+          </div>
+          <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
+            Coming soon
+          </span>
+        </div>
         <h3 className="text-text-primary mb-1 flex items-center gap-2 text-sm font-medium">
           <KeyRound className="h-3.5 w-3.5" />
           GitHub token for private repos

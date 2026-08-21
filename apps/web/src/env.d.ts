@@ -46,7 +46,7 @@ interface Window {
       error?: string;
     }>;
     getClaudeSubscriptionStatus: () => Promise<import("@shared/types").ClaudeSubscriptionResult>;
-    connectClaudeSubscription: () => Promise<import("@shared/types").ClaudeSubscriptionResult>;
+    openAgentSetupTerminal: (agentId: string) => Promise<{ ok: boolean; error?: string }>;
     saveClaudeSubscriptionToken: (
       token: string
     ) => Promise<import("@shared/types").ClaudeSubscriptionResult>;

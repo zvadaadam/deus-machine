@@ -39,7 +39,7 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "deus_cloud:start_login",
   "deus_cloud:sign_out",
   "deus_cloud:claude_sub_status",
-  "deus_cloud:claude_sub_connect",
+  "deus_cloud:agent_setup_terminal",
   "deus_cloud:claude_sub_save_token",
   "deus_cloud:claude_sub_disconnect",
   "get_installed_apps",
@@ -176,8 +176,8 @@ const electronAPI = {
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
   getClaudeSubscriptionStatus: (): Promise<unknown> =>
     ipcRenderer.invoke("deus_cloud:claude_sub_status"),
-  connectClaudeSubscription: (): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:claude_sub_connect"),
+  openAgentSetupTerminal: (agentId: string): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:agent_setup_terminal", agentId),
   saveClaudeSubscriptionToken: (token: string): Promise<unknown> =>
     ipcRenderer.invoke("deus_cloud:claude_sub_save_token", token),
   disconnectClaudeSubscription: (): Promise<unknown> =>

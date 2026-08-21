@@ -1,16 +1,15 @@
-// Claude subscription connect: turn the user's Claude Pro/Max plan into a
-// cloud-agent credential. The sanctioned shape is the USER minting a
-// one-year token via `claude setup-token` on their own machine — we assist
-// by running the CLI for them (browser opens, they approve on claude.ai,
-// we capture the printed token); paste stays as the fallback. The token
-// lives in the safeStorage vault and reaches the backend via the runtime
-// credentials push — never the renderer, never the sandbox env (the
-// sidecar proxy holds it turn-scoped).
+// Agent subscription connect: turn a personal plan (Claude Pro/Max today,
+// more agents later) into a cloud-agent credential. The sanctioned shape is
+// the USER running the mint command in their own terminal — we open the
+// terminal WITH the command for them and they paste the result; the app
+// never runs the OAuth flow itself. Tokens live in the safeStorage vault
+// and reach the backend via the runtime credentials push — never the
+// renderer, never the sandbox env (the sidecar proxy holds them
+// turn-scoped). Setup commands are keyed by agent id here in MAIN — the
+// renderer can only name an agent, never supply a command to execute.
 
-import { execFile } from "child_process";
+import { spawn } from "child_process";
 import { ipcMain } from "electron";
-import { promisify } from "util";
-import { checkCliTool, getCliLookupEnv } from "./cli-tools";
 import {
   deleteCloudCredential,
   getCloudCredentialsStatus,
@@ -20,10 +19,38 @@ import { pushCloudCredentialsToBackend, syncClaudeTokenToPlatform } from "./deus
 
 import type { ClaudeSubscriptionResult } from "../../../shared/types";
 
-const execFileAsync = promisify(execFile);
-
 /** `claude setup-token` prints a one-year OAuth bearer with this prefix. */
 const OAUTH_TOKEN_RE = /sk-ant-oat[a-zA-Z0-9_-]+/;
+
+/**
+ * Mint commands per agent — the ONLY commands the terminal opener will run.
+ * The renderer sends an agent id; an unknown id is a hard no-op. Growing
+ * this table (plus a card entry in Settings) is the whole cost of a new
+ * agent subscription.
+ */
+const AGENT_SETUP_COMMANDS: Record<string, string> = {
+  "claude-code": "claude setup-token",
+};
+
+/** Open the user's terminal with the agent's mint command typed in and run. */
+export async function openAgentSetupTerminal(
+  agentId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const command = AGENT_SETUP_COMMANDS[agentId];
+  if (!command) return { ok: false, error: `No setup command for agent "${agentId}"` };
+  return new Promise((resolve) => {
+    const child = spawn("osascript", [
+      "-e",
+      'tell application "Terminal" to activate',
+      "-e",
+      `tell application "Terminal" to do script "${command}"`,
+    ]);
+    child.on("error", () => resolve({ ok: false, error: "Could not open Terminal" }));
+    child.on("exit", (code) =>
+      resolve(code === 0 ? { ok: true } : { ok: false, error: "Could not open Terminal" })
+    );
+  });
+}
 
 async function statusResult(error?: string): Promise<ClaudeSubscriptionResult> {
   const status = await getCloudCredentialsStatus().catch(() => null);
@@ -55,42 +82,6 @@ export async function saveClaudeSubscriptionToken(
   return storeToken(token.match(OAUTH_TOKEN_RE)![0]);
 }
 
-/**
- * Assisted mint: run `claude setup-token` locally. The CLI opens the
- * browser for approval on claude.ai and prints the token when done. If the
- * CLI needs an interactive terminal (version-dependent), we surface a clear
- * error and the UI falls back to the paste flow.
- */
-export async function connectClaudeSubscriptionAssisted(): Promise<ClaudeSubscriptionResult> {
-  const claude = await checkCliTool("claude");
-  if (!claude.installed || !claude.path) {
-    return statusResult("Claude CLI not found — use the paste option instead.");
-  }
-
-  try {
-    const { stdout, stderr } = await execFileAsync(claude.path, ["setup-token"], {
-      env: getCliLookupEnv(),
-      timeout: 10 * 60 * 1000,
-      maxBuffer: 1024 * 1024,
-    });
-    const match = `${stdout}\n${stderr}`.match(OAUTH_TOKEN_RE);
-    if (!match) {
-      return statusResult(
-        "setup-token finished without printing a token — run `claude setup-token` in a terminal and paste the result."
-      );
-    }
-    return storeToken(match[0]);
-  } catch (error) {
-    const killed =
-      typeof error === "object" && error != null && "killed" in error && error.killed === true;
-    return statusResult(
-      killed
-        ? "Sign-in timed out — approve the request in your browser and try again."
-        : "Couldn't run setup-token here — run `claude setup-token` in a terminal and paste the result."
-    );
-  }
-}
-
 export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionResult> {
   await deleteCloudCredential("claudeOauthToken");
   await syncClaudeTokenToPlatform(null);
@@ -100,7 +91,9 @@ export async function disconnectClaudeSubscription(): Promise<ClaudeSubscription
 
 export function registerClaudeSubscriptionHandlers(): void {
   ipcMain.handle("deus_cloud:claude_sub_status", () => statusResult());
-  ipcMain.handle("deus_cloud:claude_sub_connect", () => connectClaudeSubscriptionAssisted());
+  ipcMain.handle("deus_cloud:agent_setup_terminal", (_event, agentId: unknown) =>
+    openAgentSetupTerminal(String(agentId ?? ""))
+  );
   ipcMain.handle("deus_cloud:claude_sub_save_token", (_event, token: unknown) =>
     saveClaudeSubscriptionToken(String(token ?? ""))
   );

@@ -65,11 +65,13 @@ export async function getClaudeSubscriptionStatus(): Promise<ClaudeSubscriptionS
   return window.electronAPI.getClaudeSubscriptionStatus();
 }
 
-export async function connectClaudeSubscription(): Promise<ClaudeSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.connectClaudeSubscription) {
-    return WEB_SUBSCRIPTION;
+export async function openAgentSetupTerminal(
+  agentId: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.openAgentSetupTerminal) {
+    return { ok: false, error: "Opening a terminal requires the desktop app" };
   }
-  return window.electronAPI.connectClaudeSubscription();
+  return window.electronAPI.openAgentSetupTerminal(agentId);
 }
 
 export async function saveClaudeSubscriptionToken(token: string): Promise<ClaudeSubscriptionState> {
