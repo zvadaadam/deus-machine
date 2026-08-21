@@ -36,6 +36,11 @@ const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 interface StoredDeusCloudSession {
   version: typeof SESSION_FILE_VERSION;
   accountId: string;
+  /** Human identity from deus-cloud /me — the account id alone reads as a
+   *  database row, not as "you". Optional: a /me failure must never block
+   *  a sign-in that otherwise succeeded. */
+  accountName?: string;
+  accountEmail?: string;
   tokenType: "Bearer";
   expiresAt: string;
   encryptedSessionToken: string;
@@ -114,6 +119,8 @@ function toPublicStatus(
   return {
     signedIn: true,
     accountId: stored.accountId,
+    accountName: stored.accountName ?? null,
+    accountEmail: stored.accountEmail ?? null,
     expiresAt: stored.expiresAt,
     tokenType: stored.tokenType,
     cloudUrl: stored.cloudUrl,
@@ -336,15 +343,44 @@ async function exchangeDesktopCode(input: {
     throw new Error("Deus Cloud returned an invalid desktop session");
   }
 
+  const profile = await fetchAccountProfile(input.cloudUrl, body.session_token);
+
   return {
     version: SESSION_FILE_VERSION,
     accountId: body.account_id,
+    ...(profile.name ? { accountName: profile.name } : {}),
+    ...(profile.email ? { accountEmail: profile.email } : {}),
     tokenType: "Bearer",
     expiresAt: new Date(Date.now() + body.expires_in_seconds * 1000).toISOString(),
     encryptedSessionToken: encryptSessionToken(body.session_token),
     cloudUrl: input.cloudUrl,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Human identity for the signed-in account. Best-effort by design: the
+ * session is already valid at this point, so a /me failure degrades the
+ * Account card to the raw id rather than failing the sign-in.
+ */
+async function fetchAccountProfile(
+  cloudUrl: string,
+  sessionToken: string
+): Promise<{ name?: string; email?: string }> {
+  try {
+    const response = await fetch(`${cloudUrl}/me`, {
+      headers: { authorization: `Bearer ${sessionToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return {};
+    const body = (await response.json()) as { account?: { name?: unknown; email?: unknown } };
+    return {
+      ...(typeof body.account?.name === "string" ? { name: body.account.name } : {}),
+      ...(typeof body.account?.email === "string" ? { email: body.account.email } : {}),
+    };
+  } catch {
+    return {};
+  }
 }
 
 function broadcastAuthChanged(status: DeusCloudSessionStatus): void {

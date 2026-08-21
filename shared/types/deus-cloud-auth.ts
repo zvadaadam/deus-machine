@@ -5,6 +5,8 @@ export interface DeusCloudSessionStatus {
   tokenType: "Bearer" | null;
   cloudUrl: string;
   /** This device holds a minted agnt platform key (D1 handshake complete). */
+  accountName?: string | null;
+  accountEmail?: string | null;
   hasPlatformKey: boolean;
   /**
    * Why this device has no platform key despite being signed in. Provisioning

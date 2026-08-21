@@ -14,7 +14,7 @@ import {
   setCloudCredential,
 } from "./cloud-credentials";
 import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
-import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
+import { AGNT_LOCAL_URL, isLocalCloudEnv, resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { logMainProcess } from "./startup-diagnostics";
 
 /**
@@ -43,10 +43,8 @@ export async function retryDeviceKeyProvisioning(): Promise<{ ok: boolean; error
 
 /** agnt platform base URL — same precedence the backend's cloud config uses. */
 export function resolveAgntBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return (env.DEUS_CLOUD_AGNT_URL ?? env.AGNT_BASE_URL ?? "https://api.deusmachine.ai").replace(
-    /\/$/,
-    ""
-  );
+  const fallback = isLocalCloudEnv(env) ? AGNT_LOCAL_URL : "https://api.deusmachine.ai";
+  return (env.DEUS_CLOUD_AGNT_URL ?? env.AGNT_BASE_URL ?? fallback).replace(/\/$/, "");
 }
 
 /**

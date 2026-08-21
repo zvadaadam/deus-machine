@@ -23,6 +23,20 @@ function formatExpiry(expiresAt: string): string {
   return `Expires in ${Math.floor(hours / 24)}d`;
 }
 
+/** "Adam Zvada" -> "AZ"; falls back to the email's first letters. */
+function initialsFrom(name?: string | null, email?: string | null): string | null {
+  const source =
+    name?.trim() ||
+    email
+      ?.split("@")[0]
+      ?.replace(/[._-]+/g, " ")
+      .trim();
+  if (!source) return null;
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
+}
+
 export function AccountSection() {
   const queryClient = useQueryClient();
   const session = useQuery({
@@ -70,6 +84,7 @@ export function AccountSection() {
   const data = session.data;
   const busy = session.isLoading || signInMutation.isPending || signOutMutation.isPending;
   const signedIn = data?.signedIn === true;
+  const accountInitials = initialsFrom(data?.accountName, data?.accountEmail);
 
   return (
     <div className="space-y-5">
@@ -84,11 +99,17 @@ export function AccountSection() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg">
-              <Cloud className="text-muted-foreground size-5" />
+              {signedIn && accountInitials ? (
+                <span className="text-text-primary text-sm font-semibold">{accountInitials}</span>
+              ) : (
+                <Cloud className="text-muted-foreground size-5" />
+              )}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{signedIn ? "Signed in" : "Not signed in"}</p>
+                <p className="truncate text-sm font-medium">
+                  {signedIn ? (data.accountName ?? "Signed in") : "Not signed in"}
+                </p>
                 {session.isLoading ? (
                   <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
                 ) : signedIn ? (
@@ -99,7 +120,7 @@ export function AccountSection() {
               </div>
               {signedIn ? (
                 <p className="text-muted-foreground mt-1 truncate text-sm">
-                  {formatAccountId(data.accountId)}
+                  {data.accountEmail ?? formatAccountId(data.accountId)}
                 </p>
               ) : (
                 <p className="text-muted-foreground mt-1 text-sm">{data?.cloudUrl}</p>
