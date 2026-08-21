@@ -137,9 +137,14 @@ describe("pushCloudCredentialsToBackend", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://127.0.0.1:51999/api/settings/cloud/credentials");
     expect(init.headers.authorization).toBe("Bearer local-token");
+    // The full contract: credentials PLUS the deus-cloud mint context the
+    // backend needs to request per-repo GitHub App installation tokens.
     expect(JSON.parse(init.body)).toEqual({
       apiKey: "agnt_sk_live_x",
       claudeOauthToken: null,
+      deusCloudUrl: expect.any(String),
+      deusCloudSessionToken: null,
+      orgId: null,
     });
   });
 });

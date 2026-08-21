@@ -326,7 +326,7 @@ async function provisionInBackground(
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
-    let environment: string | InstanceType<typeof Environment>;
+    let environment: string | ReturnType<typeof Environment.from>;
     if (envInfo.configured) {
       // Named environments carry their own secret set on the platform; the
       // create API rejects inline secrets alongside them by design.
