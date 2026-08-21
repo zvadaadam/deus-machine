@@ -4,6 +4,7 @@ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
@@ -140,8 +141,11 @@ export function CloudSection() {
     retry: false,
   });
 
+  // Same key AccountSection uses, so signing in/out there refreshes this
+  // section too — a private key here would keep showing a stale session
+  // (and a stale "setup didn't finish" banner) until the settings remount.
   const session = useQuery({
-    queryKey: ["settings", "deus-cloud-session"],
+    queryKey: queryKeys.deusCloud.session,
     queryFn: getDeusCloudSession,
     staleTime: 30_000,
     retry: false,
@@ -155,7 +159,7 @@ export function CloudSection() {
     },
     onSuccess: async () => {
       toast.success("Cloud setup complete — this device now has a platform key");
-      await queryClient.invalidateQueries({ queryKey: ["settings", "deus-cloud-session"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.deusCloud.session });
       await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Cloud setup failed"),

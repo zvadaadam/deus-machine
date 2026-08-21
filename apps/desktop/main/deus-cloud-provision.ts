@@ -49,6 +49,13 @@ export function resolveAgntBaseUrl(env: NodeJS.ProcessEnv = process.env): string
   );
 }
 
+/**
+ * Bound every platform call. undici's default header timeout is 300s, so a
+ * black-hole endpoint would spin the Settings "Retry setup" button — and
+ * block sign-out, which awaits the revoke — for five minutes.
+ */
+const PLATFORM_TIMEOUT_MS = 15_000;
+
 interface OrgRef {
   id: string;
   name?: string;
@@ -80,6 +87,7 @@ export function parseOrgList(body: unknown): OrgRef[] {
 async function fetchFirstOrg(sessionToken: string, cloudUrl: string): Promise<OrgRef> {
   const response = await fetch(`${cloudUrl}/orgs`, {
     headers: { authorization: `Bearer ${sessionToken}` },
+    signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`org lookup failed (${response.status})`);
@@ -111,6 +119,7 @@ async function mintDeviceKey(
       "content-type": "application/json",
     },
     body: JSON.stringify({ label }),
+    signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`device key mint failed (${response.status})`);
@@ -146,6 +155,7 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
         authorization: `Bearer ${authToken}`,
         "content-type": "application/json",
       },
+      signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
       body: JSON.stringify({
         apiKey: apiKey ?? null,
         claudeOauthToken: claudeOauthToken ?? null,
@@ -215,10 +225,15 @@ export async function syncAgentSecretToPlatform(
   try {
     const response =
       value === null
-        ? await fetch(url, { method: "DELETE", headers })
+        ? await fetch(url, {
+            method: "DELETE",
+            headers,
+            signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
+          })
         : await fetch(url, {
             method: "PUT",
             headers,
+            signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
             body: JSON.stringify({ value, appliesToAll: false }),
           });
     return response.ok;
@@ -267,17 +282,6 @@ export function provisionAtStartup(
 }
 
 /**
- * Startup: surface the stored key to the backend the boring way — the spawn
- * env. Must run BEFORE spawnBackend (the child copies process.env).
- */
-export async function applyCloudCredentialsToEnv(): Promise<void> {
-  const apiKey = await getCloudCredential("agntApiKey").catch(() => null);
-  if (apiKey && !process.env.DEUS_CLOUD_AGNT_API_KEY) {
-    process.env.DEUS_CLOUD_AGNT_API_KEY = apiKey;
-  }
-}
-
-/**
  * Sign-out: best-effort revoke of THIS device's key server-side, then local
  * deletion + backend clear. Called with the session token BEFORE the session
  * file is cleared.
@@ -289,6 +293,7 @@ export async function revokeDeviceKey(sessionToken: string | null): Promise<void
       await fetch(`${resolveAgntBaseUrl()}/dashboard/orgs/${meta.orgId}/api-keys/${meta.keyId}`, {
         method: "DELETE",
         headers: { authorization: `Bearer ${sessionToken}` },
+        signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
       });
     } catch {
       // Offline sign-out is fine — the key can be revoked from any signed-in

@@ -49,6 +49,31 @@ export function httpsOrigin(url: string): string {
   return url;
 }
 
+/**
+ * `owner/name` when the origin really is GitHub, else null.
+ *
+ * Parsed, never substring-matched: `/github\.com[/:]…/` also matches
+ * `https://evil.example/github.com/a/b`, which would mint a GitHub App
+ * installation token and hand it to a workspace that clones from — and so
+ * sends the token to — an unrelated host.
+ */
+export function githubRepoSlug(originUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(httpsOrigin(originUrl));
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:") return null;
+  if (url.hostname !== "github.com" && url.hostname !== "www.github.com") return null;
+  const parts = url.pathname
+    .replace(/\.git$/, "")
+    .split("/")
+    .filter(Boolean);
+  if (parts.length !== 2) return null;
+  return `${parts[0]}/${parts[1]}`;
+}
+
 export interface CreateCloudWorkspaceParams {
   repositoryId: string;
   /** Branch the sandbox checks out; defaults to the repo's default branch. */
@@ -118,9 +143,9 @@ export async function deleteCloudWipRef(
   originUrl: string,
   providerWorkspaceId: string
 ): Promise<void> {
-  const m = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(httpsOrigin(originUrl));
-  if (!m) return;
-  const [, owner, repoName] = m;
+  const slug = githubRepoSlug(originUrl);
+  if (!slug) return;
+  const [owner, repoName] = slug.split("/");
   try {
     await execFileAsync(
       "gh",
@@ -288,8 +313,8 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
 async function mintRepoInstallationToken(originUrl: string): Promise<string | null> {
   const config = getCloudConfig();
   if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return null;
-  const m = /github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/.exec(originUrl);
-  if (!m) return null;
+  const slug = githubRepoSlug(originUrl);
+  if (!slug) return null;
   try {
     const res = await fetch(
       `${config.deusCloudUrl}/orgs/${config.orgId}/github/installation-token`,
@@ -299,11 +324,11 @@ async function mintRepoInstallationToken(originUrl: string): Promise<string | nu
           authorization: `Bearer ${config.deusCloudSessionToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ repository: m[1] }),
+        body: JSON.stringify({ repository: slug }),
       }
     );
     if (!res.ok) {
-      console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${m[1]}`);
+      console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${slug}`);
       return null;
     }
     const body = (await res.json()) as { token?: string };

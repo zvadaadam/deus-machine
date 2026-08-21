@@ -30,7 +30,7 @@ import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
-import { applyCloudCredentialsToEnv, provisionAtStartup } from "./deus-cloud-provision";
+import { provisionAtStartup } from "./deus-cloud-provision";
 import { registerClaudeSubscriptionHandlers } from "./claude-subscription";
 import { registerGithubAppHandlers } from "./github-app";
 import { registerCodexSubscriptionHandlers } from "./codex-subscription";
@@ -280,9 +280,13 @@ app.whenReady().then(async () => {
   // Spawn runtime children as child processes
   logMainProcess("[main] Spawning runtime stack...");
   try {
-    // Stored cloud credentials ride the spawn env (the boring path); the
-    // runtime credentials route covers keys minted after this point.
-    await applyCloudCredentialsToEnv().catch(() => {});
+    // The device key deliberately does NOT ride the spawn env. Exporting it
+    // there put a copy in a place the desktop cannot retract: sign-out clears
+    // the vault and pushes an explicit null, but the backend's documented
+    // null-falls-back-to-env rule then resurrected the revoked key until a
+    // restart — and every backend descendant (setup scripts, agent-server,
+    // AAP processes) inherited it. provisionAtStartup pushes credentials over
+    // the runtime route immediately below, which is retractable by design.
     const { port: backendPort, authToken } = await spawnBackend({
       onStdoutLine: (source, line) => {
         if (source === "backend" && line.startsWith("DEUS_WORKSPACE_PROGRESS:")) {

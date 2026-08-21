@@ -94,7 +94,19 @@ export async function startGithubAppInstall(): Promise<{ ok: boolean; error?: st
     if (!res.ok) return { ok: false, error: `install-url failed (${res.status})` };
     const body = (await res.json()) as { url?: string };
     if (!body.url) return { ok: false, error: "No install URL returned" };
-    await shell.openExternal(body.url);
+    // shell.openExternal hands the string to the OS, which will happily launch
+    // non-http schemes. This URL comes off the network, so it is only ever
+    // allowed to be the GitHub installation page it claims to be.
+    let installUrl: URL;
+    try {
+      installUrl = new URL(body.url);
+    } catch {
+      return { ok: false, error: "Install URL was not a valid URL" };
+    }
+    if (installUrl.protocol !== "https:" || installUrl.hostname !== "github.com") {
+      return { ok: false, error: "Install URL did not point at github.com" };
+    }
+    await shell.openExternal(installUrl.toString());
     return { ok: true };
   } catch {
     return { ok: false, error: "Could not reach Deus Cloud" };
