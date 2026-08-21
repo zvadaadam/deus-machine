@@ -10,6 +10,8 @@ import {
   type ClaudeSubscriptionState,
   disconnectClaudeSubscription,
   getClaudeSubscriptionStatus,
+  getGithubAppStatus,
+  installGithubApp,
   openAgentSetupTerminal,
   saveClaudeSubscriptionToken,
 } from "@/platform/native/deus-cloud";
@@ -85,6 +87,13 @@ export function CloudSection() {
     },
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Subscription action failed"),
+  });
+
+  const githubApp = useQuery({
+    queryKey: ["settings", "github-app"],
+    queryFn: getGithubAppStatus,
+    staleTime: 30_000,
+    retry: false,
   });
 
   const status = useQuery({
@@ -269,17 +278,41 @@ export function CloudSection() {
       </div>
 
       <div className="mb-2">
-        <div className="border-border-subtle mb-3 flex items-center justify-between rounded-lg border border-dashed px-4 py-3">
+        <div
+          className={cn(
+            "border-border-subtle mb-3 flex items-center justify-between rounded-lg border px-4 py-3",
+            !githubApp.data?.configured && "border-dashed"
+          )}
+        >
           <div>
             <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
             <p className="text-text-muted mt-0.5 text-xs">
-              Install once, per-repo access, tokens minted server-side and scoped to a single
-              repository — replaces the token below. Recommended when it ships.
+              {githubApp.data?.installations.length
+                ? `Installed for ${githubApp.data.installations.map((i) => i.accountLogin).join(", ")} — sandboxes get server-minted tokens scoped to one repo.`
+                : "Install once, per-repo access, tokens minted server-side and scoped to a single repository — replaces the token below."}
             </p>
           </div>
-          <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
-            Coming soon
-          </span>
+          {githubApp.data?.installations.length ? (
+            <span className="text-accent-green flex shrink-0 items-center gap-1.5 text-sm">
+              <Check className="h-3.5 w-3.5" /> Installed
+            </span>
+          ) : githubApp.data?.configured ? (
+            <Button
+              size="sm"
+              className="shrink-0"
+              onClick={async () => {
+                const res = await installGithubApp();
+                if (!res.ok) toast.error(res.error ?? "Could not start the install");
+                else toast.info("Complete the install on GitHub, then come back");
+              }}
+            >
+              Install
+            </Button>
+          ) : (
+            <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
+              Awaiting App registration
+            </span>
+          )}
         </div>
         {step(s?.hasGithubToken, "GitHub — repo access for sandboxes")}
         <p className="text-text-muted mb-3 text-sm">

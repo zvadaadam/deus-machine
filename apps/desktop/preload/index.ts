@@ -42,6 +42,8 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "deus_cloud:agent_setup_terminal",
   "deus_cloud:claude_sub_save_token",
   "deus_cloud:claude_sub_disconnect",
+  "deus_cloud:github_app_status",
+  "deus_cloud:github_app_install",
   "get_installed_apps",
   "open_in_app",
 
@@ -182,6 +184,8 @@ const electronAPI = {
     ipcRenderer.invoke("deus_cloud:claude_sub_save_token", token),
   disconnectClaudeSubscription: (): Promise<unknown> =>
     ipcRenderer.invoke("deus_cloud:claude_sub_disconnect"),
+  getGithubAppStatus: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_status"),
+  installGithubApp: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_install"),
   onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
     ipcRenderer.on("deus_cloud:changed", listener);

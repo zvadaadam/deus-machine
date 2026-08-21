@@ -32,6 +32,7 @@ import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from ".
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { applyCloudCredentialsToEnv, provisionAtStartup } from "./deus-cloud-provision";
 import { registerClaudeSubscriptionHandlers } from "./claude-subscription";
+import { registerGithubAppHandlers } from "./github-app";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -332,6 +333,7 @@ app.whenReady().then(async () => {
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
   registerClaudeSubscriptionHandlers();
+  registerGithubAppHandlers();
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers();

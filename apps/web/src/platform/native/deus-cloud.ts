@@ -87,3 +87,24 @@ export async function disconnectClaudeSubscription(): Promise<ClaudeSubscription
   }
   return window.electronAPI.disconnectClaudeSubscription();
 }
+
+export interface GithubAppState {
+  configured: boolean;
+  signedIn: boolean;
+  installations: Array<{ installationId: number; accountLogin: string }>;
+  error?: string;
+}
+
+export async function getGithubAppStatus(): Promise<GithubAppState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.getGithubAppStatus) {
+    return { configured: false, signedIn: false, installations: [] };
+  }
+  return window.electronAPI.getGithubAppStatus();
+}
+
+export async function installGithubApp(): Promise<{ ok: boolean; error?: string }> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.installGithubApp) {
+    return { ok: false, error: "Installing the GitHub App requires the desktop app" };
+  }
+  return window.electronAPI.installGithubApp();
+}
