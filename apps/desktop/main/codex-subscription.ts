@@ -10,16 +10,14 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { ipcMain } from "electron";
-import { deleteCloudCredential, setCloudCredential } from "./cloud-credentials";
-import { getCloudCredentialsStatus } from "./cloud-credentials";
+import {
+  deleteCloudCredential,
+  getCloudCredentialsStatus,
+  setCloudCredential,
+} from "./cloud-credentials";
 import { pushCloudCredentialsToBackend, syncAgentSecretToPlatform } from "./deus-cloud-provision";
 
-export interface CodexSubscriptionResult {
-  success: boolean;
-  hasCodexSubscription: boolean;
-  accountEmail?: string;
-  error?: string;
-}
+import type { CodexSubscriptionResult } from "../../../shared/types";
 
 const AUTH_JSON_PATH = () => join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json");
 
