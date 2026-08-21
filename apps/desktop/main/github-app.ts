@@ -53,11 +53,15 @@ export async function getGithubAppState(): Promise<GithubAppState> {
     if (!res.ok) {
       return { ...EMPTY_STATE, configured: true, signedIn: true, error: `status ${res.status}` };
     }
+    // REST is snake_case; internal shape stays camelCase — map at the seam.
     const body = (await res.json()) as {
-      installations?: Array<{ installationId: number; accountLogin: string }>;
-      appSlug?: string | null;
+      installations?: Array<{ github_installation_identifier: number; account_login: string }>;
+      app_slug?: string | null;
     };
-    const installations = body.installations ?? [];
+    const installations = (body.installations ?? []).map((i) => ({
+      installationId: i.github_installation_identifier,
+      accountLogin: i.account_login,
+    }));
     let accessibleRepos: string[] = [];
     if (installations.length > 0) {
       const reposRes = await fetch(`${base}/accessible-repos`, { headers }).catch(() => null);
@@ -66,10 +70,10 @@ export async function getGithubAppState(): Promise<GithubAppState> {
       }
     }
     return {
-      configured: Boolean(body.appSlug),
+      configured: Boolean(body.app_slug),
       signedIn: true,
       installations,
-      appSlug: body.appSlug ?? null,
+      appSlug: body.app_slug ?? null,
       accessibleRepos,
     };
   } catch {
