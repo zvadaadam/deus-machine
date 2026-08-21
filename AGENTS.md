@@ -133,6 +133,57 @@ Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never 
 
 Detailed conventions for Tailwind v4, components, animations, and performance live in `.claude/skills/deus-code-style/`. Read the relevant file before writing or reviewing code.
 
+## Design ↔ code sync (design/deus.pen)
+
+The app UI is designed in `design/deus.pen` (Pencil). The file is encrypted — read and
+edit it only through the Pencil MCP tools (`get_app_state`, `execute`), never with `Read`
+or `Grep`. Pencil also ships inside Deus as an agentic app (`packages/pencil`), so the
+same file opens in the Design tab.
+
+`deus.pen` is a reconstruction of `apps/web` as it exists today, not a moodboard:
+
+- **Variables are the CSS.** Every colour, radius and type step is a Pencil variable named
+  after its custom property in `apps/web/src/global.css` (`bg-elevated`, `text-tertiary`,
+  `border-subtle`, `radius-lg`, `text-base`, …). The `mode` theme axis carries `:root`
+  (light) and `.dark` — the same two palettes.
+- **Components are the components.** `DS/*` frames map one-to-one onto React components;
+  the frame name points at the file that renders it (`DS/SidebarRow-Workspace` →
+  `features/sidebar/ui/WorkspaceItem.tsx`). Instance overrides stand in for props.
+- **Screens are real states**, at the sizes the app ships: 1440×900 desktop, 390×844
+  mobile. Every content tab, all nine settings sections, every dialog and the mobile
+  layouts are drawn — not just the happy path.
+
+Top-level frames are numbered by band: `00` overview, `01–05` foundations (colour/type/
+radius, motion, elevation, iconography, interaction states), `10–24` the component library,
+`30` states, `40–49` screens, `47a–e` the onboarding flow, `50–58` settings, `60–66`
+overlays, `70–73` mobile, `80` the `/connect` route, `90` the landing site. Keep the
+numbering when you add to it.
+
+The landing site (`apps/landing`) does not share these tokens — it has its own shadcn/Geist
+palette, namespaced `lp-*` in the design file, and ships dark-only. Never bind an app
+screen to an `lp-*` token or the reverse.
+
+`design/README.md` holds the full component → file and variable → token mapping.
+
+**The rule:** whoever changes one side changes the other in the same piece of work. Ship a
+UI change in code, update the matching `DS/*` component or screen; change the design,
+follow it with the code change. Divergence between `deus.pen` and `apps/web` is a bug. If
+another session owns the file right now, note the divergence instead of editing in
+parallel.
+
+Two things the file cannot render exactly, both documented on canvas: corners ship as
+`corner-shape: superellipse(1.5)` with every radius token scaled ×1.25 (`md` = 10px, not
+8px) and Pencil can only draw circular arcs; and the system font stack (SF Pro Text / SF
+Mono) is substituted with Inter / Roboto Mono because Pencil carries only Google fonts.
+Use the scaled radius values — they are what ships.
+
+Working notes for the Pencil editor: set variables before nodes; the canvas has no
+autosave, so save with `osascript -e 'tell application "Pen" to activate' -e 'tell
+application "System Events" to keystroke "s" using command down'`; layout/render goes
+stale after long editing sessions — save and relaunch Pen to get accurate screenshots. A
+component instance resolves its theme once per document, so light-mode sheets are built
+from primitives rather than instances.
+
 ## Hard Rules
 
 - Never edit outside your worktree directory
