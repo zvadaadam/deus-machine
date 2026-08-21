@@ -322,6 +322,12 @@ those subscriptions — and it is the reason the Settings story needs one
 --device-auth`, needs the user's ChatGPT security toggle; the
   three-step + poll UI in Conductor's modal) or a persist-after-run
   auth.json lineage per workspace — never one shared seed.
+- Mint UX converges with Claude's (verified vs Conductor 2026-08-21: their
+  device-flow UI lives in their remote frontend; the binary holds nothing):
+  our open-terminal-with-command pattern covers Codex too — the agents
+  registry gains `codex login --device-auth`, the user approves on their
+  own devices, deus collects the resulting auth.json for per-sandbox
+  seeding. No product-side OAuth, same posture as Claude.
 - Order of work: API-key path FIRST (trivial — the engine's codex adapter
   maps `apiKey → CODEX_API_KEY`; rides the same per-turn plumbing), device
   flow after, as its own iteration. Both need the codex-in-cloud package
