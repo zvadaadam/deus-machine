@@ -40,6 +40,9 @@ import { capabilities } from "@/platform/capabilities";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
+import { CONFIGURE_CLOUD_ENV } from "@/features/session/lib/sessionPrompts";
+import { getStoredModel } from "@/features/repository/ui/HomeView";
+import { DEFAULT_MODEL } from "@/shared/agents";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
 import { MainContent } from "./MainContent";
@@ -217,6 +220,26 @@ export function MainLayout() {
     },
     [welcomeCreateMutation, selectWorkspace, expandRepo]
   );
+
+  // Settings → "Set up with agent": consume the pending request — spin up a
+  // cloud workspace on that repo with the environment-onboarding prompt as
+  // turn one (the agent persists the recipe via agnt_configure_environment).
+  const pendingEnvSetupRepoId = useUIStore((s) => s.pendingEnvSetupRepoId);
+  useEffect(() => {
+    if (!pendingEnvSetupRepoId) return;
+    useUIStore.getState().clearEnvSetupRequest();
+    // Cloud sandboxes run the claude-code harness only — a stored Codex pick
+    // would be rejected at send time, so force the Claude default instead.
+    const stored = getStoredModel();
+    const model = stored.startsWith("claude-code:") ? stored : DEFAULT_MODEL;
+    void handleStartWorkspace(
+      pendingEnvSetupRepoId,
+      CONFIGURE_CLOUD_ENV,
+      model,
+      undefined,
+      "cloud"
+    );
+  }, [pendingEnvSetupRepoId, handleStartWorkspace]);
 
   // Effect: when the pending workspace becomes ready with a session, send the queued message.
   // Uses the SessionPanel ref so the message goes through useSendMessage() → optimistic UI.

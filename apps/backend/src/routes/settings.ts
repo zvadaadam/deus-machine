@@ -8,6 +8,7 @@ import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
 } from "../services/cloud-workspace-init.service";
+import { listCloudEnvironments } from "../services/cloud-environment.service";
 import { ValidationError } from "../lib/errors";
 import type { AgentHarness } from "@shared/enums";
 
@@ -91,6 +92,11 @@ app.post("/settings/cloud/credentials", async (c) => {
   const body = parseBody(CloudCredentialsBody, await c.req.json());
   setCloudRuntimeCredentials(body);
   return c.json({ ok: true, configured: getCloudConfig() !== null });
+});
+
+// Org-wide cloud environments (agent-authored recipes on the platform).
+app.get("/settings/cloud/environments", async (c) => {
+  return c.json(await listCloudEnvironments());
 });
 
 export default app;

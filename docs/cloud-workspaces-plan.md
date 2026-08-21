@@ -128,6 +128,38 @@ lifecycle problems, and breaks the Mac-off story.
   dir. Live-proven 10/10: configure on a fresh repo → second workspace
   provisions FROM the environment with deps preinstalled.
 
+### Also shipped (D1 GitHub App wiring + environment surfacing, Aug 21)
+
+- **GitHub App tokens actually reach provisioning** (the Terapist failure):
+  the desktop pushes the deus-cloud session token + org + URL alongside the
+  device key; `provisionInBackground` mints a per-repo installation token
+  via deus-cloud (`POST /orgs/:orgId/github/installation-token`, 1 h, that
+  repo only, `contents:write` with a 422→`read` fallback for read-only
+  installations) and rides it as the inline recipe's `github_token`. Never
+  persisted deus-side; the DO refreshes secrets per ensure. Best-effort:
+  no App / uncovered repo / expired session → org-PAT path unchanged.
+  Live-proven: private repo cloned in the sandbox via a minted token.
+  KNOWN GAPS: stopped-sandbox restart replays DO-stored secrets (>1 h mint
+  is stale — re-mint-on-wake is the follow-up); named environments refuse
+  inline secrets by API design, so App tokens only serve inline-recipe
+  workspaces today.
+- **Errored workspaces stay visible**: `error` joined the default workspace
+  state filter (frontend param + snapshot + delta defaults) — a failed
+  provision renders red with its message instead of vanishing.
+- **App cards act**: "Manage repos ↗" (both settings cards) deep-links to
+  GitHub's own installation page — installation is not a terminal state;
+  repo selection lives with the authority. Missing-access rows keep the
+  targeted install links.
+- **Environments in Settings** (Cursor-pattern, deus-shaped): Settings →
+  Environment shows the selected repo's cloud environment (derived name,
+  configured state, `requiredEnv`) plus the org-wide list
+  (`GET /settings/cloud/environments`). "Set up with agent" = the Start
+  Agent move: `uiStore.requestEnvSetup(repoId)` → MainLayout consumes →
+  cloud workspace on the repo with `CONFIGURE_CLOUD_ENV` as turn one →
+  agent persists via `agnt_configure_environment` → every future workspace
+  provisions from it. No new agnt machinery — pure composition of the
+  #143 primitives.
+
 ## Work packages
 
 ### D1 — Deus Cloud auth handshake (next)

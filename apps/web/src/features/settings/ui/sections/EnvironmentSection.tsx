@@ -31,6 +31,7 @@ import {
 } from "./manifest-draft";
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
+import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
 
 export function EnvironmentSection() {
   const { data: repos, isLoading: reposLoading } = useRepos();
@@ -159,6 +160,9 @@ export function EnvironmentSection() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Cloud environment — the platform-side recipe for this repo. */}
+      <CloudEnvironmentBlock repoId={selectedRepoId} />
 
       {manifestLoading ? (
         <div className="flex h-20 items-center justify-center">

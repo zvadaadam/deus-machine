@@ -22,6 +22,13 @@ interface UIState {
   settingsOpen: boolean;
   activeSettingsSection: SettingsSection;
 
+  /**
+   * Pending "set up cloud environment with an agent" request from Settings.
+   * MainLayout consumes it: closes settings, creates a cloud workspace on the
+   * repo, and sends the onboarding prompt as turn one.
+   */
+  pendingEnvSetupRepoId: string | null;
+
   // Actions - Modals
   openNewWorkspaceModal: (mode?: NewWorkspaceMode) => void;
   closeNewWorkspaceModal: () => void;
@@ -37,6 +44,8 @@ interface UIState {
   openSettings: () => void;
   closeSettings: () => void;
   setActiveSettingsSection: (section: SettingsSection) => void;
+  requestEnvSetup: (repoId: string) => void;
+  clearEnvSetupRequest: () => void;
 
   closeAllModals: () => void;
 }
@@ -51,6 +60,7 @@ export const useUIStore = create<UIState>()(
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
+      pendingEnvSetupRepoId: null,
 
       // Modal actions
       openNewWorkspaceModal: (mode: NewWorkspaceMode = "default") =>
@@ -93,6 +103,12 @@ export const useUIStore = create<UIState>()(
 
       setActiveSettingsSection: (section) =>
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
+
+      requestEnvSetup: (repoId) =>
+        set({ pendingEnvSetupRepoId: repoId, settingsOpen: false }, false, "ui/requestEnvSetup"),
+
+      clearEnvSetupRequest: () =>
+        set({ pendingEnvSetupRepoId: null }, false, "ui/clearEnvSetupRequest"),
 
       closeAllModals: () =>
         set(
