@@ -17,6 +17,30 @@ import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { logMainProcess } from "./startup-diagnostics";
 
+/**
+ * Last device-key provisioning failure for the signed-in account (main-process
+ * memory only — it is a transient condition, cleared by a successful mint or
+ * sign-out). Surfaced in Settings so the failure is recoverable in-app.
+ */
+let platformKeyError: string | null = null;
+
+export function setPlatformKeyError(message: string | null): void {
+  platformKeyError = message;
+}
+
+export function getPlatformKeyError(): string | null {
+  return platformKeyError;
+}
+
+/** Re-run provisioning for the current session (the Settings "Retry" action). */
+export async function retryDeviceKeyProvisioning(): Promise<{ ok: boolean; error?: string }> {
+  const sessionToken = await getStoredDeusCloudSessionToken().catch(() => null);
+  if (!sessionToken) return { ok: false, error: "Not signed in to Deus Cloud" };
+  await provisionAfterLogin(sessionToken, resolveDeusCloudUrl());
+  const error = getPlatformKeyError();
+  return error ? { ok: false, error } : { ok: true };
+}
+
 /** agnt platform base URL — same precedence the backend's cloud config uses. */
 export function resolveAgntBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   return (env.DEUS_CLOUD_AGNT_URL ?? env.AGNT_BASE_URL ?? "https://api.deusmachine.ai").replace(
@@ -32,13 +56,17 @@ interface OrgRef {
 
 /** Tolerant-reader over the deus-cloud orgs listing (array or wrapped). */
 export function parseOrgList(body: unknown): OrgRef[] {
-  const list = Array.isArray(body)
-    ? body
-    : body &&
-        typeof body === "object" &&
-        Array.isArray((body as { organizations?: unknown[] }).organizations)
-      ? (body as { organizations: unknown[] }).organizations
-      : [];
+  // `{ items: [...] }` is what deus-cloud's GET /orgs actually returns; the
+  // bare-array and `{ organizations }` shapes are kept as tolerant fallbacks
+  // (the latter is /me's shape). Missing the real one made every production
+  // sign-in mint nothing — the local mock and these tests had encoded the
+  // assumed shape rather than the served one.
+  const container =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
+  const named = container
+    ? ["items", "organizations"].map((k) => container[k]).find(Array.isArray)
+    : undefined;
+  const list = Array.isArray(body) ? body : ((named as unknown[]) ?? []);
   return list.flatMap((entry) => {
     if (!entry || typeof entry !== "object") return [];
     const record = entry as Record<string, unknown>;
@@ -203,10 +231,14 @@ export async function syncAgentSecretToPlatform(
 export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
   try {
     await ensureDeviceKey(sessionToken, cloudUrl);
+    setPlatformKeyError(null);
   } catch (error) {
-    logMainProcess(
-      `[deus-cloud] device key provisioning failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    // Remembered, not just logged: this runs after login already reported
+    // success, so the log file was the ONLY place the user could learn that
+    // their cloud lane is dead.
+    setPlatformKeyError(message);
+    logMainProcess(`[deus-cloud] device key provisioning failed: ${message}`);
   }
   // A token connected before sign-in was local-only — the device key now
   // exists, so the platform copy can catch up.

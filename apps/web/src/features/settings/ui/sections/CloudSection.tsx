@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import {
+  getSession as getDeusCloudSession,
+  retryProvision,
   type ClaudeSubscriptionState,
   disconnectClaudeSubscription,
   disconnectCodexSubscription,
@@ -138,6 +140,27 @@ export function CloudSection() {
     retry: false,
   });
 
+  const session = useQuery({
+    queryKey: ["settings", "deus-cloud-session"],
+    queryFn: getDeusCloudSession,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const retry = useMutation({
+    mutationFn: async () => {
+      const result = await retryProvision();
+      if (!result.ok) throw new Error(result.error ?? "Cloud setup failed");
+      return result;
+    },
+    onSuccess: async () => {
+      toast.success("Cloud setup complete — this device now has a platform key");
+      await queryClient.invalidateQueries({ queryKey: ["settings", "deus-cloud-session"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Cloud setup failed"),
+  });
+
   const status = useQuery({
     queryKey: ["settings", "cloud"],
     queryFn: () => apiClient.get<CloudSettings>("/settings/cloud"),
@@ -241,7 +264,30 @@ export function CloudSection() {
           "Connection",
           s?.enabled,
           s?.baseUrl ? `Connected · ${s.baseUrl.replace(/^https?:\/\//, "")}` : "Connected",
-          "Not connected — sign in under Account"
+          session.data?.signedIn
+            ? "Signed in — device setup didn't finish"
+            : "Not connected — sign in under Account"
+        )}
+        {/* Signed in with no platform key: provisioning runs after login, so
+            its failure never reached the login result. Name it and offer the
+            retry — "sign in under Account" is a dead end when the only button
+            there is Sign out. */}
+        {session.data?.signedIn && !s?.enabled && (
+          <div className="border-border-subtle mt-2 flex items-start justify-between gap-3 rounded-lg border border-dashed px-3 py-2">
+            <p className="text-text-muted text-xs">
+              {session.data.platformKeyError ??
+                "This device has no platform key yet, so cloud workspaces can't start."}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => retry.mutate()}
+              disabled={retry.isPending}
+            >
+              {retry.isPending ? "Retrying…" : "Retry setup"}
+            </Button>
+          </div>
         )}
       </div>
 

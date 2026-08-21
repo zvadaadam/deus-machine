@@ -179,6 +179,7 @@ const electronAPI = {
   getDeusCloudSession: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:get_session"),
   startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
+  retryDeusCloudProvision: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:retry_provision"),
   getClaudeSubscriptionStatus: (): Promise<unknown> =>
     ipcRenderer.invoke("deus_cloud:claude_sub_status"),
   openAgentSetupTerminal: (agentId: string): Promise<unknown> =>

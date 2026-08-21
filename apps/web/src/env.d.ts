@@ -68,6 +68,7 @@ interface Window {
       session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
+    retryDeusCloudProvision: () => Promise<{ ok: boolean; error?: string }>;
     onDeusCloudAuthChanged: (
       callback: (session: import("@shared/types").DeusCloudSessionStatus) => void
     ) => () => void;

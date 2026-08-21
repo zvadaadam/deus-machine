@@ -11,7 +11,12 @@ import {
   userDataFilePath,
   writeJsonFile,
 } from "./safe-storage-file";
-import { provisionAfterLogin, revokeDeviceKey } from "./deus-cloud-provision";
+import {
+  getPlatformKeyError,
+  provisionAfterLogin,
+  retryDeviceKeyProvisioning,
+  revokeDeviceKey,
+} from "./deus-cloud-provision";
 import {
   buildDesktopLoginUrl,
   createDesktopPkcePair,
@@ -113,6 +118,7 @@ function toPublicStatus(
     tokenType: stored.tokenType,
     cloudUrl: stored.cloudUrl,
     hasPlatformKey: false,
+    platformKeyError: getPlatformKeyError(),
   };
 }
 
@@ -534,4 +540,9 @@ export function registerDeusCloudAuthHandlers(): void {
   ipcMain.handle("deus_cloud:get_session", () => getDeusCloudSessionStatus());
   ipcMain.handle("deus_cloud:start_login", () => startDeusCloudLogin());
   ipcMain.handle("deus_cloud:sign_out", () => signOutDeusCloud());
+  ipcMain.handle("deus_cloud:retry_provision", async () => {
+    const result = await retryDeviceKeyProvisioning();
+    broadcastAuthChanged(await getDeusCloudSessionStatus());
+    return result;
+  });
 }

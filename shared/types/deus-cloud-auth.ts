@@ -6,6 +6,13 @@ export interface DeusCloudSessionStatus {
   cloudUrl: string;
   /** This device holds a minted agnt platform key (D1 handshake complete). */
   hasPlatformKey: boolean;
+  /**
+   * Why this device has no platform key despite being signed in. Provisioning
+   * runs AFTER login resolves, so its failure cannot ride the login result —
+   * without this the user sees "signed in" plus a cloud lane that silently
+   * does nothing, and Settings tells them to sign in when they already are.
+   */
+  platformKeyError?: string | null;
 }
 
 export interface DeusCloudAuthResult {

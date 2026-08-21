@@ -65,6 +65,12 @@ describe("resolveAgntBaseUrl", () => {
 
 describe("parseOrgList", () => {
   it("accepts a bare array, a wrapped list, and snake/camel ids", () => {
+    // The shape deus-cloud's GET /orgs actually serves (`c.json({ items: rows })`).
+    // Pinned FIRST because assuming the others is what broke every real sign-in:
+    // the parser returned [], the mint never ran, and the failure was log-only.
+    expect(parseOrgList({ items: [{ id: "org_1", name: "A" }] })).toEqual([
+      { id: "org_1", name: "A" },
+    ]);
     expect(parseOrgList([{ id: "org_1", name: "A" }])).toEqual([{ id: "org_1", name: "A" }]);
     expect(parseOrgList({ organizations: [{ organization_id: "org_2" }] })).toEqual([
       { id: "org_2", name: undefined },

@@ -42,6 +42,14 @@ export async function signOut(): Promise<DeusCloudAuthResult> {
   return window.electronAPI.signOutDeusCloud();
 }
 
+/** Re-run device-key provisioning after a failed post-login mint. */
+export async function retryProvision(): Promise<{ ok: boolean; error?: string }> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.retryDeusCloudProvision) {
+    return { ok: false, error: "Cloud setup requires the desktop app" };
+  }
+  return (await window.electronAPI.retryDeusCloudProvision()) as { ok: boolean; error?: string };
+}
+
 export function onAuthChanged(callback: (session: DeusCloudSessionStatus) => void): () => void {
   if (!capabilities.ipcEventListeners || !window.electronAPI?.onDeusCloudAuthChanged) {
     return () => {};
