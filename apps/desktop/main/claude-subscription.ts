@@ -12,6 +12,7 @@ import { spawn } from "child_process";
 import { ipcMain } from "electron";
 import {
   deleteCloudCredential,
+  getCloudCredential,
   getCloudCredentialsStatus,
   setCloudCredential,
 } from "./cloud-credentials";
@@ -39,6 +40,12 @@ export async function openAgentSetupTerminal(
 ): Promise<{ ok: boolean; error?: string }> {
   const command = AGENT_SETUP_COMMANDS[agentId];
   if (!command) return { ok: false, error: `No setup command for agent "${agentId}"` };
+  // osascript is macOS-only; Linux packages are a shipped target. The command
+  // is displayed with a Copy button either way, so degrade to telling the user
+  // exactly what to run rather than a bare "Could not open Terminal".
+  if (process.platform !== "darwin") {
+    return { ok: false, error: `Open a terminal and run: ${command}` };
+  }
   return new Promise((resolve) => {
     const child = spawn("osascript", [
       "-e",
@@ -118,8 +125,17 @@ export async function saveClaudeSubscriptionToken(
 }
 
 export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionResult> {
+  // The PLATFORM copy is what cloud/phone turns bill against, so it must die
+  // first: dropping the local token while the DELETE fails would report
+  // "disconnected" whilst the token keeps working server-side, with no local
+  // copy left to retry from. No device key = never synced = nothing to delete.
+  const hasDeviceKey = Boolean(await getCloudCredential("agntApiKey").catch(() => null));
+  if (hasDeviceKey && !(await syncClaudeTokenToPlatform(null))) {
+    return statusResult(
+      "Couldn't remove the token from the Deus platform — it would keep running cloud turns. Check your connection and try again."
+    );
+  }
   await deleteCloudCredential("claudeOauthToken");
-  await syncClaudeTokenToPlatform(null);
   await pushCloudCredentialsToBackend();
   return statusResult();
 }

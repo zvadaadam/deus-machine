@@ -328,8 +328,28 @@ async function provisionInBackground(
     const envInfo = await getCloudEnvironmentInfo(originUrl);
     let environment: string | ReturnType<typeof Environment.from>;
     if (envInfo.configured) {
-      // Named environments carry their own secret set on the platform; the
-      // create API rejects inline secrets alongside them by design.
+      // Named environments resolve their secrets FROM THE PLATFORM — the create
+      // API rejects inline secrets alongside an environmentId — so the App
+      // token cannot ride the request here. Without this, a repo that has been
+      // through environment setup silently loses App access: the first
+      // (inline) workspace clones fine, every later one clones anonymously and
+      // fails on a private repo. So write the mint as an environment-scoped
+      // secret just before create; agnt resolves it by environment id.
+      const githubToken = envInfo.environmentId ? await mintRepoInstallationToken(originUrl) : null;
+      if (githubToken && envInfo.environmentId) {
+        try {
+          await agntCreateSecret("github_token", githubToken, {
+            baseUrl,
+            apiKey,
+            environmentIds: [envInfo.environmentId],
+            appliesToAll: false,
+          });
+        } catch (err) {
+          // Best-effort, exactly like the inline path: a PAT (or a public
+          // repo) still works, and the failure must not block provisioning.
+          console.warn(`[CloudInit] environment-scoped GitHub token write failed: ${err}`);
+        }
+      }
       environment = envInfo.name;
     } else {
       let recipe = Environment.from("agnt-base").repo(originUrl, branch.source);
