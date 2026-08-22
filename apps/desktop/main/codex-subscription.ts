@@ -12,6 +12,8 @@ import { join } from "node:path";
 import { ipcMain } from "electron";
 import {
   deleteCloudCredential,
+  getCloudCredential,
+  getCloudCredentialMeta,
   getCloudCredentialsStatus,
   setCloudCredential,
 } from "./cloud-credentials";
@@ -59,14 +61,30 @@ export async function importCodexAuth(): Promise<CodexSubscriptionResult> {
   await setCloudCredential("codexAuthJson", raw);
   // Canonical platform copy — an unlinked turn credential (per-sandbox
   // seeding consumes it when Codex cloud support lands).
-  await syncAgentSecretToPlatform("CODEX_AUTH_JSON", raw);
+  if (await syncAgentSecretToPlatform("CODEX_AUTH_JSON", raw)) {
+    await setCloudCredential("codexAuthJson", raw, { syncedToPlatform: true });
+  }
   await pushCloudCredentialsToBackend();
   return statusResult();
 }
 
 export async function disconnectCodexSubscription(): Promise<CodexSubscriptionResult> {
+  // Platform copy first, same order as Claude: auth.json carries a refresh
+  // token, so dropping the local copy while the DELETE fails would report
+  // "disconnected" with nothing left to retry from.
+  const hasDeviceKey = Boolean(await getCloudCredential("agntApiKey").catch(() => null));
+  if (hasDeviceKey) {
+    if (!(await syncAgentSecretToPlatform("CODEX_AUTH_JSON", null))) {
+      return statusResult(
+        "Couldn't remove the Codex login from the Deus platform — its refresh token would stay valid. Check your connection and try again."
+      );
+    }
+  } else if ((await getCloudCredentialMeta("codexAuthJson").catch(() => null))?.syncedToPlatform) {
+    return statusResult(
+      "This login was copied to Deus Cloud and can only be removed while signed in. Sign in and disconnect again."
+    );
+  }
   await deleteCloudCredential("codexAuthJson");
-  await syncAgentSecretToPlatform("CODEX_AUTH_JSON", null);
   await pushCloudCredentialsToBackend();
   return statusResult();
 }

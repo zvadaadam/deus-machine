@@ -32,9 +32,22 @@ import {
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { getSession } from "@/platform/native/deus-cloud";
 
 export function EnvironmentSection() {
   const { data: repos, isLoading: reposLoading } = useRepos();
+  // Agent-driven environment setup provisions a real cloud workspace, so it
+  // needs the lane up: signed in AND holding this device's platform key.
+  const cloudSession = useQuery({
+    queryKey: queryKeys.deusCloud.session,
+    queryFn: getSession,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const cloudReady =
+    cloudSession.data?.signedIn === true && cloudSession.data?.hasPlatformKey === true;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo
@@ -162,7 +175,7 @@ export function EnvironmentSection() {
       </div>
 
       {/* Cloud environment — the platform-side recipe for this repo. */}
-      <CloudEnvironmentBlock repoId={selectedRepoId} />
+      <CloudEnvironmentBlock repoId={selectedRepoId} cloudReady={cloudReady} />
 
       {manifestLoading ? (
         <div className="flex h-20 items-center justify-center">

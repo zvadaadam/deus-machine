@@ -13,6 +13,7 @@ import { ipcMain } from "electron";
 import {
   deleteCloudCredential,
   getCloudCredential,
+  getCloudCredentialMeta,
   getCloudCredentialsStatus,
   setCloudCredential,
 } from "./cloud-credentials";
@@ -72,7 +73,8 @@ async function statusResult(error?: string): Promise<ClaudeSubscriptionResult> {
 async function storeToken(token: string): Promise<ClaudeSubscriptionResult> {
   await setCloudCredential("claudeOauthToken", token);
   // Local vault = cache; the platform secret is canonical (phone/Mac-off).
-  await syncClaudeTokenToPlatform(token);
+  const synced = await syncClaudeTokenToPlatform(token);
+  if (synced) await setCloudCredential("claudeOauthToken", token, { syncedToPlatform: true });
   await pushCloudCredentialsToBackend();
   return statusResult();
 }
@@ -130,9 +132,20 @@ export async function disconnectClaudeSubscription(): Promise<ClaudeSubscription
   // "disconnected" whilst the token keeps working server-side, with no local
   // copy left to retry from. No device key = never synced = nothing to delete.
   const hasDeviceKey = Boolean(await getCloudCredential("agntApiKey").catch(() => null));
-  if (hasDeviceKey && !(await syncClaudeTokenToPlatform(null))) {
+  if (hasDeviceKey) {
+    if (!(await syncClaudeTokenToPlatform(null))) {
+      return statusResult(
+        "Couldn't remove the token from the Deus platform — it would keep running cloud turns. Check your connection and try again."
+      );
+    }
+  } else if (
+    (await getCloudCredentialMeta("claudeOauthToken").catch(() => null))?.syncedToPlatform
+  ) {
+    // Signed out AFTER syncing: the platform copy outlives this device and
+    // there is no key left to delete it with. Saying "disconnected" here
+    // would be a lie about a token that still runs (and bills) cloud turns.
     return statusResult(
-      "Couldn't remove the token from the Deus platform — it would keep running cloud turns. Check your connection and try again."
+      "This token was copied to Deus Cloud and can only be removed while signed in. Sign in and disconnect again."
     );
   }
   await deleteCloudCredential("claudeOauthToken");

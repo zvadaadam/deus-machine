@@ -6,6 +6,7 @@
 
 import {
   decryptSecret,
+  isSafeStorageAvailable,
   encryptSecret,
   readJsonFile,
   removeFile,
@@ -24,6 +25,14 @@ export interface CloudCredentialMeta {
   orgId?: string;
   /** Mint label (hostname) shown in Settings. */
   label?: string;
+  /**
+   * Set when a copy of this credential was successfully written to the
+   * platform. Disconnect needs it: after an account sign-out the device key
+   * is gone, so a platform delete is impossible — and without this flag the
+   * only choices were to claim success (leaving a token that keeps billing
+   * cloud turns) or to warn about a cloud copy that may never have existed.
+   */
+  syncedToPlatform?: boolean;
   createdAt?: string;
 }
 
@@ -72,6 +81,13 @@ export async function getCloudCredential(name: CloudCredentialName): Promise<str
   const store = await readStore();
   const entry = store.entries[name];
   if (!entry) return null;
+  if (!isSafeStorageAvailable()) {
+    // The keyring is not ready (Linux login keyring still locked, first boot).
+    // Nothing was even attempted, so this says nothing about the ciphertext —
+    // deleting here would destroy the device key and every subscription token
+    // over a condition that resolves on its own a second later.
+    return null;
+  }
   try {
     return decryptSecret(entry.encryptedValue);
   } catch {

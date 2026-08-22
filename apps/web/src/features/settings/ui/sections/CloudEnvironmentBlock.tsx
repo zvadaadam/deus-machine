@@ -31,7 +31,14 @@ function repoLabel(repo: string | null): string {
   return repo.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "");
 }
 
-export function CloudEnvironmentBlock({ repoId }: { repoId: string | null }) {
+export function CloudEnvironmentBlock({
+  repoId,
+  cloudReady = true,
+}: {
+  repoId: string | null;
+  /** The cloud lane can actually provision (signed in + device key). */
+  cloudReady?: boolean;
+}) {
   const requestEnvSetup = useUIStore((s) => s.requestEnvSetup);
 
   const info = useQuery({
@@ -84,6 +91,10 @@ export function CloudEnvironmentBlock({ repoId }: { repoId: string | null }) {
             size="sm"
             variant={configured ? "outline" : "default"}
             className="shrink-0"
+            // Setup provisions a real cloud workspace, so without the lane it
+            // can only end in an error — say why instead of failing later.
+            disabled={!cloudReady}
+            title={cloudReady ? undefined : "Sign in to Deus Cloud first"}
             onClick={() => requestEnvSetup(repoId)}
           >
             <Bot className="mr-1.5 h-3.5 w-3.5" />

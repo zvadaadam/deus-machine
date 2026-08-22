@@ -154,6 +154,16 @@ function pushCloudError(session: CloudSession, code: unknown, message: unknown):
 function failLiveTurn(session: CloudSession, status: string, detail?: string): void {
   const live = handler?.liveTurnId(session.deusSessionId);
   if (!live) return;
+  // Drop the SERVER-side turn before inviting a resend. agnt keeps the
+  // execute queued on the session DO (reachable while the VM is down), so
+  // without this the queued turn replays on the next wake and runs alongside
+  // whatever the user sent — the same work twice, against the same worktree.
+  try {
+    session.socket.send({ type: "agent.cancel", turnId: live });
+  } catch {
+    // The socket is often already closing here — that is exactly the case
+    // this runs in. A failed cancel must not stop the turn from failing.
+  }
   dispatchFrame(session, {
     type: "turn.ended",
     sessionId: session.providerSessionId,

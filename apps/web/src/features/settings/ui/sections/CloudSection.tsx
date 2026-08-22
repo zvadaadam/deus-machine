@@ -296,10 +296,11 @@ export function CloudSection() {
       </div>
 
       <div className="mb-8">
+        {/* Codex is deliberately NOT counted: the cloud lane only ships Claude
+            credentials today, so a Codex-only setup would tick this step and
+            then fail every cloud turn on a missing credential. */}
         {step(
-          s?.hasAnthropicKey ||
-            sub.data?.hasClaudeSubscription ||
-            codexSub.data?.hasCodexSubscription,
+          s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
           "Agents — run on your own subscriptions"
         )}
         <p className="text-text-muted mb-3 text-sm">

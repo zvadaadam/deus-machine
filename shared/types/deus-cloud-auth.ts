@@ -4,9 +4,10 @@ export interface DeusCloudSessionStatus {
   expiresAt: string | null;
   tokenType: "Bearer" | null;
   cloudUrl: string;
-  /** This device holds a minted agnt platform key (D1 handshake complete). */
+  /** Human identity from deus-cloud /me; absent when that lookup failed. */
   accountName?: string | null;
   accountEmail?: string | null;
+  /** This device holds a minted agnt platform key (D1 handshake complete). */
   hasPlatformKey: boolean;
   /**
    * Why this device has no platform key despite being signed in. Provisioning

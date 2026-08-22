@@ -141,7 +141,13 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         .with("session", () => "Finalizing...")
         .otherwise(() => "Setting up...");
     }
-    if (isFailed) return workspace.kind === "cloud" ? "Cloud setup failed" : "Setup failed";
+    // 'error' covers a failed provision AND a sandbox that died later, so the
+    // copy must not claim it was the setup: init_stage is still set while
+    // provisioning, and cleared once the workspace has run.
+    if (isFailed) {
+      if (workspace.kind !== "cloud") return "Failed";
+      return workspace.init_stage ? "Cloud setup failed" : "Sandbox failed";
+    }
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";
     return (

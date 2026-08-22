@@ -410,13 +410,21 @@ async function refreshEnvironmentGithubToken(
         name?: string;
         appliesToAll?: boolean;
         applies_to_all?: boolean;
+        environmentIds?: string[];
+        environment_ids?: string[];
       };
       const name = meta.keyName ?? meta.name;
+      if (name?.toLowerCase() !== "github_token" || !meta.id) continue;
       const appliesToAll = meta.appliesToAll ?? meta.applies_to_all;
-      if (name?.toLowerCase() === "github_token" && appliesToAll === false && meta.id) {
-        await agntDeleteSecret(meta.id, { baseUrl, apiKey });
-        break;
-      }
+      if (appliesToAll !== false) continue;
+      // MUST be linked to the environment we are refreshing. Deleting the
+      // first non-global github_token in the org would destroy a DIFFERENT
+      // environment's working token — one failed mint here, and an unrelated
+      // repo silently loses App access.
+      const links = meta.environmentIds ?? meta.environment_ids ?? [];
+      if (!links.includes(environmentId)) continue;
+      await agntDeleteSecret(meta.id, { baseUrl, apiKey });
+      break;
     }
   } catch (err) {
     // Best-effort, exactly like the inline path: a PAT (or a public repo)

@@ -10,6 +10,7 @@ import {
   readJsonFile,
   removeFile,
   userDataFilePath,
+  isSafeStorageAvailable,
   writeJsonFile,
 } from "./safe-storage-file";
 import {
@@ -256,7 +257,10 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
       }
 
       settled = true;
-      respondHtml(res, 200, "Signed in to Deus Cloud", true);
+      // Deliberately NOT "Signed in": the code-for-session exchange has not
+      // run yet, and it can still fail. Claiming success here left the
+      // browser saying one thing and the app showing another.
+      respondHtml(res, 200, "Finishing sign-in — you can close this tab", true);
       // Pull the app forward: the user's attention is in the browser, and
       // window.close() only works for script-opened tabs, so without this
       // they are left looking at a success page wondering what happens next.
@@ -316,6 +320,10 @@ async function readSessionFile(): Promise<StoredDeusCloudSession | null> {
     ) {
       return null;
     }
+    // A locked keyring throws BEFORE decryption is attempted, so it proves
+    // nothing about the ciphertext. Discarding the session there would sign
+    // the user out over a condition that clears on its own.
+    if (!isSafeStorageAvailable()) return null;
     try {
       decryptSessionToken(parsed.encryptedSessionToken);
     } catch {
@@ -342,6 +350,16 @@ let refreshInFlight: Promise<StoredDeusCloudSession | null> | null = null;
  */
 const SESSION_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
 let lastRefreshAt = 0;
+
+/**
+ * Set by the provisioning module at startup. A plain callback rather than an
+ * import, because deus-cloud-provision already imports from here.
+ */
+let onSessionRefreshed: (() => void | Promise<void>) | null = null;
+
+export function setSessionRefreshedHandler(handler: () => void | Promise<void>): void {
+  onSessionRefreshed = handler;
+}
 
 async function refreshStoredSession(
   stored: StoredDeusCloudSession
@@ -397,6 +415,11 @@ async function refreshStoredSession(
   };
   await writeStoredSession(next);
   logMainProcess("[deus-cloud] session refreshed");
+  // The backend holds its OWN copy of the session token (it mints GitHub App
+  // installation tokens with it) and only ever receives one on an explicit
+  // push. Without this, a silently refreshed desktop keeps working while the
+  // backend's copy quietly expires and every mint starts 401ing.
+  void onSessionRefreshed?.();
   return next;
 }
 
@@ -753,10 +776,20 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
 
     // The D1 handshake: mint this device's platform key and hand credentials
     // to the backend, then re-broadcast so Settings flips to "key active".
+    const provisionGeneration = loginGeneration;
     void (async () => {
       const token = await getStoredDeusCloudSessionToken();
       if (!token) return;
       await provisionAfterLogin(token, stored.cloudUrl);
+      // Signing out mid-mint used to leave a freshly minted key in the vault
+      // of a signed-out user: revokeDeviceKey ran BEFORE the key existed, so
+      // nothing ever revoked it and the backend cloud lane stayed live.
+      if (provisionGeneration !== loginGeneration) {
+        await revokeDeviceKey(await getStoredDeusCloudSessionToken().catch(() => null)).catch(
+          () => {}
+        );
+        return;
+      }
       broadcastAuthChanged(await getDeusCloudSessionStatus());
     })();
   } catch (error) {

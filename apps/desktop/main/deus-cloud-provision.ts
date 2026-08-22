@@ -13,7 +13,7 @@ import {
   getCloudCredentialMeta,
   setCloudCredential,
 } from "./cloud-credentials";
-import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
+import { getStoredDeusCloudSessionToken, setSessionRefreshedHandler } from "./deus-cloud-auth";
 import { AGNT_LOCAL_URL, isLocalCloudEnv, resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { logMainProcess } from "./startup-diagnostics";
 
@@ -299,6 +299,10 @@ export function provisionAtStartup(
   getSessionToken: () => Promise<string | null>,
   cloudUrl: string
 ): void {
+  // Keep the backend's copy of the session token in step with silent renewals.
+  setSessionRefreshedHandler(async () => {
+    await pushCloudCredentialsToBackend();
+  });
   void (async () => {
     const token = await getSessionToken().catch(() => null);
     if (token) {
