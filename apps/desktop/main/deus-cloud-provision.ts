@@ -7,6 +7,7 @@
 // concerns outside a renderer); the deus-cloud session JWT is the credential.
 
 import { hostname } from "node:os";
+import { isSafeStorageAvailable } from "./safe-storage-file";
 import {
   deleteCloudCredential,
   getCloudCredential,
@@ -138,6 +139,12 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
   const port = process.env.DEUS_BACKEND_PORT;
   const authToken = process.env.DEUS_AUTH_TOKEN;
   if (!port || !authToken) return false;
+  if (!isSafeStorageAvailable()) {
+    // Every credential would read as null and the push would CLEAR the
+    // backend's working copies over a keyring that is merely still locked.
+    // Say nothing instead; provisionAtStartup retries once it opens.
+    return false;
+  }
 
   const [apiKey, claudeOauthToken, sessionToken, keyMeta] = await Promise.all([
     getCloudCredential("agntApiKey"),
@@ -295,6 +302,29 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
  * platform key; otherwise just hand any stored credentials to the backend.
  * Fire-and-forget by design — startup must never block on the cloud.
  */
+/**
+ * Wait out a still-locked OS keyring before the startup handoff.
+ *
+ * On Linux the login keyring commonly unlocks a beat after the app starts;
+ * running the handoff into that window pushed a set of nulls and left the
+ * cloud lane dead for the whole session with nothing to re-trigger it.
+ * Bounded: past this the user genuinely has no secure storage.
+ */
+const SAFE_STORAGE_WAIT_MS = 60_000;
+const SAFE_STORAGE_POLL_MS = 2_000;
+
+async function waitForSafeStorage(): Promise<boolean> {
+  const deadline = Date.now() + SAFE_STORAGE_WAIT_MS;
+  while (!isSafeStorageAvailable()) {
+    if (Date.now() >= deadline) {
+      logMainProcess("[deus-cloud] secure storage never became available — cloud lane stays off");
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, SAFE_STORAGE_POLL_MS));
+  }
+  return true;
+}
+
 export function provisionAtStartup(
   getSessionToken: () => Promise<string | null>,
   cloudUrl: string
@@ -304,6 +334,7 @@ export function provisionAtStartup(
     await pushCloudCredentialsToBackend();
   });
   void (async () => {
+    await waitForSafeStorage();
     const token = await getSessionToken().catch(() => null);
     if (token) {
       await provisionAfterLogin(token, cloudUrl);

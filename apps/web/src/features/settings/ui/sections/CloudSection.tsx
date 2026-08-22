@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { githubRepoSlug } from "@shared/git-origin";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
@@ -191,16 +192,13 @@ export function CloudSection() {
   // Repos the installed GitHub App cannot reach — drives the missing-access
   // list and, when empty, lets the App satisfy the repo-access step without a PAT.
   const accessible = new Set((githubApp.data?.accessibleRepos ?? []).map((r) => r.toLowerCase()));
+  // Same parser the backend mints with (@shared/git-origin) — a looser one
+  // here reported repos as uncovered, and demanded a PAT, for origin forms
+  // provisioning handles fine (ssh://, www.github.com).
   const missingRepos = (localRepos.data ?? [])
-    .map((r) => r.git_origin_url ?? "")
-    .filter((u) => u.includes("github.com"))
-    .map((u) =>
-      u
-        .replace(/^git@github\.com:/, "")
-        .replace(/^https?:\/\/github\.com\//, "")
-        .replace(/\.git$/, "")
-    )
-    .filter((full) => full.includes("/") && !accessible.has(full.toLowerCase()));
+    .map((r) => githubRepoSlug(r.git_origin_url ?? ""))
+    .filter((slug): slug is string => slug !== null)
+    .filter((slug) => !accessible.has(slug.toLowerCase()));
   const appCoversRepos =
     Boolean(githubApp.data?.installations.length) &&
     localRepos.data !== undefined &&

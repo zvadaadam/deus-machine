@@ -22,6 +22,7 @@ import {
   deleteSecret as agntDeleteSecret,
   Environment,
 } from "@deus-hq/sdk";
+import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import { getDatabase } from "../lib/database";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
@@ -42,41 +43,11 @@ const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as co
  * but only WHEN a token exists; normalizing here makes public ssh-origin
  * repos work with no token at all).
  */
-export function httpsOrigin(url: string): string {
-  const scp = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(url);
-  if (scp) return `https://${scp[1]}/${scp[2]}`;
-  const ssh = /^ssh:\/\/(?:git@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
-  if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
-  return url;
-}
 
-/**
- * `owner/name` when the origin really is GitHub, else null.
- *
- * Parsed, never substring-matched: `/github\.com[/:]…/` also matches
- * `https://evil.example/github.com/a/b`, which would mint a GitHub App
- * installation token and hand it to a workspace that clones from — and so
- * sends the token to — an unrelated host.
- */
 /** Provisioning waits on the mint, so it must fail fast rather than park the row. */
 const MINT_TIMEOUT_MS = 10_000;
 
-export function githubRepoSlug(originUrl: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(httpsOrigin(originUrl));
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "https:") return null;
-  if (url.hostname !== "github.com" && url.hostname !== "www.github.com") return null;
-  const parts = url.pathname
-    .replace(/\.git$/, "")
-    .split("/")
-    .filter(Boolean);
-  if (parts.length !== 2) return null;
-  return `${parts[0]}/${parts[1]}`;
-}
+export { githubRepoSlug, httpsOrigin };
 
 export interface CreateCloudWorkspaceParams {
   repositoryId: string;

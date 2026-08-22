@@ -361,6 +361,18 @@ export function setSessionRefreshedHandler(handler: () => void | Promise<void>):
   onSessionRefreshed = handler;
 }
 
+/** The replacement token deus-cloud attaches when it fails after rotating. */
+async function readRotatedRefreshToken(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { refresh_token?: unknown };
+    return typeof body.refresh_token === "string" && body.refresh_token.length > 0
+      ? body.refresh_token
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function refreshStoredSession(
   stored: StoredDeusCloudSession
 ): Promise<StoredDeusCloudSession | null> {
@@ -386,6 +398,18 @@ async function refreshStoredSession(
     return null;
   }
   if (!response.ok) {
+    // WorkOS rotates on every use, so a failure AFTER rotation leaves the
+    // token we hold dead. deus-cloud returns the replacement on the error
+    // body for exactly this case — persist it, or the next retry presents a
+    // token that can never succeed and the user is forced to sign in again.
+    const rotated = await readRotatedRefreshToken(response);
+    if (rotated) {
+      await writeStoredSession({
+        ...stored,
+        encryptedRefreshToken: encryptSessionToken(rotated),
+      });
+      logMainProcess("[deus-cloud] refresh failed after rotation — kept the replacement token");
+    }
     // Server-side problem (503 CONFIG_ERROR, network): keep what we have.
     throw new Error(`session refresh failed (${response.status})`);
   }

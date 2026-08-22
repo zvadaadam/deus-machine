@@ -51,6 +51,13 @@ export interface CloudCredentialsStatus {
   platformOrgId: string | null;
   hasClaudeSubscription: boolean;
   hasCodexSubscription: boolean;
+  /**
+   * The OS keyring cannot decrypt right now, so stored credentials exist on
+   * disk but are UNUSABLE this session. Distinct from "not connected":
+   * reporting these as connected would show a working subscription while
+   * every cloud turn runs without one.
+   */
+  vaultLocked: boolean;
 }
 
 const filePath = () => userDataFilePath(CREDENTIALS_FILE_NAME);
@@ -123,11 +130,16 @@ export async function deleteCloudCredential(name: CloudCredentialName): Promise<
 export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatus> {
   const store = await readStore();
   const key = store.entries.agntApiKey;
+  // Entries are ciphertext; with the keyring locked, getCloudCredential()
+  // hands the backend nothing, so claiming "connected" off mere presence
+  // would have Settings disagree with what the cloud lane actually holds.
+  const usable = isSafeStorageAvailable();
   return {
-    hasPlatformKey: Boolean(key),
+    hasPlatformKey: usable && Boolean(key),
     platformKeyLabel: key?.label ?? null,
     platformOrgId: key?.orgId ?? null,
-    hasClaudeSubscription: Boolean(store.entries.claudeOauthToken),
-    hasCodexSubscription: Boolean(store.entries.codexAuthJson),
+    hasClaudeSubscription: usable && Boolean(store.entries.claudeOauthToken),
+    hasCodexSubscription: usable && Boolean(store.entries.codexAuthJson),
+    vaultLocked: !usable && Object.keys(store.entries).length > 0,
   };
 }
