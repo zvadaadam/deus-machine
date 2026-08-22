@@ -10,6 +10,7 @@ import { hostname } from "node:os";
 import { isSafeStorageAvailable } from "./safe-storage-file";
 import {
   deleteCloudCredential,
+  hasStoredCredentials,
   getCloudCredential,
   getCloudCredentialMeta,
   setCloudCredential,
@@ -139,7 +140,7 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
   const port = process.env.DEUS_BACKEND_PORT;
   const authToken = process.env.DEUS_AUTH_TOKEN;
   if (!port || !authToken) return false;
-  if (!isSafeStorageAvailable()) {
+  if ((await hasStoredCredentials()) && !isSafeStorageAvailable()) {
     // Every credential would read as null and the push would CLEAR the
     // backend's working copies over a keyring that is merely still locked.
     // Say nothing instead; provisionAtStartup retries once it opens.
@@ -298,11 +299,6 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
 }
 
 /**
- * Startup, after the backend is up: signed-in & keyless → mint this device's
- * platform key; otherwise just hand any stored credentials to the backend.
- * Fire-and-forget by design — startup must never block on the cloud.
- */
-/**
  * Wait out a still-locked OS keyring before the startup handoff.
  *
  * On Linux the login keyring commonly unlocks a beat after the app starts;
@@ -314,6 +310,11 @@ const SAFE_STORAGE_WAIT_MS = 60_000;
 const SAFE_STORAGE_POLL_MS = 2_000;
 
 async function waitForSafeStorage(): Promise<boolean> {
+  // Nothing stored = nothing to unlock. Critically, this also means a fresh
+  // install never probes the keyring at startup: on macOS that probe is a
+  // synchronous Keychain call on the main thread, and with no keychain
+  // unlocked it blocks everything behind it — window creation included.
+  if (!(await hasStoredCredentials())) return true;
   const deadline = Date.now() + SAFE_STORAGE_WAIT_MS;
   while (!isSafeStorageAvailable()) {
     if (Date.now() >= deadline) {
@@ -325,6 +326,11 @@ async function waitForSafeStorage(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Startup, after the backend is up: signed-in & keyless → mint this device's
+ * platform key; otherwise just hand any stored credentials to the backend.
+ * Fire-and-forget by design — startup must never block on the cloud.
+ */
 export function provisionAtStartup(
   getSessionToken: () => Promise<string | null>,
   cloudUrl: string

@@ -126,6 +126,20 @@ export async function deleteCloudCredential(name: CloudCredentialName): Promise<
   await writeJsonFile(filePath(), store);
 }
 
+/**
+ * Whether anything is stored at all — a plain file read, NO keyring contact.
+ *
+ * Callers use this to avoid touching safe storage when there is nothing to
+ * protect. That matters at startup: `safeStorage.isEncryptionAvailable()`
+ * consults the macOS Keychain synchronously on the main thread, so probing
+ * it on a fresh install (or in CI, where no keychain is unlocked) stalls
+ * everything behind it — including window creation.
+ */
+export async function hasStoredCredentials(): Promise<boolean> {
+  const store = await readStore();
+  return Object.keys(store.entries).length > 0;
+}
+
 /** Presence/meta only — safe for the renderer; values never cross IPC. */
 export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatus> {
   const store = await readStore();
@@ -133,7 +147,8 @@ export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatu
   // Entries are ciphertext; with the keyring locked, getCloudCredential()
   // hands the backend nothing, so claiming "connected" off mere presence
   // would have Settings disagree with what the cloud lane actually holds.
-  const usable = isSafeStorageAvailable();
+  // Only probe the keyring when something is stored — see hasStoredCredentials.
+  const usable = Object.keys(store.entries).length === 0 || isSafeStorageAvailable();
   return {
     hasPlatformKey: usable && Boolean(key),
     platformKeyLabel: key?.label ?? null,
