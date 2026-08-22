@@ -143,6 +143,40 @@ function pushCloudError(session: CloudSession, code: unknown, message: unknown):
   });
 }
 
+/**
+ * A sandbox that dies mid-turn strands the spinner: agnt keeps the execute
+ * queued for replay, but a stopped/errored VM replays nothing until a wake —
+ * so the live turn must FAIL VISIBLY, not hang. Reached from BOTH truth
+ * sources: the live `workspace.state` frame, and the reconnect snapshot (the
+ * frame is lost when the socket is down while the sandbox stops).
+ * `paused` is deliberately excluded — agnt legitimately replays after a wake.
+ */
+function failLiveTurn(session: CloudSession, status: string, detail?: string): void {
+  const live = handler?.liveTurnId(session.deusSessionId);
+  if (!live) return;
+  // Drop the SERVER-side turn before inviting a resend. agnt keeps the
+  // execute queued on the session DO (reachable while the VM is down), so
+  // without this the queued turn replays on the next wake and runs alongside
+  // whatever the user sent — the same work twice, against the same worktree.
+  try {
+    session.socket.send({ type: "agent.cancel", turnId: live });
+  } catch {
+    // The socket is often already closing here — that is exactly the case
+    // this runs in. A failed cancel must not stop the turn from failing.
+  }
+  dispatchFrame(session, {
+    type: "turn.ended",
+    sessionId: session.providerSessionId,
+    turnId: live,
+    stopReason: "error",
+    error: {
+      category: "internal",
+      message: `Sandbox ${status}${detail ? ` — ${detail}` : ""}. Send again to restart it.`,
+    },
+    timestamp: Date.now(),
+  });
+}
+
 function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): void {
   const type = typeof frame.type === "string" ? frame.type : "";
   if (!type || !handler) return;
@@ -169,6 +203,15 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
         broadcastCloudEnv(session, { status: sessionStatus });
+        // The live `workspace.state` frame is LOST when the socket is down
+        // while the sandbox stops; this snapshot is then the only truth, and
+        // the `currentTurnId === live` early return below would strand the
+        // spinner forever. Fail here, before that gate. (paused replays.)
+        if (sessionStatus === "stopped") failLiveTurn(session, "stopped");
+      } else if (sessionStatus === "error") {
+        updateCloudWorkspace(session.deusWorkspaceId, { status: "error" });
+        broadcastCloudEnv(session, { status: "error" });
+        failLiveTurn(session, "error");
       } else if (sessionStatus === "provisioning") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
@@ -203,9 +246,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "workspace.state": {
-      const data = (frame.data ?? {}) as { status?: string; step?: string };
+      const data = (frame.data ?? {}) as { status?: string; step?: string; reason?: string };
       updateCloudWorkspace(session.deusWorkspaceId, data);
       broadcastCloudEnv(session, data);
+      // Real case: sidecar dies on a credential error → clean WS close →
+      // workspace 'stopped', and the only trace was an ephemeral env line.
+      if (data.status === "stopped" || data.status === "error") {
+        failLiveTurn(session, data.status, data.reason ?? data.step);
+      }
       return;
     }
 
@@ -434,7 +482,16 @@ export async function startCloudTurn(
   const registered = handler.beginTurn(deusSessionId, turnId);
   try {
     const wsOptions: Record<string, unknown> = {};
-    if (config.anthropicApiKey) wsOptions.apiKey = config.anthropicApiKey;
+    // Deus picks the per-turn credential EXPLICITLY — subscription first,
+    // API key fallback. No env-ordering accidents like the raw CLI (where a
+    // stray ANTHROPIC_API_KEY silently outranks the subscription token).
+    // The oauth branch requires agnt's authKind-aware sidecar (engine 0.3.1).
+    if (config.claudeOauthToken) {
+      wsOptions.apiKey = config.claudeOauthToken;
+      wsOptions.authKind = "oauth";
+    } else if (config.anthropicApiKey) {
+      wsOptions.apiKey = config.anthropicApiKey;
+    }
     if (options.model) wsOptions.model = options.model;
     if (options.thinkingLevel) wsOptions.thinkingLevel = options.thinkingLevel;
     session.socket.send({

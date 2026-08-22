@@ -9,9 +9,7 @@ const {
   assertElectronBuildVersion,
   assertPackagedMainRuntimeContract,
   assertPackagedRuntimePlatform,
-} = require(
-  "../../../scripts/runtime/electron-builder-before-pack.cjs"
-) as {
+} = require("../../../scripts/runtime/electron-builder-before-pack.cjs") as {
   assertElectronBuildVersion: (projectRoot: string) => void;
   assertPackagedMainRuntimeContract: (projectRoot: string) => void;
   assertPackagedRuntimePlatform: (context?: {
@@ -50,10 +48,16 @@ function createProjectWithMainOutput(contents: string): string {
   return projectRoot;
 }
 
-function createProjectWithRendererVersion(packageVersion: string, rendererContents: string): string {
+function createProjectWithRendererVersion(
+  packageVersion: string,
+  rendererContents: string
+): string {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), "deus-before-pack-"));
   tempRoots.push(projectRoot);
-  writeFileSync(path.join(projectRoot, "package.json"), JSON.stringify({ version: packageVersion }));
+  writeFileSync(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ version: packageVersion })
+  );
   const rendererOutput = path.join(projectRoot, "out", "renderer", "assets", "index.js");
   mkdirSync(path.dirname(rendererOutput), { recursive: true });
   writeFileSync(rendererOutput, rendererContents);
@@ -94,9 +98,9 @@ describe("electron-builder beforePack runtime guard", () => {
   });
 
   it("rejects unknown packaged architecture values for supported platforms", () => {
-    expect(() => assertPackagedRuntimePlatform({ electronPlatformName: "linux", arch: 99 })).toThrow(
-      /Refusing to build linux/
-    );
+    expect(() =>
+      assertPackagedRuntimePlatform({ electronPlatformName: "linux", arch: 99 })
+    ).toThrow(/Refusing to build linux/);
   });
 
   it("rejects platforms without staged native runtime binaries", () => {

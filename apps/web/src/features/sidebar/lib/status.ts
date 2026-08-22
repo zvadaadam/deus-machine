@@ -122,7 +122,7 @@ export const WORKFLOW_STATUS_CONFIG: Record<WorkspaceStatus, WorkflowStatusConfi
  * Derive display status from workspace data
  *
  * Priority logic:
- * 1. Error — session in error state
+ * 1. Error — workspace failed to provision, or session in error state
  * 2. Unread — agent needs user response OR has unseen activity
  * 3. Working — agent actively processing
  * 4. Idle — dormant
@@ -134,6 +134,10 @@ export const WORKFLOW_STATUS_CONFIG: Record<WorkspaceStatus, WorkflowStatusConfi
 export function getDisplayStatus(workspace: Workspace, hasUnseenActivity = false): DisplayStatus {
   const status = workspace.session_status;
 
+  // The WORKSPACE's own failure counts, not just the session's: a cloud
+  // provision that dies never gets a session to carry the error, so keying
+  // only off session_status renders a dead workspace as a plain idle row.
+  if (workspace.state === "error") return "error";
   if (status === "error") return "error";
   if (status === "needs_response" || status === "needs_plan_response") return "unread";
   if (status === "working") return "working";

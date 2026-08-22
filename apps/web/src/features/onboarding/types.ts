@@ -1,4 +1,4 @@
-export type OnboardingStep = 0 | 1 | 2 | 3 | 4;
+export type OnboardingStep = 0 | 1 | 2 | 3 | 4 | 5;
 
 // CLI types live in the platform native layer (single source of truth)
 export type { CliCheckResult } from "@/platform/native/cli";

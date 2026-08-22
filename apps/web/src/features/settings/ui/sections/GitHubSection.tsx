@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -311,6 +312,79 @@ export function GitHubSection() {
           </>
         )}
       </div>
+
+      {/* Cloud access — the App handles sandboxes; the account above is local. */}
+      <GithubAppCard />
+    </div>
+  );
+}
+
+/** Live Deus GitHub App card — same states as Settings → Cloud. */
+function GithubAppCard() {
+  const state = useQuery({
+    queryKey: ["settings", "github-app"],
+    queryFn: getGithubAppStatus,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const data = state.data;
+  return (
+    <div
+      className={
+        "border-border-subtle mt-4 flex items-center justify-between rounded-lg border px-4 py-3" +
+        (data?.configured ? "" : " border-dashed")
+      }
+    >
+      <div>
+        <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
+        <p className="text-text-muted mt-0.5 text-xs">
+          {data?.installations.length
+            ? `Installed for ${data.installations.map((i) => i.accountLogin).join(", ")} — cloud workspaces get server-minted, single-repo tokens. Repo selection lives on GitHub.`
+            : "Gives cloud workspaces per-repo access with server-minted, single-repo tokens — install once, no personal token needed."}
+        </p>
+      </div>
+      {data?.installations.length && data.appSlug ? (
+        <span className="flex shrink-0 items-center gap-3">
+          <span className="text-accent-green text-sm">Installed ✓</span>
+          {/* GitHub owns the repo picker: this lands on the account's existing
+              installation ("Configure"), where repos are added or removed. */}
+          <a
+            className="text-text-primary border-border-subtle hover:bg-surface-secondary rounded-md border px-2.5 py-1 text-xs"
+            href={`https://github.com/apps/${data.appSlug}/installations/new`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Manage repos ↗
+          </a>
+        </span>
+      ) : data?.configured ? (
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={async () => {
+            const res = await installGithubApp();
+            if (!res.ok) {
+              toast.error(res.error ?? "Could not start the install");
+              return;
+            }
+            toast.info("Complete the install on GitHub, then come back");
+            // The install completes out-of-band in the browser, so nothing
+            // else invalidates this card — refetch when focus returns instead
+            // of leaving it on "Not installed" until the settings remount.
+            const refresh = () => {
+              void state.refetch();
+              window.removeEventListener("focus", refresh);
+            };
+            window.addEventListener("focus", refresh);
+          }}
+        >
+          Install
+        </Button>
+      ) : (
+        <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
+          Awaiting App registration
+        </span>
+      )}
     </div>
   );
 }

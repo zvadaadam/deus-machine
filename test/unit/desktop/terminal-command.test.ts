@@ -105,6 +105,6 @@ describe("terminal command helpers", () => {
   });
 
   it("escapes AppleScript strings", () => {
-    expect(toAppleScriptString("'codex' \"login\"")).toBe("\"'codex' \\\"login\\\"\"");
+    expect(toAppleScriptString("'codex' \"login\"")).toBe('"\'codex\' \\"login\\""');
   });
 });

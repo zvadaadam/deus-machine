@@ -19,8 +19,10 @@ import {
   getWorkspace as agntGetWorkspace,
   createSecret as agntCreateSecret,
   listSecrets as agntListSecrets,
+  deleteSecret as agntDeleteSecret,
   Environment,
 } from "@deus-hq/sdk";
+import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import { getDatabase } from "../lib/database";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
@@ -41,13 +43,11 @@ const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as co
  * but only WHEN a token exists; normalizing here makes public ssh-origin
  * repos work with no token at all).
  */
-export function httpsOrigin(url: string): string {
-  const scp = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(url);
-  if (scp) return `https://${scp[1]}/${scp[2]}`;
-  const ssh = /^ssh:\/\/(?:git@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
-  if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
-  return url;
-}
+
+/** Provisioning waits on the mint, so it must fail fast rather than park the row. */
+const MINT_TIMEOUT_MS = 10_000;
+
+export { githubRepoSlug, httpsOrigin };
 
 export interface CreateCloudWorkspaceParams {
   repositoryId: string;
@@ -118,9 +118,9 @@ export async function deleteCloudWipRef(
   originUrl: string,
   providerWorkspaceId: string
 ): Promise<void> {
-  const m = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(httpsOrigin(originUrl));
-  if (!m) return;
-  const [, owner, repoName] = m;
+  const slug = githubRepoSlug(originUrl);
+  if (!slug) return;
+  const [owner, repoName] = slug.split("/");
   try {
     await execFileAsync(
       "gh",
@@ -172,10 +172,28 @@ async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<str
  *             message-send restarts it (requestConnection re-provisions)
  *   running/provisioning/unknown → nothing to resume; reconnect refreshes truth
  */
+/** Re-mint the environment-scoped App token for a workspace about to start. */
+async function refreshWorkspaceGithubToken(repositoryId: string | null): Promise<void> {
+  if (!repositoryId) return;
+  const config = getCloudConfig();
+  if (!config) return;
+  const originUrl = getRepositoryById(getDatabase(), repositoryId)?.git_origin_url;
+  if (!originUrl) return;
+  const envInfo = await getCloudEnvironmentInfo(originUrl);
+  if (!envInfo.configured || !envInfo.environmentId) return;
+  await refreshEnvironmentGithubToken(
+    originUrl,
+    envInfo.environmentId,
+    config.baseUrl,
+    config.apiKey
+  );
+}
+
 export async function wakeCloudWorkspaceWithFeedback(workspace: {
   id: string;
   provider_workspace_id: string;
   current_session_id: string | null;
+  repository_id?: string | null;
 }): Promise<{ ok: boolean; status: string }> {
   const db = getDatabase();
   const sessionId = workspace.current_session_id;
@@ -198,6 +216,10 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   if (status === "paused" || status === null) {
     setStage("resuming");
     announce({ status: "resuming" });
+    // A sandbox that has been asleep longer than an hour holds an expired App
+    // mint; re-mint BEFORE the resume so the woken VM's git-auth step sees a
+    // live token instead of failing its first fetch/push.
+    await refreshWorkspaceGithubToken(workspace.repository_id ?? null);
     try {
       await wakeCloudWorkspace(workspace.provider_workspace_id);
     } catch (err) {
@@ -251,10 +273,17 @@ export async function getCloudSettingsStatus(): Promise<{
       const name =
         (secret as { keyName?: string; name?: string }).keyName ??
         (secret as { name?: string }).name;
-      if (name?.toLowerCase() === "github_token") {
-        hasGithubToken = true;
-        break;
-      }
+      if (name?.toLowerCase() !== "github_token") continue;
+      // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
+      // short-lived, environment-scoped `github_token` App mints; counting
+      // those would make Settings claim a personal token is saved when none
+      // is, and mark the repo-access step done off a credential that expires
+      // in an hour.
+      const scoped = secret as { appliesToAll?: boolean; applies_to_all?: boolean };
+      const appliesToAll = scoped.appliesToAll ?? scoped.applies_to_all;
+      if (appliesToAll === false) continue;
+      hasGithubToken = true;
+      break;
     }
   } catch (err) {
     console.warn(`[CloudSettings] listSecrets failed: ${err instanceof Error ? err.message : err}`);
@@ -278,6 +307,103 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
   });
 }
 
+/**
+ * Mint a per-repo GitHub App installation token via deus-cloud (1-hour,
+ * down-scoped to exactly this repository). Best-effort by design: missing
+ * mint context, an expired session, an uncovered repo, or an unregistered
+ * App all resolve to null — the workspace then rides the org PAT secret
+ * (or clones anonymously when the repo is public).
+ */
+async function mintRepoInstallationToken(originUrl: string): Promise<string | null> {
+  const config = getCloudConfig();
+  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return null;
+  const slug = githubRepoSlug(originUrl);
+  if (!slug) return null;
+  try {
+    const res = await fetch(
+      `${config.deusCloudUrl}/orgs/${config.orgId}/github/installation-token`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.deusCloudSessionToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ repository: slug }),
+        // This await sits BEFORE workspace creation, so an unresponsive
+        // deus-cloud would otherwise park the row on "creating cloud
+        // workspace" for undici's 300s header timeout. The mint is
+        // best-effort by design: giving up fast falls back to the PAT path.
+        signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
+      }
+    );
+    if (!res.ok) {
+      console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${slug}`);
+      return null;
+    }
+    const body = (await res.json()) as { token?: string };
+    return body.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Upsert the environment-scoped `github_token` for a named environment.
+ *
+ * App mints expire in an hour, and an environment-scoped secret SHADOWS the
+ * org-wide PAT of the same name — so a stale one is worse than none: it turns
+ * "clone with the user's PAT" into "clone with an expired token" for every
+ * wake after the first hour. Hence: re-mint before each start, and on mint
+ * failure DELETE the scoped copy so resolution falls back to the org PAT
+ * rather than replaying a dead token.
+ */
+async function refreshEnvironmentGithubToken(
+  originUrl: string,
+  environmentId: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<void> {
+  const token = await mintRepoInstallationToken(originUrl);
+  try {
+    if (token) {
+      await agntCreateSecret("github_token", token, {
+        baseUrl,
+        apiKey,
+        environmentIds: [environmentId],
+        appliesToAll: false,
+      });
+      return;
+    }
+    for await (const secret of agntListSecrets({ baseUrl, apiKey })) {
+      const meta = secret as {
+        id?: string;
+        keyName?: string;
+        name?: string;
+        appliesToAll?: boolean;
+        applies_to_all?: boolean;
+        environmentIds?: string[];
+        environment_ids?: string[];
+      };
+      const name = meta.keyName ?? meta.name;
+      if (name?.toLowerCase() !== "github_token" || !meta.id) continue;
+      const appliesToAll = meta.appliesToAll ?? meta.applies_to_all;
+      if (appliesToAll !== false) continue;
+      // MUST be linked to the environment we are refreshing. Deleting the
+      // first non-global github_token in the org would destroy a DIFFERENT
+      // environment's working token — one failed mint here, and an unrelated
+      // repo silently loses App access.
+      const links = meta.environmentIds ?? meta.environment_ids ?? [];
+      if (!links.includes(environmentId)) continue;
+      await agntDeleteSecret(meta.id, { baseUrl, apiKey });
+      break;
+    }
+  } catch (err) {
+    // Best-effort, exactly like the inline path: a PAT (or a public repo)
+    // still works, and the failure must not block provisioning or a wake.
+    console.warn(`[CloudInit] environment-scoped GitHub token refresh failed: ${err}`);
+  }
+}
+
 async function provisionInBackground(
   workspaceId: string,
   originUrl: string,
@@ -291,9 +417,29 @@ async function provisionInBackground(
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
-    const environment = envInfo.configured
-      ? envInfo.name
-      : Environment.from("agnt-base").repo(originUrl, branch.source);
+    let environment: string | ReturnType<typeof Environment.from>;
+    if (envInfo.configured) {
+      // Named environments resolve their secrets FROM THE PLATFORM — the create
+      // API rejects inline secrets alongside an environmentId — so the App
+      // token cannot ride the request here. Without this, a repo that has been
+      // through environment setup silently loses App access: the first
+      // (inline) workspace clones fine, every later one clones anonymously and
+      // fails on a private repo. So write the mint as an environment-scoped
+      // secret just before create; agnt resolves it by environment id.
+      if (envInfo.environmentId) {
+        await refreshEnvironmentGithubToken(originUrl, envInfo.environmentId, baseUrl, apiKey);
+      }
+      environment = envInfo.name;
+    } else {
+      let recipe = Environment.from("agnt-base").repo(originUrl, branch.source);
+      // Per-repo App token (short-lived, this repo only) rides as a request
+      // secret: it drives agnt's git-auth step and NEVER lands in pg — the
+      // DO refreshes secrets on every ensure, so each provision gets a
+      // fresh mint instead of replaying a stale one.
+      const githubToken = await mintRepoInstallationToken(originUrl);
+      if (githubToken) recipe = recipe.secrets({ github_token: githubToken });
+      environment = recipe;
+    }
     const provider = await agntCreateWorkspace({
       baseUrl,
       apiKey,

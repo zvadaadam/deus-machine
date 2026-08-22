@@ -89,6 +89,7 @@ app.post("/workspaces/:id/cloud-wake", async (c) => {
     id: workspace.id,
     provider_workspace_id: workspace.provider_workspace_id,
     current_session_id: workspace.current_session_id,
+    repository_id: workspace.repository_id,
   });
   return c.json(result);
 });

@@ -2,7 +2,7 @@
 // locally-cloned repos) carry no usable credentials in a sandbox.
 
 import { describe, expect, it } from "vitest";
-import { httpsOrigin } from "../../../src/services/cloud-workspace-init.service";
+import { githubRepoSlug, httpsOrigin } from "../../../src/services/cloud-workspace-init.service";
 
 describe("httpsOrigin", () => {
   it("converts scp-style ssh origins", () => {
@@ -58,5 +58,30 @@ describe("environmentNameForRepo", () => {
     expect(await environmentNameForRepo("https://github.com/alice/app")).not.toBe(
       await environmentNameForRepo("https://github.com/bob/app")
     );
+  });
+});
+
+describe("githubRepoSlug", () => {
+  it("accepts real GitHub origins in every form the repo table stores", () => {
+    expect(githubRepoSlug("https://github.com/zvadaadam/therapist-backend")).toBe(
+      "zvadaadam/therapist-backend"
+    );
+    expect(githubRepoSlug("https://github.com/zvadaadam/therapist-backend.git")).toBe(
+      "zvadaadam/therapist-backend"
+    );
+    expect(githubRepoSlug("git@github.com:zvadaadam/therapist-backend.git")).toBe(
+      "zvadaadam/therapist-backend"
+    );
+  });
+
+  it("rejects hosts that merely CONTAIN github.com", () => {
+    // The old substring regex matched these, so a workspace cloning from an
+    // unrelated host would have been handed a GitHub App installation token —
+    // git writes it into credentials for THAT host and sends it there.
+    expect(githubRepoSlug("https://evil.example/github.com/a/b")).toBeNull();
+    expect(githubRepoSlug("https://notgithub.com/x/y")).toBeNull();
+    expect(githubRepoSlug("https://github.com.evil.example/a/b")).toBeNull();
+    expect(githubRepoSlug("https://gitlab.com/a/b")).toBeNull();
+    expect(githubRepoSlug("not a url")).toBeNull();
   });
 });

@@ -44,6 +44,7 @@ vi.mock("electron", () => ({
 
 import {
   getDeusCloudSessionStatus,
+  getStoredDeusCloudSessionToken,
   signOutDeusCloud,
   startDeusCloudLogin,
 } from "../../../apps/desktop/main/deus-cloud-auth";
@@ -62,6 +63,121 @@ afterEach(async () => {
   global.fetch = originalFetch;
   process.env = { ...originalEnv };
   await rm(electronMocks.userDataDir, { recursive: true, force: true });
+});
+
+describe("desktop session refresh", () => {
+  /** Sign in once so a real session file (with a refresh token) exists. */
+  async function signIn(expiresInSeconds: number): Promise<void> {
+    global.fetch = vi.fn(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/auth/desktop/config") {
+        return Response.json({
+          authorization_endpoint: "https://api.workos.test/user_management/authorize",
+          client_id: "client_test",
+          provider: "authkit",
+          redirect_uri: "http://127.0.0.1:*/auth/callback",
+        });
+      }
+      if (url.hostname === "127.0.0.1") return originalFetch(input, init);
+      if (url.pathname === "/auth/desktop/exchange") {
+        return Response.json({
+          session_token: "session-v1",
+          token_type: "Bearer",
+          expires_in_seconds: expiresInSeconds,
+          account_id: "user_test",
+          refresh_token: "refresh-v1",
+        });
+      }
+      if (url.pathname === "/me")
+        return Response.json({ account: { name: "Ada", email: "a@b.c" } });
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    const login = startDeusCloudLogin();
+    await vi.waitFor(() => expect(electronMocks.openExternal).toHaveBeenCalledTimes(1));
+    const loginUrl = new URL(electronMocks.openExternal.mock.calls[0]?.[0] as string);
+    const callbackUrl = new URL(loginUrl.searchParams.get("redirect_uri") ?? "");
+    callbackUrl.searchParams.set("code", "workos-code");
+    callbackUrl.searchParams.set("state", loginUrl.searchParams.get("state") ?? "");
+    await originalFetch(callbackUrl);
+    await expect(login).resolves.toMatchObject({ success: true });
+  }
+
+  it("renews silently when the session is near expiry, keeping the user signed in", async () => {
+    await signIn(60); // inside the 6h refresh window
+
+    let refreshBody: Record<string, unknown> | null = null;
+    global.fetch = vi.fn(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/auth/desktop/refresh") {
+        refreshBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json({
+          session_token: "session-v2",
+          token_type: "Bearer",
+          expires_in_seconds: 24 * 60 * 60,
+          account_id: "user_test",
+          refresh_token: "refresh-v2",
+        });
+      }
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({
+      signedIn: true,
+      accountId: "user_test",
+    });
+    // Presented the stored token; WorkOS rotates, so the new one must be kept.
+    expect(refreshBody).toMatchObject({ refresh_token: "refresh-v1" });
+
+    // Second read uses the ROTATED token — proof the new one was persisted.
+    await expect(getStoredDeusCloudSessionToken()).resolves.toBe("session-v2");
+  });
+
+  it("does not re-refresh on every read when the token's own lifetime is short", async () => {
+    // A 60s token is permanently inside the absolute 6h window. Without a
+    // floor, EVERY session read becomes a network round-trip — and every
+    // settings render blocks on one.
+    await signIn(60);
+
+    let refreshes = 0;
+    global.fetch = vi.fn(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/auth/desktop/refresh") {
+        refreshes += 1;
+        return Response.json({
+          session_token: `session-v${refreshes + 1}`,
+          token_type: "Bearer",
+          expires_in_seconds: 60,
+          account_id: "user_test",
+          refresh_token: `refresh-v${refreshes + 1}`,
+        });
+      }
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    await getDeusCloudSessionStatus();
+    await getDeusCloudSessionStatus();
+    await getStoredDeusCloudSessionToken();
+
+    expect(refreshes).toBe(1);
+  });
+
+  it("signs out only when the refresh token is actually rejected (401)", async () => {
+    await signIn(60);
+    global.fetch = vi.fn(async () => new Response(null, { status: 401 })) as typeof fetch;
+    await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({ signedIn: false });
+  });
+
+  it("keeps a still-valid session when refresh fails transiently", async () => {
+    await signIn(60);
+    // 503 = the worker is misconfigured, not "your session is bad". Discarding
+    // a good session here would sign the user out for a server-side problem.
+    global.fetch = vi.fn(async () => new Response(null, { status: 503 })) as typeof fetch;
+    await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({
+      signedIn: true,
+      accountId: "user_test",
+    });
+  });
 });
 
 describe("desktop Deus Cloud auth flow", () => {
