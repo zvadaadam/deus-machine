@@ -10,6 +10,13 @@ export interface DeusCloudSessionStatus {
   /** This device holds a minted agnt platform key (D1 handshake complete). */
   hasPlatformKey: boolean;
   /**
+   * Credentials exist on disk but the OS keyring cannot decrypt them right
+   * now. Without this the UI shows a bare "not connected" for a transient
+   * Linux keyring lock and sends the user off to re-mint tokens they still
+   * hold — the condition needs a name, not just a false.
+   */
+  vaultLocked?: boolean;
+  /**
    * Why this device has no platform key despite being signed in. Provisioning
    * runs AFTER login resolves, so its failure cannot ride the login result —
    * without this the user sees "signed in" plus a cloud lane that silently

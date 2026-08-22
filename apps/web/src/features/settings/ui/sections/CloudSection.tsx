@@ -266,9 +266,11 @@ export function CloudSection() {
           "Connection",
           s?.enabled,
           s?.baseUrl ? `Connected · ${s.baseUrl.replace(/^https?:\/\//, "")}` : "Connected",
-          session.data?.signedIn
-            ? "Signed in — device setup didn't finish"
-            : "Not connected — sign in under Account"
+          session.data?.vaultLocked
+            ? "Credentials are locked — unlock your keyring, then reopen Deus"
+            : session.data?.signedIn
+              ? "Signed in — device setup didn't finish"
+              : "Not connected — sign in under Account"
         )}
         {/* Signed in with no platform key: provisioning runs after login, so
             its failure never reached the login result. Name it and offer the

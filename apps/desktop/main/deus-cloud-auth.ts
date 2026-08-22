@@ -141,7 +141,11 @@ async function enrichWithCredentialStatus(
   status: DeusCloudSessionStatus
 ): Promise<DeusCloudSessionStatus> {
   const creds = await getCloudCredentialsStatus().catch(() => null);
-  return { ...status, hasPlatformKey: creds?.hasPlatformKey ?? false };
+  return {
+    ...status,
+    hasPlatformKey: creds?.hasPlatformKey ?? false,
+    ...(creds?.vaultLocked ? { vaultLocked: true } : {}),
+  };
 }
 
 /**
