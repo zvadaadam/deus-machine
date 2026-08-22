@@ -343,6 +343,8 @@ async function readSessionFile(): Promise<StoredDeusCloudSession | null> {
 /** In-flight refresh, so concurrent callers share one round-trip (and one
  *  use of the rotating token — WorkOS invalidates it on first use). */
 let refreshInFlight: Promise<StoredDeusCloudSession | null> | null = null;
+/** Set for the duration of sign-out; see the guard in refreshStoredSession. */
+let signOutInProgress = false;
 /**
  * Floor on how often a NON-expired session may be renewed.
  *
@@ -441,6 +443,14 @@ async function refreshStoredSession(
       ? { encryptedRefreshToken: encryptSessionToken(body.refresh_token) }
       : {}),
   };
+  if (signOutInProgress) {
+    // Sign-out already cleared the session; writing the renewed one back
+    // would resurrect it, and the push below would hand the backend a live
+    // token for an account the user just left. A generation counter does NOT
+    // catch this — signOutDeusCloud bumps it first, so a refresh started
+    // afterwards carries the current value and passes.
+    return null;
+  }
   await writeStoredSession(next);
   logMainProcess("[deus-cloud] session refreshed");
   // The backend holds its OWN copy of the session token (it mints GitHub App
@@ -677,6 +687,15 @@ export async function getStoredDeusCloudSessionToken(): Promise<string | null> {
 }
 
 export async function signOutDeusCloud(): Promise<DeusCloudAuthResult> {
+  signOutInProgress = true;
+  try {
+    return await performSignOut();
+  } finally {
+    signOutInProgress = false;
+  }
+}
+
+async function performSignOut(): Promise<DeusCloudAuthResult> {
   loginGeneration += 1;
   const pending = pendingLogin;
   if (pending) {

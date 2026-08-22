@@ -33,11 +33,11 @@ function repoLabel(repo: string | null): string {
 
 export function CloudEnvironmentBlock({
   repoId,
-  cloudReady = true,
+  cloudBlockedReason = null,
 }: {
   repoId: string | null;
-  /** The cloud lane can actually provision (signed in + device key). */
-  cloudReady?: boolean;
+  /** Why the cloud lane can't provision, or null when it can. */
+  cloudBlockedReason?: string | null;
 }) {
   const requestEnvSetup = useUIStore((s) => s.requestEnvSetup);
 
@@ -93,8 +93,8 @@ export function CloudEnvironmentBlock({
             className="shrink-0"
             // Setup provisions a real cloud workspace, so without the lane it
             // can only end in an error — say why instead of failing later.
-            disabled={!cloudReady}
-            title={cloudReady ? undefined : "Sign in to Deus Cloud first"}
+            disabled={cloudBlockedReason !== null}
+            title={cloudBlockedReason ?? undefined}
             onClick={() => requestEnvSetup(repoId)}
           >
             <Bot className="mr-1.5 h-3.5 w-3.5" />

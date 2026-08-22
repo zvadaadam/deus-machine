@@ -46,8 +46,14 @@ export function EnvironmentSection() {
     staleTime: 30_000,
     retry: false,
   });
-  const cloudReady =
-    cloudSession.data?.signedIn === true && cloudSession.data?.hasPlatformKey === true;
+  // A reason, not a boolean: "signed out" and "signed in but device setup
+  // failed" need different next steps, and telling an already-signed-in user
+  // to sign in is a dead end.
+  const cloudBlockedReason = !cloudSession.data?.signedIn
+    ? "Sign in to Deus Cloud first"
+    : !cloudSession.data?.hasPlatformKey
+      ? "Finish device setup in Settings → Cloud"
+      : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo
@@ -175,7 +181,7 @@ export function EnvironmentSection() {
       </div>
 
       {/* Cloud environment — the platform-side recipe for this repo. */}
-      <CloudEnvironmentBlock repoId={selectedRepoId} cloudReady={cloudReady} />
+      <CloudEnvironmentBlock repoId={selectedRepoId} cloudBlockedReason={cloudBlockedReason} />
 
       {manifestLoading ? (
         <div className="flex h-20 items-center justify-center">

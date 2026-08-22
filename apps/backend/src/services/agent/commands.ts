@@ -32,6 +32,7 @@ import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
 import { startCloudTurn, cancelCloudTurn, isCloudSession } from "./cloud/driver";
+import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
@@ -464,6 +465,13 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     // answers `accepted: false` — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
     try {
+      // A send WAKES a sleeping sandbox, and its App token expires in an hour
+      // — so the wake chip is not the only path that needs a fresh mint.
+      // Gated on the row already saying it is asleep: this must not put a
+      // deus-cloud round-trip in front of every send on a live sandbox.
+      if (workspace?.init_stage === "paused" || workspace?.init_stage === "stopped") {
+        await refreshWorkspaceGithubToken(workspace.repository_id);
+      }
       // permissionMode/maxTurns/additionalDirectories/resume have no cloud
       // channel equivalent (permissions auto-allow like the local policy;
       // resume is agnt-internal) — model and thinking DO travel.

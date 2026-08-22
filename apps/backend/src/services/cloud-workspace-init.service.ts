@@ -173,7 +173,7 @@ async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<str
  *   running/provisioning/unknown → nothing to resume; reconnect refreshes truth
  */
 /** Re-mint the environment-scoped App token for a workspace about to start. */
-async function refreshWorkspaceGithubToken(repositoryId: string | null): Promise<void> {
+export async function refreshWorkspaceGithubToken(repositoryId: string | null): Promise<void> {
   if (!repositoryId) return;
   const config = getCloudConfig();
   if (!config) return;

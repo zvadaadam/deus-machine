@@ -293,8 +293,16 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
     getCloudCredential("claudeOauthToken").catch(() => null),
     getCloudCredential("codexAuthJson").catch(() => null),
   ]);
-  if (storedClaude) await syncClaudeTokenToPlatform(storedClaude);
-  if (storedCodex) await syncAgentSecretToPlatform("CODEX_AUTH_JSON", storedCodex);
+  // Record the sync the same way the connect paths do. Without this a
+  // credential first uploaded HERE never gets the flag, and a later
+  // signed-out disconnect deletes the local copy while reporting success —
+  // leaving the platform copy running (and billing) cloud turns.
+  if (storedClaude && (await syncClaudeTokenToPlatform(storedClaude))) {
+    await setCloudCredential("claudeOauthToken", storedClaude, { syncedToPlatform: true });
+  }
+  if (storedCodex && (await syncAgentSecretToPlatform("CODEX_AUTH_JSON", storedCodex))) {
+    await setCloudCredential("codexAuthJson", storedCodex, { syncedToPlatform: true });
+  }
   await pushCloudCredentialsToBackend();
 }
 

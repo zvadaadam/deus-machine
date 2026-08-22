@@ -142,11 +142,14 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         .otherwise(() => "Setting up...");
     }
     // 'error' covers a failed provision AND a sandbox that died later, so the
-    // copy must not claim it was the setup: init_stage is still set while
-    // provisioning, and cleared once the workspace has run.
+    // copy must not claim it was the setup. A non-empty init_stage is not
+    // proof of that on its own — the driver also parks paused/stopped/
+    // resuming there — so ask the shared vocabulary instead.
     if (isFailed) {
       if (workspace.kind !== "cloud") return "Failed";
-      return workspace.init_stage ? "Cloud setup failed" : "Sandbox failed";
+      const stillProvisioning =
+        Boolean(workspace.init_stage) && cloudPresence(workspace.init_stage) === "awake";
+      return stillProvisioning ? "Cloud setup failed" : "Sandbox failed";
     }
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";
