@@ -133,6 +133,35 @@ describe("desktop session refresh", () => {
     await expect(getStoredDeusCloudSessionToken()).resolves.toBe("session-v2");
   });
 
+  it("does not re-refresh on every read when the token's own lifetime is short", async () => {
+    // A 60s token is permanently inside the absolute 6h window. Without a
+    // floor, EVERY session read becomes a network round-trip — and every
+    // settings render blocks on one.
+    await signIn(60);
+
+    let refreshes = 0;
+    global.fetch = vi.fn(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/auth/desktop/refresh") {
+        refreshes += 1;
+        return Response.json({
+          session_token: `session-v${refreshes + 1}`,
+          token_type: "Bearer",
+          expires_in_seconds: 60,
+          account_id: "user_test",
+          refresh_token: `refresh-v${refreshes + 1}`,
+        });
+      }
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+
+    await getDeusCloudSessionStatus();
+    await getDeusCloudSessionStatus();
+    await getStoredDeusCloudSessionToken();
+
+    expect(refreshes).toBe(1);
+  });
+
   it("signs out only when the refresh token is actually rejected (401)", async () => {
     await signIn(60);
     global.fetch = vi.fn(async () => new Response(null, { status: 401 })) as typeof fetch;

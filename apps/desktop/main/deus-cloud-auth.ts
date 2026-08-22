@@ -331,6 +331,17 @@ async function readSessionFile(): Promise<StoredDeusCloudSession | null> {
 /** In-flight refresh, so concurrent callers share one round-trip (and one
  *  use of the rotating token — WorkOS invalidates it on first use). */
 let refreshInFlight: Promise<StoredDeusCloudSession | null> | null = null;
+/**
+ * Floor on how often a NON-expired session may be renewed.
+ *
+ * The window below is absolute, so any token whose own lifetime is shorter
+ * than it is permanently "near expiry" — every single session read would
+ * then make a network round-trip, and every settings render would block on
+ * one. Production issues 24h tokens today, but a server-side tightening to,
+ * say, 4h must not turn into a refresh storm.
+ */
+const SESSION_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
+let lastRefreshAt = 0;
 
 async function refreshStoredSession(
   stored: StoredDeusCloudSession
@@ -366,8 +377,18 @@ async function refreshStoredSession(
     throw new Error("Deus Cloud returned an invalid refreshed session");
   }
 
+  // Backfill the human identity if sign-in never got it. /me is best-effort
+  // AT SIGN-IN, and nothing else re-fetches it — so one transient failure
+  // there used to leave the account showing as a database row forever.
+  const profile =
+    stored.accountName || stored.accountEmail
+      ? null
+      : await fetchAccountProfile(stored.cloudUrl, body.session_token);
+
   const next: StoredDeusCloudSession = {
     ...stored,
+    ...(profile?.name ? { accountName: profile.name } : {}),
+    ...(profile?.email ? { accountEmail: profile.email } : {}),
     expiresAt: new Date(Date.now() + body.expires_in_seconds * 1000).toISOString(),
     encryptedSessionToken: encryptSessionToken(body.session_token),
     ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
@@ -403,7 +424,13 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
     return stored;
   }
 
+  // An expired token is unusable, so it always retries; a merely near-expiry
+  // one waits out the floor and keeps serving in the meantime.
+  if (!expired && Date.now() - lastRefreshAt < SESSION_REFRESH_MIN_INTERVAL_MS) return stored;
+
   refreshInFlight ??= refreshStoredSession(stored).finally(() => {
+    // After the write inside refreshStoredSession, which resets it to 0.
+    lastRefreshAt = Date.now();
     refreshInFlight = null;
   });
 
@@ -422,10 +449,14 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
 }
 
 async function writeStoredSession(session: StoredDeusCloudSession): Promise<void> {
+  // The floor belongs to the token that was refreshed, not to the process: a
+  // fresh sign-in (or a rotation) must be free to renew immediately.
+  lastRefreshAt = 0;
   await writeJsonFile(getSessionFilePath(), session);
 }
 
 async function clearStoredSession(): Promise<void> {
+  lastRefreshAt = 0;
   await removeFile(getSessionFilePath());
 }
 
