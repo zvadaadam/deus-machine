@@ -96,7 +96,19 @@ export function getCloudConfig(): CloudConfig | null {
  * take effect without a process restart. Every getCloudConfig() call site
  * reads the memo, so busting it here is the entire invalidation story.
  */
+/**
+ * Registered by the cloud driver. Sockets minted under one platform identity
+ * must not survive into another: without this, account B's sends rode a
+ * session channel authenticated as account A.
+ */
+let onIdentityChanged: (() => void) | null = null;
+
+export function setCloudIdentityChangedHandler(handler: () => void): void {
+  onIdentityChanged = handler;
+}
+
 export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): void {
+  const identityBefore = `${runtime.apiKey}|${runtime.baseUrl}|${runtime.orgId}`;
   for (const key of [
     "apiKey",
     "baseUrl",
@@ -111,6 +123,9 @@ export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): voi
     runtime[key] = value === null ? undefined : value;
   }
   cached = undefined;
+  if (`${runtime.apiKey}|${runtime.baseUrl}|${runtime.orgId}` !== identityBefore) {
+    onIdentityChanged?.();
+  }
 }
 
 /** Test seam: clear the memoized config AND runtime overrides. */

@@ -299,6 +299,7 @@ export async function getCloudSettingsStatus(): Promise<{
       apiKey: config.apiKey,
     })) {
       if (secret.keyName === "CLAUDE_CODE_OAUTH_TOKEN") hasPlatformClaude = true;
+      if (hasGithubToken) continue; // both flags found by scanning the FULL list
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
       // short-lived, environment-scoped `github_token` App mints; counting
@@ -306,8 +307,10 @@ export async function getCloudSettingsStatus(): Promise<{
       // is, and mark the repo-access step done off a credential that expires
       // in an hour.
       if (secret.appliesToAll === false) continue;
+      // No break: an org-wide github_token yielded BEFORE the Claude entry
+      // must not stop the scan and leave hasPlatformClaude iteration-order
+      // dependent.
       hasGithubToken = true;
-      break;
     }
   } catch (err) {
     console.warn(`[CloudSettings] listSecrets failed: ${err instanceof Error ? err.message : err}`);

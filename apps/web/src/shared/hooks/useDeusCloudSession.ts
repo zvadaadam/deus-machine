@@ -19,12 +19,19 @@ export function useDeusCloudSession() {
   useEffect(() => {
     return onAuthChanged((nextSession) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
-      // Everything derived from the account changes with it: the backend's
-      // cloud status flips on the credentials push, and the GitHub App
-      // state is org-scoped — account B must not inherit A's installations
-      // for the cache's freshness window.
-      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
-      void queryClient.invalidateQueries({ queryKey: ["settings", "github-app"] });
+      // EVERY account-scoped cache, not a curated subset — the subset is how
+      // account B kept seeing A's data for a freshness window, three separate
+      // times on this branch.
+      for (const key of [
+        ["settings", "cloud"],
+        ["settings", "github-app"],
+        ["settings", "claude-subscription"],
+        ["settings", "codex-subscription"],
+        ["settings", "cloud-environments"],
+        ["repo-cloud-environment"],
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
     });
   }, [queryClient]);
 
@@ -32,6 +39,12 @@ export function useDeusCloudSession() {
     queryKey: queryKeys.deusCloud.session,
     queryFn: getSession,
     staleTime: 30_000,
+    // The heartbeat that keeps a long-idle app signed in: each read runs the
+    // main process's session check, which silently refreshes inside the
+    // renewal window. Without it — focus-refetch is globally off — an app
+    // left open never re-read the session, the token aged out, and GitHub
+    // App mints started failing while the UI said signed in.
+    refetchInterval: 15 * 60_000,
     retry: false,
   });
 }

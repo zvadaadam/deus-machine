@@ -412,6 +412,10 @@ export function provisionAtStartup(
   // platform copy — the dashboard can, and the next sign-in re-mints).
   setSessionRevokedHandler(async () => {
     await revokeDeviceKey(null).catch(() => {});
+    // The 401 can fire from ANY session read (a github-app status poll, a
+    // credentials push) — announce, or renderers keep "signed in" until a
+    // remount while the cloud lane is already gone.
+    await announceDeusCloudAuthChanged().catch(() => {});
   });
   void (async () => {
     await waitForSafeStorage();

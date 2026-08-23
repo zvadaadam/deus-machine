@@ -358,7 +358,7 @@ function GithubAppCard() {
           {/* GitHub owns the repo picker: this lands on the account's existing
               installation ("Configure"), where repos are added or removed. */}
           <a
-            className="text-text-primary border-border-subtle hover:bg-surface-secondary rounded-md border px-2.5 py-1 text-xs"
+            className="text-text-primary border-border-subtle hover:bg-bg-muted rounded-md border px-2.5 py-1 text-xs"
             href={`https://github.com/apps/${data.appSlug}/installations/new`}
             target="_blank"
             rel="noopener noreferrer"

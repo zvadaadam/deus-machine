@@ -490,9 +490,13 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
   if (!expired && !nearExpiry) return stored;
 
   if (!stored.encryptedRefreshToken) {
-    // Pre-refresh session (or the token was never issued): old behaviour.
+    // Pre-refresh session (or the token was never issued): expiry is
+    // TERMINAL — there is nothing to renew with, so it takes the same full
+    // sign-out as a revocation. Leaving the device key would keep the cloud
+    // lane authorized under a UI that says signed out.
     if (expired) {
       await clearStoredSession();
+      await onSessionRevoked?.();
       return null;
     }
     return stored;

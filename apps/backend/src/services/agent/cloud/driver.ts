@@ -18,7 +18,7 @@ import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
 import { CloudEnvStateSchema, type CloudEnvEvent } from "@shared/events";
-import { getCloudConfig } from "./config";
+import { getCloudConfig, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
 import { relay } from "../tool-relay";
@@ -52,6 +52,15 @@ const sessions = new Map<string, CloudSession>();
 /** Wire the driver to the process's one event handler. Called from service init. */
 export function initCloudDriver(eventHandler: AgentEventHandler): void {
   handler = eventHandler;
+  // Account switch = every open channel is authenticated as the WRONG
+  // identity. Close them all; the next send reconnects under the new config.
+  setCloudIdentityChangedHandler(() => {
+    for (const s of sessions.values()) {
+      rejectPendingDiffs(s, "platform identity changed");
+      s.socket.close();
+    }
+    sessions.clear();
+  });
 }
 
 function rejectPendingDiffs(session: CloudSession, reason: string): void {

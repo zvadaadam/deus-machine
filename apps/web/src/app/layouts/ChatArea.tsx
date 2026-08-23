@@ -157,6 +157,8 @@ export function ChatArea({
             isFirstSession={true}
             initializing={workspace.state === "initializing"}
             initStep={workspace.init_stage}
+            failed={workspace.state === "error"}
+            failureMessage={workspace.error_message}
           />
         )}
       </div>

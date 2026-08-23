@@ -54,6 +54,7 @@ const AGENT_SUBSCRIPTIONS = [
 ] as const;
 
 interface CloudSettings {
+  hasTurnCredential?: boolean;
   enabled: boolean;
   baseUrl: string | null;
   hasAnthropicKey: boolean;
@@ -185,7 +186,11 @@ export function CloudSection() {
   // ONE derivation for the header counter and the step tick — they were
   // written twice and disagreed about Codex (which the cloud lane cannot
   // run, so a Codex-only setup must not tick this).
-  const agentsDone = s?.hasAnthropicKey || sub.data?.hasClaudeSubscription;
+  // hasTurnCredential is the backend's full disjunction (API key, pushed
+  // token, canonical platform secret) — a second device in the same org has
+  // runnable turns with an empty local vault. The local subscription flag
+  // still counts for the pre-push moment right after connecting.
+  const agentsDone = s?.hasTurnCredential || sub.data?.hasClaudeSubscription;
 
   const agentConnected = (id: string) =>
     id === "codex" ? codexSub.data?.hasCodexSubscription : sub.data?.hasClaudeSubscription;
@@ -276,7 +281,7 @@ export function CloudSection() {
           "flex h-4 w-4 items-center justify-center rounded-full",
           done
             ? "bg-accent-green/15 text-accent-green"
-            : "border-border-subtle text-text-faint border border-dashed"
+            : "border-border-subtle border border-dashed"
         )}
       >
         {done && <Check className="h-3 w-3" />}
@@ -404,7 +409,7 @@ export function CloudSection() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2">
-                      <code className="bg-surface-secondary text-text-secondary rounded px-2 py-1 text-xs">
+                      <code className="bg-muted text-text-secondary rounded px-2 py-1 text-xs">
                         {agent.command}
                       </code>
                       <Button
@@ -507,7 +512,7 @@ export function CloudSection() {
             </p>
             {githubApp.data?.installations.length && githubApp.data.appSlug ? (
               <a
-                className="text-text-primary border-border-subtle hover:bg-surface-secondary self-start rounded-md border px-2.5 py-1 text-xs"
+                className="text-text-primary border-border-subtle hover:bg-bg-muted self-start rounded-md border px-2.5 py-1 text-xs"
                 href={`https://github.com/apps/${githubApp.data.appSlug}/installations/new`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -542,7 +547,7 @@ export function CloudSection() {
                   >
                     <span className="text-text-secondary truncate text-sm">{full}</span>
                     <a
-                      className="text-text-primary border-border-subtle hover:bg-surface-secondary ml-3 shrink-0 rounded-md border px-2.5 py-1 text-xs"
+                      className="text-text-primary border-border-subtle hover:bg-bg-muted ml-3 shrink-0 rounded-md border px-2.5 py-1 text-xs"
                       href={`https://github.com/apps/${githubApp.data.appSlug}/installations/new`}
                       target="_blank"
                       rel="noopener noreferrer"
