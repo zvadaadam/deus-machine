@@ -1,9 +1,9 @@
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { initialsFrom } from "@/shared/lib/formatters";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Cloud, Loader2, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { native } from "@/platform";
 import { queryKeys } from "@/shared/api/queryKeys";
 
@@ -11,30 +11,6 @@ function formatAccountId(accountId: string | null): string {
   if (!accountId) return "";
   if (accountId.length <= 18) return accountId;
   return `${accountId.slice(0, 10)}...${accountId.slice(-6)}`;
-}
-
-function formatExpiry(expiresAt: string): string {
-  const ms = Date.parse(expiresAt) - Date.now();
-  if (ms <= 0) return "Expired";
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `Expires in ${minutes || 1}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `Expires in ${hours}h`;
-  return `Expires in ${Math.floor(hours / 24)}d`;
-}
-
-/** "Adam Zvada" -> "AZ"; falls back to the email's first letters. */
-function initialsFrom(name?: string | null, email?: string | null): string | null {
-  const source =
-    name?.trim() ||
-    email
-      ?.split("@")[0]
-      ?.replace(/[._-]+/g, " ")
-      .trim();
-  if (!source) return null;
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return source.slice(0, 2).toUpperCase();
 }
 
 export function AccountSection() {
@@ -147,15 +123,9 @@ export function AccountSection() {
         </div>
       </div>
 
-      {signedIn && data.expiresAt ? (
-        <>
-          <Separator />
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Session</p>
-            <p className="text-muted-foreground text-sm">{formatExpiry(data.expiresAt)}</p>
-          </div>
-        </>
-      ) : null}
+      {/* No expiry countdown: the session renews itself silently (rotating
+          refresh) and signs out only when genuinely revoked — a ticking
+          clock here promises a sign-out the app exists to prevent. */}
     </div>
   );
 }

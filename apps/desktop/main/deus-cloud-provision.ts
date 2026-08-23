@@ -10,6 +10,7 @@ import { hostname } from "node:os";
 import { isSafeStorageAvailable } from "./safe-storage-file";
 import {
   deleteCloudCredential,
+  foreignToOrg,
   hasStoredCredentials,
   getCloudCredential,
   getCloudCredentialMeta,
@@ -159,13 +160,10 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
     getCloudCredentialMeta("agntApiKey").catch(() => null),
     getCloudCredentialMeta("claudeOauthToken").catch(() => null),
   ]);
-  // Same ownership rule as the catch-up sync: a token stamped for ANOTHER
-  // account's org must not run this org's turns. Without this, the sync
-  // guard refused to store the credential in org B — and this push then
-  // handed the same token to the backend, which sent it on every turn.
+  // Same ownership rule as the catch-up sync and the status flags: a token
+  // stamped for ANOTHER account's org must not run this org's turns.
   const orgId = keyMeta?.orgId ?? null;
-  const claudeForThisOrg =
-    claudeMeta?.syncedOrgId && claudeMeta.syncedOrgId !== orgId ? null : claudeOauthToken;
+  const claudeForThisOrg = foreignToOrg(claudeMeta, orgId) ? null : claudeOauthToken;
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
@@ -256,18 +254,6 @@ export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): P
 }
 
 /**
- * Sync the Claude subscription token's CANONICAL copy to the platform (a
- * user-scoped agnt secret, applies_to_all=false — a turn credential the
- * session DO resolves; never fanned into sandbox env). This is what makes
- * the phone work with the Mac closed. `null` deletes. Best-effort: without
- * a device key (not signed in yet) the token stays local until the next
- * sign-in re-syncs it.
- */
-export async function syncClaudeTokenToPlatform(value: string | null): Promise<boolean> {
-  return syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", value);
-}
-
-/**
  * Sync any agent turn-credential's CANONICAL platform copy (an UNLINKED
  * secret — applies_to_all=false, zero environment links: resolvable only by
  * name-targeted turn lookups, never fanned into sandbox env). `null`
@@ -338,7 +324,7 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
   ] as const) {
     if (!value) continue;
     const meta = await getCloudCredentialMeta(name).catch(() => null);
-    if (meta?.syncedOrgId && meta.syncedOrgId !== orgId) {
+    if (foreignToOrg(meta, orgId)) {
       logMainProcess(
         `[deus-cloud] ${name} belongs to another account — not syncing it to ${orgId ?? "unknown"}`
       );

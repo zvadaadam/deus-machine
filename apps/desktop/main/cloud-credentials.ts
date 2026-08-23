@@ -152,6 +152,18 @@ export async function hasStoredCredentials(): Promise<boolean> {
   return Object.keys(store.entries).length > 0;
 }
 
+/**
+ * The ownership rule, in ONE place. A credential's platform copy is foreign
+ * only when BOTH org ids are known and differ — an unknown side proves
+ * nothing, and the two previous inline spellings disagreed on exactly that.
+ */
+export function foreignToOrg(
+  meta: { syncedOrgId?: string } | null | undefined,
+  orgId: string | null | undefined
+): boolean {
+  return Boolean(meta?.syncedOrgId && orgId && meta.syncedOrgId !== orgId);
+}
+
 /** Presence/meta only — safe for the renderer; values never cross IPC. */
 export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatus> {
   const store = await readStore();
@@ -167,7 +179,7 @@ export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatu
   const ownedHere = (name: "claudeOauthToken" | "codexAuthJson") => {
     const entry = store.entries[name];
     if (!entry) return false;
-    return !(entry.syncedOrgId && key?.orgId && entry.syncedOrgId !== key.orgId);
+    return !foreignToOrg(entry, key?.orgId);
   };
   return {
     hasPlatformKey: usable && Boolean(key),

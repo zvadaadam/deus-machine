@@ -253,14 +253,16 @@ describe("revokeDeviceKey", () => {
   });
 });
 
-describe("syncClaudeTokenToPlatform", () => {
+describe("syncAgentSecretToPlatform (Claude token)", () => {
   it("PUTs the token as a non-fanout secret with the device key", async () => {
-    const { syncClaudeTokenToPlatform } =
+    const { syncAgentSecretToPlatform } =
       await import("../../../apps/desktop/main/deus-cloud-provision");
     await setCloudCredential("agntApiKey", "agnt_sk_live_x");
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
-    expect(await syncClaudeTokenToPlatform("sk-ant-oat01-secret")).toBe(true);
+    expect(await syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-secret")).toBe(
+      true
+    );
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://agnt.test/secrets/CLAUDE_CODE_OAUTH_TOKEN");
@@ -272,19 +274,21 @@ describe("syncClaudeTokenToPlatform", () => {
   });
 
   it("DELETEs the platform copy on disconnect (null)", async () => {
-    const { syncClaudeTokenToPlatform } =
+    const { syncAgentSecretToPlatform } =
       await import("../../../apps/desktop/main/deus-cloud-provision");
     await setCloudCredential("agntApiKey", "agnt_sk_live_x");
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
-    expect(await syncClaudeTokenToPlatform(null)).toBe(true);
+    expect(await syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", null)).toBe(true);
     expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
   });
 
   it("is a quiet no-op before a device key exists (local-only until sign-in)", async () => {
-    const { syncClaudeTokenToPlatform } =
+    const { syncAgentSecretToPlatform } =
       await import("../../../apps/desktop/main/deus-cloud-provision");
-    expect(await syncClaudeTokenToPlatform("sk-ant-oat01-secret")).toBe(false);
+    expect(await syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-secret")).toBe(
+      false
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

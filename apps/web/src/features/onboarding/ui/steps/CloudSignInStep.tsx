@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { initialsFrom } from "@/shared/lib/formatters";
 import { Cloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -8,20 +9,6 @@ import { startLogin } from "@/platform/native/deus-cloud";
 interface CloudSignInStepProps {
   onNext: () => void;
   onBack: () => void;
-}
-
-/** "Adam Zvada" -> "AZ"; falls back to the email's first letters. */
-function initialsFrom(name?: string | null, email?: string | null): string {
-  const source =
-    name?.trim() ||
-    email
-      ?.split("@")[0]
-      ?.replace(/[._-]+/g, " ")
-      .trim();
-  if (!source) return "DC";
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return source.slice(0, 2).toUpperCase();
 }
 
 /**
@@ -66,7 +53,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/10">
           {signedIn ? (
             <span className="text-xs font-semibold text-white">
-              {initialsFrom(data?.accountName, data?.accountEmail)}
+              {initialsFrom(data?.accountName, data?.accountEmail) ?? "DC"}
             </span>
           ) : (
             <Cloud className="size-5 text-white/50" />

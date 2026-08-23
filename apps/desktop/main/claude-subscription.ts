@@ -10,19 +10,26 @@
 
 import { spawn } from "child_process";
 import { ipcMain } from "electron";
+import { getCloudCredentialsStatus } from "./cloud-credentials";
 import {
-  deleteCloudCredential,
-  getCloudCredential,
-  getCloudCredentialMeta,
-  getCloudCredentialsStatus,
-  setCloudCredential,
-} from "./cloud-credentials";
-import { pushCloudCredentialsToBackend, syncClaudeTokenToPlatform } from "./deus-cloud-provision";
+  connectAgentCredential,
+  disconnectAgentCredential,
+  type AgentCredentialSpec,
+} from "./agent-credential";
 
 import type { ClaudeSubscriptionResult } from "../../../shared/types";
 
 /** `claude setup-token` prints a one-year OAuth bearer with this prefix. */
 const OAUTH_TOKEN_RE = /sk-ant-oat[a-zA-Z0-9_-]+/;
+
+const CLAUDE_CREDENTIAL: AgentCredentialSpec = {
+  vaultName: "claudeOauthToken",
+  secretName: "CLAUDE_CODE_OAUTH_TOKEN",
+  deleteFailedMessage:
+    "Couldn't remove the token from the Deus platform — it would keep running cloud turns. Check your connection and try again.",
+  signedOutMessage:
+    "This token was copied to Deus Cloud and can only be removed while signed in. Sign in and disconnect again.",
+};
 
 /**
  * Mint commands per agent — the ONLY commands the terminal opener will run.
@@ -71,20 +78,8 @@ async function statusResult(error?: string): Promise<ClaudeSubscriptionResult> {
 }
 
 async function storeToken(token: string): Promise<ClaudeSubscriptionResult> {
-  await setCloudCredential("claudeOauthToken", token);
   // Local vault = cache; the platform secret is canonical (phone/Mac-off).
-  // Read the owning org BEFORE the write: a sign-out landing during the PUT
-  // deletes the device key, and stamping syncedToPlatform WITHOUT the org
-  // would let the catch-up path upload this token into the next account.
-  const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
-  const synced = await syncClaudeTokenToPlatform(token);
-  if (synced) {
-    await setCloudCredential("claudeOauthToken", token, {
-      syncedToPlatform: true,
-      ...(orgId ? { syncedOrgId: orgId } : {}),
-    });
-  }
-  await pushCloudCredentialsToBackend();
+  await connectAgentCredential(CLAUDE_CREDENTIAL, token);
   return statusResult();
 }
 
@@ -139,30 +134,7 @@ export async function saveClaudeSubscriptionToken(
 }
 
 export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionResult> {
-  // The PLATFORM copy is what cloud/phone turns bill against, so it must die
-  // first: dropping the local token while the DELETE fails would report
-  // "disconnected" whilst the token keeps working server-side, with no local
-  // copy left to retry from. No device key = never synced = nothing to delete.
-  const hasDeviceKey = Boolean(await getCloudCredential("agntApiKey").catch(() => null));
-  if (hasDeviceKey) {
-    if (!(await syncClaudeTokenToPlatform(null))) {
-      return statusResult(
-        "Couldn't remove the token from the Deus platform — it would keep running cloud turns. Check your connection and try again."
-      );
-    }
-  } else if (
-    (await getCloudCredentialMeta("claudeOauthToken").catch(() => null))?.syncedToPlatform
-  ) {
-    // Signed out AFTER syncing: the platform copy outlives this device and
-    // there is no key left to delete it with. Saying "disconnected" here
-    // would be a lie about a token that still runs (and bills) cloud turns.
-    return statusResult(
-      "This token was copied to Deus Cloud and can only be removed while signed in. Sign in and disconnect again."
-    );
-  }
-  await deleteCloudCredential("claudeOauthToken");
-  await pushCloudCredentialsToBackend();
-  return statusResult();
+  return statusResult((await disconnectAgentCredential(CLAUDE_CREDENTIAL)) ?? undefined);
 }
 
 export function registerClaudeSubscriptionHandlers(): void {

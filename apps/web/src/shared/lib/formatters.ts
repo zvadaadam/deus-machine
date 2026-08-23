@@ -21,3 +21,17 @@ export function formatTimeAgo(dateString: string): string {
   if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d ago`;
   return `${Math.floor(seconds / 2592000)}mo ago`;
 }
+
+/** "Adam Zvada" -> "AZ"; falls back to the email's first letters. */
+export function initialsFrom(name?: string | null, email?: string | null): string | null {
+  const source =
+    name?.trim() ||
+    email
+      ?.split("@")[0]
+      ?.replace(/[._-]+/g, " ")
+      .trim();
+  if (!source) return null;
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
+}

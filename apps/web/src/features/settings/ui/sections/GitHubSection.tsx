@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { githubAppBlockedLabel } from "../../lib/github-app-label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
@@ -322,6 +323,7 @@ export function GitHubSection() {
 
 /** Live Deus GitHub App card — same states as Settings → Cloud. */
 function GithubAppCard() {
+  const signIn = useDeusCloudSignIn();
   const state = useQuery({
     queryKey: ["settings", "github-app"],
     queryFn: getGithubAppStatus,
@@ -378,6 +380,17 @@ function GithubAppCard() {
           }}
         >
           Install
+        </Button>
+      ) : !data?.signedIn ? (
+        // The blocked state IS the button — a pill saying "sign in first"
+        // with the sign-in living in another tab is a dead end.
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={() => signIn.mutate()}
+          disabled={signIn.isPending}
+        >
+          {signIn.isPending ? "Waiting for browser…" : "Sign in to Deus Cloud"}
         </Button>
       ) : (
         <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
