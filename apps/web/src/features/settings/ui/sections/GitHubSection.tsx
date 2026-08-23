@@ -382,7 +382,15 @@ function GithubAppCard() {
         </Button>
       ) : (
         <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
-          Awaiting App registration
+          {/* "Not configured" has three causes and they need different next
+              steps. Saying "awaiting App registration" to a signed-out user
+              claims the App does not exist when it does — and points them at
+              something only the Deus team can do. */}
+          {!data?.signedIn
+            ? "Sign in to Deus Cloud first"
+            : data.error === "offline"
+              ? "Can't reach Deus Cloud"
+              : "Awaiting App registration"}
         </span>
       )}
     </div>
