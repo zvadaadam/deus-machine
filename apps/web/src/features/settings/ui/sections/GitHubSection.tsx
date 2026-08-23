@@ -328,6 +328,12 @@ function GithubAppCard() {
     queryKey: ["settings", "github-app"],
     queryFn: getGithubAppStatus,
     staleTime: 30_000,
+    // Deliberate override of the global focus-refetch OFF: this state
+    // changes on GitHub in another tab BY DESIGN (install, manage repos,
+    // uninstall), and any return to the app should pick it up — a per-click
+    // listener missed every path but the Install button (the "Install app"
+    // links beside missing repos, most notably).
+    refetchOnWindowFocus: true,
     retry: false,
   });
   const data = state.data;
@@ -371,12 +377,6 @@ function GithubAppCard() {
               return;
             }
             toast.info("Complete the install on GitHub, then come back");
-            // The install completes out-of-band in the browser, so nothing
-            // else invalidates this card — refetch when focus returns instead
-            // of leaving it on "Not installed" until the settings remount.
-            // {once:true}: if Settings closes before focus returns, the
-            // listener must not outlive the component and poke a dead query.
-            window.addEventListener("focus", () => void state.refetch(), { once: true });
           }}
         >
           Install
