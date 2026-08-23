@@ -297,11 +297,30 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
   // credential first uploaded HERE never gets the flag, and a later
   // signed-out disconnect deletes the local copy while reporting success —
   // leaving the platform copy running (and billing) cloud turns.
-  if (storedClaude && (await syncClaudeTokenToPlatform(storedClaude))) {
-    await setCloudCredential("claudeOauthToken", storedClaude, { syncedToPlatform: true });
-  }
-  if (storedCodex && (await syncAgentSecretToPlatform("CODEX_AUTH_JSON", storedCodex))) {
-    await setCloudCredential("codexAuthJson", storedCodex, { syncedToPlatform: true });
+  //
+  // Skipping a credential already synced ELSEWHERE is the other half: these
+  // survive sign-out (only the device key is deleted), so a sign-in to a
+  // different account would upload the same token into a second org — live
+  // in both, and deletable from only the one you are signed into.
+  const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
+  for (const [name, value, secretName] of [
+    ["claudeOauthToken", storedClaude, "CLAUDE_CODE_OAUTH_TOKEN"],
+    ["codexAuthJson", storedCodex, "CODEX_AUTH_JSON"],
+  ] as const) {
+    if (!value) continue;
+    const meta = await getCloudCredentialMeta(name).catch(() => null);
+    if (meta?.syncedOrgId && meta.syncedOrgId !== orgId) {
+      logMainProcess(
+        `[deus-cloud] ${name} belongs to another account — not syncing it to ${orgId ?? "unknown"}`
+      );
+      continue;
+    }
+    if (await syncAgentSecretToPlatform(secretName, value)) {
+      await setCloudCredential(name, value, {
+        syncedToPlatform: true,
+        ...(orgId ? { syncedOrgId: orgId } : {}),
+      });
+    }
   }
   await pushCloudCredentialsToBackend();
 }

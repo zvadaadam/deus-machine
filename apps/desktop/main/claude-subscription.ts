@@ -74,7 +74,15 @@ async function storeToken(token: string): Promise<ClaudeSubscriptionResult> {
   await setCloudCredential("claudeOauthToken", token);
   // Local vault = cache; the platform secret is canonical (phone/Mac-off).
   const synced = await syncClaudeTokenToPlatform(token);
-  if (synced) await setCloudCredential("claudeOauthToken", token, { syncedToPlatform: true });
+  if (synced) {
+    // Stamp the owning org: the catch-up path uses it to refuse uploading
+    // this token into a second account's org.
+    const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
+    await setCloudCredential("claudeOauthToken", token, {
+      syncedToPlatform: true,
+      ...(orgId ? { syncedOrgId: orgId } : {}),
+    });
+  }
   await pushCloudCredentialsToBackend();
   return statusResult();
 }

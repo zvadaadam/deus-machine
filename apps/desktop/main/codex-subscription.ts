@@ -62,7 +62,12 @@ export async function importCodexAuth(): Promise<CodexSubscriptionResult> {
   // Canonical platform copy — an unlinked turn credential (per-sandbox
   // seeding consumes it when Codex cloud support lands).
   if (await syncAgentSecretToPlatform("CODEX_AUTH_JSON", raw)) {
-    await setCloudCredential("codexAuthJson", raw, { syncedToPlatform: true });
+    // Stamp the owning org — see the catch-up path in deus-cloud-provision.
+    const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
+    await setCloudCredential("codexAuthJson", raw, {
+      syncedToPlatform: true,
+      ...(orgId ? { syncedOrgId: orgId } : {}),
+    });
   }
   await pushCloudCredentialsToBackend();
   return statusResult();

@@ -33,6 +33,13 @@ export interface CloudCredentialMeta {
    * cloud turns) or to warn about a cloud copy that may never have existed.
    */
   syncedToPlatform?: boolean;
+  /**
+   * The org the platform copy was written to. Sign-out leaves subscription
+   * credentials on disk (only the device key is deleted), so signing into a
+   * DIFFERENT account would otherwise upload the same token into a second
+   * org — live in both, deletable from only one.
+   */
+  syncedOrgId?: string;
   createdAt?: string;
 }
 

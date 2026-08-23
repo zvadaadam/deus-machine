@@ -832,9 +832,11 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
       // of a signed-out user: revokeDeviceKey ran BEFORE the key existed, so
       // nothing ever revoked it and the backend cloud lane stayed live.
       if (provisionGeneration !== loginGeneration) {
-        await revokeDeviceKey(await getStoredDeusCloudSessionToken().catch(() => null)).catch(
-          () => {}
-        );
+        // Use the CAPTURED token, not a re-read: sign-out has already cleared
+        // the stored session by now, and revokeDeviceKey skips the server-side
+        // DELETE when handed null — which would delete the local copy and
+        // leave the just-minted key alive on the platform forever.
+        await revokeDeviceKey(token).catch(() => {});
         return;
       }
       broadcastAuthChanged(await getDeusCloudSessionStatus());

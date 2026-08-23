@@ -519,6 +519,17 @@ export async function cancelCloudTurn(deusSessionId: string): Promise<TurnCancel
   return { outcome: "unconfirmed", turnId: live };
 }
 
+/**
+ * Whether a channel to this session is OPEN right now.
+ *
+ * Without one, the workspace row's `init_stage` is not evidence of anything:
+ * the driver only learns "paused"/"stopped" from a snapshot, so after a
+ * backend restart the row reads NULL for a sandbox that is actually asleep.
+ */
+export function hasLiveCloudSession(deusSessionId: string): boolean {
+  return sessions.get(deusSessionId)?.socket.isOpen() ?? false;
+}
+
 /** Whether this session row belongs to the cloud lane. */
 export function isCloudSession(deusSessionId: string): boolean {
   const db = getDatabase();
