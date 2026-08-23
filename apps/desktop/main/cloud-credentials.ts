@@ -161,12 +161,20 @@ export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatu
   // would have Settings disagree with what the cloud lane actually holds.
   // Only probe the keyring when something is stored — see hasStoredCredentials.
   const usable = Object.keys(store.entries).length === 0 || isSafeStorageAvailable();
+  // Same ownership rule as the backend push: a token stamped for ANOTHER
+  // account's org is not "connected" here — reporting it would show a green
+  // check while every cloud turn runs without a credential.
+  const ownedHere = (name: "claudeOauthToken" | "codexAuthJson") => {
+    const entry = store.entries[name];
+    if (!entry) return false;
+    return !(entry.syncedOrgId && key?.orgId && entry.syncedOrgId !== key.orgId);
+  };
   return {
     hasPlatformKey: usable && Boolean(key),
     platformKeyLabel: key?.label ?? null,
     platformOrgId: key?.orgId ?? null,
-    hasClaudeSubscription: usable && Boolean(store.entries.claudeOauthToken),
-    hasCodexSubscription: usable && Boolean(store.entries.codexAuthJson),
+    hasClaudeSubscription: usable && ownedHere("claudeOauthToken"),
+    hasCodexSubscription: usable && ownedHere("codexAuthJson"),
     vaultLocked: !usable && Object.keys(store.entries).length > 0,
   };
 }

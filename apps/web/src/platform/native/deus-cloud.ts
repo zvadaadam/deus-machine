@@ -101,7 +101,8 @@ export interface GithubAppState {
   signedIn: boolean;
   installations: Array<{ installationId: number; accountLogin: string }>;
   appSlug: string | null;
-  accessibleRepos: string[];
+  /** null = lookup failed; unknown is not "none". */
+  accessibleRepos: string[] | null;
   error?: string;
 }
 

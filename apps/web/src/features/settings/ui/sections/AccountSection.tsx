@@ -48,6 +48,10 @@ export function AccountSection() {
   useEffect(() => {
     return native.deusCloud.onAuthChanged((nextSession) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
+      // The mint + credentials push finish AFTER login resolves and announce
+      // themselves through this broadcast — without the invalidation the
+      // Cloud section keeps "no platform key" for its whole 30s window.
+      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     });
   }, [queryClient]);
 

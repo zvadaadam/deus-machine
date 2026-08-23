@@ -109,39 +109,78 @@ describe("ensureDeviceKey", () => {
     });
   });
 
-  it("is idempotent: an existing stored key validates, then skips the mint", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_existing");
-    fetchMock.mockResolvedValueOnce(jsonResponse({ items: [] }));
+  /** URL-dispatched mock: the ownership+validity probes run in PARALLEL, so
+   *  sequence-based mocks would depend on scheduling order. */
+  function probeMock(handlers: {
+    secrets?: () => Response | Promise<Response>;
+    orgs?: () => Response | Promise<Response>;
+    mint?: () => Response;
+  }) {
+    fetchMock.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/secrets")) {
+        return handlers.secrets ? handlers.secrets() : jsonResponse({ items: [] });
+      }
+      if (url.includes("/api-keys")) {
+        if (!handlers.mint) throw new Error("unexpected mint");
+        return handlers.mint();
+      }
+      if (url.includes("/orgs")) {
+        return handlers.orgs ? handlers.orgs() : jsonResponse({ items: [{ id: "org_1" }] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+  }
+
+  it("is idempotent: a valid key owned by this account skips the mint", async () => {
+    await setCloudCredential("agntApiKey", "agnt_sk_existing", { keyId: "key_1", orgId: "org_1" });
+    probeMock({});
 
     await ensureDeviceKey("session-jwt", "https://cloud.test");
 
-    // Exactly one call — the validation probe. No org lookup, no mint.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toContain("/secrets");
     expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_existing");
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/api-keys"))).toBe(false);
   });
 
-  it("keeps the stored key when the validation probe cannot reach the platform", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_existing");
-    fetchMock.mockRejectedValueOnce(new Error("ENOTFOUND"));
+  it("keeps the stored key when neither probe can reach the platform", async () => {
+    await setCloudCredential("agntApiKey", "agnt_sk_existing", { keyId: "key_1", orgId: "org_1" });
+    probeMock({
+      secrets: () => Promise.reject(new Error("ENOTFOUND")),
+      orgs: () => Promise.reject(new Error("ENOTFOUND")),
+    });
 
+    // Offline is neither revoked nor foreign: the ownership probe swallows
+    // its own failure, so the key is kept and no mint is attempted.
     await ensureDeviceKey("session-jwt", "https://cloud.test");
 
-    // Offline is not revoked: no re-mint, key survives.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_existing");
   });
 
   it("re-mints when the stored key was revoked server-side", async () => {
-    await setCloudCredential("agntApiKey", "agnt_sk_revoked");
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ error: "UNAUTHORIZED" }, 401))
-      .mockResolvedValueOnce(jsonResponse({ items: [{ id: "org_1" }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: "key_2", key: "agnt_sk_fresh", label: "Mac" }));
+    await setCloudCredential("agntApiKey", "agnt_sk_revoked", { keyId: "key_1", orgId: "org_1" });
+    probeMock({
+      secrets: () => jsonResponse({ error: "UNAUTHORIZED" }, 401),
+      mint: () => jsonResponse({ id: "key_2", key: "agnt_sk_fresh", label: "Mac" }),
+    });
 
     await ensureDeviceKey("session-jwt", "https://cloud.test");
 
     expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_fresh");
+  });
+
+  it("re-mints when the stored key belongs to a DIFFERENT account's org", async () => {
+    // A 401-expired session clears only the session file; without the
+    // ownership probe, signing into account B silently reused A's org key.
+    await setCloudCredential("agntApiKey", "agnt_sk_org_a", { keyId: "key_a", orgId: "org_a" });
+    probeMock({
+      mint: () => jsonResponse({ id: "key_b", key: "agnt_sk_org_b", label: "Mac" }),
+    });
+
+    await ensureDeviceKey("session-jwt", "https://cloud.test");
+
+    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_org_b");
+    expect(await getCloudCredentialMeta("agntApiKey")).toMatchObject({ orgId: "org_1" });
   });
 
   it("surfaces a mint failure without storing anything", async () => {

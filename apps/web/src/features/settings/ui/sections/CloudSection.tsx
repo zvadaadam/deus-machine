@@ -188,16 +188,22 @@ export function CloudSection() {
 
   // Repos the installed GitHub App cannot reach — drives the missing-access
   // list and, when empty, lets the App satisfy the repo-access step without a PAT.
+  // null = the repos lookup failed. Unknown coverage claims nothing: no
+  // missing-repos list, no ticked step.
+  const coverageKnown = Array.isArray(githubApp.data?.accessibleRepos);
   const accessible = new Set((githubApp.data?.accessibleRepos ?? []).map((r) => r.toLowerCase()));
   // Same parser the backend mints with (@shared/git-origin) — a looser one
   // here reported repos as uncovered, and demanded a PAT, for origin forms
   // provisioning handles fine (ssh://, www.github.com).
-  const missingRepos = (localRepos.data ?? [])
-    .map((r) => githubRepoSlug(r.git_origin_url ?? ""))
-    .filter((slug): slug is string => slug !== null)
-    .filter((slug) => !accessible.has(slug.toLowerCase()));
+  const missingRepos = coverageKnown
+    ? (localRepos.data ?? [])
+        .map((r) => githubRepoSlug(r.git_origin_url ?? ""))
+        .filter((slug): slug is string => slug !== null)
+        .filter((slug) => !accessible.has(slug.toLowerCase()))
+    : [];
   const appCoversRepos =
     Boolean(githubApp.data?.installations.length) &&
+    coverageKnown &&
     (localRepos.data?.length ?? 0) > 0 &&
     missingRepos.length === 0;
 

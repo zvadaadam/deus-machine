@@ -16,15 +16,17 @@ export interface GithubAppState {
   installations: Array<{ installationId: number; accountLogin: string }>;
   /** App slug for install deep links (null until registered). */
   appSlug: string | null;
-  /** owner/name list the installations can access (live from GitHub). */
-  accessibleRepos: string[];
+  /** owner/name list the installations can access (live from GitHub).
+   *  null = the lookup FAILED — unknown is not the same as "none": treating
+   *  a timeout as an empty list rendered every repo as missing access. */
+  accessibleRepos: string[] | null;
   error?: string;
 }
 
 const EMPTY_STATE: Omit<GithubAppState, "configured" | "signedIn"> = {
   installations: [],
   appSlug: null,
-  accessibleRepos: [],
+  accessibleRepos: null,
 };
 
 async function orgContext(): Promise<{ token: string; orgId: string } | null> {
@@ -62,7 +64,7 @@ export async function getGithubAppState(): Promise<GithubAppState> {
       installationId: i.github_installation_identifier,
       accountLogin: i.account_login,
     }));
-    let accessibleRepos: string[] = [];
+    let accessibleRepos: string[] | null = installations.length > 0 ? null : [];
     if (installations.length > 0) {
       const reposRes = await fetch(`${base}/accessible-repos`, { headers }).catch(() => null);
       if (reposRes?.ok) {

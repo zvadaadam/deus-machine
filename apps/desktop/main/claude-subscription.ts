@@ -99,6 +99,9 @@ async function validateClaudeToken(token: string): Promise<string | null> {
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      // Everything after this call is bounded at 15s; without this the one
+      // black-holed connection turned Save into a 300s spinner.
+      signal: AbortSignal.timeout(15_000),
       headers: {
         authorization: `Bearer ${token}`,
         "anthropic-beta": "oauth-2025-04-20",

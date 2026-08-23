@@ -213,14 +213,26 @@ async function deviceKeyStillValid(apiKey: string): Promise<boolean> {
  */
 export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): Promise<boolean> {
   const existing = await getCloudCredential("agntApiKey");
-  if (existing && (await deviceKeyStillValid(existing))) {
-    return true;
-  }
   if (existing) {
-    // Revoked from the dashboard (or on another device). Without this the
-    // stale key survives every restart and each platform call 401s silently
-    // forever — the only recovery was a manual sign-out/sign-in.
-    logMainProcess("[deus-cloud] stored device key rejected by platform — re-minting");
+    // A key can outlive its ACCOUNT, not just its validity: a 401-expired
+    // session clears only the session file, so signing into a different
+    // account would silently reuse the previous account's org key — B's
+    // workspaces running (and billing) in A's org. Ownership and validity
+    // are probed together; offline keeps the key (offline ≠ revoked), a
+    // foreign org drops the local copy (the platform copy needs the OTHER
+    // account's session to revoke — its dashboard can).
+    const [meta, org, valid] = await Promise.all([
+      getCloudCredentialMeta("agntApiKey").catch(() => null),
+      fetchFirstOrg(sessionToken, cloudUrl).catch(() => null),
+      deviceKeyStillValid(existing),
+    ]);
+    const foreign = Boolean(meta?.orgId && org?.id && meta.orgId !== org.id);
+    if (valid && !foreign) return true;
+    logMainProcess(
+      foreign
+        ? `[deus-cloud] stored device key belongs to org ${meta?.orgId} — re-minting for ${org?.id}`
+        : "[deus-cloud] stored device key rejected by platform — re-minting"
+    );
     await deleteCloudCredential("agntApiKey");
   }
 

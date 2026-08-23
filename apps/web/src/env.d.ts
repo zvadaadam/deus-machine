@@ -52,7 +52,7 @@ interface Window {
       signedIn: boolean;
       installations: Array<{ installationId: number; accountLogin: string }>;
       appSlug: string | null;
-      accessibleRepos: string[];
+      accessibleRepos: string[] | null;
       error?: string;
     }>;
     installGithubApp: () => Promise<{ ok: boolean; error?: string }>;

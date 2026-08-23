@@ -3,7 +3,7 @@
 // session file and the cloud credential vault) build on this — one place
 // owns the encrypt/decrypt/permission rules.
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
 
@@ -45,7 +45,12 @@ export async function readJsonFile<T>(filePath: string): Promise<T | null> {
 /** Write a JSON file owner-read/write only, creating parent dirs. */
 export async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  // Temp + rename: writeFile truncates in place, so a crash mid-write left a
+  // torn file that readJsonFile's catch turned into an empty store — i.e. a
+  // power cut during any vault write silently wiped every credential.
+  const tmp = `${filePath}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  await rename(tmp, filePath);
 }
 
 export async function removeFile(filePath: string): Promise<void> {
