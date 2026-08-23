@@ -60,9 +60,16 @@ export function EnvironmentSection() {
       ? "Sign in to Deus Cloud first"
       : !cloudSession.data?.hasPlatformKey
         ? "Finish device setup in Settings → Cloud"
-        : cloudStatus.data && !cloudStatus.data.hasTurnCredential
-          ? "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
-          : null;
+        : !cloudStatus.data
+          ? // Fail CLOSED while unknown: enabling on a fast session read and a
+            // slow settings read provisions a sandbox whose only outcome is an
+            // auth error.
+            cloudStatus.isError
+            ? "Can't reach the Deus backend"
+            : "Checking cloud status…"
+          : !cloudStatus.data.hasTurnCredential
+            ? "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
+            : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo

@@ -21,6 +21,7 @@ import {
   getStoredDeusCloudSessionToken,
   hasStoredSessionFile,
   setSessionRefreshedHandler,
+  setSessionRevokedHandler,
 } from "./deus-cloud-auth";
 import { AGNT_LOCAL_URL, isLocalCloudEnv, resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { logMainProcess } from "./startup-diagnostics";
@@ -287,6 +288,17 @@ export async function syncAgentSecretToPlatform(
   }
 }
 
+/**
+ * The in-flight post-login catch-up. Disconnect awaits it so the pair
+ * serializes: the one real overlap between a background platform PUT and a
+ * user-initiated delete of the same credential.
+ */
+let credentialCatchUp: Promise<void> = Promise.resolve();
+
+export function whenCredentialCatchUpSettled(): Promise<void> {
+  return credentialCatchUp.catch(() => {});
+}
+
 /** Post-login hook: mint if needed, then hand credentials to the backend. */
 export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
   try {
@@ -304,40 +316,51 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
   // exists, so the platform copies can catch up. BOTH agents: syncing only
   // Claude leaves a Codex login connected pre-sign-in invisible to the cloud
   // forever (nothing else re-runs this).
-  const [storedClaude, storedCodex] = await Promise.all([
-    getCloudCredential("claudeOauthToken").catch(() => null),
-    getCloudCredential("codexAuthJson").catch(() => null),
-  ]);
-  // Record the sync the same way the connect paths do. Without this a
-  // credential first uploaded HERE never gets the flag, and a later
-  // signed-out disconnect deletes the local copy while reporting success —
-  // leaving the platform copy running (and billing) cloud turns.
-  //
-  // Skipping a credential already synced ELSEWHERE is the other half: these
-  // survive sign-out (only the device key is deleted), so a sign-in to a
-  // different account would upload the same token into a second org — live
-  // in both, and deletable from only the one you are signed into.
-  const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
-  for (const [name, value, secretName] of [
-    ["claudeOauthToken", storedClaude, "CLAUDE_CODE_OAUTH_TOKEN"],
-    ["codexAuthJson", storedCodex, "CODEX_AUTH_JSON"],
-  ] as const) {
-    if (!value) continue;
-    const meta = await getCloudCredentialMeta(name).catch(() => null);
-    if (foreignToOrg(meta, orgId)) {
-      logMainProcess(
-        `[deus-cloud] ${name} belongs to another account — not syncing it to ${orgId ?? "unknown"}`
-      );
-      continue;
+  const catchUp = (async () => {
+    const [storedClaude, storedCodex] = await Promise.all([
+      getCloudCredential("claudeOauthToken").catch(() => null),
+      getCloudCredential("codexAuthJson").catch(() => null),
+    ]);
+    // Record the sync the same way the connect paths do. Without this a
+    // credential first uploaded HERE never gets the flag, and a later
+    // signed-out disconnect deletes the local copy while reporting success —
+    // leaving the platform copy running (and billing) cloud turns.
+    //
+    // Skipping a credential already synced ELSEWHERE is the other half: these
+    // survive sign-out (only the device key is deleted), so a sign-in to a
+    // different account would upload the same token into a second org — live
+    // in both, and deletable from only the one you are signed into.
+    const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
+    for (const [name, value, secretName] of [
+      ["claudeOauthToken", storedClaude, "CLAUDE_CODE_OAUTH_TOKEN"],
+      ["codexAuthJson", storedCodex, "CODEX_AUTH_JSON"],
+    ] as const) {
+      if (!value) continue;
+      const meta = await getCloudCredentialMeta(name).catch(() => null);
+      if (foreignToOrg(meta, orgId)) {
+        logMainProcess(
+          `[deus-cloud] ${name} belongs to another account — not syncing it to ${orgId ?? "unknown"}`
+        );
+        continue;
+      }
+      // The user can hit Disconnect while this background PUT is in flight;
+      // committing the captured value afterwards would silently resurrect the
+      // credential Disconnect just reported removed. Re-check around the PUT
+      // (disconnect itself awaits this whole catch-up — see
+      // whenCredentialCatchUpSettled — so the pair cannot interleave).
+      if ((await getCloudCredential(name).catch(() => null)) !== value) continue;
+      if (await syncAgentSecretToPlatform(secretName, value)) {
+        if ((await getCloudCredential(name).catch(() => null)) !== value) continue;
+        await setCloudCredential(name, value, {
+          syncedToPlatform: true,
+          ...(orgId ? { syncedOrgId: orgId } : {}),
+        });
+      }
     }
-    if (await syncAgentSecretToPlatform(secretName, value)) {
-      await setCloudCredential(name, value, {
-        syncedToPlatform: true,
-        ...(orgId ? { syncedOrgId: orgId } : {}),
-      });
-    }
-  }
-  await pushCloudCredentialsToBackend();
+    await pushCloudCredentialsToBackend();
+  })();
+  credentialCatchUp = catchUp;
+  await catchUp;
 }
 
 /**
@@ -383,6 +406,12 @@ export function provisionAtStartup(
   // Keep the backend's copy of the session token in step with silent renewals.
   setSessionRefreshedHandler(async () => {
     await pushCloudCredentialsToBackend();
+  });
+  // A rejected refresh is a server-side revocation: retire the device key
+  // locally and push the cleared credentials (no session left to revoke the
+  // platform copy — the dashboard can, and the next sign-in re-mints).
+  setSessionRevokedHandler(async () => {
+    await revokeDeviceKey(null).catch(() => {});
   });
   void (async () => {
     await waitForSafeStorage();

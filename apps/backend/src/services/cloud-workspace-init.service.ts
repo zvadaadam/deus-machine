@@ -289,11 +289,16 @@ export async function getCloudSettingsStatus(): Promise<{
     };
   }
   let hasGithubToken = false;
+  // A second device in the same org may hold NO local Claude token while the
+  // canonical CLAUDE_CODE_OAUTH_TOKEN platform secret exists — the session DO
+  // fills it at dispatch, so turns are runnable and the status must say so.
+  let hasPlatformClaude = false;
   try {
     for await (const secret of agntListSecrets({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     })) {
+      if (secret.keyName === "CLAUDE_CODE_OAUTH_TOKEN") hasPlatformClaude = true;
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
       // short-lived, environment-scoped `github_token` App mints; counting
@@ -311,7 +316,8 @@ export async function getCloudSettingsStatus(): Promise<{
     enabled: true,
     baseUrl: config.baseUrl,
     hasAnthropicKey: Boolean(config.anthropicApiKey),
-    hasTurnCredential: Boolean(config.claudeOauthToken || config.anthropicApiKey),
+    hasTurnCredential:
+      Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
     hasGithubToken,
   };
 }

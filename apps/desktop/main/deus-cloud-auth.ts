@@ -367,6 +367,17 @@ export function setSessionRefreshedHandler(handler: () => void | Promise<void>):
   onSessionRefreshed = handler;
 }
 
+/**
+ * Fired when a refresh is REJECTED (401 — revoked server-side, not expiry).
+ * The session alone signing out while the device key stays live left "signed
+ * out" in the UI with a fully authorized cloud lane underneath.
+ */
+let onSessionRevoked: (() => void | Promise<void>) | null = null;
+
+export function setSessionRevokedHandler(handler: () => void | Promise<void>): void {
+  onSessionRevoked = handler;
+}
+
 /** The replacement token deus-cloud attaches when it fails after rotating. */
 async function readRotatedRefreshToken(response: Response): Promise<string | null> {
   try {
@@ -398,9 +409,11 @@ async function refreshStoredSession(
   });
 
   if (response.status === 401) {
-    // Revoked, expired, or already rotated — the only honest outcome is to
-    // sign out rather than keep a session that cannot be renewed.
+    // Revoked (post-refresh, 401 is never mere expiry) — the only honest
+    // outcome is a FULL local sign-out: session AND device key, or the UI
+    // reads signed-out while cloud sandboxes keep working.
     await clearStoredSession();
+    await onSessionRevoked?.();
     return null;
   }
   if (!response.ok) {

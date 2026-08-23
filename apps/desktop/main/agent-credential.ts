@@ -19,7 +19,11 @@ import {
   setCloudCredential,
   type CloudCredentialName,
 } from "./cloud-credentials";
-import { pushCloudCredentialsToBackend, syncAgentSecretToPlatform } from "./deus-cloud-provision";
+import {
+  pushCloudCredentialsToBackend,
+  syncAgentSecretToPlatform,
+  whenCredentialCatchUpSettled,
+} from "./deus-cloud-provision";
 
 export interface AgentCredentialSpec {
   /** safeStorage vault entry. */
@@ -53,6 +57,9 @@ export async function connectAgentCredential(
  * is "not disconnected", null on success.
  */
 export async function disconnectAgentCredential(spec: AgentCredentialSpec): Promise<string | null> {
+  // Serialize against the post-login catch-up: its in-flight PUT committing
+  // AFTER this delete would silently resurrect the credential.
+  await whenCredentialCatchUpSettled();
   const hasDeviceKey = Boolean(await getCloudCredential("agntApiKey").catch(() => null));
   if (hasDeviceKey) {
     if (!(await syncAgentSecretToPlatform(spec.secretName, null))) {

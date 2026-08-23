@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { apiClient } from "@/shared/api/client";
 import type { SessionPanelRef } from "@/features/session";
 import {
@@ -86,6 +87,11 @@ function SidebarResizeHandle({
 }
 
 export function MainLayout() {
+  // Keep the Deus Cloud auth listener alive for the whole app lifetime.
+  // Owned only by transient consumers (a settings section, an onboarding
+  // step), the device-key-minted broadcast was lost whenever the user
+  // navigated before the background mint finished.
+  useDeusCloudSession();
   // Zustand stores - Global state (ID-only; full object derived from React Query below)
   const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
