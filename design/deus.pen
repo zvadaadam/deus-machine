@@ -10226,7 +10226,7 @@
                   "id": "r4q4J",
                   "name": "50–58 · 60–66 · 70–73",
                   "fill": "$primary",
-                  "content": "47a–e · 50–58 · 60–66 · 70–73 · 80",
+                  "content": "47a–f · 50–58 · 60–66 · 70–73 · 80",
                   "fontFamily": "$font-mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -11202,6 +11202,266 @@
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "initializing",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JsKRY",
+              "name": "cloud setup failed",
+              "width": "fill_container",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ABAPB",
+                  "name": "Row",
+                  "width": 244,
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "s2pHa",
+                      "name": "Main",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "cpy4R",
+                          "name": "Glyph",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "git-branch",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "eWZpy",
+                          "name": "europa",
+                          "fill": "$text-tertiary",
+                          "content": "europa",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal",
+                          "letterSpacing": -0.14
+                        },
+                        {
+                          "type": "icon",
+                          "id": "HlPgj",
+                          "name": "cloud",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "cloud",
+                          "library": "lucide",
+                          "fill": "$text-disabled"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "dUrry",
+                      "name": "Meta",
+                      "fill": "$accent-red-muted",
+                      "content": "Cloud setup failed",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "A7Ks50",
+                  "name": "Label",
+                  "fill": "$text-disabled",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "state = error · cloud, still provisioning",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LAOPi",
+              "name": "sandbox failed",
+              "width": "fill_container",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "J9cvY5",
+                  "name": "Row",
+                  "width": 244,
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Z6z8f",
+                      "name": "Main",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "svZ1Y",
+                          "name": "Glyph",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "git-branch",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "d4USwG",
+                          "name": "aquila",
+                          "fill": "$text-tertiary",
+                          "content": "aquila",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal",
+                          "letterSpacing": -0.14
+                        },
+                        {
+                          "type": "icon",
+                          "id": "lJrHj",
+                          "name": "cloud",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "cloud",
+                          "library": "lucide",
+                          "fill": "$text-disabled"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "Ha0ZV",
+                      "name": "Meta",
+                      "fill": "$accent-red-muted",
+                      "content": "Sandbox failed",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "MyZeY",
+                  "name": "Label",
+                  "fill": "$text-disabled",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "state = error · cloud sandbox died later",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "aJr37",
+              "name": "failed",
+              "width": "fill_container",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "O1cbSj",
+                  "name": "Row",
+                  "width": 244,
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "f1UCl8",
+                      "name": "Main",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "fPfyi",
+                          "name": "Glyph",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "git-branch",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "XuunZ",
+                          "name": "orion",
+                          "fill": "$text-tertiary",
+                          "content": "orion",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal",
+                          "letterSpacing": -0.14
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SeHwg",
+                      "name": "Meta",
+                      "fill": "$accent-red-muted",
+                      "content": "Failed",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "r9YEz",
+                  "name": "Label",
+                  "fill": "$text-disabled",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "state = error · local worktree",
                   "fontFamily": "$font-sans",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -19913,7 +20173,7 @@
                       "id": "s32NEC",
                       "name": "1",
                       "fill": "$text-disabled",
-                      "content": "1",
+                      "content": "01",
                       "fontFamily": "$font-mono",
                       "fontSize": "$text-xs",
                       "fontWeight": "500"
@@ -19942,7 +20202,7 @@
                       "id": "XxhN1",
                       "name": "2",
                       "fill": "$text-disabled",
-                      "content": "2",
+                      "content": "02",
                       "fontFamily": "$font-mono",
                       "fontSize": "$text-xs",
                       "fontWeight": "500"
@@ -19971,7 +20231,7 @@
                       "id": "PzG0i",
                       "name": "3",
                       "fill": "$text-disabled",
-                      "content": "3",
+                      "content": "03",
                       "fontFamily": "$font-mono",
                       "fontSize": "$text-xs",
                       "fontWeight": "500"
@@ -20000,7 +20260,7 @@
                       "id": "O7DCES",
                       "name": "4",
                       "fill": "$text-disabled",
-                      "content": "4",
+                      "content": "04",
                       "fontFamily": "$font-mono",
                       "fontSize": "$text-xs",
                       "fontWeight": "500"
@@ -20192,6 +20452,195 @@
           "name": "SubagentGroupBlock · nested tool rows indent",
           "fill": "$text-disabled",
           "content": "SubagentGroupBlock · nested tool rows indent by 24",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-2xs",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "SHKyc",
+          "x": 620,
+          "y": 650,
+          "name": "Chat empty state — failed",
+          "width": 400,
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            40,
+            0
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Rxwrd",
+              "name": "Head",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "O66pj",
+                  "name": "WORKSPACE SETUP FAILED",
+                  "fill": "$text-muted",
+                  "content": "WORKSPACE SETUP FAILED",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "600",
+                  "letterSpacing": 0.66
+                },
+                {
+                  "type": "text",
+                  "id": "d6DA1",
+                  "name": "failure message",
+                  "fill": "$accent-red-muted",
+                  "content": "Sandbox provisioning timed out after 180s",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "oOAcX",
+              "name": "Steps",
+              "gap": 24,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "MrKeD",
+                  "name": "Worktree",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "xEitK",
+                      "name": "1",
+                      "fill": "$text-disabled",
+                      "content": "01",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Ga5lX",
+                      "name": "Worktree",
+                      "fill": "$text-muted",
+                      "content": "Worktree",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "rxGEL",
+                  "name": "Dependencies",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ChW14",
+                      "name": "2",
+                      "fill": "$text-disabled",
+                      "content": "02",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Tz4Mc",
+                      "name": "Dependencies",
+                      "fill": "$text-muted",
+                      "content": "Dependencies",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "fflNE",
+                  "name": "Hooks",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lf8Rk",
+                      "name": "3",
+                      "fill": "$text-disabled",
+                      "content": "03",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "tv2V0",
+                      "name": "Hooks",
+                      "fill": "$text-muted",
+                      "content": "Hooks",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "v6xUsC",
+                  "name": "Session",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "IME1w",
+                      "name": "4",
+                      "fill": "$text-disabled",
+                      "content": "04",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "JansQ",
+                      "name": "Session",
+                      "fill": "$text-muted",
+                      "content": "Session",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "obtlM",
+          "x": 620,
+          "y": 760,
+          "name": "WorkspaceEmptyState failed",
+          "fill": "$text-disabled",
+          "textGrowth": "fixed-width",
+          "width": 440,
+          "content": "WorkspaceEmptyState failed=true · the panel must agree with the red sidebar row — error_message, or a fallback",
+          "lineHeight": 1.5,
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -24445,7 +24894,7 @@
                             {
                               "type": "frame",
                               "id": "R54ZA",
-                              "name": "Signed in",
+                              "name": "Adam Zvada",
                               "width": "fill_container",
                               "gap": 12,
                               "children": [
@@ -24461,21 +24910,21 @@
                                   "alignItems": "center",
                                   "children": [
                                     {
-                                      "type": "icon",
-                                      "id": "LzPvS",
-                                      "name": "i",
-                                      "width": 20,
-                                      "height": 20,
-                                      "icon": "cloud",
-                                      "library": "lucide",
-                                      "fill": "$text-muted"
+                                      "type": "text",
+                                      "id": "rOewh",
+                                      "name": "AZ",
+                                      "fill": "$text-primary",
+                                      "content": "AZ",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "600"
                                     }
                                   ]
                                 },
                                 {
                                   "type": "frame",
                                   "id": "U6mhmW",
-                                  "name": "Signed in",
+                                  "name": "Adam Zvada",
                                   "width": "fill_container",
                                   "layout": "vertical",
                                   "gap": 4,
@@ -24490,9 +24939,9 @@
                                         {
                                           "type": "text",
                                           "id": "flLSR",
-                                          "name": "Signed in",
+                                          "name": "Adam Zvada",
                                           "fill": "$text-primary",
-                                          "content": "Signed in",
+                                          "content": "Adam Zvada",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
@@ -24512,10 +24961,10 @@
                                     {
                                       "type": "text",
                                       "id": "nTOIx",
-                                      "name": "acct",
+                                      "name": "email",
                                       "fill": "$text-muted",
-                                      "content": "acct_9f2b1c…7ad3e1",
-                                      "fontFamily": "$font-mono",
+                                      "content": "adam@deusmachine.ai",
+                                      "fontFamily": "$font-sans",
                                       "fontSize": "$text-sm",
                                       "fontWeight": "normal"
                                     }
@@ -24532,50 +24981,37 @@
                               "theme": {
                                 "mode": "dark"
                               },
-                              "descendants": {
-                                "kB8v8": {
-                                  "content": "Sign out",
-                                  "fontSize": 11
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "Zpw30",
+                                  "name": "Content",
+                                  "gap": 6,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "WyqUH",
+                                      "name": "log-out",
+                                      "width": 14,
+                                      "height": 14,
+                                      "icon": "log-out",
+                                      "library": "lucide",
+                                      "fill": "$text-secondary"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "e3aGoJ",
+                                      "name": "Label",
+                                      "fill": "$text-secondary",
+                                      "content": "Sign out",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
                                 }
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "type": "rectangle",
-                          "id": "n2vK8v",
-                          "name": "Divider",
-                          "fill": "$border-subtle",
-                          "width": "fill_container",
-                          "height": 1
-                        },
-                        {
-                          "type": "frame",
-                          "id": "eKwkk",
-                          "name": "Session",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 4,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "e4hk4U",
-                              "name": "Session",
-                              "fill": "$text-secondary",
-                              "content": "Session",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            },
-                            {
-                              "type": "text",
-                              "id": "kBXAY",
-                              "name": "Expires in 23h",
-                              "fill": "$text-muted",
-                              "content": "Expires in 23h",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
+                              ]
                             }
                           ]
                         }
@@ -25432,6 +25868,103 @@
                                       "fontSize": 11
                                     }
                                   }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "j2ALzn",
+                          "name": "Deus GitHub App",
+                          "width": "fill_container",
+                          "cornerRadius": "$radius-lg",
+                          "stroke": "$border-subtle",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "gap": 16,
+                          "padding": [
+                            12,
+                            16
+                          ],
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "cRB6D",
+                              "name": "Text",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Su3A3",
+                                  "name": "Deus GitHub App",
+                                  "fill": "$text-primary",
+                                  "content": "Deus GitHub App",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "p1oJ3M",
+                                  "name": "Installed for zvadaadam — cloud workspaces get",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Installed for zvadaadam — cloud workspaces get server-minted, single-repo tokens. Repo selection lives on GitHub.",
+                                  "lineHeight": 1.5,
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "SqHnk",
+                              "name": "Actions",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ewY1R",
+                                  "name": "Installed ✓",
+                                  "fill": "$accent-green",
+                                  "content": "Installed ✓",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "jraMf",
+                                  "name": "Manage repos ↗",
+                                  "cornerRadius": "$radius-md",
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": 1,
+                                  "strokeAlignment": "inner",
+                                  "padding": [
+                                    4,
+                                    10
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "EZuvZ",
+                                      "name": "Label",
+                                      "fill": "$text-primary",
+                                      "content": "Manage repos ↗",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 }
                               ]
                             }
@@ -29704,6 +30237,227 @@
                                   "icon": "chevron-down",
                                   "library": "lucide",
                                   "fill": "$text-muted"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "coCe0",
+                          "name": "Cloud environment",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "JMdmS",
+                              "name": "Card (dashed — not configured)",
+                              "width": "fill_container",
+                              "cornerRadius": "$radius-lg",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": 1,
+                              "strokeAlignment": "inner",
+                              "gap": 12,
+                              "padding": 16,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "CXHA6",
+                                  "name": "cloud",
+                                  "width": 20,
+                                  "height": 20,
+                                  "icon": "cloud",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "Lf3bs",
+                                  "name": "Text",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "xtsD9",
+                                      "name": "Cloud environment",
+                                      "fill": "$text-primary",
+                                      "content": "Cloud environment",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "NwEhu",
+                                      "name": "An agent onboards the codebase in a sandbox",
+                                      "fill": "$text-muted",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "An agent onboards the codebase in a sandbox — installs dependencies, verifies the setup, and saves the recipe so future cloud workspaces start ready. Take over in the workspace anytime.",
+                                      "lineHeight": 1.5,
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-base",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "id": "RvgUO",
+                                  "type": "ref",
+                                  "ref": "rg2x2",
+                                  "name": "Set up with agent",
+                                  "height": 32,
+                                  "theme": {
+                                    "mode": "dark"
+                                  },
+                                  "descendants": {
+                                    "z4bI4": {
+                                      "type": "frame",
+                                      "id": "wNhai",
+                                      "name": "Content",
+                                      "gap": 6,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "icon",
+                                          "id": "FkDBy",
+                                          "name": "bot",
+                                          "width": 14,
+                                          "height": 14,
+                                          "icon": "bot",
+                                          "library": "lucide",
+                                          "fill": "$primary-foreground"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "M4lXCu",
+                                          "name": "Label",
+                                          "fill": "$primary-foreground",
+                                          "content": "Set up with agent",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": 11,
+                                          "fontWeight": "500"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "tGAxr",
+                              "name": "Cloud environments on your org",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "p4DuM",
+                                  "name": "Label",
+                                  "width": "fill_container",
+                                  "padding": [
+                                    0,
+                                    0,
+                                    4,
+                                    0
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "J5dBTr",
+                                      "name": "Cloud environments on your org",
+                                      "fill": "$text-muted",
+                                      "content": "Cloud environments on your org",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "lBCCA",
+                                  "name": "zvadaadam/deus-machine",
+                                  "width": "fill_container",
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": {
+                                    "bottom": 1
+                                  },
+                                  "strokeAlignment": "inner",
+                                  "gap": 12,
+                                  "padding": [
+                                    8,
+                                    0
+                                  ],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "P00BYK",
+                                      "name": "repo",
+                                      "fill": "$text-secondary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "zvadaadam/deus-machine",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "nld8o",
+                                      "name": "date",
+                                      "fill": "$text-muted",
+                                      "content": "8/21/2026",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "nqMxy",
+                                  "name": "zvadaadam/agent-server",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "padding": [
+                                    8,
+                                    0
+                                  ],
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "s2OEZE",
+                                      "name": "repo",
+                                      "fill": "$text-secondary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "zvadaadam/agent-server",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "Hw7Yq",
+                                      "name": "date",
+                                      "fill": "$text-muted",
+                                      "content": "8/14/2026",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 }
                               ]
                             }

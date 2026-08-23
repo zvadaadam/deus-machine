@@ -30,10 +30,13 @@ the canvas — read left to right, top to bottom.
 
 - `40` Workspace — Changes · `41` Files · `42` Terminal · `43` Browser · `44` Design
 - `45` Home — new workspace · `46` Home — zero repos
-- `47a`…`47e` the full onboarding flow, in order: Welcome · Connect GitHub · AI coding
-  tools · Your Projects · Shape Deus with us. It has its own visual language — pure black,
-  a grain layer, white-on-white/10 surfaces, `text-white/50` copy — and does **not** use
-  the app tokens. Don't "fix" it to match the rest.
+- `47a`…`47f` the full onboarding flow, in order: Welcome · Deus Cloud sign-in · Connect
+  GitHub · AI coding tools · Your Projects · Shape Deus with us. It has its own visual
+  language — pure black, a grain layer, white-on-white/10 surfaces, `text-white/50` copy —
+  and does **not** use the app tokens. Don't "fix" it to match the rest.
+  `StepIndicator` sits **above** the card (`pb-6`), not at the bottom of the screen, and
+  step 0 doesn't render it at all. The active pip is `w-6`, steps already passed are
+  `w-1.5 bg-white/50`, and the ones still ahead `w-1.5 bg-white/20` — three states, not two.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environment · `57` Experimental · `58` Remote Access
@@ -276,6 +279,17 @@ in step with it:
 - **The header Open button is an outlined split button**, not a filled pill: a bordered
   `h-7` container, quick-open on the left, a 1px divider, and a chevron on the right.
 - The Changes review CTA reads **"Review Changes"** with the file count after it.
+- **Cloud setup counts three steps, and two of them tick on less than they look like.**
+  Codex is listed under Agents but is deliberately _not_ counted — the cloud lane only
+  ships Claude credentials, so a Codex-only setup must not tick that step. And an
+  installed GitHub App only satisfies the repo step when it covers **every** local repo;
+  with one repo missing the step stays open and the header still reads `1/3`, which is
+  why board `55` is drawn that way. Each agent and GitHub row is an accordion — one open
+  at a time, chevron rotated 180° when it is.
+- **A failed workspace stays in the sidebar.** `SIDEBAR_WORKSPACE_STATE` includes `error`
+  precisely so the failure is visible, so the row needs a reason in the meta cell, not a
+  red dot: `Cloud setup failed` while provisioning, `Sandbox failed` once it was up,
+  plain `Failed` for a local worktree — all `text-accent-red-muted`, all on board `30`.
 
 Motion values (curves, durations, press scales) are plotted on board `02`; overlay opacities
 and focus-ring rules on board `05`. Both are read straight out of `global.css` and the

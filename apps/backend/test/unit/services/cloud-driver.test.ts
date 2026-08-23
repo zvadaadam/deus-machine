@@ -33,6 +33,7 @@ vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
 }));
 
 vi.mock("../../../src/services/agent/cloud/config", () => ({
+  setCloudIdentityChangedHandler: vi.fn(),
   getCloudConfig: () => ({
     baseUrl: "http://agnt.test",
     apiKey: "agnt_sk_test_x",
