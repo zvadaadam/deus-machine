@@ -14,11 +14,13 @@
 
 import {
   deleteCloudCredential,
+  foreignToOrg,
   getCloudCredential,
   getCloudCredentialMeta,
   setCloudCredential,
   type CloudCredentialName,
 } from "./cloud-credentials";
+import { logMainProcess } from "./startup-diagnostics";
 import {
   pushCloudCredentialsToBackend,
   syncAgentSecretToPlatform,
@@ -41,8 +43,19 @@ export async function connectAgentCredential(
   spec: AgentCredentialSpec,
   value: string
 ): Promise<void> {
-  await setCloudCredential(spec.vaultName, value);
   const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
+  const prior = await getCloudCredentialMeta(spec.vaultName).catch(() => null);
+  if (foreignToOrg(prior, orgId)) {
+    // An EXPLICIT save under a new account is deliberate adoption — unlike
+    // the background catch-up, it must not be blocked. But overwriting the
+    // stamp orphans the other org's platform copy (only that account's
+    // session or dashboard can delete it), so the hand-off is logged rather
+    // than silent.
+    logMainProcess(
+      `[deus-cloud] ${spec.vaultName} was synced to org ${prior?.syncedOrgId} — adopting into ${orgId}; the old platform copy needs that account to remove`
+    );
+  }
+  await setCloudCredential(spec.vaultName, value);
   if (await syncAgentSecretToPlatform(spec.secretName, value)) {
     await setCloudCredential(spec.vaultName, value, {
       syncedToPlatform: true,
