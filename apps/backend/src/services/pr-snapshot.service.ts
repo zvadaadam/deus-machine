@@ -14,7 +14,7 @@
  */
 import { getDatabase } from "../lib/database";
 import { getPrStatus, getPrStatusForRemoteBranch, type PrStatusResponse } from "./gh.service";
-import { httpsOrigin } from "./cloud-workspace-init.service";
+import { httpsOrigin } from "@shared/git-origin";
 import { getRepositoryById } from "../db";
 import { getSessionById, getWorkspaceById } from "../db/queries";
 import { computeWorkspacePath } from "../middleware/workspace-loader";

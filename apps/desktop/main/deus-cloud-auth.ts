@@ -148,13 +148,6 @@ async function enrichWithCredentialStatus(
   };
 }
 
-/**
- * The loopback page the browser lands on after WorkOS redirects back. It is
- * the last thing a user sees during sign-in, and a bare Times New Roman
- * sentence on 127.0.0.1 reads like something broke. Self-contained (no
- * network, no assets — this server dies seconds later) and dark-first, since
- * it is only ever shown for a moment before focus returns to the app.
- */
 /** Bring the Deus window to the front (post-sign-in, from the loopback server). */
 function focusMainWindow(): void {
   try {
@@ -170,6 +163,13 @@ function focusMainWindow(): void {
   }
 }
 
+/**
+ * The loopback page the browser lands on after WorkOS redirects back. It is
+ * the last thing a user sees during sign-in, and a bare Times New Roman
+ * sentence on 127.0.0.1 reads like something broke. Self-contained (no
+ * network, no assets — this server dies seconds later) and dark-first, since
+ * it is only ever shown for a moment before focus returns to the app.
+ */
 function respondHtml(res: ServerResponse, status: number, message: string, ok = false): void {
   res.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
@@ -409,7 +409,7 @@ async function refreshStoredSession(
     // body for exactly this case — persist it, or the next retry presents a
     // token that can never succeed and the user is forced to sign in again.
     const rotated = await readRotatedRefreshToken(response);
-    if (rotated) {
+    if (rotated && !signOutInProgress) {
       await writeStoredSession({
         ...stored,
         encryptedRefreshToken: encryptSessionToken(rotated),
@@ -510,10 +510,16 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
 }
 
 async function writeStoredSession(session: StoredDeusCloudSession): Promise<void> {
-  // The floor belongs to the token that was refreshed, not to the process: a
-  // fresh sign-in (or a rotation) must be free to renew immediately.
+  // Live for the SIGN-IN caller only: a fresh sign-in must be free to renew
+  // immediately even if a refresh ran seconds before sign-out. For the
+  // refresh caller this is a no-op — its .finally overwrites the floor.
   lastRefreshAt = 0;
   await writeJsonFile(getSessionFilePath(), session);
+}
+
+/** Whether a session file exists at all — plain file read, NO keyring contact. */
+export async function hasStoredSessionFile(): Promise<boolean> {
+  return (await readJsonFile<{ version?: number }>(getSessionFilePath())) !== null;
 }
 
 async function clearStoredSession(): Promise<void> {
@@ -687,27 +693,35 @@ export async function getStoredDeusCloudSessionToken(): Promise<string | null> {
 }
 
 export async function signOutDeusCloud(): Promise<DeusCloudAuthResult> {
+  // Read the token BEFORE the flag goes up: refreshStoredSession's guard
+  // returns null while it is set, and an EXPIRED session (the common
+  // opened-after-a-day case) must refresh to yield a token at all — so
+  // reading inside would hand the revoke below nothing, deleting the key
+  // locally while leaving it alive on the platform forever.
+  const sessionToken = await getStoredDeusCloudSessionToken().catch(() => null);
   signOutInProgress = true;
   try {
-    return await performSignOut();
+    return await performSignOut(sessionToken);
   } finally {
     signOutInProgress = false;
   }
 }
 
-async function performSignOut(): Promise<DeusCloudAuthResult> {
+async function performSignOut(sessionToken: string | null): Promise<DeusCloudAuthResult> {
   loginGeneration += 1;
   const pending = pendingLogin;
   if (pending) {
     finishPendingLogin(new Error("Deus Cloud sign-in was cancelled"), undefined, pending);
   }
 
-  // Revoke THIS device's platform key while the session can still authorize
-  // it; local deletion inside also locks the device out even when offline.
-  const sessionToken = await getStoredDeusCloudSessionToken().catch(() => null);
+  // Session file first: revokeDeviceKey ends with a credentials push to the
+  // backend, and that push must read an EMPTY session — not hand the backend
+  // a live token for the account the user just left.
+  await clearStoredSession();
+  // Revoke THIS device's platform key with the token captured above; local
+  // deletion inside also locks the device out even when offline.
   await revokeDeviceKey(sessionToken).catch(() => {});
 
-  await clearStoredSession();
   const session = await getDeusCloudSessionStatus();
   broadcastAuthChanged(session);
   return { success: true, session };

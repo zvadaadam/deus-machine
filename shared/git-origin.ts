@@ -7,7 +7,15 @@
  * was uncovered — and asked for a PAT — for origins the backend handled fine.
  */
 
-/** Normalize scp-style and ssh:// git remotes to their https form. */
+/**
+ * Normalize scp-style and ssh:// git remotes to their https form.
+ *
+ * Sandboxes carry no ssh keys — https clones work anonymously for public
+ * repos and via the org's `github_token` secret for private ones (agnt's
+ * git-auth step writes https credentials and already rewrites ssh→https,
+ * but only WHEN a token exists; normalizing here makes public ssh-origin
+ * repos work with no token at all).
+ */
 export function httpsOrigin(url: string): string {
   const scp = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(url);
   if (scp) return `https://${scp[1]}/${scp[2]}`;

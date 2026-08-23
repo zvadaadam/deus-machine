@@ -73,11 +73,12 @@ async function statusResult(error?: string): Promise<ClaudeSubscriptionResult> {
 async function storeToken(token: string): Promise<ClaudeSubscriptionResult> {
   await setCloudCredential("claudeOauthToken", token);
   // Local vault = cache; the platform secret is canonical (phone/Mac-off).
+  // Read the owning org BEFORE the write: a sign-out landing during the PUT
+  // deletes the device key, and stamping syncedToPlatform WITHOUT the org
+  // would let the catch-up path upload this token into the next account.
+  const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
   const synced = await syncClaudeTokenToPlatform(token);
   if (synced) {
-    // Stamp the owning org: the catch-up path uses it to refuse uploading
-    // this token into a second account's org.
-    const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
     await setCloudCredential("claudeOauthToken", token, {
       syncedToPlatform: true,
       ...(orgId ? { syncedOrgId: orgId } : {}),

@@ -103,7 +103,7 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
  *  stack from these; nothing is persisted and a refresh clears them.
  *  Validated at this seam — a malformed platform frame is dropped here, not
  *  shipped to the UI (the workspace-row update has its own tolerance).
- *  Exported so routes (cloud-wake) can announce synthetic states — e.g. the
+ *  Exported so the wake path (cloud-workspace-init) can announce synthetic states — e.g. the
  *  optimistic "resuming" line — through the same pipe as real frames. */
 export function announceCloudEnv(workspaceId: string, sessionId: string, data: unknown): void {
   const parsed = CloudEnvStateSchema.safeParse(data);

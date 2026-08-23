@@ -84,6 +84,11 @@ export async function setCloudCredential(
 ): Promise<void> {
   const store = await readStore();
   store.entries[name] = {
+    // Carry meta the caller did not restate: a value-only rewrite (re-pasting
+    // a token while signed out) must NOT wipe syncedToPlatform/syncedOrgId —
+    // the platform still holds the OLD copy under this name, and disconnect
+    // relies on those flags to refuse a false "disconnected".
+    ...store.entries[name],
     encryptedValue: encryptSecret(value),
     createdAt: new Date().toISOString(),
     ...meta,

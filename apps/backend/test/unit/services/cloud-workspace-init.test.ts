@@ -2,7 +2,7 @@
 // locally-cloned repos) carry no usable credentials in a sandbox.
 
 import { describe, expect, it } from "vitest";
-import { githubRepoSlug, httpsOrigin } from "../../../src/services/cloud-workspace-init.service";
+import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 
 describe("httpsOrigin", () => {
   it("converts scp-style ssh origins", () => {

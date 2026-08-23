@@ -13,7 +13,7 @@ import {
   listEnvironments as agntListEnvironments,
 } from "@deus-hq/sdk";
 import { getCloudConfig } from "./agent/cloud/config";
-import { httpsOrigin } from "./cloud-workspace-init.service";
+import { httpsOrigin } from "@shared/git-origin";
 
 /**
  * Deterministic org-unique environment name for a repository — MUST match

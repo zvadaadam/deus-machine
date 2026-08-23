@@ -15,7 +15,11 @@ import {
   getCloudCredentialMeta,
   setCloudCredential,
 } from "./cloud-credentials";
-import { getStoredDeusCloudSessionToken, setSessionRefreshedHandler } from "./deus-cloud-auth";
+import {
+  getStoredDeusCloudSessionToken,
+  hasStoredSessionFile,
+  setSessionRefreshedHandler,
+} from "./deus-cloud-auth";
 import { AGNT_LOCAL_URL, isLocalCloudEnv, resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { logMainProcess } from "./startup-diagnostics";
 
@@ -26,7 +30,7 @@ import { logMainProcess } from "./startup-diagnostics";
  */
 let platformKeyError: string | null = null;
 
-export function setPlatformKeyError(message: string | null): void {
+function setPlatformKeyError(message: string | null): void {
   platformKeyError = message;
 }
 
@@ -147,12 +151,20 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
     return false;
   }
 
-  const [apiKey, claudeOauthToken, sessionToken, keyMeta] = await Promise.all([
+  const [apiKey, claudeOauthToken, sessionToken, keyMeta, claudeMeta] = await Promise.all([
     getCloudCredential("agntApiKey"),
     getCloudCredential("claudeOauthToken"),
     getStoredDeusCloudSessionToken().catch(() => null),
     getCloudCredentialMeta("agntApiKey").catch(() => null),
+    getCloudCredentialMeta("claudeOauthToken").catch(() => null),
   ]);
+  // Same ownership rule as the catch-up sync: a token stamped for ANOTHER
+  // account's org must not run this org's turns. Without this, the sync
+  // guard refused to store the credential in org B — and this push then
+  // handed the same token to the backend, which sent it on every turn.
+  const orgId = keyMeta?.orgId ?? null;
+  const claudeForThisOrg =
+    claudeMeta?.syncedOrgId && claudeMeta.syncedOrgId !== orgId ? null : claudeOauthToken;
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
@@ -164,13 +176,13 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
       signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
       body: JSON.stringify({
         apiKey: apiKey ?? null,
-        claudeOauthToken: claudeOauthToken ?? null,
+        claudeOauthToken: claudeForThisOrg ?? null,
         // deus-cloud mint context: lets the backend request per-repo GitHub
         // App installation tokens at workspace-provision time. Session-token
         // auth — expiry just disables the mint until the next push.
         deusCloudUrl: resolveDeusCloudUrl(),
         deusCloudSessionToken: sessionToken,
-        orgId: keyMeta?.orgId ?? null,
+        orgId,
       }),
     });
     return response.ok;
@@ -179,11 +191,6 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
   }
 }
 
-/**
- * Ensure this device holds a platform key for the signed-in account. Idempotent:
- * an existing stored key wins (revocation is handled by the 401 path — agnt
- * rejects a revoked key and Settings offers re-provisioning via sign-in).
- */
 /**
  * Cheapest authenticated probe agnt offers (metadata only, never values).
  * ONLY an explicit 401/403 counts as revoked — a timeout or an offline
@@ -201,6 +208,9 @@ async function deviceKeyStillValid(apiKey: string): Promise<boolean> {
   }
 }
 
+/**
+ * Ensure this device holds a platform key for the signed-in account. Idempotent:
+ */
 export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): Promise<boolean> {
   const existing = await getCloudCredential("agntApiKey");
   if (existing && (await deviceKeyStillValid(existing))) {
@@ -341,7 +351,10 @@ async function waitForSafeStorage(): Promise<boolean> {
   // install never probes the keyring at startup: on macOS that probe is a
   // synchronous Keychain call on the main thread, and with no keychain
   // unlocked it blocks everything behind it — window creation included.
-  if (!(await hasStoredCredentials())) return true;
+  // The session file lives OUTSIDE the credentials vault, and it is exactly
+  // what exists when a prior mint failed: skipping the wait then reads a
+  // null session and never provisions after the keyring opens.
+  if (!(await hasStoredCredentials()) && !(await hasStoredSessionFile())) return true;
   const deadline = Date.now() + SAFE_STORAGE_WAIT_MS;
   while (!isSafeStorageAvailable()) {
     if (Date.now() >= deadline) {
@@ -397,6 +410,5 @@ export async function revokeDeviceKey(sessionToken: string | null): Promise<void
     }
   }
   await deleteCloudCredential("agntApiKey");
-  delete process.env.DEUS_CLOUD_AGNT_API_KEY;
   await pushCloudCredentialsToBackend();
 }

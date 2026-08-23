@@ -476,6 +476,10 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       // a snapshot lands, so after a backend restart it reads NULL for a
       // sandbox that is genuinely asleep. No open channel = state unknown =
       // refresh. On a live sandbox this stays off the hot path.
+      //
+      // ENVIRONMENT lane only: inline workspaces baked their mint into the
+      // DO's secret map at create time and no wake path can rewrite it — see
+      // refreshWorkspaceGithubToken. This does NOT cover them.
       if (
         !hasLiveCloudSession(sessionId) ||
         workspace?.init_stage === "paused" ||

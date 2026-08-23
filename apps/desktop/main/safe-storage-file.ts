@@ -16,7 +16,7 @@ export function isSafeStorageAvailable(): boolean {
   return safeStorage.isEncryptionAvailable();
 }
 
-export function requireSafeStorage(): void {
+function requireSafeStorage(): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("Secure credential storage is unavailable on this device");
   }
