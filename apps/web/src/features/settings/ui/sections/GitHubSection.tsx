@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { githubAppBlockedLabel } from "../../lib/github-app-label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 import {
@@ -371,26 +372,16 @@ function GithubAppCard() {
             // The install completes out-of-band in the browser, so nothing
             // else invalidates this card — refetch when focus returns instead
             // of leaving it on "Not installed" until the settings remount.
-            const refresh = () => {
-              void state.refetch();
-              window.removeEventListener("focus", refresh);
-            };
-            window.addEventListener("focus", refresh);
+            // {once:true}: if Settings closes before focus returns, the
+            // listener must not outlive the component and poke a dead query.
+            window.addEventListener("focus", () => void state.refetch(), { once: true });
           }}
         >
           Install
         </Button>
       ) : (
         <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
-          {/* "Not configured" has three causes and they need different next
-              steps. Saying "awaiting App registration" to a signed-out user
-              claims the App does not exist when it does — and points them at
-              something only the Deus team can do. */}
-          {!data?.signedIn
-            ? "Sign in to Deus Cloud first"
-            : data.error === "offline"
-              ? "Can't reach Deus Cloud"
-              : "Awaiting App registration"}
+          {githubAppBlockedLabel(data)}
         </span>
       )}
     </div>

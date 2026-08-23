@@ -85,6 +85,9 @@ export function CloudEnvironmentBlock({
                 }.`
               : "An agent onboards the codebase in a sandbox — installs dependencies, verifies the setup, and saves the recipe so future cloud workspaces start ready. Take over in the workspace anytime."}
           </p>
+          {cloudBlockedReason && (
+            <p className="text-text-muted mt-1 text-xs">{cloudBlockedReason}</p>
+          )}
         </div>
         {repoId && (
           <Button
@@ -92,9 +95,10 @@ export function CloudEnvironmentBlock({
             variant={configured ? "outline" : "default"}
             className="shrink-0"
             // Setup provisions a real cloud workspace, so without the lane it
-            // can only end in an error — say why instead of failing later.
+            // can only end in an error. The reason renders as visible text
+            // below — a `title` on a disabled button never shows, since the
+            // shared Button sets disabled:pointer-events-none.
             disabled={cloudBlockedReason !== null}
-            title={cloudBlockedReason ?? undefined}
             onClick={() => requestEnvSetup(repoId)}
           >
             <Bot className="mr-1.5 h-3.5 w-3.5" />

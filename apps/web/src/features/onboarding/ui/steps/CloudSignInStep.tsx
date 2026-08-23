@@ -1,8 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Cloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { getSession, startLogin } from "@/platform/native/deus-cloud";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { startLogin } from "@/platform/native/deus-cloud";
 
 interface CloudSignInStepProps {
   onNext: () => void;
@@ -33,12 +34,7 @@ function initialsFrom(name?: string | null, email?: string | null): string {
 export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
   const queryClient = useQueryClient();
 
-  const session = useQuery({
-    queryKey: queryKeys.deusCloud.session,
-    queryFn: getSession,
-    staleTime: 30_000,
-    retry: false,
-  });
+  const session = useDeusCloudSession();
 
   const signIn = useMutation({
     mutationFn: startLogin,
@@ -108,12 +104,15 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
           Back
         </button>
         <div className="flex-1" />
-        <button
-          onClick={onNext}
-          className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
-        >
-          Skip
-        </button>
+        {/* Skip is meaningless once signed in — one primary action, not two. */}
+        {!signedIn && (
+          <button
+            onClick={onNext}
+            className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
+          >
+            Skip
+          </button>
+        )}
         {signedIn && (
           <button
             onClick={onNext}

@@ -193,7 +193,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       aria-current={isActive ? "page" : undefined}
       aria-label={`Workspace ${displayName}`}
       aria-busy={isInitializing || undefined}
-      title={secondaryText ?? undefined}
+      // A failed row's hover should say WHY — the red state without the
+      // stored error_message reads as "the agent errored".
+      title={(isFailed ? (workspace.error_message ?? secondaryText) : secondaryText) ?? undefined}
       onClick={isInitializing ? undefined : () => onClick(workspace)}
       onMouseEnter={
         isInitializing

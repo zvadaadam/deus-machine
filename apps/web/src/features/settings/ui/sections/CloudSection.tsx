@@ -6,11 +6,13 @@ import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { useRepos } from "@/features/repository";
+import { githubAppBlockedLabel } from "../../lib/github-app-label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import {
-  getSession as getDeusCloudSession,
   retryProvision,
   type ClaudeSubscriptionState,
   disconnectClaudeSubscription,
@@ -128,12 +130,10 @@ export function CloudSection() {
       toast.error(err instanceof Error ? err.message : "Subscription action failed"),
   });
 
-  const localRepos = useQuery({
-    queryKey: ["repos"],
-    queryFn: () => apiClient.get<Array<{ id: string; git_origin_url: string | null }>>("/repos"),
-    staleTime: 60_000,
-    retry: false,
-  });
+  // useRepos, not a local query: an inline ["repos"] key collided with
+  // queryKeys.repos.all — same cache entry, different transport and
+  // staleTime, last observer wins.
+  const localRepos = useRepos();
 
   const githubApp = useQuery({
     queryKey: ["settings", "github-app"],
@@ -142,15 +142,7 @@ export function CloudSection() {
     retry: false,
   });
 
-  // Same key AccountSection uses, so signing in/out there refreshes this
-  // section too — a private key here would keep showing a stale session
-  // (and a stale "setup didn't finish" banner) until the settings remount.
-  const session = useQuery({
-    queryKey: queryKeys.deusCloud.session,
-    queryFn: getDeusCloudSession,
-    staleTime: 30_000,
-    retry: false,
-  });
+  const session = useDeusCloudSession();
 
   const retry = useMutation({
     mutationFn: async () => {
@@ -186,6 +178,11 @@ export function CloudSection() {
 
   const s = status.data;
 
+  // ONE derivation for the header counter and the step tick — they were
+  // written twice and disagreed about Codex (which the cloud lane cannot
+  // run, so a Codex-only setup must not tick this).
+  const agentsDone = s?.hasAnthropicKey || sub.data?.hasClaudeSubscription;
+
   const agentConnected = (id: string) =>
     id === "codex" ? codexSub.data?.hasCodexSubscription : sub.data?.hasClaudeSubscription;
 
@@ -201,7 +198,7 @@ export function CloudSection() {
     .filter((slug) => !accessible.has(slug.toLowerCase()));
   const appCoversRepos =
     Boolean(githubApp.data?.installations.length) &&
-    localRepos.data !== undefined &&
+    (localRepos.data?.length ?? 0) > 0 &&
     missingRepos.length === 0;
 
   const step = (done: boolean | undefined, title: string) => (
@@ -242,15 +239,7 @@ export function CloudSection() {
           <Cloud className="h-4 w-4" />
           Cloud setup{" "}
           <span className="text-text-muted text-sm font-normal">
-            {
-              [
-                s?.enabled,
-                s?.hasAnthropicKey ||
-                  sub.data?.hasClaudeSubscription ||
-                  codexSub.data?.hasCodexSubscription,
-                s?.hasGithubToken || appCoversRepos,
-              ].filter(Boolean).length
-            }
+            {[s?.enabled, agentsDone, s?.hasGithubToken || appCoversRepos].filter(Boolean).length}
             /3
           </span>
         </h2>
@@ -266,17 +255,21 @@ export function CloudSection() {
           "Connection",
           s?.enabled,
           s?.baseUrl ? `Connected · ${s.baseUrl.replace(/^https?:\/\//, "")}` : "Connected",
-          session.data?.vaultLocked
-            ? "Credentials are locked — unlock your keyring, then reopen Deus"
-            : session.data?.signedIn
-              ? "Signed in — device setup didn't finish"
-              : "Not connected — sign in under Account"
+          status.isLoading
+            ? "Checking…"
+            : status.isError
+              ? "Can't reach the Deus backend"
+              : session.data?.vaultLocked
+                ? "Credentials are locked — unlock your keyring, then reopen Deus"
+                : session.data?.signedIn
+                  ? "Signed in — device setup didn't finish"
+                  : "Not connected — sign in under Account"
         )}
         {/* Signed in with no platform key: provisioning runs after login, so
             its failure never reached the login result. Name it and offer the
             retry — "sign in under Account" is a dead end when the only button
             there is Sign out. */}
-        {session.data?.signedIn && !s?.enabled && (
+        {session.data?.signedIn && status.isSuccess && !s?.enabled && (
           <div className="border-border-subtle mt-2 flex items-start justify-between gap-3 rounded-lg border border-dashed px-3 py-2">
             <p className="text-text-muted text-xs">
               {session.data.platformKeyError ??
@@ -299,10 +292,7 @@ export function CloudSection() {
         {/* Codex is deliberately NOT counted: the cloud lane only ships Claude
             credentials today, so a Codex-only setup would tick this step and
             then fail every cloud turn on a missing credential. */}
-        {step(
-          s?.hasAnthropicKey || sub.data?.hasClaudeSubscription,
-          "Agents — run on your own subscriptions"
-        )}
+        {step(agentsDone, "Agents — run on your own subscriptions")}
         <p className="text-text-muted mb-3 text-sm">
           Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
           by you, in your terminal — Deus only stores the result (encrypted, streamed per turn,
@@ -470,7 +460,7 @@ export function CloudSection() {
                 {githubApp.data?.installations.length ? (
                   <span className="text-accent-green flex items-center gap-1.5 text-xs">
                     <Check className="h-3.5 w-3.5" /> Installed
-                    {missingRepos.length > 0 && (
+                    {githubApp.isSuccess && missingRepos.length > 0 && (
                       <span className="text-text-muted font-normal">
                         · {missingRepos.length} repo{missingRepos.length > 1 ? "s" : ""} missing
                       </span>
@@ -480,7 +470,7 @@ export function CloudSection() {
                   <span className="text-text-muted text-xs">Not installed</span>
                 ) : (
                   <span className="text-text-muted border-border-subtle rounded-full border border-dashed px-2 py-0.5 text-xs">
-                    Awaiting App registration
+                    {githubAppBlockedLabel(githubApp.data)}
                   </span>
                 )}
                 <ChevronDown
@@ -525,13 +515,26 @@ export function CloudSection() {
                         className="self-start"
                         onClick={async () => {
                           const res = await installGithubApp();
-                          if (!res.ok) toast.error(res.error ?? "Could not start the install");
-                          else toast.info("Complete the install on GitHub, then come back");
+                          if (!res.ok) {
+                            toast.error(res.error ?? "Could not start the install");
+                            return;
+                          }
+                          toast.info("Complete the install on GitHub, then come back");
+                          // The install completes out-of-band in the browser;
+                          // refetch when focus returns instead of showing
+                          // "Not installed" until a remount.
+                          window.addEventListener("focus", () => void githubApp.refetch(), {
+                            once: true,
+                          });
                         }}
                       >
                         Install
                       </Button>
-                    ) : null}
+                    ) : (
+                      <p className="text-text-muted text-xs">
+                        {githubAppBlockedLabel(githubApp.data)}
+                      </p>
+                    )}
                     {githubApp.data?.appSlug && missingRepos.length > 0 && (
                       <div>
                         <p className="text-text-muted mb-1 text-xs">Missing GitHub access</p>

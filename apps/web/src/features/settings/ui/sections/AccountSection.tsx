@@ -55,6 +55,10 @@ export function AccountSection() {
     mutationFn: () => native.deusCloud.startLogin(),
     onSuccess: (result) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
+      // The backend's cloud settings (`enabled`) flip on sign-in via the
+      // credentials push; without this the Cloud section shows stale state
+      // for its whole 30s window.
+      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
       if (result.success && result.session.signedIn) {
         toast.success("Signed in to Deus Cloud");
         return;
@@ -70,6 +74,7 @@ export function AccountSection() {
     mutationFn: () => native.deusCloud.signOut(),
     onSuccess: (result) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
+      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
       if (result.success) {
         toast.success("Signed out of Deus Cloud");
         return;

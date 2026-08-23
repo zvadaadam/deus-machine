@@ -32,28 +32,24 @@ import {
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/shared/api/queryKeys";
-import { getSession } from "@/platform/native/deus-cloud";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 
 export function EnvironmentSection() {
   const { data: repos, isLoading: reposLoading } = useRepos();
   // Agent-driven environment setup provisions a real cloud workspace, so it
   // needs the lane up: signed in AND holding this device's platform key.
-  const cloudSession = useQuery({
-    queryKey: queryKeys.deusCloud.session,
-    queryFn: getSession,
-    staleTime: 30_000,
-    retry: false,
-  });
-  // A reason, not a boolean: "signed out" and "signed in but device setup
-  // failed" need different next steps, and telling an already-signed-in user
-  // to sign in is a dead end.
-  const cloudBlockedReason = !cloudSession.data?.signedIn
-    ? "Sign in to Deus Cloud first"
-    : !cloudSession.data?.hasPlatformKey
-      ? "Finish device setup in Settings → Cloud"
-      : null;
+  const cloudSession = useDeusCloudSession();
+  // A reason, not a boolean — distinct states need distinct next steps.
+  // vaultLocked FIRST: with the keyring locked hasPlatformKey reads false
+  // too, and "finish device setup" would send the user to redo a setup
+  // that finished fine.
+  const cloudBlockedReason = cloudSession.data?.vaultLocked
+    ? "Unlock your keyring, then reopen Deus"
+    : !cloudSession.data?.signedIn
+      ? "Sign in to Deus Cloud first"
+      : !cloudSession.data?.hasPlatformKey
+        ? "Finish device setup in Settings → Cloud"
+        : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo
