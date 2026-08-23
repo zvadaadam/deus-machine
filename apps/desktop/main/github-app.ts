@@ -6,6 +6,7 @@
 import { shell } from "electron";
 import { ipcMain } from "electron";
 import { getCloudCredentialMeta } from "./cloud-credentials";
+import { PLATFORM_TIMEOUT_MS } from "./deus-cloud-provision";
 import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 
@@ -46,7 +47,10 @@ export async function getGithubAppState(): Promise<GithubAppState> {
   const base = `${resolveDeusCloudUrl()}/orgs/${context.orgId}/github`;
   const headers = { authorization: `Bearer ${context.token}` };
   try {
-    const res = await fetch(`${base}/installation`, { headers });
+    const res = await fetch(`${base}/installation`, {
+      headers,
+      signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
+    });
     // 503 = App not registered; 404 = routes not deployed — both read as
     // not-configured (nothing actionable for the user yet).
     if (res.status === 503 || res.status === 404) {
@@ -66,7 +70,10 @@ export async function getGithubAppState(): Promise<GithubAppState> {
     }));
     let accessibleRepos: string[] | null = installations.length > 0 ? null : [];
     if (installations.length > 0) {
-      const reposRes = await fetch(`${base}/accessible-repos`, { headers }).catch(() => null);
+      const reposRes = await fetch(`${base}/accessible-repos`, {
+        headers,
+        signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
+      }).catch(() => null);
       if (reposRes?.ok) {
         accessibleRepos = ((await reposRes.json()) as { repos?: string[] }).repos ?? [];
       }
@@ -89,6 +96,10 @@ export async function startGithubAppInstall(): Promise<{ ok: boolean; error?: st
   try {
     const res = await fetch(`${resolveDeusCloudUrl()}/orgs/${context.orgId}/github/install-url`, {
       headers: { authorization: `Bearer ${context.token}` },
+      // Bounded like every other user-visible platform call: unbounded, a
+      // black-holed endpoint held the Install click for undici's 300s while
+      // the button stayed clickable and stacked more hung requests.
+      signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
     });
     if (res.status === 503 || res.status === 404) {
       return { ok: false, error: "The Deus GitHub App isn't registered yet" };

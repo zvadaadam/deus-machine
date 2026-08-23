@@ -32,6 +32,8 @@ import {
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/shared/api/client";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 
 export function EnvironmentSection() {
@@ -39,6 +41,15 @@ export function EnvironmentSection() {
   // Agent-driven environment setup provisions a real cloud workspace, so it
   // needs the lane up: signed in AND holding this device's platform key.
   const cloudSession = useDeusCloudSession();
+  // Shared cache with Settings → Cloud (same key); this section only reads
+  // whether a turn can actually run.
+  const cloudStatus = useQuery({
+    queryKey: ["settings", "cloud"],
+    queryFn: () =>
+      apiClient.get<{ enabled: boolean; hasTurnCredential?: boolean }>("/settings/cloud"),
+    staleTime: 30_000,
+    retry: false,
+  });
   // A reason, not a boolean — distinct states need distinct next steps.
   // vaultLocked FIRST: with the keyring locked hasPlatformKey reads false
   // too, and "finish device setup" would send the user to redo a setup
@@ -49,7 +60,9 @@ export function EnvironmentSection() {
       ? "Sign in to Deus Cloud first"
       : !cloudSession.data?.hasPlatformKey
         ? "Finish device setup in Settings → Cloud"
-        : null;
+        : cloudStatus.data && !cloudStatus.data.hasTurnCredential
+          ? "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
+          : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo

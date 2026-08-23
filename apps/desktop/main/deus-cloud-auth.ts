@@ -646,6 +646,15 @@ async function fetchAccountProfile(
   }
 }
 
+/**
+ * Recompute and broadcast the session status. For callers OUTSIDE this
+ * module — startup provisioning mints in the background and must announce
+ * completion, or renderer caches keep "no platform key" until a remount.
+ */
+export async function announceDeusCloudAuthChanged(): Promise<void> {
+  broadcastAuthChanged(await getDeusCloudSessionStatus());
+}
+
 function broadcastAuthChanged(status: DeusCloudSessionStatus): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {

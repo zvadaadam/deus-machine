@@ -274,11 +274,19 @@ export async function getCloudSettingsStatus(): Promise<{
   enabled: boolean;
   baseUrl: string | null;
   hasAnthropicKey: boolean;
+  /** A cloud turn can actually run: subscription token or API key present. */
+  hasTurnCredential: boolean;
   hasGithubToken: boolean;
 }> {
   const config = getCloudConfig();
   if (!config) {
-    return { enabled: false, baseUrl: null, hasAnthropicKey: false, hasGithubToken: false };
+    return {
+      enabled: false,
+      baseUrl: null,
+      hasAnthropicKey: false,
+      hasTurnCredential: false,
+      hasGithubToken: false,
+    };
   }
   let hasGithubToken = false;
   try {
@@ -303,6 +311,7 @@ export async function getCloudSettingsStatus(): Promise<{
     enabled: true,
     baseUrl: config.baseUrl,
     hasAnthropicKey: Boolean(config.anthropicApiKey),
+    hasTurnCredential: Boolean(config.claudeOauthToken || config.anthropicApiKey),
     hasGithubToken,
   };
 }

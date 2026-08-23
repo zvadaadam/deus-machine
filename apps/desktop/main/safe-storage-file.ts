@@ -4,6 +4,7 @@
 // owns the encrypt/decrypt/permission rules.
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
 
@@ -48,7 +49,11 @@ export async function writeJsonFile(filePath: string, value: unknown): Promise<v
   // Temp + rename: writeFile truncates in place, so a crash mid-write left a
   // torn file that readJsonFile's catch turned into an empty store — i.e. a
   // power cut during any vault write silently wiped every credential.
-  const tmp = `${filePath}.tmp`;
+  // Unique per write: a SHARED tmp path let two concurrent writers install
+  // the wrong snapshot and fail the second rename with ENOENT. Last rename
+  // still wins — same read-modify-write semantics as before, minus the
+  // torn-file and collision failure modes.
+  const tmp = `${filePath}.${randomUUID()}.tmp`;
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(tmp, filePath);
 }

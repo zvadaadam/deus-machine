@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Cloud, Loader2, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,30 +39,14 @@ function initialsFrom(name?: string | null, email?: string | null): string | nul
 
 export function AccountSection() {
   const queryClient = useQueryClient();
-  const session = useQuery({
-    queryKey: queryKeys.deusCloud.session,
-    queryFn: () => native.deusCloud.getSession(),
-    staleTime: 60_000,
-  });
-
-  useEffect(() => {
-    return native.deusCloud.onAuthChanged((nextSession) => {
-      queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
-      // The mint + credentials push finish AFTER login resolves and announce
-      // themselves through this broadcast — without the invalidation the
-      // Cloud section keeps "no platform key" for its whole 30s window.
-      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
-    });
-  }, [queryClient]);
+  // Session + the auth-changed listener live in the shared hook — a listener
+  // owned by this section died when the user navigated to Cloud mid-mint.
+  const session = useDeusCloudSession();
 
   const signInMutation = useMutation({
     mutationFn: () => native.deusCloud.startLogin(),
     onSuccess: (result) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
-      // The backend's cloud settings (`enabled`) flip on sign-in via the
-      // credentials push; without this the Cloud section shows stale state
-      // for its whole 30s window.
-      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
       if (result.success && result.session.signedIn) {
         toast.success("Signed in to Deus Cloud");
         return;
@@ -78,7 +62,6 @@ export function AccountSection() {
     mutationFn: () => native.deusCloud.signOut(),
     onSuccess: (result) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
-      void queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
       if (result.success) {
         toast.success("Signed out of Deus Cloud");
         return;

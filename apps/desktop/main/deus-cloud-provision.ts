@@ -16,6 +16,7 @@ import {
   setCloudCredential,
 } from "./cloud-credentials";
 import {
+  announceDeusCloudAuthChanged,
   getStoredDeusCloudSessionToken,
   hasStoredSessionFile,
   setSessionRefreshedHandler,
@@ -58,7 +59,7 @@ export function resolveAgntBaseUrl(env: NodeJS.ProcessEnv = process.env): string
  * black-hole endpoint would spin the Settings "Retry setup" button — and
  * block sign-out, which awaits the revoke — for five minutes.
  */
-const PLATFORM_TIMEOUT_MS = 15_000;
+export const PLATFORM_TIMEOUT_MS = 15_000;
 
 interface OrgRef {
   id: string;
@@ -227,7 +228,13 @@ export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): P
       deviceKeyStillValid(existing),
     ]);
     const foreign = Boolean(meta?.orgId && org?.id && meta.orgId !== org.id);
-    if (valid && !foreign) return true;
+    if (valid && !foreign) {
+      // Unknown ownership (org lookup failed) deliberately reuses: treating
+      // it as foreign would delete a good key on every same-account hiccup,
+      // and the probe re-runs at every startup, so a wrong reuse self-heals.
+      if (!org) logMainProcess("[deus-cloud] key ownership unverifiable (offline?) — reusing");
+      return true;
+    }
     logMainProcess(
       foreign
         ? `[deus-cloud] stored device key belongs to org ${meta?.orgId} — re-minting for ${org?.id}`
@@ -399,6 +406,10 @@ export function provisionAtStartup(
     } else {
       await pushCloudCredentialsToBackend();
     }
+    // Unlike the login path, nothing else announces this background work —
+    // a renderer that queried the session mid-provision cached
+    // hasPlatformKey:false and, with focus-refetch off, kept it.
+    await announceDeusCloudAuthChanged().catch(() => {});
   })();
 }
 
