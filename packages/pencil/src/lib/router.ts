@@ -55,8 +55,16 @@ const MIME: Record<string, string> = {
 function serveEditorFile(res: ServerResponse, bundleDir: string, subPath: string): void {
   const cleanPath = subPath.split("?")[0]?.split("#")[0] ?? "";
   const safe = cleanPath.replace(/^([/\\]+)/, "").replace(/^(\.\.[/\\])+/g, "");
-  const filePath = join(bundleDir, safe);
-  if (!filePath.startsWith(bundleDir + "/") && filePath !== bundleDir) {
+  let bundleRoot: string;
+  try {
+    bundleRoot = fs.realpathSync(bundleDir);
+  } catch {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("not found");
+    return;
+  }
+  const filePath = resolvePath(bundleRoot, safe);
+  if (!isInside(filePath, bundleRoot)) {
     res.writeHead(403, { "Content-Type": "text/plain" });
     res.end("forbidden");
     return;
@@ -79,6 +87,19 @@ function serveEditorFile(res: ServerResponse, bundleDir: string, subPath: string
       res.end("not found");
       return;
     }
+  }
+  let realTarget: string;
+  try {
+    realTarget = fs.realpathSync(target);
+  } catch {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("not found");
+    return;
+  }
+  if (!isInside(realTarget, bundleRoot)) {
+    res.writeHead(403, { "Content-Type": "text/plain" });
+    res.end("forbidden");
+    return;
   }
   const ext = (target.match(/\.[a-z0-9]+$/i)?.[0] ?? "").toLowerCase();
   const type = MIME[ext] ?? "application/octet-stream";
