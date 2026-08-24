@@ -45,6 +45,9 @@ interface CloudSession {
   seq: number;
   /** In-flight diff.request round-trips, keyed by requestId. */
   pendingDiffs: Map<string, PendingDiff>;
+  /** Armed grace timer for a stopped/error state seen while a turn is live —
+   *  see scheduleTurnKill. */
+  pendingTurnKill: ReturnType<typeof setTimeout> | null;
 }
 
 let handler: AgentEventHandler | null = null;
@@ -64,6 +67,7 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     clearGithubTokenRefreshFlights();
     for (const s of sessions.values()) {
       rejectPendingDiffs(s, "platform identity changed");
+      clearTurnKill(s);
       s.socket.close();
     }
     sessions.clear();
@@ -81,6 +85,7 @@ function rejectPendingDiffs(session: CloudSession, reason: string): void {
 export function shutdownCloudDriver(): void {
   for (const s of sessions.values()) {
     rejectPendingDiffs(s, "cloud driver shutting down");
+    clearTurnKill(s);
     s.socket.close();
   }
   sessions.clear();
@@ -167,6 +172,32 @@ function pushCloudError(session: CloudSession, code: unknown, message: unknown):
  * frame is lost when the socket is down while the sandbox stops).
  * `paused` is deliberately excluded — agnt legitimately replays after a wake.
  */
+/**
+ * A stopped/error state with a live turn is AMBIGUOUS: either the sandbox
+ * died mid-turn (nothing will ever come — the turn must fail visibly), or a
+ * send just WOKE a stopped sandbox and agnt is provisioning toward running
+ * exactly that queued turn (killing it here cancels the user's own restart —
+ * the "Send again to restart it" loop). The tiebreaker is the next state:
+ * recovery emits provisioning/resuming within seconds. So arm a grace timer
+ * instead of killing immediately; any recovering state disarms it.
+ */
+const TURN_KILL_GRACE_MS = 20_000;
+
+function scheduleTurnKill(session: CloudSession, status: string, detail?: string): void {
+  if (!handler?.liveTurnId(session.deusSessionId)) return;
+  if (session.pendingTurnKill) return;
+  session.pendingTurnKill = setTimeout(() => {
+    session.pendingTurnKill = null;
+    failLiveTurn(session, status, detail);
+  }, TURN_KILL_GRACE_MS);
+}
+
+function clearTurnKill(session: CloudSession): void {
+  if (!session.pendingTurnKill) return;
+  clearTimeout(session.pendingTurnKill);
+  session.pendingTurnKill = null;
+}
+
 function failLiveTurn(session: CloudSession, status: string, detail?: string): void {
   const live = handler?.liveTurnId(session.deusSessionId);
   if (!live) return;
@@ -223,11 +254,11 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // while the sandbox stops; this snapshot is then the only truth, and
         // the `currentTurnId === live` early return below would strand the
         // spinner forever. Fail here, before that gate. (paused replays.)
-        if (sessionStatus === "stopped") failLiveTurn(session, "stopped");
+        if (sessionStatus === "stopped") scheduleTurnKill(session, "stopped");
       } else if (sessionStatus === "error") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: "error" });
         broadcastCloudEnv(session, { status: "error" });
-        failLiveTurn(session, "error");
+        scheduleTurnKill(session, "error");
       } else if (sessionStatus === "provisioning") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
@@ -268,7 +299,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // Real case: sidecar dies on a credential error → clean WS close →
       // workspace 'stopped', and the only trace was an ephemeral env line.
       if (data.status === "stopped" || data.status === "error") {
-        failLiveTurn(session, data.status, data.reason ?? data.step);
+        scheduleTurnKill(session, data.status, data.reason ?? data.step);
+      } else if (
+        data.status === "provisioning" ||
+        data.status === "resuming" ||
+        data.status === "running"
+      ) {
+        // Recovery underway — the queued turn replays when the sandbox is up.
+        clearTurnKill(session);
       }
       return;
     }
@@ -418,6 +456,7 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
 async function connectCloudSession(deusSessionId: string): Promise<CloudSession> {
   const existing = sessions.get(deusSessionId);
   if (existing?.socket.isOpen()) return existing;
+  if (existing) clearTurnKill(existing);
   existing?.socket.close();
   sessions.delete(deusSessionId);
 
@@ -472,6 +511,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     providerSessionId: row.provider_session_id,
     seq: 0,
     pendingDiffs: new Map(),
+    pendingTurnKill: null,
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -483,6 +523,9 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     onDown: (reason) => {
       console.warn(`[CloudDriver] socket down session=${deusSessionId}: ${reason}`);
       rejectPendingDiffs(session, reason);
+      // The armed kill (if any) must not fire against a torn-down session —
+      // the reconnect's own snapshot re-evaluates the sandbox truthfully.
+      clearTurnKill(session);
       sessions.delete(deusSessionId);
     },
   });

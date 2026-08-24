@@ -36,6 +36,7 @@ import {
   cancelCloudTurn,
   isCloudSession,
   hasLiveCloudSession,
+  announceCloudEnv,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
@@ -480,11 +481,26 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       // ENVIRONMENT lane only: inline workspaces baked their mint into the
       // DO's secret map at create time and no wake path can rewrite it — see
       // refreshWorkspaceGithubToken. This does NOT cover them.
-      if (
-        !hasLiveCloudSession(sessionId) ||
-        workspace?.init_stage === "paused" ||
-        workspace?.init_stage === "stopped"
-      ) {
+      const asleepStage =
+        workspace?.init_stage === "paused" || workspace?.init_stage === "stopped"
+          ? workspace.init_stage
+          : null;
+      if (asleepStage && workspace) {
+        // The wake takes tens of seconds (mint + reprovision/resume) and the
+        // real agnt state frames only start once the workspace DO picks the
+        // turn up — announce NOW so the send is never met with silence. The
+        // chip flips to "Waking" (init_stage resuming) and the chat shows the
+        // env line immediately; real frames replace both within seconds.
+        getDatabase()
+          .prepare("UPDATE workspaces SET init_stage = 'resuming' WHERE id = ?")
+          .run(workspace.id);
+        invalidate(["workspaces", "stats"], {});
+        announceCloudEnv(workspace.id, sessionId, {
+          status: "resuming",
+          step: asleepStage === "stopped" ? "Restarting sandbox" : "Waking sandbox",
+        });
+      }
+      if (!hasLiveCloudSession(sessionId) || asleepStage) {
         await refreshWorkspaceGithubToken(workspace);
       }
       // permissionMode/maxTurns/additionalDirectories/resume have no cloud

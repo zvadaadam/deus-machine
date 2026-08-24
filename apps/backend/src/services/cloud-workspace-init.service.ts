@@ -264,9 +264,25 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
 
   if (status === "stopped") {
-    setStage("stopped");
-    announce({ status: "stopped", reason: "send a message to restart it" });
-    return { ok: true, status: "stopped" };
+    // Restart, don't shrug: ensureWorkspace's ensureProvisioning reprovisions
+    // a stopped sandbox, and refreshWorkspaceGithubToken routes through that
+    // exact re-create seam (with a FRESH mint — the stored one is long dead).
+    // The chip flips to Waking now; agnt's provisioning state frames take
+    // over the story within seconds on the attached session channel.
+    setStage("resuming");
+    announce({ status: "resuming", step: "Restarting sandbox" });
+    try {
+      await refreshWorkspaceGithubToken({
+        repository_id: workspace.repository_id ?? null,
+        provider_workspace_id: workspace.provider_workspace_id,
+      });
+      return { ok: true, status: "restarting" };
+    } catch (err) {
+      console.warn(`[WORKSPACE] cloud restart failed: ${err}`);
+      setStage("stopped");
+      announce({ status: "stopped", reason: "restart failed — try again or send a message" });
+      return { ok: false, status: "stopped" };
+    }
   }
 
   if (status === "paused" || status === null) {
@@ -322,6 +338,9 @@ export async function getCloudSettingsStatus(): Promise<{
   hasTurnCredential: boolean;
   /** A CLAUDE cloud turn can run — gates flows pinned to a Claude model. */
   hasClaudeTurnCredential: boolean;
+  /** Canonical CODEX_AUTH_JSON exists on the platform — the web app's only
+   *  codex-connected signal (no desktop vault there). */
+  hasPlatformCodex: boolean;
   hasGithubToken: boolean;
 }> {
   const config = getCloudConfig();
@@ -332,6 +351,7 @@ export async function getCloudSettingsStatus(): Promise<{
       hasAnthropicKey: false,
       hasTurnCredential: false,
       hasClaudeTurnCredential: false,
+      hasPlatformCodex: false,
       hasGithubToken: false,
     };
   }
@@ -376,8 +396,55 @@ export async function getCloudSettingsStatus(): Promise<{
     // Claude model, so its gate must NOT open on a codex-only credential.
     hasClaudeTurnCredential:
       Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
+    hasPlatformCodex,
     hasGithubToken,
   };
+}
+
+/**
+ * WEB-lane Codex connect: validate and store the pasted auth.json as the
+ * canonical platform secret. Same validation as the desktop import; unlinked
+ * (appliesToAll false) exactly like the desktop sync — turn credentials are
+ * resolved per-dispatch by the session DO, never fanned into sandbox env.
+ */
+export async function saveCloudCodexAuth(authJson: string): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  let parsed: { auth_mode?: string; tokens?: { access_token?: string } };
+  try {
+    parsed = JSON.parse(authJson) as typeof parsed;
+  } catch {
+    throw new Error("That isn't valid JSON — paste the full contents of ~/.codex/auth.json");
+  }
+  if (parsed.auth_mode !== "chatgpt" || !parsed.tokens?.access_token) {
+    throw new Error(
+      "That auth.json isn't a ChatGPT-plan login — run `codex login` (or `codex login --device-auth` on a headless machine) and paste the file it writes."
+    );
+  }
+  await agntCreateSecret("CODEX_AUTH_JSON", authJson, {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    appliesToAll: false,
+  });
+}
+
+export async function disconnectCloudCodexAuth(): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  // deleteSecret is id-addressed; resolve the entry by canonical name first.
+  for await (const secret of agntListSecrets({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  })) {
+    if (secret.keyName !== "CODEX_AUTH_JSON") continue;
+    const deleted = await agntDeleteSecret(secret.id, {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    });
+    if (!deleted) throw new Error("The platform did not confirm the delete — try again.");
+    return;
+  }
+  // Nothing to delete = already disconnected; not an error.
 }
 
 /** Store the org github_token secret (unlocks private repos in sandboxes). */

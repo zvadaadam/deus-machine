@@ -58697,6 +58697,328 @@
               ]
             }
           ]
+        },
+        {
+          "type": "frame",
+          "id": "F2l2Uk",
+          "name": "SETTINGS — CLOUD AGENT ROW (Codex, expanded)",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 10,
+          "children": [
+            {
+              "type": "frame",
+              "id": "TZERg",
+              "name": "h",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "DdQZS",
+                  "name": "SETTINGS — CLOUD AGENT ROW (CODEX, EXPANDED)",
+                  "fill": "$text-disabled",
+                  "content": "SETTINGS — CLOUD AGENT ROW (CODEX, EXPANDED)",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-2xs",
+                  "fontWeight": "600",
+                  "letterSpacing": 0.54
+                },
+                {
+                  "type": "text",
+                  "id": "e245m",
+                  "name": "CloudSection DisclosureRow — one open at a time",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "CloudSection DisclosureRow — only one agent row is open at a time, so board 55 draws Claude Code expanded and this is the other half. Sign-in is one click (main spawns the bundled codex login, browser OAuth); the device-auth command stays as the headless fallback. Connected collapses this to a single outline Disconnect.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-sans",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "IQfMJ",
+              "name": "Agent list",
+              "clip": true,
+              "width": 608,
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "GOszX",
+                  "name": "Codex",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "g4Wjii",
+                      "name": "Header",
+                      "width": "fill_container",
+                      "padding": [
+                        10,
+                        16
+                      ],
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "V6YFB",
+                          "name": "Title",
+                          "fill": "$text-primary",
+                          "content": "Codex",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Qurk8",
+                          "name": "Status",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "X035G8",
+                              "name": "Not connected",
+                              "fill": "$text-muted",
+                              "content": "Not connected",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-xs",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "S9p7c",
+                              "name": "chevron (rotate-180)",
+                              "flipY": true,
+                              "width": 14,
+                              "height": 14,
+                              "icon": "chevron-down",
+                              "library": "lucide",
+                              "fill": "$text-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "x5LHL",
+                      "name": "Body — expanded",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        16,
+                        12,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Waw1x",
+                          "name": "Instructions",
+                          "fill": "$text-muted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes. Stored encrypted, resolved per turn server-side. On the web app (no CLI), paste your auth.json below — it goes straight to the platform copy cloud turns read.",
+                          "lineHeight": 1.5,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "lZT6w",
+                          "name": "Command row",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "MSzAs",
+                              "name": "code",
+                              "fill": "$bg-muted",
+                              "cornerRadius": "$radius-xs",
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "h38bjR",
+                                  "name": "codex login --device-auth",
+                                  "fill": "$text-secondary",
+                                  "content": "codex login --device-auth",
+                                  "fontFamily": "$font-mono",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "kKip7",
+                              "type": "ref",
+                              "ref": "WNY4N",
+                              "name": "Copy",
+                              "height": 32,
+                              "theme": {
+                                "mode": "dark"
+                              },
+                              "descendants": {
+                                "XQbnF": {
+                                  "type": "icon",
+                                  "id": "eXp03",
+                                  "name": "copy",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "copy",
+                                  "library": "lucide",
+                                  "fill": "$text-secondary"
+                                }
+                              }
+                            },
+                            {
+                              "id": "VUHwk",
+                              "type": "ref",
+                              "ref": "Rcfnv",
+                              "name": "Open in Terminal",
+                              "height": 32,
+                              "theme": {
+                                "mode": "dark"
+                              },
+                              "descendants": {
+                                "kB8v8": {
+                                  "type": "frame",
+                                  "id": "LzOk4",
+                                  "name": "Content",
+                                  "gap": 6,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "wLchJ",
+                                      "name": "i",
+                                      "width": 14,
+                                      "height": 14,
+                                      "icon": "square-terminal",
+                                      "library": "lucide",
+                                      "fill": "$text-secondary"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "XSvl7",
+                                      "name": "Label",
+                                      "fill": "$text-secondary",
+                                      "content": "Open in Terminal",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "kKXBA",
+                          "name": "Action row",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "E0Svv",
+                              "type": "ref",
+                              "ref": "rg2x2",
+                              "name": "Sign in with ChatGPT",
+                              "height": 32,
+                              "theme": {
+                                "mode": "dark"
+                              },
+                              "descendants": {
+                                "z4bI4": {
+                                  "content": "Sign in with ChatGPT",
+                                  "fontSize": 11
+                                }
+                              }
+                            },
+                            {
+                              "id": "T1Y3VF",
+                              "type": "ref",
+                              "ref": "WNY4N",
+                              "name": "Import existing",
+                              "height": 32,
+                              "theme": {
+                                "mode": "dark"
+                              },
+                              "descendants": {
+                                "XQbnF": {
+                                  "content": "Import existing",
+                                  "fontSize": 11
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "X6Gzq7",
+                          "name": "Paste row — universal fallback (only path on web)",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "bH16g",
+                              "type": "ref",
+                              "ref": "YqG8t",
+                              "name": "auth.json input",
+                              "width": 320,
+                              "descendants": {
+                                "E8yhJ5": {
+                                  "content": "Paste ~/.codex/auth.json contents"
+                                }
+                              }
+                            },
+                            {
+                              "id": "WmuPA",
+                              "type": "ref",
+                              "ref": "Rcfnv",
+                              "name": "Save",
+                              "descendants": {
+                                "kB8v8": {
+                                  "content": "Save"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     },

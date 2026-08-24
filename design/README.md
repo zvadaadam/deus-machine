@@ -279,13 +279,16 @@ in step with it:
 - **The header Open button is an outlined split button**, not a filled pill: a bordered
   `h-7` container, quick-open on the left, a 1px divider, and a chevron on the right.
 - The Changes review CTA reads **"Review Changes"** with the file count after it.
-- **Cloud setup counts three steps, and two of them tick on less than they look like.**
-  Codex is listed under Agents but is deliberately _not_ counted — the cloud lane only
-  ships Claude credentials, so a Codex-only setup must not tick that step. And an
-  installed GitHub App only satisfies the repo step when it covers **every** local repo;
-  with one repo missing the step stays open and the header still reads `1/3`, which is
-  why board `55` is drawn that way. Each agent and GitHub row is an accordion — one open
-  at a time, chevron rotated 180° when it is.
+- **Cloud setup counts three steps, and the GitHub one ticks on less than it looks like.**
+  Either subscription satisfies the Agents step now that the sandbox runs
+  `codex-app-server` — Codex counts. But an installed GitHub App only satisfies the repo
+  step when it covers **every** local repo; with one repo missing the step stays open and
+  the header still reads `1/3`, which is why board `55` is drawn that way. Each agent and
+  GitHub row is an accordion — **one open at a time**, chevron rotated 180° when it is.
+  That is why board `55` shows Claude Code open (paste a `claude setup-token`) and the
+  Codex row's own expanded state lives on board `22`: one-click **Sign in with ChatGPT**
+  with a ghost **Import existing** beside it, and the `codex login --device-auth` chip
+  above them as the headless fallback.
 - **A failed workspace stays in the sidebar.** `SIDEBAR_WORKSPACE_STATE` includes `error`
   precisely so the failure is visible, so the row needs a reason in the meta cell, not a
   red dot: `Cloud setup failed` while provisioning, `Sandbox failed` once it was up,

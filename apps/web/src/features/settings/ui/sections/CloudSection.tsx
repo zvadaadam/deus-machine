@@ -6,6 +6,7 @@ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
+import { capabilities } from "@/platform/capabilities";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useRepos } from "@/features/repository";
@@ -56,6 +57,7 @@ const AGENT_SUBSCRIPTIONS = [
 
 interface CloudSettings {
   hasTurnCredential?: boolean;
+  hasPlatformCodex?: boolean;
   enabled: boolean;
   baseUrl: string | null;
   hasAnthropicKey: boolean;
@@ -71,6 +73,7 @@ export function CloudSection() {
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
   const [subToken, setSubToken] = useState("");
+  const [codexAuthJson, setCodexAuthJson] = useState("");
   // One agent row expanded at a time — compact list, setup opens inline.
   const [openAgent, setOpenAgent] = useState<string | null>(null);
   const [openGithub, setOpenGithub] = useState<"app" | "pat" | null>(null);
@@ -118,6 +121,31 @@ export function CloudSection() {
       await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Codex action failed"),
+  });
+
+  // Universal fallback (and the ONLY path on web, where no CLI can spawn):
+  // paste ~/.codex/auth.json, backend validates and writes the canonical
+  // platform secret — the copy cloud turns actually read, on every surface.
+  const codexPaste = useMutation({
+    mutationFn: (authJson: string) =>
+      apiClient.post<{ ok: boolean }>("/settings/cloud/codex-auth", { authJson }),
+    onSuccess: async () => {
+      setCodexAuthJson("");
+      toast.success("Codex connected — cloud sandboxes can run Codex on your plan");
+      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex connect failed"),
+  });
+
+  const codexWebDisconnect = useMutation({
+    mutationFn: () => apiClient.delete<{ ok: boolean }>("/settings/cloud/codex-auth"),
+    onSuccess: async () => {
+      toast.success("Codex subscription disconnected");
+      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex disconnect failed"),
   });
 
   const subAction = useMutation({
@@ -209,7 +237,9 @@ export function CloudSection() {
     s?.hasTurnCredential || sub.data?.hasClaudeSubscription || codexSub.data?.hasCodexSubscription;
 
   const agentConnected = (id: string) =>
-    id === "codex" ? codexSub.data?.hasCodexSubscription : sub.data?.hasClaudeSubscription;
+    id === "codex"
+      ? codexSub.data?.hasCodexSubscription || s?.hasPlatformCodex
+      : sub.data?.hasClaudeSubscription;
 
   // Repos the installed GitHub App cannot reach — drives the missing-access
   // list and, when empty, lets the App satisfy the repo-access step without a PAT.
@@ -412,10 +442,16 @@ export function CloudSection() {
                     className="self-start"
                     onClick={() =>
                       agent.id === "codex"
-                        ? codexAction.mutate({ kind: "disconnect" })
+                        ? capabilities.ipcInvoke
+                          ? codexAction.mutate({ kind: "disconnect" })
+                          : codexWebDisconnect.mutate()
                         : subAction.mutate({ kind: "disconnect" })
                     }
-                    disabled={agent.id === "codex" ? codexAction.isPending : subAction.isPending}
+                    disabled={
+                      agent.id === "codex"
+                        ? codexAction.isPending || codexWebDisconnect.isPending
+                        : subAction.isPending
+                    }
                   >
                     Disconnect
                   </Button>
@@ -436,16 +472,18 @@ export function CloudSection() {
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          const res = await openAgentSetupTerminal(agent.id);
-                          if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
-                        }}
-                      >
-                        <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
-                      </Button>
+                      {capabilities.ipcInvoke && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            const res = await openAgentSetupTerminal(agent.id);
+                            if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
+                          }}
+                        >
+                          <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
+                        </Button>
+                      )}
                     </div>
                     {agent.kind === "paste" ? (
                       <div className="flex items-center gap-2">
@@ -470,28 +508,56 @@ export function CloudSection() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        {/* One click: main spawns the bundled `codex login`
-                            (browser OAuth, no device codes) and imports the
-                            credential it writes. The manual command above
-                            stays as the fallback for headless setups. */}
-                        <Button
-                          size="sm"
-                          className="self-start"
-                          onClick={() => codexAction.mutate({ kind: "login" })}
-                          disabled={codexAction.isPending}
-                        >
-                          {codexAction.isPending ? "Waiting for browser…" : "Sign in with ChatGPT"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => codexAction.mutate({ kind: "import" })}
-                          disabled={codexAction.isPending}
-                        >
-                          Import existing
-                        </Button>
-                      </div>
+                      <>
+                        {capabilities.ipcInvoke && (
+                          <div className="flex items-center gap-2">
+                            {/* One click: main spawns the bundled `codex login`
+                                (browser OAuth, no device codes) and imports the
+                                credential it writes. Desktop only — the web app
+                                has no CLI to spawn, so it uses the paste path
+                                below instead of a dead button. */}
+                            <Button
+                              size="sm"
+                              className="self-start"
+                              onClick={() => codexAction.mutate({ kind: "login" })}
+                              disabled={codexAction.isPending}
+                            >
+                              {codexAction.isPending
+                                ? "Waiting for browser…"
+                                : "Sign in with ChatGPT"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => codexAction.mutate({ kind: "import" })}
+                              disabled={codexAction.isPending}
+                            >
+                              Import existing
+                            </Button>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            aria-label="Codex auth.json contents"
+                            type="password"
+                            value={codexAuthJson}
+                            onChange={(e) => setCodexAuthJson(e.target.value)}
+                            placeholder={"Paste ~/.codex/auth.json contents"}
+                            className="max-w-md text-sm"
+                            disabled={codexPaste.isPending}
+                          />
+                          <Button
+                            size="sm"
+                            variant={capabilities.ipcInvoke ? "outline" : "default"}
+                            onClick={() =>
+                              codexAuthJson.trim() && codexPaste.mutate(codexAuthJson.trim())
+                            }
+                            disabled={!codexAuthJson.trim() || codexPaste.isPending}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </>
                     )}
                   </>
                 )}
