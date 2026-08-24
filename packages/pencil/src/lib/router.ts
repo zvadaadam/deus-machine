@@ -25,6 +25,9 @@ import { getBinaryStatus } from "./mcp-binary.ts";
 import { rewriteEditorIndex } from "./editor-bundle.ts";
 import type { Context } from "./types.ts";
 
+const PANEL_TOKEN_HEADER = "x-pencil-panel-token";
+const PANEL_TOKEN_PLACEHOLDER = "__PENCIL_PANEL_TOKEN__";
+
 /** True when `child` is `parent` or a descendant directory thereof. Uses
  *  resolve + relative so sibling-prefix attacks (`/foo-other` against
  *  `/foo`) and `..` traversal both fail closed. */
@@ -125,6 +128,31 @@ function sendJson(
   send(res, status, "application/json", JSON.stringify(payload, null, 2), extraHeaders);
 }
 
+function headerValue(req: IncomingMessage, name: string): string | null {
+  const value = req.headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function requirePanelToken(req: IncomingMessage, res: ServerResponse, ctx: RouterContext): boolean {
+  if (headerValue(req, PANEL_TOKEN_HEADER) === ctx.panelToken) return true;
+  sendJson(res, 403, { error: "forbidden" });
+  return false;
+}
+
+function hasJsonContentType(req: IncomingMessage): boolean {
+  const contentType = headerValue(req, "content-type");
+  if (!contentType) return false;
+  const mime = contentType.split(";")[0]?.trim().toLowerCase();
+  return mime === "application/json" || Boolean(mime?.endsWith("+json"));
+}
+
+function resolveUiDir(here: string): string {
+  const bundled = join(here, "ui");
+  if (fs.existsSync(bundled)) return bundled;
+  return join(here, "..", "ui");
+}
+
 async function readJsonBody<T = unknown>(req: IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -183,14 +211,20 @@ function ensurePreviewWatcher(storage: string): void {
 export interface RouterContext extends Context {
   /** Path to the Pencil editor bundle directory (containing index.html). */
   editorBundleDir: string;
+  /** Per-launch bearer token embedded in the same-origin panel page. */
+  panelToken: string;
+  /** Test override for the bundled UI directory. */
+  uiDir?: string;
 }
 
 export function createRouter(
   ctx: RouterContext
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   const here = dirname(fileURLToPath(import.meta.url));
-  const uiDir = join(here, "ui");
-  const parentHtml = fs.readFileSync(join(uiDir, "parent.html"), "utf8");
+  const uiDir = ctx.uiDir ?? resolveUiDir(here);
+  const parentHtml = fs
+    .readFileSync(join(uiDir, "parent.html"), "utf8")
+    .replace(PANEL_TOKEN_PLACEHOLDER, ctx.panelToken);
   const stylesCss = fs.readFileSync(join(uiDir, "styles.css"), "utf8");
   const appJs = fs.readFileSync(join(uiDir, "app.js"), "utf8");
 
@@ -235,6 +269,7 @@ export function createRouter(
 
     // ----- editor IPC bridge (POST per request) ----------------------
     if (method === "POST" && url === "/ipc") {
+      if (!requirePanelToken(req, res, ctx)) return;
       let body: ipcHost.IpcMessage;
       try {
         body = await readJsonBody<ipcHost.IpcMessage>(req);
@@ -264,6 +299,7 @@ export function createRouter(
     // returns; parent.html POSTs the response here so the pending Promise
     // can resolve.
     if (method === "POST" && url === "/ipc-response") {
+      if (!requirePanelToken(req, res, ctx)) return;
       let body: IframeReply;
       try {
         body = await readJsonBody<IframeReply>(req);
@@ -362,6 +398,7 @@ export function createRouter(
     }
 
     if (method === "POST" && url === "/auth-set") {
+      if (!requirePanelToken(req, res, ctx)) return;
       let payload: { key?: unknown };
       try {
         payload = await readJsonBody(req);
@@ -400,6 +437,7 @@ export function createRouter(
     }
 
     if (method === "POST" && url === "/auth-clear") {
+      if (!requirePanelToken(req, res, ctx)) return;
       auth.clearKey();
       auth.clearEditorSession();
       return sendJson(res, 200, { ok: true, ...auth.authState() });
@@ -446,6 +484,7 @@ export function createRouter(
     }
 
     if (method === "POST" && url === "/active") {
+      if (!requirePanelToken(req, res, ctx)) return;
       let payload: { file?: unknown; name?: unknown };
       try {
         payload = await readJsonBody(req);
@@ -471,6 +510,7 @@ export function createRouter(
 
     // --- system handoff (reveal/open) -----------------------------------
     if (method === "POST" && (url === "/reveal" || url === "/open-pen")) {
+      if (!requirePanelToken(req, res, ctx)) return;
       let payload: { path?: unknown };
       try {
         payload = await readJsonBody(req);
@@ -516,6 +556,7 @@ export function createRouter(
 
     // --- ops ------------------------------------------------------------
     if (method === "POST" && url === "/cancel") {
+      if (!requirePanelToken(req, res, ctx)) return;
       const id = ops.cancelCurrentOp();
       return sendJson(res, 200, { ok: Boolean(id), id });
     }
@@ -562,6 +603,9 @@ export function createRouter(
 
     // --- mcp ------------------------------------------------------------
     if (method === "POST" && url === "/mcp") {
+      if (!hasJsonContentType(req)) {
+        return sendJson(res, 415, { error: "content-type must be application/json" });
+      }
       const body = await readBody(req);
       try {
         const result = await mcp.handleMcpRequest(body, ctx);

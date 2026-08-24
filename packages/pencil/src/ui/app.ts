@@ -125,6 +125,16 @@ function setStatus(s: StatusState, text: string): void {
 
 // ---- net helpers --------------------------------------------------------
 
+const PANEL_TOKEN =
+  document.querySelector<HTMLMetaElement>('meta[name="pencil-panel-token"]')?.content ?? "";
+
+function jsonHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "X-Pencil-Panel-Token": PANEL_TOKEN,
+  };
+}
+
 async function jsonFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -142,7 +152,7 @@ async function jsonFetch<T = unknown>(url: string, init?: RequestInit): Promise<
 async function postJson<T = unknown>(url: string, payload: unknown): Promise<T> {
   return jsonFetch<T>(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify(payload ?? {}),
   });
 }
@@ -166,7 +176,7 @@ async function handleEditorMessage(msg: IpcMessage): Promise<void> {
   try {
     const res = await fetch("/ipc", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonHeaders(),
       body: JSON.stringify(msg),
     });
     if (res.status === 202) return; // notification, no reply
@@ -207,7 +217,7 @@ async function relayEditorReply(msg: IpcMessage): Promise<void> {
   try {
     await fetch("/ipc-response", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonHeaders(),
       body: JSON.stringify(msg),
     });
   } catch (err) {
@@ -620,7 +630,7 @@ interface McpResp {
 async function callNewDesignTool(name: string): Promise<boolean> {
   const res = await fetch("/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: Date.now(),
