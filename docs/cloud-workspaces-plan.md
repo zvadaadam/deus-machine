@@ -502,3 +502,90 @@ one per sandbox (single-use refresh tokens — never share a seed).
   turn-scoped proxy makes switching a config change).
 - Idle-TTL default for IDE dwell (agnt-side; 5min is CI-tuned).
 - Marketplace listing for the GitHub App vs private install link.
+
+## Sprint D2 — the loop closes and survives (spec 2026-08-24, seams verified in code)
+
+Everything below was verified against agnt main `e7d0c198` and deus main
+`f6a59d33f` — file:line citations are real, not remembered.
+
+### D2.1 Credential durability — sandboxes older than an hour keep git
+
+Two halves, both verified buildable:
+
+**(a) deus, wake/send → refresh the DO's stored secrets (BOTH lanes).**
+agnt's `ensureWorkspace` existing-row path takes request-fresh secrets with
+row-truth recipe (`create-workspace.ts:365` — `secrets: provisioning.secrets`),
+and the DO's `ensureInitialized` REFRESHES `state.secrets` on identity match
+(`do/workspace.ts:280-284`), which `getProvisioningRecipe` replays on any
+stopped→reprovision. So the inline lane needs no recipe replay:
+`agntCreateWorkspace({ workspaceId: provider_workspace_id, secrets:
+{ github_token: freshMint } })`. `ensureProvisioning` is a no-op for
+running/paused (`do/workspace.ts:310-320`) — safe on the hot path.
+`refreshWorkspaceGithubToken` grows an inline branch doing exactly this.
+
+**(b) agnt, resume → rewrite the credentials file on thaw.**
+A paused sandbox thaws with the create-time `.git-credentials` on disk;
+resume runs no steps (`resumeSandbox`, `do/workspace.ts:1106`). The provider
+API is id-addressed (`provider.writeFile(sandboxId, …)`, `sandbox/types.ts`),
+so the DO can rewrite the file after `provider.connect` with the CURRENT
+`state.secrets` github token — no sidecar change, no protocol change.
+Extract `writeGitCredentialsFile(provider, sandboxId, token, host)` from the
+git-auth step (`steps/git-auth.ts:40-45`) and call it from `resumeSandbox`.
+KNOWN LIMIT, accepted: the live agent process keeps its stale `GH_TOKEN`
+env until respawn — git push/fetch (the credentials file) is what matters;
+`gh` inside a >1h-old live session stays stale until D2.2's mint makes the
+next spawn fresh.
+
+### D2.2 The PR loop — widen the mint, keep the flow agent-driven
+
+Create PR is a PROMPT (`useSessionActions.ts:120-125` → `createPRPrompt`),
+not a route — the agent runs `gh pr create`. Cloud sandboxes hold a mint of
+`{contents, metadata}` only (`deus-cloud github/app.ts:190-196`), so the
+prompt 403s. The clean fix is NOT a deus-side PR route (that forks the
+product into button-driven-on-cloud): widen the standard mint to
+`{contents:write, metadata:read, pull_requests:write, workflows:write}` with
+a 422 cascade (full → contents-only → read-only) for installations whose
+grant predates the wider App permissions. Deus Bot already holds all four.
+Purpose-split mints were considered and rejected: the sandbox holds ONE
+token for its lifetime, contents:write already implies push-anything, and
+per-purpose tokens require the on-demand credential helper (D2.3-sized
+machinery) for negligible marginal risk reduction.
+
+### D2.3 Codex in the cloud — specced, not built (real design work)
+
+The sidecar engine is hard-pinned claude-code (`sidecar/agents/engine.ts:39`
+`const HARNESS = "claude-code"`), though `@zvada/agent-server/core` ships the
+codex adapter. Required pieces, in order: (1) codex CLI in the E2B template;
+(2) per-run harness selection in the sidecar engine (model string → harness,
+mirroring deus's model table); (3) CODEX_AUTH_JSON is a FILE credential — the
+turn-credential path must materialize it to `~/.codex/auth.json` before
+spawn, then shred on turn end (unlike the bearer flow, which stays in env);
+(4) deus driver: stop gating cloud sends to `agentHarness === "claude-code"`.
+The canonical platform secret already syncs (CODEX_AUTH_JSON, unlinked).
+
+### D2.4 installation_repositories webhook — DROPPED, with reasoning
+
+There is nothing to sync server-side: accessible-repos is queried live from
+GitHub per request (`github/app.ts listInstallationRepos`), no cache table
+exists, and the desktop's focus-refetch covers the client cache. An
+`installation.created` upsert is impossible without the state JWT (no org
+linkage on direct installs — deliberate, see the callback's oracle note).
+Events stay subscribed for a future push channel.
+
+### D2.5 Queued small fixes (deus)
+
+- `connecting` map invalidation on identity change (the open-socket half
+  shipped in D1; in-flight connect promises survive an account switch).
+- Provisioning path routes through the `githubTokenRefreshes` single-flight
+  (today only wake/send do; two concurrent same-env provisions can race a
+  failed mint's delete against a fresh write).
+- `pendingWelcomeMessageRef` becomes a per-workspace map (a second
+  workspace started during env-setup provisioning steals the slot and the
+  environment setup silently never runs).
+
+### D3 (next) — "Mac closed": mobile direct-to-cloud
+
+Phone today is a paired remote to the DESKTOP backend; with the Mac closed
+there is no backend. The platform-canonical secrets exist precisely so a
+web client can go deus-cloud auth → agnt session DO directly. Own sprint;
+D2.2's mint work is a prerequisite it now has.
