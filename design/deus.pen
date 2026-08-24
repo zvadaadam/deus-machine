@@ -24973,7 +24973,7 @@
                               ]
                             },
                             {
-                              "id": "MKLMA",
+                              "id": "A7A3N",
                               "type": "ref",
                               "ref": "Rcfnv",
                               "name": "Sign out",
@@ -24981,17 +24981,17 @@
                               "theme": {
                                 "mode": "dark"
                               },
-                              "children": [
-                                {
+                              "descendants": {
+                                "kB8v8": {
                                   "type": "frame",
-                                  "id": "Zpw30",
+                                  "id": "dIelr",
                                   "name": "Content",
                                   "gap": 6,
                                   "alignItems": "center",
                                   "children": [
                                     {
                                       "type": "icon",
-                                      "id": "WyqUH",
+                                      "id": "iXdWR",
                                       "name": "log-out",
                                       "width": 14,
                                       "height": 14,
@@ -25001,7 +25001,7 @@
                                     },
                                     {
                                       "type": "text",
-                                      "id": "e3aGoJ",
+                                      "id": "a3Ffog",
                                       "name": "Label",
                                       "fill": "$text-secondary",
                                       "content": "Sign out",
@@ -25011,7 +25011,7 @@
                                     }
                                   ]
                                 }
-                              ]
+                              }
                             }
                           ]
                         }
