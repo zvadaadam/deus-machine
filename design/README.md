@@ -40,6 +40,12 @@ the canvas — read left to right, top to bottom.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environment · `57` Experimental · `58` Remote Access
+- `54a`, `54b` and `54c` are a **proposal, not built** — a row-per-provider AI Providers
+  section where each provider carries a Local and a Cloud lane (`54a`), its 14-state matrix
+  (`54b`), and the four setup flows with every command and failure string from the main
+  process (`54c`). They are the one deliberate divergence in this file. Either implement
+  them in `AISection.tsx` (extracting the cloud-agent control so it can also stay mounted
+  in Settings → Cloud) or delete all three boards. They must not sit here indefinitely.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
@@ -279,6 +285,12 @@ in step with it:
 - **The header Open button is an outlined split button**, not a filled pill: a bordered
   `h-7` container, quick-open on the left, a 1px divider, and a chevron on the right.
 - The Changes review CTA reads **"Review Changes"** with the file count after it.
+- **A harness is drawn with its own logo, never a generic sparkle.** `apps/web/src/assets/agents/`
+  ships 18 brand SVGs and `getAgentLogo(harness)` resolves them in six places: `ModelPicker`
+  (trigger + every row), `ComposerControls`, `SessionTab`, `ClosedSessionsPopover`,
+  `PlanApprovalOverlay` and `AgentQuestionOverlay`. The marks in this file are those exact
+  paths, transcribed with their `viewBox="29 29 42 42"` and bound to a text colour the way
+  `currentColor` behaves in code — so a `sparkles` icon in any of those slots is a bug.
 - **Cloud setup counts three steps, and the GitHub one ticks on less than it looks like.**
   Either subscription satisfies the Agents step now that the sandbox runs
   `codex-app-server` — Codex counts. But an installed GitHub App only satisfies the repo

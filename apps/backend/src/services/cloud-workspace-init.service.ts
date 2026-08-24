@@ -171,19 +171,24 @@ async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<str
  * The third place — the thawed filesystem of a PAUSED sandbox — is agnt's
  * side of this seam: resumeSandbox rewrites .git-credentials from the DO's
  * refreshed map.
+ *
+ * Returns whether the idempotent re-create was actually invoked — that call
+ * is ALSO what restarts a stopped sandbox, so callers using this as the
+ * restart vehicle must treat false as "nothing moved" (unconfigured cloud,
+ * no origin, identity change mid-lookup) and revert their optimistic state.
  */
 export async function refreshWorkspaceGithubToken(workspace: {
   repository_id: string | null;
   provider_workspace_id?: string | null;
-}): Promise<void> {
-  if (!workspace.repository_id) return;
+}): Promise<boolean> {
+  if (!workspace.repository_id) return false;
   const config = getCloudConfig();
   // Mint preconditions, hoisted ABOVE the env-info round-trip: without a
   // deus-cloud session there is nothing this function can do, and it runs on
   // the send path with the user's spinner already up.
-  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return;
+  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return false;
   const originUrl = getRepositoryById(getDatabase(), workspace.repository_id)?.git_origin_url;
-  if (!originUrl) return;
+  if (!originUrl) return false;
   const generationAtStart = getCloudIdentityGeneration();
   const envInfo = await getCloudEnvironmentInfo(originUrl);
   if (generationAtStart !== getCloudIdentityGeneration()) {
@@ -192,7 +197,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
     // clearing alone cannot cover this interval — a stale registration here
     // would hand the new account an old-credential refresh. Bail; the new
     // identity's own send/wake path refreshes with its own config.
-    return;
+    return false;
   }
 
   if (envInfo.configured && envInfo.environmentId) {
@@ -215,8 +220,9 @@ export async function refreshWorkspaceGithubToken(workspace: {
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
       });
+      return true;
     }
-    return;
+    return false;
   }
 
   // Inline lane: the mint was baked into the DO's map at create time, where
@@ -226,7 +232,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
   // secrets server-side, so an omitted github_token REMOVES the stale inline
   // mint from the map and lets the PAT (or anonymous clone) win again — and
   // the restart-by-recreate still happens for tokenless workspaces.
-  if (!workspace.provider_workspace_id) return;
+  if (!workspace.provider_workspace_id) return false;
   const token = await mintRepoInstallationToken(originUrl);
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
@@ -236,6 +242,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
+  return true;
 }
 
 const githubTokenRefreshes = new Map<string, Promise<void>>();
@@ -268,27 +275,39 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   };
 
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
+  let finalStatus = status ?? "unknown";
 
   if (status === "stopped") {
     // Restart, don't shrug: ensureWorkspace's ensureProvisioning reprovisions
     // a stopped sandbox, and refreshWorkspaceGithubToken routes through that
     // exact re-create seam (with a FRESH mint — the stored one is long dead).
     // The chip flips to Waking now; agnt's provisioning state frames take
-    // over the story within seconds on the attached session channel.
+    // over the story on the session channel the shared tail below attaches
+    // (do NOT return early — after a backend restart no socket exists yet,
+    // and without one the frames have nowhere to land and the chip would
+    // stick on Waking forever).
     setStage("resuming");
     announce({ status: "resuming", step: "Restarting sandbox" });
     try {
-      await refreshWorkspaceGithubToken({
+      const restarted = await refreshWorkspaceGithubToken({
         repository_id: workspace.repository_id ?? null,
         provider_workspace_id: workspace.provider_workspace_id,
       });
-      return { ok: true, status: "restarting" };
+      if (!restarted) {
+        // Every early-out (unconfigured cloud, missing origin, identity
+        // change) means the re-create never ran and NOTHING will move —
+        // leaving "resuming" up would be a permanent lie.
+        setStage("stopped");
+        announce({ status: "stopped", reason: "restart unavailable — try sending a message" });
+        return { ok: false, status: "stopped" };
+      }
     } catch (err) {
       console.warn(`[WORKSPACE] cloud restart failed: ${err}`);
       setStage("stopped");
       announce({ status: "stopped", reason: "restart failed — try again or send a message" });
       return { ok: false, status: "stopped" };
     }
+    finalStatus = "restarting";
   }
 
   if (status === "paused" || status === null) {
@@ -322,7 +341,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     }
   }
   invalidate(["workspaces", "stats"], {});
-  return { ok: true, status: status ?? "unknown" };
+  return { ok: true, status: finalStatus };
 }
 
 /** Wake a paused sandbox (explicit resume; sends also auto-resume). */

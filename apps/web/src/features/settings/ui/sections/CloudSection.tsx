@@ -233,8 +233,11 @@ export function CloudSection() {
   // org has runnable turns with an empty local vault. The local subscription
   // flags still count for the pre-push moment right after connecting; Codex
   // counts since the sandbox runs codex-app-server.
-  const agentsDone =
-    s?.hasTurnCredential || sub.data?.hasClaudeSubscription || codexSub.data?.hasCodexSubscription;
+  // Codex deliberately ABSENT as a local signal: cloud turns read only the
+  // platform copy, and hasTurnCredential already folds hasPlatformCodex in —
+  // counting the local vault would mark setup done while an unsynced codex
+  // connect still fails every cloud turn (the warning-toast case).
+  const agentsDone = s?.hasTurnCredential || sub.data?.hasClaudeSubscription;
 
   const agentConnected = (id: string) =>
     id === "codex"

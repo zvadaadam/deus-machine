@@ -9,7 +9,7 @@
  * Data fetching is owned by each tab component, not by this router.
  */
 
-import { useRef } from "react";
+import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
@@ -47,14 +47,27 @@ export function ContentView({
   useAppsStopped(workspace.id);
 
   // The terminal mounts for the LAST LOCAL workspace even while a cloud one
-  // is selected — see the comment at the render site. Ref-during-render is
-  // deliberate: the value is a pure function of the prop history and updating
-  // it in an effect would flash the panel unmounted for one frame.
-  const lastLocalTerminalRef = useRef<{ id: string; path: string } | null>(null);
-  if (workspace.kind !== "cloud") {
-    lastLocalTerminalRef.current = { id: workspace.id, path: workspace.workspace_path };
-  }
-  const terminalTarget = lastLocalTerminalRef.current;
+  // is selected — see the comment at the render site. A LOCAL selection uses
+  // the live prop directly (no first-frame gap); the committed state only
+  // serves CLOUD renders, so it may lag by an effect tick without being
+  // user-visible. Updated in a layout effect, not during render — a discarded
+  // render must not leak an uncommitted workspace into a later cloud mount.
+  const [lastLocalTerminal, setLastLocalTerminal] = useState<{ id: string; path: string } | null>(
+    null
+  );
+  useLayoutEffect(() => {
+    if (workspace.kind !== "cloud") {
+      setLastLocalTerminal((prev) =>
+        prev?.id === workspace.id && prev.path === workspace.workspace_path
+          ? prev
+          : { id: workspace.id, path: workspace.workspace_path }
+      );
+    }
+  }, [workspace.kind, workspace.id, workspace.workspace_path]);
+  const terminalTarget =
+    workspace.kind !== "cloud"
+      ? { id: workspace.id, path: workspace.workspace_path }
+      : lastLocalTerminal;
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">

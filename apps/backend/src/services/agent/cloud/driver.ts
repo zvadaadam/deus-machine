@@ -270,8 +270,15 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // that follow append to it.
         updateCloudWorkspace(session.deusWorkspaceId, { status: "provisioning" });
         broadcastCloudEnv(session, { status: "provisioning" });
+        // Recovery truth can arrive VIA the snapshot when the live
+        // workspace.state frame fell into a socket gap — the reconnect
+        // doesn't fire onDown (the socket retries internally), so an armed
+        // kill survives to here and must be disarmed the same way the live
+        // frame path disarms it.
+        clearTurnKill(session);
       } else if (sessionStatus === "ready" || sessionStatus === "running") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: "running" });
+        clearTurnKill(session);
       }
 
       // Reconnect gap-heal: if the turn deus believes is live already settled

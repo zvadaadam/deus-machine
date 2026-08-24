@@ -512,6 +512,19 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
         thinkingLevel: readThinkingLevel(params.thinkingLevel),
       });
     } catch (err) {
+      // The optimistic "Waking" flip above must not outlive a failed wake:
+      // the prompt is rolled back, so a stuck Waking chip would promise a
+      // recovery nothing is driving. Same honest revert the chip path does.
+      if (asleepStage && workspace) {
+        getDatabase()
+          .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
+          .run(asleepStage, workspace.id);
+        invalidate(["workspaces", "stats"], {});
+        announceCloudEnv(workspace.id, sessionId, {
+          status: asleepStage,
+          reason: "wake failed — try again",
+        });
+      }
       handleAgentError(sessionId, err);
       throw err;
     }
