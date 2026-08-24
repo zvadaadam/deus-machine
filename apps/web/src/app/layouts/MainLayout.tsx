@@ -196,6 +196,7 @@ export function MainLayout() {
   // the selected panel's ref), so an entry simply waits until its workspace
   // is selected again.
   const pendingWelcomeMessagesRef = useRef(new Map<string, { message: string; model: string }>());
+  const welcomeSendsInFlightRef = useRef(new Set<string>());
 
   const handleStartWorkspace = useCallback(
     async (
@@ -256,11 +257,25 @@ export function MainLayout() {
     if (selectedWorkspace.state !== "ready" || !selectedWorkspace.current_session_id) return;
     if (!workspaceChatPanelRef.current) return;
 
-    pendingWelcomeMessagesRef.current.delete(selectedWorkspace.id);
-    workspaceChatPanelRef.current.sendMessage(pending.message, pending.model).catch((error) => {
-      console.error("Failed to send welcome message:", error);
-      toast.error(getErrorMessage(error));
-    });
+    // Keep the entry until the send RESOLVES: deleting up front turns a
+    // transient failure (backend hiccup mid-provision) into a silently lost
+    // prompt. The in-flight set stops effect re-runs from double-sending
+    // while the first attempt is still settling.
+    if (welcomeSendsInFlightRef.current.has(selectedWorkspace.id)) return;
+    welcomeSendsInFlightRef.current.add(selectedWorkspace.id);
+    const workspaceId = selectedWorkspace.id;
+    workspaceChatPanelRef.current
+      .sendMessage(pending.message, pending.model)
+      .then(() => {
+        pendingWelcomeMessagesRef.current.delete(workspaceId);
+      })
+      .catch((error) => {
+        console.error("Failed to send welcome message:", error);
+        toast.error(getErrorMessage(error));
+      })
+      .finally(() => {
+        welcomeSendsInFlightRef.current.delete(workspaceId);
+      });
   }, [selectedWorkspace]);
 
   // Derive repo name for GitHub picker modal from repoGroups

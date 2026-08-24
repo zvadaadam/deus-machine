@@ -107,6 +107,9 @@ export function CloudSection() {
           : "Codex subscription disconnected"
       );
       await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
+      // hasTurnCredential (checklist + send-gating) folds Codex in — same
+      // pairing the Claude action below does.
+      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Codex action failed"),
   });

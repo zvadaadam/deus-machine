@@ -27,6 +27,7 @@ import { invalidate } from "../../query-engine";
 import { broadcast } from "../../ws.service";
 import { getDatabase } from "../../../lib/database";
 import { getSessionRaw } from "../../../db";
+import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 
@@ -60,6 +61,7 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     // after B signs in, and new callers must not adopt A's pending promise.
     identityGeneration += 1;
     connecting.clear();
+    clearGithubTokenRefreshFlights();
     for (const s of sessions.values()) {
       rejectPendingDiffs(s, "platform identity changed");
       s.socket.close();
@@ -393,8 +395,11 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
   const inFlight = connecting.get(deusSessionId);
   if (inFlight) return inFlight;
 
-  const attempt = connectCloudSession(deusSessionId).finally(() => {
-    connecting.delete(deusSessionId);
+  const attempt: Promise<CloudSession> = connectCloudSession(deusSessionId).finally(() => {
+    // Only OUR entry: an identity change clears the map and a new attempt may
+    // already occupy this key — an unconditional delete would evict the
+    // replacement and let a later caller open a duplicate socket.
+    if (connecting.get(deusSessionId) === attempt) connecting.delete(deusSessionId);
   });
   connecting.set(deusSessionId, attempt);
   return attempt;
@@ -432,6 +437,12 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       workspaceId: workspace.provider_workspace_id,
       sessionId: deusSessionId,
     });
+    if (generationAtStart !== identityGeneration) {
+      // The account changed while createSession was in flight. Persisting the
+      // OLD identity's provider id would poison the row: every later connect
+      // under the new account would reuse it and fail its token mint forever.
+      throw new Error("Platform identity changed during connect — retry under the new account");
+    }
     db.prepare("UPDATE sessions SET provider_session_id = ? WHERE id = ?").run(
       created.id,
       deusSessionId

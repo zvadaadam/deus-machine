@@ -551,17 +551,45 @@ token for its lifetime, contents:write already implies push-anything, and
 per-purpose tokens require the on-demand credential helper (D2.3-sized
 machinery) for negligible marginal risk reduction.
 
-### D2.3 Codex in the cloud — specced, not built (real design work)
+### D2.3 Codex in the cloud — BUILT (agnt `d2-cloud-loop` + this branch)
 
-The sidecar engine is hard-pinned claude-code (`sidecar/agents/engine.ts:39`
-`const HARNESS = "claude-code"`), though `@zvada/agent-server/core` ships the
-codex adapter. Required pieces, in order: (1) codex CLI in the E2B template;
-(2) per-run harness selection in the sidecar engine (model string → harness,
-mirroring deus's model table); (3) CODEX_AUTH_JSON is a FILE credential — the
-turn-credential path must materialize it to `~/.codex/auth.json` before
-spawn, then shred on turn end (unlike the bearer flow, which stays in env);
-(4) deus driver: stop gating cloud sends to `agentHarness === "claude-code"`.
-The canonical platform secret already syncs (CODEX_AUTH_JSON, unlinked).
+All four pieces landed: (1) codex CLI baked into the E2B template
+(`@openai/codex@0.146.1`, pinned to deus's local version, `CODEX_CLI_PATH`);
+(2) sidecar engine registers both harnesses and dispatches per-turn on
+`options.harness`; (3) CODEX_AUTH_JSON materializes to a session-scoped
+`CODEX_HOME` (0700 dir / 0600 file) before spawn and is shredded at turn
+end and on session reset — never ambient env, no proxy/apiKeyStore (that
+machinery is Anthropic-bearer-specific); (4) deus's cloud gate admits
+`codex-app-server` and the desktop ships auth via spawned `codex login`
+(Conductor-style) or auth.json import.
+
+**Operational gate, not a code gate:** live Codex turns need the agnt branch
+deployed AND the E2B template rebuilt+promoted (`sandbox/e2b/build.ts`).
+Until then a cloud Codex turn fails with the sidecar's honest
+unknown-harness/missing-CLI error — same failure class as any deploy skew,
+so the deus-side gate deliberately does NOT re-block on it. The two PRs
+(deus #314, agnt #151) merge together; template promote is a release step.
+
+**Codex v1 boundaries, recorded:**
+
+- _Credential visibility._ The materialized auth.json is readable by the
+  agent process for the turn's duration — a necessity of the codex CLI's
+  file-based auth, and the same exposure as running codex on the user's own
+  machine (Conductor ships exactly this). The Claude lane avoids it only
+  because Anthropic bearers can ride a loopback proxy; there is no
+  equivalent indirection for ChatGPT device auth short of MITM-ing their
+  OAuth. Mitigations that DO exist: session-scoped CODEX_HOME (0700/0600),
+  shredded at turn end and reset, never ambient env.
+- _Pre-Codex sidecar coexistence._ A sandbox PAUSED on a pre-codex image
+  resumes with the old sidecar, whose schema strips the unknown harness
+  fields — a codex turn would silently run Claude. There is no sidecar
+  version handshake yet (queued in D2.5); the window is accepted pre-launch
+  because it closes at template promote and paused pre-codex sandboxes with
+  codex turns require a user who had codex UI before the deploy — an empty
+  set. Post-launch, the handshake is mandatory before the NEXT harness.
+- _No MCP bridge._ Codex turns ignore `mcpServers` (the runtime factory is
+  claude-only) — AskUserQuestion/browser tools are absent; the sidecar logs
+  a warning rather than dropping silently.
 
 ### D2.4 installation_repositories webhook — DROPPED, with reasoning
 
@@ -572,16 +600,20 @@ exists, and the desktop's focus-refetch covers the client cache. An
 linkage on direct installs — deliberate, see the callback's oracle note).
 Events stay subscribed for a future push channel.
 
-### D2.5 Queued small fixes (deus)
+### D2.5 Queued small fixes
 
-- `connecting` map invalidation on identity change (the open-socket half
-  shipped in D1; in-flight connect promises survive an account switch).
-- Provisioning path routes through the `githubTokenRefreshes` single-flight
-  (today only wake/send do; two concurrent same-env provisions can race a
-  failed mint's delete against a fresh write).
-- `pendingWelcomeMessageRef` becomes a per-workspace map (a second
-  workspace started during env-setup provisioning steals the slot and the
-  environment setup silently never runs).
+Shipped in this branch: `connecting` map invalidation on identity change
+(plus promise-identity-guarded cleanup and a pre-persist generation check),
+`githubTokenRefreshes` single-flight with a normalized origin key cleared on
+identity change, and the per-workspace welcome-message map (success-gated
+delete, in-flight guard).
+
+Still queued:
+
+- **Sidecar capability handshake** (agnt): sidecar announces version +
+  harness list on its control hello; DOs gate harness-specific dispatch on
+  it. Mandatory before the next harness ships post-launch — see the
+  coexistence boundary in D2.3.
 
 ### D3 (next) — "Mac closed": mobile direct-to-cloud
 

@@ -54510,6 +54510,73 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "j2abRS",
+              "name": "h — cloud",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 2,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "S90xW",
+                  "name": "note",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Cloud workspace — the whole TerminalPanel (tab strip included) is swapped for a placeholder until the remote PTY rides the sidecar channel; the agent runs commands inside the sandbox",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-sans",
+                  "fontSize": 10,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "JlpWy",
+              "name": "Panel — cloud",
+              "clip": true,
+              "width": 600,
+              "height": 190,
+              "fill": "$bg-elevated",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 6,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "h4ExU",
+                  "name": "Terminal attaches to the cloud sandbox",
+                  "opacity": 0.7,
+                  "fill": "$text-primary",
+                  "content": "Terminal attaches to the cloud sandbox",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "medium"
+                },
+                {
+                  "type": "text",
+                  "id": "fzMvJ",
+                  "name": "hint",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": 336,
+                  "content": "The remote shell is coming — for now, ask the agent to run commands; it executes inside the sandbox.",
+                  "lineHeight": 1.5,
+                  "textAlign": "center",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         },

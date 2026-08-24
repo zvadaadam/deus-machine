@@ -434,15 +434,29 @@ function refreshEnvironmentGithubTokenOnce(
   baseUrl: string,
   apiKey: string
 ): Promise<void> {
-  const inFlight = githubTokenRefreshes.get(originUrl);
+  // Normalized key: provisioning passes the https form, wake/send pass the
+  // raw stored origin — an ssh-form remote would otherwise key two separate
+  // flights for the same environment and re-open the delete-vs-write race
+  // the single-flight exists to close.
+  const key = httpsOrigin(originUrl);
+  const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
   const run = refreshEnvironmentGithubToken(originUrl, environmentId, baseUrl, apiKey).finally(
     () => {
-      githubTokenRefreshes.delete(originUrl);
+      githubTokenRefreshes.delete(key);
     }
   );
-  githubTokenRefreshes.set(originUrl, run);
+  githubTokenRefreshes.set(key, run);
   return run;
+}
+
+/**
+ * Called by the driver's identity-change handler: in-flight refreshes were
+ * minted under the PREVIOUS account, and the next account's provision must
+ * not adopt (or be blocked by) them.
+ */
+export function clearGithubTokenRefreshFlights(): void {
+  githubTokenRefreshes.clear();
 }
 
 async function refreshEnvironmentGithubToken(
