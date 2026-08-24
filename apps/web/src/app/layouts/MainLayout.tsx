@@ -266,8 +266,10 @@ export function MainLayout() {
     const workspaceId = selectedWorkspace.id;
     workspaceChatPanelRef.current
       .sendMessage(pending.message, pending.model)
-      .then(() => {
-        pendingWelcomeMessagesRef.current.delete(workspaceId);
+      .then((sent) => {
+        // sendMessage RESOLVES on failure too (it toasts and reports false) —
+        // only a true delivery may consume the queued prompt.
+        if (sent) pendingWelcomeMessagesRef.current.delete(workspaceId);
       })
       .catch((error) => {
         console.error("Failed to send welcome message:", error);

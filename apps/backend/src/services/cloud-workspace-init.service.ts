@@ -204,14 +204,16 @@ export async function refreshWorkspaceGithubToken(workspace: {
     );
     if (workspace.provider_workspace_id) {
       // Re-resolve the (just-refreshed) environment secrets into the DO's
-      // stored map, so a stopped→reprovision replays the fresh token.
+      // stored map, so a stopped→reprovision replays the fresh token. NOT
+      // best-effort: ensureProvisioning inside this call is ALSO what
+      // restarts a stopped sandbox (chip + send paths) — swallowing its
+      // failure reported successful wakes over a sandbox that never moved,
+      // and resumes rewriting auth files from a stale map.
       await agntCreateWorkspace({
         workspaceId: workspace.provider_workspace_id,
         environment: envInfo.name,
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
-      }).catch((err) => {
-        console.warn(`[CloudInit] DO secret refresh (env lane) failed: ${err}`);
       });
     }
     return;
@@ -219,16 +221,20 @@ export async function refreshWorkspaceGithubToken(workspace: {
 
   // Inline lane: the mint was baked into the DO's map at create time, where
   // it SHADOWS the org PAT. Push a fresh one through the re-create seam.
+  // A null mint (no App install — PAT/public-repo workspaces, or a transient
+  // mint failure) does NOT skip the call: the re-create resolves org-wide
+  // secrets server-side, so an omitted github_token REMOVES the stale inline
+  // mint from the map and lets the PAT (or anonymous clone) win again — and
+  // the restart-by-recreate still happens for tokenless workspaces.
   if (!workspace.provider_workspace_id) return;
   const token = await mintRepoInstallationToken(originUrl);
-  if (!token) return;
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
-    environment: Environment.from("agnt-base").secrets({ github_token: token }),
+    environment: token
+      ? Environment.from("agnt-base").secrets({ github_token: token })
+      : Environment.from("agnt-base"),
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
-  }).catch((err) => {
-    console.warn(`[CloudInit] DO secret refresh (inline lane) failed: ${err}`);
   });
 }
 

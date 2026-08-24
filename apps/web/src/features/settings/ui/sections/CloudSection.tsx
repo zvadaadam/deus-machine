@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { match } from "ts-pattern";
 import type { ReactNode } from "react";
 import { githubRepoSlug } from "@shared/git-origin";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import { cn } from "@/shared/lib/utils";
 import {
   retryProvision,
   type ClaudeSubscriptionState,
+  type CodexSubscriptionState,
   disconnectClaudeSubscription,
   disconnectCodexSubscription,
   getClaudeSubscriptionStatus,
@@ -51,7 +53,7 @@ const AGENT_SUBSCRIPTIONS = [
     command: "codex login --device-auth",
     placeholder: null,
     instructions:
-      "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes. Stored encrypted, resolved per turn server-side. The command above is the manual fallback (device-auth) for headless machines.",
+      "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes (on the web app, paste the file instead). Unlike Claude's proxied token, Codex needs its auth file INSIDE the sandbox during its turns — same exposure as running codex on your own machine; it's removed the moment the turn ends. The command above is the manual fallback (device-auth) for headless machines.",
   },
 ] as const;
 
@@ -94,12 +96,20 @@ export function CloudSection() {
 
   const codexAction = useMutation({
     mutationFn: async (action: { kind: "login" } | { kind: "import" } | { kind: "disconnect" }) => {
-      const result =
-        action.kind === "login"
-          ? await startCodexLogin()
-          : action.kind === "import"
-            ? await importCodexAuth()
-            : await disconnectCodexSubscription();
+      const result = await match(action.kind)
+        .with("login", () => startCodexLogin())
+        .with("import", () => importCodexAuth())
+        .with(
+          "disconnect",
+          (): Promise<CodexSubscriptionState> =>
+            capabilities.ipcInvoke
+              ? disconnectCodexSubscription()
+              : // Web: no vault to clear — delete the platform copy directly.
+                apiClient
+                  .delete<{ ok: boolean }>("/settings/cloud/codex-auth")
+                  .then(() => ({ success: true, hasCodexSubscription: false }))
+        )
+        .exhaustive();
       if (result.error) throw new Error(result.error);
       return result;
     },
@@ -136,16 +146,6 @@ export function CloudSection() {
       await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Codex connect failed"),
-  });
-
-  const codexWebDisconnect = useMutation({
-    mutationFn: () => apiClient.delete<{ ok: boolean }>("/settings/cloud/codex-auth"),
-    onSuccess: async () => {
-      toast.success("Codex subscription disconnected");
-      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex disconnect failed"),
   });
 
   const subAction = useMutation({
@@ -411,8 +411,8 @@ export function CloudSection() {
         {step(agentsDone, "Agents — run on your own subscriptions")}
         <p className="text-text-muted mb-3 text-sm">
           Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
-          by you, in your terminal — Deus only stores the result (encrypted, streamed per turn,
-          never visible to the agent).
+          by you, in your terminal — Deus stores the result encrypted and hands it out per turn. How
+          each agent receives it differs; the row below says so honestly.
         </p>
         <div className="border-border-subtle divide-border-subtle divide-y rounded-lg border">
           {AGENT_SUBSCRIPTIONS.map((agent) => {
@@ -442,16 +442,10 @@ export function CloudSection() {
                     className="self-start"
                     onClick={() =>
                       agent.id === "codex"
-                        ? capabilities.ipcInvoke
-                          ? codexAction.mutate({ kind: "disconnect" })
-                          : codexWebDisconnect.mutate()
+                        ? codexAction.mutate({ kind: "disconnect" })
                         : subAction.mutate({ kind: "disconnect" })
                     }
-                    disabled={
-                      agent.id === "codex"
-                        ? codexAction.isPending || codexWebDisconnect.isPending
-                        : subAction.isPending
-                    }
+                    disabled={agent.id === "codex" ? codexAction.isPending : subAction.isPending}
                   >
                     Disconnect
                   </Button>

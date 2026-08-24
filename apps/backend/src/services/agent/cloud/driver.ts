@@ -184,10 +184,15 @@ function pushCloudError(session: CloudSession, code: unknown, message: unknown):
 const TURN_KILL_GRACE_MS = 20_000;
 
 function scheduleTurnKill(session: CloudSession, status: string, detail?: string): void {
-  if (!handler?.liveTurnId(session.deusSessionId)) return;
+  const armedFor = handler?.liveTurnId(session.deusSessionId);
+  if (!armedFor) return;
   if (session.pendingTurnKill) return;
   session.pendingTurnKill = setTimeout(() => {
     session.pendingTurnKill = null;
+    // Fire only against the turn this was armed for: turn A may have settled
+    // during the grace window and turn B started — killing B off A's stale
+    // stopped-state would cancel a healthy fresh turn.
+    if (handler?.liveTurnId(session.deusSessionId) !== armedFor) return;
     failLiveTurn(session, status, detail);
   }, TURN_KILL_GRACE_MS);
 }

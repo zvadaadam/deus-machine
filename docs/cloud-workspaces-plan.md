@@ -590,6 +590,17 @@ so the deus-side gate deliberately does NOT re-block on it. The two PRs
 - _No MCP bridge._ Codex turns ignore `mcpServers` (the runtime factory is
   claude-only) — AskUserQuestion/browser tools are absent; the sidecar logs
   a warning rather than dropping silently.
+- _Shared refresh-token lineage._ Every sandbox turn is seeded from the ONE
+  canonical CODEX_AUTH_JSON; when the codex CLI rotates the refresh token
+  inside a session-scoped home, that rotation dies with the turn-end shred
+  and the canonical copy keeps the older lineage. Whether OpenAI's refresh
+  grant tolerates this reuse is their server policy — the user's own
+  ~/.codex rotates against the same lineage constantly, and Conductor ships
+  the identical import model, so it demonstrably survives in practice — but
+  it is NOT a guarantee we control. If canonical-copy refreshes ever start
+  failing, the fix is per-workspace device-flow credentials (D3's in-app
+  device-code work makes that natural); recorded here so the failure mode
+  is a lookup, not a mystery.
 
 ### D2.4 installation_repositories webhook — DROPPED, with reasoning
 

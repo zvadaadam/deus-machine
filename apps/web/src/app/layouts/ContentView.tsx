@@ -9,6 +9,7 @@
  * Data fetching is owned by each tab component, not by this router.
  */
 
+import { useRef } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
@@ -45,6 +46,16 @@ export function ContentView({
   useAppsLaunched(workspace.id);
   useAppsStopped(workspace.id);
 
+  // The terminal mounts for the LAST LOCAL workspace even while a cloud one
+  // is selected — see the comment at the render site. Ref-during-render is
+  // deliberate: the value is a pure function of the prop history and updating
+  // it in an effect would flash the panel unmounted for one frame.
+  const lastLocalTerminalRef = useRef<{ id: string; path: string } | null>(null);
+  if (workspace.kind !== "cloud") {
+    lastLocalTerminalRef.current = { id: workspace.id, path: workspace.workspace_path };
+  }
+  const terminalTarget = lastLocalTerminalRef.current;
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Lazy tabs — mounted only when active */}
@@ -76,7 +87,7 @@ export function ContentView({
           activeTab !== "terminal" && "pointer-events-none invisible absolute"
         )}
       >
-        {workspace.kind === "cloud" ? (
+        {workspace.kind === "cloud" && (
           // A LOCAL shell here would masquerade as the sandbox — the same
           // truthfulness class as every state-collapse bug this sprint. The
           // real remote PTY rides the sidecar session channel (browser:input
@@ -88,12 +99,22 @@ export function ContentView({
               inside the sandbox.
             </p>
           </div>
-        ) : (
-          <TerminalPanel
-            workspaceId={workspace.id}
-            workspacePath={workspace.workspace_path}
-            panelVisible={activeTab === "terminal"}
-          />
+        )}
+        {terminalTarget && (
+          // Mounted through cloud selections too (frozen on the last LOCAL
+          // workspace): TerminalPanel keeps every visited workspace's xterm
+          // buffers in component state, so unmounting it on a cloud visit
+          // silently discarded scrollback that survives every local↔local
+          // switch. Cloud ids never enter the panel — a local PTY at a cloud
+          // row's path would be the masquerade the placeholder exists to
+          // avoid.
+          <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+            <TerminalPanel
+              workspaceId={terminalTarget.id}
+              workspacePath={terminalTarget.path}
+              panelVisible={activeTab === "terminal" && workspace.kind !== "cloud"}
+            />
+          </div>
         )}
       </div>
 
