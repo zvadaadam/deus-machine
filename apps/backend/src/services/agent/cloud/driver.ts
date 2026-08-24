@@ -481,6 +481,8 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
 export interface CloudTurnOptions {
   /** Model override — agnt's sidecar honors options.model (else its default). */
   model?: string;
+  /** Which engine harness runs the turn; the wire defaults to claude-code. */
+  agentHarness?: string;
   thinkingLevel?: ThinkingLevel;
 }
 
@@ -505,11 +507,16 @@ export async function startCloudTurn(
   const registered = handler.beginTurn(deusSessionId, turnId);
   try {
     const wsOptions: Record<string, unknown> = {};
-    // Deus picks the per-turn credential EXPLICITLY — subscription first,
-    // API key fallback. No env-ordering accidents like the raw CLI (where a
-    // stray ANTHROPIC_API_KEY silently outranks the subscription token).
-    // The oauth branch requires agnt's authKind-aware sidecar (engine 0.3.1).
-    if (config.claudeOauthToken) {
+    if (options.agentHarness === "codex-app-server") {
+      // Codex: the credential is the auth.json FILE, held only as the
+      // canonical platform secret — the session DO resolves it at dispatch
+      // (deus's backend never carries it). Only the harness rides the wire.
+      wsOptions.harness = "codex-app-server";
+    } else if (config.claudeOauthToken) {
+      // Deus picks the per-turn credential EXPLICITLY — subscription first,
+      // API key fallback. No env-ordering accidents like the raw CLI (where
+      // a stray ANTHROPIC_API_KEY silently outranks the subscription token).
+      // The oauth branch requires agnt's authKind-aware sidecar (0.3.1+).
       wsOptions.apiKey = config.claudeOauthToken;
       wsOptions.authKind = "oauth";
     } else if (config.anthropicApiKey) {

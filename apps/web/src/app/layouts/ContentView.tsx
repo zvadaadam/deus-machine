@@ -76,11 +76,25 @@ export function ContentView({
           activeTab !== "terminal" && "pointer-events-none invisible absolute"
         )}
       >
-        <TerminalPanel
-          workspaceId={workspace.id}
-          workspacePath={workspace.workspace_path}
-          panelVisible={activeTab === "terminal"}
-        />
+        {workspace.kind === "cloud" ? (
+          // A LOCAL shell here would masquerade as the sandbox — the same
+          // truthfulness class as every state-collapse bug this sprint. The
+          // real remote PTY rides the sidecar session channel (browser:input
+          // proves the streaming pattern); until it lands, say so.
+          <div className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1.5 text-sm">
+            <p className="text-foreground/70 font-medium">Terminal attaches to the cloud sandbox</p>
+            <p className="max-w-sm text-center text-xs">
+              The remote shell is coming — for now, ask the agent to run commands; it executes
+              inside the sandbox.
+            </p>
+          </div>
+        ) : (
+          <TerminalPanel
+            workspaceId={workspace.id}
+            workspacePath={workspace.workspace_path}
+            panelVisible={activeTab === "terminal"}
+          />
+        )}
       </div>
 
       {simulatorAvailable && (

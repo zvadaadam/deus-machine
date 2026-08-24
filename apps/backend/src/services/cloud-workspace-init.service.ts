@@ -324,12 +324,14 @@ export async function getCloudSettingsStatus(): Promise<{
   // canonical CLAUDE_CODE_OAUTH_TOKEN platform secret exists — the session DO
   // fills it at dispatch, so turns are runnable and the status must say so.
   let hasPlatformClaude = false;
+  let hasPlatformCodex = false;
   try {
     for await (const secret of agntListSecrets({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     })) {
       if (secret.keyName === "CLAUDE_CODE_OAUTH_TOKEN") hasPlatformClaude = true;
+      if (secret.keyName === "CODEX_AUTH_JSON") hasPlatformCodex = true;
       if (hasGithubToken) continue; // both flags found by scanning the FULL list
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
@@ -351,7 +353,9 @@ export async function getCloudSettingsStatus(): Promise<{
     baseUrl: config.baseUrl,
     hasAnthropicKey: Boolean(config.anthropicApiKey),
     hasTurnCredential:
-      Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
+      Boolean(config.claudeOauthToken || config.anthropicApiKey) ||
+      hasPlatformClaude ||
+      hasPlatformCodex,
     hasGithubToken,
   };
 }

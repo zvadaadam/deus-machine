@@ -230,8 +230,10 @@ export function MainLayout() {
   useEffect(() => {
     if (!pendingEnvSetupRepoId) return;
     useUIStore.getState().clearEnvSetupRequest();
-    // Cloud sandboxes run the claude-code harness only — a stored Codex pick
-    // would be rejected at send time, so force the Claude default instead.
+    // The setup turn is pinned to Claude regardless of the stored pick — not
+    // because the cloud can't run Codex (it can), but because the
+    // environment-onboarding prompt is tuned and tested against one agent
+    // and this flow must be deterministic.
     const stored = getStoredModel();
     const model = stored.startsWith("claude-code:") ? stored : DEFAULT_MODEL;
     void handleStartWorkspace(

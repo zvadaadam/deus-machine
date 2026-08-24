@@ -6,10 +6,12 @@
 // secret). Cloud turns consume it when Codex cloud support lands — the
 // status is honest about that.
 
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { ipcMain } from "electron";
+import { extendCliPath, resolveCliExecutable } from "../../../shared/lib/cli-path";
 import { getCloudCredentialsStatus } from "./cloud-credentials";
 import {
   connectAgentCredential,
@@ -37,6 +39,55 @@ async function statusResult(error?: string): Promise<CodexSubscriptionResult> {
     hasCodexSubscription: status?.hasCodexSubscription ?? false,
     ...(error ? { error } : {}),
   };
+}
+
+/**
+ * One-click sign-in: spawn the bundled codex CLI's browser login and import
+ * the credential it writes. Plain `codex login` runs a local OAuth callback
+ * and opens the browser itself — no ChatGPT security-settings toggle, no
+ * device codes, no terminal. The CLI owns the entire OAuth exchange and
+ * writes ~/.codex/auth.json; we only read the result, exactly like the
+ * import path. Single-flight: a second click while the browser is open
+ * reports the wait instead of racing a second login server.
+ */
+let codexLoginInFlight: Promise<CodexSubscriptionResult> | null = null;
+
+export function startCodexLogin(): Promise<CodexSubscriptionResult> {
+  if (codexLoginInFlight) return codexLoginInFlight;
+  codexLoginInFlight = runCodexLogin().finally(() => {
+    codexLoginInFlight = null;
+  });
+  return codexLoginInFlight;
+}
+
+async function runCodexLogin(): Promise<CodexSubscriptionResult> {
+  const codex = resolveCliExecutable("codex");
+  const exit = await new Promise<{ code: number | null; error?: string }>((resolve) => {
+    const child = spawn(codex, ["login"], {
+      env: { ...process.env, PATH: extendCliPath(process.env.PATH) },
+      stdio: "ignore",
+    });
+    // The browser round-trip is the slow part; five minutes is generous and
+    // guarantees the button never wedges on an abandoned login.
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ code: null, error: "Sign-in timed out — try again." });
+    }, 5 * 60_000);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      resolve({ code: null, error: `Could not run codex: ${err.message}` });
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      resolve({ code });
+    });
+  });
+  if (exit.error) return statusResult(exit.error);
+  if (exit.code !== 0) {
+    return statusResult("Codex sign-in did not complete — the browser flow was cancelled.");
+  }
+  // The CLI wrote auth.json; the import path validates, stores, and syncs.
+  return importCodexAuth();
 }
 
 /** Import ~/.codex/auth.json after the user ran the device-auth login. */
@@ -78,5 +129,6 @@ export async function disconnectCodexSubscription(): Promise<CodexSubscriptionRe
 export function registerCodexSubscriptionHandlers(): void {
   ipcMain.handle("deus_cloud:codex_sub_status", () => statusResult());
   ipcMain.handle("deus_cloud:codex_sub_import", () => importCodexAuth());
+  ipcMain.handle("deus_cloud:codex_sub_login", () => startCodexLogin());
   ipcMain.handle("deus_cloud:codex_sub_disconnect", () => disconnectCodexSubscription());
 }

@@ -22,6 +22,7 @@ import {
   getCodexSubscriptionStatus,
   getGithubAppStatus,
   importCodexAuth,
+  startCodexLogin,
   installGithubApp,
   openAgentSetupTerminal,
   saveClaudeSubscriptionToken,
@@ -49,7 +50,7 @@ const AGENT_SUBSCRIPTIONS = [
     command: "codex login --device-auth",
     placeholder: null,
     instructions:
-      "Enable device authorization in ChatGPT security settings, run this in a terminal and approve the code, then import the credential it writes. Stored encrypted; cloud turns activate with Codex cloud support.",
+      "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes. Stored encrypted, resolved per turn server-side. The command above is the manual fallback (device-auth) for headless machines.",
   },
 ] as const;
 
@@ -89,16 +90,20 @@ export function CloudSection() {
   });
 
   const codexAction = useMutation({
-    mutationFn: async (action: { kind: "import" } | { kind: "disconnect" }) => {
+    mutationFn: async (action: { kind: "login" } | { kind: "import" } | { kind: "disconnect" }) => {
       const result =
-        action.kind === "import" ? await importCodexAuth() : await disconnectCodexSubscription();
+        action.kind === "login"
+          ? await startCodexLogin()
+          : action.kind === "import"
+            ? await importCodexAuth()
+            : await disconnectCodexSubscription();
       if (result.error) throw new Error(result.error);
       return result;
     },
     onSuccess: async (result) => {
       toast.success(
         result.hasCodexSubscription
-          ? "Codex subscription imported — activates with Codex cloud support"
+          ? "Codex connected — cloud sandboxes can run Codex on your plan"
           : "Codex subscription disconnected"
       );
       await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
@@ -187,10 +192,12 @@ export function CloudSection() {
   // written twice and disagreed about Codex (which the cloud lane cannot
   // run, so a Codex-only setup must not tick this).
   // hasTurnCredential is the backend's full disjunction (API key, pushed
-  // token, canonical platform secret) — a second device in the same org has
-  // runnable turns with an empty local vault. The local subscription flag
-  // still counts for the pre-push moment right after connecting.
-  const agentsDone = s?.hasTurnCredential || sub.data?.hasClaudeSubscription;
+  // token, either canonical platform secret) — a second device in the same
+  // org has runnable turns with an empty local vault. The local subscription
+  // flags still count for the pre-push moment right after connecting; Codex
+  // counts since the sandbox runs codex-app-server.
+  const agentsDone =
+    s?.hasTurnCredential || sub.data?.hasClaudeSubscription || codexSub.data?.hasCodexSubscription;
 
   const agentConnected = (id: string) =>
     id === "codex" ? codexSub.data?.hasCodexSubscription : sub.data?.hasClaudeSubscription;
@@ -362,9 +369,6 @@ export function CloudSection() {
       </div>
 
       <div className="mb-8">
-        {/* Codex is deliberately NOT counted: the cloud lane only ships Claude
-            credentials today, so a Codex-only setup would tick this step and
-            then fail every cloud turn on a missing credential. */}
         {step(agentsDone, "Agents — run on your own subscriptions")}
         <p className="text-text-muted mb-3 text-sm">
           Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
@@ -457,14 +461,28 @@ export function CloudSection() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="sm"
-                        className="self-start"
-                        onClick={() => codexAction.mutate({ kind: "import" })}
-                        disabled={codexAction.isPending}
-                      >
-                        {codexAction.isPending ? "Importing…" : "Import credential"}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {/* One click: main spawns the bundled `codex login`
+                            (browser OAuth, no device codes) and imports the
+                            credential it writes. The manual command above
+                            stays as the fallback for headless setups. */}
+                        <Button
+                          size="sm"
+                          className="self-start"
+                          onClick={() => codexAction.mutate({ kind: "login" })}
+                          disabled={codexAction.isPending}
+                        >
+                          {codexAction.isPending ? "Waiting for browser…" : "Sign in with ChatGPT"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => codexAction.mutate({ kind: "import" })}
+                          disabled={codexAction.isPending}
+                        >
+                          Import existing
+                        </Button>
+                      </div>
                     )}
                   </>
                 )}

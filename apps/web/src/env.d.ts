@@ -58,6 +58,7 @@ interface Window {
     installGithubApp: () => Promise<{ ok: boolean; error?: string }>;
     getCodexSubscriptionStatus: () => Promise<import("@shared/types").CodexSubscriptionResult>;
     importCodexAuth: () => Promise<import("@shared/types").CodexSubscriptionResult>;
+    startCodexLogin: () => Promise<import("@shared/types").CodexSubscriptionResult>;
     disconnectCodexSubscription: () => Promise<import("@shared/types").CodexSubscriptionResult>;
     saveClaudeSubscriptionToken: (
       token: string

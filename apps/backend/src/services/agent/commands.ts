@@ -387,15 +387,15 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     cwd = computeWorkspacePath(workspace) ?? undefined;
   }
 
-  // The cloud sidecar runs the claude-code harness only (it deliberately
-  // never installs the Codex SDK) — reject other harnesses up front with a
-  // real explanation instead of a provider-session error mid-connect. This
-  // MUST precede every write below: after the harness persist it would leave
-  // a rejected harness on the row; after the working flip it would strand
-  // the session in "working" with no turn to ever end it.
-  if (isCloud && agentHarness !== "claude-code") {
+  // The cloud sidecar runs claude-code and codex-app-server (the template
+  // bakes both CLIs). Anything else — codex-sdk, acp — is rejected up front
+  // with a real explanation instead of a provider-session error
+  // mid-connect. This MUST precede every write below: after the harness
+  // persist it would leave a rejected harness on the row; after the working
+  // flip it would strand the session in "working" with no turn to end it.
+  if (isCloud && agentHarness !== "claude-code" && agentHarness !== "codex-app-server") {
     throw new Error(
-      "Codex isn't available in cloud workspaces yet — the sandbox runs Claude only. Pick a Claude model, or use a local workspace for Codex."
+      "This agent isn't available in cloud workspaces — pick a Claude or Codex model, or use a local workspace."
     );
   }
 
@@ -492,6 +492,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       // resume is agnt-internal) — model and thinking DO travel.
       await startCloudTurn(sessionId, turnId, content, {
         model,
+        agentHarness,
         thinkingLevel: readThinkingLevel(params.thinkingLevel),
       });
     } catch (err) {
