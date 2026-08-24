@@ -39,10 +39,17 @@ export interface AgentCredentialSpec {
 }
 
 /** Store locally, sync the canonical platform copy, stamp what succeeded. */
+/**
+ * Store locally + sync to the platform. Returns whether the platform copy
+ * landed: callers whose CLOUD behavior depends entirely on the platform copy
+ * (codex — turns resolve the secret at the session DO, the local value is
+ * never sent per turn) must surface `false` instead of reporting connected.
+ * The startup catch-up retries unsynced values on the next launch.
+ */
 export async function connectAgentCredential(
   spec: AgentCredentialSpec,
   value: string
-): Promise<void> {
+): Promise<boolean> {
   const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
   const prior = await getCloudCredentialMeta(spec.vaultName).catch(() => null);
   if (foreignToOrg(prior, orgId)) {
@@ -56,13 +63,15 @@ export async function connectAgentCredential(
     );
   }
   await setCloudCredential(spec.vaultName, value);
-  if (await syncAgentSecretToPlatform(spec.secretName, value)) {
+  const synced = await syncAgentSecretToPlatform(spec.secretName, value);
+  if (synced) {
     await setCloudCredential(spec.vaultName, value, {
       syncedToPlatform: true,
       ...(orgId ? { syncedOrgId: orgId } : {}),
     });
   }
   await pushCloudCredentialsToBackend();
+  return synced;
 }
 
 /**

@@ -384,6 +384,16 @@ const connecting = new Map<string, Promise<CloudSession>>();
 /** Bumped on every platform-identity change; stale connects check it. */
 let identityGeneration = 0;
 
+/**
+ * Monotonic account-switch counter. Callers that await across the identity
+ * boundary (cloud-workspace-init's refresh path) capture it before the await
+ * and bail on mismatch — the clear()-based invalidation cannot cover work
+ * that REGISTERS after the clear ran.
+ */
+export function getCloudIdentityGeneration(): number {
+  return identityGeneration;
+}
+
 /** Open (or return) the live socket for a cloud session. Concurrent callers
  *  (create pipeline vs. a fast first send, diff polls vs. wake) share one
  *  in-flight connect — a lost race would leak a second socket that

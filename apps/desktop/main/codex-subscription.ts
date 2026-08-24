@@ -118,8 +118,18 @@ export async function importCodexAuth(): Promise<CodexSubscriptionResult> {
   }
   // Canonical platform copy — an unlinked turn credential (per-sandbox
   // seeding consumes it when Codex cloud support lands).
-  await connectAgentCredential(CODEX_CREDENTIAL, raw);
-  return statusResult();
+  const synced = await connectAgentCredential(CODEX_CREDENTIAL, raw);
+  // Codex cloud turns resolve ONLY the platform copy (the local value is
+  // never sent per turn) — an unsynced connect would read "connected" while
+  // every cloud turn fails. Say so; the startup catch-up retries the upload.
+  const result = await statusResult();
+  return synced
+    ? result
+    : {
+        ...result,
+        warning:
+          "Codex is connected on this Mac, but copying the login to Deus Cloud failed — cloud sandboxes can't run Codex until it syncs. Check your connection; Deus retries on next launch.",
+      };
 }
 
 export async function disconnectCodexSubscription(): Promise<CodexSubscriptionResult> {

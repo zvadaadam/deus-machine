@@ -101,11 +101,17 @@ export function CloudSection() {
       return result;
     },
     onSuccess: async (result) => {
-      toast.success(
-        result.hasCodexSubscription
-          ? "Codex connected — cloud sandboxes can run Codex on your plan"
-          : "Codex subscription disconnected"
-      );
+      if (result.warning) {
+        // Connected locally but the platform copy failed — cloud turns
+        // resolve ONLY the platform copy, so "connected" alone would lie.
+        toast.warning(result.warning);
+      } else {
+        toast.success(
+          result.hasCodexSubscription
+            ? "Codex connected — cloud sandboxes can run Codex on your plan"
+            : "Codex subscription disconnected"
+        );
+      }
       await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
       // hasTurnCredential (checklist + send-gating) folds Codex in — same
       // pairing the Claude action below does.

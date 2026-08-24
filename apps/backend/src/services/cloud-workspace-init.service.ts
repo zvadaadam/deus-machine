@@ -28,7 +28,11 @@ import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import { getCloudConfig } from "./agent/cloud/config";
-import { ensureCloudSession, announceCloudEnv } from "./agent/cloud/driver";
+import {
+  ensureCloudSession,
+  announceCloudEnv,
+  getCloudIdentityGeneration,
+} from "./agent/cloud/driver";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 
 const execFileAsync = promisify(execFile);
@@ -180,7 +184,16 @@ export async function refreshWorkspaceGithubToken(workspace: {
   if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return;
   const originUrl = getRepositoryById(getDatabase(), workspace.repository_id)?.git_origin_url;
   if (!originUrl) return;
+  const generationAtStart = getCloudIdentityGeneration();
   const envInfo = await getCloudEnvironmentInfo(originUrl);
+  if (generationAtStart !== getCloudIdentityGeneration()) {
+    // The account changed while the lookup was in flight. The identity
+    // handler's clear() ran BEFORE this call would register its flight, so
+    // clearing alone cannot cover this interval — a stale registration here
+    // would hand the new account an old-credential refresh. Bail; the new
+    // identity's own send/wake path refreshes with its own config.
+    return;
+  }
 
   if (envInfo.configured && envInfo.environmentId) {
     await refreshEnvironmentGithubTokenOnce(
@@ -307,6 +320,8 @@ export async function getCloudSettingsStatus(): Promise<{
   hasAnthropicKey: boolean;
   /** A cloud turn can actually run: subscription token or API key present. */
   hasTurnCredential: boolean;
+  /** A CLAUDE cloud turn can run — gates flows pinned to a Claude model. */
+  hasClaudeTurnCredential: boolean;
   hasGithubToken: boolean;
 }> {
   const config = getCloudConfig();
@@ -316,6 +331,7 @@ export async function getCloudSettingsStatus(): Promise<{
       baseUrl: null,
       hasAnthropicKey: false,
       hasTurnCredential: false,
+      hasClaudeTurnCredential: false,
       hasGithubToken: false,
     };
   }
@@ -356,6 +372,10 @@ export async function getCloudSettingsStatus(): Promise<{
       Boolean(config.claudeOauthToken || config.anthropicApiKey) ||
       hasPlatformClaude ||
       hasPlatformCodex,
+    // Claude-only readiness: the environment-setup flow pins its turn to a
+    // Claude model, so its gate must NOT open on a codex-only credential.
+    hasClaudeTurnCredential:
+      Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
     hasGithubToken,
   };
 }
@@ -441,11 +461,18 @@ function refreshEnvironmentGithubTokenOnce(
   const key = httpsOrigin(originUrl);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
-  const run = refreshEnvironmentGithubToken(originUrl, environmentId, baseUrl, apiKey).finally(
-    () => {
-      githubTokenRefreshes.delete(key);
-    }
-  );
+  const run: Promise<void> = refreshEnvironmentGithubToken(
+    originUrl,
+    environmentId,
+    baseUrl,
+    apiKey
+  ).finally(() => {
+    // Only OUR entry: the identity-change clear may have let a replacement
+    // flight occupy this key — an unconditional delete would evict it and
+    // reopen the delete-vs-write race (same guard as the driver's
+    // connecting map).
+    if (githubTokenRefreshes.get(key) === run) githubTokenRefreshes.delete(key);
+  });
   githubTokenRefreshes.set(key, run);
   return run;
 }
