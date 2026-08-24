@@ -485,7 +485,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
         workspace?.init_stage === "paused" ||
         workspace?.init_stage === "stopped"
       ) {
-        await refreshWorkspaceGithubToken(workspace.repository_id);
+        await refreshWorkspaceGithubToken(workspace);
       }
       // permissionMode/maxTurns/additionalDirectories/resume have no cloud
       // channel equivalent (permissions auto-allow like the local policy;

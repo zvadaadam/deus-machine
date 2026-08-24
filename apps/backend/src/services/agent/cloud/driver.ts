@@ -55,6 +55,11 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
   // Account switch = every open channel is authenticated as the WRONG
   // identity. Close them all; the next send reconnects under the new config.
   setCloudIdentityChangedHandler(() => {
+    // Established sockets AND in-flight attempts: a connect started under
+    // account A must not land its A-authenticated session into the map
+    // after B signs in, and new callers must not adopt A's pending promise.
+    identityGeneration += 1;
+    connecting.clear();
     for (const s of sessions.values()) {
       rejectPendingDiffs(s, "platform identity changed");
       s.socket.close();
@@ -374,6 +379,8 @@ function extractAnswers(response: unknown): string[] {
 // ---- Session lifecycle ----
 
 const connecting = new Map<string, Promise<CloudSession>>();
+/** Bumped on every platform-identity change; stale connects check it. */
+let identityGeneration = 0;
 
 /** Open (or return) the live socket for a cloud session. Concurrent callers
  *  (create pipeline vs. a fast first send, diff polls vs. wake) share one
@@ -399,6 +406,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
   existing?.socket.close();
   sessions.delete(deusSessionId);
 
+  const generationAtStart = identityGeneration;
   const config = getCloudConfig();
   if (!config) throw new Error("Cloud workspaces are not configured (missing agnt API key)");
 
@@ -457,6 +465,12 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       sessions.delete(deusSessionId);
     },
   });
+  if (generationAtStart !== identityGeneration) {
+    // The account changed while this connect was in flight: the socket is
+    // authenticated as the PREVIOUS identity and must not enter the map.
+    session.socket.close();
+    throw new Error("Platform identity changed during connect — retry under the new account");
+  }
   sessions.set(deusSessionId, session);
   await session.socket.ready();
   return session;

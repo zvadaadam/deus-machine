@@ -152,43 +152,71 @@ async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<str
 }
 
 /**
- * Re-mint the App token for a workspace about to start.
+ * Re-mint the App token for a workspace about to start — BOTH lanes.
  *
- * ENVIRONMENT lane only. Inline workspaces bake the mint into the DO's secret
- * map at create time, where it OVERRIDES the org PAT (agnt merges request
- * secrets last) and nothing re-resolves on resume — so after the first hour an
- * inline sandbox holds a dead token this refresh cannot reach. The honest fix
- * is the idempotent re-create seam (docs/cloud-workspaces-plan.md, "refresh");
- * until then this narrows the gap for environment repos and must not pretend
- * otherwise.
+ * The refresh has to land in two places, because a sandbox reads credentials
+ * from two places:
+ *  - the DO's stored secret map, replayed on stopped→reprovision. agnt's
+ *    ensureWorkspace existing-row path takes request-fresh secrets with
+ *    row-truth recipe, and ensureInitialized REFRESHES state.secrets on
+ *    identity match — so an idempotent re-create with only { workspaceId,
+ *    secrets } is the sanctioned refresh seam (ensureProvisioning is a no-op
+ *    for running/paused sandboxes).
+ *  - the platform's environment-scoped secret (env lane), resolved at that
+ *    same re-create.
+ * The third place — the thawed filesystem of a PAUSED sandbox — is agnt's
+ * side of this seam: resumeSandbox rewrites .git-credentials from the DO's
+ * refreshed map.
  */
-export async function refreshWorkspaceGithubToken(repositoryId: string | null): Promise<void> {
-  if (!repositoryId) return;
+export async function refreshWorkspaceGithubToken(workspace: {
+  repository_id: string | null;
+  provider_workspace_id?: string | null;
+}): Promise<void> {
+  if (!workspace.repository_id) return;
   const config = getCloudConfig();
   // Mint preconditions, hoisted ABOVE the env-info round-trip: without a
   // deus-cloud session there is nothing this function can do, and it runs on
   // the send path with the user's spinner already up.
   if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return;
-  const originUrl = getRepositoryById(getDatabase(), repositoryId)?.git_origin_url;
+  const originUrl = getRepositoryById(getDatabase(), workspace.repository_id)?.git_origin_url;
   if (!originUrl) return;
-  // Two chips (sidebar + header) can fire this concurrently; a failed second
-  // mint must not delete the fresh token the first one just wrote.
-  const inFlight = githubTokenRefreshes.get(repositoryId);
-  if (inFlight) return inFlight;
-  const run = (async () => {
-    const envInfo = await getCloudEnvironmentInfo(originUrl);
-    if (!envInfo.configured || !envInfo.environmentId) return;
-    await refreshEnvironmentGithubToken(
+  const envInfo = await getCloudEnvironmentInfo(originUrl);
+
+  if (envInfo.configured && envInfo.environmentId) {
+    await refreshEnvironmentGithubTokenOnce(
       originUrl,
       envInfo.environmentId,
       config.baseUrl,
       config.apiKey
     );
-  })().finally(() => {
-    githubTokenRefreshes.delete(repositoryId);
+    if (workspace.provider_workspace_id) {
+      // Re-resolve the (just-refreshed) environment secrets into the DO's
+      // stored map, so a stopped→reprovision replays the fresh token.
+      await agntCreateWorkspace({
+        workspaceId: workspace.provider_workspace_id,
+        environment: envInfo.name,
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+      }).catch((err) => {
+        console.warn(`[CloudInit] DO secret refresh (env lane) failed: ${err}`);
+      });
+    }
+    return;
+  }
+
+  // Inline lane: the mint was baked into the DO's map at create time, where
+  // it SHADOWS the org PAT. Push a fresh one through the re-create seam.
+  if (!workspace.provider_workspace_id) return;
+  const token = await mintRepoInstallationToken(originUrl);
+  if (!token) return;
+  await agntCreateWorkspace({
+    workspaceId: workspace.provider_workspace_id,
+    environment: Environment.from("agnt-base").secrets({ github_token: token }),
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  }).catch((err) => {
+    console.warn(`[CloudInit] DO secret refresh (inline lane) failed: ${err}`);
   });
-  githubTokenRefreshes.set(repositoryId, run);
-  return run;
 }
 
 const githubTokenRefreshes = new Map<string, Promise<void>>();
@@ -236,7 +264,10 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
       // re-mint BEFORE the resume. Inside the try: a throw here must take
       // the same honest revert to "paused" as a failed resume, not strand
       // the row on a permanent "resuming" spinner.
-      await refreshWorkspaceGithubToken(workspace.repository_id ?? null);
+      await refreshWorkspaceGithubToken({
+        repository_id: workspace.repository_id ?? null,
+        provider_workspace_id: workspace.provider_workspace_id,
+      });
       await wakeCloudWorkspace(workspace.provider_workspace_id);
     } catch (err) {
       console.warn(`[WORKSPACE] cloud wake resume failed: ${err}`);
@@ -387,6 +418,29 @@ async function mintRepoInstallationToken(originUrl: string): Promise<string | nu
  * failure DELETE the scoped copy so resolution falls back to the org PAT
  * rather than replaying a dead token.
  */
+/**
+ * Single-flight per origin. Provisioning, wake, and send can all refresh the
+ * same environment concurrently (two same-env workspaces provisioning at
+ * once is routine) — and a FAILED refresh's delete branch must never race a
+ * successful one's fresh write.
+ */
+function refreshEnvironmentGithubTokenOnce(
+  originUrl: string,
+  environmentId: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<void> {
+  const inFlight = githubTokenRefreshes.get(originUrl);
+  if (inFlight) return inFlight;
+  const run = refreshEnvironmentGithubToken(originUrl, environmentId, baseUrl, apiKey).finally(
+    () => {
+      githubTokenRefreshes.delete(originUrl);
+    }
+  );
+  githubTokenRefreshes.set(originUrl, run);
+  return run;
+}
+
 async function refreshEnvironmentGithubToken(
   originUrl: string,
   environmentId: string,
@@ -445,7 +499,7 @@ async function provisionInBackground(
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
       if (envInfo.environmentId) {
-        await refreshEnvironmentGithubToken(originUrl, envInfo.environmentId, baseUrl, apiKey);
+        await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, baseUrl, apiKey);
       }
       environment = envInfo.name;
     } else {

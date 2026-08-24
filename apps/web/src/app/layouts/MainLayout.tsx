@@ -190,11 +190,12 @@ export function MainLayout() {
   // 2. Select it (transitions to two-panel layout)
   // 3. Queue the message to be sent once the workspace has a session
   const welcomeCreateMutation = useCreateWorkspace();
-  const pendingWelcomeMessageRef = useRef<{
-    message: string;
-    workspaceId: string;
-    model: string;
-  } | null>(null);
+  // Keyed by workspace: a single slot meant the NEXT started workspace stole
+  // the pending prompt — most damagingly the environment-setup turn, which
+  // then silently never ran. Delivery stays selection-gated (the send rides
+  // the selected panel's ref), so an entry simply waits until its workspace
+  // is selected again.
+  const pendingWelcomeMessagesRef = useRef(new Map<string, { message: string; model: string }>());
 
   const handleStartWorkspace = useCallback(
     async (
@@ -211,17 +212,12 @@ export function MainLayout() {
             : repoId
         );
         // Store pending message — will be sent when workspace gets a session
-        pendingWelcomeMessageRef.current = {
-          message,
-          workspaceId: workspace.id,
-          model,
-        };
+        pendingWelcomeMessagesRef.current.set(workspace.id, { message, model });
         selectWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
       } catch (error) {
         console.error("Failed to create workspace from home:", error);
         toast.error(getErrorMessage(error));
-        pendingWelcomeMessageRef.current = null;
       }
     },
     [welcomeCreateMutation, selectWorkspace, expandRepo]
@@ -252,14 +248,13 @@ export function MainLayout() {
   // React effect ordering guarantees child useImperativeHandle runs before parent useEffect,
   // so workspaceChatPanelRef.current is set when this fires.
   useEffect(() => {
-    const pending = pendingWelcomeMessageRef.current;
-    if (!pending) return;
     if (!selectedWorkspace) return;
-    if (selectedWorkspace.id !== pending.workspaceId) return;
+    const pending = pendingWelcomeMessagesRef.current.get(selectedWorkspace.id);
+    if (!pending) return;
     if (selectedWorkspace.state !== "ready" || !selectedWorkspace.current_session_id) return;
     if (!workspaceChatPanelRef.current) return;
 
-    pendingWelcomeMessageRef.current = null;
+    pendingWelcomeMessagesRef.current.delete(selectedWorkspace.id);
     workspaceChatPanelRef.current.sendMessage(pending.message, pending.model).catch((error) => {
       console.error("Failed to send welcome message:", error);
       toast.error(getErrorMessage(error));
