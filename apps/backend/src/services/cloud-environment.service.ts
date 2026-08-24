@@ -50,6 +50,9 @@ export interface CloudEnvironmentInfo {
   environmentId?: string;
   /** Env var NAMES the environment declares it needs (values = secrets). */
   requiredEnv?: string[];
+  /** Lookup ERRORED (non-404): configured:false here means UNKNOWN, not
+   *  absent — state-rewriting callers must not act on it. */
+  lookupFailed?: true;
 }
 
 export interface CloudEnvironmentSummary {
@@ -106,11 +109,14 @@ export async function getCloudEnvironmentInfo(
     };
   } catch (err) {
     // Not-found is the normal "no specialized environment" answer. Anything
-    // else (platform down, auth) also degrades to the inline default — but
-    // audibly, so a misconfigured stack doesn't read as "never configured".
+    // else (platform down, auth) is UNKNOWN, not unconfigured — flagged so
+    // callers that would REWRITE state off this answer (the refresh path's
+    // inline lane replaces the DO's secret map) can refuse to act on it,
+    // while read-only consumers may still degrade to the inline default.
     const status = (err as { statusCode?: number }).statusCode;
     if (status !== 404) {
-      console.warn(`[CloudEnv] environment lookup failed (treating as unconfigured): ${err}`);
+      console.warn(`[CloudEnv] environment lookup failed (result UNKNOWN): ${err}`);
+      return { configured: false, name, lookupFailed: true };
     }
     return { configured: false, name };
   }

@@ -343,6 +343,13 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
         );
         continue;
       }
+      // HEAL-ONLY: re-uploading an already-synced credential would silently
+      // resurrect a platform copy the user deleted from ANOTHER surface (the
+      // web app's Disconnect removes only the platform secret — this desktop's
+      // vault copy survives and must not undo that decision on next launch).
+      // Rotations still propagate: every explicit connect PUTs unconditionally
+      // and re-stamps.
+      if (meta?.syncedToPlatform) continue;
       // The user can hit Disconnect while this background PUT is in flight;
       // committing the captured value afterwards would silently resurrect the
       // credential Disconnect just reported removed. Re-check around the PUT

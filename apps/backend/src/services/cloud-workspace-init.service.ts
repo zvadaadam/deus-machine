@@ -191,6 +191,14 @@ export async function refreshWorkspaceGithubToken(workspace: {
   if (!originUrl) return false;
   const generationAtStart = getCloudIdentityGeneration();
   const envInfo = await getCloudEnvironmentInfo(originUrl);
+  if (envInfo.lookupFailed) {
+    // UNKNOWN is not unconfigured: falling through to the inline lane would
+    // re-create a NAMED-environment workspace from agnt-base and replace its
+    // DO secret map (env vars, credentials) with the inline defaults — a
+    // transient platform blip must never rewrite durable state. Report
+    // no-op; wake callers revert honestly, sends surface the retryable miss.
+    return false;
+  }
   if (generationAtStart !== getCloudIdentityGeneration()) {
     // The account changed while the lookup was in flight. The identity
     // handler's clear() ran BEFORE this call would register its flight, so

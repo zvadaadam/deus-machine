@@ -625,6 +625,18 @@ Still queued:
   harness list on its control hello; DOs gate harness-specific dispatch on
   it. Mandatory before the next harness ships post-launch — see the
   coexistence boundary in D2.3.
+- **Stable welcome-delivery identity** (deus): the queued welcome/env-setup
+  prompt re-sends with a NEW turnId after an ambiguous failure (ack lost,
+  send actually admitted) — the retained entry can double-run the prompt.
+  Fix shape: persist the turnId with the pending entry and thread it through
+  the imperative send so retries CONVERGE (agnt already keys idempotency on
+  turnId); reconcile against the persisted user echo before replaying.
+- **Codex snapshot parity** (agnt): agent-snapshot archives only
+  /home/user/.claude, so codex rollout state under /tmp/codex-home-\* dies
+  with a GC'd/reprovisioned sandbox while the backend still holds the
+  resume pointer. Fix shape: move CODEX_HOME under a snapshotted path and
+  extend the archive with an auth.json exclusion. Until then: codex resume
+  survives pause/thaw and sidecar restarts, NOT reprovision — claude does.
 
 ### D3 (next) — "Mac closed": mobile direct-to-cloud
 
