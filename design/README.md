@@ -40,12 +40,15 @@ the canvas — read left to right, top to bottom.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environment · `57` Experimental · `58` Remote Access
-- `54a`, `54b` and `54c` are a **proposal, not built** — a row-per-provider AI Providers
-  section where each provider carries a Local and a Cloud lane (`54a`), its 14-state matrix
-  (`54b`), and the four setup flows with every command and failure string from the main
-  process (`54c`). They are the one deliberate divergence in this file. Either implement
-  them in `AISection.tsx` (extracting the cloud-agent control so it can also stay mounted
-  in Settings → Cloud) or delete all three boards. They must not sit here indefinitely.
+- `54a`–`54c` and `59`/`59a` are a **proposal, not built** — the settings revamp. `54a` is
+  the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
+  14-state matrix, `54c` the four setup flows with every command and failure string from
+  the main process. `59` carries the system behind it — the `cell` row primitive
+  (leading · trailing · below, hairline inset dividers, no card per row, controls sized to
+  their content) and a regrouped nav — and `59a` applies it to General. The primitive is
+  lifted from Cursor's own `.cursor-settings-cell`, read out of its app bundle.
+  These boards are the file's one deliberate divergence: either implement them or delete
+  them. They must not sit here indefinitely.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states

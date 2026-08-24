@@ -470,6 +470,12 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     // driver enforces deus's one-live-turn contract itself; every throw here
     // answers `accepted: false` — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
+    // Above the try: the catch's honest revert needs to know which stage the
+    // optimistic Waking flip replaced.
+    const asleepStage =
+      workspace?.init_stage === "paused" || workspace?.init_stage === "stopped"
+        ? workspace.init_stage
+        : null;
     try {
       // A send WAKES a sleeping sandbox, and its App token expires in an hour
       // — so the wake chip is not the only path that needs a fresh mint.
@@ -481,10 +487,6 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       // ENVIRONMENT lane only: inline workspaces baked their mint into the
       // DO's secret map at create time and no wake path can rewrite it — see
       // refreshWorkspaceGithubToken. This does NOT cover them.
-      const asleepStage =
-        workspace?.init_stage === "paused" || workspace?.init_stage === "stopped"
-          ? workspace.init_stage
-          : null;
       if (asleepStage && workspace) {
         // The wake takes tens of seconds (mint + reprovision/resume) and the
         // real agnt state frames only start once the workspace DO picks the
