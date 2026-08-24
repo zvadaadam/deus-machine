@@ -39,43 +39,38 @@ interface Window {
     confirm: (message: string, detail?: string) => Promise<boolean>;
     startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;
-    getDeusCloudSession: () => Promise<{
-      signedIn: boolean;
-      accountId: string | null;
-      expiresAt: string | null;
-      tokenType: "Bearer" | null;
-      cloudUrl: string;
-    }>;
+    getDeusCloudSession: () => Promise<import("@shared/types").DeusCloudSessionStatus>;
     startDeusCloudLogin: () => Promise<{
       success: boolean;
-      session: {
-        signedIn: boolean;
-        accountId: string | null;
-        expiresAt: string | null;
-        tokenType: "Bearer" | null;
-        cloudUrl: string;
-      };
+      session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
+    getClaudeSubscriptionStatus: () => Promise<import("@shared/types").ClaudeSubscriptionResult>;
+    openAgentSetupTerminal: (agentId: string) => Promise<{ ok: boolean; error?: string }>;
+    getGithubAppStatus: () => Promise<{
+      configured: boolean;
+      signedIn: boolean;
+      installations: Array<{ installationId: number; accountLogin: string }>;
+      appSlug: string | null;
+      accessibleRepos: string[] | null;
+      error?: string;
+    }>;
+    installGithubApp: () => Promise<{ ok: boolean; error?: string }>;
+    getCodexSubscriptionStatus: () => Promise<import("@shared/types").CodexSubscriptionResult>;
+    importCodexAuth: () => Promise<import("@shared/types").CodexSubscriptionResult>;
+    disconnectCodexSubscription: () => Promise<import("@shared/types").CodexSubscriptionResult>;
+    saveClaudeSubscriptionToken: (
+      token: string
+    ) => Promise<import("@shared/types").ClaudeSubscriptionResult>;
+    disconnectClaudeSubscription: () => Promise<import("@shared/types").ClaudeSubscriptionResult>;
     signOutDeusCloud: () => Promise<{
       success: boolean;
-      session: {
-        signedIn: boolean;
-        accountId: string | null;
-        expiresAt: string | null;
-        tokenType: "Bearer" | null;
-        cloudUrl: string;
-      };
+      session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
+    retryDeusCloudProvision: () => Promise<{ ok: boolean; error?: string }>;
     onDeusCloudAuthChanged: (
-      callback: (session: {
-        signedIn: boolean;
-        accountId: string | null;
-        expiresAt: string | null;
-        tokenType: "Bearer" | null;
-        cloudUrl: string;
-      }) => void
+      callback: (session: import("@shared/types").DeusCloudSessionStatus) => void
     ) => () => void;
     on: (event: string, callback: (...args: unknown[]) => void) => () => void;
     invoke: (channel: string, args?: unknown) => Promise<unknown>;

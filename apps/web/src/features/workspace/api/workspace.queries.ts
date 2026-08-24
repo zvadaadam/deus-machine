@@ -22,7 +22,18 @@ import { track } from "@/platform/analytics";
  * HTTP queryFn is fallback for initial load before WS connects.
  * Event-driven invalidation via IPC events also works (both paths coexist).
  */
-export function useWorkspacesByRepo(state: string = "ready,initializing") {
+/**
+ * The states the sidebar shows. 'error' is included so a failed cloud
+ * provision stays VISIBLE (red state + message) instead of vanishing.
+ *
+ * This is also the optimistic-write key for the workspace mutations below —
+ * they must target the SAME cache entry the sidebar reads, or placeholders,
+ * archive removal and status flips land in a cache nobody renders and only
+ * appear after the follow-up invalidation.
+ */
+export const SIDEBAR_WORKSPACE_STATE = "ready,initializing,error";
+
+export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
   useQuerySubscription("workspaces", {
     queryKey: queryKeys.workspaces.byRepo(state),
     params: { state },
@@ -307,7 +318,7 @@ type CreateWorkspaceParams =
 
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
+  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
     mutationFn: (params: CreateWorkspaceParams) => {
@@ -376,7 +387,7 @@ export function useCreateWorkspace() {
  */
 export function useArchiveWorkspace() {
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
+  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
     mutationFn: (workspaceId: string) => WorkspaceService.archive(workspaceId),
@@ -431,7 +442,7 @@ export function useArchiveWorkspace() {
  */
 export function useUpdateWorkspaceStatus() {
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaces.byRepo("ready,initializing");
+  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
     mutationFn: ({ workspaceId, status }: { workspaceId: string; status: WorkspaceStatus }) =>

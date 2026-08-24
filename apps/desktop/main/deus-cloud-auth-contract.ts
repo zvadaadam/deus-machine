@@ -50,12 +50,26 @@ export function assertDesktopPkcePair(pair: DesktopPkcePair): void {
   }
 }
 
+/**
+ * Local-stack ports, used when DEUS_CLOUD_ENV=local. One switch instead of
+ * remembering a URL per service: production is the default (that is how the
+ * app actually runs), and pointing at a locally-running deus-cloud + agnt is
+ * an explicit, named opt-in. An explicit URL still wins over the switch.
+ */
+export const DEUS_CLOUD_LOCAL_URL = "http://127.0.0.1:5788";
+export const AGNT_LOCAL_URL = "http://127.0.0.1:8788";
+
+/** True when this process was asked to talk to a locally-running platform. */
+export function isLocalCloudEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.DEUS_CLOUD_ENV === "local";
+}
+
 export function resolveDeusCloudUrl(env: NodeJS.ProcessEnv = process.env): string {
   const raw =
     env.DEUS_MACHINE_CLOUD_URL ||
     env.DEUS_CLOUD_URL ||
     env.VITE_DEUS_CLOUD_URL ||
-    DEUS_CLOUD_DEFAULT_URL;
+    (isLocalCloudEnv(env) ? DEUS_CLOUD_LOCAL_URL : DEUS_CLOUD_DEFAULT_URL);
   const parsed = new URL(raw);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("Deus Cloud URL must use http or https");

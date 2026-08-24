@@ -31,7 +31,13 @@ import {
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
-import { startCloudTurn, cancelCloudTurn, isCloudSession } from "./cloud/driver";
+import {
+  startCloudTurn,
+  cancelCloudTurn,
+  isCloudSession,
+  hasLiveCloudSession,
+} from "./cloud/driver";
+import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { broadcast as wsBroadcast } from "../ws.service";
@@ -464,6 +470,23 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     // answers `accepted: false` — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
     try {
+      // A send WAKES a sleeping sandbox, and its App token expires in an hour
+      // — so the wake chip is not the only path that needs a fresh mint.
+      // The row alone is not enough: `init_stage` only becomes "paused" once
+      // a snapshot lands, so after a backend restart it reads NULL for a
+      // sandbox that is genuinely asleep. No open channel = state unknown =
+      // refresh. On a live sandbox this stays off the hot path.
+      //
+      // ENVIRONMENT lane only: inline workspaces baked their mint into the
+      // DO's secret map at create time and no wake path can rewrite it — see
+      // refreshWorkspaceGithubToken. This does NOT cover them.
+      if (
+        !hasLiveCloudSession(sessionId) ||
+        workspace?.init_stage === "paused" ||
+        workspace?.init_stage === "stopped"
+      ) {
+        await refreshWorkspaceGithubToken(workspace.repository_id);
+      }
       // permissionMode/maxTurns/additionalDirectories/resume have no cloud
       // channel equivalent (permissions auto-allow like the local policy;
       // resume is agnt-internal) — model and thinking DO travel.

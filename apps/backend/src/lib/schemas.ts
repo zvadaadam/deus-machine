@@ -191,6 +191,19 @@ export const SaveSettingBody = z.object({
   value: z.unknown(),
 });
 
+// Runtime cloud-credential handoff from the desktop main process. Every
+// field optional; `null` clears the value (falls back to env). Values are
+// held in backend memory only — never persisted here.
+export const CloudCredentialsBody = z.object({
+  apiKey: z.string().min(1).nullish(),
+  baseUrl: z.string().url().nullish(),
+  anthropicApiKey: z.string().min(1).nullish(),
+  claudeOauthToken: z.string().min(1).nullish(),
+  deusCloudUrl: z.string().url().nullish(),
+  deusCloudSessionToken: z.string().min(1).nullish(),
+  orgId: z.string().min(1).nullish(),
+});
+
 // ============================================================================
 // Validation Helpers
 // ============================================================================

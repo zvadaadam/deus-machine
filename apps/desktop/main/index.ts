@@ -28,7 +28,12 @@ import { setupAppMenu } from "./app-menu";
 import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
-import { registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
+import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
+import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
+import { provisionAtStartup } from "./deus-cloud-provision";
+import { registerClaudeSubscriptionHandlers } from "./claude-subscription";
+import { registerGithubAppHandlers } from "./github-app";
+import { registerCodexSubscriptionHandlers } from "./codex-subscription";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -41,12 +46,17 @@ import { resolveDefaultDataDir } from "../../../shared/runtime";
 // Single Instance Lock
 // ---------------------------------------------------------------------------
 
-const canonicalUserDataPath = resolveDefaultDataDir({
-  platform: process.platform,
-  homeDir: process.env.HOME || homedir(),
-  appData: process.env.APPDATA,
-  xdgDataHome: process.env.XDG_DATA_HOME,
-});
+// DEUS_USER_DATA_DIR isolates a whole app instance (dev parallel instances,
+// e2e runs) WITHOUT overriding HOME — a HOME override breaks macOS Keychain
+// resolution and with it safeStorage, which the credential vault requires.
+const canonicalUserDataPath =
+  process.env.DEUS_USER_DATA_DIR ||
+  resolveDefaultDataDir({
+    platform: process.platform,
+    homeDir: process.env.HOME || homedir(),
+    appData: process.env.APPDATA,
+    xdgDataHome: process.env.XDG_DATA_HOME,
+  });
 app.setPath("userData", canonicalUserDataPath);
 
 if (!app.requestSingleInstanceLock()) {
@@ -270,6 +280,13 @@ app.whenReady().then(async () => {
   // Spawn runtime children as child processes
   logMainProcess("[main] Spawning runtime stack...");
   try {
+    // The device key deliberately does NOT ride the spawn env. Exporting it
+    // there put a copy in a place the desktop cannot retract: sign-out clears
+    // the vault and pushes an explicit null, but the backend's documented
+    // null-falls-back-to-env rule then resurrected the revoked key until a
+    // restart — and every backend descendant (setup scripts, agent-server,
+    // AAP processes) inherited it. provisionAtStartup pushes credentials over
+    // the runtime route immediately below, which is retractable by design.
     const { port: backendPort, authToken } = await spawnBackend({
       onStdoutLine: (source, line) => {
         if (source === "backend" && line.startsWith("DEUS_WORKSPACE_PROGRESS:")) {
@@ -289,6 +306,8 @@ app.whenReady().then(async () => {
     // Expose backend connection info so IPC handlers can return it to renderer
     process.env.DEUS_BACKEND_PORT = String(backendPort);
     process.env.DEUS_AUTH_TOKEN = authToken;
+
+    provisionAtStartup(getStoredDeusCloudSessionToken, resolveDeusCloudUrl());
 
     // System tray icon with backend health status
     setupTray(backendPort);
@@ -318,6 +337,9 @@ app.whenReady().then(async () => {
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
+  registerClaudeSubscriptionHandlers();
+  registerGithubAppHandlers();
+  registerCodexSubscriptionHandlers();
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers();

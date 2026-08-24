@@ -15,41 +15,40 @@ const {
   verifyPackagedRuntimeExternalModules,
   verifyPackagedRuntimeManifests,
   validateVersionOutput,
-} =
-  require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
-    binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
-    ensureLinuxNodePtyRuntimePrebuild: (context: {
-      electronPlatformName: string;
-      arch: string | number;
-      resourcesDir: string;
-    }) => { copied: number };
-    pruneCanvasRuntimeBinaries: (context: {
-      electronPlatformName: string;
-      arch: string | number;
-      resourcesDir: string;
-    }) => { removed: number; kept: number };
-    pruneNodePtyRuntimeBinaries: (context: {
-      electronPlatformName: string;
-      arch: string | number;
-      resourcesDir: string;
-    }) => { removed: number; kept: number };
-    prunePencilCliBinaries: (context: {
-      electronPlatformName: string;
-      arch: string | number;
-      resourcesDir: string;
-    }) => { removed: number; kept: number };
-    verifyPackagedRuntimeExternalModules: (
-      resourcesDir: string,
-      targetArch: string,
-      options?: { verifyNativePayloads?: boolean; verifyNativePayloadSignatures?: boolean }
-    ) => void;
-    verifyPackagedRuntimeManifests: (
-      binDir: string,
-      targetArch: string,
-      options?: { verifyFileHashes?: boolean }
-    ) => void;
-    validateVersionOutput: (label: string, output: string) => void;
-  };
+} = require("../../../scripts/prune-pencil-cli-binaries.cjs") as {
+  binaryNamesForTarget: (platform: string, arch: string | number) => Set<string>;
+  ensureLinuxNodePtyRuntimePrebuild: (context: {
+    electronPlatformName: string;
+    arch: string | number;
+    resourcesDir: string;
+  }) => { copied: number };
+  pruneCanvasRuntimeBinaries: (context: {
+    electronPlatformName: string;
+    arch: string | number;
+    resourcesDir: string;
+  }) => { removed: number; kept: number };
+  pruneNodePtyRuntimeBinaries: (context: {
+    electronPlatformName: string;
+    arch: string | number;
+    resourcesDir: string;
+  }) => { removed: number; kept: number };
+  prunePencilCliBinaries: (context: {
+    electronPlatformName: string;
+    arch: string | number;
+    resourcesDir: string;
+  }) => { removed: number; kept: number };
+  verifyPackagedRuntimeExternalModules: (
+    resourcesDir: string,
+    targetArch: string,
+    options?: { verifyNativePayloads?: boolean; verifyNativePayloadSignatures?: boolean }
+  ) => void;
+  verifyPackagedRuntimeManifests: (
+    binDir: string,
+    targetArch: string,
+    options?: { verifyFileHashes?: boolean }
+  ) => void;
+  validateVersionOutput: (label: string, output: string) => void;
+};
 
 const tempRoots: string[] = [];
 
@@ -170,13 +169,7 @@ function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
     recursive: true,
   });
   writeFileSync(
-    path.join(
-      unpackedNodeModules,
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node"
-    ),
+    path.join(unpackedNodeModules, "better-sqlite3", "build", "Release", "better_sqlite3.node"),
     "better-sqlite-native"
   );
   mkdirSync(path.join(unpackedNodeModules, "node-pty", "prebuilds", "darwin-arm64"), {
@@ -191,23 +184,13 @@ function writeRuntimeExternalModuleFixture(resourcesDir: string): void {
     "pty-helper"
   );
   writeFileSync(
-    path.join(
-      unpackedNodeModules,
-      "@napi-rs",
-      "canvas-darwin-arm64",
-      "skia.darwin-arm64.node"
-    ),
+    path.join(unpackedNodeModules, "@napi-rs", "canvas-darwin-arm64", "skia.darwin-arm64.node"),
     "canvas-native"
   );
 }
 
 function writeNodePtyPruneFixture(resourcesDir: string): string {
-  const nodePtyRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "node-pty"
-  );
+  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
   for (const fileParts of [
     ["build", "Release", "pty.node"],
     ["build", "Release", "spawn-helper"],
@@ -224,12 +207,7 @@ function writeNodePtyPruneFixture(resourcesDir: string): string {
 }
 
 function writeLinuxNodePtyBuildFixture(resourcesDir: string): string {
-  const nodePtyRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "node-pty"
-  );
+  const nodePtyRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "node-pty");
   for (const fileParts of [
     ["build", "Release", "pty.node"],
     ["build", "Release", "spawn-helper"],
@@ -244,12 +222,7 @@ function writeLinuxNodePtyBuildFixture(resourcesDir: string): string {
 }
 
 function writeCanvasPruneFixture(resourcesDir: string): string {
-  const napiRsRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "@napi-rs"
-  );
+  const napiRsRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "@napi-rs");
   for (const packageName of [
     "canvas",
     "canvas-darwin-arm64",

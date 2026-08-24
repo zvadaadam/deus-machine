@@ -1,9 +1,9 @@
-import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { initialsFrom } from "@/shared/lib/formatters";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Cloud, Loader2, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { native } from "@/platform";
 import { queryKeys } from "@/shared/api/queryKeys";
 
@@ -13,29 +13,11 @@ function formatAccountId(accountId: string | null): string {
   return `${accountId.slice(0, 10)}...${accountId.slice(-6)}`;
 }
 
-function formatExpiry(expiresAt: string): string {
-  const ms = Date.parse(expiresAt) - Date.now();
-  if (ms <= 0) return "Expired";
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `Expires in ${minutes || 1}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `Expires in ${hours}h`;
-  return `Expires in ${Math.floor(hours / 24)}d`;
-}
-
 export function AccountSection() {
   const queryClient = useQueryClient();
-  const session = useQuery({
-    queryKey: queryKeys.deusCloud.session,
-    queryFn: () => native.deusCloud.getSession(),
-    staleTime: 60_000,
-  });
-
-  useEffect(() => {
-    return native.deusCloud.onAuthChanged((nextSession) => {
-      queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
-    });
-  }, [queryClient]);
+  // Session + the auth-changed listener live in the shared hook — a listener
+  // owned by this section died when the user navigated to Cloud mid-mint.
+  const session = useDeusCloudSession();
 
   const signInMutation = useMutation({
     mutationFn: () => native.deusCloud.startLogin(),
@@ -70,6 +52,7 @@ export function AccountSection() {
   const data = session.data;
   const busy = session.isLoading || signInMutation.isPending || signOutMutation.isPending;
   const signedIn = data?.signedIn === true;
+  const accountInitials = initialsFrom(data?.accountName, data?.accountEmail);
 
   return (
     <div className="space-y-5">
@@ -84,11 +67,17 @@ export function AccountSection() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg">
-              <Cloud className="text-muted-foreground size-5" />
+              {signedIn && accountInitials ? (
+                <span className="text-text-primary text-sm font-semibold">{accountInitials}</span>
+              ) : (
+                <Cloud className="text-muted-foreground size-5" />
+              )}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{signedIn ? "Signed in" : "Not signed in"}</p>
+                <p className="truncate text-sm font-medium">
+                  {signedIn ? (data.accountName ?? "Signed in") : "Not signed in"}
+                </p>
                 {session.isLoading ? (
                   <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
                 ) : signedIn ? (
@@ -99,7 +88,7 @@ export function AccountSection() {
               </div>
               {signedIn ? (
                 <p className="text-muted-foreground mt-1 truncate text-sm">
-                  {formatAccountId(data.accountId)}
+                  {data.accountEmail ?? formatAccountId(data.accountId)}
                 </p>
               ) : (
                 <p className="text-muted-foreground mt-1 text-sm">{data?.cloudUrl}</p>
@@ -134,15 +123,9 @@ export function AccountSection() {
         </div>
       </div>
 
-      {signedIn && data.expiresAt ? (
-        <>
-          <Separator />
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Session</p>
-            <p className="text-muted-foreground text-sm">{formatExpiry(data.expiresAt)}</p>
-          </div>
-        </>
-      ) : null}
+      {/* No expiry countdown: the session renews itself silently (rotating
+          refresh) and signs out only when genuinely revoked — a ticking
+          clock here promises a sign-out the app exists to prevent. */}
     </div>
   );
 }

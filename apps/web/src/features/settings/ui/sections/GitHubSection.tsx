@@ -1,5 +1,8 @@
 import { useEffect } from "react";
+import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
+import { githubAppBlockedLabel } from "../../lib/github-app-label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -311,6 +314,89 @@ export function GitHubSection() {
           </>
         )}
       </div>
+
+      {/* Cloud access — the App handles sandboxes; the account above is local. */}
+      <GithubAppCard />
+    </div>
+  );
+}
+
+/** Live Deus GitHub App card — same states as Settings → Cloud. */
+function GithubAppCard() {
+  const signIn = useDeusCloudSignIn();
+  const state = useQuery({
+    queryKey: ["settings", "github-app"],
+    queryFn: getGithubAppStatus,
+    staleTime: 30_000,
+    // Deliberate override of the global focus-refetch OFF: this state
+    // changes on GitHub in another tab BY DESIGN (install, manage repos,
+    // uninstall), and any return to the app should pick it up — a per-click
+    // listener missed every path but the Install button (the "Install app"
+    // links beside missing repos, most notably).
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  const data = state.data;
+  return (
+    <div
+      className={
+        "border-border-subtle mt-4 flex items-center justify-between rounded-lg border px-4 py-3" +
+        (data?.configured ? "" : " border-dashed")
+      }
+    >
+      <div>
+        <span className="text-text-primary text-sm font-medium">Deus GitHub App</span>
+        <p className="text-text-muted mt-0.5 text-xs">
+          {data?.installations.length
+            ? `Installed for ${data.installations.map((i) => i.accountLogin).join(", ")} — cloud workspaces get server-minted, single-repo tokens. Repo selection lives on GitHub.`
+            : "Gives cloud workspaces per-repo access with server-minted, single-repo tokens — install once, no personal token needed."}
+        </p>
+      </div>
+      {data?.installations.length && data.appSlug ? (
+        <span className="flex shrink-0 items-center gap-3">
+          <span className="text-accent-green text-sm">Installed ✓</span>
+          {/* GitHub owns the repo picker: this lands on the account's existing
+              installation ("Configure"), where repos are added or removed. */}
+          <a
+            className="text-text-primary border-border-subtle hover:bg-bg-muted rounded-md border px-2.5 py-1 text-xs"
+            href={`https://github.com/apps/${data.appSlug}/installations/new`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Manage repos ↗
+          </a>
+        </span>
+      ) : data?.configured ? (
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={async () => {
+            const res = await installGithubApp();
+            if (!res.ok) {
+              toast.error(res.error ?? "Could not start the install");
+              return;
+            }
+            toast.info("Complete the install on GitHub, then come back");
+          }}
+        >
+          Install
+        </Button>
+      ) : !data?.signedIn ? (
+        // The blocked state IS the button — a pill saying "sign in first"
+        // with the sign-in living in another tab is a dead end.
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={() => signIn.mutate()}
+          disabled={signIn.isPending}
+        >
+          {signIn.isPending ? "Waiting for browser…" : "Sign in to Deus Cloud"}
+        </Button>
+      ) : (
+        <span className="text-text-muted border-border-subtle shrink-0 rounded-full border border-dashed px-2 py-0.5 text-xs">
+          {githubAppBlockedLabel(data)}
+        </span>
+      )}
     </div>
   );
 }

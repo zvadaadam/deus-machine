@@ -124,7 +124,9 @@ export function SettingsPage() {
             </span>
           </div>
         )}
-        <ScrollArea className="flex-1">
+        {/* min-h-0: without it the flex item refuses to shrink below its
+            content, the viewport never overflows, and the page can't scroll. */}
+        <ScrollArea className="min-h-0 flex-1">
           <div className="mx-auto max-w-2xl px-8 py-8">
             {/* Saving indicator */}
             {saving && (

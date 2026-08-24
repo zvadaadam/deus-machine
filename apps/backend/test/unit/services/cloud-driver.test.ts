@@ -33,10 +33,12 @@ vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
 }));
 
 vi.mock("../../../src/services/agent/cloud/config", () => ({
+  setCloudIdentityChangedHandler: vi.fn(),
   getCloudConfig: () => ({
     baseUrl: "http://agnt.test",
     apiKey: "agnt_sk_test_x",
     anthropicApiKey: "sk-ant-test",
+    claudeOauthToken: null,
   }),
 }));
 
@@ -162,6 +164,34 @@ describe("cloud driver frame → fold contract", () => {
       stopReason: "end_turn",
       cost: 0.01,
     });
+  });
+
+  it("fails the live turn when the sandbox dies mid-turn (workspace stopped/error)", () => {
+    // Real case: sidecar dies on a credential error → workspace 'stopped' —
+    // without this the spinner hangs forever and the cause is an ephemeral
+    // env line the user can miss entirely.
+    handler.liveTurnId.mockReturnValue("turn-x");
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "stopped", reason: "sidecar_disconnected (code=1006)" },
+    });
+
+    expect(handler.handle).toHaveBeenCalledTimes(1);
+    expect(handler.handle.mock.calls[0][0].event).toMatchObject({
+      type: "turn.ended",
+      turnId: "turn-x",
+      stopReason: "error",
+      error: {
+        category: "internal",
+        message: expect.stringContaining("sidecar_disconnected"),
+      },
+    });
+  });
+
+  it("leaves settled sessions alone when the sandbox stops (no live turn)", () => {
+    handler.liveTurnId.mockReturnValue(undefined);
+    capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
+    expect(handler.handle).not.toHaveBeenCalled();
   });
 
   it("ignores a snapshot while our live turn is still current server-side", () => {

@@ -5,14 +5,24 @@ import { cn } from "@/shared/lib/utils";
 import { track } from "@/platform/analytics";
 import { StepIndicator } from "./components/StepIndicator";
 import { WelcomeStep } from "./steps/WelcomeStep";
+import { CloudSignInStep } from "./steps/CloudSignInStep";
 import { GitHubSetupStep } from "./steps/GitHubSetupStep";
 import { AIToolsCheckStep } from "./steps/AIToolsCheckStep";
 import { DeusStep } from "./steps/DeusStep";
 import { ProjectSelectionStep } from "./steps/ProjectSelectionStep";
 import type { OnboardingStep } from "../types";
 
-const TOTAL_STEPS = 5;
-const STEP_NAMES = ["welcome", "github", "ai-tools", "project-selection", "finish"];
+const TOTAL_STEPS = 6;
+// Order must match the step switch below — analytics reads it by index, so a
+// step inserted without updating this silently mislabels every later step.
+const STEP_NAMES = [
+  "welcome",
+  "cloud-sign-in",
+  "github",
+  "ai-tools",
+  "project-selection",
+  "finish",
+];
 
 /** Full-screen onboarding view — dark, grain-textured, CLI-inspired. */
 export function OnboardingOverlay() {
@@ -49,7 +59,7 @@ export function OnboardingOverlay() {
       "animate-[onboarding-step-exit-forward_160ms_cubic-bezier(.215,.61,.355,1)_forwards]"
     );
     setTimeout(() => {
-      const nextStep = Math.min(currentStep + 1, 4) as OnboardingStep;
+      const nextStep = Math.min(currentStep + 1, TOTAL_STEPS - 1) as OnboardingStep;
       setCurrentStep(nextStep);
       track("onboarding_step_viewed", { step: nextStep, step_name: STEP_NAMES[nextStep] });
       setAnimClass("animate-[onboarding-step-enter-forward_240ms_cubic-bezier(.215,.61,.355,1)]");
@@ -113,10 +123,11 @@ export function OnboardingOverlay() {
 
         <div className={cn("w-full", currentStep === 0 ? "h-full" : "", animClass)}>
           {currentStep === 0 && <WelcomeStep onNext={goForward} />}
-          {currentStep === 1 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}
-          {currentStep === 2 && <AIToolsCheckStep onNext={goForward} onBack={goBack} />}
-          {currentStep === 3 && <ProjectSelectionStep onBack={goBack} onNext={goForward} />}
-          {currentStep === 4 && <DeusStep onBack={goBack} onComplete={handleComplete} />}
+          {currentStep === 1 && <CloudSignInStep onNext={goForward} onBack={goBack} />}
+          {currentStep === 2 && <GitHubSetupStep onNext={goForward} onBack={goBack} />}
+          {currentStep === 3 && <AIToolsCheckStep onNext={goForward} onBack={goBack} />}
+          {currentStep === 4 && <ProjectSelectionStep onBack={goBack} onNext={goForward} />}
+          {currentStep === 5 && <DeusStep onBack={goBack} onComplete={handleComplete} />}
         </div>
       </div>
     </div>

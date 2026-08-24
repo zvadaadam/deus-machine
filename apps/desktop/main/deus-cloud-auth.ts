@@ -1,9 +1,24 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { dirname, join } from "node:path";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "../../../shared/types";
+import { getCloudCredentialsStatus } from "./cloud-credentials";
+import { logMainProcess } from "./startup-diagnostics";
+import {
+  decryptSecret,
+  encryptSecret,
+  readJsonFile,
+  removeFile,
+  userDataFilePath,
+  isSafeStorageAvailable,
+  writeJsonFile,
+} from "./safe-storage-file";
+import {
+  getPlatformKeyError,
+  provisionAfterLogin,
+  retryDeviceKeyProvisioning,
+  revokeDeviceKey,
+} from "./deus-cloud-provision";
 import {
   buildDesktopLoginUrl,
   createDesktopPkcePair,
@@ -23,9 +38,18 @@ const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 interface StoredDeusCloudSession {
   version: typeof SESSION_FILE_VERSION;
   accountId: string;
+  /** Human identity from deus-cloud /me — the account id alone reads as a
+   *  database row, not as "you". Optional: a /me failure must never block
+   *  a sign-in that otherwise succeeded. */
+  accountName?: string;
+  accountEmail?: string;
   tokenType: "Bearer";
   expiresAt: string;
   encryptedSessionToken: string;
+  /** WorkOS refresh token (rotating), encrypted like the session itself.
+   *  Absent for sessions stored before refresh existed — those simply expire
+   *  the old way and the user signs in once more. */
+  encryptedRefreshToken?: string;
   cloudUrl: string;
   createdAt: string;
 }
@@ -35,6 +59,7 @@ interface DesktopExchangeResponse {
   token_type?: string;
   expires_in_seconds?: number;
   account_id?: string;
+  refresh_token?: string;
 }
 
 interface DesktopAuthConfigResponse {
@@ -80,7 +105,7 @@ function cloudEndpointUrl(cloudUrl: string, path: string): URL {
 }
 
 function getSessionFilePath(): string {
-  return join(app.getPath("userData"), SESSION_FILE_NAME);
+  return userDataFilePath(SESSION_FILE_NAME);
 }
 
 function toPublicStatus(
@@ -94,30 +119,103 @@ function toPublicStatus(
       expiresAt: null,
       tokenType: null,
       cloudUrl,
+      hasPlatformKey: false,
     };
   }
 
   return {
     signedIn: true,
     accountId: stored.accountId,
+    accountName: stored.accountName ?? null,
+    accountEmail: stored.accountEmail ?? null,
     expiresAt: stored.expiresAt,
     tokenType: stored.tokenType,
     cloudUrl: stored.cloudUrl,
+    hasPlatformKey: false,
+    platformKeyError: getPlatformKeyError(),
   };
 }
 
-function requireSafeStorage(): void {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("Secure credential storage is unavailable on this device");
+/** Overlay device-key presence onto a session status (never the value). */
+async function enrichWithCredentialStatus(
+  status: DeusCloudSessionStatus
+): Promise<DeusCloudSessionStatus> {
+  const creds = await getCloudCredentialsStatus().catch(() => null);
+  return {
+    ...status,
+    hasPlatformKey: creds?.hasPlatformKey ?? false,
+    ...(creds?.vaultLocked ? { vaultLocked: true } : {}),
+  };
+}
+
+/** Bring the Deus window to the front (post-sign-in, from the loopback server). */
+function focusMainWindow(): void {
+  try {
+    app.focus({ steal: true });
+    const [win] = BrowserWindow.getAllWindows();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  } catch {
+    // Focus is a courtesy; never let it break a completed sign-in.
   }
 }
 
-function respondHtml(res: ServerResponse, status: number, message: string): void {
+/**
+ * The loopback page the browser lands on after WorkOS redirects back. It is
+ * the last thing a user sees during sign-in, and a bare Times New Roman
+ * sentence on 127.0.0.1 reads like something broke. Self-contained (no
+ * network, no assets — this server dies seconds later) and dark-first, since
+ * it is only ever shown for a moment before focus returns to the app.
+ */
+function respondHtml(res: ServerResponse, status: number, message: string, ok = false): void {
   res.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
   });
-  res.end(`<!doctype html><title>Deus</title><body>${message}</body>`);
+  const mark = ok
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>`;
+  res.end(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Deus</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0a0a0a; color: #fafafa;
+    font: 400 15px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card { text-align: center; padding: 40px 32px; max-width: 380px; }
+  .badge {
+    width: 48px; height: 48px; margin: 0 auto 20px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: ${ok ? "rgba(52,199,89,.12)" : "rgba(255,255,255,.06)"};
+    color: ${ok ? "#34c759" : "rgba(250,250,250,.55)"};
+  }
+  .badge svg { width: 24px; height: 24px; }
+  h1 { margin: 0 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; font-size: 14px; color: rgba(250,250,250,.5); }
+  @media (prefers-color-scheme: light) {
+    body { background: #fafafa; color: #0a0a0a; }
+    p { color: rgba(10,10,10,.5); }
+  }
+</style></head>
+<body><div class="card">
+  <div class="badge">${mark}</div>
+  <h1>${message}</h1>
+  <p>You can close this tab and return to Deus.</p>
+</div>
+<script>
+  // Best-effort: only works for script-opened windows, so the copy above
+  // never depends on it.
+  setTimeout(() => { try { window.close(); } catch (_) {} }, 1200);
+</script>
+</body></html>`);
 }
 
 async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
@@ -145,7 +243,7 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
     }
 
     if (settled) {
-      respondHtml(res, 409, "This Deus sign-in request was already handled.");
+      respondHtml(res, 409, "This sign-in link was already used");
       return;
     }
 
@@ -163,11 +261,18 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
       }
 
       settled = true;
-      respondHtml(res, 200, "You can return to Deus.");
+      // Deliberately NOT "Signed in": the code-for-session exchange has not
+      // run yet, and it can still fail. Claiming success here left the
+      // browser saying one thing and the app showing another.
+      respondHtml(res, 200, "Finishing sign-in — you can close this tab", true);
+      // Pull the app forward: the user's attention is in the browser, and
+      // window.close() only works for script-opened tabs, so without this
+      // they are left looking at a success page wondering what happens next.
+      focusMainWindow();
       resolveCallback(callback);
     } catch (error) {
       settled = true;
-      respondHtml(res, 400, "Deus sign-in failed.");
+      respondHtml(res, 400, "Sign-in failed");
       rejectCallback(error instanceof Error ? error : new Error("Deus Cloud sign-in failed"));
     }
   });
@@ -199,10 +304,15 @@ async function createDesktopCallbackServer(expectedState: string): Promise<Deskt
   };
 }
 
-async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
+/** Renew this far ahead of expiry, so a session is never used near its edge. */
+const SESSION_REFRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/** Read + structurally validate the file. Expiry is NOT judged here: an
+ *  expired session with a refresh token is still renewable. */
+async function readSessionFile(): Promise<StoredDeusCloudSession | null> {
   try {
-    const raw = await readFile(getSessionFilePath(), "utf8");
-    const parsed = JSON.parse(raw) as Partial<StoredDeusCloudSession>;
+    const parsed =
+      (await readJsonFile<Partial<StoredDeusCloudSession>>(getSessionFilePath())) ?? {};
     if (
       parsed.version !== SESSION_FILE_VERSION ||
       typeof parsed.accountId !== "string" ||
@@ -214,46 +324,228 @@ async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
     ) {
       return null;
     }
-
-    const expiresAt = parseTimestamp(parsed.expiresAt);
-    if (!expiresAt || expiresAt <= Date.now()) {
-      await clearStoredSession();
-      return null;
-    }
-
+    // A locked keyring throws BEFORE decryption is attempted, so it proves
+    // nothing about the ciphertext. Discarding the session there would sign
+    // the user out over a condition that clears on its own.
+    if (!isSafeStorageAvailable()) return null;
     try {
       decryptSessionToken(parsed.encryptedSessionToken);
     } catch {
       await clearStoredSession();
       return null;
     }
-
     return parsed as StoredDeusCloudSession;
   } catch {
     return null;
   }
 }
 
+/** In-flight refresh, so concurrent callers share one round-trip (and one
+ *  use of the rotating token — WorkOS invalidates it on first use). */
+let refreshInFlight: Promise<StoredDeusCloudSession | null> | null = null;
+/** Set for the duration of sign-out; see the guard in refreshStoredSession. */
+let signOutInProgress = false;
+/**
+ * Floor on how often a NON-expired session may be renewed.
+ *
+ * The window below is absolute, so any token whose own lifetime is shorter
+ * than it is permanently "near expiry" — every single session read would
+ * then make a network round-trip, and every settings render would block on
+ * one. Production issues 24h tokens today, but a server-side tightening to,
+ * say, 4h must not turn into a refresh storm.
+ */
+const SESSION_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
+let lastRefreshAt = 0;
+
+/**
+ * Set by the provisioning module at startup. A plain callback rather than an
+ * import, because deus-cloud-provision already imports from here.
+ */
+let onSessionRefreshed: (() => void | Promise<void>) | null = null;
+
+export function setSessionRefreshedHandler(handler: () => void | Promise<void>): void {
+  onSessionRefreshed = handler;
+}
+
+/**
+ * Fired when a refresh is REJECTED (401 — revoked server-side, not expiry).
+ * The session alone signing out while the device key stays live left "signed
+ * out" in the UI with a fully authorized cloud lane underneath.
+ */
+let onSessionRevoked: (() => void | Promise<void>) | null = null;
+
+export function setSessionRevokedHandler(handler: () => void | Promise<void>): void {
+  onSessionRevoked = handler;
+}
+
+/** The replacement token deus-cloud attaches when it fails after rotating. */
+async function readRotatedRefreshToken(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { refresh_token?: unknown };
+    return typeof body.refresh_token === "string" && body.refresh_token.length > 0
+      ? body.refresh_token
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshStoredSession(
+  stored: StoredDeusCloudSession
+): Promise<StoredDeusCloudSession | null> {
+  if (!stored.encryptedRefreshToken) return null;
+  let refreshToken: string;
+  try {
+    refreshToken = decryptSessionToken(stored.encryptedRefreshToken);
+  } catch {
+    return null;
+  }
+
+  const response = await fetch(`${stored.cloudUrl}/auth/desktop/refresh`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (response.status === 401) {
+    // Revoked (post-refresh, 401 is never mere expiry) — the only honest
+    // outcome is a FULL local sign-out: session AND device key, or the UI
+    // reads signed-out while cloud sandboxes keep working.
+    await clearStoredSession();
+    await onSessionRevoked?.();
+    return null;
+  }
+  if (!response.ok) {
+    // WorkOS rotates on every use, so a failure AFTER rotation leaves the
+    // token we hold dead. deus-cloud returns the replacement on the error
+    // body for exactly this case — persist it, or the next retry presents a
+    // token that can never succeed and the user is forced to sign in again.
+    const rotated = await readRotatedRefreshToken(response);
+    if (rotated && !signOutInProgress) {
+      await writeStoredSession({
+        ...stored,
+        encryptedRefreshToken: encryptSessionToken(rotated),
+      });
+      logMainProcess("[deus-cloud] refresh failed after rotation — kept the replacement token");
+    }
+    // Server-side problem (503 CONFIG_ERROR, network): keep what we have.
+    throw new Error(`session refresh failed (${response.status})`);
+  }
+
+  const body = (await response.json()) as DesktopExchangeResponse;
+  if (!body.session_token || typeof body.expires_in_seconds !== "number") {
+    throw new Error("Deus Cloud returned an invalid refreshed session");
+  }
+
+  // Backfill the human identity if sign-in never got it. /me is best-effort
+  // AT SIGN-IN, and nothing else re-fetches it — so one transient failure
+  // there used to leave the account showing as a database row forever.
+  const profile =
+    stored.accountName || stored.accountEmail
+      ? null
+      : await fetchAccountProfile(stored.cloudUrl, body.session_token);
+
+  const next: StoredDeusCloudSession = {
+    ...stored,
+    ...(profile?.name ? { accountName: profile.name } : {}),
+    ...(profile?.email ? { accountEmail: profile.email } : {}),
+    expiresAt: new Date(Date.now() + body.expires_in_seconds * 1000).toISOString(),
+    encryptedSessionToken: encryptSessionToken(body.session_token),
+    ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
+      ? { encryptedRefreshToken: encryptSessionToken(body.refresh_token) }
+      : {}),
+  };
+  if (signOutInProgress) {
+    // Sign-out already cleared the session; writing the renewed one back
+    // would resurrect it, and the push below would hand the backend a live
+    // token for an account the user just left. A generation counter does NOT
+    // catch this — signOutDeusCloud bumps it first, so a refresh started
+    // afterwards carries the current value and passes.
+    return null;
+  }
+  await writeStoredSession(next);
+  logMainProcess("[deus-cloud] session refreshed");
+  // The backend holds its OWN copy of the session token (it mints GitHub App
+  // installation tokens with it) and only ever receives one on an explicit
+  // push. Without this, a silently refreshed desktop keeps working while the
+  // backend's copy quietly expires and every mint starts 401ing.
+  void onSessionRefreshed?.();
+  return next;
+}
+
+/**
+ * The session every caller should read. Renews silently when it is close to
+ * expiry (or already past it) so a signed-in machine stays signed in — a
+ * desktop app that logs you out daily is the thing this avoids.
+ */
+async function readStoredSession(): Promise<StoredDeusCloudSession | null> {
+  const stored = await readSessionFile();
+  if (!stored) return null;
+
+  const expiresAt = parseTimestamp(stored.expiresAt);
+  const expired = !expiresAt || expiresAt <= Date.now();
+  const nearExpiry = expiresAt !== null && expiresAt - Date.now() <= SESSION_REFRESH_WINDOW_MS;
+
+  if (!expired && !nearExpiry) return stored;
+
+  if (!stored.encryptedRefreshToken) {
+    // Pre-refresh session (or the token was never issued): expiry is
+    // TERMINAL — there is nothing to renew with, so it takes the same full
+    // sign-out as a revocation. Leaving the device key would keep the cloud
+    // lane authorized under a UI that says signed out.
+    if (expired) {
+      await clearStoredSession();
+      await onSessionRevoked?.();
+      return null;
+    }
+    return stored;
+  }
+
+  // An expired token is unusable, so it always retries; a merely near-expiry
+  // one waits out the floor and keeps serving in the meantime.
+  if (!expired && Date.now() - lastRefreshAt < SESSION_REFRESH_MIN_INTERVAL_MS) return stored;
+
+  refreshInFlight ??= refreshStoredSession(stored).finally(() => {
+    // After the write inside refreshStoredSession, which resets it to 0.
+    lastRefreshAt = Date.now();
+    refreshInFlight = null;
+  });
+
+  try {
+    const refreshed = await refreshInFlight;
+    if (refreshed) return refreshed;
+    return null; // 401 path already cleared the session
+  } catch (error) {
+    logMainProcess(
+      `[deus-cloud] session refresh failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    // Transient failure: a still-valid session keeps working; an expired one
+    // cannot be used, but is kept on disk so the next attempt can retry.
+    return expired ? null : stored;
+  }
+}
+
 async function writeStoredSession(session: StoredDeusCloudSession): Promise<void> {
-  const filePath = getSessionFilePath();
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(session, null, 2)}\n`, { mode: 0o600 });
-  await chmod(filePath, 0o600);
+  // Live for the SIGN-IN caller only: a fresh sign-in must be free to renew
+  // immediately even if a refresh ran seconds before sign-out. For the
+  // refresh caller this is a no-op — its .finally overwrites the floor.
+  lastRefreshAt = 0;
+  await writeJsonFile(getSessionFilePath(), session);
+}
+
+/** Whether a session file exists at all — plain file read, NO keyring contact. */
+export async function hasStoredSessionFile(): Promise<boolean> {
+  return (await readJsonFile<{ version?: number }>(getSessionFilePath())) !== null;
 }
 
 async function clearStoredSession(): Promise<void> {
-  await rm(getSessionFilePath(), { force: true });
+  lastRefreshAt = 0;
+  await removeFile(getSessionFilePath());
 }
 
-function encryptSessionToken(token: string): string {
-  requireSafeStorage();
-  return safeStorage.encryptString(token).toString("base64");
-}
-
-function decryptSessionToken(encryptedToken: string): string {
-  requireSafeStorage();
-  return safeStorage.decryptString(Buffer.from(encryptedToken, "base64"));
-}
+const encryptSessionToken = encryptSecret;
+const decryptSessionToken = decryptSecret;
 
 function parseDesktopAuthConfig(body: DesktopAuthConfigResponse | null): DesktopAuthConfig {
   if (
@@ -328,15 +620,56 @@ async function exchangeDesktopCode(input: {
     throw new Error("Deus Cloud returned an invalid desktop session");
   }
 
+  const profile = await fetchAccountProfile(input.cloudUrl, body.session_token);
+
   return {
     version: SESSION_FILE_VERSION,
     accountId: body.account_id,
+    ...(profile.name ? { accountName: profile.name } : {}),
+    ...(profile.email ? { accountEmail: profile.email } : {}),
+    ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
+      ? { encryptedRefreshToken: encryptSessionToken(body.refresh_token) }
+      : {}),
     tokenType: "Bearer",
     expiresAt: new Date(Date.now() + body.expires_in_seconds * 1000).toISOString(),
     encryptedSessionToken: encryptSessionToken(body.session_token),
     cloudUrl: input.cloudUrl,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Human identity for the signed-in account. Best-effort by design: the
+ * session is already valid at this point, so a /me failure degrades the
+ * Account card to the raw id rather than failing the sign-in.
+ */
+async function fetchAccountProfile(
+  cloudUrl: string,
+  sessionToken: string
+): Promise<{ name?: string; email?: string }> {
+  try {
+    const response = await fetch(`${cloudUrl}/me`, {
+      headers: { authorization: `Bearer ${sessionToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return {};
+    const body = (await response.json()) as { account?: { name?: unknown; email?: unknown } };
+    return {
+      ...(typeof body.account?.name === "string" ? { name: body.account.name } : {}),
+      ...(typeof body.account?.email === "string" ? { email: body.account.email } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Recompute and broadcast the session status. For callers OUTSIDE this
+ * module — startup provisioning mints in the background and must announce
+ * completion, or renderer caches keep "no platform key" until a remount.
+ */
+export async function announceDeusCloudAuthChanged(): Promise<void> {
+  broadcastAuthChanged(await getDeusCloudSessionStatus());
 }
 
 function broadcastAuthChanged(status: DeusCloudSessionStatus): void {
@@ -371,7 +704,7 @@ function finishPendingLogin(
 }
 
 export async function getDeusCloudSessionStatus(): Promise<DeusCloudSessionStatus> {
-  return toPublicStatus(await readStoredSession());
+  return enrichWithCredentialStatus(toPublicStatus(await readStoredSession()));
 }
 
 export async function getStoredDeusCloudSessionToken(): Promise<string | null> {
@@ -386,13 +719,35 @@ export async function getStoredDeusCloudSessionToken(): Promise<string | null> {
 }
 
 export async function signOutDeusCloud(): Promise<DeusCloudAuthResult> {
+  // Read the token BEFORE the flag goes up: refreshStoredSession's guard
+  // returns null while it is set, and an EXPIRED session (the common
+  // opened-after-a-day case) must refresh to yield a token at all — so
+  // reading inside would hand the revoke below nothing, deleting the key
+  // locally while leaving it alive on the platform forever.
+  const sessionToken = await getStoredDeusCloudSessionToken().catch(() => null);
+  signOutInProgress = true;
+  try {
+    return await performSignOut(sessionToken);
+  } finally {
+    signOutInProgress = false;
+  }
+}
+
+async function performSignOut(sessionToken: string | null): Promise<DeusCloudAuthResult> {
   loginGeneration += 1;
   const pending = pendingLogin;
   if (pending) {
     finishPendingLogin(new Error("Deus Cloud sign-in was cancelled"), undefined, pending);
   }
 
+  // Session file first: revokeDeviceKey ends with a credentials push to the
+  // backend, and that push must read an EMPTY session — not hand the backend
+  // a live token for the account the user just left.
   await clearStoredSession();
+  // Revoke THIS device's platform key with the token captured above; local
+  // deletion inside also locks the device out even when offline.
+  await revokeDeviceKey(sessionToken).catch(() => {});
+
   const session = await getDeusCloudSessionStatus();
   broadcastAuthChanged(session);
   return { success: true, session };
@@ -502,9 +857,30 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
     if (pendingLogin !== pending) return;
 
     await writeStoredSession(stored);
-    const session = toPublicStatus(stored);
+    const session = await enrichWithCredentialStatus(toPublicStatus(stored));
     broadcastAuthChanged(session);
     finishPendingLogin(null, session, pending);
+
+    // The D1 handshake: mint this device's platform key and hand credentials
+    // to the backend, then re-broadcast so Settings flips to "key active".
+    const provisionGeneration = loginGeneration;
+    void (async () => {
+      const token = await getStoredDeusCloudSessionToken();
+      if (!token) return;
+      await provisionAfterLogin(token, stored.cloudUrl);
+      // Signing out mid-mint used to leave a freshly minted key in the vault
+      // of a signed-out user: revokeDeviceKey ran BEFORE the key existed, so
+      // nothing ever revoked it and the backend cloud lane stayed live.
+      if (provisionGeneration !== loginGeneration) {
+        // Use the CAPTURED token, not a re-read: sign-out has already cleared
+        // the stored session by now, and revokeDeviceKey skips the server-side
+        // DELETE when handed null — which would delete the local copy and
+        // leave the just-minted key alive on the platform forever.
+        await revokeDeviceKey(token).catch(() => {});
+        return;
+      }
+      broadcastAuthChanged(await getDeusCloudSessionStatus());
+    })();
   } catch (error) {
     const normalized = error instanceof Error ? error : new Error("Deus Cloud sign-in failed");
     finishPendingLogin(normalized, undefined, activePending ?? undefined);
@@ -518,4 +894,9 @@ export function registerDeusCloudAuthHandlers(): void {
   ipcMain.handle("deus_cloud:get_session", () => getDeusCloudSessionStatus());
   ipcMain.handle("deus_cloud:start_login", () => startDeusCloudLogin());
   ipcMain.handle("deus_cloud:sign_out", () => signOutDeusCloud());
+  ipcMain.handle("deus_cloud:retry_provision", async () => {
+    const result = await retryDeviceKeyProvisioning();
+    broadcastAuthChanged(await getDeusCloudSessionStatus());
+    return result;
+  });
 }

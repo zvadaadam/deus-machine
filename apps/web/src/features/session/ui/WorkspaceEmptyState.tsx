@@ -14,6 +14,10 @@ interface WorkspaceEmptyStateProps {
   initializing?: boolean;
   /** Current init pipeline step (worktree, dependencies, hooks, session) */
   initStep?: string | null;
+  /** Provisioning failed — the row is selectable so the failure is visible,
+   *  and this panel must agree with the sidebar instead of saying "ready". */
+  failed?: boolean;
+  failureMessage?: string | null;
   /** Cloud workspaces live in a sandbox, not a local safe copy — different subtitle. */
   kind?: WorkspaceKind;
   className?: string;
@@ -53,6 +57,8 @@ export function WorkspaceEmptyState({
   isFirstSession = false,
   initializing = false,
   initStep,
+  failed = false,
+  failureMessage,
   kind,
   className,
 }: WorkspaceEmptyStateProps) {
@@ -88,19 +94,27 @@ export function WorkspaceEmptyState({
         <div className="text-center">
           <h2 className="text-muted-foreground/60 flex items-center justify-center gap-2 text-xs font-semibold tracking-wide uppercase">
             {initializing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {initializing
-              ? match(initStep)
-                  .with("worktree", () => "Creating worktree...")
-                  .with("dependencies", () => "Installing dependencies...")
-                  .with("hooks", () => "Setting up environment...")
-                  .with("session", () => "Finalizing...")
-                  .otherwise(() => "Setting up workspace...")
-              : "Workspace ready"}
+            {failed
+              ? "Workspace setup failed"
+              : initializing
+                ? match(initStep)
+                    .with("worktree", () => "Creating worktree...")
+                    .with("dependencies", () => "Installing dependencies...")
+                    .with("hooks", () => "Setting up environment...")
+                    .with("session", () => "Finalizing...")
+                    .otherwise(() => "Setting up workspace...")
+                : "Workspace ready"}
           </h2>
-          {!initializing && (
-            <p className="text-muted-foreground/45 mt-1.5 text-sm">
-              {subtitle(repoName, parentBranch, kind)}
+          {failed ? (
+            <p className="text-accent-red-muted mt-1.5 text-sm">
+              {failureMessage ?? "Provisioning did not complete. Archive this workspace and retry."}
             </p>
+          ) : (
+            !initializing && (
+              <p className="text-muted-foreground/45 mt-1.5 text-sm">
+                {subtitle(repoName, parentBranch, kind)}
+              </p>
+            )
           )}
         </div>
 

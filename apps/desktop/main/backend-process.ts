@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
+import { pushCloudCredentialsToBackend } from "./deus-cloud-provision";
 import { existsSync, statSync, writeFileSync } from "fs";
 import { delimiter, extname, join } from "path";
 import { app, BrowserWindow } from "electron";
@@ -150,6 +151,11 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send("backend:port-changed", { port });
         }
+        // A restarted backend starts with no cloud credentials: they live in
+        // safeStorage and reach it only over the runtime route (deliberately
+        // NOT the spawn env, so sign-out can retract them). Without this the
+        // cloud lane silently stays disabled until the app is relaunched.
+        void pushCloudCredentialsToBackend().catch(() => {});
         console.log(`[runtime] Restarted on port ${port}, notified renderer`);
       } catch (err) {
         console.error("[runtime] Restart failed:", err);

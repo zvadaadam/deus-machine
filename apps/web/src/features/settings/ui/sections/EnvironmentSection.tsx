@@ -31,9 +31,45 @@ import {
 } from "./manifest-draft";
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
+import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/shared/api/client";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 
 export function EnvironmentSection() {
   const { data: repos, isLoading: reposLoading } = useRepos();
+  // Agent-driven environment setup provisions a real cloud workspace, so it
+  // needs the lane up: signed in AND holding this device's platform key.
+  const cloudSession = useDeusCloudSession();
+  // Shared cache with Settings → Cloud (same key); this section only reads
+  // whether a turn can actually run.
+  const cloudStatus = useQuery({
+    queryKey: ["settings", "cloud"],
+    queryFn: () =>
+      apiClient.get<{ enabled: boolean; hasTurnCredential?: boolean }>("/settings/cloud"),
+    staleTime: 30_000,
+    retry: false,
+  });
+  // A reason, not a boolean — distinct states need distinct next steps.
+  // vaultLocked FIRST: with the keyring locked hasPlatformKey reads false
+  // too, and "finish device setup" would send the user to redo a setup
+  // that finished fine.
+  const cloudBlockedReason = cloudSession.data?.vaultLocked
+    ? "Unlock your keyring, then reopen Deus"
+    : !cloudSession.data?.signedIn
+      ? "Sign in to Deus Cloud first"
+      : !cloudSession.data?.hasPlatformKey
+        ? "Finish device setup in Settings → Cloud"
+        : !cloudStatus.data
+          ? // Fail CLOSED while unknown: enabling on a fast session read and a
+            // slow settings read provisions a sandbox whose only outcome is an
+            // auth error.
+            cloudStatus.isError
+            ? "Can't reach the Deus backend"
+            : "Checking cloud status…"
+          : !cloudStatus.data.hasTurnCredential
+            ? "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
+            : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo
@@ -159,6 +195,9 @@ export function EnvironmentSection() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Cloud environment — the platform-side recipe for this repo. */}
+      <CloudEnvironmentBlock repoId={selectedRepoId} cloudBlockedReason={cloudBlockedReason} />
 
       {manifestLoading ? (
         <div className="flex h-20 items-center justify-center">

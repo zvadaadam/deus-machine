@@ -104,6 +104,10 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     (!!activeChatTabSessionId && activeChatTabSessionId !== workspace.current_session_id);
 
   const displayStatus = getDisplayStatus(workspace, hasUnseenActivity);
+  // A workspace whose provision died: it stays in the sidebar (see
+  // SIDEBAR_WORKSPACE_STATE) precisely so the failure is visible, which needs
+  // a reason line — a bare red dot reads as "the agent errored".
+  const isFailed = workspace.state === "error";
   const isSetupRunning = workspace.setup_status === "running";
   const isSetupFailed = workspace.setup_status === "failed";
   const isAttention = displayStatus !== "idle";
@@ -116,11 +120,12 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   const hasChanges = additions > 0 || deletions > 0;
 
   // Diff stats only when nothing more urgent claims the cell.
-  const showDiff = hasChanges && displayStatus === "idle" && !isSetupFailed && !isSetupRunning;
+  const showDiff =
+    hasChanges && displayStatus === "idle" && !isSetupFailed && !isSetupRunning && !isFailed;
 
   // Attention states get a clear dot instead of text: unread gold, error red.
   const statusDotClass =
-    isInitializing || isSetupRunning || isSetupFailed
+    isInitializing || isSetupRunning || isSetupFailed || isFailed
       ? null
       : match(displayStatus)
           .with("unread", () => "bg-accent-gold")
@@ -135,6 +140,16 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         .with("hooks", () => "Setting up...")
         .with("session", () => "Finalizing...")
         .otherwise(() => "Setting up...");
+    }
+    // 'error' covers a failed provision AND a sandbox that died later, so the
+    // copy must not claim it was the setup. A non-empty init_stage is not
+    // proof of that on its own — the driver also parks paused/stopped/
+    // resuming there — so ask the shared vocabulary instead.
+    if (isFailed) {
+      if (workspace.kind !== "cloud") return "Failed";
+      const stillProvisioning =
+        Boolean(workspace.init_stage) && cloudPresence(workspace.init_stage) === "awake";
+      return stillProvisioning ? "Cloud setup failed" : "Sandbox failed";
     }
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";
@@ -151,13 +166,14 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   };
 
   // Error/unread never reach text rendering — they show as dots above.
-  const metaClass = isSetupFailed
-    ? "text-accent-red-muted"
-    : isSetupRunning || isInitializing
-      ? "text-text-muted"
-      : displayStatus === "working"
-        ? "text-text-tertiary"
-        : "text-text-disabled";
+  const metaClass =
+    isSetupFailed || isFailed
+      ? "text-accent-red-muted"
+      : isSetupRunning || isInitializing
+        ? "text-text-muted"
+        : displayStatus === "working"
+          ? "text-text-tertiary"
+          : "text-text-disabled";
 
   const handleArchive = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -177,7 +193,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       aria-current={isActive ? "page" : undefined}
       aria-label={`Workspace ${displayName}`}
       aria-busy={isInitializing || undefined}
-      title={secondaryText ?? undefined}
+      // A failed row's hover should say WHY — the red state without the
+      // stored error_message reads as "the agent errored".
+      title={(isFailed ? (workspace.error_message ?? secondaryText) : secondaryText) ?? undefined}
       onClick={isInitializing ? undefined : () => onClick(workspace)}
       onMouseEnter={
         isInitializing
