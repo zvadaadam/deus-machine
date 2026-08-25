@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { match } from "ts-pattern";
 import type { ReactNode } from "react";
 import { githubRepoSlug } from "@shared/git-origin";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,6 +7,7 @@ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
+import { capabilities } from "@/platform/capabilities";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useRepos } from "@/features/repository";
@@ -16,12 +18,14 @@ import { cn } from "@/shared/lib/utils";
 import {
   retryProvision,
   type ClaudeSubscriptionState,
+  type CodexSubscriptionState,
   disconnectClaudeSubscription,
   disconnectCodexSubscription,
   getClaudeSubscriptionStatus,
   getCodexSubscriptionStatus,
   getGithubAppStatus,
   importCodexAuth,
+  startCodexLogin,
   installGithubApp,
   openAgentSetupTerminal,
   saveClaudeSubscriptionToken,
@@ -49,12 +53,13 @@ const AGENT_SUBSCRIPTIONS = [
     command: "codex login --device-auth",
     placeholder: null,
     instructions:
-      "Enable device authorization in ChatGPT security settings, run this in a terminal and approve the code, then import the credential it writes. Stored encrypted; cloud turns activate with Codex cloud support.",
+      "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes (on the web app, paste the file instead). Unlike Claude's proxied token, Codex needs its auth file INSIDE the sandbox during its turns — same exposure as running codex on your own machine; it's removed the moment the turn ends. The command above is the manual fallback (device-auth) for headless machines.",
   },
 ] as const;
 
 interface CloudSettings {
   hasTurnCredential?: boolean;
+  hasPlatformCodex?: boolean;
   enabled: boolean;
   baseUrl: string | null;
   hasAnthropicKey: boolean;
@@ -70,6 +75,7 @@ export function CloudSection() {
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
   const [subToken, setSubToken] = useState("");
+  const [codexAuthJson, setCodexAuthJson] = useState("");
   // One agent row expanded at a time — compact list, setup opens inline.
   const [openAgent, setOpenAgent] = useState<string | null>(null);
   const [openGithub, setOpenGithub] = useState<"app" | "pat" | null>(null);
@@ -89,21 +95,57 @@ export function CloudSection() {
   });
 
   const codexAction = useMutation({
-    mutationFn: async (action: { kind: "import" } | { kind: "disconnect" }) => {
-      const result =
-        action.kind === "import" ? await importCodexAuth() : await disconnectCodexSubscription();
+    mutationFn: async (action: { kind: "login" } | { kind: "import" } | { kind: "disconnect" }) => {
+      const result = await match(action.kind)
+        .with("login", () => startCodexLogin())
+        .with("import", () => importCodexAuth())
+        .with(
+          "disconnect",
+          (): Promise<CodexSubscriptionState> =>
+            capabilities.ipcInvoke
+              ? disconnectCodexSubscription()
+              : // Web: no vault to clear — delete the platform copy directly.
+                apiClient
+                  .delete<{ ok: boolean }>("/settings/cloud/codex-auth")
+                  .then(() => ({ success: true, hasCodexSubscription: false }))
+        )
+        .exhaustive();
       if (result.error) throw new Error(result.error);
       return result;
     },
     onSuccess: async (result) => {
-      toast.success(
-        result.hasCodexSubscription
-          ? "Codex subscription imported — activates with Codex cloud support"
-          : "Codex subscription disconnected"
-      );
+      if (result.warning) {
+        // Connected locally but the platform copy failed — cloud turns
+        // resolve ONLY the platform copy, so "connected" alone would lie.
+        toast.warning(result.warning);
+      } else {
+        toast.success(
+          result.hasCodexSubscription
+            ? "Codex connected — cloud sandboxes can run Codex on your plan"
+            : "Codex subscription disconnected"
+        );
+      }
       await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
+      // hasTurnCredential (checklist + send-gating) folds Codex in — same
+      // pairing the Claude action below does.
+      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Codex action failed"),
+  });
+
+  // Universal fallback (and the ONLY path on web, where no CLI can spawn):
+  // paste ~/.codex/auth.json, backend validates and writes the canonical
+  // platform secret — the copy cloud turns actually read, on every surface.
+  const codexPaste = useMutation({
+    mutationFn: (authJson: string) =>
+      apiClient.post<{ ok: boolean }>("/settings/cloud/codex-auth", { authJson }),
+    onSuccess: async () => {
+      setCodexAuthJson("");
+      toast.success("Codex connected — cloud sandboxes can run Codex on your plan");
+      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex connect failed"),
   });
 
   const subAction = useMutation({
@@ -187,13 +229,20 @@ export function CloudSection() {
   // written twice and disagreed about Codex (which the cloud lane cannot
   // run, so a Codex-only setup must not tick this).
   // hasTurnCredential is the backend's full disjunction (API key, pushed
-  // token, canonical platform secret) — a second device in the same org has
-  // runnable turns with an empty local vault. The local subscription flag
-  // still counts for the pre-push moment right after connecting.
+  // token, either canonical platform secret) — a second device in the same
+  // org has runnable turns with an empty local vault. The local subscription
+  // flags still count for the pre-push moment right after connecting; Codex
+  // counts since the sandbox runs codex-app-server.
+  // Codex deliberately ABSENT as a local signal: cloud turns read only the
+  // platform copy, and hasTurnCredential already folds hasPlatformCodex in —
+  // counting the local vault would mark setup done while an unsynced codex
+  // connect still fails every cloud turn (the warning-toast case).
   const agentsDone = s?.hasTurnCredential || sub.data?.hasClaudeSubscription;
 
   const agentConnected = (id: string) =>
-    id === "codex" ? codexSub.data?.hasCodexSubscription : sub.data?.hasClaudeSubscription;
+    id === "codex"
+      ? codexSub.data?.hasCodexSubscription || s?.hasPlatformCodex
+      : sub.data?.hasClaudeSubscription;
 
   // Repos the installed GitHub App cannot reach — drives the missing-access
   // list and, when empty, lets the App satisfy the repo-access step without a PAT.
@@ -362,14 +411,11 @@ export function CloudSection() {
       </div>
 
       <div className="mb-8">
-        {/* Codex is deliberately NOT counted: the cloud lane only ships Claude
-            credentials today, so a Codex-only setup would tick this step and
-            then fail every cloud turn on a missing credential. */}
         {step(agentsDone, "Agents — run on your own subscriptions")}
         <p className="text-text-muted mb-3 text-sm">
           Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
-          by you, in your terminal — Deus only stores the result (encrypted, streamed per turn,
-          never visible to the agent).
+          by you, in your terminal — Deus stores the result encrypted and hands it out per turn. How
+          each agent receives it differs; the row below says so honestly.
         </p>
         <div className="border-border-subtle divide-border-subtle divide-y rounded-lg border">
           {AGENT_SUBSCRIPTIONS.map((agent) => {
@@ -423,16 +469,18 @@ export function CloudSection() {
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          const res = await openAgentSetupTerminal(agent.id);
-                          if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
-                        }}
-                      >
-                        <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
-                      </Button>
+                      {capabilities.ipcInvoke && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            const res = await openAgentSetupTerminal(agent.id);
+                            if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
+                          }}
+                        >
+                          <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
+                        </Button>
+                      )}
                     </div>
                     {agent.kind === "paste" ? (
                       <div className="flex items-center gap-2">
@@ -457,14 +505,56 @@ export function CloudSection() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="sm"
-                        className="self-start"
-                        onClick={() => codexAction.mutate({ kind: "import" })}
-                        disabled={codexAction.isPending}
-                      >
-                        {codexAction.isPending ? "Importing…" : "Import credential"}
-                      </Button>
+                      <>
+                        {capabilities.ipcInvoke && (
+                          <div className="flex items-center gap-2">
+                            {/* One click: main spawns the bundled `codex login`
+                                (browser OAuth, no device codes) and imports the
+                                credential it writes. Desktop only — the web app
+                                has no CLI to spawn, so it uses the paste path
+                                below instead of a dead button. */}
+                            <Button
+                              size="sm"
+                              className="self-start"
+                              onClick={() => codexAction.mutate({ kind: "login" })}
+                              disabled={codexAction.isPending}
+                            >
+                              {codexAction.isPending
+                                ? "Waiting for browser…"
+                                : "Sign in with ChatGPT"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => codexAction.mutate({ kind: "import" })}
+                              disabled={codexAction.isPending}
+                            >
+                              Import existing
+                            </Button>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            aria-label="Codex auth.json contents"
+                            type="password"
+                            value={codexAuthJson}
+                            onChange={(e) => setCodexAuthJson(e.target.value)}
+                            placeholder={"Paste ~/.codex/auth.json contents"}
+                            className="max-w-md text-sm"
+                            disabled={codexPaste.isPending}
+                          />
+                          <Button
+                            size="sm"
+                            variant={capabilities.ipcInvoke ? "outline" : "default"}
+                            onClick={() =>
+                              codexAuthJson.trim() && codexPaste.mutate(codexAuthJson.trim())
+                            }
+                            disabled={!codexAuthJson.trim() || codexPaste.isPending}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </>
                     )}
                   </>
                 )}

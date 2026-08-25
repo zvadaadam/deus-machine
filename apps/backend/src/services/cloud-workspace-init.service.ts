@@ -28,7 +28,11 @@ import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import { getCloudConfig } from "./agent/cloud/config";
-import { ensureCloudSession, announceCloudEnv } from "./agent/cloud/driver";
+import {
+  ensureCloudSession,
+  announceCloudEnv,
+  getCloudIdentityGeneration,
+} from "./agent/cloud/driver";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 
 const execFileAsync = promisify(execFile);
@@ -152,43 +156,103 @@ async function getCloudWorkspaceStatus(providerWorkspaceId: string): Promise<str
 }
 
 /**
- * Re-mint the App token for a workspace about to start.
+ * Re-mint the App token for a workspace about to start — BOTH lanes.
  *
- * ENVIRONMENT lane only. Inline workspaces bake the mint into the DO's secret
- * map at create time, where it OVERRIDES the org PAT (agnt merges request
- * secrets last) and nothing re-resolves on resume — so after the first hour an
- * inline sandbox holds a dead token this refresh cannot reach. The honest fix
- * is the idempotent re-create seam (docs/cloud-workspaces-plan.md, "refresh");
- * until then this narrows the gap for environment repos and must not pretend
- * otherwise.
+ * The refresh has to land in two places, because a sandbox reads credentials
+ * from two places:
+ *  - the DO's stored secret map, replayed on stopped→reprovision. agnt's
+ *    ensureWorkspace existing-row path takes request-fresh secrets with
+ *    row-truth recipe, and ensureInitialized REFRESHES state.secrets on
+ *    identity match — so an idempotent re-create with only { workspaceId,
+ *    secrets } is the sanctioned refresh seam (ensureProvisioning is a no-op
+ *    for running/paused sandboxes).
+ *  - the platform's environment-scoped secret (env lane), resolved at that
+ *    same re-create.
+ * The third place — the thawed filesystem of a PAUSED sandbox — is agnt's
+ * side of this seam: resumeSandbox rewrites .git-credentials from the DO's
+ * refreshed map.
+ *
+ * Returns whether the idempotent re-create was actually invoked — that call
+ * is ALSO what restarts a stopped sandbox, so callers using this as the
+ * restart vehicle must treat false as "nothing moved" (unconfigured cloud,
+ * no origin, identity change mid-lookup) and revert their optimistic state.
  */
-export async function refreshWorkspaceGithubToken(repositoryId: string | null): Promise<void> {
-  if (!repositoryId) return;
+export async function refreshWorkspaceGithubToken(workspace: {
+  repository_id: string | null;
+  provider_workspace_id?: string | null;
+}): Promise<boolean> {
+  if (!workspace.repository_id) return false;
   const config = getCloudConfig();
-  // Mint preconditions, hoisted ABOVE the env-info round-trip: without a
-  // deus-cloud session there is nothing this function can do, and it runs on
-  // the send path with the user's spinner already up.
-  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return;
-  const originUrl = getRepositoryById(getDatabase(), repositoryId)?.git_origin_url;
-  if (!originUrl) return;
-  // Two chips (sidebar + header) can fire this concurrently; a failed second
-  // mint must not delete the fresh token the first one just wrote.
-  const inFlight = githubTokenRefreshes.get(repositoryId);
-  if (inFlight) return inFlight;
-  const run = (async () => {
-    const envInfo = await getCloudEnvironmentInfo(originUrl);
-    if (!envInfo.configured || !envInfo.environmentId) return;
-    await refreshEnvironmentGithubToken(
+  // Only the AGNT config gates this function: the deus-cloud session bits
+  // gate the MINT, and mintRepoInstallationToken already no-ops to null
+  // without them — the tokenless re-create (public repos, org-PAT setups,
+  // env-key-only configs) must still run, because it is ALSO the restart
+  // vehicle for stopped sandboxes.
+  if (!config) return false;
+  const originUrl = getRepositoryById(getDatabase(), workspace.repository_id)?.git_origin_url;
+  if (!originUrl) return false;
+  const generationAtStart = getCloudIdentityGeneration();
+  const envInfo = await getCloudEnvironmentInfo(originUrl);
+  if (envInfo.lookupFailed) {
+    // UNKNOWN is not unconfigured: falling through to the inline lane would
+    // re-create a NAMED-environment workspace from agnt-base and replace its
+    // DO secret map (env vars, credentials) with the inline defaults — a
+    // transient platform blip must never rewrite durable state. Report
+    // no-op; wake callers revert honestly, sends surface the retryable miss.
+    return false;
+  }
+  if (generationAtStart !== getCloudIdentityGeneration()) {
+    // The account changed while the lookup was in flight. The identity
+    // handler's clear() ran BEFORE this call would register its flight, so
+    // clearing alone cannot cover this interval — a stale registration here
+    // would hand the new account an old-credential refresh. Bail; the new
+    // identity's own send/wake path refreshes with its own config.
+    return false;
+  }
+
+  if (envInfo.configured && envInfo.environmentId) {
+    await refreshEnvironmentGithubTokenOnce(
       originUrl,
       envInfo.environmentId,
       config.baseUrl,
       config.apiKey
     );
-  })().finally(() => {
-    githubTokenRefreshes.delete(repositoryId);
+    if (workspace.provider_workspace_id) {
+      // Re-resolve the (just-refreshed) environment secrets into the DO's
+      // stored map, so a stopped→reprovision replays the fresh token. NOT
+      // best-effort: ensureProvisioning inside this call is ALSO what
+      // restarts a stopped sandbox (chip + send paths) — swallowing its
+      // failure reported successful wakes over a sandbox that never moved,
+      // and resumes rewriting auth files from a stale map.
+      await agntCreateWorkspace({
+        workspaceId: workspace.provider_workspace_id,
+        environment: envInfo.name,
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+      });
+      return true;
+    }
+    return false;
+  }
+
+  // Inline lane: the mint was baked into the DO's map at create time, where
+  // it SHADOWS the org PAT. Push a fresh one through the re-create seam.
+  // A null mint (no App install — PAT/public-repo workspaces, or a transient
+  // mint failure) does NOT skip the call: the re-create resolves org-wide
+  // secrets server-side, so an omitted github_token REMOVES the stale inline
+  // mint from the map and lets the PAT (or anonymous clone) win again — and
+  // the restart-by-recreate still happens for tokenless workspaces.
+  if (!workspace.provider_workspace_id) return false;
+  const token = await mintRepoInstallationToken(originUrl);
+  await agntCreateWorkspace({
+    workspaceId: workspace.provider_workspace_id,
+    environment: token
+      ? Environment.from("agnt-base").secrets({ github_token: token })
+      : Environment.from("agnt-base"),
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
   });
-  githubTokenRefreshes.set(repositoryId, run);
-  return run;
+  return true;
 }
 
 const githubTokenRefreshes = new Map<string, Promise<void>>();
@@ -221,11 +285,39 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   };
 
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
+  let finalStatus = status ?? "unknown";
 
   if (status === "stopped") {
-    setStage("stopped");
-    announce({ status: "stopped", reason: "send a message to restart it" });
-    return { ok: true, status: "stopped" };
+    // Restart, don't shrug: ensureWorkspace's ensureProvisioning reprovisions
+    // a stopped sandbox, and refreshWorkspaceGithubToken routes through that
+    // exact re-create seam (with a FRESH mint — the stored one is long dead).
+    // The chip flips to Waking now; agnt's provisioning state frames take
+    // over the story on the session channel the shared tail below attaches
+    // (do NOT return early — after a backend restart no socket exists yet,
+    // and without one the frames have nowhere to land and the chip would
+    // stick on Waking forever).
+    setStage("resuming");
+    announce({ status: "resuming", step: "Restarting sandbox" });
+    try {
+      const restarted = await refreshWorkspaceGithubToken({
+        repository_id: workspace.repository_id ?? null,
+        provider_workspace_id: workspace.provider_workspace_id,
+      });
+      if (!restarted) {
+        // Every early-out (unconfigured cloud, missing origin, identity
+        // change) means the re-create never ran and NOTHING will move —
+        // leaving "resuming" up would be a permanent lie.
+        setStage("stopped");
+        announce({ status: "stopped", reason: "restart unavailable — try sending a message" });
+        return { ok: false, status: "stopped" };
+      }
+    } catch (err) {
+      console.warn(`[WORKSPACE] cloud restart failed: ${err}`);
+      setStage("stopped");
+      announce({ status: "stopped", reason: "restart failed — try again or send a message" });
+      return { ok: false, status: "stopped" };
+    }
+    finalStatus = "restarting";
   }
 
   if (status === "paused" || status === null) {
@@ -236,7 +328,10 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
       // re-mint BEFORE the resume. Inside the try: a throw here must take
       // the same honest revert to "paused" as a failed resume, not strand
       // the row on a permanent "resuming" spinner.
-      await refreshWorkspaceGithubToken(workspace.repository_id ?? null);
+      await refreshWorkspaceGithubToken({
+        repository_id: workspace.repository_id ?? null,
+        provider_workspace_id: workspace.provider_workspace_id,
+      });
       await wakeCloudWorkspace(workspace.provider_workspace_id);
     } catch (err) {
       console.warn(`[WORKSPACE] cloud wake resume failed: ${err}`);
@@ -256,7 +351,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     }
   }
   invalidate(["workspaces", "stats"], {});
-  return { ok: true, status: status ?? "unknown" };
+  return { ok: true, status: finalStatus };
 }
 
 /** Wake a paused sandbox (explicit resume; sends also auto-resume). */
@@ -276,6 +371,11 @@ export async function getCloudSettingsStatus(): Promise<{
   hasAnthropicKey: boolean;
   /** A cloud turn can actually run: subscription token or API key present. */
   hasTurnCredential: boolean;
+  /** A CLAUDE cloud turn can run — gates flows pinned to a Claude model. */
+  hasClaudeTurnCredential: boolean;
+  /** Canonical CODEX_AUTH_JSON exists on the platform — the web app's only
+   *  codex-connected signal (no desktop vault there). */
+  hasPlatformCodex: boolean;
   hasGithubToken: boolean;
 }> {
   const config = getCloudConfig();
@@ -285,6 +385,8 @@ export async function getCloudSettingsStatus(): Promise<{
       baseUrl: null,
       hasAnthropicKey: false,
       hasTurnCredential: false,
+      hasClaudeTurnCredential: false,
+      hasPlatformCodex: false,
       hasGithubToken: false,
     };
   }
@@ -293,12 +395,14 @@ export async function getCloudSettingsStatus(): Promise<{
   // canonical CLAUDE_CODE_OAUTH_TOKEN platform secret exists — the session DO
   // fills it at dispatch, so turns are runnable and the status must say so.
   let hasPlatformClaude = false;
+  let hasPlatformCodex = false;
   try {
     for await (const secret of agntListSecrets({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     })) {
       if (secret.keyName === "CLAUDE_CODE_OAUTH_TOKEN") hasPlatformClaude = true;
+      if (secret.keyName === "CODEX_AUTH_JSON") hasPlatformCodex = true;
       if (hasGithubToken) continue; // both flags found by scanning the FULL list
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
@@ -320,9 +424,69 @@ export async function getCloudSettingsStatus(): Promise<{
     baseUrl: config.baseUrl,
     hasAnthropicKey: Boolean(config.anthropicApiKey),
     hasTurnCredential:
+      Boolean(config.claudeOauthToken || config.anthropicApiKey) ||
+      hasPlatformClaude ||
+      hasPlatformCodex,
+    // Claude-only readiness: the environment-setup flow pins its turn to a
+    // Claude model, so its gate must NOT open on a codex-only credential.
+    hasClaudeTurnCredential:
       Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
+    hasPlatformCodex,
     hasGithubToken,
   };
+}
+
+/**
+ * WEB-lane Codex connect: validate and store the pasted auth.json as the
+ * canonical platform secret. Same validation as the desktop import; unlinked
+ * (appliesToAll false) exactly like the desktop sync — turn credentials are
+ * resolved per-dispatch by the session DO, never fanned into sandbox env.
+ */
+export async function saveCloudCodexAuth(authJson: string): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  let parsed: { auth_mode?: string; tokens?: { access_token?: string; refresh_token?: string } };
+  try {
+    parsed = JSON.parse(authJson) as typeof parsed;
+  } catch {
+    throw new Error("That isn't valid JSON — paste the full contents of ~/.codex/auth.json");
+  }
+  if (
+    parsed.auth_mode !== "chatgpt" ||
+    !parsed.tokens?.access_token ||
+    !parsed.tokens?.refresh_token
+  ) {
+    // refresh_token required: an access-token-only paste works until first
+    // expiry, then every cloud turn fails while Settings still reads
+    // Connected off the secret's mere presence.
+    throw new Error(
+      "That auth.json isn't a complete ChatGPT-plan login (needs access AND refresh tokens) — run `codex login` (or `codex login --device-auth` on a headless machine) and paste the full file it writes."
+    );
+  }
+  await agntCreateSecret("CODEX_AUTH_JSON", authJson, {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    appliesToAll: false,
+  });
+}
+
+export async function disconnectCloudCodexAuth(): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  // deleteSecret is id-addressed; resolve the entry by canonical name first.
+  for await (const secret of agntListSecrets({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  })) {
+    if (secret.keyName !== "CODEX_AUTH_JSON") continue;
+    const deleted = await agntDeleteSecret(secret.id, {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    });
+    if (!deleted) throw new Error("The platform did not confirm the delete — try again.");
+    return;
+  }
+  // Nothing to delete = already disconnected; not an error.
 }
 
 /** Store the org github_token secret (unlocks private repos in sandboxes). */
@@ -387,6 +551,50 @@ async function mintRepoInstallationToken(originUrl: string): Promise<string | nu
  * failure DELETE the scoped copy so resolution falls back to the org PAT
  * rather than replaying a dead token.
  */
+/**
+ * Single-flight per origin. Provisioning, wake, and send can all refresh the
+ * same environment concurrently (two same-env workspaces provisioning at
+ * once is routine) — and a FAILED refresh's delete branch must never race a
+ * successful one's fresh write.
+ */
+function refreshEnvironmentGithubTokenOnce(
+  originUrl: string,
+  environmentId: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<void> {
+  // Normalized key: provisioning passes the https form, wake/send pass the
+  // raw stored origin — an ssh-form remote would otherwise key two separate
+  // flights for the same environment and re-open the delete-vs-write race
+  // the single-flight exists to close.
+  const key = httpsOrigin(originUrl);
+  const inFlight = githubTokenRefreshes.get(key);
+  if (inFlight) return inFlight;
+  const run: Promise<void> = refreshEnvironmentGithubToken(
+    originUrl,
+    environmentId,
+    baseUrl,
+    apiKey
+  ).finally(() => {
+    // Only OUR entry: the identity-change clear may have let a replacement
+    // flight occupy this key — an unconditional delete would evict it and
+    // reopen the delete-vs-write race (same guard as the driver's
+    // connecting map).
+    if (githubTokenRefreshes.get(key) === run) githubTokenRefreshes.delete(key);
+  });
+  githubTokenRefreshes.set(key, run);
+  return run;
+}
+
+/**
+ * Called by the driver's identity-change handler: in-flight refreshes were
+ * minted under the PREVIOUS account, and the next account's provision must
+ * not adopt (or be blocked by) them.
+ */
+export function clearGithubTokenRefreshFlights(): void {
+  githubTokenRefreshes.clear();
+}
+
 async function refreshEnvironmentGithubToken(
   originUrl: string,
   environmentId: string,
@@ -445,7 +653,7 @@ async function provisionInBackground(
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
       if (envInfo.environmentId) {
-        await refreshEnvironmentGithubToken(originUrl, envInfo.environmentId, baseUrl, apiKey);
+        await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, baseUrl, apiKey);
       }
       environment = envInfo.name;
     } else {

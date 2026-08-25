@@ -190,11 +190,13 @@ export function MainLayout() {
   // 2. Select it (transitions to two-panel layout)
   // 3. Queue the message to be sent once the workspace has a session
   const welcomeCreateMutation = useCreateWorkspace();
-  const pendingWelcomeMessageRef = useRef<{
-    message: string;
-    workspaceId: string;
-    model: string;
-  } | null>(null);
+  // Keyed by workspace: a single slot meant the NEXT started workspace stole
+  // the pending prompt — most damagingly the environment-setup turn, which
+  // then silently never ran. Delivery stays selection-gated (the send rides
+  // the selected panel's ref), so an entry simply waits until its workspace
+  // is selected again.
+  const pendingWelcomeMessagesRef = useRef(new Map<string, { message: string; model: string }>());
+  const welcomeSendsInFlightRef = useRef(new Set<string>());
 
   const handleStartWorkspace = useCallback(
     async (
@@ -211,17 +213,12 @@ export function MainLayout() {
             : repoId
         );
         // Store pending message — will be sent when workspace gets a session
-        pendingWelcomeMessageRef.current = {
-          message,
-          workspaceId: workspace.id,
-          model,
-        };
+        pendingWelcomeMessagesRef.current.set(workspace.id, { message, model });
         selectWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
       } catch (error) {
         console.error("Failed to create workspace from home:", error);
         toast.error(getErrorMessage(error));
-        pendingWelcomeMessageRef.current = null;
       }
     },
     [welcomeCreateMutation, selectWorkspace, expandRepo]
@@ -234,8 +231,10 @@ export function MainLayout() {
   useEffect(() => {
     if (!pendingEnvSetupRepoId) return;
     useUIStore.getState().clearEnvSetupRequest();
-    // Cloud sandboxes run the claude-code harness only — a stored Codex pick
-    // would be rejected at send time, so force the Claude default instead.
+    // The setup turn is pinned to Claude regardless of the stored pick — not
+    // because the cloud can't run Codex (it can), but because the
+    // environment-onboarding prompt is tuned and tested against one agent
+    // and this flow must be deterministic.
     const stored = getStoredModel();
     const model = stored.startsWith("claude-code:") ? stored : DEFAULT_MODEL;
     void handleStartWorkspace(
@@ -252,18 +251,33 @@ export function MainLayout() {
   // React effect ordering guarantees child useImperativeHandle runs before parent useEffect,
   // so workspaceChatPanelRef.current is set when this fires.
   useEffect(() => {
-    const pending = pendingWelcomeMessageRef.current;
-    if (!pending) return;
     if (!selectedWorkspace) return;
-    if (selectedWorkspace.id !== pending.workspaceId) return;
+    const pending = pendingWelcomeMessagesRef.current.get(selectedWorkspace.id);
+    if (!pending) return;
     if (selectedWorkspace.state !== "ready" || !selectedWorkspace.current_session_id) return;
     if (!workspaceChatPanelRef.current) return;
 
-    pendingWelcomeMessageRef.current = null;
-    workspaceChatPanelRef.current.sendMessage(pending.message, pending.model).catch((error) => {
-      console.error("Failed to send welcome message:", error);
-      toast.error(getErrorMessage(error));
-    });
+    // Keep the entry until the send RESOLVES: deleting up front turns a
+    // transient failure (backend hiccup mid-provision) into a silently lost
+    // prompt. The in-flight set stops effect re-runs from double-sending
+    // while the first attempt is still settling.
+    if (welcomeSendsInFlightRef.current.has(selectedWorkspace.id)) return;
+    welcomeSendsInFlightRef.current.add(selectedWorkspace.id);
+    const workspaceId = selectedWorkspace.id;
+    workspaceChatPanelRef.current
+      .sendMessage(pending.message, pending.model)
+      .then((sent) => {
+        // sendMessage RESOLVES on failure too (it toasts and reports false) —
+        // only a true delivery may consume the queued prompt.
+        if (sent) pendingWelcomeMessagesRef.current.delete(workspaceId);
+      })
+      .catch((error) => {
+        console.error("Failed to send welcome message:", error);
+        toast.error(getErrorMessage(error));
+      })
+      .finally(() => {
+        welcomeSendsInFlightRef.current.delete(workspaceId);
+      });
   }, [selectedWorkspace]);
 
   // Derive repo name for GitHub picker modal from repoGroups

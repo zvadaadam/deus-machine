@@ -46,7 +46,11 @@ export function EnvironmentSection() {
   const cloudStatus = useQuery({
     queryKey: ["settings", "cloud"],
     queryFn: () =>
-      apiClient.get<{ enabled: boolean; hasTurnCredential?: boolean }>("/settings/cloud"),
+      apiClient.get<{
+        enabled: boolean;
+        hasTurnCredential?: boolean;
+        hasClaudeTurnCredential?: boolean;
+      }>("/settings/cloud"),
     staleTime: 30_000,
     retry: false,
   });
@@ -67,8 +71,11 @@ export function EnvironmentSection() {
             cloudStatus.isError
             ? "Can't reach the Deus backend"
             : "Checking cloud status…"
-          : !cloudStatus.data.hasTurnCredential
-            ? "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
+          : !(cloudStatus.data.hasClaudeTurnCredential ?? cloudStatus.data.hasTurnCredential)
+            ? // CLAUDE-scoped, not the full union: this flow pins its turn to a
+              // Claude model, so a codex-only credential would enable a button
+              // whose turn can only fail.
+              "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
             : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 

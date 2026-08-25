@@ -166,26 +166,56 @@ describe("cloud driver frame → fold contract", () => {
     });
   });
 
-  it("fails the live turn when the sandbox dies mid-turn (workspace stopped/error)", () => {
+  it("fails the live turn when the sandbox dies mid-turn — after the recovery grace window", () => {
     // Real case: sidecar dies on a credential error → workspace 'stopped' —
     // without this the spinner hangs forever and the cause is an ephemeral
-    // env line the user can miss entirely.
-    handler.liveTurnId.mockReturnValue("turn-x");
-    capturedOnFrame!({
-      type: "workspace.state",
-      data: { status: "stopped", reason: "sidecar_disconnected (code=1006)" },
-    });
+    // env line the user can miss entirely. The kill is GRACE-DELAYED: the
+    // same stopped/error states pass by legitimately while a send is waking
+    // a stopped sandbox, and recovery announces itself within seconds.
+    vi.useFakeTimers();
+    try {
+      handler.liveTurnId.mockReturnValue("turn-x");
+      capturedOnFrame!({
+        type: "workspace.state",
+        data: { status: "stopped", reason: "sidecar_disconnected (code=1006)" },
+      });
 
-    expect(handler.handle).toHaveBeenCalledTimes(1);
-    expect(handler.handle.mock.calls[0][0].event).toMatchObject({
-      type: "turn.ended",
-      turnId: "turn-x",
-      stopReason: "error",
-      error: {
-        category: "internal",
-        message: expect.stringContaining("sidecar_disconnected"),
-      },
-    });
+      // Not yet — the grace window is still open.
+      expect(handler.handle).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(20_000);
+
+      expect(handler.handle).toHaveBeenCalledTimes(1);
+      expect(handler.handle.mock.calls[0][0].event).toMatchObject({
+        type: "turn.ended",
+        turnId: "turn-x",
+        stopReason: "error",
+        error: {
+          category: "internal",
+          message: expect.stringContaining("sidecar_disconnected"),
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("spares the queued turn when recovery follows the stop (wake-by-send)", () => {
+    // A send into a STOPPED sandbox queues the turn server-side and triggers
+    // reprovision — the stopped/error states seen on the way are NOT a death,
+    // and killing the turn here is what produced the "Send again to restart
+    // it" loop. Provisioning disarms the kill; the turn replays on the new
+    // sandbox.
+    vi.useFakeTimers();
+    try {
+      handler.liveTurnId.mockReturnValue("turn-x");
+      capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
+      capturedOnFrame!({ type: "workspace.state", data: { status: "provisioning" } });
+      vi.advanceTimersByTime(60_000);
+
+      expect(handler.handle).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("leaves settled sessions alone when the sandbox stops (no live turn)", () => {

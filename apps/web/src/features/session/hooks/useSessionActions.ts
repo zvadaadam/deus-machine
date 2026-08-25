@@ -39,10 +39,12 @@ interface UseSessionActionsReturn {
    *   Used by the home-screen welcome flow where we dispatch the first
    *   message before the user has a chance to interact with a composer.
    */
-  sendMessage: (customContent?: string, modelOverride?: string) => Promise<void>;
+  /** Resolves true only when the send actually reached the backend — the
+   *  welcome flow keeps its queued prompt on false and retries later. */
+  sendMessage: (customContent?: string, modelOverride?: string) => Promise<boolean>;
   stopSession: () => Promise<void>;
-  compactConversation: () => Promise<void>;
-  createPR: () => Promise<void>;
+  compactConversation: () => Promise<boolean>;
+  createPR: () => Promise<boolean>;
   sending: boolean;
 }
 
@@ -57,13 +59,13 @@ export function useSessionActions({
 
   const sendMessage = useCallback(
     async (customContent?: string, modelOverride?: string) => {
-      if (sendMessageMutation.isPending) return;
+      if (sendMessageMutation.isPending) return false;
 
       const composer = useSessionComposerStore.getState().composers[sessionId];
-      if (!composer) return;
+      if (!composer) return false;
 
       const content = customContent || composer.draft.trim();
-      if (!content) return;
+      if (!content) return false;
 
       try {
         // modelOverride wins for this send only; otherwise use the composer's
@@ -90,7 +92,9 @@ export function useSessionActions({
       } catch (error) {
         console.error("Failed to send message:", error);
         toast.error(error instanceof Error ? error.message : "Failed to send message");
-        return;
+        // The toast is feedback, not delivery — callers that queued this
+        // prompt (welcome flow) must see the failure to keep their entry.
+        return false;
       }
 
       try {
@@ -98,6 +102,7 @@ export function useSessionActions({
       } catch (callbackError) {
         console.error("[useSessionActions] onMessageSent callback failed:", callbackError);
       }
+      return true;
     },
     [sessionId, sendMessageMutation, onMessageSent]
   );

@@ -40,6 +40,15 @@ the canvas — read left to right, top to bottom.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environment · `57` Experimental · `58` Remote Access
+- `54a`–`54c` and `59`/`59a` are a **proposal, not built** — the settings revamp. `54a` is
+  the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
+  14-state matrix, `54c` the four setup flows with every command and failure string from
+  the main process. `59` carries the system behind it — the `cell` row primitive
+  (leading · trailing · below, hairline inset dividers, no card per row, controls sized to
+  their content) and a regrouped nav — and `59a` applies it to General. The primitive is
+  lifted from Cursor's own `.cursor-settings-cell`, read out of its app bundle.
+  These boards are the file's one deliberate divergence: either implement them or delete
+  them. They must not sit here indefinitely.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
@@ -279,13 +288,22 @@ in step with it:
 - **The header Open button is an outlined split button**, not a filled pill: a bordered
   `h-7` container, quick-open on the left, a 1px divider, and a chevron on the right.
 - The Changes review CTA reads **"Review Changes"** with the file count after it.
-- **Cloud setup counts three steps, and two of them tick on less than they look like.**
-  Codex is listed under Agents but is deliberately _not_ counted — the cloud lane only
-  ships Claude credentials, so a Codex-only setup must not tick that step. And an
-  installed GitHub App only satisfies the repo step when it covers **every** local repo;
-  with one repo missing the step stays open and the header still reads `1/3`, which is
-  why board `55` is drawn that way. Each agent and GitHub row is an accordion — one open
-  at a time, chevron rotated 180° when it is.
+- **A harness is drawn with its own logo, never a generic sparkle.** `apps/web/src/assets/agents/`
+  ships 18 brand SVGs and `getAgentLogo(harness)` resolves them in six places: `ModelPicker`
+  (trigger + every row), `ComposerControls`, `SessionTab`, `ClosedSessionsPopover`,
+  `PlanApprovalOverlay` and `AgentQuestionOverlay`. The marks in this file are those exact
+  paths, transcribed with their `viewBox="29 29 42 42"` and bound to a text colour the way
+  `currentColor` behaves in code — so a `sparkles` icon in any of those slots is a bug.
+- **Cloud setup counts three steps, and the GitHub one ticks on less than it looks like.**
+  Either subscription satisfies the Agents step now that the sandbox runs
+  `codex-app-server` — Codex counts. But an installed GitHub App only satisfies the repo
+  step when it covers **every** local repo; with one repo missing the step stays open and
+  the header still reads `1/3`, which is why board `55` is drawn that way. Each agent and
+  GitHub row is an accordion — **one open at a time**, chevron rotated 180° when it is.
+  That is why board `55` shows Claude Code open (paste a `claude setup-token`) and the
+  Codex row's own expanded state lives on board `22`: one-click **Sign in with ChatGPT**
+  with a ghost **Import existing** beside it, and the `codex login --device-auth` chip
+  above them as the headless fallback.
 - **A failed workspace stays in the sidebar.** `SIDEBAR_WORKSPACE_STATE` includes `error`
   precisely so the failure is visible, so the row needs a reason in the meta cell, not a
   red dot: `Cloud setup failed` while provisioning, `Sandbox failed` once it was up,

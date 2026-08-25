@@ -36,6 +36,7 @@ import {
   cancelCloudTurn,
   isCloudSession,
   hasLiveCloudSession,
+  announceCloudEnv,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
@@ -387,15 +388,15 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     cwd = computeWorkspacePath(workspace) ?? undefined;
   }
 
-  // The cloud sidecar runs the claude-code harness only (it deliberately
-  // never installs the Codex SDK) — reject other harnesses up front with a
-  // real explanation instead of a provider-session error mid-connect. This
-  // MUST precede every write below: after the harness persist it would leave
-  // a rejected harness on the row; after the working flip it would strand
-  // the session in "working" with no turn to ever end it.
-  if (isCloud && agentHarness !== "claude-code") {
+  // The cloud sidecar runs claude-code and codex-app-server (the template
+  // bakes both CLIs). Anything else — codex-sdk, acp — is rejected up front
+  // with a real explanation instead of a provider-session error
+  // mid-connect. This MUST precede every write below: after the harness
+  // persist it would leave a rejected harness on the row; after the working
+  // flip it would strand the session in "working" with no turn to end it.
+  if (isCloud && agentHarness !== "claude-code" && agentHarness !== "codex-app-server") {
     throw new Error(
-      "Codex isn't available in cloud workspaces yet — the sandbox runs Claude only. Pick a Claude model, or use a local workspace for Codex."
+      "This agent isn't available in cloud workspaces — pick a Claude or Codex model, or use a local workspace."
     );
   }
 
@@ -469,6 +470,12 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     // driver enforces deus's one-live-turn contract itself; every throw here
     // answers `accepted: false` — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
+    // Above the try: the catch's honest revert needs to know which stage the
+    // optimistic Waking flip replaced.
+    const asleepStage =
+      workspace?.init_stage === "paused" || workspace?.init_stage === "stopped"
+        ? workspace.init_stage
+        : null;
     try {
       // A send WAKES a sleeping sandbox, and its App token expires in an hour
       // — so the wake chip is not the only path that needs a fresh mint.
@@ -480,21 +487,46 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       // ENVIRONMENT lane only: inline workspaces baked their mint into the
       // DO's secret map at create time and no wake path can rewrite it — see
       // refreshWorkspaceGithubToken. This does NOT cover them.
-      if (
-        !hasLiveCloudSession(sessionId) ||
-        workspace?.init_stage === "paused" ||
-        workspace?.init_stage === "stopped"
-      ) {
-        await refreshWorkspaceGithubToken(workspace.repository_id);
+      if (asleepStage && workspace) {
+        // The wake takes tens of seconds (mint + reprovision/resume) and the
+        // real agnt state frames only start once the workspace DO picks the
+        // turn up — announce NOW so the send is never met with silence. The
+        // chip flips to "Waking" (init_stage resuming) and the chat shows the
+        // env line immediately; real frames replace both within seconds.
+        getDatabase()
+          .prepare("UPDATE workspaces SET init_stage = 'resuming' WHERE id = ?")
+          .run(workspace.id);
+        invalidate(["workspaces", "stats"], {});
+        announceCloudEnv(workspace.id, sessionId, {
+          status: "resuming",
+          step: asleepStage === "stopped" ? "Restarting sandbox" : "Waking sandbox",
+        });
+      }
+      if (!hasLiveCloudSession(sessionId) || asleepStage) {
+        await refreshWorkspaceGithubToken(workspace);
       }
       // permissionMode/maxTurns/additionalDirectories/resume have no cloud
       // channel equivalent (permissions auto-allow like the local policy;
       // resume is agnt-internal) — model and thinking DO travel.
       await startCloudTurn(sessionId, turnId, content, {
         model,
+        agentHarness,
         thinkingLevel: readThinkingLevel(params.thinkingLevel),
       });
     } catch (err) {
+      // The optimistic "Waking" flip above must not outlive a failed wake:
+      // the prompt is rolled back, so a stuck Waking chip would promise a
+      // recovery nothing is driving. Same honest revert the chip path does.
+      if (asleepStage && workspace) {
+        getDatabase()
+          .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
+          .run(asleepStage, workspace.id);
+        invalidate(["workspaces", "stats"], {});
+        announceCloudEnv(workspace.id, sessionId, {
+          status: asleepStage,
+          reason: "wake failed — try again",
+        });
+      }
       handleAgentError(sessionId, err);
       throw err;
     }

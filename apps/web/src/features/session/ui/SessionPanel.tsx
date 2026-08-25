@@ -62,7 +62,9 @@ export interface SessionPanelRef {
    *  home-screen welcome flow where the first send happens before the
    *  composer is mounted. All other "push content into chat" flows go
    *  directly through `sessionComposerActions`. */
-  sendMessage: (content: string, model?: string) => Promise<void>;
+  /** Resolves true only when the send reached the backend (see
+   *  useSessionActions) — false keeps the caller's queued prompt alive. */
+  sendMessage: (content: string, model?: string) => Promise<boolean>;
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
@@ -245,8 +247,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     useEffect(() => {
       onCompact?.(() => composerRef.current?.compactConversation());
       onCreatePR?.(() => composerRef.current?.createPR());
-      onSendAgentMessage?.(
-        (content: string) => composerRef.current?.sendMessage(content) ?? Promise.resolve()
+      onSendAgentMessage?.((content: string) =>
+        (composerRef.current?.sendMessage(content) ?? Promise.resolve(false)).then(() => undefined)
       );
       onStop?.(() => composerRef.current?.stopSession());
     }, [onCompact, onCreatePR, onSendAgentMessage, onStop]);
@@ -260,7 +262,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       ref,
       () => ({
         sendMessage: (content: string, modelOverride?: string) =>
-          composerRef.current?.sendMessage(content, modelOverride) ?? Promise.resolve(),
+          composerRef.current?.sendMessage(content, modelOverride) ?? Promise.resolve(false),
       }),
       []
     );

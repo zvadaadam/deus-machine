@@ -37,10 +37,10 @@ export interface SessionComposerRef {
    *  welcome flow, which dispatches before a composer surface mounts.
    *  `modelOverride` forces a model for THIS send only and also updates
    *  the composer store so subsequent sends keep it. */
-  sendMessage: (content: string, modelOverride?: string) => Promise<void>;
+  sendMessage: (content: string, modelOverride?: string) => Promise<boolean>;
   stopSession: () => Promise<void>;
-  compactConversation: () => Promise<void>;
-  createPR: () => Promise<void>;
+  compactConversation: () => Promise<boolean>;
+  createPR: () => Promise<boolean>;
 }
 
 interface SessionComposerProps {
@@ -145,7 +145,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
           if (modelOverride) {
             sessionComposerActions.setModel(sessionId, modelOverride, defaultThinking);
           }
-          await sendMessage(content, modelOverride);
+          return sendMessage(content, modelOverride);
         },
         stopSession,
         compactConversation,

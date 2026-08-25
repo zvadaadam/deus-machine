@@ -42,4 +42,7 @@ export interface CodexSubscriptionResult {
   hasCodexSubscription: boolean;
   accountEmail?: string;
   error?: string;
+  /** Connected locally but NOT yet on the platform — cloud turns will fail
+   *  until the startup catch-up lands the copy. */
+  warning?: string;
 }

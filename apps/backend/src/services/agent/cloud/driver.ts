@@ -27,6 +27,7 @@ import { invalidate } from "../../query-engine";
 import { broadcast } from "../../ws.service";
 import { getDatabase } from "../../../lib/database";
 import { getSessionRaw } from "../../../db";
+import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 
@@ -44,6 +45,9 @@ interface CloudSession {
   seq: number;
   /** In-flight diff.request round-trips, keyed by requestId. */
   pendingDiffs: Map<string, PendingDiff>;
+  /** Armed grace timer for a stopped/error state seen while a turn is live —
+   *  see scheduleTurnKill. */
+  pendingTurnKill: ReturnType<typeof setTimeout> | null;
 }
 
 let handler: AgentEventHandler | null = null;
@@ -55,8 +59,15 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
   // Account switch = every open channel is authenticated as the WRONG
   // identity. Close them all; the next send reconnects under the new config.
   setCloudIdentityChangedHandler(() => {
+    // Established sockets AND in-flight attempts: a connect started under
+    // account A must not land its A-authenticated session into the map
+    // after B signs in, and new callers must not adopt A's pending promise.
+    identityGeneration += 1;
+    connecting.clear();
+    clearGithubTokenRefreshFlights();
     for (const s of sessions.values()) {
       rejectPendingDiffs(s, "platform identity changed");
+      clearTurnKill(s);
       s.socket.close();
     }
     sessions.clear();
@@ -74,6 +85,7 @@ function rejectPendingDiffs(session: CloudSession, reason: string): void {
 export function shutdownCloudDriver(): void {
   for (const s of sessions.values()) {
     rejectPendingDiffs(s, "cloud driver shutting down");
+    clearTurnKill(s);
     s.socket.close();
   }
   sessions.clear();
@@ -160,6 +172,37 @@ function pushCloudError(session: CloudSession, code: unknown, message: unknown):
  * frame is lost when the socket is down while the sandbox stops).
  * `paused` is deliberately excluded — agnt legitimately replays after a wake.
  */
+/**
+ * A stopped/error state with a live turn is AMBIGUOUS: either the sandbox
+ * died mid-turn (nothing will ever come — the turn must fail visibly), or a
+ * send just WOKE a stopped sandbox and agnt is provisioning toward running
+ * exactly that queued turn (killing it here cancels the user's own restart —
+ * the "Send again to restart it" loop). The tiebreaker is the next state:
+ * recovery emits provisioning/resuming within seconds. So arm a grace timer
+ * instead of killing immediately; any recovering state disarms it.
+ */
+const TURN_KILL_GRACE_MS = 20_000;
+
+function scheduleTurnKill(session: CloudSession, status: string, detail?: string): void {
+  const armedFor = handler?.liveTurnId(session.deusSessionId);
+  if (!armedFor) return;
+  if (session.pendingTurnKill) return;
+  session.pendingTurnKill = setTimeout(() => {
+    session.pendingTurnKill = null;
+    // Fire only against the turn this was armed for: turn A may have settled
+    // during the grace window and turn B started — killing B off A's stale
+    // stopped-state would cancel a healthy fresh turn.
+    if (handler?.liveTurnId(session.deusSessionId) !== armedFor) return;
+    failLiveTurn(session, status, detail);
+  }, TURN_KILL_GRACE_MS);
+}
+
+function clearTurnKill(session: CloudSession): void {
+  if (!session.pendingTurnKill) return;
+  clearTimeout(session.pendingTurnKill);
+  session.pendingTurnKill = null;
+}
+
 function failLiveTurn(session: CloudSession, status: string, detail?: string): void {
   const live = handler?.liveTurnId(session.deusSessionId);
   if (!live) return;
@@ -216,19 +259,26 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         // while the sandbox stops; this snapshot is then the only truth, and
         // the `currentTurnId === live` early return below would strand the
         // spinner forever. Fail here, before that gate. (paused replays.)
-        if (sessionStatus === "stopped") failLiveTurn(session, "stopped");
+        if (sessionStatus === "stopped") scheduleTurnKill(session, "stopped");
       } else if (sessionStatus === "error") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: "error" });
         broadcastCloudEnv(session, { status: "error" });
-        failLiveTurn(session, "error");
+        scheduleTurnKill(session, "error");
       } else if (sessionStatus === "provisioning") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
         // that follow append to it.
         updateCloudWorkspace(session.deusWorkspaceId, { status: "provisioning" });
         broadcastCloudEnv(session, { status: "provisioning" });
+        // Recovery truth can arrive VIA the snapshot when the live
+        // workspace.state frame fell into a socket gap — the reconnect
+        // doesn't fire onDown (the socket retries internally), so an armed
+        // kill survives to here and must be disarmed the same way the live
+        // frame path disarms it.
+        clearTurnKill(session);
       } else if (sessionStatus === "ready" || sessionStatus === "running") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: "running" });
+        clearTurnKill(session);
       }
 
       // Reconnect gap-heal: if the turn deus believes is live already settled
@@ -261,7 +311,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // Real case: sidecar dies on a credential error → clean WS close →
       // workspace 'stopped', and the only trace was an ephemeral env line.
       if (data.status === "stopped" || data.status === "error") {
-        failLiveTurn(session, data.status, data.reason ?? data.step);
+        scheduleTurnKill(session, data.status, data.reason ?? data.step);
+      } else if (
+        data.status === "provisioning" ||
+        data.status === "resuming" ||
+        data.status === "running"
+      ) {
+        // Recovery underway — the queued turn replays when the sandbox is up.
+        clearTurnKill(session);
       }
       return;
     }
@@ -374,6 +431,18 @@ function extractAnswers(response: unknown): string[] {
 // ---- Session lifecycle ----
 
 const connecting = new Map<string, Promise<CloudSession>>();
+/** Bumped on every platform-identity change; stale connects check it. */
+let identityGeneration = 0;
+
+/**
+ * Monotonic account-switch counter. Callers that await across the identity
+ * boundary (cloud-workspace-init's refresh path) capture it before the await
+ * and bail on mismatch — the clear()-based invalidation cannot cover work
+ * that REGISTERS after the clear ran.
+ */
+export function getCloudIdentityGeneration(): number {
+  return identityGeneration;
+}
 
 /** Open (or return) the live socket for a cloud session. Concurrent callers
  *  (create pipeline vs. a fast first send, diff polls vs. wake) share one
@@ -386,8 +455,11 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
   const inFlight = connecting.get(deusSessionId);
   if (inFlight) return inFlight;
 
-  const attempt = connectCloudSession(deusSessionId).finally(() => {
-    connecting.delete(deusSessionId);
+  const attempt: Promise<CloudSession> = connectCloudSession(deusSessionId).finally(() => {
+    // Only OUR entry: an identity change clears the map and a new attempt may
+    // already occupy this key — an unconditional delete would evict the
+    // replacement and let a later caller open a duplicate socket.
+    if (connecting.get(deusSessionId) === attempt) connecting.delete(deusSessionId);
   });
   connecting.set(deusSessionId, attempt);
   return attempt;
@@ -396,9 +468,11 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
 async function connectCloudSession(deusSessionId: string): Promise<CloudSession> {
   const existing = sessions.get(deusSessionId);
   if (existing?.socket.isOpen()) return existing;
+  if (existing) clearTurnKill(existing);
   existing?.socket.close();
   sessions.delete(deusSessionId);
 
+  const generationAtStart = identityGeneration;
   const config = getCloudConfig();
   if (!config) throw new Error("Cloud workspaces are not configured (missing agnt API key)");
 
@@ -424,6 +498,12 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       workspaceId: workspace.provider_workspace_id,
       sessionId: deusSessionId,
     });
+    if (generationAtStart !== identityGeneration) {
+      // The account changed while createSession was in flight. Persisting the
+      // OLD identity's provider id would poison the row: every later connect
+      // under the new account would reuse it and fail its token mint forever.
+      throw new Error("Platform identity changed during connect — retry under the new account");
+    }
     db.prepare("UPDATE sessions SET provider_session_id = ? WHERE id = ?").run(
       created.id,
       deusSessionId
@@ -443,6 +523,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     providerSessionId: row.provider_session_id,
     seq: 0,
     pendingDiffs: new Map(),
+    pendingTurnKill: null,
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -454,9 +535,18 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     onDown: (reason) => {
       console.warn(`[CloudDriver] socket down session=${deusSessionId}: ${reason}`);
       rejectPendingDiffs(session, reason);
+      // The armed kill (if any) must not fire against a torn-down session —
+      // the reconnect's own snapshot re-evaluates the sandbox truthfully.
+      clearTurnKill(session);
       sessions.delete(deusSessionId);
     },
   });
+  if (generationAtStart !== identityGeneration) {
+    // The account changed while this connect was in flight: the socket is
+    // authenticated as the PREVIOUS identity and must not enter the map.
+    session.socket.close();
+    throw new Error("Platform identity changed during connect — retry under the new account");
+  }
   sessions.set(deusSessionId, session);
   await session.socket.ready();
   return session;
@@ -467,6 +557,8 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
 export interface CloudTurnOptions {
   /** Model override — agnt's sidecar honors options.model (else its default). */
   model?: string;
+  /** Which engine harness runs the turn; the wire defaults to claude-code. */
+  agentHarness?: string;
   thinkingLevel?: ThinkingLevel;
 }
 
@@ -491,11 +583,16 @@ export async function startCloudTurn(
   const registered = handler.beginTurn(deusSessionId, turnId);
   try {
     const wsOptions: Record<string, unknown> = {};
-    // Deus picks the per-turn credential EXPLICITLY — subscription first,
-    // API key fallback. No env-ordering accidents like the raw CLI (where a
-    // stray ANTHROPIC_API_KEY silently outranks the subscription token).
-    // The oauth branch requires agnt's authKind-aware sidecar (engine 0.3.1).
-    if (config.claudeOauthToken) {
+    if (options.agentHarness === "codex-app-server") {
+      // Codex: the credential is the auth.json FILE, held only as the
+      // canonical platform secret — the session DO resolves it at dispatch
+      // (deus's backend never carries it). Only the harness rides the wire.
+      wsOptions.harness = "codex-app-server";
+    } else if (config.claudeOauthToken) {
+      // Deus picks the per-turn credential EXPLICITLY — subscription first,
+      // API key fallback. No env-ordering accidents like the raw CLI (where
+      // a stray ANTHROPIC_API_KEY silently outranks the subscription token).
+      // The oauth branch requires agnt's authKind-aware sidecar (0.3.1+).
       wsOptions.apiKey = config.claudeOauthToken;
       wsOptions.authKind = "oauth";
     } else if (config.anthropicApiKey) {

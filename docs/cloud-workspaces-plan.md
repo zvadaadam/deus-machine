@@ -502,3 +502,145 @@ one per sandbox (single-use refresh tokens — never share a seed).
   turn-scoped proxy makes switching a config change).
 - Idle-TTL default for IDE dwell (agnt-side; 5min is CI-tuned).
 - Marketplace listing for the GitHub App vs private install link.
+
+## Sprint D2 — the loop closes and survives (spec 2026-08-24, seams verified in code)
+
+Everything below was verified against agnt main `e7d0c198` and deus main
+`f6a59d33f` — file:line citations are real, not remembered.
+
+### D2.1 Credential durability — sandboxes older than an hour keep git
+
+Two halves, both verified buildable:
+
+**(a) deus, wake/send → refresh the DO's stored secrets (BOTH lanes).**
+agnt's `ensureWorkspace` existing-row path takes request-fresh secrets with
+row-truth recipe (`create-workspace.ts:365` — `secrets: provisioning.secrets`),
+and the DO's `ensureInitialized` REFRESHES `state.secrets` on identity match
+(`do/workspace.ts:280-284`), which `getProvisioningRecipe` replays on any
+stopped→reprovision. So the inline lane needs no recipe replay:
+`agntCreateWorkspace({ workspaceId: provider_workspace_id, secrets:
+{ github_token: freshMint } })`. `ensureProvisioning` is a no-op for
+running/paused (`do/workspace.ts:310-320`) — safe on the hot path.
+`refreshWorkspaceGithubToken` grows an inline branch doing exactly this.
+
+**(b) agnt, resume → rewrite the credentials file on thaw.**
+A paused sandbox thaws with the create-time `.git-credentials` on disk;
+resume runs no steps (`resumeSandbox`, `do/workspace.ts:1106`). The provider
+API is id-addressed (`provider.writeFile(sandboxId, …)`, `sandbox/types.ts`),
+so the DO can rewrite the file after `provider.connect` with the CURRENT
+`state.secrets` github token — no sidecar change, no protocol change.
+Extract `writeGitCredentialsFile(provider, sandboxId, token, host)` from the
+git-auth step (`steps/git-auth.ts:40-45`) and call it from `resumeSandbox`.
+KNOWN LIMIT, accepted: the live agent process keeps its stale `GH_TOKEN`
+env until respawn — git push/fetch (the credentials file) is what matters;
+`gh` inside a >1h-old live session stays stale until D2.2's mint makes the
+next spawn fresh.
+
+### D2.2 The PR loop — widen the mint, keep the flow agent-driven
+
+Create PR is a PROMPT (`useSessionActions.ts:120-125` → `createPRPrompt`),
+not a route — the agent runs `gh pr create`. Cloud sandboxes hold a mint of
+`{contents, metadata}` only (`deus-cloud github/app.ts:190-196`), so the
+prompt 403s. The clean fix is NOT a deus-side PR route (that forks the
+product into button-driven-on-cloud): widen the standard mint to
+`{contents:write, metadata:read, pull_requests:write, workflows:write}` with
+a 422 cascade (full → contents-only → read-only) for installations whose
+grant predates the wider App permissions. Deus Bot already holds all four.
+Purpose-split mints were considered and rejected: the sandbox holds ONE
+token for its lifetime, contents:write already implies push-anything, and
+per-purpose tokens require the on-demand credential helper (D2.3-sized
+machinery) for negligible marginal risk reduction.
+
+### D2.3 Codex in the cloud — BUILT (agnt `d2-cloud-loop` + this branch)
+
+All four pieces landed: (1) codex CLI baked into the E2B template
+(`@openai/codex@0.146.1`, pinned to deus's local version, `CODEX_CLI_PATH`);
+(2) sidecar engine registers both harnesses and dispatches per-turn on
+`options.harness`; (3) CODEX_AUTH_JSON materializes to a session-scoped
+`CODEX_HOME` (0700 dir / 0600 file) before spawn and is shredded at turn
+end and on session reset — never ambient env, no proxy/apiKeyStore (that
+machinery is Anthropic-bearer-specific); (4) deus's cloud gate admits
+`codex-app-server` and the desktop ships auth via spawned `codex login`
+(Conductor-style) or auth.json import.
+
+**Operational gate, not a code gate:** live Codex turns need the agnt branch
+deployed AND the E2B template rebuilt+promoted (`sandbox/e2b/build.ts`).
+Until then a cloud Codex turn fails with the sidecar's honest
+unknown-harness/missing-CLI error — same failure class as any deploy skew,
+so the deus-side gate deliberately does NOT re-block on it. The two PRs
+(deus #314, agnt #151) merge together; template promote is a release step.
+
+**Codex v1 boundaries, recorded:**
+
+- _Credential visibility._ The materialized auth.json is readable by the
+  agent process for the turn's duration — a necessity of the codex CLI's
+  file-based auth, and the same exposure as running codex on the user's own
+  machine (Conductor ships exactly this). The Claude lane avoids it only
+  because Anthropic bearers can ride a loopback proxy; there is no
+  equivalent indirection for ChatGPT device auth short of MITM-ing their
+  OAuth. Mitigations that DO exist: session-scoped CODEX_HOME (0700/0600),
+  shredded at turn end and reset, never ambient env.
+- _Pre-Codex sidecar coexistence._ A sandbox PAUSED on a pre-codex image
+  resumes with the old sidecar, whose schema strips the unknown harness
+  fields — a codex turn would silently run Claude. There is no sidecar
+  version handshake yet (queued in D2.5); the window is accepted pre-launch
+  because it closes at template promote and paused pre-codex sandboxes with
+  codex turns require a user who had codex UI before the deploy — an empty
+  set. Post-launch, the handshake is mandatory before the NEXT harness.
+- _No MCP bridge._ Codex turns ignore `mcpServers` (the runtime factory is
+  claude-only) — AskUserQuestion/browser tools are absent; the sidecar logs
+  a warning rather than dropping silently.
+- _Shared refresh-token lineage._ Every sandbox turn is seeded from the ONE
+  canonical CODEX_AUTH_JSON; when the codex CLI rotates the refresh token
+  inside a session-scoped home, that rotation dies with the turn-end shred
+  and the canonical copy keeps the older lineage. Whether OpenAI's refresh
+  grant tolerates this reuse is their server policy — the user's own
+  ~/.codex rotates against the same lineage constantly, and Conductor ships
+  the identical import model, so it demonstrably survives in practice — but
+  it is NOT a guarantee we control. If canonical-copy refreshes ever start
+  failing, the fix is per-workspace device-flow credentials (D3's in-app
+  device-code work makes that natural); recorded here so the failure mode
+  is a lookup, not a mystery.
+
+### D2.4 installation_repositories webhook — DROPPED, with reasoning
+
+There is nothing to sync server-side: accessible-repos is queried live from
+GitHub per request (`github/app.ts listInstallationRepos`), no cache table
+exists, and the desktop's focus-refetch covers the client cache. An
+`installation.created` upsert is impossible without the state JWT (no org
+linkage on direct installs — deliberate, see the callback's oracle note).
+Events stay subscribed for a future push channel.
+
+### D2.5 Queued small fixes
+
+Shipped in this branch: `connecting` map invalidation on identity change
+(plus promise-identity-guarded cleanup and a pre-persist generation check),
+`githubTokenRefreshes` single-flight with a normalized origin key cleared on
+identity change, and the per-workspace welcome-message map (success-gated
+delete, in-flight guard).
+
+Still queued:
+
+- **Sidecar capability handshake** (agnt): sidecar announces version +
+  harness list on its control hello; DOs gate harness-specific dispatch on
+  it. Mandatory before the next harness ships post-launch — see the
+  coexistence boundary in D2.3.
+- **Stable welcome-delivery identity** (deus): the queued welcome/env-setup
+  prompt re-sends with a NEW turnId after an ambiguous failure (ack lost,
+  send actually admitted) — the retained entry can double-run the prompt.
+  Fix shape: persist the turnId with the pending entry and thread it through
+  the imperative send so retries CONVERGE (agnt already keys idempotency on
+  turnId); reconcile against the persisted user echo before replaying.
+- **Codex snapshot parity** (agnt): agent-snapshot archives only
+  /home/user/.claude, so codex rollout state under /tmp/codex-home-\* dies
+  with a GC'd/reprovisioned sandbox while the backend still holds the
+  resume pointer. Fix shape: move CODEX_HOME under a snapshotted path and
+  extend the archive with an auth.json exclusion. Until then: codex resume
+  survives pause/thaw and sidecar restarts, NOT reprovision — claude does.
+
+### D3 (next) — "Mac closed": mobile direct-to-cloud
+
+Phone today is a paired remote to the DESKTOP backend; with the Mac closed
+there is no backend. The platform-canonical secrets exist precisely so a
+web client can go deus-cloud auth → agnt session DO directly. Own sprint;
+D2.2's mint work is a prerequisite it now has.

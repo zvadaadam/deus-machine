@@ -148,6 +148,14 @@ export async function importCodexAuth(): Promise<CodexSubscriptionState> {
   return window.electronAPI.importCodexAuth();
 }
 
+/** One-click ChatGPT sign-in: main spawns `codex login`, imports the result. */
+export async function startCodexLogin(): Promise<CodexSubscriptionState> {
+  if (!capabilities.ipcInvoke || !window.electronAPI?.startCodexLogin) {
+    return { success: false, hasCodexSubscription: false, error: "Requires the desktop app" };
+  }
+  return window.electronAPI.startCodexLogin() as Promise<CodexSubscriptionState>;
+}
+
 export async function disconnectCodexSubscription(): Promise<CodexSubscriptionState> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.disconnectCodexSubscription) {
     return WEB_CODEX;

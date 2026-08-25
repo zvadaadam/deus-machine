@@ -9,6 +9,7 @@
  * Data fetching is owned by each tab component, not by this router.
  */
 
+import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
@@ -45,6 +46,29 @@ export function ContentView({
   useAppsLaunched(workspace.id);
   useAppsStopped(workspace.id);
 
+  // The terminal mounts for the LAST LOCAL workspace even while a cloud one
+  // is selected — see the comment at the render site. A LOCAL selection uses
+  // the live prop directly (no first-frame gap); the committed state only
+  // serves CLOUD renders, so it may lag by an effect tick without being
+  // user-visible. Updated in a layout effect, not during render — a discarded
+  // render must not leak an uncommitted workspace into a later cloud mount.
+  const [lastLocalTerminal, setLastLocalTerminal] = useState<{ id: string; path: string } | null>(
+    null
+  );
+  useLayoutEffect(() => {
+    if (workspace.kind !== "cloud") {
+      setLastLocalTerminal((prev) =>
+        prev?.id === workspace.id && prev.path === workspace.workspace_path
+          ? prev
+          : { id: workspace.id, path: workspace.workspace_path }
+      );
+    }
+  }, [workspace.kind, workspace.id, workspace.workspace_path]);
+  const terminalTarget =
+    workspace.kind !== "cloud"
+      ? { id: workspace.id, path: workspace.workspace_path }
+      : lastLocalTerminal;
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Lazy tabs — mounted only when active */}
@@ -76,11 +100,35 @@ export function ContentView({
           activeTab !== "terminal" && "pointer-events-none invisible absolute"
         )}
       >
-        <TerminalPanel
-          workspaceId={workspace.id}
-          workspacePath={workspace.workspace_path}
-          panelVisible={activeTab === "terminal"}
-        />
+        {workspace.kind === "cloud" && (
+          // A LOCAL shell here would masquerade as the sandbox — the same
+          // truthfulness class as every state-collapse bug this sprint. The
+          // real remote PTY rides the sidecar session channel (browser:input
+          // proves the streaming pattern); until it lands, say so.
+          <div className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1.5 text-sm">
+            <p className="text-foreground/70 font-medium">Terminal attaches to the cloud sandbox</p>
+            <p className="max-w-sm text-center text-xs">
+              The remote shell is coming — for now, ask the agent to run commands; it executes
+              inside the sandbox.
+            </p>
+          </div>
+        )}
+        {terminalTarget && (
+          // Mounted through cloud selections too (frozen on the last LOCAL
+          // workspace): TerminalPanel keeps every visited workspace's xterm
+          // buffers in component state, so unmounting it on a cloud visit
+          // silently discarded scrollback that survives every local↔local
+          // switch. Cloud ids never enter the panel — a local PTY at a cloud
+          // row's path would be the masquerade the placeholder exists to
+          // avoid.
+          <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+            <TerminalPanel
+              workspaceId={terminalTarget.id}
+              workspacePath={terminalTarget.path}
+              panelVisible={activeTab === "terminal" && workspace.kind !== "cloud"}
+            />
+          </div>
+        )}
       </div>
 
       {simulatorAvailable && (

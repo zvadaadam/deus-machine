@@ -6,7 +6,7 @@ import {
   GitBranch,
   GitPullRequest,
   Settings,
-  Orbit,
+  Bot,
   ArrowUpRight,
   UserCircle,
 } from "lucide-react";
@@ -150,7 +150,7 @@ export const staticCommands: CommandDefinition[] = [
   {
     id: "settings-ai",
     label: "Settings: Providers",
-    icon: Orbit,
+    icon: Bot,
     group: "settings",
     keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
     action: () => {

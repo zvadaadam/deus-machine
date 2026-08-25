@@ -39,10 +39,17 @@ export interface AgentCredentialSpec {
 }
 
 /** Store locally, sync the canonical platform copy, stamp what succeeded. */
+/**
+ * Store locally + sync to the platform. Returns whether the platform copy
+ * landed: callers whose CLOUD behavior depends entirely on the platform copy
+ * (codex — turns resolve the secret at the session DO, the local value is
+ * never sent per turn) must surface `false` instead of reporting connected.
+ * The startup catch-up retries unsynced values on the next launch.
+ */
 export async function connectAgentCredential(
   spec: AgentCredentialSpec,
   value: string
-): Promise<void> {
+): Promise<boolean> {
   const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
   const prior = await getCloudCredentialMeta(spec.vaultName).catch(() => null);
   if (foreignToOrg(prior, orgId)) {
@@ -55,14 +62,23 @@ export async function connectAgentCredential(
       `[deus-cloud] ${spec.vaultName} was synced to org ${prior?.syncedOrgId} — adopting into ${orgId}; the old platform copy needs that account to remove`
     );
   }
-  await setCloudCredential(spec.vaultName, value);
-  if (await syncAgentSecretToPlatform(spec.secretName, value)) {
+  // Reset the stamp WITH the new value: setCloudCredential preserves meta on
+  // value-only writes, so a replacement after a failed PUT would inherit the
+  // old syncedToPlatform:true and the heal-only catch-up would skip it
+  // forever — the platform would keep serving the SUPERSEDED credential.
+  // (Trade-off accepted: until the PUT lands, a signed-out disconnect can no
+  // longer refuse on the stamp — but the platform copy it protects is the
+  // one the user just replaced.)
+  await setCloudCredential(spec.vaultName, value, { syncedToPlatform: false });
+  const synced = await syncAgentSecretToPlatform(spec.secretName, value);
+  if (synced) {
     await setCloudCredential(spec.vaultName, value, {
       syncedToPlatform: true,
       ...(orgId ? { syncedOrgId: orgId } : {}),
     });
   }
   await pushCloudCredentialsToBackend();
+  return synced;
 }
 
 /**
