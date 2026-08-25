@@ -237,17 +237,23 @@ export async function refreshWorkspaceGithubToken(workspace: {
 
   // Inline lane: the mint was baked into the DO's map at create time, where
   // it SHADOWS the org PAT. Push a fresh one through the re-create seam.
-  // A null mint (no App install — PAT/public-repo workspaces, or a transient
-  // mint failure) does NOT skip the call: the re-create resolves org-wide
-  // secrets server-side, so an omitted github_token REMOVES the stale inline
-  // mint from the map and lets the PAT (or anonymous clone) win again — and
-  // the restart-by-recreate still happens for tokenless workspaces.
+  // A DEFINITIVE null mint (deus-cloud answered "no access": no App install
+  // — PAT/public-repo workspaces) does not skip the call: the re-create
+  // resolves org-wide secrets server-side, so an omitted github_token
+  // REMOVES the stale inline mint from the map and lets the PAT (or
+  // anonymous clone) win again — and the restart-by-recreate still happens
+  // for tokenless workspaces. An UNKNOWN mint outcome (timeout/5xx/missing
+  // context) must NOT strip the map: a ten-second deus-cloud blip would
+  // otherwise blank a working sandbox's git access on the next wake. The
+  // stored token keeps working until its own expiry; the next refresh
+  // retries.
   if (!workspace.provider_workspace_id) return false;
-  const token = await mintRepoInstallationToken(originUrl);
+  const mint = await mintRepoInstallationToken(originUrl);
+  if (!mint.token && !mint.definitive) return false;
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
-    environment: token
-      ? Environment.from("agnt-base").secrets({ github_token: token })
+    environment: mint.token
+      ? Environment.from("agnt-base").secrets({ github_token: mint.token })
       : Environment.from("agnt-base"),
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -504,14 +510,24 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
  * Mint a per-repo GitHub App installation token via deus-cloud (1-hour,
  * down-scoped to exactly this repository). Best-effort by design: missing
  * mint context, an expired session, an uncovered repo, or an unregistered
- * App all resolve to null — the workspace then rides the org PAT secret
- * (or clones anonymously when the repo is public).
+ * App all resolve to a null token — the workspace then rides the org PAT
+ * secret (or clones anonymously when the repo is public).
+ *
+ * `definitive` is the DESTRUCTIVE-ACTION gate: true only when deus-cloud
+ * positively answered "this identity may not mint for this repo" (403/404)
+ * or the origin has no slug at all. A timeout, 5xx, network error or
+ * missing mint context is an UNKNOWN — callers that remove or blank
+ * existing credentials on a null token must not do so on unknowns, or a
+ * ten-second deus-cloud blip strips a working sandbox of its git access.
  */
-async function mintRepoInstallationToken(originUrl: string): Promise<string | null> {
+async function mintRepoInstallationToken(
+  originUrl: string
+): Promise<{ token: string | null; definitive: boolean }> {
   const config = getCloudConfig();
-  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return null;
+  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId)
+    return { token: null, definitive: false };
   const slug = githubRepoSlug(originUrl);
-  if (!slug) return null;
+  if (!slug) return { token: null, definitive: true };
   try {
     const res = await fetch(
       `${config.deusCloudUrl}/orgs/${config.orgId}/github/installation-token`,
@@ -532,12 +548,12 @@ async function mintRepoInstallationToken(originUrl: string): Promise<string | nu
     );
     if (!res.ok) {
       console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${slug}`);
-      return null;
+      return { token: null, definitive: res.status === 403 || res.status === 404 };
     }
     const body = (await res.json()) as { token?: string };
-    return body.token ?? null;
+    return { token: body.token ?? null, definitive: body.token ? true : false };
   } catch {
-    return null;
+    return { token: null, definitive: false };
   }
 }
 
@@ -601,10 +617,10 @@ async function refreshEnvironmentGithubToken(
   baseUrl: string,
   apiKey: string
 ): Promise<void> {
-  const token = await mintRepoInstallationToken(originUrl);
+  const mint = await mintRepoInstallationToken(originUrl);
   try {
-    if (token) {
-      await agntCreateSecret("github_token", token, {
+    if (mint.token) {
+      await agntCreateSecret("github_token", mint.token, {
         baseUrl,
         apiKey,
         environmentIds: [environmentId],
@@ -612,6 +628,11 @@ async function refreshEnvironmentGithubToken(
       });
       return;
     }
+    // Delete the stored env token only when deus-cloud POSITIVELY said this
+    // identity may not mint for the repo. On an unknown outcome the stored
+    // token stays — possibly stale, but stale-until-expiry beats stripping a
+    // working environment because of a transient blip.
+    if (!mint.definitive) return;
     for await (const secret of agntListSecrets({ baseUrl, apiKey })) {
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       if (secret.appliesToAll !== false) continue;
@@ -662,7 +683,7 @@ async function provisionInBackground(
       // secret: it drives agnt's git-auth step and NEVER lands in pg — the
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
-      const githubToken = await mintRepoInstallationToken(originUrl);
+      const githubToken = (await mintRepoInstallationToken(originUrl)).token;
       if (githubToken) recipe = recipe.secrets({ github_token: githubToken });
       environment = recipe;
     }
