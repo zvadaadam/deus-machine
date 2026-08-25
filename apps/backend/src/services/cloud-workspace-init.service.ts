@@ -250,13 +250,17 @@ export async function refreshWorkspaceGithubToken(workspace: {
   if (!workspace.provider_workspace_id) return false;
   const mint = await mintRepoInstallationToken(originUrl);
   if (!mint.token && !mint.definitive) {
-    // Unknown outcome — but an inline token STAMPED older than its 1-hour
-    // life is expired either way and only shadows the org PAT, so the
-    // tokenless re-create may proceed exactly as for a definitive answer.
-    // No stamp recorded = can't prove expiry = keep (status quo protection).
+    // Unknown outcome — proceed with the tokenless re-create only when the
+    // DO map provably holds nothing worth protecting: stamp 0 = the map is
+    // KNOWN tokenless (created/last refreshed without a mint — nothing to
+    // strip, so the restart must not be blocked), stamp older than the
+    // token's 1-hour life = expired either way (only shadows the org PAT).
+    // null = legacy row from before stamping — can't prove anything, keep
+    // the status-quo protection.
     const stampedAt = getInlineMintStamp(workspace);
-    const provablyExpired = stampedAt !== null && Date.now() - stampedAt > 55 * 60_000;
-    if (!provablyExpired) return false;
+    const mapProvablyStrippable =
+      stampedAt === 0 || (stampedAt !== null && Date.now() - stampedAt > 55 * 60_000);
+    if (!mapProvablyStrippable) return false;
   }
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
@@ -266,7 +270,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
-  setInlineMintStamp(workspace, mint.token ? Date.now() : null);
+  setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
   return true;
 }
 
@@ -588,9 +592,18 @@ async function mintRepoInstallationToken(
       // working sandbox during a deploy mismatch.
       let definitive = res.status === 403;
       if (res.status === 404) {
+        // Only deus-cloud's OWN answer is permission truth. Its AppError
+        // serializes as { error: "NOT_FOUND", message: "No GitHub App
+        // installation for <owner>", … } — a proxy/routing 404 (plain text,
+        // {"error":"Not Found"}, null) must stay UNKNOWN, or a deployment
+        // skew strips a working credential.
         const body = await res.text().catch(() => "");
         try {
-          definitive = typeof JSON.parse(body) === "object";
+          const parsed = JSON.parse(body) as { error?: unknown; message?: unknown } | null;
+          definitive =
+            parsed?.error === "NOT_FOUND" &&
+            typeof parsed.message === "string" &&
+            parsed.message.includes("GitHub App installation");
         } catch {
           definitive = false;
         }
@@ -745,6 +758,11 @@ async function provisionInBackground(
       if (githubToken) {
         recipe = recipe.secrets({ github_token: githubToken });
         inlineMintStampAtCreate = Date.now();
+      } else {
+        // The DO map is KNOWN tokenless from birth (nothing baked) — record
+        // 0 so a later unknown-outcome restart isn't blocked protecting a
+        // token that never existed.
+        inlineMintStampAtCreate = 0;
       }
       environment = recipe;
     }
