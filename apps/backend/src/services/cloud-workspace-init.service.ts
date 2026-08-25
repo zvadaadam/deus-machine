@@ -249,7 +249,15 @@ export async function refreshWorkspaceGithubToken(workspace: {
   // retries.
   if (!workspace.provider_workspace_id) return false;
   const mint = await mintRepoInstallationToken(originUrl);
-  if (!mint.token && !mint.definitive) return false;
+  if (!mint.token && !mint.definitive) {
+    // Unknown outcome — but an inline token STAMPED older than its 1-hour
+    // life is expired either way and only shadows the org PAT, so the
+    // tokenless re-create may proceed exactly as for a definitive answer.
+    // No stamp recorded = can't prove expiry = keep (status quo protection).
+    const stampedAt = getInlineMintStamp(workspace);
+    const provablyExpired = stampedAt !== null && Date.now() - stampedAt > 55 * 60_000;
+    if (!provablyExpired) return false;
+  }
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
     environment: mint.token
@@ -258,7 +266,27 @@ export async function refreshWorkspaceGithubToken(workspace: {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
+  setInlineMintStamp(workspace, mint.token ? Date.now() : null);
   return true;
+}
+
+/** last_inline_mint_at accessors — see the schema comment for semantics. */
+function getInlineMintStamp(workspace: { provider_workspace_id?: string | null }): number | null {
+  if (!workspace.provider_workspace_id) return null;
+  const row = getDatabase()
+    .prepare("SELECT last_inline_mint_at FROM workspaces WHERE provider_workspace_id = ?")
+    .get(workspace.provider_workspace_id) as { last_inline_mint_at?: number | null } | undefined;
+  return row?.last_inline_mint_at ?? null;
+}
+
+function setInlineMintStamp(
+  workspace: { provider_workspace_id?: string | null },
+  stamp: number | null
+): void {
+  if (!workspace.provider_workspace_id) return;
+  getDatabase()
+    .prepare("UPDATE workspaces SET last_inline_mint_at = ? WHERE provider_workspace_id = ?")
+    .run(stamp, workspace.provider_workspace_id);
 }
 
 const githubTokenRefreshes = new Map<string, Promise<void>>();
@@ -663,7 +691,10 @@ async function refreshEnvironmentGithubToken(
       // repo silently loses App access.
       if (!secret.environmentIds.includes(environmentId)) continue;
       if (keepUnknown) {
-        const ageMs = Date.now() - Date.parse(secret.createdAt ?? "");
+        // updatedAt, not createdAt: the platform UPSERTS this secret, so
+        // createdAt is the row's birth — a freshly rotated token would read
+        // as expired forever off it.
+        const ageMs = Date.now() - Date.parse(secret.updatedAt ?? secret.createdAt ?? "");
         const stillPlausiblyValid = Number.isFinite(ageMs) && ageMs < 55 * 60_000;
         if (stillPlausiblyValid) break;
       }
@@ -691,6 +722,7 @@ async function provisionInBackground(
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
     let environment: string | ReturnType<typeof Environment.from>;
+    let inlineMintStampAtCreate: number | null = null;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -710,7 +742,10 @@ async function provisionInBackground(
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
       const githubToken = (await mintRepoInstallationToken(originUrl)).token;
-      if (githubToken) recipe = recipe.secrets({ github_token: githubToken });
+      if (githubToken) {
+        recipe = recipe.secrets({ github_token: githubToken });
+        inlineMintStampAtCreate = Date.now();
+      }
       environment = recipe;
     }
     const provider = await agntCreateWorkspace({
@@ -721,8 +756,8 @@ async function provisionInBackground(
       checkout: { branch: branch.work, from: branch.source },
     });
     db.prepare(
-      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session' WHERE id = ?"
-    ).run(provider.id, workspaceId);
+      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
+    ).run(provider.id, inlineMintStampAtCreate, workspaceId);
     invalidate([...WORKSPACE_RESOURCES], {});
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });
