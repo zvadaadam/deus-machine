@@ -183,10 +183,12 @@ export async function refreshWorkspaceGithubToken(workspace: {
 }): Promise<boolean> {
   if (!workspace.repository_id) return false;
   const config = getCloudConfig();
-  // Mint preconditions, hoisted ABOVE the env-info round-trip: without a
-  // deus-cloud session there is nothing this function can do, and it runs on
-  // the send path with the user's spinner already up.
-  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return false;
+  // Only the AGNT config gates this function: the deus-cloud session bits
+  // gate the MINT, and mintRepoInstallationToken already no-ops to null
+  // without them — the tokenless re-create (public repos, org-PAT setups,
+  // env-key-only configs) must still run, because it is ALSO the restart
+  // vehicle for stopped sandboxes.
+  if (!config) return false;
   const originUrl = getRepositoryById(getDatabase(), workspace.repository_id)?.git_origin_url;
   if (!originUrl) return false;
   const generationAtStart = getCloudIdentityGeneration();
@@ -443,15 +445,22 @@ export async function getCloudSettingsStatus(): Promise<{
 export async function saveCloudCodexAuth(authJson: string): Promise<void> {
   const config = getCloudConfig();
   if (!config) throw new Error("Cloud workspaces are not configured");
-  let parsed: { auth_mode?: string; tokens?: { access_token?: string } };
+  let parsed: { auth_mode?: string; tokens?: { access_token?: string; refresh_token?: string } };
   try {
     parsed = JSON.parse(authJson) as typeof parsed;
   } catch {
     throw new Error("That isn't valid JSON — paste the full contents of ~/.codex/auth.json");
   }
-  if (parsed.auth_mode !== "chatgpt" || !parsed.tokens?.access_token) {
+  if (
+    parsed.auth_mode !== "chatgpt" ||
+    !parsed.tokens?.access_token ||
+    !parsed.tokens?.refresh_token
+  ) {
+    // refresh_token required: an access-token-only paste works until first
+    // expiry, then every cloud turn fails while Settings still reads
+    // Connected off the secret's mere presence.
     throw new Error(
-      "That auth.json isn't a ChatGPT-plan login — run `codex login` (or `codex login --device-auth` on a headless machine) and paste the file it writes."
+      "That auth.json isn't a complete ChatGPT-plan login (needs access AND refresh tokens) — run `codex login` (or `codex login --device-auth` on a headless machine) and paste the full file it writes."
     );
   }
   await agntCreateSecret("CODEX_AUTH_JSON", authJson, {

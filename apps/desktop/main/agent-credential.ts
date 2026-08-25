@@ -62,7 +62,14 @@ export async function connectAgentCredential(
       `[deus-cloud] ${spec.vaultName} was synced to org ${prior?.syncedOrgId} — adopting into ${orgId}; the old platform copy needs that account to remove`
     );
   }
-  await setCloudCredential(spec.vaultName, value);
+  // Reset the stamp WITH the new value: setCloudCredential preserves meta on
+  // value-only writes, so a replacement after a failed PUT would inherit the
+  // old syncedToPlatform:true and the heal-only catch-up would skip it
+  // forever — the platform would keep serving the SUPERSEDED credential.
+  // (Trade-off accepted: until the PUT lands, a signed-out disconnect can no
+  // longer refuse on the stamp — but the platform copy it protects is the
+  // one the user just replaced.)
+  await setCloudCredential(spec.vaultName, value, { syncedToPlatform: false });
   const synced = await syncAgentSecretToPlatform(spec.secretName, value);
   if (synced) {
     await setCloudCredential(spec.vaultName, value, {
