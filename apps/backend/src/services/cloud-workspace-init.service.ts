@@ -237,22 +237,60 @@ export async function refreshWorkspaceGithubToken(workspace: {
 
   // Inline lane: the mint was baked into the DO's map at create time, where
   // it SHADOWS the org PAT. Push a fresh one through the re-create seam.
-  // A null mint (no App install — PAT/public-repo workspaces, or a transient
-  // mint failure) does NOT skip the call: the re-create resolves org-wide
-  // secrets server-side, so an omitted github_token REMOVES the stale inline
-  // mint from the map and lets the PAT (or anonymous clone) win again — and
-  // the restart-by-recreate still happens for tokenless workspaces.
+  // A DEFINITIVE null mint (deus-cloud answered "no access": no App install
+  // — PAT/public-repo workspaces) does not skip the call: the re-create
+  // resolves org-wide secrets server-side, so an omitted github_token
+  // REMOVES the stale inline mint from the map and lets the PAT (or
+  // anonymous clone) win again — and the restart-by-recreate still happens
+  // for tokenless workspaces. An UNKNOWN mint outcome (timeout/5xx/missing
+  // context) must NOT strip the map: a ten-second deus-cloud blip would
+  // otherwise blank a working sandbox's git access on the next wake. The
+  // stored token keeps working until its own expiry; the next refresh
+  // retries.
   if (!workspace.provider_workspace_id) return false;
-  const token = await mintRepoInstallationToken(originUrl);
+  const mint = await mintRepoInstallationToken(originUrl);
+  if (!mint.token && !mint.definitive) {
+    // Unknown outcome — proceed with the tokenless re-create only when the
+    // DO map provably holds nothing worth protecting: stamp 0 = the map is
+    // KNOWN tokenless (created/last refreshed without a mint — nothing to
+    // strip, so the restart must not be blocked), stamp older than the
+    // token's 1-hour life = expired either way (only shadows the org PAT).
+    // null = legacy row from before stamping — can't prove anything, keep
+    // the status-quo protection.
+    const stampedAt = getInlineMintStamp(workspace);
+    const mapProvablyStrippable =
+      stampedAt === 0 || (stampedAt !== null && Date.now() - stampedAt > 55 * 60_000);
+    if (!mapProvablyStrippable) return false;
+  }
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
-    environment: token
-      ? Environment.from("agnt-base").secrets({ github_token: token })
+    environment: mint.token
+      ? Environment.from("agnt-base").secrets({ github_token: mint.token })
       : Environment.from("agnt-base"),
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
+  setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
   return true;
+}
+
+/** last_inline_mint_at accessors — see the schema comment for semantics. */
+function getInlineMintStamp(workspace: { provider_workspace_id?: string | null }): number | null {
+  if (!workspace.provider_workspace_id) return null;
+  const row = getDatabase()
+    .prepare("SELECT last_inline_mint_at FROM workspaces WHERE provider_workspace_id = ?")
+    .get(workspace.provider_workspace_id) as { last_inline_mint_at?: number | null } | undefined;
+  return row?.last_inline_mint_at ?? null;
+}
+
+function setInlineMintStamp(
+  workspace: { provider_workspace_id?: string | null },
+  stamp: number | null
+): void {
+  if (!workspace.provider_workspace_id) return;
+  getDatabase()
+    .prepare("UPDATE workspaces SET last_inline_mint_at = ? WHERE provider_workspace_id = ?")
+    .run(stamp, workspace.provider_workspace_id);
 }
 
 const githubTokenRefreshes = new Map<string, Promise<void>>();
@@ -504,14 +542,29 @@ export async function saveCloudGithubToken(token: string): Promise<void> {
  * Mint a per-repo GitHub App installation token via deus-cloud (1-hour,
  * down-scoped to exactly this repository). Best-effort by design: missing
  * mint context, an expired session, an uncovered repo, or an unregistered
- * App all resolve to null — the workspace then rides the org PAT secret
- * (or clones anonymously when the repo is public).
+ * App all resolve to a null token — the workspace then rides the org PAT
+ * secret (or clones anonymously when the repo is public).
+ *
+ * `definitive` is the DESTRUCTIVE-ACTION gate: true only when deus-cloud
+ * positively answered "this identity may not mint for this repo" (403/404)
+ * or the origin has no slug at all. A timeout, 5xx, network error or
+ * missing mint context is an UNKNOWN — callers that remove or blank
+ * existing credentials on a null token must not do so on unknowns, or a
+ * ten-second deus-cloud blip strips a working sandbox of its git access.
  */
-async function mintRepoInstallationToken(originUrl: string): Promise<string | null> {
+async function mintRepoInstallationToken(
+  originUrl: string
+): Promise<{ token: string | null; definitive: boolean }> {
   const config = getCloudConfig();
-  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId) return null;
+  // Missing mint context is DEFINITIVE: a deployment without a deus-cloud
+  // session (env-key-only configs, or after an explicit sign-out) cannot
+  // have minted the stored tokens it would be protecting — and treating it
+  // as unknown permanently blocked the tokenless re-create that restarts
+  // stopped sandboxes in exactly those deployments.
+  if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId)
+    return { token: null, definitive: true };
   const slug = githubRepoSlug(originUrl);
-  if (!slug) return null;
+  if (!slug) return { token: null, definitive: true };
   try {
     const res = await fetch(
       `${config.deusCloudUrl}/orgs/${config.orgId}/github/installation-token`,
@@ -532,12 +585,35 @@ async function mintRepoInstallationToken(originUrl: string): Promise<string | nu
     );
     if (!res.ok) {
       console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${slug}`);
-      return null;
+      // 404 is definitive ONLY when deus-cloud itself answered (its
+      // AppError body is JSON: "No GitHub App installation for …"). A bare
+      // routing 404 — GitHub routes not deployed yet, a worker fallthrough —
+      // is a deployment skew, and stripping credentials on it would break a
+      // working sandbox during a deploy mismatch.
+      let definitive = res.status === 403;
+      if (res.status === 404) {
+        // Only deus-cloud's OWN answer is permission truth. Its AppError
+        // serializes as { error: "NOT_FOUND", message: "No GitHub App
+        // installation for <owner>", … } — a proxy/routing 404 (plain text,
+        // {"error":"Not Found"}, null) must stay UNKNOWN, or a deployment
+        // skew strips a working credential.
+        const body = await res.text().catch(() => "");
+        try {
+          const parsed = JSON.parse(body) as { error?: unknown; message?: unknown } | null;
+          definitive =
+            parsed?.error === "NOT_FOUND" &&
+            typeof parsed.message === "string" &&
+            parsed.message.includes("GitHub App installation");
+        } catch {
+          definitive = false;
+        }
+      }
+      return { token: null, definitive };
     }
     const body = (await res.json()) as { token?: string };
-    return body.token ?? null;
+    return { token: body.token ?? null, definitive: body.token ? true : false };
   } catch {
-    return null;
+    return { token: null, definitive: false };
   }
 }
 
@@ -601,10 +677,10 @@ async function refreshEnvironmentGithubToken(
   baseUrl: string,
   apiKey: string
 ): Promise<void> {
-  const token = await mintRepoInstallationToken(originUrl);
+  const mint = await mintRepoInstallationToken(originUrl);
   try {
-    if (token) {
-      await agntCreateSecret("github_token", token, {
+    if (mint.token) {
+      await agntCreateSecret("github_token", mint.token, {
         baseUrl,
         apiKey,
         environmentIds: [environmentId],
@@ -612,6 +688,13 @@ async function refreshEnvironmentGithubToken(
       });
       return;
     }
+    // Delete the stored env token when deus-cloud POSITIVELY said this
+    // identity may not mint — or when the stored token is provably PAST its
+    // one-hour life. An unknown outcome keeps a token only while it can
+    // still work: an expired scoped token is pure downside (it shadows the
+    // org PAT while authenticating nothing), so age decides where the mint
+    // couldn't.
+    const keepUnknown = !mint.definitive;
     for await (const secret of agntListSecrets({ baseUrl, apiKey })) {
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       if (secret.appliesToAll !== false) continue;
@@ -620,6 +703,14 @@ async function refreshEnvironmentGithubToken(
       // environment's working token — one failed mint here, and an unrelated
       // repo silently loses App access.
       if (!secret.environmentIds.includes(environmentId)) continue;
+      if (keepUnknown) {
+        // updatedAt, not createdAt: the platform UPSERTS this secret, so
+        // createdAt is the row's birth — a freshly rotated token would read
+        // as expired forever off it.
+        const ageMs = Date.now() - Date.parse(secret.updatedAt ?? secret.createdAt ?? "");
+        const stillPlausiblyValid = Number.isFinite(ageMs) && ageMs < 55 * 60_000;
+        if (stillPlausiblyValid) break;
+      }
       await agntDeleteSecret(secret.id, { baseUrl, apiKey });
       break;
     }
@@ -644,6 +735,7 @@ async function provisionInBackground(
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
     let environment: string | ReturnType<typeof Environment.from>;
+    let inlineMintStampAtCreate: number | null = null;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -662,8 +754,16 @@ async function provisionInBackground(
       // secret: it drives agnt's git-auth step and NEVER lands in pg — the
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
-      const githubToken = await mintRepoInstallationToken(originUrl);
-      if (githubToken) recipe = recipe.secrets({ github_token: githubToken });
+      const githubToken = (await mintRepoInstallationToken(originUrl)).token;
+      if (githubToken) {
+        recipe = recipe.secrets({ github_token: githubToken });
+        inlineMintStampAtCreate = Date.now();
+      } else {
+        // The DO map is KNOWN tokenless from birth (nothing baked) — record
+        // 0 so a later unknown-outcome restart isn't blocked protecting a
+        // token that never existed.
+        inlineMintStampAtCreate = 0;
+      }
       environment = recipe;
     }
     const provider = await agntCreateWorkspace({
@@ -674,8 +774,8 @@ async function provisionInBackground(
       checkout: { branch: branch.work, from: branch.source },
     });
     db.prepare(
-      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session' WHERE id = ?"
-    ).run(provider.id, workspaceId);
+      "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
+    ).run(provider.id, inlineMintStampAtCreate, workspaceId);
     invalidate([...WORKSPACE_RESOURCES], {});
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });

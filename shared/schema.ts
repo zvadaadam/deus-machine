@@ -82,6 +82,11 @@ export const ADDITIVE_COLUMNS = {
     // Cloud workspaces: where the files live + the agnt workspace backing them.
     kind: "TEXT NOT NULL DEFAULT 'worktree'",
     provider_workspace_id: "TEXT",
+    // Epoch-ms of the last SUCCESSFUL inline App-token mint pushed into the
+    // agnt DO's secret map. Lets the refresh path age-gate an UNKNOWN mint
+    // outcome: a stored inline token past its 1-hour life only shadows the
+    // org PAT, so it may be stripped even when the remint result is unknown.
+    last_inline_mint_at: "INTEGER",
   },
   sessions: {
     // agnt session id for cloud-workspace sessions (null for local).
@@ -127,6 +132,7 @@ export const SCHEMA_SQL = `
     error_message TEXT,
     kind TEXT NOT NULL DEFAULT 'worktree',
     provider_workspace_id TEXT,
+    last_inline_mint_at INTEGER,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
