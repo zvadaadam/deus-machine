@@ -524,8 +524,13 @@ async function mintRepoInstallationToken(
   originUrl: string
 ): Promise<{ token: string | null; definitive: boolean }> {
   const config = getCloudConfig();
+  // Missing mint context is DEFINITIVE: a deployment without a deus-cloud
+  // session (env-key-only configs, or after an explicit sign-out) cannot
+  // have minted the stored tokens it would be protecting — and treating it
+  // as unknown permanently blocked the tokenless re-create that restarts
+  // stopped sandboxes in exactly those deployments.
   if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId)
-    return { token: null, definitive: false };
+    return { token: null, definitive: true };
   const slug = githubRepoSlug(originUrl);
   if (!slug) return { token: null, definitive: true };
   try {
@@ -548,7 +553,21 @@ async function mintRepoInstallationToken(
     );
     if (!res.ok) {
       console.warn(`[CloudInit] GitHub App token mint unavailable (${res.status}) for ${slug}`);
-      return { token: null, definitive: res.status === 403 || res.status === 404 };
+      // 404 is definitive ONLY when deus-cloud itself answered (its
+      // AppError body is JSON: "No GitHub App installation for …"). A bare
+      // routing 404 — GitHub routes not deployed yet, a worker fallthrough —
+      // is a deployment skew, and stripping credentials on it would break a
+      // working sandbox during a deploy mismatch.
+      let definitive = res.status === 403;
+      if (res.status === 404) {
+        const body = await res.text().catch(() => "");
+        try {
+          definitive = typeof JSON.parse(body) === "object";
+        } catch {
+          definitive = false;
+        }
+      }
+      return { token: null, definitive };
     }
     const body = (await res.json()) as { token?: string };
     return { token: body.token ?? null, definitive: body.token ? true : false };
@@ -628,11 +647,13 @@ async function refreshEnvironmentGithubToken(
       });
       return;
     }
-    // Delete the stored env token only when deus-cloud POSITIVELY said this
-    // identity may not mint for the repo. On an unknown outcome the stored
-    // token stays — possibly stale, but stale-until-expiry beats stripping a
-    // working environment because of a transient blip.
-    if (!mint.definitive) return;
+    // Delete the stored env token when deus-cloud POSITIVELY said this
+    // identity may not mint — or when the stored token is provably PAST its
+    // one-hour life. An unknown outcome keeps a token only while it can
+    // still work: an expired scoped token is pure downside (it shadows the
+    // org PAT while authenticating nothing), so age decides where the mint
+    // couldn't.
+    const keepUnknown = !mint.definitive;
     for await (const secret of agntListSecrets({ baseUrl, apiKey })) {
       if (secret.keyName.toLowerCase() !== "github_token") continue;
       if (secret.appliesToAll !== false) continue;
@@ -641,6 +662,11 @@ async function refreshEnvironmentGithubToken(
       // environment's working token — one failed mint here, and an unrelated
       // repo silently loses App access.
       if (!secret.environmentIds.includes(environmentId)) continue;
+      if (keepUnknown) {
+        const ageMs = Date.now() - Date.parse(secret.createdAt ?? "");
+        const stillPlausiblyValid = Number.isFinite(ageMs) && ageMs < 55 * 60_000;
+        if (stillPlausiblyValid) break;
+      }
       await agntDeleteSecret(secret.id, { baseUrl, apiKey });
       break;
     }
