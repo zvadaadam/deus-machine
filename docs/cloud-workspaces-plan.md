@@ -746,6 +746,10 @@ Queued follow-ups out of the review waves (real, deliberately not v1):
   finer-grained caps list joins the dial the same way harnesses did.
 - **PTY reattach** (agnt sidecar): 64KB ring buffer + reopen-with-same-id
   replay, if resume-with-open-terminal proves annoying in practice.
+- **codex-sdk full removal** (deus): the picker already hides it
+  (MODEL_PICKER_GROUPS) — registration survives only for old session rows.
+  Deleting it is an enum + `.exhaustive()` + PRELAUNCH_RETIRED sweep of its
+  own, not a rider.
 
 ### D3 (next) — "Mac closed": mobile direct-to-cloud
 

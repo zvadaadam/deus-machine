@@ -5,7 +5,11 @@ import { getErrorMessage, isExecError } from "@shared/lib/errors";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { ValidationError } from "../lib/errors";
 import * as gitService from "../services/git.service";
-import { getCloudDiffSummary, getCloudDiffFile } from "../services/agent/cloud/driver";
+import {
+  getCloudDiffSummary,
+  getCloudDiffFile,
+  requestCloudFs,
+} from "../services/agent/cloud/driver";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: string } };
@@ -84,9 +88,14 @@ app.get("/workspaces/:id/diff-file", withWorkspace, async (c) => {
     const sessionId = workspace.current_session_id;
     if (!sessionId) return c.json({ file, diff: "", old_content: null, new_content: null });
     try {
+      // Content rides the fs channel (its owner since Sprint T); the diff
+      // channel keeps only what it is named for. FILE/CONTENT is deprecated.
       const [diffPart, contentPart] = await Promise.all([
         getCloudDiffFile(sessionId, file, "DIFF"),
-        getCloudDiffFile(sessionId, file, "CONTENT"),
+        requestCloudFs(sessionId, { op: "read", path: file }) as Promise<{
+          content?: string;
+          error?: string;
+        }>,
       ]);
       if (diffPart.error || contentPart.error) {
         throw new Error(diffPart.error ?? contentPart.error);

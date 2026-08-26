@@ -253,7 +253,14 @@ export function listTopFiles(
   } catch {
     filePaths = scanWithReaddir(workspacePath);
   }
+  return scoreTopFiles(filePaths, limit);
+}
 
+/** Depth/length scoring over ANY flat path list — cloud trees reuse this. */
+export function scoreTopFiles(
+  filePaths: string[],
+  limit: number = 15
+): Array<{ path: string; name: string; score: number }> {
   // Score by path depth (fewer segments = higher score) and shorter names
   const scored = filePaths.map((filePath) => {
     const name = filePath.split("/").pop() || filePath;
@@ -283,7 +290,15 @@ export function fuzzySearchFiles(
   } catch {
     filePaths = scanWithReaddir(workspacePath);
   }
+  return fuzzySearchPaths(filePaths, query, limit);
+}
 
+/** Subsequence scoring over ANY flat path list — cloud trees reuse this. */
+export function fuzzySearchPaths(
+  filePaths: string[],
+  query: string,
+  limit: number = 15
+): Array<{ path: string; name: string; score: number }> {
   const lowerQuery = query.toLowerCase();
   const scored: Array<{ path: string; name: string; score: number }> = [];
 

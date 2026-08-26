@@ -136,6 +136,33 @@ app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
  */
 app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
   const { query, limit = 15 } = await c.req.json<{ query: string; limit?: number }>();
+
+  const workspace = c.get("workspace");
+  if (workspace.kind === "cloud") {
+    // Same scoring, sandbox truth: flatten the fs-channel tree and reuse the
+    // local scorers — @-mentions and the Files filter work identically.
+    const sessionId = workspace.current_session_id;
+    if (!sessionId) return c.json([]);
+    const data = (await requestCloudFs(sessionId, { op: "list" })) as {
+      tree?: CloudFsNode[];
+      error?: string;
+    };
+    if (data.error) return c.json([]);
+    const paths: string[] = [];
+    const collect = (nodes: CloudFsNode[]) => {
+      for (const node of nodes) {
+        if (node.type === "file") paths.push(node.path);
+        else if (node.children) collect(node.children);
+      }
+    };
+    collect(data.tree ?? []);
+    const results =
+      !query || typeof query !== "string"
+        ? filesService.scoreTopFiles(paths, limit)
+        : filesService.fuzzySearchPaths(paths, query, limit);
+    return c.json(results);
+  }
+
   const workspacePath = c.get("workspacePath");
 
   // Empty query → return top-level files (short paths first)

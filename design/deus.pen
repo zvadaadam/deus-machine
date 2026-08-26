@@ -72454,6 +72454,36 @@
           "letterSpacing": 0.54
         }
       ]
+    },
+    {
+      "type": "text",
+      "id": "aLFLf",
+      "x": 1540,
+      "y": 4166,
+      "name": "note — cloud",
+      "fill": "$text-muted",
+      "textGrowth": "fixed-width",
+      "width": 1440,
+      "content": "CLOUD PARITY (Sprint T): this exact screen also serves cloud workspaces — the tree and file reads ride the sandbox fs channel (fs.request list/read); same FileBrowserPanel, no placeholder. Search/@-mentions flatten the same tree.",
+      "lineHeight": 1.4,
+      "fontFamily": "$font-sans",
+      "fontSize": 10,
+      "fontWeight": "normal"
+    },
+    {
+      "type": "text",
+      "id": "i4gNs",
+      "x": 3080,
+      "y": 4166,
+      "name": "note — cloud",
+      "fill": "$text-muted",
+      "textGrowth": "fixed-width",
+      "width": 1440,
+      "content": "CLOUD PARITY (Sprint T): same TerminalPanel for cloud — pty frames ride the sidecar session channel onto the identical pty-data/pty-exit events. Dead session: error prints in-terminal, Enter respawns. States: 21 · Content panel states.",
+      "lineHeight": 1.4,
+      "fontFamily": "$font-sans",
+      "fontSize": 10,
+      "fontWeight": "normal"
     }
   ],
   "themes": {
