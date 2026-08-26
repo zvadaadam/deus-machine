@@ -44,10 +44,9 @@ interface CloudSession {
   providerSessionId: string;
   socket: SessionSocket;
   seq: number;
-  /** In-flight diff.request round-trips, keyed by requestId. */
-  pendingDiffs: Map<string, PendingDiff>;
-  /** In-flight fs.request round-trips (list/read), same correlation shape. */
-  pendingFs: Map<string, PendingDiff>;
+  /** In-flight request/response round-trips (diff + fs), keyed by requestId.
+   *  requestIds are per-call UUIDs, so one map cannot cross-resolve. */
+  pending: Map<string, PendingDiff>;
   /** Armed grace timer for a stopped/error state seen while a turn is live —
    *  see scheduleTurnKill. */
   pendingTurnKill: ReturnType<typeof setTimeout> | null;
@@ -78,16 +77,11 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
 }
 
 function rejectPendingDiffs(session: CloudSession, reason: string): void {
-  for (const pending of session.pendingDiffs.values()) {
+  for (const pending of session.pending.values()) {
     clearTimeout(pending.timer);
     pending.reject(new Error(reason));
   }
-  session.pendingDiffs.clear();
-  for (const pending of session.pendingFs.values()) {
-    clearTimeout(pending.timer);
-    pending.reject(new Error(reason));
-  }
-  session.pendingFs.clear();
+  session.pending.clear();
   // Terminals bound to this channel die with it (v1: no reattach). The
   // sidecar kills its side when the replacement socket opens; this is the
   // frontend's honest close so xterm doesn't sit frozen on a dead pipe.
@@ -343,12 +337,13 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     case "workspace.lifecycle":
       return; // step chatter — workspace.state carries the row-level truth
 
-    case "diff.response": {
+    case "diff.response":
+    case "fs.response": {
       const data = (frame.data ?? {}) as { requestId?: string };
       if (!data.requestId) return;
-      const pending = session.pendingDiffs.get(data.requestId);
+      const pending = session.pending.get(data.requestId);
       if (!pending) return;
-      session.pendingDiffs.delete(data.requestId);
+      session.pending.delete(data.requestId);
       clearTimeout(pending.timer);
       pending.resolve(data as Record<string, unknown>);
       return;
@@ -394,17 +389,6 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         sessionId: session.providerSessionId,
         result: { behavior: "allow" },
       });
-      return;
-    }
-
-    case "fs.response": {
-      const data = (frame.data ?? {}) as { requestId?: string };
-      if (!data.requestId) return;
-      const pending = session.pendingFs.get(data.requestId);
-      if (!pending) return;
-      session.pendingFs.delete(data.requestId);
-      clearTimeout(pending.timer);
-      pending.resolve(data as Record<string, unknown>);
       return;
     }
 
@@ -572,8 +556,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     deusWorkspaceId: row.workspace_id,
     providerSessionId: row.provider_session_id,
     seq: 0,
-    pendingDiffs: new Map(),
-    pendingFs: new Map(),
+    pending: new Map(),
     pendingTurnKill: null,
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
@@ -720,40 +703,42 @@ export interface CloudDiffFile {
   error?: string;
 }
 
-/** One diff.request round-trip against the sandbox's live worktree. */
-export async function requestCloudDiff(
+/** One requestId-correlated round-trip against the sandbox. The `<type>.request`
+ *  frame is answered by the matching `<type>.response`, resolved by requestId
+ *  in dispatchFrame. Diff and fs share this — the only difference was the frame
+ *  name and a word in the timeout message. */
+async function roundTrip(
   deusSessionId: string,
-  request: CloudDiffRequest
-): Promise<Record<string, unknown>> {
-  const session = await ensureCloudSession(deusSessionId);
-  const requestId = crypto.randomUUID();
-  const response = new Promise<Record<string, unknown>>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      session.pendingDiffs.delete(requestId);
-      reject(new Error("cloud diff request timed out"));
-    }, DIFF_TIMEOUT_MS);
-    session.pendingDiffs.set(requestId, { resolve, reject, timer });
-  });
-  session.socket.send({ type: "diff.request", data: { ...request, requestId } });
-  return response;
-}
-
-/** One fs.request round-trip (list/read) against the sandbox worktree. */
-export async function requestCloudFs(
-  deusSessionId: string,
+  type: "diff.request" | "fs.request",
   request: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const session = await ensureCloudSession(deusSessionId);
   const requestId = crypto.randomUUID();
   const response = new Promise<Record<string, unknown>>((resolve, reject) => {
     const timer = setTimeout(() => {
-      session.pendingFs.delete(requestId);
-      reject(new Error("cloud fs request timed out"));
+      session.pending.delete(requestId);
+      reject(new Error(`cloud ${type} timed out`));
     }, DIFF_TIMEOUT_MS);
-    session.pendingFs.set(requestId, { resolve, reject, timer });
+    session.pending.set(requestId, { resolve, reject, timer });
   });
-  session.socket.send({ type: "fs.request", data: { ...request, requestId } });
+  session.socket.send({ type, data: { ...request, requestId } });
   return response;
+}
+
+/** One diff.request round-trip against the sandbox's live worktree. */
+export function requestCloudDiff(
+  deusSessionId: string,
+  request: CloudDiffRequest
+): Promise<Record<string, unknown>> {
+  return roundTrip(deusSessionId, "diff.request", request as Record<string, unknown>);
+}
+
+/** One fs.request round-trip (list/read) against the sandbox worktree. */
+export function requestCloudFs(
+  deusSessionId: string,
+  request: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  return roundTrip(deusSessionId, "fs.request", request);
 }
 
 // ── Cloud PTY: the frontend's pty:* commands, rerouted onto the session channel.
