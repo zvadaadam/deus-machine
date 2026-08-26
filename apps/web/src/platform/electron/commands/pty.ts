@@ -15,6 +15,8 @@ export const ptyCommands = {
     cols: number;
     rows: number;
     cwd: string;
+    /** Cloud workspaces: the backend reroutes the shell into the sandbox. */
+    cloudWorkspaceId?: string;
   }): Promise<void> => sendCommand("pty:spawn", options).then(() => {}),
 
   write: (id: string, data: number[]): Promise<void> =>

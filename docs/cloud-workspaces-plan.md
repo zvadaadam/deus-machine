@@ -638,6 +638,115 @@ Still queued:
   extend the archive with an auth.json exclusion. Until then: codex resume
   survives pause/thaw and sidecar restarts, NOT reprovision — claude does.
 
+### Sprint T — remote Files + remote PTY (the sandbox becomes a full IDE target)
+
+Two content tabs stop being local-only: Files browses/reads the sandbox
+worktree, Terminal is an interactive shell inside the sandbox. Exploration
+verdict (2026-08-26): both read-paths are shorter than planned — file
+CONTENT reads already ride the session channel end-to-end
+(`diff:request{scope:FILE,format:CONTENT}` → `getCloudDiffFile`, driver.ts
+~:700), and the deus frontend already speaks a complete PTY frame set
+(`pty:spawn/write/resize/kill` + `pty-data/pty-exit`, shared/events.ts) that
+cloud can reuse UNCHANGED — the branch happens in the deus backend, not the
+UI.
+
+**Naming doctrine (the part that must not drift).** Three layers, three
+conventions, all pre-existing: agnt's sidecar↔DO session channel is
+colon-namespaced (`diff:request`/`diff:response`), agnt's client-facing wire
+(@deus-hq/api ws-events) is dot-namespaced (`diff.response`,
+`browser.frame`), deus's internal frontend WS keeps its legacy names
+(`pty:spawn`, `pty-data`). New frames follow the same split. ACP
+(@agentclientprotocol/sdk, already an engine harness) is the vocabulary
+reference where domains overlap — its fs domain names file access
+(`fs/read_text_file`) and its `terminal/*` methods are AGENT-driven,
+non-interactive command execution (create/output-poll/kill/release, no
+stdin/resize). Two consequences: our file domain is named `fs`, and our
+interactive terminal is named `pty` — NOT `terminal` — so the word stays
+reserved for a future ACP terminal bridge (agent tool-calls embedding
+command output) without a semantic collision. ACP contributes shapes, not
+methods: byte-limit + `truncated` honesty on bounded output, and exit
+`{exitCode, signal}` objects.
+
+**fs contract (new, and one migration).** Session channel gains
+`fs:request` / `fs:response` (requestId-correlated, mirroring the diff pull
+exactly):
+
+- `fs:request  {sessionId, requestId, op:"list", path?, maxEntries?}` — tree
+  listing, bounded (default ~5000 entries), `git ls-files`-backed in repos
+  with a bounded readdir fallback, response
+  `{ok, tree: FsNode[], truncated}` where
+  `FsNode {name, path, type:"file"|"dir", size?, children?}`.
+- `fs:request  {sessionId, requestId, op:"read", path}` — file content.
+  This MIGRATES the existing content read out of the diff channel
+  (pre-launch, no compat burden): `diff:request` returns to its true domain
+  (worktree changes: SUMMARY + FILE/DIFF), `fs` owns file access. Client
+  wire: `fs.request` / `fs.response`.
+
+deus: `files.service` grows a cloud branch mapping FsNode→FileTreeNode
+(shapes are already near-identical); the Files tab frontend is untouched.
+
+**pty contract (new).** Session channel: commands
+`pty:open {sessionId, ptyId, cols, rows, cwd?}`, `pty:input {…, data:b64}`,
+`pty:resize {…, cols, rows}`, `pty:close {…}`; events
+`pty:data {sessionId, ptyId, data:b64}`, `pty:exit {…, exitCode?, signal?,
+error?}`. Client wire: same names, dots. Deliberately NO open-ack (failure
+is a prompt `pty:exit` with `error`) and NO reattach/replay in v1 — a
+dropped session socket ends the terminal UI honestly, exactly like the
+local terminal on backend restart; a sidecar-side 64KB ring buffer +
+reattach is the queued follow-up if resume-with-open-terminal proves
+annoying in practice. Bounded: ≤4 concurrent ptys per session, killed on
+session leave and sidecar shutdown. Data is base64 (binary-safe; the
+`browser.frame` precedent). Relay is the browser-frame path verbatim:
+sidecar → `sidecar-messages.ts` broadcast; client command → sidecar, the
+`browser.input` path.
+
+deus: the pty WS router branches cloud workspaces to the driver
+(driver default case at cloud/driver.ts:383 currently swallows unknown
+events — pty/fs cases land there), re-broadcasting `pty.data`/`pty.exit`
+under the existing `PTY_DATA`/`PTY_EXIT` event names with the same id, so
+xterm never learns the difference. The ContentView cloud-terminal
+placeholder is replaced by the real terminal when the workspace is running.
+
+**Sidecar PTY runtime.** The sidecar bundle runs under Bun with runtime
+deps resolved from `/opt/sidecar/node_modules` (the claude-SDK/codex
+pattern). Plan A: `node-pty` pinned into the template's `/opt/sidecar` npm
+install + `--external node-pty` in the sidecar build, with a template-CI
+smoke (spawn a pty under Bun, echo round-trip) — build-essential is already
+in the image. Plan B if Bun×node-pty misbehaves: wrap the shell in
+`script -qfec` (util-linux allocates the pty, zero native deps) at the cost
+of dynamic resize — degraded, documented, only if A fails its smoke.
+
+**Design sync (same piece of work).** `21 · Content panel states` gains the
+cloud states (Files: cloud loading/tree/error; Terminal: cloud
+waking/connected/disconnected) and screens `41` Files / `42` Terminal get
+cloud-workspace notes — via Pencil MCP, per the design↔code rule.
+
+**Verification (sequential, the actual desktop app).** Create cloud
+workspace from the desktop → Files tree + file open → interactive terminal
+(echo, vi, resize) → pause → resume → terminal-death honesty + Files still
+live. Day-one task: diagnose the desktop app itself (reported feeling
+broken).
+
+Ship order: agnt wire+sidecar+relay (+ template node-pty, + api schemas +
+changeset) → publish → deus driver/services/UI + design mirrors (pins
+bumped to the new api/sdk) → desktop verification. Riding along: drop the
+legacy `codex-sdk` frontend registration (catalog already points at
+`codex-app-server`), and this doc's D2.5 "capability handshake" queue item
+is DONE (shipped as agnt #154/#157/#158).
+
+Queued follow-ups out of the review waves (real, deliberately not v1):
+
+- **SDK SessionClient fs/pty surface** (agnt): typed send methods + a
+  subscription model for pty streams. No consumer exists yet — deus drives
+  its own session socket; the api schemas already ship for the raw wire.
+- **Capability-window gate**: fs/pty commands fail promptly for sidecars
+  that announced no harnesses; a sidecar from the brief
+  harness-handshake-only rollout window still slips through and drops the
+  frame (client times out, workspace restart heals). If it ever matters, a
+  finer-grained caps list joins the dial the same way harnesses did.
+- **PTY reattach** (agnt sidecar): 64KB ring buffer + reopen-with-same-id
+  replay, if resume-with-open-terminal proves annoying in practice.
+
 ### D3 (next) — "Mac closed": mobile direct-to-cloud
 
 Phone today is a paired remote to the DESKTOP backend; with the Mac closed

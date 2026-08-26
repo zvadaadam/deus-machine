@@ -101,17 +101,18 @@ export function ContentView({
         )}
       >
         {workspace.kind === "cloud" && (
-          // A LOCAL shell here would masquerade as the sandbox — the same
-          // truthfulness class as every state-collapse bug this sprint. The
-          // real remote PTY rides the sidecar session channel (browser:input
-          // proves the streaming pattern); until it lands, say so.
-          <div className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1.5 text-sm">
-            <p className="text-foreground/70 font-medium">Terminal attaches to the cloud sandbox</p>
-            <p className="max-w-sm text-center text-xs">
-              The remote shell is coming — for now, ask the agent to run commands; it executes
-              inside the sandbox.
-            </p>
-          </div>
+          // The REAL remote shell: pty frames ride the sidecar session
+          // channel and come back on the same pty-data/pty-exit events the
+          // local terminal speaks — a separate panel instance so cloud ids
+          // never mix into the frozen local panel below. A sandbox that
+          // isn't running fails the spawn promptly (SIDECAR_NOT_CONNECTED)
+          // and the message lands in the terminal itself.
+          <TerminalPanel
+            workspaceId={workspace.id}
+            workspacePath=""
+            cloud
+            panelVisible={activeTab === "terminal"}
+          />
         )}
         {terminalTarget && (
           // Mounted through cloud selections too (frozen on the last LOCAL

@@ -54606,7 +54606,7 @@
                   "fill": "$text-muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Cloud workspace — the whole TerminalPanel (tab strip included) is swapped for a placeholder until the remote PTY rides the sidecar channel; the agent runs commands inside the sandbox",
+                  "content": "Cloud workspace — the SAME TerminalPanel, real shell in the sandbox: pty frames ride the sidecar session channel and come back on the exact events the local terminal speaks. Separate panel instance, so cloud ids never enter the frozen local one.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": 10,
@@ -54627,34 +54627,194 @@
               "strokeWidth": 1,
               "strokeAlignment": "inner",
               "layout": "vertical",
-              "gap": 6,
-              "justifyContent": "center",
-              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "pNiv4",
+                  "name": "TabBar",
+                  "width": "fill_container",
+                  "height": 36,
+                  "stroke": "$border-subtle",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "IVml6",
+                      "name": "add",
+                      "width": 28,
+                      "height": 28,
+                      "cornerRadius": "$radius-md",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "Dfxac",
+                          "name": "plus",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KjIQx",
+                      "name": "sp",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "r7PKZE",
+                      "name": "shell",
+                      "height": 22,
+                      "cornerRadius": "$radius-sm",
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oJcNj",
+                          "name": "bash",
+                          "fill": "$text-muted",
+                          "content": "bash · sandbox",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "tvoD6",
+                  "name": "Body",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg-muted",
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "s7J1K9",
+                      "name": "prompt1",
+                      "fill": "$text-secondary",
+                      "content": "user@sandbox:~/repo$ echo live-$((40+2))",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "vim9Z",
+                      "name": "out1",
+                      "fill": "$text-primary",
+                      "content": "live-42",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "AhdYj",
+                      "name": "prompt2",
+                      "fill": "$text-secondary",
+                      "content": "user@sandbox:~/repo$ ▍",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LD8ip",
+              "name": "h — cloud asleep",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 2,
               "children": [
                 {
                   "type": "text",
-                  "id": "h4ExU",
-                  "name": "Terminal attaches to the cloud sandbox",
-                  "opacity": 0.7,
-                  "fill": "$text-primary",
-                  "content": "Terminal attaches to the cloud sandbox",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-sm",
-                  "fontWeight": "medium"
-                },
-                {
-                  "type": "text",
-                  "id": "fzMvJ",
-                  "name": "hint",
+                  "id": "g54Rd",
+                  "name": "note",
                   "fill": "$text-muted",
                   "textGrowth": "fixed-width",
-                  "width": 336,
-                  "content": "The remote shell is coming — for now, ask the agent to run commands; it executes inside the sandbox.",
+                  "width": "fill_container",
+                  "content": "Cloud workspace, sandbox not running — the spawn fails PROMPTLY (no silent hang): the error prints inside the terminal itself. Waking the workspace and reopening a tab recovers.",
                   "lineHeight": 1.5,
-                  "textAlign": "center",
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": 10,
                   "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "qHqJf",
+              "name": "Panel — cloud asleep",
+              "clip": true,
+              "width": 600,
+              "height": 120,
+              "fill": "$bg-elevated",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "hcvM4",
+                  "name": "Body",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg-muted",
+                  "layout": "vertical",
+                  "gap": 3,
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lxen6",
+                      "name": "err",
+                      "fill": "$accent-red",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Failed to start terminal: SIDECAR_NOT_CONNECTED: sandbox is not connected — retry when running",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
                 }
               ]
             }

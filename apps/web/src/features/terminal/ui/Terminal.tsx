@@ -10,6 +10,9 @@ import "./Terminal.css";
 interface TerminalProps {
   id: string;
   workspacePath: string;
+  /** Set for cloud workspaces: the shell runs in the SANDBOX (session
+   *  channel), not locally — command/cwd are decided sandbox-side. */
+  cloudWorkspaceId?: string;
   /** Command to execute automatically after shell init (e.g. task execution, "claude login") */
   initialCommand?: string;
   getInitialCommand?: (id: string) => string | undefined;
@@ -106,6 +109,7 @@ export function Terminal({
   initialCommand,
   getInitialCommand,
   visible = true,
+  cloudWorkspaceId,
 }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -115,9 +119,10 @@ export function Terminal({
     if (!terminalRef.current) return;
 
     // Unique PTY id per effect invocation so StrictMode double-fire doesn't collide
-    const ptyId = `${id}-${Date.now()}`;
+    let ptyId = `${id}-${Date.now()}`;
     let disposed = false;
     let ready = false;
+    let dead = false;
     const commandToRun = initialCommand ?? getInitialCommand?.(id);
 
     // Create xterm instance with theme-aware colors
@@ -144,48 +149,70 @@ export function Terminal({
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
 
-    // Forward terminal input to PTY
+    // Forward terminal input to PTY. A DEAD terminal is never a dead end:
+    // Enter respawns a fresh shell in place (new ptyId — the old one is
+    // retired backend-side, and ids are per-spawn anyway).
     const inputDisposable = xterm.onData((data) => {
-      if (ready && !disposed) {
+      if (disposed) return;
+      if (dead) {
+        if (data.includes("\r")) {
+          dead = false;
+          ptyId = `${id}-${Date.now()}`;
+          xterm.clear();
+          startPty();
+        }
+        return;
+      }
+      if (ready) {
         ptyCommands.write(ptyId, Array.from(new TextEncoder().encode(data))).catch((err) => {
           console.error("Failed to write to PTY:", err);
         });
       }
     });
 
-    // Spawn PTY
+    // Spawn PTY — cloud terminals ride the sandbox session channel; the
+    // backend picks the shell there, so command/cwd only matter locally.
     const shell = navigator.platform?.startsWith("Win") ? "powershell.exe" : "/bin/zsh";
-    ptyCommands
-      .spawn({
-        id: ptyId,
-        command: shell,
-        args: [],
-        cols: xterm.cols,
-        rows: xterm.rows,
-        cwd: workspacePath,
-      })
-      .then(() => {
-        if (!disposed) {
-          ready = true;
-          // Auto-run initial command after shell init settles
-          if (commandToRun) {
-            setTimeout(() => {
-              if (!disposed) {
-                const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
-                ptyCommands.write(ptyId, encoded).catch((err) => {
-                  console.error("Failed to write initial command:", err);
-                });
-              }
-            }, 300);
+    const startPty = () => {
+      ready = false;
+      const spawnId = ptyId;
+      ptyCommands
+        .spawn({
+          id: spawnId,
+          command: shell,
+          args: [],
+          cols: xterm.cols,
+          rows: xterm.rows,
+          cwd: workspacePath,
+          ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
+        })
+        .then(() => {
+          if (!disposed && spawnId === ptyId) {
+            ready = true;
+            // Auto-run initial command after shell init settles
+            if (commandToRun) {
+              setTimeout(() => {
+                if (!disposed) {
+                  const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
+                  ptyCommands.write(spawnId, encoded).catch((err) => {
+                    console.error("Failed to write initial command:", err);
+                  });
+                }
+              }, 300);
+            }
           }
-        }
-      })
-      .catch((err) => {
-        if (!disposed) {
-          console.error("Failed to spawn PTY:", err);
-          xterm.write(`\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n`);
-        }
-      });
+        })
+        .catch((err) => {
+          if (!disposed && spawnId === ptyId) {
+            dead = true;
+            console.error("Failed to spawn PTY:", err);
+            xterm.write(
+              `\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n\x1b[90mPress Enter to retry\x1b[0m\r\n`
+            );
+          }
+        });
+    };
+    startPty();
 
     // Listen for PTY data via WS q:event
     const unlistenData = onEvent((event, data) => {
@@ -202,9 +229,13 @@ export function Terminal({
     const unlistenExit = onEvent((event, data) => {
       if (disposed) return;
       if (event === "pty-exit") {
-        const payload = data as { id: string };
+        const payload = data as { id: string; error?: string };
         if (payload.id === ptyId) {
-          xterm.write("\r\n\x1b[90mSession ended\x1b[0m\r\n");
+          dead = true;
+          if (payload.error) {
+            xterm.write(`\r\n\x1b[31m${payload.error}\x1b[0m\r\n`);
+          }
+          xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
         }
       }
     });

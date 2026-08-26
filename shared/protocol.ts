@@ -14,11 +14,19 @@ import {
   ThinkingLevelSchema as EngineThinkingLevelSchema,
 } from "@zvada/agent-server/protocol";
 import type { PermissionMode, ThinkingLevel } from "@zvada/agent-server/protocol";
+import type { z } from "zod";
 
-export const PermissionModeSchema = EnginePermissionModeSchema;
+// Cast, not inference: the engine resolves its own zod install (deus also
+// carries zod 3 transitively via @jimp, so a workspace-wide dedupe override
+// is not an option), and the inferred type would name that nested install by
+// a non-portable node_modules path (TS2742). Runtime is untouched — zod 4
+// schemas are self-contained parse machines regardless of which instance
+// constructed them.
+export const PermissionModeSchema =
+  EnginePermissionModeSchema as unknown as z.ZodType<PermissionMode>;
 export type { PermissionMode };
 
-export const ThinkingLevelSchema = EngineThinkingLevelSchema;
+export const ThinkingLevelSchema = EngineThinkingLevelSchema as unknown as z.ZodType<ThinkingLevel>;
 export type { ThinkingLevel };
 
 /** Retired deus spellings → engine values. Read-time only; never written. */

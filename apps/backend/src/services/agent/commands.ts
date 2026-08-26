@@ -29,6 +29,7 @@ import {
   persistSessionWorking,
 } from "./persistence";
 import { invalidate } from "../query-engine";
+import { getWorkspaceRaw } from "../../db/queries";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
 import {
@@ -37,6 +38,11 @@ import {
   isCloudSession,
   hasLiveCloudSession,
   announceCloudEnv,
+  isCloudPty,
+  openCloudPty,
+  writeCloudPty,
+  resizeCloudPty,
+  killCloudPty,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
@@ -74,13 +80,28 @@ export async function runCommand(
       .with("sendMessage", () => handleSendMessage(params))
       .with("stopSession", () => handleStopSession(params))
       // ---- PTY commands ----
-      .with("pty:spawn", () => {
+      .with("pty:spawn", async () => {
         const id = requireParam(params, "id", "pty:spawn");
         const cmd = readString(params, "command") ?? "bash";
         const args = Array.isArray(params.args) ? (params.args as string[]) : [];
         const cols = readNumber(params, "cols") ?? 80;
         const rows = readNumber(params, "rows") ?? 24;
         const cwd = readString(params, "cwd");
+
+        // A cloud terminal never touches node-pty: the frontend names the
+        // cloud WORKSPACE, the backend resolves its current session, and the
+        // driver reroutes the same pty-data/pty-exit events — xterm cannot
+        // tell the difference.
+        const cloudWorkspaceId = readString(params, "cloudWorkspaceId");
+        if (cloudWorkspaceId) {
+          const row = getWorkspaceRaw(getDatabase(), cloudWorkspaceId);
+          const cloudSessionId = row?.current_session_id;
+          if (!cloudSessionId) {
+            throw new Error("Cloud workspace has no active session for a terminal");
+          }
+          await openCloudPty(cloudSessionId, { ptyId: id, cols, rows });
+          return { commandId: id };
+        }
 
         const ptyId = spawnPty({ id, command: cmd, args, cols, rows, cwd });
         return { commandId: ptyId };
@@ -90,6 +111,10 @@ export async function runCommand(
         const data = Array.isArray(params.data) ? (params.data as number[]) : undefined;
         if (!data) throw new Error("pty:write requires data (number[])");
 
+        if (isCloudPty(id)) {
+          writeCloudPty(id, data);
+          return {};
+        }
         writeToPty(id, data);
         return {};
       })
@@ -101,12 +126,20 @@ export async function runCommand(
           throw new Error("pty:resize requires id, cols, and rows");
         }
 
+        if (isCloudPty(id)) {
+          resizeCloudPty(id, cols, rows);
+          return {};
+        }
         resizePty(id, cols, rows);
         return {};
       })
       .with("pty:kill", () => {
         const id = requireParam(params, "id", "pty:kill");
 
+        if (isCloudPty(id)) {
+          killCloudPty(id);
+          return {};
+        }
         killPty(id);
         return {};
       })
