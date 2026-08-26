@@ -212,5 +212,8 @@
     "*.{json,md,html,css}": [
       "prettier --write"
     ]
+  },
+  "overrides": {
+    "zod": "^4.3.6"
   }
 }

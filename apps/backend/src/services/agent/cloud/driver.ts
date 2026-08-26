@@ -94,7 +94,7 @@ function rejectPendingDiffs(session: CloudSession, reason: string): void {
   for (const [ptyId, owner] of cloudPtys) {
     if (owner === session.deusSessionId) {
       cloudPtys.delete(ptyId);
-      emitPtyExit(ptyId);
+      emitPtyExit(ptyId, reason);
     }
   }
 }
@@ -417,10 +417,10 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "pty.exit": {
-      const data = (frame.data ?? {}) as { ptyId?: string };
+      const data = (frame.data ?? {}) as { ptyId?: string; error?: string };
       if (!data.ptyId || !cloudPtys.has(data.ptyId)) return;
       cloudPtys.delete(data.ptyId);
-      emitPtyExit(data.ptyId);
+      emitPtyExit(data.ptyId, data.error);
       return;
     }
 

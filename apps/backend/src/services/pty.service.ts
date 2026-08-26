@@ -31,8 +31,8 @@ export function emitPtyData(id: string, bytes: number[]): void {
   pushEvent("pty-data", { id, data: bytes });
 }
 
-export function emitPtyExit(id: string): void {
-  pushEvent("pty-exit", { id });
+export function emitPtyExit(id: string, error?: string): void {
+  pushEvent("pty-exit", { id, ...(error ? { error } : {}) });
 }
 
 export function spawnPty(args: {

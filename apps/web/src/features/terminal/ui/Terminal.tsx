@@ -208,8 +208,11 @@ export function Terminal({
     const unlistenExit = onEvent((event, data) => {
       if (disposed) return;
       if (event === "pty-exit") {
-        const payload = data as { id: string };
+        const payload = data as { id: string; error?: string };
         if (payload.id === ptyId) {
+          if (payload.error) {
+            xterm.write(`\r\n\x1b[31m${payload.error}\x1b[0m\r\n`);
+          }
           xterm.write("\r\n\x1b[90mSession ended\x1b[0m\r\n");
         }
       }
