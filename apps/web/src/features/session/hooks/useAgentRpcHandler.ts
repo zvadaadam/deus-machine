@@ -199,9 +199,10 @@ export function useAgentRpcHandler(
       // request left it hanging on an invisible card until its own timeout.
       const normalized = normalizeQuestions(params);
       if (!sessionId || normalized.length === 0) {
-        respond({
-          error: "askUserQuestion payload had no usable questions — proceed without an answer",
-        });
+        // Unblock the agent with a SCHEMA-VALID cancellation — {error} violates
+        // AskUserQuestionResponseSchema (needs `answers`), and the cloud path
+        // would coerce it to the bogus answer "[object Object]".
+        respond({ answers: ["USER_CANCELLED"] });
         return;
       }
       const questions = normalized;

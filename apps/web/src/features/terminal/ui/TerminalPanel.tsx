@@ -24,6 +24,11 @@ interface TerminalPanelProps {
   /** Cloud workspaces: shells spawn in the SANDBOX over the session channel
    *  (same pty-data/pty-exit events — xterm can't tell). Path is unused. */
   cloud?: boolean;
+  /** Whether this panel represents the CURRENTLY selected workspace. The
+   *  cloud and local panels are both mounted (frozen); only the current one
+   *  may consume workspace-agnostic queued tasks, or the hidden panel steals
+   *  them and runs them under the wrong (frozen) workspace. */
+  isActive?: boolean;
   /** Whether the terminal panel is the active (visible) right-side tab */
   panelVisible?: boolean;
   onCollapse?: () => void;
@@ -85,6 +90,7 @@ export function TerminalPanel({
   workspaceId,
   workspacePath,
   cloud,
+  isActive = true,
   panelVisible = true,
   onCollapse,
 }: TerminalPanelProps) {
@@ -166,7 +172,7 @@ export function TerminalPanel({
   const pendingTask = useTerminalTaskStore((s) => s.pendingTask);
 
   useEffect(() => {
-    if (!pendingTask) return;
+    if (!pendingTask || !isActive) return; // only the current workspace's panel consumes
     const task = consumeTerminalTask();
     if (!task) return;
 
@@ -180,7 +186,7 @@ export function TerminalPanel({
       id,
       num + 1
     );
-  }, [pendingTask, workspaceId]);
+  }, [pendingTask, isActive, workspaceId]);
 
   // Watch for pending terminal commands from the layout store (e.g. "claude login" from chat error)
   const pendingCommand = useWorkspaceLayoutStore(

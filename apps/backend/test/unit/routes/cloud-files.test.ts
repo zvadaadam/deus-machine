@@ -42,14 +42,36 @@ beforeEach(() => {
 });
 
 describe("cloud files routes", () => {
-  it("tree answers with the provisioning truth while no session exists", async () => {
+  it("tree returns an empty listing (not an error panel) while provisioning", async () => {
     cloudWorkspace.current_session_id = null;
 
     const res = await app.request("/workspaces/ws-cloud-1/files");
+    const body = (await res.json()) as { files: unknown[]; provisioning?: boolean };
 
-    expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/provisioning/i);
+    expect(res.status).toBe(200);
+    expect(body.files).toEqual([]);
+    expect(body.provisioning).toBe(true);
     expect(mockRequestCloudFs).not.toHaveBeenCalled();
+  });
+
+  it("invalidate-cache clears the cloud tree cache so mentions don't go stale", async () => {
+    cloudWorkspace.current_session_id = "sess-invalidate";
+    mockRequestCloudFs.mockResolvedValue({ tree: [{ name: "a.ts", path: "a.ts", type: "file" }] });
+    // warm the search cache
+    await app.request("/workspaces/ws-cloud-1/files/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "a" }),
+    });
+    await app.request("/workspaces/ws-cloud-1/files/invalidate-cache", { method: "POST" });
+    mockRequestCloudFs.mockClear();
+    // a fresh search must re-list (cache was cleared), not serve the stale set
+    await app.request("/workspaces/ws-cloud-1/files/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "a" }),
+    });
+    expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
   });
 
   it("tree maps FsNode → local shape and carries the truncation flag", async () => {
@@ -97,6 +119,7 @@ describe("cloud files routes", () => {
   });
 
   it("search caches the flattened tree across keystrokes", async () => {
+    cloudWorkspace.current_session_id = "sess-search-cache";
     mockRequestCloudFs.mockResolvedValue({
       tree: [{ name: "alpha.ts", path: "alpha.ts", type: "file" }],
     });

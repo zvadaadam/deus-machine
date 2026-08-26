@@ -9,12 +9,10 @@ import { requestCloudFs } from "../services/agent/cloud/driver";
 /** Cloud fs failures are USER states (asleep sandbox, provisioning, timeouts)
  *  — mapped here so they surface as instructions, never "Internal server
  *  error" + a spurious error report. */
-function cloudSessionOrThrow(workspace: { current_session_id: string | null }): string {
-  if (!workspace.current_session_id) {
-    throw new ValidationError(
-      "Cloud workspace is still provisioning — files appear once the sandbox is up."
-    );
-  }
+/** Null until the sandbox is up. The tree route returns an empty listing (not
+ *  an error) so Files shows "empty", not a dead error panel that never
+ *  refetches when provisioning completes. */
+function cloudSessionOrNull(workspace: { current_session_id: string | null }): string | null {
   return workspace.current_session_id;
 }
 
@@ -34,9 +32,38 @@ async function cloudFsOrThrow(
   }
 }
 
-/** @-mention search re-lists the sandbox on every keystroke without this. */
+/** @-mention search re-lists the sandbox on every keystroke without this. The
+ *  cache is keyed by session and shared by the tree route (which warms it) and
+ *  search (which reads it); the refresh button clears it. */
 const cloudTreeCache = new Map<string, { paths: string[]; expiresAt: number }>();
 const CLOUD_TREE_TTL_MS = 15_000;
+/** Search/@-mentions must see the WHOLE repo, not a 5k-truncated prefix — a
+ *  higher list bound for the cloud lane (still bounded so a giant monorepo
+ *  can't DoS the channel). */
+const CLOUD_LIST_CAP = 50_000;
+
+function flattenCloudTree(tree: CloudFsNode[]): string[] {
+  const paths: string[] = [];
+  const walk = (nodes: CloudFsNode[]) => {
+    for (const node of nodes) {
+      if (node.type === "file") paths.push(node.path);
+      else if (node.children) walk(node.children);
+    }
+  };
+  walk(tree);
+  return paths;
+}
+
+function cacheCloudTree(sessionId: string, tree: CloudFsNode[]): void {
+  cloudTreeCache.set(sessionId, {
+    paths: flattenCloudTree(tree),
+    expiresAt: Date.now() + CLOUD_TREE_TTL_MS,
+  });
+  if (cloudTreeCache.size > 16) {
+    const oldest = cloudTreeCache.keys().next().value;
+    if (oldest) cloudTreeCache.delete(oldest);
+  }
+}
 import { ValidationError } from "../lib/errors";
 import * as filesService from "../services/files.service";
 import * as gitService from "../services/git.service";
@@ -52,13 +79,15 @@ const app = new Hono<Env>();
 app.get("/workspaces/:id/files", withWorkspace, async (c) => {
   const workspace = c.get("workspace");
   if (workspace.kind === "cloud") {
-    const sessionId = cloudSessionOrThrow(workspace);
-    const data = (await cloudFsOrThrow(sessionId, { op: "list" })) as {
+    const sessionId = cloudSessionOrNull(workspace);
+    if (!sessionId) return c.json({ files: [], totalFiles: 0, totalSize: 0, provisioning: true });
+    const data = (await cloudFsOrThrow(sessionId, { op: "list", maxEntries: CLOUD_LIST_CAP })) as {
       tree?: CloudFsNode[];
       truncated?: boolean;
       error?: string;
     };
     if (data.error) throw new ValidationError(data.error);
+    cacheCloudTree(sessionId, data.tree ?? []); // feed @-mention search
     return c.json({ ...cloudTreeToResponse(data.tree ?? []), truncated: data.truncated === true });
   }
   const workspacePath = c.get("workspacePath");
@@ -100,8 +129,12 @@ function cloudTreeToResponse(tree: CloudFsNode[]) {
  * POST /workspaces/:id/files/invalidate-cache — Clear file scan cache for this workspace.
  */
 app.post("/workspaces/:id/files/invalidate-cache", withWorkspace, (c) => {
-  const workspacePath = c.get("workspacePath");
-  filesService.invalidateCache(workspacePath);
+  const workspace = c.get("workspace");
+  if (workspace.kind === "cloud") {
+    if (workspace.current_session_id) cloudTreeCache.delete(workspace.current_session_id);
+    return c.json({ ok: true });
+  }
+  filesService.invalidateCache(c.get("workspacePath"));
   return c.json({ ok: true });
 });
 
@@ -118,7 +151,8 @@ app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
     // The sidecar enforces canonical containment; this mirrors the local
     // branch's early rejection so both lanes refuse the same inputs.
     if (filePath.split("/").includes("..")) throw new ValidationError("Invalid file path");
-    const sessionId = cloudSessionOrThrow(workspace);
+    const sessionId = cloudSessionOrNull(workspace);
+    if (!sessionId) throw new ValidationError("File not found");
     const data = (await cloudFsOrThrow(sessionId, { op: "read", path: filePath })) as {
       content?: string;
       error?: string;
@@ -176,29 +210,18 @@ app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
     // local scorers — @-mentions and the Files filter work identically.
     const sessionId = workspace.current_session_id;
     if (!sessionId) return c.json([]);
-    let paths: string[];
     const cached = cloudTreeCache.get(sessionId);
+    let paths: string[];
     if (cached && cached.expiresAt > Date.now()) {
       paths = cached.paths;
     } else {
-      const data = (await requestCloudFs(sessionId, { op: "list" }).catch(() => null)) as {
-        tree?: CloudFsNode[];
-        error?: string;
-      } | null;
+      const data = (await requestCloudFs(sessionId, {
+        op: "list",
+        maxEntries: CLOUD_LIST_CAP,
+      }).catch(() => null)) as { tree?: CloudFsNode[]; error?: string } | null;
       if (!data || data.error) return c.json([]);
-      paths = [];
-      const collect = (nodes: CloudFsNode[]) => {
-        for (const node of nodes) {
-          if (node.type === "file") paths.push(node.path);
-          else if (node.children) collect(node.children);
-        }
-      };
-      collect(data.tree ?? []);
-      cloudTreeCache.set(sessionId, { paths, expiresAt: Date.now() + CLOUD_TREE_TTL_MS });
-      if (cloudTreeCache.size > 16) {
-        const oldest = cloudTreeCache.keys().next().value;
-        if (oldest) cloudTreeCache.delete(oldest);
-      }
+      cacheCloudTree(sessionId, data.tree ?? []);
+      paths = cloudTreeCache.get(sessionId)!.paths;
     }
     const results =
       !query || typeof query !== "string"

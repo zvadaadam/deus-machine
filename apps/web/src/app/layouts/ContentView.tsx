@@ -125,6 +125,7 @@ export function ContentView({
               workspaceId={cloudTerminalId}
               workspacePath=""
               cloud
+              isActive={workspace.kind === "cloud"}
               panelVisible={activeTab === "terminal" && workspace.kind === "cloud"}
             />
           </div>
@@ -141,6 +142,7 @@ export function ContentView({
             <TerminalPanel
               workspaceId={terminalTarget.id}
               workspacePath={terminalTarget.path}
+              isActive={workspace.kind !== "cloud"}
               panelVisible={activeTab === "terminal" && workspace.kind !== "cloud"}
             />
           </div>
