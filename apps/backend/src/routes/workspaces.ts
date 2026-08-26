@@ -9,6 +9,7 @@ import { getDatabase } from "../lib/database";
 import { createBackendChildEnv } from "../runtime/child-env";
 import { withWorkspace, computeWorkspacePath } from "../middleware/workspace-loader";
 import { NotFoundError, ValidationError } from "../lib/errors";
+import { getCloudConfig } from "../services/agent/cloud/config";
 import { parseBody, PatchWorkspaceBody, CreateWorkspaceBody } from "../lib/schemas";
 import { generateUniqueName } from "../services/workspace.service";
 import {
@@ -209,6 +210,14 @@ app.post("/workspaces", async (c) => {
   // workspace.state events through the cloud driver instead of the local
   // worktree pipeline below.
   if (location === "cloud") {
+    // An unconfigured lane is a USER state (signed out), not a server fault —
+    // a 500 here told people "Internal server error" when the truth was
+    // "sign in first".
+    if (!getCloudConfig()) {
+      throw new ValidationError(
+        "Sign in to Deus Cloud to create cloud workspaces (Settings → Cloud)."
+      );
+    }
     const { workspaceId } = createCloudWorkspace({
       repositoryId: repository_id,
       sourceBranch: source_branch,
