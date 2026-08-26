@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -115,7 +115,19 @@ export function Terminal({
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // xterm must never be OPENED into a hidden/zero-size container: its
+  // renderer caches broken dimensions and every later write throws
+  // ("reading 'dimensions'"), leaving the tab permanently blank — the
+  // "first terminal is dead until you open a new tab" bug. The first tab
+  // mounts while the Changes tab is active, so defer everything until the
+  // panel has actually been visible once.
+  const [activated, setActivated] = useState(visible);
   useEffect(() => {
+    if (visible && !activated) setActivated(true);
+  }, [visible, activated]);
+
+  useEffect(() => {
+    if (!activated) return;
     if (!terminalRef.current) return;
 
     // Unique PTY id per effect invocation so StrictMode double-fire doesn't collide
@@ -265,7 +277,7 @@ export function Terminal({
       });
       xterm.dispose();
     };
-  }, [id, workspacePath, initialCommand, getInitialCommand]);
+  }, [activated, id, workspacePath, initialCommand, getInitialCommand]);
 
   // Refit terminal when becoming visible — container may have resized while hidden
   useEffect(() => {

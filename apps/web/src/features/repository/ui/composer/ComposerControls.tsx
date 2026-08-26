@@ -6,6 +6,11 @@
  */
 
 import { createElement, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { apiClient } from "@/shared/api/client";
+import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
+
 import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
@@ -179,6 +184,25 @@ interface CloudToggleProps {
 
 /** Off-by-default cloud switch — on = the workspace runs in an agnt sandbox. */
 export function CloudToggle({ location, onLocationChange, withTooltip = false }: CloudToggleProps) {
+  // Signed-out truth at the moment of intent: flipping Cloud on without a
+  // Deus Cloud session can only end in a failed create, so say it HERE with
+  // the sign-in one click away — not as a 500 after the prompt is written.
+  const cloudStatus = useQuery({
+    queryKey: ["settings", "cloud"],
+    queryFn: () => apiClient.get<{ enabled: boolean }>("/settings/cloud"),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const signIn = useDeusCloudSignIn();
+  const handleChange = (on: boolean) => {
+    onLocationChange(on ? "cloud" : "local");
+    if (on && cloudStatus.data && !cloudStatus.data.enabled) {
+      toast("Not signed in to Deus Cloud", {
+        description: "Cloud workspaces need a Deus Cloud account on this device.",
+        action: { label: "Sign in", onClick: () => signIn.mutate() },
+      });
+    }
+  };
   const label = (
     <label
       className={cn(
@@ -190,7 +214,7 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
       <span>Cloud</span>
       <Switch
         checked={location === "cloud"}
-        onCheckedChange={(on) => onLocationChange(on ? "cloud" : "local")}
+        onCheckedChange={handleChange}
         className="scale-75"
         aria-label="Run in a cloud sandbox"
       />
