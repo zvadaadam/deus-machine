@@ -21,6 +21,9 @@ const MAX_CACHED_WORKSPACES = 5;
 interface TerminalPanelProps {
   workspaceId: string;
   workspacePath: string;
+  /** Cloud workspaces: shells spawn in the SANDBOX over the session channel
+   *  (same pty-data/pty-exit events — xterm can't tell). Path is unused. */
+  cloud?: boolean;
   /** Whether the terminal panel is the active (visible) right-side tab */
   panelVisible?: boolean;
   onCollapse?: () => void;
@@ -37,12 +40,14 @@ interface TerminalPanelProps {
 function WorkspaceTerminals({
   workspaceId,
   workspacePath,
+  cloud,
   isCurrent,
   panelVisible,
   getInitialCommand,
 }: {
   workspaceId: string;
   workspacePath: string;
+  cloud?: boolean;
   isCurrent: boolean;
   panelVisible: boolean;
   getInitialCommand: (id: string) => string | undefined;
@@ -66,6 +71,7 @@ function WorkspaceTerminals({
           <Terminal
             id={tab.id}
             workspacePath={workspacePath}
+            cloudWorkspaceId={cloud ? workspaceId : undefined}
             getInitialCommand={getInitialCommand}
             visible={panelVisible && isCurrent && activeTabId === tab.id}
           />
@@ -78,6 +84,7 @@ function WorkspaceTerminals({
 export function TerminalPanel({
   workspaceId,
   workspacePath,
+  cloud,
   panelVisible = true,
   onCollapse,
 }: TerminalPanelProps) {
@@ -282,6 +289,7 @@ export function TerminalPanel({
             key={wsId}
             workspaceId={wsId}
             workspacePath={wsPath}
+            cloud={cloud}
             isCurrent={wsId === workspaceId}
             panelVisible={panelVisible}
             getInitialCommand={getInitialCommand}

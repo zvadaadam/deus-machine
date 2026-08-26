@@ -4,6 +4,7 @@ import fs from "fs";
 import { tmpdir } from "os";
 import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
+import { requestCloudFs } from "../services/agent/cloud/driver";
 import { ValidationError } from "../lib/errors";
 import * as filesService from "../services/files.service";
 import * as gitService from "../services/git.service";
@@ -16,11 +17,53 @@ const app = new Hono<Env>();
  * GET /workspaces/:id/files — Scan workspace files.
  * Returns a hierarchical tree of all files (.gitignore-aware).
  */
-app.get("/workspaces/:id/files", withWorkspace, (c) => {
+app.get("/workspaces/:id/files", withWorkspace, async (c) => {
+  const workspace = c.get("workspace");
+  if (workspace.kind === "cloud") {
+    const sessionId = workspace.current_session_id;
+    if (!sessionId) return c.json({ files: [], totalFiles: 0, totalSize: 0 });
+    const data = (await requestCloudFs(sessionId, { op: "list" })) as {
+      tree?: CloudFsNode[];
+      truncated?: boolean;
+      error?: string;
+    };
+    if (data.error) throw new ValidationError(data.error);
+    return c.json(cloudTreeToResponse(data.tree ?? []));
+  }
   const workspacePath = c.get("workspacePath");
   const result = filesService.scanWorkspaceFiles(workspacePath);
   return c.json(result);
 });
+
+// ── Cloud mapping: the sandbox fs channel's FsNode → the local tree shape ──
+
+interface CloudFsNode {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  size?: number;
+  children?: CloudFsNode[];
+}
+
+function cloudTreeToResponse(tree: CloudFsNode[]) {
+  let totalFiles = 0;
+  let totalSize = 0;
+  const map = (node: CloudFsNode): Record<string, unknown> => {
+    if (node.type === "file") {
+      totalFiles += 1;
+      totalSize += node.size ?? 0;
+      return { name: node.name, path: node.path, type: "file", size: node.size };
+    }
+    return {
+      name: node.name,
+      path: node.path,
+      type: "directory",
+      children: (node.children ?? []).map(map),
+    };
+  };
+  const files = tree.map(map);
+  return { files, totalFiles, totalSize };
+}
 
 /**
  * POST /workspaces/:id/files/invalidate-cache — Clear file scan cache for this workspace.
@@ -35,9 +78,24 @@ app.post("/workspaces/:id/files/invalidate-cache", withWorkspace, (c) => {
  * GET /workspaces/:id/file-content — Read a file's text content.
  * Query param: ?path=relative/file/path
  */
-app.get("/workspaces/:id/file-content", withWorkspace, (c) => {
+app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
   const filePath = c.req.query("path");
   if (!filePath) throw new ValidationError("path parameter is required");
+
+  const workspace = c.get("workspace");
+  if (workspace.kind === "cloud") {
+    const sessionId = workspace.current_session_id;
+    if (!sessionId) throw new ValidationError("Cloud workspace has no active session");
+    const data = (await requestCloudFs(sessionId, { op: "read", path: filePath })) as {
+      content?: string;
+      error?: string;
+    };
+    if (data.error) throw new ValidationError(data.error);
+    if (typeof data.content !== "string") {
+      return c.json({ error: "binary_file", message: "File appears to be binary" }, 422);
+    }
+    return c.json({ content: data.content });
+  }
 
   const workspacePath = c.get("workspacePath");
 

@@ -24,6 +24,17 @@ function pushEvent(event: string, data: unknown): void {
   broadcast(JSON.stringify({ type: "q:event", event, data }));
 }
 
+// The single home for the frontend's terminal event names — the cloud PTY
+// relay (agent/cloud/driver.ts) emits through these so local and remote
+// terminals are indistinguishable to xterm.
+export function emitPtyData(id: string, bytes: number[]): void {
+  pushEvent("pty-data", { id, data: bytes });
+}
+
+export function emitPtyExit(id: string): void {
+  pushEvent("pty-exit", { id });
+}
+
 export function spawnPty(args: {
   id: string;
   command: string;

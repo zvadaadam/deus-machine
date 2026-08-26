@@ -8,8 +8,8 @@
         "@agentclientprotocol/sdk": "^1.3.0",
         "@anthropic-ai/claude-agent-sdk": "0.3.220",
         "@anthropic-ai/sdk": "^0.93.0",
-        "@deus-hq/api": "1.0.0",
-        "@deus-hq/sdk": "1.0.0",
+        "@deus-hq/api": "1.2.0",
+        "@deus-hq/sdk": "1.2.0",
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
@@ -44,7 +44,7 @@
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/addon-web-links": "^0.12.0",
         "@xterm/xterm": "^5.5.0",
-        "@zvada/agent-server": "0.3.0",
+        "@zvada/agent-server": "0.3.2",
         "agent-browser": "^0.21.4",
         "better-sqlite3": "^12.4.1",
         "chokidar": "^4.0.0",
@@ -278,9 +278,9 @@
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
-    "@deus-hq/api": ["@deus-hq/api@1.0.0", "", { "dependencies": { "@zvada/agent-server": "0.3.0", "zod": "^4.4.3" } }, "sha512-1G4oCMDZnoSmdmSaZzE/uaExL/xtJPTxDNas5tgQMTL4EhrLEkBxlsSdlTZDpYQo8EBZ1Al/qVaEGb4llrCXAQ=="],
+    "@deus-hq/api": ["@deus-hq/api@1.2.0", "", { "dependencies": { "@zvada/agent-server": "0.3.2", "zod": "^4.4.3" } }, "sha512-b/P3QUtC+lYOVvLDTXI/TBdOjHOkKp5lxGxzJ8Z8cVeufsnynT9p2N625UR5bWy4s8Y/04IIUN6wsKQYryVeOA=="],
 
-    "@deus-hq/sdk": ["@deus-hq/sdk@1.0.0", "", { "dependencies": { "@deus-hq/api": "1.0.0", "@zvada/agent-server": "0.3.0", "ws": "^8", "zod": "^4.4.3" } }, "sha512-RmZhp3rG9kftPa+mlggs94MKY+OLnkMrtU6nYDMiC1IzTMOC//vaOR3/AoDhuwSZAfxowYFhPtTPmKuU0zybYQ=="],
+    "@deus-hq/sdk": ["@deus-hq/sdk@1.2.0", "", { "dependencies": { "@deus-hq/api": "1.2.0", "@zvada/agent-server": "0.3.2", "ws": "^8", "zod": "^4.4.3" } }, "sha512-tSVQNLsgIiN+a7AO9x6Of8eupvUTqlhyRb6vcb2Fn5Qkk7opW0fqppJtU53X9dr/l/C1MjZ6iaL6Tr2EM1WTrA=="],
 
     "@deus/pencil-app": ["@deus/pencil-app@workspace:packages/pencil"],
 
@@ -1374,7 +1374,7 @@
 
     "@xtuc/long": ["@xtuc/long@4.2.2", "", {}, "sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ=="],
 
-    "@zvada/agent-server": ["@zvada/agent-server@0.3.0", "", { "dependencies": { "zod": "^4.0.0" }, "peerDependencies": { "@agentclientprotocol/sdk": ">=1.2.0", "@anthropic-ai/claude-agent-sdk": ">=0.2.0", "@openai/codex-sdk": ">=0.40.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"], "bin": { "agent-server": "src/server/bin.ts" } }, "sha512-5oHteiJzjXuGKycpmsJoucS8L73LsM1W9GypSE0+1Xt3ZztY2kKysxnXInIOjBpexripuCSlLfmdBu1ySI7QOA=="],
+    "@zvada/agent-server": ["@zvada/agent-server@0.3.2", "", { "dependencies": { "zod": "^4.0.0" }, "peerDependencies": { "@agentclientprotocol/sdk": ">=1.2.0", "@anthropic-ai/claude-agent-sdk": ">=0.2.0", "@openai/codex-sdk": ">=0.40.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"], "bin": { "agent-server": "src/server/bin.ts" } }, "sha512-IGN+NPYP5nZkg95AuOfJeaFy4+wmzn5xsPS+9ABAWIfDZ+4fEulvANxnRaYbLc7rEg4b5AWecLe10njagLVSLA=="],
 
     "abbrev": ["abbrev@3.0.1", "", {}, "sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg=="],
 
@@ -3559,6 +3559,8 @@
     "@vitest/expect/chai": ["chai@6.2.2", "", {}, "sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg=="],
 
     "@vitest/mocker/estree-walker": ["estree-walker@3.0.3", "", { "dependencies": { "@types/estree": "^1.0.0" } }, "sha512-7RUKfXgSMMkzt6ZuXmqapOurLGPPfgj6l9uRZ7lRGolvk0y2yocc35LdcxKC5PQZdn2DMqioAQ2NoWcrTKmm6g=="],
+
+    "@zvada/agent-server/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "agent-dots/@types/react": ["@types/react@19.2.14", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w=="],
 

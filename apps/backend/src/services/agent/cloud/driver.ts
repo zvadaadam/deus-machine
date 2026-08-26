@@ -26,6 +26,7 @@ import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../per
 import { invalidate } from "../../query-engine";
 import { broadcast } from "../../ws.service";
 import { getDatabase } from "../../../lib/database";
+import { emitPtyData, emitPtyExit } from "../../pty.service";
 import { getSessionRaw } from "../../../db";
 import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
 
@@ -45,6 +46,8 @@ interface CloudSession {
   seq: number;
   /** In-flight diff.request round-trips, keyed by requestId. */
   pendingDiffs: Map<string, PendingDiff>;
+  /** In-flight fs.request round-trips (list/read), same correlation shape. */
+  pendingFs: Map<string, PendingDiff>;
   /** Armed grace timer for a stopped/error state seen while a turn is live —
    *  see scheduleTurnKill. */
   pendingTurnKill: ReturnType<typeof setTimeout> | null;
@@ -80,6 +83,20 @@ function rejectPendingDiffs(session: CloudSession, reason: string): void {
     pending.reject(new Error(reason));
   }
   session.pendingDiffs.clear();
+  for (const pending of session.pendingFs.values()) {
+    clearTimeout(pending.timer);
+    pending.reject(new Error(reason));
+  }
+  session.pendingFs.clear();
+  // Terminals bound to this channel die with it (v1: no reattach). The
+  // sidecar kills its side when the replacement socket opens; this is the
+  // frontend's honest close so xterm doesn't sit frozen on a dead pipe.
+  for (const [ptyId, owner] of cloudPtys) {
+    if (owner === session.deusSessionId) {
+      cloudPtys.delete(ptyId);
+      emitPtyExit(ptyId);
+    }
+  }
 }
 
 export function shutdownCloudDriver(): void {
@@ -380,8 +397,35 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       return;
     }
 
+    case "fs.response": {
+      const data = (frame.data ?? {}) as { requestId?: string };
+      if (!data.requestId) return;
+      const pending = session.pendingFs.get(data.requestId);
+      if (!pending) return;
+      session.pendingFs.delete(data.requestId);
+      clearTimeout(pending.timer);
+      pending.resolve(data as Record<string, unknown>);
+      return;
+    }
+
+    case "pty.data": {
+      const data = (frame.data ?? {}) as { ptyId?: string; data?: string };
+      if (!data.ptyId || typeof data.data !== "string") return;
+      if (!cloudPtys.has(data.ptyId)) return; // late frames after kill
+      emitPtyData(data.ptyId, Array.from(Buffer.from(data.data, "base64")));
+      return;
+    }
+
+    case "pty.exit": {
+      const data = (frame.data ?? {}) as { ptyId?: string };
+      if (!data.ptyId || !cloudPtys.has(data.ptyId)) return;
+      cloudPtys.delete(data.ptyId);
+      emitPtyExit(data.ptyId);
+      return;
+    }
+
     default:
-      // diff.*, browser.*, hook.*, checkpoint:* — later sprints.
+      // browser.*, hook.*, checkpoint:* — later sprints.
       return;
   }
 }
@@ -523,6 +567,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     providerSessionId: row.provider_session_id,
     seq: 0,
     pendingDiffs: new Map(),
+    pendingFs: new Map(),
     pendingTurnKill: null,
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
@@ -685,6 +730,64 @@ export async function requestCloudDiff(
   });
   session.socket.send({ type: "diff.request", data: { ...request, requestId } });
   return response;
+}
+
+/** One fs.request round-trip (list/read) against the sandbox worktree. */
+export async function requestCloudFs(
+  deusSessionId: string,
+  request: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const session = await ensureCloudSession(deusSessionId);
+  const requestId = crypto.randomUUID();
+  const response = new Promise<Record<string, unknown>>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      session.pendingFs.delete(requestId);
+      reject(new Error("cloud fs request timed out"));
+    }, DIFF_TIMEOUT_MS);
+    session.pendingFs.set(requestId, { resolve, reject, timer });
+  });
+  session.socket.send({ type: "fs.request", data: { ...request, requestId } });
+  return response;
+}
+
+// ── Cloud PTY: the frontend's pty:* commands, rerouted onto the session channel.
+// Registry maps a frontend ptyId to the deus session whose channel carries it —
+// write/resize/kill arrive with only the ptyId.
+const cloudPtys = new Map<string, string>();
+
+export function isCloudPty(ptyId: string): boolean {
+  return cloudPtys.has(ptyId);
+}
+
+export async function openCloudPty(
+  deusSessionId: string,
+  args: { ptyId: string; cols: number; rows: number; cwd?: string }
+): Promise<void> {
+  const session = await ensureCloudSession(deusSessionId);
+  cloudPtys.set(args.ptyId, deusSessionId);
+  session.socket.send({ type: "pty.open", data: { ...args } });
+}
+
+export function writeCloudPty(ptyId: string, bytes: number[]): void {
+  const session = sessions.get(cloudPtys.get(ptyId) ?? "");
+  if (!session) throw new Error(`Cloud PTY not found: ${ptyId}`);
+  session.socket.send({
+    type: "pty.input",
+    data: { ptyId, data: Buffer.from(bytes).toString("base64") },
+  });
+}
+
+export function resizeCloudPty(ptyId: string, cols: number, rows: number): void {
+  const session = sessions.get(cloudPtys.get(ptyId) ?? "");
+  if (!session) return;
+  session.socket.send({ type: "pty.resize", data: { ptyId, cols, rows } });
+}
+
+export function killCloudPty(ptyId: string): void {
+  const session = sessions.get(cloudPtys.get(ptyId) ?? "");
+  cloudPtys.delete(ptyId);
+  if (!session) return;
+  session.socket.send({ type: "pty.close", data: { ptyId } });
 }
 
 /** SUMMARY: which files differ in the sandbox worktree right now. */

@@ -10,6 +10,9 @@ import "./Terminal.css";
 interface TerminalProps {
   id: string;
   workspacePath: string;
+  /** Set for cloud workspaces: the shell runs in the SANDBOX (session
+   *  channel), not locally — command/cwd are decided sandbox-side. */
+  cloudWorkspaceId?: string;
   /** Command to execute automatically after shell init (e.g. task execution, "claude login") */
   initialCommand?: string;
   getInitialCommand?: (id: string) => string | undefined;
@@ -106,6 +109,7 @@ export function Terminal({
   initialCommand,
   getInitialCommand,
   visible = true,
+  cloudWorkspaceId,
 }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -153,7 +157,8 @@ export function Terminal({
       }
     });
 
-    // Spawn PTY
+    // Spawn PTY — cloud terminals ride the sandbox session channel; the
+    // backend picks the shell there, so command/cwd only matter locally.
     const shell = navigator.platform?.startsWith("Win") ? "powershell.exe" : "/bin/zsh";
     ptyCommands
       .spawn({
@@ -163,6 +168,7 @@ export function Terminal({
         cols: xterm.cols,
         rows: xterm.rows,
         cwd: workspacePath,
+        ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
       })
       .then(() => {
         if (!disposed) {
