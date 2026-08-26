@@ -734,6 +734,19 @@ legacy `codex-sdk` frontend registration (catalog already points at
 `codex-app-server`), and this doc's D2.5 "capability handshake" queue item
 is DONE (shipped as agnt #154/#157/#158).
 
+Queued follow-ups out of the review waves (real, deliberately not v1):
+
+- **SDK SessionClient fs/pty surface** (agnt): typed send methods + a
+  subscription model for pty streams. No consumer exists yet — deus drives
+  its own session socket; the api schemas already ship for the raw wire.
+- **Capability-window gate**: fs/pty commands fail promptly for sidecars
+  that announced no harnesses; a sidecar from the brief
+  harness-handshake-only rollout window still slips through and drops the
+  frame (client times out, workspace restart heals). If it ever matters, a
+  finer-grained caps list joins the dial the same way harnesses did.
+- **PTY reattach** (agnt sidecar): 64KB ring buffer + reopen-with-same-id
+  replay, if resume-with-open-terminal proves annoying in practice.
+
 ### D3 (next) — "Mac closed": mobile direct-to-cloud
 
 Phone today is a paired remote to the DESKTOP backend; with the Mac closed
