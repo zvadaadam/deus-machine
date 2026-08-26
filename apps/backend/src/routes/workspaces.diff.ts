@@ -97,9 +97,11 @@ app.get("/workspaces/:id/diff-file", withWorkspace, async (c) => {
           error?: string;
         }>,
       ]);
-      if (diffPart.error || contentPart.error) {
-        throw new Error(diffPart.error ?? contentPart.error);
+      if (diffPart.error) {
+        throw new Error(diffPart.error);
       }
+      // Content is enrichment, not a gate — a deleted file has a diff and no
+      // bytes to read; failing the whole route hid the deletion entirely.
       // old_content is not reconstructable from the live channel (Sprint 3
       // serves it from fetched checkpoint objects); the diff text carries the
       // change either way, and the viewer already tolerates null contents

@@ -69,6 +69,19 @@ export function ContentView({
       ? { id: workspace.id, path: workspace.workspace_path }
       : lastLocalTerminal;
 
+  // Same freeze rule for the CLOUD panel: unmounting it on a cloud→local
+  // switch disposed live xterms mid-frame (xterm schedules un-cancelable
+  // rAF/timeout work at open — the "reading 'dimensions'" crash) and killed
+  // sandbox shells that survive every cloud↔cloud switch. Keep the last
+  // cloud workspace's panel mounted, hidden, exactly like the local one.
+  const [lastCloudTerminal, setLastCloudTerminal] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (workspace.kind === "cloud") {
+      setLastCloudTerminal((prev) => (prev === workspace.id ? prev : workspace.id));
+    }
+  }, [workspace.kind, workspace.id]);
+  const cloudTerminalId = workspace.kind === "cloud" ? workspace.id : lastCloudTerminal;
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Lazy tabs — mounted only when active */}
@@ -100,19 +113,21 @@ export function ContentView({
           activeTab !== "terminal" && "pointer-events-none invisible absolute"
         )}
       >
-        {workspace.kind === "cloud" && (
+        {cloudTerminalId && (
           // The REAL remote shell: pty frames ride the sidecar session
           // channel and come back on the same pty-data/pty-exit events the
           // local terminal speaks — a separate panel instance so cloud ids
           // never mix into the frozen local panel below. A sandbox that
           // isn't running fails the spawn promptly (SIDECAR_NOT_CONNECTED)
           // and the message lands in the terminal itself.
-          <TerminalPanel
-            workspaceId={workspace.id}
-            workspacePath=""
-            cloud
-            panelVisible={activeTab === "terminal"}
-          />
+          <div className={cn("h-full w-full", workspace.kind !== "cloud" && "hidden")}>
+            <TerminalPanel
+              workspaceId={cloudTerminalId}
+              workspacePath=""
+              cloud
+              panelVisible={activeTab === "terminal" && workspace.kind === "cloud"}
+            />
+          </div>
         )}
         {terminalTarget && (
           // Mounted through cloud selections too (frozen on the last LOCAL

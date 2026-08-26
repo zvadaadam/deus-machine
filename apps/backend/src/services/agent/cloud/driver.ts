@@ -512,8 +512,14 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
 async function connectCloudSession(deusSessionId: string): Promise<CloudSession> {
   const existing = sessions.get(deusSessionId);
   if (existing?.socket.isOpen()) return existing;
-  if (existing) clearTurnKill(existing);
-  existing?.socket.close();
+  if (existing) {
+    clearTurnKill(existing);
+    // The replaced channel's in-flight reads AND its terminals die here —
+    // without this sweep a socket blip left cloud ptys as live cursors
+    // silently swallowing keystrokes (no exit ever emitted).
+    rejectPendingDiffs(existing, "session channel reconnecting");
+    existing.socket.close();
+  }
   sessions.delete(deusSessionId);
 
   const generationAtStart = identityGeneration;
@@ -765,7 +771,12 @@ export async function openCloudPty(
 ): Promise<void> {
   const session = await ensureCloudSession(deusSessionId);
   cloudPtys.set(args.ptyId, deusSessionId);
-  session.socket.send({ type: "pty.open", data: { ...args } });
+  try {
+    session.socket.send({ type: "pty.open", data: { ...args } });
+  } catch (err) {
+    cloudPtys.delete(args.ptyId); // never leak a registry entry for a frame that never left
+    throw err;
+  }
 }
 
 export function writeCloudPty(ptyId: string, bytes: number[]): void {
