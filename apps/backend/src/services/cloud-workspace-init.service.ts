@@ -363,14 +363,29 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     announce({ status: "resuming" });
     try {
       // A sandbox asleep longer than an hour holds an expired App mint;
-      // re-mint BEFORE the resume. Inside the try: a throw here must take
-      // the same honest revert to "paused" as a failed resume, not strand
-      // the row on a permanent "resuming" spinner.
-      await refreshWorkspaceGithubToken({
+      // re-mint BEFORE the resume. This ALSO runs ensureProvisioning — the same
+      // re-create seam the stopped path uses — so a gone/EXPIRED sandbox is
+      // already coming back by the time the resume below runs. Inside the try:
+      // a throw here must take the same honest revert to "paused" as a failed
+      // resume, not strand the row on a permanent "resuming" spinner.
+      const reprovisioned = await refreshWorkspaceGithubToken({
         repository_id: workspace.repository_id ?? null,
         provider_workspace_id: workspace.provider_workspace_id,
       });
-      await wakeCloudWorkspace(workspace.provider_workspace_id);
+      try {
+        await wakeCloudWorkspace(workspace.provider_workspace_id);
+      } catch (resumeErr) {
+        // A gone/expired sandbox can't be resumed ("Workspace not found or not
+        // paused"). But if the refresh above reprovisioned it, the computer is
+        // already restarting as a fresh sandbox — that's a restart, not a
+        // failure, so let agnt's provisioning frames take over (like stopped).
+        const msg = resumeErr instanceof Error ? resumeErr.message : String(resumeErr);
+        if (reprovisioned && /not\s+found|not\s+paused/i.test(msg)) {
+          finalStatus = "restarting";
+        } else {
+          throw resumeErr;
+        }
+      }
     } catch (err) {
       console.warn(`[WORKSPACE] cloud wake resume failed: ${err}`);
       setStage("paused");
