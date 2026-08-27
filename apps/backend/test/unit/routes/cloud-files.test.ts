@@ -137,4 +137,29 @@ describe("cloud files routes", () => {
     expect(((await second.json()) as Array<{ path: string }>)[0]?.path).toBe("alpha.ts");
     expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
   });
+
+  it("coalesces concurrent searches during the first list into one round-trip", async () => {
+    cloudWorkspace.current_session_id = "sess-single-flight";
+    let resolveList!: (v: unknown) => void;
+    const listPromise = new Promise((res) => {
+      resolveList = res;
+    });
+    mockRequestCloudFs.mockReturnValue(listPromise);
+
+    const search = (q: string) =>
+      app.request("/workspaces/ws-cloud-1/files/search", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+    // three keystrokes land while the first (slow) list is still in flight
+    const all = Promise.all([search("a"), search("ab"), search("abc")]);
+    await new Promise((r) => setTimeout(r, 0)); // let all three reach the shared await
+    resolveList({ tree: [{ name: "alpha.ts", path: "alpha.ts", type: "file" }] });
+    await all;
+
+    // one shared sandbox list, not one per keystroke
+    expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
+    mockRequestCloudFs.mockReset();
+  });
 });

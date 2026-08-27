@@ -64,6 +64,32 @@ function cacheCloudTree(sessionId: string, tree: CloudFsNode[]): void {
     if (oldest) cloudTreeCache.delete(oldest);
   }
 }
+
+/** One in-flight fs.list per session. Without this, every @-mention keystroke
+ *  that lands while the first (up to 50k-entry) listing is still in flight sees
+ *  an empty cache and fires its OWN full-tree round-trip — a thundering herd on
+ *  the sandbox. Concurrent callers now await the same request; it warms the
+ *  cache so the searches that follow are cache hits. */
+const cloudListInFlight = new Map<string, Promise<{ tree: CloudFsNode[]; truncated: boolean }>>();
+
+function listCloudTreeShared(
+  sessionId: string
+): Promise<{ tree: CloudFsNode[]; truncated: boolean }> {
+  const existing = cloudListInFlight.get(sessionId);
+  if (existing) return existing;
+  const p = (async () => {
+    const data = (await cloudFsOrThrow(sessionId, {
+      op: "list",
+      maxEntries: CLOUD_LIST_CAP,
+    })) as { tree?: CloudFsNode[]; truncated?: boolean; error?: string };
+    if (data.error) throw new ValidationError(data.error);
+    const tree = data.tree ?? [];
+    cacheCloudTree(sessionId, tree);
+    return { tree, truncated: data.truncated === true };
+  })().finally(() => cloudListInFlight.delete(sessionId));
+  cloudListInFlight.set(sessionId, p);
+  return p;
+}
 import { ValidationError } from "../lib/errors";
 import * as filesService from "../services/files.service";
 import * as gitService from "../services/git.service";
@@ -81,14 +107,8 @@ app.get("/workspaces/:id/files", withWorkspace, async (c) => {
   if (workspace.kind === "cloud") {
     const sessionId = cloudSessionOrNull(workspace);
     if (!sessionId) return c.json({ files: [], totalFiles: 0, totalSize: 0, provisioning: true });
-    const data = (await cloudFsOrThrow(sessionId, { op: "list", maxEntries: CLOUD_LIST_CAP })) as {
-      tree?: CloudFsNode[];
-      truncated?: boolean;
-      error?: string;
-    };
-    if (data.error) throw new ValidationError(data.error);
-    cacheCloudTree(sessionId, data.tree ?? []); // feed @-mention search
-    return c.json({ ...cloudTreeToResponse(data.tree ?? []), truncated: data.truncated === true });
+    const { tree, truncated } = await listCloudTreeShared(sessionId); // also warms @-mention search
+    return c.json({ ...cloudTreeToResponse(tree), truncated });
   }
   const workspacePath = c.get("workspacePath");
   const result = filesService.scanWorkspaceFiles(workspacePath);
@@ -215,13 +235,11 @@ app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
     if (cached && cached.expiresAt > Date.now()) {
       paths = cached.paths;
     } else {
-      const data = (await requestCloudFs(sessionId, {
-        op: "list",
-        maxEntries: CLOUD_LIST_CAP,
-      }).catch(() => null)) as { tree?: CloudFsNode[]; error?: string } | null;
-      if (!data || data.error) return c.json([]);
-      cacheCloudTree(sessionId, data.tree ?? []);
-      paths = cloudTreeCache.get(sessionId)!.paths;
+      const listed = await listCloudTreeShared(sessionId).catch(() => null);
+      if (!listed) return c.json([]);
+      // listCloudTreeShared warmed the cache; fall back to the fresh tree only
+      // if a concurrent evict raced it out.
+      paths = cloudTreeCache.get(sessionId)?.paths ?? flattenCloudTree(listed.tree);
     }
     const results =
       !query || typeof query !== "string"

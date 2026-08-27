@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
+import { capabilities } from "@/platform/capabilities";
 
 import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -197,9 +198,17 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
   const handleChange = (on: boolean) => {
     onLocationChange(on ? "cloud" : "local");
     if (on && cloudStatus.data && !cloudStatus.data.enabled) {
+      // Deus Cloud sign-in mints a device credential over Electron IPC; there's
+      // no web sign-in yet. On app.deusmachine.ai, point at the desktop app
+      // instead of a "Sign in" button whose only outcome is "requires the
+      // desktop app".
       toast("Not signed in to Deus Cloud", {
-        description: "Cloud workspaces need a Deus Cloud account on this device.",
-        action: { label: "Sign in", onClick: () => signIn.mutate() },
+        description: capabilities.ipcInvoke
+          ? "Cloud workspaces need a Deus Cloud account on this device."
+          : "Sign in to Deus Cloud from the desktop app to use cloud workspaces.",
+        ...(capabilities.ipcInvoke && {
+          action: { label: "Sign in", onClick: () => signIn.mutate() },
+        }),
       });
     }
   };
