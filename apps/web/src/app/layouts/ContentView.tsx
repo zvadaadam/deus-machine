@@ -11,6 +11,8 @@
 
 import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
+import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
+import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
@@ -81,6 +83,7 @@ export function ContentView({
     }
   }, [workspace.kind, workspace.id]);
   const cloudTerminalId = workspace.kind === "cloud" ? workspace.id : lastCloudTerminal;
+  const cloudSandbox = workspace.kind === "cloud" ? cloudPresence(workspace.init_stage) : "awake";
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -120,7 +123,7 @@ export function ContentView({
           // never mix into the frozen local panel below. A sandbox that
           // isn't running fails the spawn promptly (SIDECAR_NOT_CONNECTED)
           // and the message lands in the terminal itself.
-          <div className={cn("h-full w-full", workspace.kind !== "cloud" && "hidden")}>
+          <div className={cn("relative h-full w-full", workspace.kind !== "cloud" && "hidden")}>
             <TerminalPanel
               workspaceId={cloudTerminalId}
               workspacePath=""
@@ -128,6 +131,11 @@ export function ContentView({
               isActive={workspace.kind === "cloud"}
               panelVisible={activeTab === "terminal" && workspace.kind === "cloud"}
             />
+            {cloudSandbox !== "awake" && (
+              <div className="absolute inset-0 z-10">
+                <CloudSandboxGate workspaceId={workspace.id} presence={cloudSandbox} />
+              </div>
+            )}
           </div>
         )}
         {terminalTarget && (

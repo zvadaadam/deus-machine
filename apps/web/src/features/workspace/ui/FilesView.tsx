@@ -14,6 +14,8 @@ import { useFileChanges } from "../api/workspace.queries";
 import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
 import { useWorkspaceLayoutStore, workspaceLayoutActions } from "../store/workspaceLayoutStore";
+import { cloudPresence } from "../lib/cloudPresence";
+import { CloudSandboxGate } from "./CloudSandboxGate";
 
 interface FilesViewProps {
   workspace: Workspace;
@@ -46,6 +48,13 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
     },
     [workspace.id]
   );
+
+  // A paused/stopped cloud sandbox has no sidecar to serve the tree — show the
+  // wake gate instead of an empty tree or a SIDECAR_NOT_CONNECTED error.
+  const presence = workspace.kind === "cloud" ? cloudPresence(workspace.init_stage) : "awake";
+  if (presence !== "awake") {
+    return <CloudSandboxGate workspaceId={workspace.id} presence={presence} />;
+  }
 
   return (
     <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">
