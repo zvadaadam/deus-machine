@@ -14,7 +14,7 @@ import { getDatabase } from "../../lib/database";
 import { invalidate } from "../query-engine";
 import { environmentNameForRepo, getCloudEnvironmentInfo } from "../cloud-environment.service";
 import { generateUniqueName } from "../workspace.service";
-import type { RepositoryRow } from "../../db/types";
+import type { AutomationWithDetailsRow, RepositoryRow } from "../../db/types";
 import * as platform from "./platform";
 import * as store from "./store";
 
@@ -46,7 +46,7 @@ export function validateSchedule(cron: string, timezone: string | null): void {
 
 // ─── Cache reads (the WS query layer is synchronous) ─────────
 
-function toAutomation(row: Record<string, unknown>): Automation {
+function toAutomation(row: AutomationWithDetailsRow): Automation {
   return row as unknown as Automation;
 }
 
