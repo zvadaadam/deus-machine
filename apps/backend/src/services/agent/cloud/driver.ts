@@ -721,7 +721,18 @@ async function roundTrip(
     }, DIFF_TIMEOUT_MS);
     session.pending.set(requestId, { resolve, reject, timer });
   });
-  session.socket.send({ type, data: { ...request, requestId } });
+  try {
+    session.socket.send({ type, data: { ...request, requestId } });
+  } catch (err) {
+    // Socket closed between ensureCloudSession and send — reject NOW instead
+    // of leaking the pending entry until its timeout fires an unhandled reject.
+    const entry = session.pending.get(requestId);
+    if (entry) {
+      clearTimeout(entry.timer);
+      session.pending.delete(requestId);
+      entry.reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
   return response;
 }
 

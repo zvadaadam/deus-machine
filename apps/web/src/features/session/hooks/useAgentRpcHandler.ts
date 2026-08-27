@@ -165,7 +165,7 @@ export function useAgentRpcHandler(
 
   const handleExitPlanMode = useCallback(
     (params: Record<string, unknown>, wsRequestId: string) => {
-      const sessionId = params.sessionId as string;
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
       if (!sessionId) return;
 
       if (import.meta.env.DEV) {
@@ -192,13 +192,15 @@ export function useAgentRpcHandler(
 
   const handleAskUserQuestion = useCallback(
     (params: Record<string, unknown>, wsRequestId: string, respond: RespondFn) => {
-      const sessionId = params.sessionId as string;
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
       // Tolerant-reader: agents call this tool in more shapes than our schema
       // (singular question, single object, missing options). A shape we still
       // can't use must UNBLOCK the agent immediately — silently dropping the
       // request left it hanging on an invisible card until its own timeout.
       const normalized = normalizeQuestions(params);
       if (!sessionId || normalized.length === 0) {
+        // Invalid sessionId or nothing usable — unblock the agent with a
+        // schema-valid cancellation and store no pending request.
         // Unblock the agent with a SCHEMA-VALID cancellation — {error} violates
         // AskUserQuestionResponseSchema (needs `answers`), and the cloud path
         // would coerce it to the bogus answer "[object Object]".
