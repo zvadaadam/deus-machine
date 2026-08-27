@@ -24,7 +24,15 @@ export function CloudSandboxGate({
 
   const wake = () => {
     setWaking(true);
-    void apiClient.post(`/workspaces/${workspaceId}/cloud-wake`).catch(() => setWaking(false));
+    // cloud-wake answers 200 {ok:false} on a failed restart/resume (it restores
+    // the workspace to asleep), so a rejected promise isn't the only failure —
+    // reset the spinner and bring the button back unless the wake actually took.
+    void apiClient
+      .post<{ ok?: boolean }>(`/workspaces/${workspaceId}/cloud-wake`)
+      .then((res) => {
+        if (!res?.ok) setWaking(false);
+      })
+      .catch(() => setWaking(false));
   };
 
   return (

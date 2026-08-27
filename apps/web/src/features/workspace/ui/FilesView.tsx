@@ -31,8 +31,15 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
   const revealRequest = pendingFileNavigation?.target === "files" ? pendingFileNavigation : null;
   const isReady = workspace.state === "ready";
 
+  // A paused/stopped cloud sandbox has no sidecar to serve the tree or diffs.
+  // Compute presence up front so the change poller below stays off a down
+  // sandbox, and gate the whole view to the wake screen instead of an empty
+  // tree or a SIDECAR_NOT_CONNECTED error.
+  const presence = workspace.kind === "cloud" ? cloudPresence(workspace.init_stage) : "awake";
+  const canServe = presence === "awake";
+
   const { data: fileChangesData } = useFileChanges(
-    isReady ? workspace.id : null,
+    isReady && canServe ? workspace.id : null,
     workspace.session_status,
     isWatched,
     workspace.state
@@ -49,9 +56,6 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
     [workspace.id]
   );
 
-  // A paused/stopped cloud sandbox has no sidecar to serve the tree — show the
-  // wake gate instead of an empty tree or a SIDECAR_NOT_CONNECTED error.
-  const presence = workspace.kind === "cloud" ? cloudPresence(workspace.init_stage) : "awake";
   if (presence !== "awake") {
     return <CloudSandboxGate workspaceId={workspace.id} presence={presence} />;
   }

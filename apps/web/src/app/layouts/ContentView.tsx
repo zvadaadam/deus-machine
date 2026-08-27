@@ -120,21 +120,22 @@ export function ContentView({
           // The REAL remote shell: pty frames ride the sidecar session
           // channel and come back on the same pty-data/pty-exit events the
           // local terminal speaks — a separate panel instance so cloud ids
-          // never mix into the frozen local panel below. A sandbox that
-          // isn't running fails the spawn promptly (SIDECAR_NOT_CONNECTED)
-          // and the message lands in the terminal itself.
-          <div className={cn("relative h-full w-full", workspace.kind !== "cloud" && "hidden")}>
-            <TerminalPanel
-              workspaceId={cloudTerminalId}
-              workspacePath=""
-              cloud
-              isActive={workspace.kind === "cloud"}
-              panelVisible={activeTab === "terminal" && workspace.kind === "cloud"}
-            />
-            {cloudSandbox !== "awake" && (
-              <div className="absolute inset-0 z-10">
-                <CloudSandboxGate workspaceId={workspace.id} presence={cloudSandbox} />
-              </div>
+          // never mix into the frozen local panel below.
+          <div className={cn("h-full w-full", workspace.kind !== "cloud" && "hidden")}>
+            {cloudSandbox === "awake" ? (
+              <TerminalPanel
+                workspaceId={cloudTerminalId}
+                workspacePath=""
+                cloud
+                isActive={workspace.kind === "cloud"}
+                panelVisible={activeTab === "terminal" && workspace.kind === "cloud"}
+              />
+            ) : (
+              // Asleep/waking: the spawn fires on mount and would die against a
+              // down sandbox, leaving a "press Enter to restart" corpse the wake
+              // can't clear. Render the gate INSTEAD of the terminal so waking
+              // mounts a fresh, live shell — one action, no dead prompt.
+              <CloudSandboxGate workspaceId={workspace.id} presence={cloudSandbox} />
             )}
           </div>
         )}

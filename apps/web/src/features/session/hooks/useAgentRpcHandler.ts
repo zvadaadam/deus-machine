@@ -164,9 +164,14 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleExitPlanMode = useCallback(
-    (params: Record<string, unknown>, wsRequestId: string) => {
+    (params: Record<string, unknown>, wsRequestId: string, respond: RespondFn) => {
       const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
-      if (!sessionId) return;
+      // Malformed request: complete it as a rejected plan (the schema-valid
+      // cancellation) instead of leaving the agent to time out on silence.
+      if (!sessionId) {
+        respond({ approved: false });
+        return;
+      }
 
       if (import.meta.env.DEV) {
         console.log("[AgentRPC] exitPlanMode pending for session:", sessionId);
@@ -371,7 +376,7 @@ export function useAgentRpcHandler(
     }
 
     match(method)
-      .with("exitPlanMode", () => handleExitPlanMode(params, requestId))
+      .with("exitPlanMode", () => handleExitPlanMode(params, requestId, respond))
       .with("askUserQuestion", () => handleAskUserQuestion(params, requestId, respond))
       .with("getDiff", () => handleGetDiff(params, respond))
       .with("diffComment", () => handleDiffComment(params, respond))
