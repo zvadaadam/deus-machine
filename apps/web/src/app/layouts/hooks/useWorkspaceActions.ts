@@ -128,8 +128,9 @@ export function useWorkspaceActions({
       if (!selectedWorkspace) return;
       WorkspaceService.runTask(selectedWorkspace.id, taskName)
         .then(({ command }) => {
-          // Open a new terminal tab running the task command
-          queueTerminalTask(taskName, command);
+          // Open a new terminal tab running the task command (scoped to this
+          // workspace so it can only run in its own repo)
+          queueTerminalTask(selectedWorkspace.id, taskName, command);
           // Switch to terminal tab (right panel is always visible now)
           setContentTab("terminal");
         })

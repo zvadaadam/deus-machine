@@ -32,11 +32,16 @@ export function CloudSandboxGate({
   // it — an indefinite spinner. After a grace period, surface a retry so the
   // user is never stranded on a computer that isn't actually coming back.
   const [stalled, setStalled] = useState(false);
+  // `attempt` bumps on every wake() so the grace timer reschedules per attempt.
+  // Without it, a retry from the stalled state can't re-arm: isWaking is already
+  // true (never reset on success), so an effect keyed on isWaking alone wouldn't
+  // re-run — and a retry that also fails to reconnect would spin forever.
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!isWaking) return;
     const t = setTimeout(() => setStalled(true), 30_000);
     return () => clearTimeout(t);
-  }, [isWaking]);
+  }, [isWaking, attempt]);
   // `stalled` only means anything mid-wake; a fresh wake() resets it. Gating on
   // isWaking here keeps a stale flag from a prior cycle out of the asleep view.
   const showStalled = isWaking && stalled;
@@ -44,6 +49,7 @@ export function CloudSandboxGate({
 
   const wake = () => {
     setStalled(false);
+    setAttempt((n) => n + 1);
     setWaking(true);
     // cloud-wake answers 200 {ok:false} on a failed restart/resume (it restores
     // the workspace to asleep), so a rejected promise isn't the only failure —
