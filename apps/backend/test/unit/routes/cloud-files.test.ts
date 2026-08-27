@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 
-const { mockRequestCloudFs, mockWithWorkspace, cloudWorkspace } = vi.hoisted(() => {
+const { mockRequestCloudFs, mockWithWorkspace, cloudWorkspace, identityState } = vi.hoisted(() => {
   const cloudWorkspace: Record<string, unknown> = {
     id: "ws-cloud-1",
     kind: "cloud",
@@ -9,6 +9,7 @@ const { mockRequestCloudFs, mockWithWorkspace, cloudWorkspace } = vi.hoisted(() 
   };
   return {
     cloudWorkspace,
+    identityState: { gen: 0 },
     mockRequestCloudFs: vi.fn(),
     mockWithWorkspace: vi.fn((c: any, next: any) => {
       c.set("workspace", cloudWorkspace);
@@ -20,6 +21,7 @@ const { mockRequestCloudFs, mockWithWorkspace, cloudWorkspace } = vi.hoisted(() 
 
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   requestCloudFs: mockRequestCloudFs,
+  getCloudIdentityGeneration: () => identityState.gen,
 }));
 
 vi.mock("../../../src/middleware/workspace-loader", () => ({
@@ -39,6 +41,7 @@ app.onError(errorHandler);
 beforeEach(() => {
   vi.clearAllMocks();
   cloudWorkspace.current_session_id = "sess-cloud-1";
+  identityState.gen = 0;
 });
 
 describe("cloud files routes", () => {
@@ -161,5 +164,19 @@ describe("cloud files routes", () => {
     // one shared sandbox list, not one per keystroke
     expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
     mockRequestCloudFs.mockReset();
+  });
+
+  it("re-lists after a cloud identity change instead of serving another account's cache", async () => {
+    cloudWorkspace.current_session_id = "sess-identity";
+    mockRequestCloudFs.mockResolvedValue({ tree: [{ name: "a.ts", path: "a.ts", type: "file" }] });
+    // account A warms the cache
+    await app.request("/workspaces/ws-cloud-1/files");
+    expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
+    // sign-out / switch bumps the identity generation
+    identityState.gen = 1;
+    // a request for the still-persisted session must NOT serve A's cached tree —
+    // the generation mismatch forces a fresh (re-authenticating) list
+    await app.request("/workspaces/ws-cloud-1/files");
+    expect(mockRequestCloudFs).toHaveBeenCalledTimes(2);
   });
 });

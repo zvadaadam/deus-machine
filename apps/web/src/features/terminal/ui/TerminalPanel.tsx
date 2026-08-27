@@ -163,7 +163,7 @@ export function TerminalPanel({
   }
 
   // Watch for queued task commands from the task store (e.g. "bun run build" from header buttons)
-  const pendingTask = useTerminalTaskStore((s) => s.pendingTask);
+  const pendingTask = useTerminalTaskStore((s) => s.pendingTasks[workspaceId]);
 
   useEffect(() => {
     if (!pendingTask) return;

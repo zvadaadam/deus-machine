@@ -4,7 +4,7 @@ import fs from "fs";
 import { tmpdir } from "os";
 import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
-import { requestCloudFs } from "../services/agent/cloud/driver";
+import { requestCloudFs, getCloudIdentityGeneration } from "../services/agent/cloud/driver";
 
 /** Cloud fs failures are USER states (asleep computer, provisioning, timeouts)
  *  — mapped here so they surface as instructions, never "Internal server
@@ -39,12 +39,18 @@ type CloudList = { tree: CloudFsNode[]; truncated: boolean };
  *  of each firing their own, and repeat reads within the TTL await an
  *  already-settled promise for free. The tree route and search both go through
  *  it; `invalidate-cache` drops the entry — an in-flight one too, so a refresh
- *  can't be clobbered by the list it raced. Failures are never cached. */
-const cloudTreeCache = new Map<string, { promise: Promise<CloudList>; expiresAt: number }>();
+ *  can't be clobbered by the list it raced. Failures are never cached. Entries
+ *  are stamped with the cloud identity generation: a sign-out/account switch
+ *  bumps it, so account B never reads account A's still-cached paths. */
+const cloudTreeCache = new Map<
+  string,
+  { promise: Promise<CloudList>; expiresAt: number; identityGen: number }
+>();
 
 function listCloudTree(sessionId: string): Promise<CloudList> {
+  const identityGen = getCloudIdentityGeneration();
   const hit = cloudTreeCache.get(sessionId);
-  if (hit && hit.expiresAt > Date.now()) return hit.promise;
+  if (hit && hit.expiresAt > Date.now() && hit.identityGen === identityGen) return hit.promise;
   const promise = (async (): Promise<CloudList> => {
     const data = (await cloudFsOrThrow(sessionId, {
       op: "list",
@@ -58,7 +64,11 @@ function listCloudTree(sessionId: string): Promise<CloudList> {
   promise.catch(() => {
     if (cloudTreeCache.get(sessionId)?.promise === promise) cloudTreeCache.delete(sessionId);
   });
-  cloudTreeCache.set(sessionId, { promise, expiresAt: Date.now() + CLOUD_TREE_TTL_MS });
+  cloudTreeCache.set(sessionId, {
+    promise,
+    expiresAt: Date.now() + CLOUD_TREE_TTL_MS,
+    identityGen,
+  });
   if (cloudTreeCache.size > 16) {
     const oldest = cloudTreeCache.keys().next().value;
     if (oldest && oldest !== sessionId) cloudTreeCache.delete(oldest);

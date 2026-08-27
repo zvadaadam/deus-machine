@@ -203,9 +203,11 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
           action: { label: "Sign in", onClick: () => signIn.mutate() },
         }),
       });
-      // Web can't complete cloud sign-in, so don't select an un-serviceable
-      // cloud location the user would then submit into a failed create.
-      if (!capabilities.ipcInvoke) return;
+      // Keep the location LOCAL until sign-in actually succeeds — the switch
+      // stays off, the toast explains why. Selecting cloud here (web can't sign
+      // in at all; desktop hasn't yet) only sets up a submit that the backend
+      // guard rejects. Re-toggling after sign-in takes the cloud path below.
+      return;
     }
     onLocationChange(on ? "cloud" : "local");
   };

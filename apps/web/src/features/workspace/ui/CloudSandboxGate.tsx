@@ -38,7 +38,13 @@ export function CloudSandboxGate({
   // re-run — and a retry that also fails to reconnect would spin forever.
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!isWaking) return;
+    // Clear a prior cycle's stalled flag when waking ends, so a later
+    // server-driven re-wake (e.g. a chat message flips presence back to
+    // "waking") gets its full grace period instead of showing retry instantly.
+    if (!isWaking) {
+      setStalled(false);
+      return;
+    }
     const t = setTimeout(() => setStalled(true), 30_000);
     return () => clearTimeout(t);
   }, [isWaking, attempt]);
