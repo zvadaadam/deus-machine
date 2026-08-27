@@ -14,7 +14,7 @@ import { useFileChanges } from "../api/workspace.queries";
 import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
 import { useWorkspaceLayoutStore, workspaceLayoutActions } from "../store/workspaceLayoutStore";
-import { cloudPresence } from "../lib/cloudPresence";
+import { cloudGateStage } from "../lib/cloudPresence";
 import { CloudSandboxGate } from "./CloudSandboxGate";
 
 interface FilesViewProps {
@@ -31,12 +31,12 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
   const revealRequest = pendingFileNavigation?.target === "files" ? pendingFileNavigation : null;
   const isReady = workspace.state === "ready";
 
-  // A paused/stopped cloud sandbox has no sidecar to serve the tree or diffs.
-  // Compute presence up front so the change poller below stays off a down
-  // sandbox, and gate the whole view to the wake screen instead of an empty
-  // tree or a SIDECAR_NOT_CONNECTED error.
-  const presence = workspace.kind === "cloud" ? cloudPresence(workspace.init_stage) : "awake";
-  const canServe = presence === "awake";
+  // A provisioning/paused/stopped cloud computer has no sidecar to serve the
+  // tree or diffs. Compute the gate stage up front so the change poller stays
+  // off a down computer, and gate the whole view to the setting-up/wake screen
+  // instead of an empty tree or a raw "WebSocket not connected".
+  const gateStage = cloudGateStage(workspace);
+  const canServe = gateStage === null;
 
   const { data: fileChangesData } = useFileChanges(
     isReady && canServe ? workspace.id : null,
@@ -56,8 +56,8 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
     [workspace.id]
   );
 
-  if (presence !== "awake") {
-    return <CloudSandboxGate workspaceId={workspace.id} presence={presence} />;
+  if (gateStage) {
+    return <CloudSandboxGate workspaceId={workspace.id} stage={gateStage} />;
   }
 
   return (

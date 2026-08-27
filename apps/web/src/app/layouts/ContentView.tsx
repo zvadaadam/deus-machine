@@ -11,7 +11,7 @@
 
 import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
-import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
+import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
 import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUnavailable";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
@@ -72,23 +72,26 @@ export function ContentView({
       ? { id: workspace.id, path: workspace.workspace_path }
       : lastLocalTerminal;
 
-  const cloudSandbox = workspace.kind === "cloud" ? cloudPresence(workspace.init_stage) : "awake";
+  // null when the cloud sidecar can serve (or the workspace is local); else the
+  // stage the gate should show (provisioning / asleep / waking).
+  const cloudStage = cloudGateStage(workspace);
+  const cloudServing = workspace.kind === "cloud" && cloudStage === null;
 
-  // Same freeze rule for the CLOUD panel, but keyed to the last AWAKE cloud
-  // workspace. Unmounting the shared cloud panel disposed live xterms mid-frame
-  // (xterm's un-cancelable rAF work — the "reading 'dimensions'" crash) and, on
-  // a visit to a PAUSED computer, would kill the shells of OTHER still-awake
-  // cloud workspaces the panel caches. Gating on `awake` means an asleep
-  // computer never becomes the mounted id: its (dead) shell never spawns here —
-  // the gate overlays instead — and awake workspaces stay live underneath.
+  // Same freeze rule for the CLOUD panel, but keyed to the last SERVICEABLE
+  // cloud workspace. Unmounting the shared cloud panel disposed live xterms
+  // mid-frame (xterm's un-cancelable rAF work — the "reading 'dimensions'"
+  // crash) and, on a visit to a paused/provisioning computer, would kill the
+  // shells of OTHER still-awake cloud workspaces the panel caches. Gating on
+  // "serving" means a non-serving computer never becomes the mounted id: its
+  // shell never spawns against a down sidecar — the gate overlays instead — and
+  // awake workspaces stay live underneath.
   const [lastCloudTerminal, setLastCloudTerminal] = useState<string | null>(null);
   useLayoutEffect(() => {
-    if (workspace.kind === "cloud" && cloudSandbox === "awake") {
+    if (cloudServing) {
       setLastCloudTerminal((prev) => (prev === workspace.id ? prev : workspace.id));
     }
-  }, [workspace.kind, workspace.id, cloudSandbox]);
-  const cloudTerminalId =
-    workspace.kind === "cloud" && cloudSandbox === "awake" ? workspace.id : lastCloudTerminal;
+  }, [cloudServing, workspace.id]);
+  const cloudTerminalId = cloudServing ? workspace.id : lastCloudTerminal;
 
   // The Browser previews a dev server at localhost:PORT — only reachable for a
   // LOCAL workspace. Freeze it on the last local workspace (like the terminal)
@@ -147,7 +150,7 @@ export function ContentView({
           // The REAL remote shell: pty frames ride the sidecar session
           // channel and come back on the same pty-data/pty-exit events the
           // local terminal speaks — a separate panel instance so cloud ids
-          // never mix into the frozen local panel below. Only ever an AWAKE
+          // never mix into the frozen local panel below. Only ever a SERVING
           // workspace's id (see the freeze above), so the shell never spawns
           // against a down computer.
           <div className={cn("h-full w-full", workspace.kind !== "cloud" && "hidden")}>
@@ -155,9 +158,7 @@ export function ContentView({
               workspaceId={cloudTerminalId}
               workspacePath=""
               cloud
-              panelVisible={
-                activeTab === "terminal" && workspace.kind === "cloud" && cloudSandbox === "awake"
-              }
+              panelVisible={activeTab === "terminal" && cloudServing}
             />
           </div>
         )}
@@ -177,13 +178,14 @@ export function ContentView({
             />
           </div>
         )}
-        {workspace.kind === "cloud" && cloudSandbox !== "awake" && (
-          // Asleep/waking: overlay the gate over the frozen cloud panel. Because
-          // cloudTerminalId only tracks an AWAKE workspace, the asleep computer
-          // never mounts a shell here (no dead "press Enter" corpse), and any
-          // other awake workspace's shells stay live underneath the overlay.
+        {cloudStage && (
+          // Provisioning/asleep/waking: overlay the gate over the frozen cloud
+          // panel. Because cloudTerminalId only tracks a SERVING workspace, the
+          // non-serving computer never mounts a shell here (no dead "press
+          // Enter" corpse / WebSocket error), and any other awake workspace's
+          // shells stay live underneath the overlay.
           <div className="absolute inset-0 z-10">
-            <CloudSandboxGate workspaceId={workspace.id} presence={cloudSandbox} />
+            <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
           </div>
         )}
       </div>

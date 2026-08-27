@@ -2,30 +2,32 @@ import { useEffect, useState } from "react";
 import { Cloud, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/shared/api/client";
-import type { CloudPresence } from "../lib/cloudPresence";
+import type { CloudGateStage } from "../lib/cloudPresence";
 
 /**
- * The honest "your computer isn't running" state for the Files, Changes and
- * Terminal panels. A paused/stopped cloud computer has no sidecar, so the
- * panels can't function — instead of a frozen terminal that looks alive or a
- * raw SIDECAR_NOT_CONNECTED error, this says so plainly and offers the one
- * action that fixes it: wake. (Sending a chat message also wakes it — the copy
- * says so.) Waking rides the same POST /cloud-wake as the sidebar/header chip.
- * "computer" is the product word for the sandbox — the user's own machine in
- * the cloud; keep it consistent with the header chip and sidebar liveness.
+ * The honest "your computer isn't ready" state for the Files, Changes and
+ * Terminal panels — a paused/stopped/resuming or still-provisioning cloud
+ * computer has no sidecar, so the panels would otherwise show a raw "WebSocket
+ * not connected" / "Failed to start terminal". Three stages:
+ *   - provisioning — first-time setup in flight; just wait (no action).
+ *   - waking       — an explicit resume is in flight.
+ *   - asleep       — paused/stopped; offer the one action that fixes it: wake.
+ * Waking rides the same POST /cloud-wake as the sidebar/header chip. "computer"
+ * is the product word for the sandbox — the user's own machine in the cloud.
  */
 export function CloudSandboxGate({
   workspaceId,
-  presence,
+  stage,
 }: {
   workspaceId: string;
-  presence: Exclude<CloudPresence, "awake">;
+  stage: CloudGateStage;
 }) {
   const [waking, setWaking] = useState(false);
-  // `waking` bridges the window before the server echoes; `presence` is
+  // `waking` bridges the window before the server echoes; `stage` is
   // authoritative. Deliberately never reset on success — a woken computer flips
-  // presence to "awake", which UNMOUNTS this gate.
-  const isWaking = waking || presence === "waking";
+  // the stage to serviceable, which UNMOUNTS this gate. (Provisioning has no
+  // wake action, so `waking` never goes true there.)
+  const isWaking = waking || stage === "waking";
 
   // A resume can succeed while its session channel never reconnects, leaving
   // init_stage stuck on "resuming" (presence "waking") with nothing to clear
@@ -51,7 +53,8 @@ export function CloudSandboxGate({
   // `stalled` only means anything mid-wake; a fresh wake() resets it. Gating on
   // isWaking here keeps a stale flag from a prior cycle out of the asleep view.
   const showStalled = isWaking && stalled;
-  const showSpinner = isWaking && !showStalled;
+  // Provisioning spins too, but on its own — no wake action, no stall/retry.
+  const showSpinner = stage === "provisioning" || (isWaking && !showStalled);
 
   const wake = () => {
     setStalled(false);
@@ -78,18 +81,22 @@ export function CloudSandboxGate({
         )}
       </div>
       <p className="text-text-secondary text-sm font-medium">
-        {showSpinner
-          ? "Waking your computer…"
-          : showStalled
-            ? "Still waking your computer"
-            : "This computer is asleep"}
+        {stage === "provisioning"
+          ? "Setting up your computer…"
+          : showSpinner
+            ? "Waking your computer…"
+            : showStalled
+              ? "Still waking your computer"
+              : "This computer is asleep"}
       </p>
       <p className="text-text-muted max-w-xs text-xs">
-        {showSpinner
-          ? "It'll be ready in a moment."
-          : showStalled
-            ? "This is taking longer than usual — try again, or just send a message."
-            : "Wake it to browse files and use the terminal — or just send a message."}
+        {stage === "provisioning"
+          ? "Installing dependencies and cloning your repo — this only takes a moment."
+          : showSpinner
+            ? "It'll be ready in a moment."
+            : showStalled
+              ? "This is taking longer than usual — try again, or just send a message."
+              : "Wake it to browse files and use the terminal — or just send a message."}
       </p>
       {!showSpinner && (
         <Button size="sm" onClick={wake}>
