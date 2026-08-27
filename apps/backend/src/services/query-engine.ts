@@ -624,10 +624,13 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
           ? updateAutomation(automationId, input)
           : createAutomation(input, "user");
       })
-      .with("deleteAutomation", () => {
-        deleteAutomationService(requireParam(params, "automationId", "deleteAutomation"));
-        return { success: true };
-      })
+      .with("deleteAutomation", () =>
+        // Awaited: a platform failure must fail the mutation, not ack a
+        // delete that never happened.
+        deleteAutomationService(requireParam(params, "automationId", "deleteAutomation")).then(
+          () => ({ success: true })
+        )
+      )
       .with("toggleAutomation", () => {
         const automationId = requireParam(params, "automationId", "toggleAutomation");
         const status = requireParam(params, "status", "toggleAutomation");

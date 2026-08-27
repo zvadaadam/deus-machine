@@ -90,7 +90,10 @@ export function AutomationEditor({
     setForm((f) => ({ ...f, schedule: { ...f.schedule, ...update } }));
 
   const selectedPreset = SCHEDULE_PRESETS.find((p) => p.id === form.schedule.preset);
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Editing keeps the automation's saved timezone — always submitting the
+  // browser's would silently shift a schedule created in another timezone
+  // even when only the name or prompt changed.
+  const timezone = automation?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const handleSave = () => {
     save.mutate(

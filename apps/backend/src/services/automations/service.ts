@@ -141,11 +141,25 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
         repoIdByEnvName(),
       ]);
       const locals = store.localColumnsById();
+      // Read BEFORE the replace: an automation whose platform last-run moved
+      // has a stale run ledger — the list derives last_run_status from it, so
+      // a new timestamp over an old failed row would show "Failed just now".
+      const prevLastRun = store.lastRunAtById();
       store.replaceAutomationsCache(
         summaries.map((summary) => platform.summaryToRow(summary, envMap, locals.get(summary.id)))
       );
+      const changed = summaries.filter((summary) => {
+        const prev = prevLastRun.get(summary.id);
+        return prev !== undefined && summary.lastRunAt !== null && prev !== summary.lastRunAt;
+      });
+      await Promise.all(
+        changed.map(async (summary) => {
+          const runs = await platform.fetchRuns(summary.id);
+          store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
+        })
+      );
       lastFullRefreshAt = Date.now();
-      invalidate(["automations"]);
+      invalidate(changed.length > 0 ? [...AUTOMATION_RESOURCES] : ["automations"]);
     } finally {
       refreshInFlight = null;
     }
@@ -155,7 +169,15 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
 
 /** Boot / credentials-arrived hook: best-effort background mirror. */
 export function initAutomations(): void {
-  if (!platform.platformConfigured()) return;
+  if (!platform.platformConfigured()) {
+    // Sign-out (or boot before credentials arrive): the cache must not keep
+    // serving the previous identity's prompts and run history — list/view
+    // stay live app-wide and the agent tool reads the same cache. Runs
+    // cascade with their automations.
+    store.replaceAutomationsCache([]);
+    invalidate([...AUTOMATION_RESOURCES]);
+    return;
+  }
   void refreshAutomations().catch((err) => {
     console.warn("[Automations] initial platform sync failed:", err);
   });
@@ -212,6 +234,17 @@ export async function createAutomation(
 ): Promise<Automation> {
   platform.requirePlatform();
   const valid = validateInput(input);
+  // Scheduling something that can never run is worse than refusing: without a
+  // Claude turn credential every fire fails until auto-pause. (Call-time
+  // import: the settings status lives beside the cloud driver, which imports
+  // this module through the agent service graph.)
+  const { getCloudSettingsStatus } = await import("../cloud-workspace-init.service");
+  const status = await getCloudSettingsStatus();
+  if (!status.hasClaudeTurnCredential) {
+    throw new Error(
+      "Deus Cloud can't run Claude yet — add your Claude subscription or an Anthropic API key under Settings → Cloud, then create the automation."
+    );
+  }
   const environment = await ensureRepoEnvironment(valid.repository_id);
   const id = await platform.createPlatformAutomation({
     displayName: valid.name,
@@ -351,15 +384,16 @@ export async function openAutomationRun(
 
   const db = getDatabase();
 
-  // Already adopted — reuse the rows, but heal an empty transcript first:
-  // the run may have finished while deus was closed, before any live channel
-  // could fold its events.
+  // Already adopted — reuse the rows, but heal the transcript first: the run
+  // may have finished (or continued) while deus was closed, and a PARTIAL
+  // transcript is as stale as an empty one — a message-count gate would
+  // freeze it forever. The insert path is idempotent, so backfill always.
   if (run.session_id && run.workspace_id) {
-    const existing = db
-      .prepare("SELECT id, message_count FROM sessions WHERE id = ?")
-      .get(run.session_id) as { id: string; message_count: number } | undefined;
+    const existing = db.prepare("SELECT id FROM sessions WHERE id = ?").get(run.session_id) as
+      | { id: string }
+      | undefined;
     if (existing) {
-      if (existing.message_count === 0 && run.provider_session_id) {
+      if (run.provider_session_id) {
         await backfillTranscript(run.session_id, run.provider_session_id);
       }
       return { workspaceId: run.workspace_id, sessionId: run.session_id };
@@ -377,34 +411,47 @@ export async function openAutomationRun(
   const providerWorkspaceId = detail.workspaceId;
   if (!providerWorkspaceId) throw new Error("The run's sandbox is gone.");
 
-  let workspace = db
-    .prepare("SELECT id FROM workspaces WHERE provider_workspace_id = ? AND state != 'archived'")
-    .get(providerWorkspaceId) as { id: string } | undefined;
-  if (!workspace) {
-    const workspaceId = uuidv7();
-    db.prepare(
-      `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id)
-       VALUES (?, ?, ?, ?, 'ready', 'cloud', ?)`
-    ).run(
-      workspaceId,
-      automation.repository_id,
-      generateUniqueName(db),
-      automation.name,
-      providerWorkspaceId
-    );
-    workspace = { id: workspaceId };
-  }
-
+  // The session (same_session policies reuse one across runs) owns its
+  // workspace: adopting an existing session into a DIFFERENT workspace would
+  // leave the new workspace's current_session_id pointing at a session its
+  // own workspace-scoped queries can't see. If the owning workspace was
+  // archived, resurface it rather than orphaning the session.
   let session = db
-    .prepare("SELECT id FROM sessions WHERE provider_session_id = ?")
-    .get(run.provider_session_id) as { id: string } | undefined;
-  if (!session) {
+    .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
+    .get(run.provider_session_id) as { id: string; workspace_id: string } | undefined;
+
+  let workspace: { id: string };
+  if (session) {
+    workspace = { id: session.workspace_id };
+    db.prepare(
+      "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
+    ).run(session.workspace_id);
+  } else {
+    const found = db
+      .prepare("SELECT id FROM workspaces WHERE provider_workspace_id = ? AND state != 'archived'")
+      .get(providerWorkspaceId) as { id: string } | undefined;
+    if (found) {
+      workspace = found;
+    } else {
+      const workspaceId = uuidv7();
+      db.prepare(
+        `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id)
+         VALUES (?, ?, ?, ?, 'ready', 'cloud', ?)`
+      ).run(
+        workspaceId,
+        automation.repository_id,
+        generateUniqueName(db),
+        automation.name,
+        providerWorkspaceId
+      );
+      workspace = { id: workspaceId };
+    }
     const sessionId = uuidv7();
     db.prepare(
       `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, status)
        VALUES (?, ?, 'claude-code', ?, 'idle')`
     ).run(sessionId, workspace.id, run.provider_session_id);
-    session = { id: sessionId };
+    session = { id: sessionId, workspace_id: workspace.id };
   }
 
   db.prepare(

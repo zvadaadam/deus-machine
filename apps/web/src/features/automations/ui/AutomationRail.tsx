@@ -24,7 +24,10 @@ export function AutomationRail({
 }) {
   return (
     <>
-      <div className="flex w-[340px] shrink-0 flex-col py-4 pr-3 pl-3">
+      {/* Mobile stacks: the editor/detail panel takes the full width and its
+          back affordance returns to the list — a fixed rail would leave the
+          panel ~50px on a 390px viewport. */}
+      <div className="hidden w-[340px] shrink-0 flex-col py-4 pr-3 pl-3 md:flex">
         <div className="flex items-center justify-between px-2 pb-2.5">
           <button
             type="button"

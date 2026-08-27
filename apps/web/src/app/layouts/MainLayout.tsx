@@ -32,7 +32,7 @@ import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { useSidebarStore } from "@/features/sidebar/store";
-import { useUIStore } from "@/shared/stores/uiStore";
+import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
@@ -442,6 +442,9 @@ export function MainLayout() {
 
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
+      // The Automations view overlays MainContent — a workspace click while
+      // it is open must land ON the workspace, not silently under the view.
+      uiActions.closeAutomations();
       selectWorkspace(workspace.id);
       expandRepo(workspace.repository_id);
       // Only mark the active tab's session as read — other tabs keep their
@@ -484,7 +487,10 @@ export function MainLayout() {
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           onArchive={archiveWorkspace}
           onStatusChange={handleStatusChange}
-          onNewSession={() => selectWorkspace(null)}
+          onNewSession={() => {
+            uiActions.closeAutomations();
+            selectWorkspace(null);
+          }}
           onOpenAutomations={openAutomations}
           automationsActive={automationsOpen}
           profile={sidebarProfile}

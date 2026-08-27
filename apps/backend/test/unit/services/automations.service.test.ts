@@ -19,26 +19,33 @@ const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 import { SCHEMA_SQL } from "@shared/schema";
 
-const { mockGetDatabase, mockInvalidate, mockGetCloudConfig, mockGetCloudEnvironmentInfo, sdk } =
-  vi.hoisted(() => ({
-    mockGetDatabase: vi.fn(),
-    mockInvalidate: vi.fn(),
-    mockGetCloudConfig: vi.fn(),
-    mockGetCloudEnvironmentInfo: vi.fn(),
-    sdk: {
-      createAutomation: vi.fn(),
-      getAutomation: vi.fn(),
-      listAutomations: vi.fn(),
-      updateAutomation: vi.fn(),
-      deleteAutomation: vi.fn(),
-      pauseAutomation: vi.fn(),
-      resumeAutomation: vi.fn(),
-      triggerAutomation: vi.fn(),
-      listAutomationRuns: vi.fn(),
-      getSession: vi.fn(),
-      createEnvironment: vi.fn(),
-    },
-  }));
+const {
+  mockGetDatabase,
+  mockInvalidate,
+  mockGetCloudConfig,
+  mockGetCloudEnvironmentInfo,
+  mockGetCloudSettingsStatus,
+  sdk,
+} = vi.hoisted(() => ({
+  mockGetDatabase: vi.fn(),
+  mockInvalidate: vi.fn(),
+  mockGetCloudConfig: vi.fn(),
+  mockGetCloudEnvironmentInfo: vi.fn(),
+  mockGetCloudSettingsStatus: vi.fn(async () => ({ hasClaudeTurnCredential: true })),
+  sdk: {
+    createAutomation: vi.fn(),
+    getAutomation: vi.fn(),
+    listAutomations: vi.fn(),
+    updateAutomation: vi.fn(),
+    deleteAutomation: vi.fn(),
+    pauseAutomation: vi.fn(),
+    resumeAutomation: vi.fn(),
+    triggerAutomation: vi.fn(),
+    listAutomationRuns: vi.fn(),
+    getSession: vi.fn(),
+    createEnvironment: vi.fn(),
+  },
+}));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
@@ -54,6 +61,9 @@ vi.mock("../../../src/services/workspace.service", () => ({
 }));
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   ensureCloudSession: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
+  getCloudSettingsStatus: mockGetCloudSettingsStatus,
 }));
 vi.mock("@deus-hq/sdk", () => ({
   ...sdk,
@@ -302,6 +312,18 @@ describeWithDb("createAutomation", () => {
       "user"
     );
     expect(sdk.createEnvironment).toHaveBeenCalledWith(expect.objectContaining({ name: envName }));
+  });
+
+  it("refuses to create when no Claude turn credential exists", async () => {
+    // Scheduling something that can never run would fail every fire until
+    // auto-pause — refuse up front and point at Settings → Cloud.
+    mockGetCloudSettingsStatus.mockResolvedValueOnce({ hasClaudeTurnCredential: false });
+    await expect(
+      createAutomation(
+        { repository_id: "repo-1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+        "user"
+      )
+    ).rejects.toThrow(/can't run Claude yet/);
   });
 
   it("rejects without cloud credentials, a remote, or a sane schedule", async () => {

@@ -108,6 +108,16 @@ export function deleteAutomationRow(id: string): void {
   getDatabase().prepare("DELETE FROM automations WHERE id = ?").run(id);
 }
 
+/** Cached platform last-run stamp per automation, read before a cache
+ *  replace — the refresh uses it to spot automations whose run ledger went
+ *  stale while the detail view was closed. */
+export function lastRunAtById(): Map<string, string | null> {
+  const rows = getDatabase().prepare("SELECT id, last_run_at FROM automations").all() as Array<
+    Pick<AutomationRow, "id" | "last_run_at">
+  >;
+  return new Map(rows.map((r) => [r.id, r.last_run_at]));
+}
+
 /** created_by / adopted-workspace map, read before a cache replace. */
 export function localColumnsById(): Map<
   string,
@@ -185,6 +195,7 @@ interface PlatformMessageLike {
   turnId?: unknown;
   role?: unknown;
   messageIndex?: unknown;
+  parentToolCallId?: unknown;
   parts?: unknown;
 }
 
@@ -225,7 +236,9 @@ export function backfillSessionTranscript(
         deusSessionId,
         message.role,
         typeof message.turnId === "string" ? message.turnId : null,
-        null
+        // Subagent messages carry their spawning tool call — dropping it
+        // would surface them as unrelated top-level messages in the timeline.
+        typeof message.parentToolCallId === "string" ? message.parentToolCallId : null
       );
       if (result.changes > 0) inserted++;
       const parts = Array.isArray(message.parts) ? (message.parts as PlatformPartLike[]) : [];

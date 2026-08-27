@@ -117,7 +117,15 @@ export function AppSidebar({
       {/* App-level nav — sits under the header, above the repo list */}
       <div className="px-1.5 pb-1">
         <SidebarRow variant="action" isActive={automationsActive} asChild>
-          <button type="button" onClick={onOpenAutomations}>
+          <button
+            type="button"
+            onClick={() => {
+              onOpenAutomations?.();
+              // Same mobile behavior as workspace selection: the off-canvas
+              // sheet must not stay open over the page it just navigated to.
+              if (isMobile) setOpenMobile(false);
+            }}
+          >
             <SidebarRowMain>
               <span className="flex h-5 w-5 shrink-0 items-center justify-center">
                 <ClockFading
