@@ -6,16 +6,9 @@ import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { requestCloudFs } from "../services/agent/cloud/driver";
 
-/** Cloud fs failures are USER states (asleep sandbox, provisioning, timeouts)
+/** Cloud fs failures are USER states (asleep computer, provisioning, timeouts)
  *  — mapped here so they surface as instructions, never "Internal server
  *  error" + a spurious error report. */
-/** Null until the sandbox is up. The tree route returns an empty listing (not
- *  an error) so Files shows "empty", not a dead error panel that never
- *  refetches when provisioning completes. */
-function cloudSessionOrNull(workspace: { current_session_id: string | null }): string | null {
-  return workspace.current_session_id;
-}
-
 async function cloudFsOrThrow(
   sessionId: string,
   request: Record<string, unknown>
@@ -32,15 +25,46 @@ async function cloudFsOrThrow(
   }
 }
 
-/** @-mention search re-lists the sandbox on every keystroke without this. The
- *  cache is keyed by session and shared by the tree route (which warms it) and
- *  search (which reads it); the refresh button clears it. */
-const cloudTreeCache = new Map<string, { paths: string[]; expiresAt: number }>();
-const CLOUD_TREE_TTL_MS = 15_000;
 /** Search/@-mentions must see the WHOLE repo, not a 5k-truncated prefix — a
  *  higher list bound for the cloud lane (still bounded so a giant monorepo
  *  can't DoS the channel). */
 const CLOUD_LIST_CAP = 50_000;
+const CLOUD_TREE_TTL_MS = 15_000;
+
+type CloudList = { tree: CloudFsNode[]; truncated: boolean };
+
+/** One cached fs.list per session, keyed by the (settling) PROMISE rather than
+ *  its result, so a single structure does double duty: concurrent @-mention
+ *  keystrokes that land mid-flight await the SAME up-to-50k round-trip instead
+ *  of each firing their own, and repeat reads within the TTL await an
+ *  already-settled promise for free. The tree route and search both go through
+ *  it; `invalidate-cache` drops the entry — an in-flight one too, so a refresh
+ *  can't be clobbered by the list it raced. Failures are never cached. */
+const cloudTreeCache = new Map<string, { promise: Promise<CloudList>; expiresAt: number }>();
+
+function listCloudTree(sessionId: string): Promise<CloudList> {
+  const hit = cloudTreeCache.get(sessionId);
+  if (hit && hit.expiresAt > Date.now()) return hit.promise;
+  const promise = (async (): Promise<CloudList> => {
+    const data = (await cloudFsOrThrow(sessionId, {
+      op: "list",
+      maxEntries: CLOUD_LIST_CAP,
+    })) as { tree?: CloudFsNode[]; truncated?: boolean; error?: string };
+    if (data.error) throw new ValidationError(data.error);
+    return { tree: data.tree ?? [], truncated: data.truncated === true };
+  })();
+  // Never cache a failure: drop the entry so the next caller retries — unless a
+  // later refresh already replaced this exact promise.
+  promise.catch(() => {
+    if (cloudTreeCache.get(sessionId)?.promise === promise) cloudTreeCache.delete(sessionId);
+  });
+  cloudTreeCache.set(sessionId, { promise, expiresAt: Date.now() + CLOUD_TREE_TTL_MS });
+  if (cloudTreeCache.size > 16) {
+    const oldest = cloudTreeCache.keys().next().value;
+    if (oldest && oldest !== sessionId) cloudTreeCache.delete(oldest);
+  }
+  return promise;
+}
 
 function flattenCloudTree(tree: CloudFsNode[]): string[] {
   const paths: string[] = [];
@@ -52,43 +76,6 @@ function flattenCloudTree(tree: CloudFsNode[]): string[] {
   };
   walk(tree);
   return paths;
-}
-
-function cacheCloudTree(sessionId: string, tree: CloudFsNode[]): void {
-  cloudTreeCache.set(sessionId, {
-    paths: flattenCloudTree(tree),
-    expiresAt: Date.now() + CLOUD_TREE_TTL_MS,
-  });
-  if (cloudTreeCache.size > 16) {
-    const oldest = cloudTreeCache.keys().next().value;
-    if (oldest) cloudTreeCache.delete(oldest);
-  }
-}
-
-/** One in-flight fs.list per session. Without this, every @-mention keystroke
- *  that lands while the first (up to 50k-entry) listing is still in flight sees
- *  an empty cache and fires its OWN full-tree round-trip — a thundering herd on
- *  the sandbox. Concurrent callers now await the same request; it warms the
- *  cache so the searches that follow are cache hits. */
-const cloudListInFlight = new Map<string, Promise<{ tree: CloudFsNode[]; truncated: boolean }>>();
-
-function listCloudTreeShared(
-  sessionId: string
-): Promise<{ tree: CloudFsNode[]; truncated: boolean }> {
-  const existing = cloudListInFlight.get(sessionId);
-  if (existing) return existing;
-  const p = (async () => {
-    const data = (await cloudFsOrThrow(sessionId, {
-      op: "list",
-      maxEntries: CLOUD_LIST_CAP,
-    })) as { tree?: CloudFsNode[]; truncated?: boolean; error?: string };
-    if (data.error) throw new ValidationError(data.error);
-    const tree = data.tree ?? [];
-    cacheCloudTree(sessionId, tree);
-    return { tree, truncated: data.truncated === true };
-  })().finally(() => cloudListInFlight.delete(sessionId));
-  cloudListInFlight.set(sessionId, p);
-  return p;
 }
 import { ValidationError } from "../lib/errors";
 import * as filesService from "../services/files.service";
@@ -105,9 +92,11 @@ const app = new Hono<Env>();
 app.get("/workspaces/:id/files", withWorkspace, async (c) => {
   const workspace = c.get("workspace");
   if (workspace.kind === "cloud") {
-    const sessionId = cloudSessionOrNull(workspace);
+    // Null session = still provisioning; return an empty listing (not an error)
+    // so Files shows "empty", not a dead panel that never refetches.
+    const sessionId = workspace.current_session_id;
     if (!sessionId) return c.json({ files: [], totalFiles: 0, totalSize: 0, provisioning: true });
-    const { tree, truncated } = await listCloudTreeShared(sessionId); // also warms @-mention search
+    const { tree, truncated } = await listCloudTree(sessionId);
     return c.json({ ...cloudTreeToResponse(tree), truncated });
   }
   const workspacePath = c.get("workspacePath");
@@ -171,7 +160,7 @@ app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
     // The sidecar enforces canonical containment; this mirrors the local
     // branch's early rejection so both lanes refuse the same inputs.
     if (filePath.split("/").includes("..")) throw new ValidationError("Invalid file path");
-    const sessionId = cloudSessionOrNull(workspace);
+    const sessionId = workspace.current_session_id;
     if (!sessionId) throw new ValidationError("File not found");
     const data = (await cloudFsOrThrow(sessionId, { op: "read", path: filePath })) as {
       content?: string;
@@ -226,21 +215,14 @@ app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
 
   const workspace = c.get("workspace");
   if (workspace.kind === "cloud") {
-    // Same scoring, sandbox truth: flatten the fs-channel tree and reuse the
-    // local scorers — @-mentions and the Files filter work identically.
+    // Same scoring, computer truth: flatten the fs-channel tree and reuse the
+    // local scorers — @-mentions and the Files filter work identically. The
+    // shared cache means keystrokes after the first list are free.
     const sessionId = workspace.current_session_id;
     if (!sessionId) return c.json([]);
-    const cached = cloudTreeCache.get(sessionId);
-    let paths: string[];
-    if (cached && cached.expiresAt > Date.now()) {
-      paths = cached.paths;
-    } else {
-      const listed = await listCloudTreeShared(sessionId).catch(() => null);
-      if (!listed) return c.json([]);
-      // listCloudTreeShared warmed the cache; fall back to the fresh tree only
-      // if a concurrent evict raced it out.
-      paths = cloudTreeCache.get(sessionId)?.paths ?? flattenCloudTree(listed.tree);
-    }
+    const listed = await listCloudTree(sessionId).catch(() => null);
+    if (!listed) return c.json([]);
+    const paths = flattenCloudTree(listed.tree);
     const results =
       !query || typeof query !== "string"
         ? filesService.scoreTopFiles(paths, limit)
