@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cloud, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/shared/api/client";
@@ -22,9 +22,28 @@ export function CloudSandboxGate({
   presence: Exclude<CloudPresence, "awake">;
 }) {
   const [waking, setWaking] = useState(false);
+  // `waking` bridges the window before the server echoes; `presence` is
+  // authoritative. Deliberately never reset on success — a woken computer flips
+  // presence to "awake", which UNMOUNTS this gate.
   const isWaking = waking || presence === "waking";
 
+  // A resume can succeed while its session channel never reconnects, leaving
+  // init_stage stuck on "resuming" (presence "waking") with nothing to clear
+  // it — an indefinite spinner. After a grace period, surface a retry so the
+  // user is never stranded on a computer that isn't actually coming back.
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (!isWaking) return;
+    const t = setTimeout(() => setStalled(true), 30_000);
+    return () => clearTimeout(t);
+  }, [isWaking]);
+  // `stalled` only means anything mid-wake; a fresh wake() resets it. Gating on
+  // isWaking here keeps a stale flag from a prior cycle out of the asleep view.
+  const showStalled = isWaking && stalled;
+  const showSpinner = isWaking && !showStalled;
+
   const wake = () => {
+    setStalled(false);
     setWaking(true);
     // cloud-wake answers 200 {ok:false} on a failed restart/resume (it restores
     // the workspace to asleep), so a rejected promise isn't the only failure —
@@ -40,23 +59,29 @@ export function CloudSandboxGate({
   return (
     <div className="bg-bg-base/95 flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center backdrop-blur-sm">
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
-        {isWaking ? (
+        {showSpinner ? (
           <Loader2 className="text-text-muted h-5 w-5 animate-spin" aria-hidden="true" />
         ) : (
           <Cloud className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
         )}
       </div>
       <p className="text-text-secondary text-sm font-medium">
-        {isWaking ? "Waking your computer…" : "This computer is asleep"}
+        {showSpinner
+          ? "Waking your computer…"
+          : showStalled
+            ? "Still waking your computer"
+            : "This computer is asleep"}
       </p>
       <p className="text-text-muted max-w-xs text-xs">
-        {isWaking
+        {showSpinner
           ? "It'll be ready in a moment."
-          : "Wake it to browse files and use the terminal — or just send a message."}
+          : showStalled
+            ? "This is taking longer than usual — try again, or just send a message."
+            : "Wake it to browse files and use the terminal — or just send a message."}
       </p>
-      {!isWaking && (
+      {!showSpinner && (
         <Button size="sm" onClick={wake}>
-          Wake computer
+          {showStalled ? "Try again" : "Wake computer"}
         </Button>
       )}
     </div>

@@ -7,6 +7,7 @@ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
+import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { capabilities } from "@/platform/capabilities";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
@@ -56,15 +57,6 @@ const AGENT_SUBSCRIPTIONS = [
       "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes (on the web app, paste the file instead). Unlike Claude's proxied token, Codex needs its auth file INSIDE the sandbox during its turns — same exposure as running codex on your own machine; it's removed the moment the turn ends. The command above is the manual fallback (device-auth) for headless machines.",
   },
 ] as const;
-
-interface CloudSettings {
-  hasTurnCredential?: boolean;
-  hasPlatformCodex?: boolean;
-  enabled: boolean;
-  baseUrl: string | null;
-  hasAnthropicKey: boolean;
-  hasGithubToken: boolean;
-}
 
 /**
  * Cloud workspaces settings — connection status + the org GitHub token that
@@ -205,12 +197,7 @@ export function CloudSection() {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Cloud setup failed"),
   });
 
-  const status = useQuery({
-    queryKey: ["settings", "cloud"],
-    queryFn: () => apiClient.get<CloudSettings>("/settings/cloud"),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const status = useCloudSettings();
 
   const saveToken = useMutation({
     mutationFn: (value: string) =>

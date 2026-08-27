@@ -6,10 +6,9 @@
  */
 
 import { createElement, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiClient } from "@/shared/api/client";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
+import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { capabilities } from "@/platform/capabilities";
 
 import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
@@ -188,15 +187,9 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
   // Signed-out truth at the moment of intent: flipping Cloud on without a
   // Deus Cloud session can only end in a failed create, so say it HERE with
   // the sign-in one click away — not as a 500 after the prompt is written.
-  const cloudStatus = useQuery({
-    queryKey: ["settings", "cloud"],
-    queryFn: () => apiClient.get<{ enabled: boolean }>("/settings/cloud"),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const cloudStatus = useCloudSettings();
   const signIn = useDeusCloudSignIn();
   const handleChange = (on: boolean) => {
-    onLocationChange(on ? "cloud" : "local");
     if (on && cloudStatus.data && !cloudStatus.data.enabled) {
       // Deus Cloud sign-in mints a device credential over Electron IPC; there's
       // no web sign-in yet. On app.deusmachine.ai, point at the desktop app
@@ -210,7 +203,11 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
           action: { label: "Sign in", onClick: () => signIn.mutate() },
         }),
       });
+      // Web can't complete cloud sign-in, so don't select an un-serviceable
+      // cloud location the user would then submit into a failed create.
+      if (!capabilities.ipcInvoke) return;
     }
+    onLocationChange(on ? "cloud" : "local");
   };
   const label = (
     <label
