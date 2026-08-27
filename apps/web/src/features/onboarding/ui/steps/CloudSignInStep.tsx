@@ -44,7 +44,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold text-white">Sign in to Deus Cloud</h2>
         <p className="text-sm text-white/50">
-          Run agents in cloud sandboxes and pick work up from your phone. You can do this later —
+          Run agents on cloud computers and pick work up from your phone. You can do this later —
           local workspaces work without an account.
         </p>
       </div>
