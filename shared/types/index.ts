@@ -18,6 +18,9 @@ export type {
 // Session types
 export type { Compaction, Message, MessageRole, Session, SessionStatus } from "./session";
 
+// Automation types
+export type { Automation, AutomationRun } from "./automation";
+
 // Repository types
 export type { Repository, Stats } from "./repository";
 

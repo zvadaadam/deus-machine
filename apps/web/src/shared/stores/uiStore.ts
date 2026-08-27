@@ -13,6 +13,8 @@ interface UIState {
   // Modals
   showNewWorkspaceModal: boolean;
   newWorkspaceMode: NewWorkspaceMode;
+  /** Prefill for the prompt-first workspace modal (consumed via remount key). */
+  newWorkspaceDraft: string | null;
   showSystemPromptModal: boolean;
 
   // Command palette
@@ -21,6 +23,11 @@ interface UIState {
   // Settings view (full-page, not a modal)
   settingsOpen: boolean;
   activeSettingsSection: SettingsSection;
+
+  // Automations view (full-page, keeps the app sidebar)
+  automationsOpen: boolean;
+  /** Deep-link: open straight onto this automation's detail (consumed once). */
+  automationsFocusId: string | null;
 
   /**
    * Pending "set up cloud environment with an agent" request from Settings.
@@ -31,6 +38,8 @@ interface UIState {
 
   // Actions - Modals
   openNewWorkspaceModal: (mode?: NewWorkspaceMode) => void;
+  /** Open the prompt-first modal with a starter prompt (Create with AI). */
+  openNewWorkspaceModalWithDraft: (draft: string) => void;
   closeNewWorkspaceModal: () => void;
   openSystemPromptModal: () => void;
   closeSystemPromptModal: () => void;
@@ -47,6 +56,11 @@ interface UIState {
   requestEnvSetup: (repoId: string) => void;
   clearEnvSetupRequest: () => void;
 
+  // Actions - Automations view
+  openAutomations: (automationId?: string) => void;
+  closeAutomations: () => void;
+  clearAutomationsFocus: () => void;
+
   closeAllModals: () => void;
 }
 
@@ -56,23 +70,38 @@ export const useUIStore = create<UIState>()(
       // Initial state
       showNewWorkspaceModal: false,
       newWorkspaceMode: "default" as NewWorkspaceMode,
+      newWorkspaceDraft: null,
       showSystemPromptModal: false,
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
+      automationsOpen: false,
+      automationsFocusId: null,
       pendingEnvSetupRepoId: null,
 
       // Modal actions
       openNewWorkspaceModal: (mode: NewWorkspaceMode = "default") =>
         set(
-          { showNewWorkspaceModal: true, newWorkspaceMode: mode },
+          { showNewWorkspaceModal: true, newWorkspaceMode: mode, newWorkspaceDraft: null },
           false,
           "ui/openNewWorkspaceModal"
         ),
 
+      openNewWorkspaceModalWithDraft: (draft: string) =>
+        set(
+          {
+            showNewWorkspaceModal: true,
+            newWorkspaceMode: "default" as NewWorkspaceMode,
+            newWorkspaceDraft: draft,
+            automationsOpen: false,
+          },
+          false,
+          "ui/openNewWorkspaceModalWithDraft"
+        ),
+
       closeNewWorkspaceModal: () =>
         set(
-          { showNewWorkspaceModal: false, newWorkspaceMode: "default" },
+          { showNewWorkspaceModal: false, newWorkspaceMode: "default", newWorkspaceDraft: null },
           false,
           "ui/closeNewWorkspaceModal"
         ),
@@ -96,10 +125,29 @@ export const useUIStore = create<UIState>()(
           "ui/toggleCommandPalette"
         ),
 
-      // Settings view actions
-      openSettings: () => set({ settingsOpen: true }, false, "ui/openSettings"),
+      // Settings view actions — settings and automations are both full-page
+      // takeovers, so opening one closes the other.
+      openSettings: () =>
+        set({ settingsOpen: true, automationsOpen: false }, false, "ui/openSettings"),
 
       closeSettings: () => set({ settingsOpen: false }, false, "ui/closeSettings"),
+
+      // Automations view actions
+      openAutomations: (automationId) =>
+        set(
+          {
+            automationsOpen: true,
+            settingsOpen: false,
+            automationsFocusId: automationId ?? null,
+          },
+          false,
+          "ui/openAutomations"
+        ),
+
+      closeAutomations: () => set({ automationsOpen: false }, false, "ui/closeAutomations"),
+
+      clearAutomationsFocus: () =>
+        set({ automationsFocusId: null }, false, "ui/clearAutomationsFocus"),
 
       setActiveSettingsSection: (section) =>
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
@@ -118,6 +166,7 @@ export const useUIStore = create<UIState>()(
             showSystemPromptModal: false,
             commandPaletteOpen: false,
             settingsOpen: false,
+            automationsOpen: false,
           },
           false,
           "ui/closeAllModals"
@@ -142,11 +191,15 @@ export const useUIStore = create<UIState>()(
 export const uiActions = {
   openNewWorkspaceModal: (mode?: NewWorkspaceMode) =>
     useUIStore.getState().openNewWorkspaceModal(mode),
+  openNewWorkspaceModalWithDraft: (draft: string) =>
+    useUIStore.getState().openNewWorkspaceModalWithDraft(draft),
   closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
   openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
   closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
   openSettings: () => useUIStore.getState().openSettings(),
   closeSettings: () => useUIStore.getState().closeSettings(),
+  openAutomations: (automationId?: string) => useUIStore.getState().openAutomations(automationId),
+  closeAutomations: () => useUIStore.getState().closeAutomations(),
   openCommandPalette: () => useUIStore.getState().openCommandPalette(),
   closeCommandPalette: () => useUIStore.getState().closeCommandPalette(),
   toggleCommandPalette: () => useUIStore.getState().toggleCommandPalette(),

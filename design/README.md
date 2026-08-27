@@ -30,6 +30,26 @@ the canvas — read left to right, top to bottom.
 
 - `40` Workspace — Changes · `41` Files · `42` Terminal · `43` Browser · `44` Design
 - `45` Home — new workspace · `46` Home — zero repos
+- `46a`…`46d` and `46x` — Automations (plan in `docs/automations-plan.md`; **built,
+  cloud-only**: `features/automations/` + `services/automations/`). `46a` the list view
+  — the sidebar gains an Automations NAV ROW directly under the header, above the repo
+  list (Cursor's placement, user-directed 2026-08-27; `AppSidebar.tsx` — the board still
+  draws the earlier footer placement); the main area is the Home-style inset with list +
+  suggestions (`AutomationsListView.tsx`). Code-only provenance the boards don't show
+  yet: automation-born workspaces carry a zap beside the name in the sidebar row
+  (`WorkspaceItem.tsx`) and an automation chip in the workspace header that deep-links
+  to the run history (`WorkspaceHeader.tsx`). `46b` the create surface — **deliberately not a dialog**:
+  the list compresses to a 340px rail and the editor fills the right with a back
+  affordance (`AutomationRail.tsx` + `AutomationEditor.tsx`). `46c` the same split
+  showing detail + run history (`AutomationDetail.tsx`). `46d` the chat pieces — the
+  `automation_update` tool card (`AutomationToolRenderer.tsx`, archetype G), the
+  auto-pause banner, the empty state; the run-provenance chip is still design-only.
+  KNOWN DIVERGENCE (boards predate the cloud-only decision): `46b` still draws the
+  Cloud/This-Mac segmented control and the Notifications select — shipped code has
+  neither (a static "runs in your Deus Cloud sandbox" note instead), the row lane
+  chips are gone, and the quit-warning note no longer applies. Trim the boards next
+  time deus.pen is the active Pen document. `46x` the ChatGPT/Cursor reference
+  screenshots (PNGs in `references/automations/`, teardown notes in the captions).
 - `47a`…`47f` the full onboarding flow, in order: Welcome · Deus Cloud sign-in · Connect
   GitHub · AI coding tools · Your Projects · Shape Deus with us. It has its own visual
   language — pure black, a grain layer, white-on-white/10 surfaces, `text-white/50` copy —

@@ -29,6 +29,8 @@ import type {
   StopAppResponse,
   ReadAppSkillRequest,
   ReadAppSkillResponse,
+  AutomationUpdateRequest,
+  AutomationUpdateResponse,
 } from "./rpc-schemas";
 
 /** Timeout for data-fetching requests that should resolve quickly. */
@@ -38,6 +40,10 @@ const DATA_QUERY_TIMEOUT_MS = 10_000;
  *  the backend adds probe-setup + storage-dir work on top. 60s keeps first-
  *  time launches (binary not yet downloaded) from tripping the timeout. */
 const AAP_LAUNCH_TIMEOUT_MS = 60_000;
+
+/** Timeout for automation writes — Deus Cloud round-trips, possibly including
+ *  a lazy environment create before the automation itself. */
+const AUTOMATION_TIMEOUT_MS = 30_000;
 
 let host: SideChannelEndpoint | null = null;
 
@@ -111,5 +117,10 @@ export const HostRpc = {
   },
   requestReadAppSkill(r: ReadAppSkillRequest): Promise<ReadAppSkillResponse> {
     return requestHost(SIDE_CHANNEL.aapReadAppSkill, r, DATA_QUERY_TIMEOUT_MS);
+  },
+  requestAutomationUpdate(r: AutomationUpdateRequest): Promise<AutomationUpdateResponse> {
+    // Cloud round-trips: a create may lazily provision the repo's platform
+    // environment before the automation itself — give it real headroom.
+    return requestHost(SIDE_CHANNEL.automationUpdate, r, AUTOMATION_TIMEOUT_MS);
   },
 };

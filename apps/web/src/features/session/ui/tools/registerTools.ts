@@ -62,6 +62,8 @@ import {
   // Deus MCP — Recording
   RecordingStartToolRenderer,
   RecordingStopToolRenderer,
+  // Deus MCP — Automations
+  AutomationToolRenderer,
 } from "./renderers";
 
 // Idempotency guard - prevent double registration during HMR/dev
@@ -184,6 +186,9 @@ export function registerAllTools() {
   // Deus MCP — Recording tools
   toolRegistry.register("recording_start", RecordingStartToolRenderer);
   toolRegistry.register("recording_stop", RecordingStopToolRenderer);
+
+  // Deus MCP — Automations (mcp__deus__automation_update normalizes to this)
+  toolRegistry.register("automation_update", AutomationToolRenderer);
 }
 
 // Auto-initialize on import (idempotent)

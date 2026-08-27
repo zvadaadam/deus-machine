@@ -59,3 +59,4 @@ export {
 
 // Deus MCP tools — Recording
 export { RecordingStartToolRenderer, RecordingStopToolRenderer } from "./RecordingToolRenderers";
+export { AutomationToolRenderer } from "./AutomationToolRenderer";

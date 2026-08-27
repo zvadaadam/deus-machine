@@ -12,6 +12,7 @@ import {
   Check,
   Cloud as CloudIcon,
   CloudOff,
+  ClockFading,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -62,6 +63,10 @@ interface WorkspaceHeaderProps {
   onCloudWake?: () => void;
   /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
   mobile?: boolean;
+  /** Provenance: this workspace is an automation's held sandbox. */
+  automationName?: string;
+  /** Opens the automation's detail (run history) in the Automations view. */
+  onOpenAutomation?: () => void;
 }
 
 /**
@@ -90,6 +95,8 @@ export function WorkspaceHeader({
   cloudWaking,
   onCloudWake,
   mobile,
+  automationName,
+  onOpenAutomation,
 }: WorkspaceHeaderProps) {
   const { state: sidebarState, toggleSidebar } = useSidebar();
   const sidebarCollapsed = sidebarState === "collapsed";
@@ -187,6 +194,27 @@ export function WorkspaceHeader({
               </TooltipContent>
             </Tooltip>
           ))}
+
+        {automationName && (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onOpenAutomation}
+                aria-label={`Automation: ${automationName}`}
+                className="text-text-tertiary border-border-secondary hover:text-text-secondary focus-visible:ring-ring mr-0.5 flex min-w-0 flex-shrink cursor-pointer items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <ClockFading className="h-3 w-3 shrink-0" />
+                <span className="truncate">{automationName}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">
+                Runs of this automation land here — click for its run history
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {subtitle && (
           <span

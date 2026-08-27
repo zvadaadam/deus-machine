@@ -167,7 +167,10 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("running_apps");
       // Local server discovery
       expect(QUERY_RESOURCES).toContain("local_servers");
-      expect(QUERY_RESOURCES).toHaveLength(8);
+      // Automations
+      expect(QUERY_RESOURCES).toContain("automations");
+      expect(QUERY_RESOURCES).toContain("automation_runs");
+      expect(QUERY_RESOURCES).toHaveLength(10);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
@@ -185,7 +188,11 @@ describe("shared/events", () => {
       expect(MUTATION_NAMES).toContain("invalidateFileCache");
       expect(MUTATION_NAMES).toContain("revokeDevice");
       expect(MUTATION_NAMES).toContain("runTask");
-      expect(MUTATION_NAMES).toHaveLength(13);
+      // Automations
+      expect(MUTATION_NAMES).toContain("saveAutomation");
+      expect(MUTATION_NAMES).toContain("deleteAutomation");
+      expect(MUTATION_NAMES).toContain("toggleAutomation");
+      expect(MUTATION_NAMES).toHaveLength(16);
     });
 
     it("COMMAND_NAMES contains the expected commands", () => {
@@ -215,7 +222,11 @@ describe("shared/events", () => {
       // AAP commands
       expect(COMMAND_NAMES).toContain("launchApp");
       expect(COMMAND_NAMES).toContain("stopApp");
-      expect(COMMAND_NAMES).toHaveLength(30);
+      // Automations
+      expect(COMMAND_NAMES).toContain("runAutomationNow");
+      expect(COMMAND_NAMES).toContain("refreshAutomations");
+      expect(COMMAND_NAMES).toContain("openAutomationRun");
+      expect(COMMAND_NAMES).toHaveLength(33);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {

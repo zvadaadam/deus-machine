@@ -69,6 +69,9 @@ export const QUERY_RESOURCES = [
   "running_apps",
   // Localhost dev-server discovery (curated port probe + page metadata)
   "local_servers",
+  // Automations (prompts on a schedule) + their run ledger (param: automationId)
+  "automations",
+  "automation_runs",
 ] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 
@@ -120,6 +123,11 @@ export const MUTATION_NAMES = [
   "invalidateFileCache",
   "runTask",
   "revokeDevice",
+  // Automations — one service, two callers: these mutations and the agent's
+  // deus/automation/* side-channel tools converge on automations.service.
+  "saveAutomation",
+  "deleteAutomation",
+  "toggleAutomation",
 ] as const;
 export type MutationName = (typeof MUTATION_NAMES)[number];
 
@@ -163,6 +171,13 @@ export const COMMAND_NAMES = [
   // (not these commands), but both paths converge on apps.service.launchApp.
   "launchApp",
   "stopApp",
+  // Automations (cloud-only; agnt is the scheduler + source of truth).
+  // runAutomationNow triggers a platform fire; refreshAutomations re-mirrors
+  // the platform into the local cache (optionally one automation + its runs);
+  // openAutomationRun adopts a run's sandbox session into deus rows.
+  "runAutomationNow",
+  "refreshAutomations",
+  "openAutomationRun",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 

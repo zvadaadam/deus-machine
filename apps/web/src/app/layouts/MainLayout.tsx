@@ -32,7 +32,7 @@ import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { useSidebarStore } from "@/features/sidebar/store";
-import { useUIStore } from "@/shared/stores/uiStore";
+import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
@@ -41,6 +41,7 @@ import { capabilities } from "@/platform/capabilities";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
+import { AutomationsPage, useAutomations } from "@/features/automations";
 import { CONFIGURE_CLOUD_ENV } from "@/features/session/lib/sessionPrompts";
 import { getStoredModel } from "@/features/repository/ui/HomeView";
 import { DEFAULT_MODEL } from "@/shared/agents";
@@ -99,14 +100,20 @@ export function MainLayout() {
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
+  const newWorkspaceDraft = useUIStore((s) => s.newWorkspaceDraft);
   const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const automationsOpen = useUIStore((s) => s.automationsOpen);
+  const openAutomations = useUIStore((s) => s.openAutomations);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
 
   // TanStack Query
   const workspacesQuery = useWorkspacesByRepo();
+  // Keep the automations cache warm app-wide: the sidebar zap and the header
+  // chip derive provenance from it, not just the Automations view.
+  useAutomations();
 
   const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
   const loading = workspacesQuery.isLoading;
@@ -435,6 +442,9 @@ export function MainLayout() {
 
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
+      // The Automations view overlays MainContent — a workspace click while
+      // it is open must land ON the workspace, not silently under the view.
+      uiActions.closeAutomations();
       selectWorkspace(workspace.id);
       expandRepo(workspace.repository_id);
       // Only mark the active tab's session as read — other tabs keep their
@@ -477,7 +487,12 @@ export function MainLayout() {
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           onArchive={archiveWorkspace}
           onStatusChange={handleStatusChange}
-          onNewSession={() => selectWorkspace(null)}
+          onNewSession={() => {
+            uiActions.closeAutomations();
+            selectWorkspace(null);
+          }}
+          onOpenAutomations={openAutomations}
+          automationsActive={automationsOpen}
           profile={sidebarProfile}
         />
       )}
@@ -485,9 +500,11 @@ export function MainLayout() {
       {/* Sidebar resize handle */}
       <SidebarResizeHandle onSizeChange={setSidebarWidth} onDraggingChange={setSidebarDragging} />
 
-      {/* Main Content — swap between app content and settings page */}
+      {/* Main Content — swap between app content, settings and automations */}
       {settingsOpen ? (
         <SettingsPage />
+      ) : automationsOpen ? (
+        <AutomationsPage />
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}
@@ -523,6 +540,8 @@ export function MainLayout() {
         />
       ) : (
         <NewWorkspacePromptModal
+          key={newWorkspaceDraft ?? "blank"}
+          initialPrompt={newWorkspaceDraft ?? undefined}
           show={showNewWorkspaceModal}
           repos={repos}
           selectedRepoId={repoActions.selectedRepoId}

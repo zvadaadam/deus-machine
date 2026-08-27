@@ -49,6 +49,8 @@ import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { ChatArea } from "./ChatArea";
 import { ContentView } from "./ContentView";
 import { MobileLayout } from "./MobileLayout";
+import { useAutomationForWorkspace } from "@/features/automations";
+import { uiActions } from "@/shared/stores/uiStore";
 import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
 import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
@@ -96,6 +98,9 @@ export function MainContent({
   const isMobile = useIsMobile();
 
   const selectedWorkspaceId = selectedWorkspace?.id ?? null;
+  // Provenance: the automation whose held sandbox this workspace is (if any)
+  // — renders the header chip that jumps to the automation's run history.
+  const workspaceAutomation = useAutomationForWorkspace(selectedWorkspaceId);
   const {
     contentTab,
     setContentTab,
@@ -381,6 +386,12 @@ export function MainContent({
                         branch={selectedWorkspace.git_branch ?? undefined}
                         workspacePath={selectedWorkspace.workspace_path}
                         kind={selectedWorkspace.kind}
+                        automationName={workspaceAutomation?.name}
+                        onOpenAutomation={
+                          workspaceAutomation
+                            ? () => uiActions.openAutomations(workspaceAutomation.id)
+                            : undefined
+                        }
                         cloudAsleep={
                           selectedWorkspace.kind === "cloud" &&
                           cloudPresence(selectedWorkspace.init_stage) === "asleep"

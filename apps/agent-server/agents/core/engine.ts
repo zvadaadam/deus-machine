@@ -41,8 +41,15 @@ export function getRegistry(): AgentRegistry {
         ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
       // Legacy-handler parity: deus can't render AskUserQuestion, and
       // sub-agent text must reach the wire.
+      //
+      // The harness's own Cron* tools are disallowed because deus HAS a
+      // scheduler surface: Automations (the deus MCP automation_update tool,
+      // backed by the cloud platform). A harness-level cron job is invisible
+      // to the Deus UI and unmanaged — and with both available, the model
+      // reliably grabs the built-in one for "schedule this" asks (observed
+      // live: ToolSearch → CronCreate → confident false success).
       sdkOptions: () => ({
-        disallowedTools: ["AskUserQuestion"],
+        disallowedTools: ["AskUserQuestion", "CronCreate", "CronList", "CronDelete"],
         forwardSubagentText: true,
       }),
       toolPolicy: decideToolUse,

@@ -113,8 +113,14 @@ export async function getCloudEnvironmentInfo(
     // callers that would REWRITE state off this answer (the refresh path's
     // inline lane replaces the DO's secret map) can refuse to act on it,
     // while read-only consumers may still degrade to the inline default.
+    // The platform's not-found answer has shifted shape across builds: 404,
+    // but also 400 with its "Environment not found" ValidationError (the
+    // resolver's message). Either way the environment is ABSENT — only
+    // genuinely unexpected failures stay UNKNOWN.
     const status = (err as { statusCode?: number }).statusCode;
-    if (status !== 404) {
+    const message = err instanceof Error ? err.message : String(err);
+    const notFound = status === 404 || /environment not found/i.test(message);
+    if (!notFound) {
       console.warn(`[CloudEnv] environment lookup failed (result UNKNOWN): ${err}`);
       return { configured: false, name, lookupFailed: true };
     }

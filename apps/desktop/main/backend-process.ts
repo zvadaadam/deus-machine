@@ -175,7 +175,14 @@ export async function spawnBackend(
       `deus-runtime executable is missing or not executable: ${runtime.runtimeExecutable}`
     );
   }
-  const dbPath = join(app.getPath("userData"), DEUS_DB_FILENAME);
+  // Dev only: an explicit DATABASE_PATH wins — the isolation seam the backend
+  // already honors, so a worktree dev run can point at a scratch database
+  // instead of the real userData one (whose schema may not match the branch).
+  // A PACKAGED app never honors it: stray shell env must not redirect the
+  // real database (same doctrine as PACKAGED_RUNTIME_ENV_DENYLIST).
+  const dbPath =
+    (!app.isPackaged && process.env.DATABASE_PATH) ||
+    join(app.getPath("userData"), DEUS_DB_FILENAME);
 
   const sharedEnv: NodeJS.ProcessEnv = {
     DATABASE_PATH: dbPath,

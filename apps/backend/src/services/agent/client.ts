@@ -59,6 +59,7 @@ const TOOL_REQUEST_METHODS: Record<string, string> = {
   [SIDE_CHANNEL.aapLaunchApp]: "aap/launch-app",
   [SIDE_CHANNEL.aapStopApp]: "aap/stop-app",
   [SIDE_CHANNEL.aapReadAppSkill]: "aap/read-app-skill",
+  [SIDE_CHANNEL.automationUpdate]: "automation/update",
 };
 
 const SIDE_CHANNEL_REQUEST_TIMEOUT_MS = 30_000;
