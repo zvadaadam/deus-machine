@@ -20,6 +20,7 @@ import {
   startBackgroundRefresh as startLocalServerDiscovery,
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
+import { initAutomations } from "./services/automations";
 import { startManagedAgentServer, stopManagedAgentServer } from "./runtime/agent-process";
 
 // Initialize Sentry before anything else.
@@ -145,6 +146,10 @@ async function onListening(port: number): Promise<void> {
   // `local_servers` WS subscribers each time a sweep completes.
   setLocalServerRefreshListener(() => invalidate(["local_servers"]));
   startLocalServerDiscovery();
+
+  // Automations are cloud-only (agnt schedules + executes) — just mirror the
+  // platform into the local cache when credentials are already present.
+  initAutomations();
 }
 
 // Bind 0.0.0.0 to accept connections from all interfaces.

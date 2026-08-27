@@ -32,6 +32,8 @@ export interface AppSidebarProps {
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
   onNewSession?: () => void;
+  onOpenAutomations?: () => void;
+  automationsActive?: boolean;
   profile?: SidebarProfile;
 }
 

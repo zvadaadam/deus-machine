@@ -8,6 +8,7 @@ import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAppsTools } from "./apps";
+import { createAutomationTools } from "./automations";
 
 import { createSimulatorTools } from "./simulator";
 import { createRecordingTools, getSessionManager } from "./recording";
@@ -78,6 +79,7 @@ export function createDeusMCPServer(sessionId: string) {
       }),
       ...createSimulatorTools(sessionId),
       ...createAppsTools(sessionId),
+      ...createAutomationTools(sessionId),
       ...wrappedRecordingTools,
     ],
   });

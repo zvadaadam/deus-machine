@@ -111,7 +111,7 @@ Resources, mutations, commands, and events are all defined in `shared/events.ts`
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 7 tables: `repositories`, `workspaces`, `sessions`, `messages`, `parts`, `compactions`, `paired_devices`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 9 tables: `repositories`, `workspaces`, `sessions`, `messages`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`.
 
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`

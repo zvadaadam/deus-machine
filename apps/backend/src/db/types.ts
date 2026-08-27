@@ -180,6 +180,58 @@ export interface MessageRowWithParts extends MessageRow {
   >;
 }
 
+// ─── automations (cache of the agnt platform's rows) ─────────
+
+export interface AutomationRow {
+  /** agnt automation id. */
+  id: string;
+  /** Display name (the platform's mutable description). */
+  name: string;
+  prompt: string;
+  cron: string | null;
+  timezone: string | null;
+  /** spec.environment — the repo link (repo-<slug>-<hash8>). */
+  environment: string;
+  /** Local repo resolved from the environment name; null off this machine. */
+  repository_id: string | null;
+  status: string;
+  paused_reason: string | null;
+  session_policy: string;
+  model: string | null;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  consecutive_failures: number;
+  created_by: string;
+  /** Adopted deus workspace row for the held sandbox. */
+  workspace_id: string | null;
+  synced_at: string;
+  updated_at: string;
+}
+
+/** List/detail shape: row + the derived fields the UI renders. */
+export interface AutomationWithDetailsRow extends AutomationRow {
+  repo_name: string | null;
+  last_run_status: string | null;
+}
+
+export interface AutomationRunRow {
+  /** agnt run id. */
+  id: string;
+  automation_id: string;
+  status: string;
+  trigger: string;
+  provider_session_id: string | null;
+  session_id: string | null;
+  workspace_id: string | null;
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  stop_reason: string | null;
+  error_message: string | null;
+  cost: number | null;
+  summary: string | null;
+}
+
 // ─── stats ───────────────────────────────────────────────────
 
 export interface StatsRow {

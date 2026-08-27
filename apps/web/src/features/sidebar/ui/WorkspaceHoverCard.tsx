@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { match } from "ts-pattern";
-import { GitBranch } from "lucide-react";
+import { Cloud, ClockFading, GitBranch, Laptop } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
@@ -10,6 +10,8 @@ import { formatTimeAgo } from "@/shared/lib/formatters";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
 import type { Workspace, DiffStats } from "@/shared/types";
+import { useAutomationForWorkspace } from "@/features/automations";
+import { uiActions } from "@/shared/stores/uiStore";
 import type { DisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import { WorkspaceGitIcon, derivePrLifecycle } from "./WorkspaceGitIcon";
@@ -145,6 +147,9 @@ export function WorkspaceHoverCard({
   const displayName = getWorkspaceDisplayName(workspace);
   const secondaryText = getWorkspaceSecondaryText(workspace);
   const isWorking = displayStatus === "working";
+  // Provenance + where the files live — the two facts the row can't fit.
+  const automation = useAutomationForWorkspace(workspace.id);
+  const isCloud = workspace.kind === "cloud";
 
   const prLabel = prChipLabel(workspace);
   const showCi =
@@ -173,6 +178,35 @@ export function WorkspaceHoverCard({
             </span>
           </div>
           <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
+        </div>
+
+        {/* Context: where it runs · what created it */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="bg-bg-raised text-text-secondary text-2xs flex items-center gap-1 rounded-full px-2 py-0.5 font-medium">
+            {isCloud ? (
+              <>
+                <Cloud className="h-2.5 w-2.5" /> Runs in Deus Cloud
+              </>
+            ) : (
+              <>
+                <Laptop className="h-2.5 w-2.5" /> Runs locally
+              </>
+            )}
+          </span>
+          {automation && (
+            <button
+              type="button"
+              title={`Triggered by the "${automation.name}" automation — click for its runs`}
+              onClick={(e) => {
+                e.stopPropagation();
+                uiActions.openAutomations(automation.id);
+              }}
+              className="bg-bg-raised text-text-secondary hover:text-text-primary text-2xs flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium transition-colors duration-150"
+            >
+              <ClockFading className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">Automation · {automation.name}</span>
+            </button>
+          )}
         </div>
 
         {isWorking && workspace.current_session_id && (

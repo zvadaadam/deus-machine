@@ -15,7 +15,8 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { FolderOpen } from "lucide-react";
+import { ClockFading, FolderOpen } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSidebarStore } from "../store/sidebarStore";
@@ -23,6 +24,7 @@ import type { AppSidebarProps } from "../model/types";
 import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarFooter } from "./SidebarFooter";
+import { SidebarRow, SidebarRowMain } from "./SidebarRow";
 
 export function AppSidebar({
   repositories,
@@ -36,6 +38,8 @@ export function AppSidebar({
   onArchive,
   onStatusChange,
   onNewSession,
+  onOpenAutomations,
+  automationsActive,
   diffStatsMap,
   profile,
 }: AppSidebarProps) {
@@ -109,6 +113,40 @@ export function AppSidebar({
         onNewSession={onNewSession}
         isExpanded={isExpanded}
       />
+
+      {/* App-level nav — sits under the header, above the repo list */}
+      <div className="px-1.5 pb-1">
+        <SidebarRow variant="action" isActive={automationsActive} asChild>
+          <button
+            type="button"
+            onClick={() => {
+              onOpenAutomations?.();
+              // Same mobile behavior as workspace selection: the off-canvas
+              // sheet must not stay open over the page it just navigated to.
+              if (isMobile) setOpenMobile(false);
+            }}
+          >
+            <SidebarRowMain>
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                <ClockFading
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    automationsActive ? "text-text-primary" : "text-text-muted"
+                  )}
+                />
+              </span>
+              <span
+                className={cn(
+                  "truncate text-sm",
+                  automationsActive ? "text-text-primary font-medium" : "text-text-secondary"
+                )}
+              >
+                Automations
+              </span>
+            </SidebarRowMain>
+          </button>
+        </SidebarRow>
+      </div>
 
       {/* Repositories List or Empty State */}
       {repositories.length === 0 ? (

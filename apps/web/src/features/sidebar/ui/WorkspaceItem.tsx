@@ -1,6 +1,6 @@
 import React from "react";
 import { match } from "ts-pattern";
-import { Archive, Cloud, Loader2 } from "lucide-react";
+import { Archive, Cloud, ClockFading, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -9,6 +9,7 @@ import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { apiClient } from "@/shared/api/client";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
+import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
@@ -75,6 +76,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
   onStatusChange,
 }: WorkspaceItemProps) {
   const isInitializing = workspace.state === "initializing";
+  // Provenance: automation-born workspaces carry a zap beside the name.
+  const automation = useAutomationForWorkspace(workspace.id);
   const queryClient = useQueryClient();
 
   const { duration } = useWorkingDuration({
@@ -256,6 +259,14 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           {displayName}
         </span>
         {workspace.kind === "cloud" && <CloudLivenessIcon workspace={workspace} />}
+        {automation && (
+          <span
+            title={`Runs of automation "${automation.name}" land here`}
+            className="flex shrink-0 items-center"
+          >
+            <ClockFading className="text-text-muted h-3 w-3" />
+          </span>
+        )}
       </div>
 
       {/* Right: one signal. Fades out on hover to make room for archive. */}
