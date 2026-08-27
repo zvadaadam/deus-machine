@@ -190,23 +190,27 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
   const cloudStatus = useCloudSettings();
   const signIn = useDeusCloudSignIn();
   const handleChange = (on: boolean) => {
-    if (on && cloudStatus.data && !cloudStatus.data.enabled) {
-      // Deus Cloud sign-in mints a device credential over Electron IPC; there's
-      // no web sign-in yet. On app.deusmachine.ai, point at the desktop app
-      // instead of a "Sign in" button whose only outcome is "requires the
-      // desktop app".
-      toast("Not signed in to Deus Cloud", {
-        description: capabilities.ipcInvoke
-          ? "Cloud workspaces need a Deus Cloud account on this device."
-          : "Sign in to Deus Cloud from the desktop app to use cloud workspaces.",
-        ...(capabilities.ipcInvoke && {
-          action: { label: "Sign in", onClick: () => signIn.mutate() },
-        }),
-      });
-      // Keep the location LOCAL until sign-in actually succeeds — the switch
-      // stays off, the toast explains why. Selecting cloud here (web can't sign
-      // in at all; desktop hasn't yet) only sets up a submit that the backend
-      // guard rejects. Re-toggling after sign-in takes the cloud path below.
+    // Only select cloud once it's CONFIRMED enabled. A still-loading or errored
+    // /settings/cloud leaves `data` undefined — selecting cloud then just arms a
+    // submit the backend guard rejects — so treat "not confirmed enabled" as
+    // unavailable and keep the switch local.
+    if (on && !cloudStatus.data?.enabled) {
+      // Only nudge to sign in once we KNOW it's disabled — a status that hasn't
+      // loaded yet shouldn't cry "not signed in". Deus Cloud sign-in mints a
+      // device credential over Electron IPC; there's no web sign-in yet, so on
+      // app.deusmachine.ai point at the desktop app.
+      if (cloudStatus.data && !cloudStatus.data.enabled) {
+        toast("Not signed in to Deus Cloud", {
+          description: capabilities.ipcInvoke
+            ? "Cloud workspaces need a Deus Cloud account on this device."
+            : "Sign in to Deus Cloud from the desktop app to use cloud workspaces.",
+          ...(capabilities.ipcInvoke && {
+            action: { label: "Sign in", onClick: () => signIn.mutate() },
+          }),
+        });
+      }
+      // Keep the location LOCAL — re-toggling after sign-in (or once the status
+      // resolves to enabled) takes the cloud path below.
       return;
     }
     onLocationChange(on ? "cloud" : "local");

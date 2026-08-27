@@ -42,15 +42,14 @@ type CloudList = { tree: CloudFsNode[]; truncated: boolean };
  *  can't be clobbered by the list it raced. Failures are never cached. Entries
  *  are stamped with the cloud identity generation: a sign-out/account switch
  *  bumps it, so account B never reads account A's still-cached paths. */
-const cloudTreeCache = new Map<
-  string,
-  { promise: Promise<CloudList>; expiresAt: number; identityGen: number }
->();
+const cloudTreeCache = new Map<string, CloudCacheEntry>();
+
+type CloudCacheEntry = { promise: Promise<CloudList>; expiresAt: number; identityGen: number };
 
 function listCloudTree(sessionId: string): Promise<CloudList> {
   const identityGen = getCloudIdentityGeneration();
   const hit = cloudTreeCache.get(sessionId);
-  if (hit && hit.expiresAt > Date.now() && hit.identityGen === identityGen) return hit.promise;
+  if (hit && hit.identityGen === identityGen && hit.expiresAt > Date.now()) return hit.promise;
   const promise = (async (): Promise<CloudList> => {
     const data = (await cloudFsOrThrow(sessionId, {
       op: "list",
@@ -59,16 +58,21 @@ function listCloudTree(sessionId: string): Promise<CloudList> {
     if (data.error) throw new ValidationError(data.error);
     return { tree: data.tree ?? [], truncated: data.truncated === true };
   })();
-  // Never cache a failure: drop the entry so the next caller retries — unless a
-  // later refresh already replaced this exact promise.
-  promise.catch(() => {
-    if (cloudTreeCache.get(sessionId)?.promise === promise) cloudTreeCache.delete(sessionId);
-  });
-  cloudTreeCache.set(sessionId, {
-    promise,
-    expiresAt: Date.now() + CLOUD_TREE_TTL_MS,
-    identityGen,
-  });
+  // In-flight entries carry expiresAt = Infinity so they're always reusable —
+  // the TTL only starts once the (up to 50k) list SETTLES. Otherwise a list
+  // slower than the TTL would read as "expired" mid-flight and every keystroke
+  // would kick off its own full re-list. The `=== entry` guards keep a later
+  // refresh / identity change from having its entry clobbered by this one.
+  const entry: CloudCacheEntry = { promise, expiresAt: Infinity, identityGen };
+  promise.then(
+    () => {
+      if (cloudTreeCache.get(sessionId) === entry) entry.expiresAt = Date.now() + CLOUD_TREE_TTL_MS;
+    },
+    () => {
+      if (cloudTreeCache.get(sessionId) === entry) cloudTreeCache.delete(sessionId); // never cache a failure
+    }
+  );
+  cloudTreeCache.set(sessionId, entry);
   if (cloudTreeCache.size > 16) {
     const oldest = cloudTreeCache.keys().next().value;
     if (oldest && oldest !== sessionId) cloudTreeCache.delete(oldest);

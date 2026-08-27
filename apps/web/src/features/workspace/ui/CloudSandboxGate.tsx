@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Cloud, Loader2 } from "lucide-react";
+import { Cloud, CloudOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/shared/api/client";
 import type { CloudGateStage } from "../lib/cloudPresence";
@@ -71,34 +71,42 @@ export function CloudSandboxGate({
       .catch(() => setWaking(false));
   };
 
+  const isError = stage === "error";
+
   return (
     <div className="bg-bg-base/95 flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center backdrop-blur-sm">
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
         {showSpinner ? (
           <Loader2 className="text-text-muted h-5 w-5 animate-spin" aria-hidden="true" />
+        ) : isError ? (
+          <CloudOff className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
         ) : (
           <Cloud className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
         )}
       </div>
       <p className="text-text-secondary text-sm font-medium">
-        {stage === "provisioning"
-          ? "Setting up your computer…"
-          : showSpinner
-            ? "Waking your computer…"
-            : showStalled
-              ? "Still waking your computer"
-              : "This computer is asleep"}
+        {isError
+          ? "This computer failed to start"
+          : stage === "provisioning"
+            ? "Setting up your computer…"
+            : showSpinner
+              ? "Waking your computer…"
+              : showStalled
+                ? "Still waking your computer"
+                : "This computer is asleep"}
       </p>
       <p className="text-text-muted max-w-xs text-xs">
-        {stage === "provisioning"
-          ? "Installing dependencies and cloning your repo — this only takes a moment."
-          : showSpinner
-            ? "It'll be ready in a moment."
-            : showStalled
-              ? "This is taking longer than usual — try again, or just send a message."
-              : "Wake it to browse files and use the terminal — or just send a message."}
+        {isError
+          ? "Provisioning didn't finish. Set up your cloud environment again, or send a message to start a fresh one."
+          : stage === "provisioning"
+            ? "Installing dependencies and cloning your repo — this only takes a moment."
+            : showSpinner
+              ? "It'll be ready in a moment."
+              : showStalled
+                ? "This is taking longer than usual — try again, or just send a message."
+                : "Wake it to browse files and use the terminal — or just send a message."}
       </p>
-      {!showSpinner && (
+      {!showSpinner && !isError && (
         <Button size="sm" onClick={wake}>
           {showStalled ? "Try again" : "Wake computer"}
         </Button>
