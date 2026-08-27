@@ -13,6 +13,7 @@ import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
+import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUnavailable";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
@@ -107,7 +108,11 @@ export function ContentView({
           activeTab !== "browser" && "pointer-events-none invisible absolute"
         )}
       >
-        <BrowserPanel workspaceId={workspace.id} panelVisible={activeTab === "browser"} />
+        {workspace.kind === "cloud" ? (
+          <CloudBrowserUnavailable />
+        ) : (
+          <BrowserPanel workspaceId={workspace.id} panelVisible={activeTab === "browser"} />
+        )}
       </div>
 
       <div

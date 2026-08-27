@@ -55,8 +55,8 @@ function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["works
       }}
       title={
         asleep
-          ? `Cloud sandbox ${workspace.init_stage} — click to wake (a message also wakes it)`
-          : "Cloud sandbox online — click to refresh"
+          ? `Cloud computer ${workspace.init_stage} — click to wake (a message also wakes it)`
+          : "Cloud computer online — click to refresh"
       }
       aria-label="Cloud workspace status"
       className="flex shrink-0 cursor-pointer items-center"
@@ -149,7 +149,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       if (workspace.kind !== "cloud") return "Failed";
       const stillProvisioning =
         Boolean(workspace.init_stage) && cloudPresence(workspace.init_stage) === "awake";
-      return stillProvisioning ? "Cloud setup failed" : "Sandbox failed";
+      return stillProvisioning ? "Cloud setup failed" : "Computer failed";
     }
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";

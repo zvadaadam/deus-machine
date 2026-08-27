@@ -5,12 +5,14 @@ import { apiClient } from "@/shared/api/client";
 import type { CloudPresence } from "../lib/cloudPresence";
 
 /**
- * The honest "the sandbox isn't running" state for the Files and Terminal
- * panels. A paused/stopped sandbox has no sidecar, so the panels can't
- * function — instead of a frozen terminal that looks alive or a raw
- * SIDECAR_NOT_CONNECTED error, this says so plainly and offers the one action
- * that fixes it: wake. (Sending a chat message also wakes it — the copy says
- * so.) Waking rides the same POST /cloud-wake as the sidebar/header chip.
+ * The honest "your computer isn't running" state for the Files, Changes and
+ * Terminal panels. A paused/stopped cloud computer has no sidecar, so the
+ * panels can't function — instead of a frozen terminal that looks alive or a
+ * raw SIDECAR_NOT_CONNECTED error, this says so plainly and offers the one
+ * action that fixes it: wake. (Sending a chat message also wakes it — the copy
+ * says so.) Waking rides the same POST /cloud-wake as the sidebar/header chip.
+ * "computer" is the product word for the sandbox — the user's own machine in
+ * the cloud; keep it consistent with the header chip and sidebar liveness.
  */
 export function CloudSandboxGate({
   workspaceId,
@@ -45,7 +47,7 @@ export function CloudSandboxGate({
         )}
       </div>
       <p className="text-text-secondary text-sm font-medium">
-        {isWaking ? "Waking the sandbox…" : "This sandbox is asleep"}
+        {isWaking ? "Waking your computer…" : "This computer is asleep"}
       </p>
       <p className="text-text-muted max-w-xs text-xs">
         {isWaking
@@ -54,7 +56,7 @@ export function CloudSandboxGate({
       </p>
       {!isWaking && (
         <Button size="sm" onClick={wake}>
-          Wake sandbox
+          Wake computer
         </Button>
       )}
     </div>

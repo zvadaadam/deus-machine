@@ -225,7 +225,7 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
         checked={location === "cloud"}
         onCheckedChange={handleChange}
         className="scale-75"
-        aria-label="Run in a cloud sandbox"
+        aria-label="Run on a cloud computer"
       />
     </label>
   );
@@ -237,7 +237,7 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
       <TooltipContent side="bottom">
         <p className="text-xs">
           {location === "cloud"
-            ? "Runs in a cloud sandbox (clones the repo's origin)"
+            ? "Runs on a cloud computer (clones the repo's origin)"
             : "Off — runs in a git worktree on this Mac"}
         </p>
       </TooltipContent>

@@ -166,7 +166,9 @@ export function WorkspaceHeader({
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                <p className="text-xs">Sandbox asleep — click to wake it, or just send a message</p>
+                <p className="text-xs">
+                  Computer asleep — click to wake it, or just send a message
+                </p>
               </TooltipContent>
             </Tooltip>
           ) : (
@@ -182,7 +184,8 @@ export function WorkspaceHeader({
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  Runs in a cloud sandbox — files live remotely; the Changes tab shows the live diff
+                  Runs on a cloud computer — files live remotely; the Changes tab shows the live
+                  diff
                 </p>
               </TooltipContent>
             </Tooltip>

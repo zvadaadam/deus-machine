@@ -83,7 +83,7 @@ export function CloudEnvironmentBlock({
                     ? ` — needs ${info.data.requiredEnv.join(", ")}`
                     : ""
                 }.`
-              : "An agent onboards the codebase in a sandbox — installs dependencies, verifies the setup, and saves the recipe so future cloud workspaces start ready. Take over in the workspace anytime."}
+              : "An agent onboards the codebase on a cloud computer — installs dependencies, verifies the setup, and saves the recipe so future cloud workspaces start ready. Take over in the workspace anytime."}
           </p>
           {cloudBlockedReason && (
             <p className="text-text-muted mt-1 text-xs">{cloudBlockedReason}</p>

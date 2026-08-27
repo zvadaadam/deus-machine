@@ -121,7 +121,7 @@ export function CloudSection() {
       } else {
         toast.success(
           result.hasCodexSubscription
-            ? "Codex connected — cloud sandboxes can run Codex on your plan"
+            ? "Codex connected — cloud computers can run Codex on your plan"
             : "Codex subscription disconnected"
         );
       }
@@ -141,7 +141,7 @@ export function CloudSection() {
       apiClient.post<{ ok: boolean }>("/settings/cloud/codex-auth", { authJson }),
     onSuccess: async () => {
       setCodexAuthJson("");
-      toast.success("Codex connected — cloud sandboxes can run Codex on your plan");
+      toast.success("Codex connected — cloud computers can run Codex on your plan");
       await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
       await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
     },
@@ -366,7 +366,7 @@ export function CloudSection() {
           </span>
         </h2>
         <p className="text-text-muted text-sm">
-          Cloud workspaces run in sandboxes on the Deus platform — the agent and files live
+          Cloud workspaces run on computers on the Deus platform — the agent and files live
           remotely, and everything streams into the app.
         </p>
       </div>
@@ -565,9 +565,9 @@ export function CloudSection() {
       </div>
 
       <div className="mb-2">
-        {step(s?.hasGithubToken || appCoversRepos, "GitHub — repo access for sandboxes")}
+        {step(s?.hasGithubToken || appCoversRepos, "GitHub — repo access for cloud computers")}
         <p className="text-text-muted mb-3 text-sm">
-          Sandboxes clone over https. The GitHub App mints short-lived, single-repo tokens
+          Cloud computers clone over https. The GitHub App mints short-lived, single-repo tokens
           server-side; a fine-grained personal access token is the fallback for anything it doesn't
           cover.
         </p>
