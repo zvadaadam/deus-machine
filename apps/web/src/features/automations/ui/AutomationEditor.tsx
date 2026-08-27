@@ -121,6 +121,8 @@ export function AutomationEditor({
     form.name.trim().length > 0 &&
     form.prompt.trim().length > 0 &&
     form.repositoryId.length > 0 &&
+    // A cleared time input would silently save "0 0" — midnight.
+    (!selectedPreset?.hasTime || /^\d{1,2}:\d{2}$/.test(form.schedule.time)) &&
     (form.schedule.preset !== "custom" || form.schedule.cron.trim().length > 0);
 
   return (

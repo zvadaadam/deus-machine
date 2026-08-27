@@ -30,7 +30,16 @@ interface AutomationToolPayload {
 function parsePayload(output: string): AutomationToolPayload | null {
   try {
     const parsed = JSON.parse(output) as unknown;
-    if (parsed && typeof parsed === "object") return parsed as AutomationToolPayload;
+    if (!parsed || typeof parsed !== "object") return null;
+    // Shape-check the fields the renderer dereferences — a malformed tool
+    // output must degrade to plain text, not throw mid-render.
+    const record = parsed as Record<string, unknown>;
+    const payload: AutomationToolPayload = { ...record };
+    if (record.automation && typeof record.automation !== "object") delete payload.automation;
+    if (record.automations !== undefined && !Array.isArray(record.automations)) {
+      delete payload.automations;
+    }
+    return payload;
   } catch {
     // Error text, not JSON — the caller falls back to plain output.
   }

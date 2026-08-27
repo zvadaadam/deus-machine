@@ -30,16 +30,20 @@ type ViewState =
   | { mode: "detail"; automationId: string };
 
 export function AutomationsPage() {
-  // Deep-link from a workspace's provenance chip: the chip lives in the
-  // workspace view, so this page always MOUNTS fresh with the focus set —
-  // consume it in the initializer (no effect, no render cascade).
+  // Deep-link from a provenance chip: the initializer covers the fresh-mount
+  // case without a render cascade, and the subscription covers chips clicked
+  // WHILE this page is already open (hover cards render beside it) — the
+  // store value only changes when a chip fires, and consuming it clears it.
   const [view, setView] = useState<ViewState>(() => {
     const focusId = useUIStore.getState().automationsFocusId;
     return focusId ? { mode: "detail", automationId: focusId } : { mode: "list" };
   });
+  const focusId = useUIStore((s) => s.automationsFocusId);
   useEffect(() => {
+    if (!focusId) return;
+    setView({ mode: "detail", automationId: focusId });
     useUIStore.getState().clearAutomationsFocus();
-  }, []);
+  }, [focusId]);
   const { data: automations, isLoading } = useAutomations();
 
   // Cloud connection gate — automations live on the platform.

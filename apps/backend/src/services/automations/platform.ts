@@ -154,8 +154,10 @@ function slugName(displayName: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
+    .replace(/^-+/, "")
+    .slice(0, 60)
+    // Trailing trim AFTER the cut — truncation can land on a separator.
+    .replace(/-+$/, "");
   if (!slug) return "automation";
   // The platform's name grammar demands a leading letter ("24/7 monitor"
   // would otherwise fail validation, which the 409-only retry never catches).
@@ -185,7 +187,7 @@ export async function createPlatformAutomation(
       const suffix = Math.random().toString(16).slice(2, 6);
       const handle = await sdkCreateAutomation({
         ...base,
-        name: `${slugName(input.displayName).slice(0, 55)}-${suffix}`,
+        name: `${slugName(input.displayName).slice(0, 55).replace(/-+$/, "")}-${suffix}`,
       });
       return handle.id;
     }

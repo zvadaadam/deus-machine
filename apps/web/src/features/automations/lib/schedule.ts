@@ -77,10 +77,28 @@ export function humanizeSchedule(cron: string | null): string {
       return `Weekdays at ${at(form.time)}`;
     case "weekly":
       return `Mondays at ${at(form.time)}`;
-    case "custom":
+    case "custom": {
+      // Generic single-weekday crons have no preset, but the words rule
+      // still holds — three built-in templates ship them.
+      const single = /^(\d{1,2}) (\d{1,2}) \* \* ([0-7])$/.exec(form.cron);
+      if (single) {
+        const day = WEEKDAY_NAMES[Number.parseInt(single[3], 10) % 7];
+        return `${day} at ${Number.parseInt(single[2], 10)}:${single[1].padStart(2, "0")}`;
+      }
       return cron;
+    }
   }
 }
+
+const WEEKDAY_NAMES = [
+  "Sundays",
+  "Mondays",
+  "Tuesdays",
+  "Wednesdays",
+  "Thursdays",
+  "Fridays",
+  "Saturdays",
+];
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

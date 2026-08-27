@@ -154,11 +154,13 @@ automation_runs (
 )
 ```
 
-Cloud rows are a **cache** of the agnt ledger (refreshed on subscribe/focus and after
-mutations); local rows are the source of truth. One workspace per automation (held, like
-agnt), one session per run — the workspace row carries the automation's name and sits under
-its repo in the sidebar; runs are session tabs inside it. Notifications come free:
-`useGlobalSessionNotifications` already fires on those sessions' status transitions.
+The SQLite rows are a **cache** of the agnt ledger (refreshed on subscribe/focus and after
+mutations); the platform is the source of truth (see the cloud-only decision below). One
+workspace per automation (held, like agnt); sessions follow the policy — `fresh_session`
+creates one per run, `same_session` reuses one across runs. The workspace row carries the
+automation's name and sits under its repo in the sidebar; runs open as session tabs inside
+it. Notifications come free: `useGlobalSessionNotifications` already fires on those
+sessions' status transitions.
 
 ### Local scheduler (new, small)
 
@@ -196,9 +198,10 @@ AND next_run_at <= now`.
   (`getCloudConfig()`); `environment` = the repo-derived name `repo-<slug>-<hash8>` when the
   agent-authored environment exists, else the inline recipe path already used by
   `createCloudWorkspace`. Store `provider_automation_id`.
-- Runs: `listAutomationRuns` → upsert the cache; each run's `session_id` is adopted as a deus
-  session row (`provider_session_id`) on the automation's held cloud workspace row
-  (`provider_workspace_id` from the agnt automation), so transcripts open in the normal UI.
+- Runs: `listAutomationRuns` → upsert the cache; opening a run adopts it through its
+  SESSION — `getSession(provider_session_id)` yields the platform `workspaceId`, and deus
+  finds-or-creates the workspace row (`provider_workspace_id`) and session row
+  (`provider_session_id`) from that, so transcripts open in the normal UI.
 - No cloud sign-in → lane disabled in UI with the same nudge Settings → Cloud uses.
 - v1 keeps polling (subscribe/focus refresh); the agnt delivery **webhook → deus-cloud →
   push** channel is the later real-time path. Webhook _triggers_ (agnt has them) surface in
@@ -217,10 +220,13 @@ AND next_run_at <= now`.
 The `deus` in-process MCP server grows an `automations.ts` tool family (the ChatGPT shape,
 adapted):
 
-- **One tool, `automation_update`**, modes `view|create|update|delete|list` — create/update
-  take `{name, prompt, cron, timezone?, lane?, repositoryId?, sessionPolicy?, model?,
-notificationPolicy?, status?}`; repo defaults to the calling session's repo (resolved from
-  `sessionId` backend-side, the AAP doctrine — the agent never guesses ids).
+- **One tool, `automation_update`**, modes `view|create|update|delete|list` — as SHIPPED,
+  create takes `{name, prompt, cron, timezone?, sessionPolicy?, model?}` and update
+  additionally takes `status` (pause/resume); there is no `lane` (cloud-only), no
+  `notificationPolicy`, no `repositoryId` on update (the repo rides the environment and is
+  immutable per automation), and no `status` on create (born active). Repo defaults to the
+  calling session's repo (resolved from `sessionId` backend-side, the AAP doctrine — the
+  agent never guesses ids).
 - Wire: `SIDE_CHANNEL += deus/automation/*` → `rpc-schemas` → `HostRpc` →
   `TOOL_REQUEST_METHODS` → an `automation/` branch in `handleToolRequest` **before** the
   relay fallthrough → the same service the mutations use. One service, two callers.
