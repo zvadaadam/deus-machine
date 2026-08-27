@@ -6,42 +6,18 @@
  * string[] shape Pierre wants, push additions/deletions/committed markers
  * via renderRowDecoration, and forward reveal + selection intents through
  * the imperative model methods.
- *
- * Live agent-activity layer (flash + dirty-folder dot):
- *   - Activity detection (write/edit/delete) runs at panel-level (see
- *     FileBrowserPanel → useActivityDetector) against the unfiltered enriched
- *     tree, so narrowing via search/sub-filter doesn't synthesize deletes.
- *   - This component only subscribes to the resulting recentActivityStore.
- *   - A short-lived CSS class is applied to the row's shadow-DOM button for
- *     each new activity, driving the flash wash defined in FLASH_UNSAFE_CSS.
- *   - When the touched file lives inside a collapsed folder, the flash rolls
- *     up to the nearest visible ancestor and that folder is marked dirty so
- *     renderRowDecoration can paint a persistent dot until the user expands.
  */
 
 import { useEffect, useMemo, useRef } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
-import type {
-  FileTreeDirectoryHandle,
-  FileTreeItemHandle,
-  FileTreeRowDecorationRenderer,
-  GitStatusEntry,
-} from "@pierre/trees";
+import type { FileTreeRowDecorationRenderer, GitStatusEntry } from "@pierre/trees";
 import "@pierre/trees/web-components";
 
 import type { FileTreeNode } from "../../types";
-import { FILE_TREE_FLASH_CSS, fileTreeThemeStyles } from "../../lib/fileTreeTheme";
-import {
-  useRecentActivityStore,
-  recentActivityActions,
-  type ActivityEntry,
-  type ActivityKind,
-} from "../../store/recentActivityStore";
+import { fileTreeThemeStyles } from "../../lib/fileTreeTheme";
 
 interface FileTreeProps {
   nodes: FileTreeNode[];
-  /** Required for workspace-scoped activity recording + dirty-folder state. */
-  workspaceId: string | null;
   selectedPath?: string | null;
   onFileClick?: (path: string) => void;
   /** When true directories start expanded; when false they start collapsed. */
@@ -94,44 +70,8 @@ function buildGitStatus(nodes: FileTreeNode[]): GitStatusEntry[] {
   return entries;
 }
 
-// Walk from leaf to root. If any ancestor directory is collapsed, return
-// that ancestor's path so the flash lands on a visible row. Otherwise return
-// the leaf path unchanged.
-function isDirectoryHandle(h: FileTreeItemHandle): h is FileTreeDirectoryHandle {
-  return h.isDirectory();
-}
-
-function resolveVisibleTarget(
-  leafPath: string,
-  model: ReturnType<typeof useFileTree>["model"]
-): string {
-  const segs = leafPath.split("/").filter(Boolean);
-  let acc = "";
-  for (let i = 0; i < segs.length - 1; i++) {
-    acc += segs[i] + "/";
-    const handle = model.getItem(acc);
-    if (!handle || !isDirectoryHandle(handle)) continue;
-    if (!handle.isExpanded()) return acc;
-  }
-  return leafPath;
-}
-
-// ActivityKind → CSS class. Kept in sync with FILE_TREE_FLASH_CSS in fileTreeTheme.ts.
-const KIND_CLASS: Record<ActivityKind, string> = {
-  write: "deus-flash-add",
-  edit: "deus-flash-edit",
-  delete: "deus-flash-delete",
-};
-const ALL_FLASH_CLASSES = Object.values(KIND_CLASS);
-
-// Stable empty references so Zustand selectors return referentially-equal
-// results when a workspace has no activity yet (avoids extra rerenders).
-const EMPTY_ACTIVITIES: readonly ActivityEntry[] = Object.freeze([]);
-const EMPTY_DIRTY: Readonly<Record<string, ActivityKind>> = Object.freeze({});
-
 export function FileTree({
   nodes,
-  workspaceId,
   selectedPath,
   onFileClick,
   defaultExpanded,
@@ -148,33 +88,17 @@ export function FileTree({
     [nodes]
   );
 
-  // Activity detection happens at panel-level (against the UNFILTERED enriched
-  // tree) so that narrowing via search/sub-filter doesn't look like deletions.
-  // This component just subscribes to the resulting activity stream below.
-
-  // Subscribe to the workspace's live activity stream and dirty-folder map.
-  const activities = useRecentActivityStore((s) =>
-    workspaceId ? (s.byWorkspace[workspaceId] ?? EMPTY_ACTIVITIES) : EMPTY_ACTIVITIES
-  );
-  const dirtyFolders = useRecentActivityStore((s) =>
-    workspaceId ? (s.dirtyByWorkspace[workspaceId] ?? EMPTY_DIRTY) : EMPTY_DIRTY
-  );
-
   // Refs keep the latest callback/data reachable from Pierre's stable closures
   // (onSelectionChange + renderRowDecoration are captured once at construction).
   // Sync to refs in an effect so we don't mutate during render — closures read
   // `.current` in response to user events, which always land post-commit.
   const onFileClickRef = useRef(onFileClick);
   const fileLookupRef = useRef(fileLookup);
-  const dirtyFoldersRef = useRef(dirtyFolders);
-  const workspaceIdRef = useRef(workspaceId);
 
   useEffect(() => {
     onFileClickRef.current = onFileClick;
     fileLookupRef.current = fileLookup;
-    dirtyFoldersRef.current = dirtyFolders;
-    workspaceIdRef.current = workspaceId;
-  }, [onFileClick, fileLookup, dirtyFolders, workspaceId]);
+  }, [onFileClick, fileLookup]);
 
   // When we programmatically `.select()` a path to mirror controlled state,
   // Pierre still emits onSelectionChange. Record the path we just pushed so
@@ -197,27 +121,7 @@ export function FileTree({
   const renderRowDecoration: FileTreeRowDecorationRenderer = useMemo(
     () =>
       ({ row }) => {
-        // Collapsed folders with unseen activity carry a persistent dot.
-        if (row.kind === "directory") {
-          const dirty = dirtyFoldersRef.current;
-          if (!row.isExpanded) {
-            if (dirty[row.path]) {
-              return { text: "●", title: "Unseen activity inside" };
-            }
-            return null;
-          }
-          // Folder is expanded — if it was dirty, clear lazily. The microtask
-          // defers the mutation until after this render pass completes so we
-          // don't mutate store state from inside a render.
-          if (dirty[row.path]) {
-            const wsId = workspaceIdRef.current;
-            const target = row.path;
-            if (wsId) {
-              queueMicrotask(() => recentActivityActions.clearDirty(wsId, target));
-            }
-          }
-          return null;
-        }
+        if (row.kind === "directory") return null;
 
         // File decoration — +N/−N line counts plus uncommitted marker.
         const node = fileLookupRef.current.get(row.path);
@@ -249,7 +153,6 @@ export function FileTree({
     gitStatus,
     renderRowDecoration,
     onSelectionChange: handleSelectionChange,
-    unsafeCSS: FILE_TREE_FLASH_CSS,
   });
 
   // useFileTree consumed the initial paths + gitStatus. Skip the first-render
@@ -294,79 +197,5 @@ export function FileTree({
     onRevealConsumed?.(revealRequestId);
   }, [revealRequestId, revealPath, model, onRevealConsumed]);
 
-  // Container ref so we can reach into Pierre's shadow root for the flash
-  // class application. Pierre's React component doesn't forward refs, so we
-  // query for the custom-element host from a wrapper div.
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Tracks which (path, at) activity keys we've already applied a flash for
-  // — ensures each distinct event gets exactly one animation cycle even when
-  // the activities array reference changes for unrelated reasons.
-  const seenActivitiesRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    // Pierre mounts its tree as a <file-tree-container> custom element. We
-    // reach through that host into its shadow root to apply the flash class
-    // directly on a row's <button>. If Pierre renames this host in a future
-    // version, the null-guard below short-circuits and flashes stop painting
-    // (functionally graceful, visibly noticeable — we'll catch it on upgrade).
-    const host =
-      (containerRef.current?.querySelector("file-tree-container") as HTMLElement | null) ?? null;
-    const shadowRoot = host?.shadowRoot ?? null;
-    if (!shadowRoot) return;
-
-    const live = new Set<string>();
-
-    for (const entry of activities) {
-      const key = `${entry.path}\u0000${entry.at}`;
-      live.add(key);
-      if (seenActivitiesRef.current.has(key)) continue;
-      seenActivitiesRef.current.add(key);
-
-      // Decide which row to flash. Collapsed ancestors absorb the signal.
-      const target = resolveVisibleTarget(entry.path, model);
-      if (target !== entry.path) {
-        recentActivityActions.markDirty(workspaceId, target, entry.kind);
-      }
-
-      const row = shadowRoot.querySelector(
-        `button[data-item-path="${CSS.escape(target)}"]`
-      ) as HTMLElement | null;
-      if (!row) continue;
-
-      // Hard-cancel any running animation so re-flashes on the same row
-      // always paint the peak again instead of being coalesced.
-      try {
-        row.getAnimations?.().forEach((a) => a.cancel());
-      } catch {
-        /* older engines — fall through to class toggle */
-      }
-      for (const cls of ALL_FLASH_CLASSES) row.classList.remove(cls);
-      // Defensive reflow — some engines coalesce class changes without it.
-      void row.offsetWidth;
-      row.classList.add(KIND_CLASS[entry.kind]);
-    }
-
-    // GC keys for entries that have expired out of the store so re-hitting
-    // the same path later produces a fresh flash (not deduped by stale key).
-    for (const k of seenActivitiesRef.current) {
-      if (!live.has(k)) seenActivitiesRef.current.delete(k);
-    }
-  }, [activities, workspaceId, model]);
-
-  // Nudge Pierre to repaint when the dirty-folder set changes so the
-  // decoration renderer re-runs and the dot appears/disappears promptly.
-  // setComposition is idempotent at the data level but always triggers a
-  // re-render of the row surface, which is exactly what we need.
-  useEffect(() => {
-    if (!hasMountedRef.current) return;
-    model.setComposition(model.getComposition());
-  }, [dirtyFolders, model]);
-
-  return (
-    <div ref={containerRef} style={{ display: "block", height: "100%", width: "100%" }}>
-      <PierreFileTree model={model} style={fileTreeThemeStyles} />
-    </div>
-  );
+  return <PierreFileTree model={model} style={fileTreeThemeStyles} />;
 }
