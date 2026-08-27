@@ -35,6 +35,9 @@ export interface EditorPrefill {
 
 const CLAUDE_MODELS = AGENT_CONFIGS["claude-code"].models;
 
+/** Select sentinel for model: null — runs use the platform default. */
+const PLATFORM_DEFAULT_MODEL = "__platform_default__";
+
 interface FormState {
   name: string;
   prompt: string;
@@ -51,7 +54,7 @@ function initialForm(automation: Automation | null, prefill?: EditorPrefill): Fo
       name: automation.name,
       prompt: automation.prompt,
       repositoryId: automation.repository_id ?? "",
-      model: automation.model ?? CLAUDE_MODELS[0].model,
+      model: automation.model ?? PLATFORM_DEFAULT_MODEL,
       schedule: parseSchedule(automation.cron ?? "0 9 * * 1-5"),
       sessionPolicy: automation.session_policy,
     };
@@ -80,6 +83,10 @@ export function AutomationEditor({
   onSaved: (automation: Automation) => void;
 }) {
   const [form, setForm] = useState<FormState>(() => initialForm(automation, prefill));
+  // The pristine snapshot: edits submit ONLY what changed, so untouched
+  // nulls (UTC timezone, platform-default model, a webhook-only cron)
+  // survive a rename instead of being resurrected as concrete values.
+  const [initial] = useState<FormState>(() => initialForm(automation, prefill));
   const reposQuery = useRepos();
   // Cloud sandboxes clone from the remote — a repo without one can't be a target.
   const repos = (reposQuery.data ?? []).filter((repo) => repo.git_origin_url);
@@ -90,37 +97,58 @@ export function AutomationEditor({
     setForm((f) => ({ ...f, schedule: { ...f.schedule, ...update } }));
 
   const selectedPreset = SCHEDULE_PRESETS.find((p) => p.id === form.schedule.preset);
-  // Editing keeps the automation's saved timezone — always submitting the
-  // browser's would silently shift a schedule created in another timezone
-  // even when only the name or prompt changed.
-  const timezone = automation?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const scheduleChanged = !automation || buildCron(form.schedule) !== buildCron(initial.schedule);
+  // A re-authored schedule is written in the user's local terms; an untouched
+  // one keeps the automation's stored timezone (null = UTC) by omission.
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezoneHint = scheduleChanged ? browserTimezone : (automation?.timezone ?? "UTC");
+
+  const modelValue = (value: string) => (value === PLATFORM_DEFAULT_MODEL ? null : value);
 
   const handleSave = () => {
-    save.mutate(
-      {
-        ...(automation ? { automationId: automation.id } : {}),
-        repository_id: form.repositoryId,
-        name: form.name,
-        prompt: form.prompt,
-        cron: buildCron(form.schedule),
-        timezone,
-        session_policy: form.sessionPolicy,
-        model: form.model || null,
+    const input = automation
+      ? {
+          automationId: automation.id,
+          ...(form.name !== initial.name ? { name: form.name } : {}),
+          ...(form.prompt !== initial.prompt ? { prompt: form.prompt } : {}),
+          ...(form.repositoryId && form.repositoryId !== initial.repositoryId
+            ? { repository_id: form.repositoryId }
+            : {}),
+          ...(scheduleChanged ? { cron: buildCron(form.schedule), timezone: browserTimezone } : {}),
+          ...(form.sessionPolicy !== initial.sessionPolicy
+            ? { session_policy: form.sessionPolicy }
+            : {}),
+          ...(form.model !== initial.model ? { model: modelValue(form.model) } : {}),
+        }
+      : {
+          repository_id: form.repositoryId,
+          name: form.name,
+          prompt: form.prompt,
+          cron: buildCron(form.schedule),
+          timezone: browserTimezone,
+          session_policy: form.sessionPolicy,
+          model: modelValue(form.model),
+        };
+    if (automation && Object.keys(input).length === 1) {
+      onSaved(automation);
+      return;
+    }
+    save.mutate(input, {
+      onSuccess: (saved) => {
+        toast.success(automation ? "Automation saved" : "Automation created");
+        onSaved(saved);
       },
-      {
-        onSuccess: (saved) => {
-          toast.success(automation ? "Automation saved" : "Automation created");
-          onSaved(saved);
-        },
-        onError: (err) => toast.error(getErrorMessage(err)),
-      }
-    );
+      onError: (err) => toast.error(getErrorMessage(err)),
+    });
   };
 
   const canSave =
     form.name.trim().length > 0 &&
     form.prompt.trim().length > 0 &&
-    form.repositoryId.length > 0 &&
+    // The repository rides the environment and is only needed when creating
+    // (or retargeting) — a synced automation whose repo isn't on this Mac
+    // must still allow metadata edits.
+    (automation ? true : form.repositoryId.length > 0) &&
     // A cleared time input would silently save "0 0" — midnight.
     (!selectedPreset?.hasTime || /^\d{1,2}:\d{2}$/.test(form.schedule.time)) &&
     (form.schedule.preset !== "custom" || form.schedule.cron.trim().length > 0);
@@ -128,7 +156,7 @@ export function AutomationEditor({
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       {/* Panel header */}
-      <div className="flex items-center justify-between px-8 pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 pt-5 md:px-8">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -205,6 +233,7 @@ export function AutomationEditor({
                   <SelectValue placeholder="Model" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={PLATFORM_DEFAULT_MODEL}>Platform default</SelectItem>
                   {CLAUDE_MODELS.map((option) => (
                     <SelectItem key={option.model} value={option.model}>
                       Claude · {option.label}
@@ -215,7 +244,7 @@ export function AutomationEditor({
             </Field>
           </div>
 
-          <Field label="Schedule" hint={`${timezone} · at least 5 minutes apart`}>
+          <Field label="Schedule" hint={`${timezoneHint} · at least 5 minutes apart`}>
             <div className="flex gap-2">
               <Select
                 value={form.schedule.preset}

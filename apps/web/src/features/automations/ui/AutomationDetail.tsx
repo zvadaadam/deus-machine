@@ -22,6 +22,7 @@ import { Button, ScrollArea } from "@/components/ui";
 import { Switch } from "@/components/ui/switch";
 import { useWorkspaceStore } from "@/features/workspace/store";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import type { Automation, AutomationRun } from "@/shared/types";
 import {
   refreshAutomations,
@@ -80,7 +81,15 @@ export function AutomationDetail({
 
   const handleOpenRun = (run: AutomationRun) => {
     openRun.mutate(run.id, {
-      onSuccess: ({ workspaceId }) => {
+      onSuccess: ({ workspaceId, sessionId }) => {
+        // Activate the adopted run's session tab — the persisted layout
+        // would otherwise restore the previously active tab over the run
+        // the user just clicked.
+        const layout = workspaceLayoutActions.getLayout(workspaceId);
+        const tabs = layout.chatTabSessionIds.includes(sessionId)
+          ? layout.chatTabSessionIds
+          : [...layout.chatTabSessionIds, sessionId];
+        workspaceLayoutActions.setChatTabState(workspaceId, tabs, sessionId);
         closeAutomations();
         selectWorkspace(workspaceId);
       },
@@ -193,7 +202,6 @@ export function AutomationDetail({
                     {i > 0 && <div className="bg-border-subtle h-px w-full" />}
                     <RunRow
                       run={run}
-                      index={(runs.data ?? []).length - i}
                       opening={openRun.isPending && openRun.variables === run.id}
                       onOpen={handleOpenRun}
                     />
@@ -208,14 +216,18 @@ export function AutomationDetail({
   );
 }
 
+const RUN_LABELS: Record<string, string> = {
+  manual: "Manual run",
+  webhook: "Webhook run",
+  cron: "Scheduled run",
+};
+
 function RunRow({
   run,
-  index,
   opening,
   onOpen,
 }: {
   run: AutomationRun;
-  index: number;
   opening: boolean;
   onOpen: (run: AutomationRun) => void;
 }) {
@@ -232,7 +244,9 @@ function RunRow({
       className="enabled:hover:bg-foreground/[0.03] flex h-11 w-full items-center gap-2.5 rounded-md px-1.5 text-left transition-colors duration-150 disabled:cursor-default"
     >
       <Icon className={cn("h-3.5 w-3.5 shrink-0", color, spin && "animate-spin")} />
-      <span className="text-text-primary shrink-0 text-sm font-medium">Run #{index}</span>
+      <span className="text-text-primary shrink-0 text-sm font-medium">
+        {RUN_LABELS[run.trigger] ?? "Run"}
+      </span>
       <span className="text-text-muted shrink-0 text-xs">
         {formatRunWhen(run.started_at ?? run.scheduled_at)}
       </span>

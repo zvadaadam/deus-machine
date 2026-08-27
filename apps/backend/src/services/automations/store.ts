@@ -176,6 +176,21 @@ export function upsertRuns(rows: AutomationRunRow[]): void {
 
 // ─── Run adoption (find-or-create the deus rows for a platform run) ──
 
+/** Resurface an archived adopted workspace and repoint its current session.
+ *  Returns true when anything changed (caller invalidates). */
+export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): boolean {
+  const db = getDatabase();
+  const revived = db
+    .prepare(
+      "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
+    )
+    .run(workspaceId);
+  db.prepare(
+    "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ? AND current_session_id IS NOT ?"
+  ).run(sessionId, workspaceId, sessionId);
+  return revived.changes > 0;
+}
+
 /** True when an adopted deus session row still exists. */
 export function sessionExists(sessionId: string): boolean {
   return getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId) !== undefined;

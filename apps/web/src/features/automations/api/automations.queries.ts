@@ -20,13 +20,13 @@ export const automationKeys = {
 
 export interface AutomationFormInput {
   automationId?: string;
-  repository_id: string;
-  name: string;
-  prompt: string;
-  cron: string;
+  repository_id?: string;
+  name?: string;
+  prompt?: string;
+  cron?: string;
   timezone?: string | null;
-  session_policy: "fresh_session" | "same_session";
-  model: string | null;
+  session_policy?: "fresh_session" | "same_session";
+  model?: string | null;
 }
 
 export function useAutomations(): { data: Automation[] | undefined; isLoading: boolean } {

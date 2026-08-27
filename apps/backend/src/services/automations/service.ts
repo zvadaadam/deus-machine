@@ -111,7 +111,15 @@ async function ensureRepoEnvironment(repositoryId: string): Promise<string> {
 
 let refreshInFlight: Promise<void> | null = null;
 let lastFullRefreshAt = 0;
+/** Bumped by every scoped write (create/update/toggle/delete/refresh(id)) —
+ *  a full refresh whose platform snapshot predates it must not replace the
+ *  cache with stale rows (or resurrect a just-deleted one). */
+let lastScopedWriteAt = 0;
 const FULL_REFRESH_MIN_INTERVAL_MS = 5_000;
+
+export function markScopedWrite(): void {
+  lastScopedWriteAt = Date.now();
+}
 
 /**
  * Mirror the platform into the cache. With `automationId`, one automation +
@@ -130,6 +138,7 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
     const previous = store.getAutomationRaw(automationId);
     store.upsertAutomation(platform.summaryToRow(summary, envMap, previous));
     store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
+    markScopedWrite();
     invalidate([...AUTOMATION_RESOURCES]);
     return;
   }
@@ -138,10 +147,15 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
   if (Date.now() - lastFullRefreshAt < FULL_REFRESH_MIN_INTERVAL_MS) return;
   refreshInFlight = (async () => {
     try {
+      const snapshotStartedAt = Date.now();
       const [summaries, envMap] = await Promise.all([
         platform.fetchAutomations(),
         repoIdByEnvName(),
       ]);
+      // A scoped write landed while this list was in flight — its snapshot
+      // is already stale; dropping it beats restoring an old name/status or
+      // resurrecting a deleted row. The next mount/focus refresh converges.
+      if (lastScopedWriteAt > snapshotStartedAt) return;
       const locals = store.localColumnsById();
       // Read BEFORE the replace: an automation whose platform last-run moved
       // has a stale run ledger — the list derives last_run_status from it, so
@@ -260,10 +274,37 @@ export async function createAutomation(
   // Seed the row directly with its provenance — writing a "user"-labelled row
   // first and patching created_by after would broadcast the intermediate
   // state to every subscriber. A fresh automation has no runs to pull.
-  const [summary, envMap] = await Promise.all([platform.fetchAutomation(id), repoIdByEnvName()]);
-  store.upsertAutomation(
-    platform.summaryToRow(summary, envMap, { created_by: createdBy, workspace_id: null })
-  );
+  try {
+    const [summary, envMap] = await Promise.all([platform.fetchAutomation(id), repoIdByEnvName()]);
+    store.upsertAutomation(
+      platform.summaryToRow(summary, envMap, { created_by: createdBy, workspace_id: null })
+    );
+  } catch (err) {
+    // The platform ACCEPTED the create — a transient follow-up read must not
+    // report failure (the caller would retry and duplicate). Seed the cache
+    // from the validated input; the next refresh reconciles the details.
+    console.warn(`[Automations] post-create reconcile failed for ${id}, seeding from input:`, err);
+    store.upsertAutomation({
+      id,
+      name: valid.name,
+      prompt: valid.prompt,
+      cron: valid.cron,
+      timezone: valid.timezone,
+      environment,
+      repository_id: valid.repository_id,
+      status: "active",
+      paused_reason: null,
+      session_policy: valid.session_policy,
+      model: valid.model,
+      next_run_at: null,
+      last_run_at: null,
+      consecutive_failures: 0,
+      created_by: createdBy,
+      workspace_id: null,
+      updated_at: new Date().toISOString(),
+    });
+  }
+  markScopedWrite();
   invalidate([...AUTOMATION_RESOURCES]);
   const created = getAutomation(id);
   if (!created) throw new Error("Automation not found after creation");
@@ -308,13 +349,16 @@ export async function updateAutomation(
     if (model) spec.model = model;
     else delete spec.model;
   }
-  if (input.repository_id !== undefined && input.repository_id !== existing.repository_id) {
-    spec.environment = await ensureRepoEnvironment(input.repository_id);
-    // The held sandbox belongs to the old repo — drop the adoption link.
-    store.updateLocalColumns(id, { workspace_id: null });
+  const retargeted =
+    input.repository_id !== undefined && input.repository_id !== existing.repository_id;
+  if (retargeted) {
+    spec.environment = await ensureRepoEnvironment(input.repository_id as string);
   }
 
   await platform.updatePlatformAutomation(id, { description: name, spec });
+  // Only AFTER the platform accepted the retarget: the held sandbox belongs
+  // to the old repo, but a failed update must not strip the provenance link.
+  if (retargeted) store.updateLocalColumns(id, { workspace_id: null });
   await refreshAutomations(id);
   const updated = getAutomation(id);
   if (!updated) throw new Error("Automation not found after update");
@@ -339,6 +383,7 @@ export async function deleteAutomation(id: string): Promise<void> {
   if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
   await platform.deletePlatformAutomation(id);
   store.deleteAutomationRow(id);
+  markScopedWrite();
   invalidate([...AUTOMATION_RESOURCES]);
 }
 
@@ -394,6 +439,13 @@ export async function openAutomationRun(
   // transcript is as stale as an empty one — a message-count gate would
   // freeze it forever. The insert path is idempotent, so backfill always.
   if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
+    // The user may have archived the adopted workspace since — an archived
+    // row is invisible to the workspace queries, so opening the run would
+    // select an id the frontend cannot resolve. Resurface it, like the
+    // adoption path does.
+    if (store.reviveAdoptedWorkspace(run.workspace_id, run.session_id)) {
+      invalidate(["workspaces", "stats"]);
+    }
     if (run.provider_session_id) {
       await backfillTranscript(run.session_id, run.provider_session_id);
     }
