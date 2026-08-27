@@ -13,6 +13,8 @@ export type {
   MessageRole,
   Session,
   SessionStatus,
+  Automation,
+  AutomationRun,
   Repository,
   Stats,
   Settings,

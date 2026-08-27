@@ -41,6 +41,7 @@ import { capabilities } from "@/platform/capabilities";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
+import { AutomationsPage, useAutomations } from "@/features/automations";
 import { CONFIGURE_CLOUD_ENV } from "@/features/session/lib/sessionPrompts";
 import { getStoredModel } from "@/features/repository/ui/HomeView";
 import { DEFAULT_MODEL } from "@/shared/agents";
@@ -99,14 +100,20 @@ export function MainLayout() {
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
+  const newWorkspaceDraft = useUIStore((s) => s.newWorkspaceDraft);
   const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const automationsOpen = useUIStore((s) => s.automationsOpen);
+  const openAutomations = useUIStore((s) => s.openAutomations);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
 
   // TanStack Query
   const workspacesQuery = useWorkspacesByRepo();
+  // Keep the automations cache warm app-wide: the sidebar zap and the header
+  // chip derive provenance from it, not just the Automations view.
+  useAutomations();
 
   const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
   const loading = workspacesQuery.isLoading;
@@ -478,6 +485,8 @@ export function MainLayout() {
           onArchive={archiveWorkspace}
           onStatusChange={handleStatusChange}
           onNewSession={() => selectWorkspace(null)}
+          onOpenAutomations={openAutomations}
+          automationsActive={automationsOpen}
           profile={sidebarProfile}
         />
       )}
@@ -485,9 +494,11 @@ export function MainLayout() {
       {/* Sidebar resize handle */}
       <SidebarResizeHandle onSizeChange={setSidebarWidth} onDraggingChange={setSidebarDragging} />
 
-      {/* Main Content — swap between app content and settings page */}
+      {/* Main Content — swap between app content, settings and automations */}
       {settingsOpen ? (
         <SettingsPage />
+      ) : automationsOpen ? (
+        <AutomationsPage />
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}
@@ -523,6 +534,8 @@ export function MainLayout() {
         />
       ) : (
         <NewWorkspacePromptModal
+          key={newWorkspaceDraft ?? "blank"}
+          initialPrompt={newWorkspaceDraft ?? undefined}
           show={showNewWorkspaceModal}
           repos={repos}
           selectedRepoId={repoActions.selectedRepoId}

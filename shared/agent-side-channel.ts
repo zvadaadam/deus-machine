@@ -42,6 +42,9 @@ export const SIDE_CHANNEL = {
   aapLaunchApp: "deus/aap/launch-app",
   aapStopApp: "deus/aap/stop-app",
   aapReadAppSkill: "deus/aap/read-app-skill",
+  /** One mode-discriminated automations tool (list/view/create/update/delete)
+   *  — the ChatGPT `automation_update` shape, backed by automations.service. */
+  automationUpdate: "deus/automation/update",
 } as const;
 
 /** Payload of the `deus/title` notification. */

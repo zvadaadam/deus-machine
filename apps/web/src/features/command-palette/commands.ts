@@ -9,6 +9,7 @@ import {
   Bot,
   ArrowUpRight,
   UserCircle,
+  ClockFading,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
@@ -111,6 +112,14 @@ export const staticCommands: CommandDefinition[] = [
     shortcut: "\u2318,",
     keywords: ["preferences", "config", "options"],
     action: () => uiActions.openSettings(),
+  },
+  {
+    id: "open-automations",
+    label: "Go to Automations",
+    icon: ClockFading,
+    group: "navigation",
+    keywords: ["automations", "scheduled", "cron", "recurring", "tasks"],
+    action: () => uiActions.openAutomations(),
   },
 
   // --- Settings sections ---

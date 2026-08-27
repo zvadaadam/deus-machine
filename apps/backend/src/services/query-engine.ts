@@ -34,6 +34,15 @@ import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.servi
 import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
 import { getDiscoveredServers } from "./local-servers.service";
 import {
+  createAutomation,
+  updateAutomation,
+  toggleAutomation as toggleAutomationService,
+  deleteAutomation as deleteAutomationService,
+  listAutomations,
+  listAutomationRuns,
+  type AutomationInput,
+} from "./automations";
+import {
   runRequest,
   type RequestContext,
   type RequestResourceName,
@@ -452,6 +461,10 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
         return getRunningApps(workspaceId ?? null);
       })
       .with("local_servers", () => getDiscoveredServers())
+      .with("automations", () => listAutomations())
+      .with("automation_runs", () =>
+        listAutomationRuns(requireParam(params, "automationId", "automation_runs"))
+      )
       .exhaustive()
   );
 }
@@ -602,6 +615,26 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         setWorkspaceStatus(workspaceId, parsed);
         invalidate(["workspaces", "stats"]);
         return { success: true };
+      })
+      // ---- Automations (service calls invalidate itself) ----
+      .with("saveAutomation", () => {
+        const input = params as unknown as AutomationInput & { automationId?: string };
+        const automationId = readStringParam(params, "automationId");
+        return automationId
+          ? updateAutomation(automationId, input)
+          : createAutomation(input, "user");
+      })
+      .with("deleteAutomation", () => {
+        deleteAutomationService(requireParam(params, "automationId", "deleteAutomation"));
+        return { success: true };
+      })
+      .with("toggleAutomation", () => {
+        const automationId = requireParam(params, "automationId", "toggleAutomation");
+        const status = requireParam(params, "status", "toggleAutomation");
+        if (status !== "active" && status !== "paused") {
+          throw new Error("toggleAutomation status must be 'active' or 'paused'");
+        }
+        return toggleAutomationService(automationId, status);
       })
       .exhaustive()
   );

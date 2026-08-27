@@ -47,6 +47,7 @@ import {
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
+import { runAutomationNow, refreshAutomations, openAutomationRun } from "../automations";
 import { broadcast as wsBroadcast } from "../ws.service";
 import type { AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
@@ -355,6 +356,21 @@ export async function runCommand(
       // ---- AAP (agentic apps protocol) commands ----
       .with("launchApp", () => handleLaunchApp(params))
       .with("stopApp", () => handleStopApp(params))
+      // ---- Automations (cloud-only; agnt executes, deus mirrors) ----
+      .with("runAutomationNow", async () => {
+        const automationId = requireParam(params, "automationId", "runAutomationNow");
+        const runId = await runAutomationNow(automationId);
+        return { commandId: runId };
+      })
+      .with("refreshAutomations", async () => {
+        await refreshAutomations(readString(params, "automationId"));
+        return {};
+      })
+      .with("openAutomationRun", async () => {
+        const runId = requireParam(params, "runId", "openAutomationRun");
+        const opened = await openAutomationRun(runId);
+        return { commandId: runId, ...opened };
+      })
       .exhaustive()
   );
 }

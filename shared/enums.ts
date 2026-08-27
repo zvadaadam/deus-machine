@@ -80,3 +80,33 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
  */
 export const AgentHarnessSchema = z.enum(["claude-code", "codex-sdk", "codex-app-server"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
+
+// ── Automations ──────────────────────────────────────────────────────────
+// Cloud-only: automations live on the agnt platform (scheduled and executed
+// there — they fire with this Mac closed); deus mirrors them into a local
+// cache. These enums mirror the platform's wire vocabulary exactly.
+
+export const AutomationStatusSchema = z.enum(["active", "paused"]);
+export type AutomationStatus = z.infer<typeof AutomationStatusSchema>;
+
+/** Why a paused automation is paused. Resuming an auto_failures pause
+ *  forgives the failure streak; resuming a manual pause does not. */
+export const AutomationPausedReasonSchema = z.enum(["manual", "auto_failures"]);
+export type AutomationPausedReason = z.infer<typeof AutomationPausedReasonSchema>;
+
+/** fresh_session = a new session per run on the automation's held sandbox.
+ *  same_session = one long-lived session the runs continue (heartbeat). */
+export const AutomationSessionPolicySchema = z.enum(["fresh_session", "same_session"]);
+export type AutomationSessionPolicy = z.infer<typeof AutomationSessionPolicySchema>;
+
+export const AutomationRunStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
+]);
+export type AutomationRunStatus = z.infer<typeof AutomationRunStatusSchema>;
+
+export const AutomationRunTriggerSchema = z.enum(["cron", "webhook", "manual"]);
+export type AutomationRunTrigger = z.infer<typeof AutomationRunTriggerSchema>;

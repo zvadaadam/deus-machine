@@ -20,6 +20,8 @@ interface NewWorkspacePromptModalProps {
   creating: boolean;
   onClose: () => void;
   onRepoChange: (repoId: string) => void;
+  /** Starter prompt (Create with AI) — consumed at mount; remount via key to reset. */
+  initialPrompt?: string;
   /** Empty prompt = create only; non-empty = create and send it as turn one. */
   onSubmit: (params: {
     repoId: string;
@@ -45,8 +47,9 @@ export function NewWorkspacePromptModal({
   onClose,
   onRepoChange,
   onSubmit,
+  initialPrompt,
 }: NewWorkspacePromptModalProps) {
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [location, setLocation] = useState<"local" | "cloud">("local");
   const [model, setModel] = useState(getStoredModel);
   const [branchSelection, setBranchSelection] = useState<{

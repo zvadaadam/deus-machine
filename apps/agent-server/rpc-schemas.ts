@@ -143,6 +143,38 @@ export const ReadAppSkillResponseSchema = z.object({
   content: z.string(),
 });
 
+// ============================================================================
+// Automations
+//
+// One mode-discriminated request (the ChatGPT `automation_update` shape). The
+// backend resolves every default from the calling session — repo, lane,
+// harness, model — so the agent never guesses ids it doesn't have.
+// ============================================================================
+
+export const AutomationUpdateRequestSchema = z.object({
+  sessionId: z.string(),
+  mode: z.enum(["list", "view", "create", "update", "delete"]),
+  /** Automation id (preferred) or exact name. Required for view/update/delete. */
+  automationId: z.string().optional(),
+  name: z.string().optional(),
+  prompt: z.string().optional(),
+  /** 5-field cron expression (e.g. "0 9 * * 1-5"). ≥5 minutes between fires. */
+  cron: z.string().optional(),
+  /** IANA timezone; omitted = UTC. */
+  timezone: z.string().nullable().optional(),
+  sessionPolicy: z.enum(["fresh_session", "same_session"]).optional(),
+  model: z.string().nullable().optional(),
+  status: z.enum(["active", "paused"]).optional(),
+});
+
+/** Loose on purpose: the backend returns wire `Automation` rows (shared/types)
+ *  and the tool renders them as JSON — no second schema to drift. */
+export const AutomationUpdateResponseSchema = z.object({
+  automations: z.array(z.unknown()).optional(),
+  automation: z.unknown().optional(),
+  deleted: z.boolean().optional(),
+});
+
 // --- Inbound (backend → agent-server) ---
 
 export const RegisterAppMcpRequestSchema = z.object({
@@ -190,6 +222,8 @@ export type StopAppRequest = z.infer<typeof StopAppRequestSchema>;
 export type StopAppResponse = z.infer<typeof StopAppResponseSchema>;
 export type ReadAppSkillRequest = z.infer<typeof ReadAppSkillRequestSchema>;
 export type ReadAppSkillResponse = z.infer<typeof ReadAppSkillResponseSchema>;
+export type AutomationUpdateRequest = z.infer<typeof AutomationUpdateRequestSchema>;
+export type AutomationUpdateResponse = z.infer<typeof AutomationUpdateResponseSchema>;
 export type RegisterAppMcpRequest = z.infer<typeof RegisterAppMcpRequestSchema>;
 export type RegisterAppMcpResponse = z.infer<typeof RegisterAppMcpResponseSchema>;
 export type UnregisterAppMcpRequest = z.infer<typeof UnregisterAppMcpRequestSchema>;

@@ -11,6 +11,7 @@ import {
   disconnectCloudCodexAuth,
 } from "../services/cloud-workspace-init.service";
 import { listCloudEnvironments } from "../services/cloud-environment.service";
+import { initAutomations } from "../services/automations";
 import { ValidationError } from "../lib/errors";
 import type { AgentHarness } from "@shared/enums";
 
@@ -109,6 +110,9 @@ app.post("/settings/cloud/github-token", async (c) => {
 app.post("/settings/cloud/credentials", async (c) => {
   const body = parseBody(CloudCredentialsBody, await c.req.json());
   setCloudRuntimeCredentials(body);
+  // Credentials arriving is the moment the automations cache can first (or
+  // freshly) mirror the platform — kick a background sync.
+  initAutomations();
   return c.json({ ok: true, configured: getCloudConfig() !== null });
 });
 

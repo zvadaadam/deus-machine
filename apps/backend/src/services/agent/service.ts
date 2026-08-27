@@ -33,6 +33,7 @@ import {
 import { invalidate } from "../query-engine";
 import { getContextForSession } from "../simulator-context";
 import { getRunningApps, launchApp, listApps, readAppSkill, stopApp } from "../aap";
+import { handleAutomationToolRequest } from "../automations";
 import { DB_PATH, getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { requireParam } from "../../lib/query-params";
@@ -215,6 +216,12 @@ async function handleToolRequest(
 ): Promise<unknown> {
   if (method.startsWith("aap/")) {
     return handleAapRpc(method, params);
+  }
+
+  // Automations: answered entirely in the backend (no frontend relay) by the
+  // SAME service the q:mutate arms use — one service, two callers.
+  if (method === "automation/update") {
+    return handleAutomationToolRequest(params);
   }
 
   // Simulator context is backend state — no frontend relay.

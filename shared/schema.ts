@@ -5,9 +5,9 @@
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, parts, compactions,
- *         paired_devices
- * Indexes: 15
- * Triggers: 5 (3 auto-update updated_at, 2 denormalized message_count + auto-seq)
+ *         paired_devices, automations, automation_runs
+ * Indexes: 17
+ * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
  *
  * The agent-facing tables (messages, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
@@ -43,6 +43,11 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
     "pr_checked_at",
   ],
   sessions: ["agent_harness", "error_category"],
+  // Automations went cloud-only (agnt is the scheduler + source of truth;
+  // these tables are its cache). A database with the locally-scheduled shape
+  // predates that and must be reset.
+  automations: ["environment", "synced_at"],
+  automation_runs: ["provider_session_id"],
   // Protocol unification (engine 0.3.0): messages gained turn-level accounting
   // and the unified parent column; a database without them predates the switch
   // to canonical protocol vocabulary and must be reset.
@@ -223,7 +228,60 @@ export const SCHEMA_SQL = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Indexes (15)
+  -- Automations: a prompt the agnt platform runs on a schedule, in a cloud
+  -- sandbox, with the Mac open or closed. CLOUD-ONLY and a CACHE: the
+  -- platform (agnt Postgres + the Automation Durable Object) is the source
+  -- of truth — it schedules, executes, settles and auto-pauses; deus mirrors
+  -- summaries through @deus-hq/sdk so the WS query layer stays synchronous.
+  -- id = the agnt automation id verbatim. "name" is the DISPLAY name (the
+  -- platform's mutable description; the org-unique platform name is a slug
+  -- deus derives and never shows). "environment" is the spec's environment
+  -- name — the repo link (repo-<slug>-<hash8>); repository_id resolves it to
+  -- a local repo and stays NULL when the repo isn't on this machine, so no
+  -- FK. workspace_id is the adopted deus row for the held sandbox.
+  CREATE TABLE IF NOT EXISTS automations (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    cron TEXT,
+    timezone TEXT,
+    environment TEXT NOT NULL,
+    repository_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    paused_reason TEXT,
+    session_policy TEXT NOT NULL DEFAULT 'fresh_session',
+    model TEXT,
+    next_run_at TEXT,
+    last_run_at TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT NOT NULL DEFAULT 'user',
+    workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- The platform's run ledger, cached. id = the agnt run id.
+  -- provider_session_id is the agnt session id (fresh_session runs derive
+  -- sessionId === runId); session_id/workspace_id are the adopted deus rows,
+  -- stamped when a run is opened in the app.
+  CREATE TABLE IF NOT EXISTS automation_runs (
+    id TEXT PRIMARY KEY NOT NULL,
+    automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'running',
+    trigger TEXT NOT NULL DEFAULT 'cron',
+    provider_session_id TEXT,
+    session_id TEXT,
+    workspace_id TEXT,
+    scheduled_at TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    stop_reason TEXT,
+    error_message TEXT,
+    cost REAL,
+    summary TEXT
+  );
+
+  -- Indexes (17)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -241,8 +299,11 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_compactions_session ON compactions(session_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_compactions_turn ON compactions(session_id, turn_id);
   CREATE INDEX IF NOT EXISTS idx_paired_devices_token_hash ON paired_devices(token_hash);
+  CREATE INDEX IF NOT EXISTS idx_automations_repository_id ON automations(repository_id);
+  -- Run history newest-first (agnt run ids are UUID7 — the PK carries time).
+  CREATE INDEX IF NOT EXISTS idx_automation_runs_automation ON automation_runs(automation_id, id DESC);
 
-  -- Triggers: auto-update updated_at (3)
+  -- Triggers: auto-update updated_at (4)
   CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
     AFTER UPDATE ON repositories
     BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
@@ -254,6 +315,10 @@ export const SCHEMA_SQL = `
   CREATE TRIGGER IF NOT EXISTS update_sessions_updated_at
     AFTER UPDATE ON sessions
     BEGIN UPDATE sessions SET updated_at = datetime('now') WHERE id = NEW.id; END;
+
+  CREATE TRIGGER IF NOT EXISTS update_automations_updated_at
+    AFTER UPDATE ON automations
+    BEGIN UPDATE automations SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
   -- Triggers: denormalized message_count + auto-seq on messages (2)
   CREATE TRIGGER IF NOT EXISTS assign_message_seq
