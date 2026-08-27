@@ -11,6 +11,7 @@ import { AutomationSessionPolicySchema } from "@shared/enums";
 import type { Automation, AutomationRun } from "@shared/types";
 import { httpsOrigin } from "@shared/git-origin";
 import { getDatabase } from "../../lib/database";
+import { getRepositoryById } from "../../db";
 import { invalidate } from "../query-engine";
 import { environmentNameForRepo, getCloudEnvironmentInfo } from "../cloud-environment.service";
 import { generateUniqueName } from "../workspace.service";
@@ -70,9 +71,7 @@ export function automationsConfigured(): boolean {
 // ─── Repo ↔ environment link ─────────────────────────────────
 
 function repoWithOrigin(repositoryId: string): RepositoryRow & { git_origin_url: string } {
-  const repo = getDatabase()
-    .prepare("SELECT * FROM repositories WHERE id = ?")
-    .get(repositoryId) as RepositoryRow | undefined;
+  const repo = getRepositoryById(getDatabase(), repositoryId);
   if (!repo) throw new Error("Repository not found.");
   if (!repo.git_origin_url) {
     throw new Error(
@@ -87,11 +86,13 @@ async function repoIdByEnvName(): Promise<Map<string, string>> {
   const repos = getDatabase()
     .prepare("SELECT id, git_origin_url FROM repositories WHERE git_origin_url IS NOT NULL")
     .all() as Array<{ id: string; git_origin_url: string }>;
-  const map = new Map<string, string>();
-  for (const repo of repos) {
-    map.set(await environmentNameForRepo(httpsOrigin(repo.git_origin_url)), repo.id);
-  }
-  return map;
+  const entries = await Promise.all(
+    repos.map(
+      async (repo) =>
+        [await environmentNameForRepo(httpsOrigin(repo.git_origin_url)), repo.id] as const
+    )
+  );
+  return new Map(entries);
 }
 
 /** The repo's derived environment, created platform-side when missing. */
@@ -121,12 +122,13 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
   if (!platform.platformConfigured()) return;
 
   if (automationId) {
-    const [summary, runs] = await Promise.all([
+    const [summary, runs, envMap] = await Promise.all([
       platform.fetchAutomation(automationId),
       platform.fetchRuns(automationId),
+      repoIdByEnvName(),
     ]);
     const previous = store.getAutomationRaw(automationId);
-    store.upsertAutomation(platform.summaryToRow(summary, await repoIdByEnvName(), previous));
+    store.upsertAutomation(platform.summaryToRow(summary, envMap, previous));
     store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
     invalidate([...AUTOMATION_RESOURCES]);
     return;
@@ -255,9 +257,14 @@ export async function createAutomation(
     model: valid.model,
     sessionPolicy: valid.session_policy,
   });
-  await refreshAutomations(id);
-  store.updateLocalColumns(id, { created_by: createdBy });
-  invalidate(["automations"]);
+  // Seed the row directly with its provenance — writing a "user"-labelled row
+  // first and patching created_by after would broadcast the intermediate
+  // state to every subscriber. A fresh automation has no runs to pull.
+  const [summary, envMap] = await Promise.all([platform.fetchAutomation(id), repoIdByEnvName()]);
+  store.upsertAutomation(
+    platform.summaryToRow(summary, envMap, { created_by: createdBy, workspace_id: null })
+  );
+  invalidate([...AUTOMATION_RESOURCES]);
   const created = getAutomation(id);
   if (!created) throw new Error("Automation not found after creation");
   return created;
@@ -382,22 +389,15 @@ export async function openAutomationRun(
   const automation = store.getAutomationRaw(run.automation_id);
   if (!automation) throw new Error("Automation not found.");
 
-  const db = getDatabase();
-
   // Already adopted — reuse the rows, but heal the transcript first: the run
   // may have finished (or continued) while deus was closed, and a PARTIAL
   // transcript is as stale as an empty one — a message-count gate would
   // freeze it forever. The insert path is idempotent, so backfill always.
-  if (run.session_id && run.workspace_id) {
-    const existing = db.prepare("SELECT id FROM sessions WHERE id = ?").get(run.session_id) as
-      | { id: string }
-      | undefined;
-    if (existing) {
-      if (run.provider_session_id) {
-        await backfillTranscript(run.session_id, run.provider_session_id);
-      }
-      return { workspaceId: run.workspace_id, sessionId: run.session_id };
+  if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
+    if (run.provider_session_id) {
+      await backfillTranscript(run.session_id, run.provider_session_id);
     }
+    return { workspaceId: run.workspace_id, sessionId: run.session_id };
   }
 
   if (!run.provider_session_id) {
@@ -408,79 +408,39 @@ export async function openAutomationRun(
   }
 
   const detail = await platform.fetchSessionDetail(run.provider_session_id);
-  const providerWorkspaceId = detail.workspaceId;
-  if (!providerWorkspaceId) throw new Error("The run's sandbox is gone.");
+  if (!detail.workspaceId) throw new Error("The run's sandbox is gone.");
 
-  // The session (same_session policies reuse one across runs) owns its
-  // workspace: adopting an existing session into a DIFFERENT workspace would
-  // leave the new workspace's current_session_id pointing at a session its
-  // own workspace-scoped queries can't see. If the owning workspace was
-  // archived, resurface it rather than orphaning the session.
-  let session = db
-    .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
-    .get(run.provider_session_id) as { id: string; workspace_id: string } | undefined;
-
-  let workspace: { id: string };
-  if (session) {
-    workspace = { id: session.workspace_id };
-    db.prepare(
-      "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
-    ).run(session.workspace_id);
-  } else {
-    const found = db
-      .prepare("SELECT id FROM workspaces WHERE provider_workspace_id = ? AND state != 'archived'")
-      .get(providerWorkspaceId) as { id: string } | undefined;
-    if (found) {
-      workspace = found;
-    } else {
-      const workspaceId = uuidv7();
-      db.prepare(
-        `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id)
-         VALUES (?, ?, ?, ?, 'ready', 'cloud', ?)`
-      ).run(
-        workspaceId,
-        automation.repository_id,
-        generateUniqueName(db),
-        automation.name,
-        providerWorkspaceId
-      );
-      workspace = { id: workspaceId };
-    }
-    const sessionId = uuidv7();
-    db.prepare(
-      `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, status)
-       VALUES (?, ?, 'claude-code', ?, 'idle')`
-    ).run(sessionId, workspace.id, run.provider_session_id);
-    session = { id: sessionId, workspace_id: workspace.id };
-  }
-
-  db.prepare(
-    "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(session.id, workspace.id);
-  store.setRunAdoption(runId, session.id, workspace.id);
-  store.updateLocalColumns(automation.id, { workspace_id: workspace.id });
+  const { workspaceId, sessionId } = store.adoptRunRows({
+    runId,
+    automationId: automation.id,
+    repositoryId: automation.repository_id,
+    automationName: automation.name,
+    providerSessionId: run.provider_session_id,
+    providerWorkspaceId: detail.workspaceId,
+    newWorkspaceSlug: () => generateUniqueName(getDatabase()),
+  });
 
   // Backfill the transcript from the platform's stored messages — the run
   // executed server-side, so the live channel never folded its events here.
-  const inserted = store.backfillSessionTranscript(session.id, detail.messages);
+  const inserted = store.backfillSessionTranscript(sessionId, detail.messages);
   if (inserted > 0) {
     console.log(
-      `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${session.id}`
+      `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${sessionId}`
     );
   }
   invalidate(["workspaces", "sessions", "session", "messages", "stats", ...AUTOMATION_RESOURCES], {
-    sessionIds: [session.id],
+    sessionIds: [sessionId],
   });
 
   // Attach the live session channel (call-time import: the driver sits in the
   // agent service graph, which imports this module through the tool dispatch).
   void import("../agent/cloud/driver")
-    .then(({ ensureCloudSession }) => ensureCloudSession(session.id))
+    .then(({ ensureCloudSession }) => ensureCloudSession(sessionId))
     .catch((err) => {
       console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
     });
 
-  return { workspaceId: workspace.id, sessionId: session.id };
+  return { workspaceId, sessionId };
 }
 
 /** Heal an adopted-but-empty transcript from the platform's stored messages. */

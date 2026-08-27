@@ -4,7 +4,9 @@
 // model — so the agent never guesses ids it doesn't have. Writes go through
 // the same service the q:mutate arms use; everything executes in Deus Cloud.
 
+import { match } from "ts-pattern";
 import { getDatabase } from "../../lib/database";
+import { readStringParam, requireParam } from "../../lib/query-params";
 import { getSessionRaw, getWorkspaceRaw } from "../../db";
 import {
   createAutomation,
@@ -59,80 +61,72 @@ function resolveAutomationId(ref: string): string {
   throw new Error(`automation: not found: ${ref}`);
 }
 
-function readString(params: Record<string, unknown>, key: string): string | undefined {
-  return typeof params[key] === "string" ? (params[key] as string) : undefined;
-}
+const MODES = ["list", "view", "create", "update", "delete"] as const;
+type Mode = (typeof MODES)[number];
 
 export async function handleAutomationToolRequest(
   params: Record<string, unknown>
 ): Promise<unknown> {
-  const sessionId = readString(params, "sessionId");
+  const sessionId = readStringParam(params, "sessionId");
   if (!sessionId) throw new Error("automation: sessionId is required");
-  const mode = readString(params, "mode");
+  const rawMode = readStringParam(params, "mode");
+  if (!rawMode || !(MODES as readonly string[]).includes(rawMode)) {
+    throw new Error(`automation: unknown mode "${rawMode}"`);
+  }
+  const requireRef = () =>
+    resolveAutomationId(requireParam(params, "automationId", "automation_update"));
 
-  switch (mode) {
-    case "list":
+  return match(rawMode as Mode)
+    .with("list", async () => {
       await refreshAutomations().catch(() => {
         // Stale cache beats a failed list — the platform may be briefly away.
       });
       return { automations: listAutomations() };
-
-    case "view": {
-      const id = resolveAutomationId(requireRef(params));
+    })
+    .with("view", async () => {
+      const id = requireRef();
       await refreshAutomations(id).catch(() => {});
       return { automation: getAutomation(id), runs: listAutomationRuns(id).slice(0, 10) };
-    }
-
-    case "create": {
+    })
+    .with("create", async () => {
       const defaults = defaultsFromSession(sessionId);
       const input: AutomationInput = {
-        repository_id: readString(params, "repositoryId") ?? defaults.repository_id,
-        name: readString(params, "name") ?? "",
-        prompt: readString(params, "prompt") ?? "",
-        cron: readString(params, "cron") ?? "",
-        timezone: readString(params, "timezone") ?? null,
-        session_policy: readString(params, "sessionPolicy"),
-        model: readString(params, "model") ?? defaults.model,
+        repository_id: readStringParam(params, "repositoryId") ?? defaults.repository_id,
+        name: readStringParam(params, "name") ?? "",
+        prompt: readStringParam(params, "prompt") ?? "",
+        cron: readStringParam(params, "cron") ?? "",
+        timezone: readStringParam(params, "timezone") ?? null,
+        session_policy: readStringParam(params, "sessionPolicy"),
+        model: readStringParam(params, "model") ?? defaults.model,
       };
       return { automation: await createAutomation(input, "agent") };
-    }
-
-    case "update": {
-      const id = resolveAutomationId(requireRef(params));
+    })
+    .with("update", async () => {
+      const id = requireRef();
       const patch: Partial<AutomationInput> = {};
-      const name = readString(params, "name");
-      const prompt = readString(params, "prompt");
-      const cron = readString(params, "cron");
-      const sessionPolicy = readString(params, "sessionPolicy");
+      const name = readStringParam(params, "name");
+      const prompt = readStringParam(params, "prompt");
+      const cron = readStringParam(params, "cron");
+      const sessionPolicy = readStringParam(params, "sessionPolicy");
       if (name !== undefined) patch.name = name;
       if (prompt !== undefined) patch.prompt = prompt;
       if (cron !== undefined) patch.cron = cron;
-      if ("timezone" in params) patch.timezone = readString(params, "timezone") ?? null;
+      if ("timezone" in params) patch.timezone = readStringParam(params, "timezone") ?? null;
       if (sessionPolicy !== undefined) patch.session_policy = sessionPolicy;
-      if ("model" in params) patch.model = readString(params, "model") ?? null;
+      if ("model" in params) patch.model = readStringParam(params, "model") ?? null;
 
       let automation =
         Object.keys(patch).length > 0 ? await updateAutomation(id, patch) : getAutomation(id);
-      const status = readString(params, "status");
+      const status = readStringParam(params, "status");
       if (status === "active" || status === "paused") {
         automation = await toggleAutomation(id, status);
       }
       return { automation };
-    }
-
-    case "delete": {
-      const id = resolveAutomationId(requireRef(params));
+    })
+    .with("delete", async () => {
+      const id = requireRef();
       await deleteAutomation(id);
       return { deleted: true };
-    }
-
-    default:
-      throw new Error(`automation: unknown mode "${mode}"`);
-  }
-}
-
-function requireRef(params: Record<string, unknown>): string {
-  const ref = readString(params, "automationId");
-  if (!ref) throw new Error("automation: automationId is required for this mode");
-  return ref;
+    })
+    .exhaustive();
 }

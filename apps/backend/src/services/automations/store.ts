@@ -3,6 +3,7 @@
 // tables exist so the WS query layer stays synchronous and the UI renders
 // instantly. Sync logic lives in service.ts; this file owns rows.
 
+import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../../lib/database";
 import type { AutomationRow, AutomationRunRow, AutomationWithDetailsRow } from "../../db/types";
 
@@ -173,11 +174,87 @@ export function upsertRuns(rows: AutomationRunRow[]): void {
   apply();
 }
 
-/** Stamp the adopted deus rows onto a run after it's opened in the app. */
-export function setRunAdoption(runId: string, sessionId: string, workspaceId: string): void {
-  getDatabase()
-    .prepare("UPDATE automation_runs SET session_id = ?, workspace_id = ? WHERE id = ?")
-    .run(sessionId, workspaceId, runId);
+// ─── Run adoption (find-or-create the deus rows for a platform run) ──
+
+/** True when an adopted deus session row still exists. */
+export function sessionExists(sessionId: string): boolean {
+  return getDatabase().prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId) !== undefined;
+}
+
+/**
+ * Find-or-create the deus workspace/session rows for a run's platform ids —
+ * ONE transaction, so a mid-sequence failure can never leave a workspace
+ * whose current_session_id points at a session that never landed (the same
+ * atomicity the cloud-workspace-init pair keeps). The session owns its
+ * workspace: same_session runs reuse one session across fires, and adopting
+ * it into a different workspace would orphan it from that workspace's scoped
+ * queries — an archived owner is resurfaced instead.
+ */
+export function adoptRunRows(input: {
+  runId: string;
+  automationId: string;
+  repositoryId: string;
+  automationName: string;
+  providerSessionId: string;
+  providerWorkspaceId: string;
+  newWorkspaceSlug: () => string;
+}): { workspaceId: string; sessionId: string } {
+  const db = getDatabase();
+  const adopt = db.transaction(() => {
+    let session = db
+      .prepare("SELECT id, workspace_id FROM sessions WHERE provider_session_id = ?")
+      .get(input.providerSessionId) as { id: string; workspace_id: string } | undefined;
+
+    let workspaceId: string;
+    if (session) {
+      workspaceId = session.workspace_id;
+      db.prepare(
+        "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
+      ).run(workspaceId);
+    } else {
+      const found = db
+        .prepare(
+          "SELECT id FROM workspaces WHERE provider_workspace_id = ? AND state != 'archived'"
+        )
+        .get(input.providerWorkspaceId) as { id: string } | undefined;
+      if (found) {
+        workspaceId = found.id;
+      } else {
+        workspaceId = uuidv7();
+        db.prepare(
+          `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id)
+           VALUES (?, ?, ?, ?, 'ready', 'cloud', ?)`
+        ).run(
+          workspaceId,
+          input.repositoryId,
+          input.newWorkspaceSlug(),
+          input.automationName,
+          input.providerWorkspaceId
+        );
+      }
+      const sessionId = uuidv7();
+      db.prepare(
+        `INSERT INTO sessions (id, workspace_id, agent_harness, provider_session_id, status)
+         VALUES (?, ?, 'claude-code', ?, 'idle')`
+      ).run(sessionId, workspaceId, input.providerSessionId);
+      session = { id: sessionId, workspace_id: workspaceId };
+    }
+
+    db.prepare(
+      "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(session.id, workspaceId);
+    db.prepare("UPDATE automation_runs SET session_id = ?, workspace_id = ? WHERE id = ?").run(
+      session.id,
+      workspaceId,
+      input.runId
+    );
+    db.prepare("UPDATE automations SET workspace_id = ? WHERE id = ?").run(
+      workspaceId,
+      input.automationId
+    );
+    return { workspaceId, sessionId: session.id };
+  });
+  return adopt();
 }
 
 // ─── Transcript backfill (adopted runs) ──────────────────────
