@@ -32,8 +32,7 @@ import {
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/shared/api/client";
+import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 
 export function EnvironmentSection() {
@@ -43,17 +42,7 @@ export function EnvironmentSection() {
   const cloudSession = useDeusCloudSession();
   // Shared cache with Settings → Cloud (same key); this section only reads
   // whether a turn can actually run.
-  const cloudStatus = useQuery({
-    queryKey: ["settings", "cloud"],
-    queryFn: () =>
-      apiClient.get<{
-        enabled: boolean;
-        hasTurnCredential?: boolean;
-        hasClaudeTurnCredential?: boolean;
-      }>("/settings/cloud"),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const cloudStatus = useCloudSettings();
   // A reason, not a boolean — distinct states need distinct next steps.
   // vaultLocked FIRST: with the keyring locked hasPlatformKey reads false
   // too, and "finish device setup" would send the user to redo a setup

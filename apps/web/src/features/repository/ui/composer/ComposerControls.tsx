@@ -6,6 +6,11 @@
  */
 
 import { createElement, useState } from "react";
+import { toast } from "sonner";
+import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
+import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
+import { capabilities } from "@/platform/capabilities";
+
 import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
@@ -179,6 +184,37 @@ interface CloudToggleProps {
 
 /** Off-by-default cloud switch — on = the workspace runs in an agnt sandbox. */
 export function CloudToggle({ location, onLocationChange, withTooltip = false }: CloudToggleProps) {
+  // Signed-out truth at the moment of intent: flipping Cloud on without a
+  // Deus Cloud session can only end in a failed create, so say it HERE with
+  // the sign-in one click away — not as a 500 after the prompt is written.
+  const cloudStatus = useCloudSettings();
+  const signIn = useDeusCloudSignIn();
+  const handleChange = (on: boolean) => {
+    // Only select cloud once it's CONFIRMED enabled. A still-loading or errored
+    // /settings/cloud leaves `data` undefined — selecting cloud then just arms a
+    // submit the backend guard rejects — so treat "not confirmed enabled" as
+    // unavailable and keep the switch local.
+    if (on && !cloudStatus.data?.enabled) {
+      // Only nudge to sign in once we KNOW it's disabled — a status that hasn't
+      // loaded yet shouldn't cry "not signed in". Deus Cloud sign-in mints a
+      // device credential over Electron IPC; there's no web sign-in yet, so on
+      // app.deusmachine.ai point at the desktop app.
+      if (cloudStatus.data && !cloudStatus.data.enabled) {
+        toast("Not signed in to Deus Cloud", {
+          description: capabilities.ipcInvoke
+            ? "Cloud workspaces need a Deus Cloud account on this device."
+            : "Sign in to Deus Cloud from the desktop app to use cloud workspaces.",
+          ...(capabilities.ipcInvoke && {
+            action: { label: "Sign in", onClick: () => signIn.mutate() },
+          }),
+        });
+      }
+      // Keep the location LOCAL — re-toggling after sign-in (or once the status
+      // resolves to enabled) takes the cloud path below.
+      return;
+    }
+    onLocationChange(on ? "cloud" : "local");
+  };
   const label = (
     <label
       className={cn(
@@ -190,9 +226,9 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
       <span>Cloud</span>
       <Switch
         checked={location === "cloud"}
-        onCheckedChange={(on) => onLocationChange(on ? "cloud" : "local")}
+        onCheckedChange={handleChange}
         className="scale-75"
-        aria-label="Run in a cloud sandbox"
+        aria-label="Run on a cloud computer"
       />
     </label>
   );
@@ -204,7 +240,7 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
       <TooltipContent side="bottom">
         <p className="text-xs">
           {location === "cloud"
-            ? "Runs in a cloud sandbox (clones the repo's origin)"
+            ? "Runs on a cloud computer (clones the repo's origin)"
             : "Off — runs in a git worktree on this Mac"}
         </p>
       </TooltipContent>

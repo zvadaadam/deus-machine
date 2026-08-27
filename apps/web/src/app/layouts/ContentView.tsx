@@ -11,6 +11,9 @@
 
 import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
+import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
+import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
+import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUnavailable";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
@@ -69,6 +72,39 @@ export function ContentView({
       ? { id: workspace.id, path: workspace.workspace_path }
       : lastLocalTerminal;
 
+  // null when the cloud sidecar can serve (or the workspace is local); else the
+  // stage the gate should show (provisioning / asleep / waking).
+  const cloudStage = cloudGateStage(workspace);
+  const cloudServing = workspace.kind === "cloud" && cloudStage === null;
+
+  // Same freeze rule for the CLOUD panel, but keyed to the last SERVICEABLE
+  // cloud workspace. Unmounting the shared cloud panel disposed live xterms
+  // mid-frame (xterm's un-cancelable rAF work — the "reading 'dimensions'"
+  // crash) and, on a visit to a paused/provisioning computer, would kill the
+  // shells of OTHER still-awake cloud workspaces the panel caches. Gating on
+  // "serving" means a non-serving computer never becomes the mounted id: its
+  // shell never spawns against a down sidecar — the gate overlays instead — and
+  // awake workspaces stay live underneath.
+  const [lastCloudTerminal, setLastCloudTerminal] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (cloudServing) {
+      setLastCloudTerminal((prev) => (prev === workspace.id ? prev : workspace.id));
+    }
+  }, [cloudServing, workspace.id]);
+  const cloudTerminalId = cloudServing ? workspace.id : lastCloudTerminal;
+
+  // The Browser previews a dev server at localhost:PORT — only reachable for a
+  // LOCAL workspace. Freeze it on the last local workspace (like the terminal)
+  // so a cloud visit doesn't unmount it mid-navigation and orphan the webview;
+  // cloud gets the placeholder overlay instead.
+  const [lastLocalBrowser, setLastLocalBrowser] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (workspace.kind !== "cloud") {
+      setLastLocalBrowser((prev) => (prev === workspace.id ? prev : workspace.id));
+    }
+  }, [workspace.kind, workspace.id]);
+  const browserTarget = workspace.kind !== "cloud" ? workspace.id : lastLocalBrowser;
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Lazy tabs — mounted only when active */}
@@ -87,32 +123,44 @@ export function ContentView({
       {/* Persistent tabs — always mounted, hidden when inactive */}
       <div
         className={cn(
-          "h-full w-full min-w-0 overflow-hidden",
+          "relative h-full w-full min-w-0 overflow-hidden",
           activeTab !== "browser" && "pointer-events-none invisible absolute"
         )}
       >
-        <BrowserPanel workspaceId={workspace.id} panelVisible={activeTab === "browser"} />
+        {browserTarget && (
+          <BrowserPanel
+            workspaceId={browserTarget}
+            panelVisible={activeTab === "browser" && workspace.kind !== "cloud"}
+          />
+        )}
+        {workspace.kind === "cloud" && (
+          <div className="absolute inset-0 z-10">
+            <CloudBrowserUnavailable />
+          </div>
+        )}
       </div>
 
       <div
         className={cn(
-          "h-full w-full",
+          "relative h-full w-full",
           activeTab !== "terminal" && "pointer-events-none invisible absolute"
         )}
       >
-        {workspace.kind === "cloud" && (
+        {cloudTerminalId && (
           // The REAL remote shell: pty frames ride the sidecar session
           // channel and come back on the same pty-data/pty-exit events the
           // local terminal speaks — a separate panel instance so cloud ids
-          // never mix into the frozen local panel below. A sandbox that
-          // isn't running fails the spawn promptly (SIDECAR_NOT_CONNECTED)
-          // and the message lands in the terminal itself.
-          <TerminalPanel
-            workspaceId={workspace.id}
-            workspacePath=""
-            cloud
-            panelVisible={activeTab === "terminal"}
-          />
+          // never mix into the frozen local panel below. Only ever a SERVING
+          // workspace's id (see the freeze above), so the shell never spawns
+          // against a down computer.
+          <div className={cn("h-full w-full", workspace.kind !== "cloud" && "hidden")}>
+            <TerminalPanel
+              workspaceId={cloudTerminalId}
+              workspacePath=""
+              cloud
+              panelVisible={activeTab === "terminal" && cloudServing}
+            />
+          </div>
         )}
         {terminalTarget && (
           // Mounted through cloud selections too (frozen on the last LOCAL
@@ -128,6 +176,16 @@ export function ContentView({
               workspacePath={terminalTarget.path}
               panelVisible={activeTab === "terminal" && workspace.kind !== "cloud"}
             />
+          </div>
+        )}
+        {cloudStage && (
+          // Provisioning/asleep/waking: overlay the gate over the frozen cloud
+          // panel. Because cloudTerminalId only tracks a SERVING workspace, the
+          // non-serving computer never mounts a shell here (no dead "press
+          // Enter" corpse / WebSocket error), and any other awake workspace's
+          // shells stay live underneath the overlay.
+          <div className="absolute inset-0 z-10">
+            <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
           </div>
         )}
       </div>

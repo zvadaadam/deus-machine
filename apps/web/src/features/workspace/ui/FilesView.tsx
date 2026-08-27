@@ -14,6 +14,8 @@ import { useFileChanges } from "../api/workspace.queries";
 import { FileBrowserPanel, FileViewer } from "@/features/file-browser";
 import type { Workspace } from "@/shared/types";
 import { useWorkspaceLayoutStore, workspaceLayoutActions } from "../store/workspaceLayoutStore";
+import { cloudGateStage } from "../lib/cloudPresence";
+import { CloudSandboxGate } from "./CloudSandboxGate";
 
 interface FilesViewProps {
   workspace: Workspace;
@@ -29,8 +31,15 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
   const revealRequest = pendingFileNavigation?.target === "files" ? pendingFileNavigation : null;
   const isReady = workspace.state === "ready";
 
+  // A provisioning/paused/stopped cloud computer has no sidecar to serve the
+  // tree or diffs. Compute the gate stage up front so the change poller stays
+  // off a down computer, and gate the whole view to the setting-up/wake screen
+  // instead of an empty tree or a raw "WebSocket not connected".
+  const gateStage = cloudGateStage(workspace);
+  const canServe = gateStage === null;
+
   const { data: fileChangesData } = useFileChanges(
-    isReady ? workspace.id : null,
+    isReady && canServe ? workspace.id : null,
     workspace.session_status,
     isWatched,
     workspace.state
@@ -46,6 +55,10 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
     },
     [workspace.id]
   );
+
+  if (gateStage) {
+    return <CloudSandboxGate workspaceId={workspace.id} stage={gateStage} />;
+  }
 
   return (
     <ResizablePanelGroup direction="horizontal" className="min-h-0 flex-1">

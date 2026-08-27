@@ -163,11 +163,14 @@ export function TerminalPanel({
   }
 
   // Watch for queued task commands from the task store (e.g. "bun run build" from header buttons)
-  const pendingTask = useTerminalTaskStore((s) => s.pendingTask);
+  const pendingTask = useTerminalTaskStore((s) => s.pendingTasks[workspaceId]);
 
   useEffect(() => {
     if (!pendingTask) return;
-    const task = consumeTerminalTask();
+    // Claim only tasks queued FOR this workspace — the id match (not isActive)
+    // is the guard, so a task can't leak into the wrong repo when its own panel
+    // is inactive (e.g. an asleep cloud computer whose panel isn't mounted).
+    const task = consumeTerminalTask(workspaceId);
     if (!task) return;
 
     // Read fresh state to avoid stale closure over render-time values

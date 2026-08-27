@@ -49,6 +49,38 @@ export interface AskQuestionRequest {
 
 export type PendingAgentRequest = PlanModeRequest | AskQuestionRequest;
 
+/** Fold the tool-call shapes agents actually produce into our question list. */
+function normalizeQuestions(params: Record<string, unknown>): AskQuestionRequest["questions"] {
+  const toEntry = (value: unknown): AskQuestionRequest["questions"][number] | null => {
+    if (typeof value === "string" && value.trim()) {
+      return { question: value.trim(), options: [] };
+    }
+    if (value && typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      const question =
+        typeof obj.question === "string"
+          ? obj.question
+          : typeof obj.prompt === "string"
+            ? obj.prompt
+            : null;
+      if (!question || !question.trim()) return null;
+      const options = Array.isArray(obj.options)
+        ? obj.options.filter((o): o is string => typeof o === "string" && o.trim().length > 0)
+        : [];
+      return {
+        question: question.trim(),
+        options,
+        ...(typeof obj.multiSelect === "boolean" ? { multiSelect: obj.multiSelect } : {}),
+      };
+    }
+    return null;
+  };
+
+  const raw = params.questions ?? params.question;
+  const list = Array.isArray(raw) ? raw : raw !== undefined ? [raw] : [];
+  return list.map(toEntry).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -132,9 +164,14 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleExitPlanMode = useCallback(
-    (params: Record<string, unknown>, wsRequestId: string) => {
-      const sessionId = params.sessionId as string;
-      if (!sessionId) return;
+    (params: Record<string, unknown>, wsRequestId: string, respond: RespondFn) => {
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+      // Malformed request: complete it as a rejected plan (the schema-valid
+      // cancellation) instead of leaving the agent to time out on silence.
+      if (!sessionId) {
+        respond({ approved: false });
+        return;
+      }
 
       if (import.meta.env.DEV) {
         console.log("[AgentRPC] exitPlanMode pending for session:", sessionId);
@@ -159,10 +196,23 @@ export function useAgentRpcHandler(
   // ============================================================================
 
   const handleAskUserQuestion = useCallback(
-    (params: Record<string, unknown>, wsRequestId: string) => {
-      const sessionId = params.sessionId as string;
-      const questions = params.questions as AskQuestionRequest["questions"];
-      if (!sessionId || !Array.isArray(questions)) return;
+    (params: Record<string, unknown>, wsRequestId: string, respond: RespondFn) => {
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+      // Tolerant-reader: agents call this tool in more shapes than our schema
+      // (singular question, single object, missing options). A shape we still
+      // can't use must UNBLOCK the agent immediately — silently dropping the
+      // request left it hanging on an invisible card until its own timeout.
+      const normalized = normalizeQuestions(params);
+      if (!sessionId || normalized.length === 0) {
+        // Invalid sessionId or nothing usable — unblock the agent with a
+        // schema-valid cancellation and store no pending request.
+        // Unblock the agent with a SCHEMA-VALID cancellation — {error} violates
+        // AskUserQuestionResponseSchema (needs `answers`), and the cloud path
+        // would coerce it to the bogus answer "[object Object]".
+        respond({ answers: ["USER_CANCELLED"] });
+        return;
+      }
+      const questions = normalized;
 
       if (import.meta.env.DEV) {
         console.log(
@@ -326,8 +376,8 @@ export function useAgentRpcHandler(
     }
 
     match(method)
-      .with("exitPlanMode", () => handleExitPlanMode(params, requestId))
-      .with("askUserQuestion", () => handleAskUserQuestion(params, requestId))
+      .with("exitPlanMode", () => handleExitPlanMode(params, requestId, respond))
+      .with("askUserQuestion", () => handleAskUserQuestion(params, requestId, respond))
       .with("getDiff", () => handleGetDiff(params, respond))
       .with("diffComment", () => handleDiffComment(params, respond))
       .with("getTerminalOutput", () => handleGetTerminalOutput(params, respond))

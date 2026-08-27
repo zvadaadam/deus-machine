@@ -746,6 +746,25 @@ Queued follow-ups out of the review waves (real, deliberately not v1):
   finer-grained caps list joins the dial the same way harnesses did.
 - **PTY reattach** (agnt sidecar): 64KB ring buffer + reopen-with-same-id
   replay, if resume-with-open-terminal proves annoying in practice.
+- **Terminal-panel unification** (deus, thermo R1): ContentView mounts two
+  frozen TerminalPanels (local + cloud) only because `cloud` is a panel-wide
+  prop; widening TerminalPanel's `visitedWorkspaces` LRU to carry cloudness
+  per-entry collapses it to ONE panel (~-45 lines). Deferred as its own
+  change — it rewrites the terminal mount model we just stabilized against
+  the xterm dimensions crash, so it wants isolated live verification.
+- **Cloud FS as a strategy** (deus, thermo D1/D2): the `kind === "cloud"`
+  branch is re-decided in every files route; a `WorkspaceFs` (Local/Cloud)
+  chosen once from workspace.kind + typed `listCloudFs`/`readCloudFs`
+  wrappers (owning `CloudFsNode`) would make each route one line and delete
+  the per-call casts. PTY stays id-dispatched (not kind-branched) by design.
+- **Terminal.tsx respawn state model** (deus, thermo D3): the single effect
+  now owns spawn+respawn+activation+ready/dead; driving respawn via a
+  `generation` state deletes the mutable-ptyId guards, at the cost of an
+  xterm rebuild — Important-not-Critical.
+- **codex-sdk full removal** (deus): the picker already hides it
+  (MODEL_PICKER_GROUPS) — registration survives only for old session rows.
+  Deleting it is an enum + `.exhaustive()` + PRELAUNCH_RETIRED sweep of its
+  own, not a rider.
 
 ### D3 (next) — "Mac closed": mobile direct-to-cloud
 

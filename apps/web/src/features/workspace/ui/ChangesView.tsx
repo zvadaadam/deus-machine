@@ -37,6 +37,8 @@ import {
   type ChangesFilter,
 } from "../lib/changesFilter";
 import { fileChangePath } from "../lib/workspace.utils";
+import { cloudGateStage } from "../lib/cloudPresence";
+import { CloudSandboxGate } from "./CloudSandboxGate";
 import type { Workspace } from "@/shared/types";
 
 interface ChangesViewProps {
@@ -61,9 +63,16 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
 
   const isReady = workspace.state === "ready";
 
+  // A provisioning/paused/stopped cloud computer has no sidecar to serve the
+  // diff. Compute the gate stage up front so the change poller stays off a down
+  // computer, and gate the whole view to the setting-up/wake screen instead of
+  // a misleading "No changes yet".
+  const gateStage = cloudGateStage(workspace);
+  const canServe = gateStage === null;
+
   // Fetch file change data
   const { data: fileChangesData } = useFileChanges(
-    isReady ? workspace.id : null,
+    isReady && canServe ? workspace.id : null,
     workspace.session_status,
     isWatched,
     workspace.state
@@ -91,6 +100,10 @@ export function ChangesView({ workspace, isWatched = false, onReview, compact }:
   const handleUnpin = useCallback(() => setFileTreePinned(false), [setFileTreePinned]);
 
   const activeFilterLabel = changesFilterLabel(changesFilter);
+
+  if (gateStage) {
+    return <CloudSandboxGate workspaceId={workspace.id} stage={gateStage} />;
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

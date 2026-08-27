@@ -35,7 +35,7 @@ export function useCloudEnvEntries(workspaceId?: string | null): CloudEnvEntry[]
 // Deliberately an OPEN dictionary (string keys): steps are an open platform
 // vocabulary, looked up with arbitrary runtime strings and humanized on miss.
 const STEP_LABELS: Record<string, string> = {
-  initializing: "Initializing sandbox",
+  initializing: "Initializing computer",
   installing_packages: "Installing packages",
   syncing_env_vars: "Syncing environment",
   configuring_git_auth: "Configuring git access",
@@ -47,7 +47,7 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 function stepLabel(step: string | null): string {
-  if (!step) return "Provisioning sandbox";
+  if (!step) return "Provisioning computer";
   const known = STEP_LABELS[step];
   if (known) return known;
   const words = step.replace(/_/g, " ");
@@ -71,7 +71,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
     return [
       {
         key: `paused-${latest.id}`,
-        label: "Sandbox paused — it wakes on your next message",
+        label: "Computer paused — it wakes on your next message",
         icon: "asleep",
         tone: "muted",
       },
@@ -81,7 +81,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
     return [
       {
         key: `stopped-${latest.id}`,
-        label: latest.reason ? `Sandbox stopped — ${latest.reason}` : "Sandbox stopped",
+        label: latest.reason ? `Computer stopped — ${latest.reason}` : "Computer stopped",
         icon: "asleep",
         tone: "muted",
       },
@@ -105,7 +105,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
     if (entry.status === "provisioning") {
       lines.push({ key: `step-${entry.id}`, label: stepLabel(entry.step), icon: "done" });
     } else if (entry.status === "resuming") {
-      lines.push({ key: `resume-${entry.id}`, label: "Waking sandbox", icon: "done" });
+      lines.push({ key: `resume-${entry.id}`, label: "Waking computer", icon: "done" });
     }
   }
   if (latest.status === "running") {

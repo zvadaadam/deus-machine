@@ -42,8 +42,8 @@ function subtitle(
   const project = repoName ?? "your project";
   if (kind === "cloud") {
     return parentBranch
-      ? `A cloud sandbox running ${project}, cloned from ${parentBranch}.`
-      : `A cloud sandbox running ${project}.`;
+      ? `A cloud computer running ${project}, cloned from ${parentBranch}.`
+      : `A cloud computer running ${project}.`;
   }
   if (parentBranch) {
     return `A safe copy of ${project}, branched from ${parentBranch}.`;
