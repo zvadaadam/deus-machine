@@ -6,13 +6,35 @@ terminal — any resource — is reachable the same way whether it lives on your
 Mac, in your cloud, or (later) on a teammate's machine. One address scheme, one
 wire, one projection._
 
-**Status: design + Phase 0 started.** Near-term product need is only **your
+**Status: Phases 0–2 shipped (backend); the communication style is in place for
+cloud + local and ready for future nodes.** Near-term product need is only **your
 local + your cloud, one user**. The mesh is the north star that shapes how we
 build that near-term slice so the teammate mesh is a clean _extension_, not a
 rewrite. Nothing here asks us to build the teammate mesh now — it asks us to not
 _foreclose_ it. The interactive companion to this doc lives at
 `.context/research/mesh-architecture.html`; the shipped cloud model it builds on
 is `docs/cloud-workspaces-plan.md`.
+
+## Adding a future node (the seam is ready)
+
+Because live resources route through the driver interface and state routes
+through the source-agnostic fold, a new node — a second Mac, a teammate's
+machine, a second cloud region — plugs in without touching call sites:
+
+1. **Give it a `NodeId`** (`services/node/index.ts`). Today `"local"` / `"cloud"`;
+   a peer becomes `"peer:<pubkey-hash>"` — `NodeId` is opaque and derived exactly
+   so this doesn't ripple.
+2. **State resources**: point its event stream at the shared
+   `AgentEventHandler.handle` (the fold is proven node-agnostic — see the
+   contract test). Its workspaces/sessions/messages then appear locally for free.
+3. **Live-probe resources**: implement `NodeDriver` (diff + fs) for it and add a
+   case to `resolveNode`. Streams (pty) implement the `ptyRouter` shape.
+4. **Reach + trust** (only for a node you don't already own): a discovery entry
+   and a signed capability grant — the one genuinely new build, deferred until a
+   teammate node is real (see Trust, below).
+
+Steps 1–3 are the pattern this PR establishes; nothing about them is
+cloud-specific. That is what "ready for future nodes" means here.
 
 ---
 

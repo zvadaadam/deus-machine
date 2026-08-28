@@ -32,7 +32,7 @@ import {
   cloudTreeToResponse,
   cloudFsOrThrow,
 } from "./cloud-fs";
-import { CLOUD_NODE_ID, workspaceNodeId } from "./index";
+import { CLOUD_NODE_ID, formatRef, workspaceNodeId, workspaceRef } from "./index";
 import type { WorkspaceWithDetailsRow } from "../../db";
 
 // ─────────────────────────── result shapes ───────────────────────────
@@ -243,7 +243,7 @@ class RemoteNodeDriver implements NodeDriver {
       return await getCloudDiffSummary(this.workspace.current_session_id);
     } catch (err) {
       console.warn(
-        `[Diff] cloud summary unavailable for ${this.workspace.id}: ${getErrorMessage(err)}`
+        `[Diff] cloud summary unavailable for ${formatRef(workspaceRef(this.workspace))}: ${getErrorMessage(err)}`
       );
       return null;
     }

@@ -1,17 +1,21 @@
 /**
- * Node addressing — the vocabulary of the node mesh.
+ * Node addressing — the communication vocabulary of the node mesh.
  *
- * See `docs/node-mesh-plan.md`. This is Phase 0: additive scaffolding, not yet
- * wired into routes. A resource (a workspace, session, file tree, terminal…) is
- * addressed by a node-qualified `(node, kind, id)` ref; everything the mesh does
- * is verbs on that ref.
+ * See `docs/node-mesh-plan.md`. Every live resource (a workspace, session, file
+ * tree, terminal…) is addressed by a node-qualified `(node, kind, id)` ref, and
+ * everything the mesh does is verbs on that ref. This module is the single
+ * contract cloud, local, and future nodes all speak: `workspaceNodeId` /
+ * `resolveNode` (driver.ts) route by the owning node today; `ResourceRef` +
+ * `formatRef` / `parseRef` are the serialization the frontend federation and the
+ * NRP wire will carry. Some of it is consumed here now, some by those layers —
+ * it is intentional API surface, not dead code.
  *
  * `NodeId` is a plain string today (`"local"` / `"cloud"`) but is kept opaque and
  * *derived* rather than parsed, so it can later become a public-key hash
- * (prior-art invariant: self-certifying node identity — Tailscale/Syncthing/AT
- * Proto) without touching call sites. Populating the `node` dimension now, while
- * it is always local/cloud, is the cheap-early move that keeps the teammate mesh
- * an extension rather than a rewrite.
+ * (self-certifying node identity — Tailscale/Syncthing/AT Proto) without touching
+ * call sites. Populating the `node` dimension now, while it is always
+ * local/cloud, is the cheap-early move that keeps future nodes an extension
+ * rather than a rewrite.
  */
 
 /** Stable identifier of a node that owns resources. Opaque; derived, not parsed. */
