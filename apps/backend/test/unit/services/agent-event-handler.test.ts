@@ -167,6 +167,88 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   });
 
   // ==========================================================================
+  // node-agnostic fold — the mesh foundation
+  // ==========================================================================
+
+  describe("node-agnostic fold (the mesh foundation)", () => {
+    // The handler folds by sessionId + event ONLY; it never asks which transport
+    // or node delivered an envelope. This pins the property the whole node mesh
+    // leans on (docs/node-mesh-plan.md): a new node that emits the same engine
+    // envelopes lands in the fold — persisted, invalidated, pushed — for free.
+    // If anyone adds source-specific branching into the fold, the parity below
+    // breaks and this test fails.
+    function feedCanonicalStream(sid: string): void {
+      const turnId = `${sid}-turn`;
+      const events: LifecycleEvent[] = [
+        {
+          type: "session.created",
+          sessionId: sid,
+          nativeSessionId: `native-${sid}`,
+          harness: "claude-code",
+          timestamp: T,
+        },
+        {
+          type: "message.started",
+          sessionId: sid,
+          turnId,
+          messageId: `${sid}-msg`,
+          outputIndex: 1,
+          role: "assistant",
+          timestamp: T,
+        },
+        {
+          type: "message.part",
+          sessionId: sid,
+          turnId,
+          messageId: `${sid}-msg`,
+          outputIndex: 1,
+          partIndex: 0,
+          part: {
+            type: "text",
+            id: `${sid}-part`,
+            sessionId: sid,
+            messageId: `${sid}-msg`,
+            text: "hello",
+            state: "done",
+          },
+          timestamp: T,
+        },
+        { type: "turn.ended", sessionId: sid, turnId, stopReason: "end_turn", timestamp: T },
+      ];
+      for (const event of events) handler.handle({ sessionId: sid, seq: ++seq, event });
+    }
+
+    function foldFootprint(sid: string) {
+      return {
+        persistedFor: mockPersistChanges.mock.calls.filter((c) => c[0] === sid).length,
+        invalidatedFor: mockInvalidate.mock.calls
+          .filter(([, opts]) => (opts as { sessionIds?: string[] })?.sessionIds?.includes(sid))
+          .flatMap(([resources]) => resources as string[]),
+        pushedTypes: pushedEnvelopes()
+          .filter((e) => e.sessionId === sid)
+          .map((e) => e.event.type),
+      };
+    }
+
+    it("folds two differently-sourced sessions identically (a 3rd node slots in for free)", () => {
+      // Two sessions standing in for two nodes/transports. Nothing tells the
+      // handler that one is "local" and one is "cloud" — it sees only envelopes.
+      feedCanonicalStream("node-a-sess");
+      feedCanonicalStream("node-b-sess");
+
+      const a = foldFootprint("node-a-sess");
+      const b = foldFootprint("node-b-sess");
+
+      // Same persistence, same invalidations, same pushes — the fold is blind to
+      // which node delivered the stream.
+      expect(a.persistedFor).toBeGreaterThan(0);
+      expect(b.persistedFor).toBe(a.persistedFor);
+      expect(b.invalidatedFor).toEqual(a.invalidatedFor);
+      expect(b.pushedTypes).toEqual(a.pushedTypes);
+    });
+  });
+
+  // ==========================================================================
   // session.created
   // ==========================================================================
 

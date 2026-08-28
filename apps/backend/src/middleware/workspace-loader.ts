@@ -13,8 +13,8 @@ export interface WorkspaceContext {
 /**
  * Compute the filesystem path for a LOCAL workspace.
  * Local worktrees live at {root_path}/.deus/{slug}; cloud workspaces have no
- * local path (empty string) — gate local-FS features on `kind` via
- * resolveWorkspaceTarget, not on this returning "".
+ * local path (empty string) — gate local-FS features on the owning node
+ * (services/node: `workspaceNodeId` / `resolveNode`), not on this returning "".
  */
 export function computeWorkspacePath(ws: {
   kind?: string | null;
@@ -25,28 +25,6 @@ export function computeWorkspacePath(ws: {
   if (!ws.root_path) return "";
   if (!ws.slug) return "";
   return path.join(ws.root_path, ".deus", ws.slug);
-}
-
-/** Where a workspace's files live and how to reach them. */
-export type WorkspaceTarget =
-  | { kind: "local"; path: string }
-  | { kind: "cloud"; providerWorkspaceId: string | null };
-
-/**
- * Single source of truth for "where does this workspace live".
- * Local-FS features (git, files, watchers, PTY) require kind === "local";
- * cloud features route through the agnt provider ids.
- */
-export function resolveWorkspaceTarget(ws: {
-  kind?: string | null;
-  root_path?: string | null;
-  slug?: string | null;
-  provider_workspace_id?: string | null;
-}): WorkspaceTarget {
-  if (ws.kind === "cloud") {
-    return { kind: "cloud", providerWorkspaceId: ws.provider_workspace_id ?? null };
-  }
-  return { kind: "local", path: computeWorkspacePath(ws) };
 }
 
 /**
