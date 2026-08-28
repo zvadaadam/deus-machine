@@ -171,12 +171,18 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("node-agnostic fold (the mesh foundation)", () => {
-    // The handler folds by sessionId + event ONLY; it never asks which transport
-    // or node delivered an envelope. This pins the property the whole node mesh
-    // leans on (docs/node-mesh-plan.md): a new node that emits the same engine
-    // envelopes lands in the fold — persisted, invalidated, pushed — for free.
-    // If anyone adds source-specific branching into the fold, the parity below
-    // breaks and this test fails.
+    // Scope: this pins that the HANDLER is source-agnostic — it folds by
+    // sessionId + event only and never special-cases a session by which node/
+    // transport delivered it, so two sessions fed the SAME identical envelope
+    // shape are persisted/invalidated/pushed identically. That is the mesh
+    // property the fold half relies on (docs/node-mesh-plan.md): a node emitting
+    // the same engine envelopes lands in the fold for free. If anyone adds
+    // source-specific branching INTO the fold, the parity below breaks.
+    //
+    // It does NOT verify that the two live transports construct identical
+    // envelopes (the local WS link's onEnvelope vs the cloud driver's
+    // pushToFold) — that convergence is the transports' contract, wired to one
+    // shared handler in service.ts, not the handler's own behavior tested here.
     function feedCanonicalStream(sid: string): void {
       const turnId = `${sid}-turn`;
       const events: LifecycleEvent[] = [
@@ -230,9 +236,10 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       };
     }
 
-    it("folds two differently-sourced sessions identically (a 3rd node slots in for free)", () => {
-      // Two sessions standing in for two nodes/transports. Nothing tells the
-      // handler that one is "local" and one is "cloud" — it sees only envelopes.
+    it("folds any session identically — the handler never special-cases a source", () => {
+      // Two sessions fed the same identical envelope shape. Nothing tells the
+      // handler that one might be "local" and one "cloud" — it sees only
+      // envelopes, so its persist/invalidate/push must be identical for both.
       feedCanonicalStream("node-a-sess");
       feedCanonicalStream("node-b-sess");
 

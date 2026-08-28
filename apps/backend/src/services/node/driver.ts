@@ -67,15 +67,36 @@ export type FsReadOutcome =
   | { ok: true; content: string }
   | { ok: false; status: 422; body: Record<string, unknown> };
 
+/**
+ * The workspace file tree the route serializes. `files` is left as `unknown[]`
+ * because the two lanes' node shapes differ (local `FileTreeNode` vs the cloud
+ * sandbox's mapped nodes); the container fields are what callers rely on.
+ * `truncated` / `provisioning` are cloud-only.
+ */
+export interface FsTreeResponse {
+  files: unknown[];
+  totalFiles: number;
+  totalSize: number;
+  truncated?: boolean;
+  provisioning?: boolean;
+}
+
+/** A fuzzy file-search hit — identical shape on both lanes. */
+export interface FileMatch {
+  path: string;
+  name: string;
+  score: number;
+}
+
 export interface NodeDriver {
   // diff family
   diffStats(): Promise<DiffStats>;
   diffFiles(): Promise<DiffFilesResult>;
   diffFile(file: string): Promise<DiffFileOutcome>;
   // fs family
-  fsTree(): Promise<unknown>;
+  fsTree(): Promise<FsTreeResponse>;
   fsRead(filePath: string): Promise<FsReadOutcome>;
-  fsSearch(query: string, limit: number): Promise<unknown[]>;
+  fsSearch(query: string, limit: number): Promise<FileMatch[]>;
   fsInvalidate(): void;
 }
 
@@ -174,7 +195,7 @@ class LocalNodeDriver implements NodeDriver {
     }
   }
 
-  async fsTree(): Promise<unknown> {
+  async fsTree(): Promise<FsTreeResponse> {
     return filesService.scanWorkspaceFiles(this.workspacePath);
   }
 
@@ -213,7 +234,7 @@ class LocalNodeDriver implements NodeDriver {
     return { ok: true, content };
   }
 
-  async fsSearch(query: string, limit: number): Promise<unknown[]> {
+  async fsSearch(query: string, limit: number): Promise<FileMatch[]> {
     // Empty query → return top-level files (short paths first)
     if (!query || typeof query !== "string") {
       return filesService.listTopFiles(this.workspacePath, limit);
@@ -313,7 +334,7 @@ class RemoteNodeDriver implements NodeDriver {
     }
   }
 
-  async fsTree(): Promise<unknown> {
+  async fsTree(): Promise<FsTreeResponse> {
     // Null session = still provisioning; return an empty listing (not an error)
     // so Files shows "empty", not a dead panel that never refetches.
     const sessionId = this.workspace.current_session_id;
@@ -343,7 +364,7 @@ class RemoteNodeDriver implements NodeDriver {
     return { ok: true, content: data.content };
   }
 
-  async fsSearch(query: string, limit: number): Promise<unknown[]> {
+  async fsSearch(query: string, limit: number): Promise<FileMatch[]> {
     // Same scoring, computer truth: flatten the fs-channel tree and reuse the
     // local scorers — @-mentions and the Files filter work identically. The
     // shared cache means keystrokes after the first list are free.

@@ -40,6 +40,8 @@ export async function cloudFsOrThrow(
  *  can't DoS the channel). */
 const CLOUD_LIST_CAP = 50_000;
 const CLOUD_TREE_TTL_MS = 15_000;
+/** Bound the per-session tree cache; oldest entry is evicted past this. */
+const CLOUD_TREE_CACHE_MAX = 16;
 
 type CloudList = { tree: CloudFsNode[]; truncated: boolean };
 type CloudCacheEntry = { promise: Promise<CloudList>; expiresAt: number; identityGen: number };
@@ -80,7 +82,7 @@ export function listCloudTree(sessionId: string): Promise<CloudList> {
     }
   );
   cloudTreeCache.set(sessionId, entry);
-  if (cloudTreeCache.size > 16) {
+  if (cloudTreeCache.size > CLOUD_TREE_CACHE_MAX) {
     const oldest = cloudTreeCache.keys().next().value;
     if (oldest && oldest !== sessionId) cloudTreeCache.delete(oldest);
   }
