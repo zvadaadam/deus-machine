@@ -20,7 +20,7 @@ import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
+import { ptyRouter } from "../node/pty";
 import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
 import { delegateToRoute } from "../route-delegate";
 import {
@@ -29,7 +29,6 @@ import {
   persistSessionWorking,
 } from "./persistence";
 import { invalidate } from "../query-engine";
-import { getWorkspaceRaw } from "../../db/queries";
 import * as agentService from "./service";
 import { resolveAapPaths } from "./service";
 import {
@@ -38,11 +37,6 @@ import {
   isCloudSession,
   hasLiveCloudSession,
   announceCloudEnv,
-  isCloudPty,
-  openCloudPty,
-  writeCloudPty,
-  resizeCloudPty,
-  killCloudPty,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
@@ -88,35 +82,25 @@ export async function runCommand(
         const cols = readNumber(params, "cols") ?? 80;
         const rows = readNumber(params, "rows") ?? 24;
         const cwd = readString(params, "cwd");
-
-        // A cloud terminal never touches node-pty: the frontend names the
-        // cloud WORKSPACE, the backend resolves its current session, and the
-        // driver reroutes the same pty-data/pty-exit events — xterm cannot
-        // tell the difference.
         const cloudWorkspaceId = readString(params, "cloudWorkspaceId");
-        if (cloudWorkspaceId) {
-          const row = getWorkspaceRaw(getDatabase(), cloudWorkspaceId);
-          const cloudSessionId = row?.current_session_id;
-          if (!cloudSessionId) {
-            throw new Error("Cloud workspace has no active session for a terminal");
-          }
-          await openCloudPty(cloudSessionId, { ptyId: id, cols, rows });
-          return { commandId: id };
-        }
 
-        const ptyId = spawnPty({ id, command: cmd, args, cols, rows, cwd });
-        return { commandId: ptyId };
+        const commandId = await ptyRouter.open({
+          id,
+          command: cmd,
+          args,
+          cols,
+          rows,
+          cwd,
+          cloudWorkspaceId,
+        });
+        return { commandId };
       })
       .with("pty:write", () => {
         const id = requireParam(params, "id", "pty:write");
         const data = Array.isArray(params.data) ? (params.data as number[]) : undefined;
         if (!data) throw new Error("pty:write requires data (number[])");
 
-        if (isCloudPty(id)) {
-          writeCloudPty(id, data);
-          return {};
-        }
-        writeToPty(id, data);
+        ptyRouter.write(id, data);
         return {};
       })
       .with("pty:resize", () => {
@@ -127,21 +111,13 @@ export async function runCommand(
           throw new Error("pty:resize requires id, cols, and rows");
         }
 
-        if (isCloudPty(id)) {
-          resizeCloudPty(id, cols, rows);
-          return {};
-        }
-        resizePty(id, cols, rows);
+        ptyRouter.resize(id, cols, rows);
         return {};
       })
       .with("pty:kill", () => {
         const id = requireParam(params, "id", "pty:kill");
 
-        if (isCloudPty(id)) {
-          killCloudPty(id);
-          return {};
-        }
-        killPty(id);
+        ptyRouter.kill(id);
         return {};
       })
       // ---- File system commands ----

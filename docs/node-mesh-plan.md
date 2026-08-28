@@ -356,9 +356,11 @@ forcing them into a workspace-keyed request/response driver would be the wrong
 abstraction:
 
 - **pty** (`commands.ts` `pty:spawn/write/resize/kill`) — a duplex **stream**,
-  routed by `ptyId` via `isCloudPty` (a registry lookup), not by workspace.
-  Streams are what the NRP wire's `resource/open((kind,id))→stream` handles at
-  Phase 4; the local/cloud pty split is already centralized behind `isCloudPty`.
+  routed by `ptyId` via `isCloudPty` (a registry lookup), not by workspace, so it
+  is **not** part of the request/response `NodeDriver`. It does get its own
+  node-router (`services/node/pty.ts`, `ptyRouter`) that centralizes the four
+  scattered `isCloudPty` branches — the backend's local-vs-cloud dispatch until
+  the NRP wire's `resource/open((kind,id))→stream` takes streams at Phase 4.
 - **turns** (`commands.ts` `handleSendMessage`) — agent-turn **orchestration**
   with cloud lifecycle woven all through it (sandbox wake, `announceCloudEnv`,
   optimistic "Waking" flip + rollback, github-token refresh). Not a resource
