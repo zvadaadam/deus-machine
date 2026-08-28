@@ -167,6 +167,95 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   });
 
   // ==========================================================================
+  // node-agnostic fold — the mesh foundation
+  // ==========================================================================
+
+  describe("node-agnostic fold (the mesh foundation)", () => {
+    // Scope: this pins that the HANDLER is source-agnostic — it folds by
+    // sessionId + event only and never special-cases a session by which node/
+    // transport delivered it, so two sessions fed the SAME identical envelope
+    // shape are persisted/invalidated/pushed identically. That is the mesh
+    // property the fold half relies on (docs/node-mesh-plan.md): a node emitting
+    // the same engine envelopes lands in the fold for free. If anyone adds
+    // source-specific branching INTO the fold, the parity below breaks.
+    //
+    // It does NOT verify that the two live transports construct identical
+    // envelopes (the local WS link's onEnvelope vs the cloud driver's
+    // pushToFold) — that convergence is the transports' contract, wired to one
+    // shared handler in service.ts, not the handler's own behavior tested here.
+    function feedCanonicalStream(sid: string): void {
+      const turnId = `${sid}-turn`;
+      const events: LifecycleEvent[] = [
+        {
+          type: "session.created",
+          sessionId: sid,
+          nativeSessionId: `native-${sid}`,
+          harness: "claude-code",
+          timestamp: T,
+        },
+        {
+          type: "message.started",
+          sessionId: sid,
+          turnId,
+          messageId: `${sid}-msg`,
+          outputIndex: 1,
+          role: "assistant",
+          timestamp: T,
+        },
+        {
+          type: "message.part",
+          sessionId: sid,
+          turnId,
+          messageId: `${sid}-msg`,
+          outputIndex: 1,
+          partIndex: 0,
+          part: {
+            type: "text",
+            id: `${sid}-part`,
+            sessionId: sid,
+            messageId: `${sid}-msg`,
+            text: "hello",
+            state: "done",
+          },
+          timestamp: T,
+        },
+        { type: "turn.ended", sessionId: sid, turnId, stopReason: "end_turn", timestamp: T },
+      ];
+      for (const event of events) handler.handle({ sessionId: sid, seq: ++seq, event });
+    }
+
+    function foldFootprint(sid: string) {
+      return {
+        persistedFor: mockPersistChanges.mock.calls.filter((c) => c[0] === sid).length,
+        invalidatedFor: mockInvalidate.mock.calls
+          .filter(([, opts]) => (opts as { sessionIds?: string[] })?.sessionIds?.includes(sid))
+          .flatMap(([resources]) => resources as string[]),
+        pushedTypes: pushedEnvelopes()
+          .filter((e) => e.sessionId === sid)
+          .map((e) => e.event.type),
+      };
+    }
+
+    it("folds any session identically — the handler never special-cases a source", () => {
+      // Two sessions fed the same identical envelope shape. Nothing tells the
+      // handler that one might be "local" and one "cloud" — it sees only
+      // envelopes, so its persist/invalidate/push must be identical for both.
+      feedCanonicalStream("node-a-sess");
+      feedCanonicalStream("node-b-sess");
+
+      const a = foldFootprint("node-a-sess");
+      const b = foldFootprint("node-b-sess");
+
+      // Same persistence, same invalidations, same pushes — the fold is blind to
+      // which node delivered the stream.
+      expect(a.persistedFor).toBeGreaterThan(0);
+      expect(b.persistedFor).toBe(a.persistedFor);
+      expect(b.invalidatedFor).toEqual(a.invalidatedFor);
+      expect(b.pushedTypes).toEqual(a.pushedTypes);
+    });
+  });
+
+  // ==========================================================================
   // session.created
   // ==========================================================================
 

@@ -4,95 +4,8 @@ import fs from "fs";
 import { tmpdir } from "os";
 import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
-import { requestCloudFs, getCloudIdentityGeneration } from "../services/agent/cloud/driver";
-
-/** Cloud fs failures are USER states (asleep computer, provisioning, timeouts)
- *  — mapped here so they surface as instructions, never "Internal server
- *  error" + a spurious error report. */
-async function cloudFsOrThrow(
-  sessionId: string,
-  request: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  try {
-    return await requestCloudFs(sessionId, request);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new ValidationError(
-      /timed out/.test(message)
-        ? "Sandbox did not answer — it may be waking; try again shortly."
-        : message
-    );
-  }
-}
-
-/** Search/@-mentions must see the WHOLE repo, not a 5k-truncated prefix — a
- *  higher list bound for the cloud lane (still bounded so a giant monorepo
- *  can't DoS the channel). */
-const CLOUD_LIST_CAP = 50_000;
-const CLOUD_TREE_TTL_MS = 15_000;
-
-type CloudList = { tree: CloudFsNode[]; truncated: boolean };
-
-/** One cached fs.list per session, keyed by the (settling) PROMISE rather than
- *  its result, so a single structure does double duty: concurrent @-mention
- *  keystrokes that land mid-flight await the SAME up-to-50k round-trip instead
- *  of each firing their own, and repeat reads within the TTL await an
- *  already-settled promise for free. The tree route and search both go through
- *  it; `invalidate-cache` drops the entry — an in-flight one too, so a refresh
- *  can't be clobbered by the list it raced. Failures are never cached. Entries
- *  are stamped with the cloud identity generation: a sign-out/account switch
- *  bumps it, so account B never reads account A's still-cached paths. */
-const cloudTreeCache = new Map<string, CloudCacheEntry>();
-
-type CloudCacheEntry = { promise: Promise<CloudList>; expiresAt: number; identityGen: number };
-
-function listCloudTree(sessionId: string): Promise<CloudList> {
-  const identityGen = getCloudIdentityGeneration();
-  const hit = cloudTreeCache.get(sessionId);
-  if (hit && hit.identityGen === identityGen && hit.expiresAt > Date.now()) return hit.promise;
-  const promise = (async (): Promise<CloudList> => {
-    const data = (await cloudFsOrThrow(sessionId, {
-      op: "list",
-      maxEntries: CLOUD_LIST_CAP,
-    })) as { tree?: CloudFsNode[]; truncated?: boolean; error?: string };
-    if (data.error) throw new ValidationError(data.error);
-    return { tree: data.tree ?? [], truncated: data.truncated === true };
-  })();
-  // In-flight entries carry expiresAt = Infinity so they're always reusable —
-  // the TTL only starts once the (up to 50k) list SETTLES. Otherwise a list
-  // slower than the TTL would read as "expired" mid-flight and every keystroke
-  // would kick off its own full re-list. The `=== entry` guards keep a later
-  // refresh / identity change from having its entry clobbered by this one.
-  const entry: CloudCacheEntry = { promise, expiresAt: Infinity, identityGen };
-  promise.then(
-    () => {
-      if (cloudTreeCache.get(sessionId) === entry) entry.expiresAt = Date.now() + CLOUD_TREE_TTL_MS;
-    },
-    () => {
-      if (cloudTreeCache.get(sessionId) === entry) cloudTreeCache.delete(sessionId); // never cache a failure
-    }
-  );
-  cloudTreeCache.set(sessionId, entry);
-  if (cloudTreeCache.size > 16) {
-    const oldest = cloudTreeCache.keys().next().value;
-    if (oldest && oldest !== sessionId) cloudTreeCache.delete(oldest);
-  }
-  return promise;
-}
-
-function flattenCloudTree(tree: CloudFsNode[]): string[] {
-  const paths: string[] = [];
-  const walk = (nodes: CloudFsNode[]) => {
-    for (const node of nodes) {
-      if (node.type === "file") paths.push(node.path);
-      else if (node.children) walk(node.children);
-    }
-  };
-  walk(tree);
-  return paths;
-}
 import { ValidationError } from "../lib/errors";
-import * as filesService from "../services/files.service";
+import { resolveNode } from "../services/node/driver";
 import * as gitService from "../services/git.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
@@ -100,64 +13,25 @@ type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: str
 const app = new Hono<Env>();
 
 /**
+ * The file-tree / read / search / invalidate routes delegate to the owning
+ * node's driver (local fs or the cloud session socket) — see
+ * services/node/driver.ts. The route only knows the HTTP shape; which node
+ * answers is the driver's concern. The media routes below are local-only.
+ */
+
+/**
  * GET /workspaces/:id/files — Scan workspace files.
  * Returns a hierarchical tree of all files (.gitignore-aware).
  */
 app.get("/workspaces/:id/files", withWorkspace, async (c) => {
-  const workspace = c.get("workspace");
-  if (workspace.kind === "cloud") {
-    // Null session = still provisioning; return an empty listing (not an error)
-    // so Files shows "empty", not a dead panel that never refetches.
-    const sessionId = workspace.current_session_id;
-    if (!sessionId) return c.json({ files: [], totalFiles: 0, totalSize: 0, provisioning: true });
-    const { tree, truncated } = await listCloudTree(sessionId);
-    return c.json({ ...cloudTreeToResponse(tree), truncated });
-  }
-  const workspacePath = c.get("workspacePath");
-  const result = filesService.scanWorkspaceFiles(workspacePath);
-  return c.json(result);
+  return c.json(await resolveNode(c.get("workspace"), c.get("workspacePath")).fsTree());
 });
-
-// ── Cloud mapping: the sandbox fs channel's FsNode → the local tree shape ──
-
-interface CloudFsNode {
-  name: string;
-  path: string;
-  type: "file" | "dir";
-  size?: number;
-  children?: CloudFsNode[];
-}
-
-function cloudTreeToResponse(tree: CloudFsNode[]) {
-  let totalFiles = 0;
-  let totalSize = 0;
-  const map = (node: CloudFsNode): Record<string, unknown> => {
-    if (node.type === "file") {
-      totalFiles += 1;
-      totalSize += node.size ?? 0;
-      return { name: node.name, path: node.path, type: "file", size: node.size };
-    }
-    return {
-      name: node.name,
-      path: node.path,
-      type: "directory",
-      children: (node.children ?? []).map(map),
-    };
-  };
-  const files = tree.map(map);
-  return { files, totalFiles, totalSize };
-}
 
 /**
  * POST /workspaces/:id/files/invalidate-cache — Clear file scan cache for this workspace.
  */
 app.post("/workspaces/:id/files/invalidate-cache", withWorkspace, (c) => {
-  const workspace = c.get("workspace");
-  if (workspace.kind === "cloud") {
-    if (workspace.current_session_id) cloudTreeCache.delete(workspace.current_session_id);
-    return c.json({ ok: true });
-  }
-  filesService.invalidateCache(c.get("workspacePath"));
+  resolveNode(c.get("workspace"), c.get("workspacePath")).fsInvalidate();
   return c.json({ ok: true });
 });
 
@@ -169,54 +43,9 @@ app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
   const filePath = c.req.query("path");
   if (!filePath) throw new ValidationError("path parameter is required");
 
-  const workspace = c.get("workspace");
-  if (workspace.kind === "cloud") {
-    // The sidecar enforces canonical containment; this mirrors the local
-    // branch's early rejection so both lanes refuse the same inputs.
-    if (filePath.split("/").includes("..")) throw new ValidationError("Invalid file path");
-    const sessionId = workspace.current_session_id;
-    if (!sessionId) throw new ValidationError("File not found");
-    const data = (await cloudFsOrThrow(sessionId, { op: "read", path: filePath })) as {
-      content?: string;
-      error?: string;
-    };
-    if (data.error) throw new ValidationError(data.error);
-    if (typeof data.content !== "string") {
-      return c.json({ error: "binary_file", message: "File appears to be binary" }, 422);
-    }
-    return c.json({ content: data.content });
-  }
-
-  const workspacePath = c.get("workspacePath");
-
-  const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
-  if (!safeRelativePath) throw new ValidationError("Invalid file path");
-
-  const absolutePath = path.resolve(workspacePath, safeRelativePath);
-  if (!fs.existsSync(absolutePath)) {
-    throw new ValidationError("File not found");
-  }
-
-  let realWorkspacePath: string;
-  let realPath: string;
-  try {
-    realWorkspacePath = fs.realpathSync(workspacePath);
-    realPath = fs.realpathSync(absolutePath);
-  } catch {
-    throw new ValidationError("File not found");
-  }
-
-  const relativeRealPath = path.relative(realWorkspacePath, realPath);
-  if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
-    throw new ValidationError("Invalid file path");
-  }
-
-  const content = filesService.readTextFile(realPath);
-  if (content === null) {
-    return c.json({ error: "binary_file", message: "File appears to be binary" }, 422);
-  }
-
-  return c.json({ content });
+  const outcome = await resolveNode(c.get("workspace"), c.get("workspacePath")).fsRead(filePath);
+  if (!outcome.ok) return c.json(outcome.body, outcome.status);
+  return c.json({ content: outcome.content });
 });
 
 /**
@@ -226,33 +55,10 @@ app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
  */
 app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
   const { query, limit = 15 } = await c.req.json<{ query: string; limit?: number }>();
-
-  const workspace = c.get("workspace");
-  if (workspace.kind === "cloud") {
-    // Same scoring, computer truth: flatten the fs-channel tree and reuse the
-    // local scorers — @-mentions and the Files filter work identically. The
-    // shared cache means keystrokes after the first list are free.
-    const sessionId = workspace.current_session_id;
-    if (!sessionId) return c.json([]);
-    const listed = await listCloudTree(sessionId).catch(() => null);
-    if (!listed) return c.json([]);
-    const paths = flattenCloudTree(listed.tree);
-    const results =
-      !query || typeof query !== "string"
-        ? filesService.scoreTopFiles(paths, limit)
-        : filesService.fuzzySearchPaths(paths, query, limit);
-    return c.json(results);
-  }
-
-  const workspacePath = c.get("workspacePath");
-
-  // Empty query → return top-level files (short paths first)
-  if (!query || typeof query !== "string") {
-    const results = filesService.listTopFiles(workspacePath, limit);
-    return c.json(results);
-  }
-
-  const results = filesService.fuzzySearchFiles(workspacePath, query, limit);
+  const results = await resolveNode(c.get("workspace"), c.get("workspacePath")).fsSearch(
+    query,
+    limit
+  );
   return c.json(results);
 });
 
