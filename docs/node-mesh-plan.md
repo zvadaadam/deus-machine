@@ -383,13 +383,21 @@ abstraction:
   node-router (`services/node/pty.ts`, `ptyRouter`) that centralizes the four
   scattered `isCloudPty` branches — the backend's local-vs-cloud dispatch until
   the NRP wire's `resource/open((kind,id))→stream` takes streams at Phase 4.
-- **turns** (`commands.ts` `handleSendMessage`) — agent-turn **orchestration**
-  with cloud lifecycle woven all through it (sandbox wake, `announceCloudEnv`,
-  optimistic "Waking" flip + rollback, github-token refresh). Not a resource
-  read. The turn is a `kind` over NRP later (`resource/send` on a session), not a
-  backend request/response method.
-- **stopSession** (`commands.ts`) — a thin `isCloudSession`-keyed turn cancel;
-  moves with turns.
+  **Live-verified** (2026-08-28): a real terminal driven over the `q:` WS channel
+  through `ptyRouter` → node-pty executed a command and streamed its output back.
+- **turns** (`commands.ts` `handleSendMessage`) — **not** a clean node-dispatch,
+  proven by the code. The cloud lane (`:493–557`) is ~65 lines of sandbox-wake /
+  `init_stage` flip / `announceCloudEnv` / github-token refresh / honest-rollback
+  **orchestration** with `startCloudTurn` as one call inside it; the local lane
+  (`:558–620`) is a different shape entirely (connection + cwd + resume +
+  `turnActive` race handling, a richer signature). They are two orchestrations,
+  not one operation over two transports — a unified backend "turn transport"
+  would fit neither and risk the core path. The turn is a `kind` over the NRP
+  wire (`resource/send` on a session), where start + stop live together.
+- **stopSession** (`commands.ts:680`) — an id-keyed `isCloudSession` cancel that
+  _could_ be extracted cleanly, but turn-start can't; splitting cancel from start
+  would be an awkward half-migration. Turns move to NRP **as a whole**, so stop
+  stays with start.
 - **pr-snapshot** (`pr-snapshot.service.ts` `lookupPrStatus`) — **both lanes run
   `gh` locally**, just with different inputs (worktree remotes vs remote branch
   name). It is not node dispatch (nothing runs on the cloud node); it is a
