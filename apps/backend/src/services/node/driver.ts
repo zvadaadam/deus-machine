@@ -300,10 +300,16 @@ class RemoteNodeDriver implements NodeDriver {
       // channel keeps only what it is named for. FILE/CONTENT is deprecated.
       const [diffPart, contentPart] = await Promise.all([
         getCloudDiffFile(sessionId, file, "DIFF"),
-        requestCloudFs(sessionId, { op: "read", path: file }) as Promise<{
-          content?: string;
-          error?: string;
-        }>,
+        // Content is enrichment, not a gate (see below): a read that REJECTS
+        // (transient fs error, an unreadable/deleted file) must not fail an
+        // available diff, so fall back to no content instead of rejecting the
+        // whole Promise.all.
+        (
+          requestCloudFs(sessionId, { op: "read", path: file }) as Promise<{
+            content?: string;
+            error?: string;
+          }>
+        ).catch(() => ({}) as { content?: string; error?: string }),
       ]);
       if (diffPart.error) {
         throw new Error(diffPart.error);

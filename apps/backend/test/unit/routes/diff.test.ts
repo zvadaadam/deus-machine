@@ -118,6 +118,19 @@ describe("diff routes (through NodeDriver)", () => {
     });
   });
 
+  it("cloud diff-file: a rejecting content read does NOT sink an available diff", async () => {
+    setCloud();
+    cloud.requestCloudFs.mockRejectedValueOnce(new Error("fs channel down"));
+    const res = await app.request("/workspaces/ws-cloud/diff-file?file=x.ts");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      file: "x.ts",
+      diff: "@@ cloud diff @@",
+      old_content: null,
+      new_content: null,
+    });
+  });
+
   it("asleep cloud (no session) → empty diff, 200 not error", async () => {
     setCloud(null);
     expect(await (await app.request("/workspaces/ws-cloud/diff-stats")).json()).toEqual({

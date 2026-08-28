@@ -51,6 +51,7 @@ export const ptyRouter = {
         ptyId: params.id,
         cols: params.cols,
         rows: params.rows,
+        cwd: params.cwd,
       });
       return params.id;
     }
@@ -64,16 +65,19 @@ export const ptyRouter = {
     });
   },
 
+  /** Write input bytes to the terminal that owns `id` (cloud or local). */
   write(id: string, data: number[]): void {
     if (isCloudPty(id)) writeCloudPty(id, data);
     else writeToPty(id, data);
   },
 
+  /** Resize the terminal that owns `id`. */
   resize(id: string, cols: number, rows: number): void {
     if (isCloudPty(id)) resizeCloudPty(id, cols, rows);
     else resizePty(id, cols, rows);
   },
 
+  /** Kill the terminal that owns `id`. */
   kill(id: string): void {
     if (isCloudPty(id)) killCloudPty(id);
     else killPty(id);

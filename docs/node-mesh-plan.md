@@ -25,8 +25,10 @@ machine, a second cloud region — plugs in without touching call sites:
    a peer becomes `"peer:<pubkey-hash>"` — `NodeId` is opaque and derived exactly
    so this doesn't ripple.
 2. **State resources**: point its event stream at the shared
-   `AgentEventHandler.handle` (the fold is proven node-agnostic — see the
-   contract test). Its workspaces/sessions/messages then appear locally for free.
+   `AgentEventHandler.handle` (the fold is proven _source-agnostic_ — see the
+   contract test). Its workspaces/sessions/messages then fold in locally — once
+   session IDs are node-unique or the fold key is node-qualified (see State,
+   above), so two nodes can't collide on a shared session ID.
 3. **Live-probe resources**: implement `NodeDriver` (diff + fs) for it and add a
    case to `resolveNode`. Streams (pty) implement the `ptyRouter` shape.
 4. **Reach + trust** (only for a node you don't already own): a discovery entry
@@ -77,7 +79,13 @@ This is the fact that makes federation cheap:
   into local SQLite**. A node emits lifecycle events; the fold writes rows; the
   UI reads rows. The read is always local — remoteness is invisible to it. This
   is _already true_ for cloud sessions today, via the shared fold. A third node
-  emitting the same envelope shape slots in for free.
+  emitting the same envelope shape folds the same way — **with one caveat**:
+  `handle` keys purely on `sessionId`, so this is _source-agnostic_ handling, not
+  yet _collision-safe_ identity. True multi-node sharing needs either
+  globally-unique session IDs across nodes or a node-qualified fold/persistence
+  key (a `nodeId` on the envelope); otherwise two nodes reusing a session ID
+  would merge in local persistence and invalidation. Adding that key is the
+  cheap-early move (prior-art invariant 2), not a rewrite.
 - **Live-probes** (diff summary/file, fs tree/read, pty) **can't** be
   event-sourced ahead of time and are fetched per request from the owning node.
   These — and only these — are the `kind === "cloud"` branches. Example, from
@@ -201,16 +209,21 @@ need. Do not gold-plate it for nodes that don't exist.
 ### 3. NodeDriver — owning-node dispatch (replaces the `kind` branches)
 
 ```ts
+// Shipped (Phase 1) — one method per live-probe op, resolved per owning node:
 interface NodeDriver {
-  diffSummary(ref): DiffSummary;
-  diffFile(ref, file): DiffFile;
-  fsList(ref): FsNode[];
-  fsRead(ref, path): FileContent;
-  ptyOpen(ref): PtyHandle; // open→duplex, seq'd, replayable
-  // …the union of what the ~10 branch sites need, no more
+  diffStats(): Promise<DiffStats>;
+  diffFiles(): Promise<DiffFilesResult>;
+  diffFile(file): Promise<DiffFileOutcome>;
+  fsTree(): Promise<FsTreeResponse>;
+  fsRead(filePath): Promise<FsReadOutcome>;
+  fsSearch(query, limit): Promise<FileMatch[]>;
+  fsInvalidate(): void;
 }
-const driver = resolveNode(workspace); // LocalNodeDriver | RemoteNodeDriver
-return driver.diffSummary(ref); // one call, one shape, every route
+const driver = resolveNode(workspace, workspacePath); // LocalNodeDriver | RemoteNodeDriver
+return driver.diffStats(); // one call, one shape, every route
+// pty is a STREAM, so it is NOT on NodeDriver — it routes through `ptyRouter`
+// (services/node/pty.ts). The ref-shaped `diffSummary(ref)` / `ptyOpen(ref)`
+// form is the future NRP direction (§2), not the shipped backend interface.
 ```
 
 `resolveNode` branches on `workspaceNodeId` — the pure predicate in
@@ -263,8 +276,10 @@ per-org keypair, JWKS-style):
   "sub": "user:ada",
   "act": "read",
   "res": { "node": "cloud:brightco", "kind": "repo", "id": "payments-svc" },
-  "exp": 1735689600,
-  "sig": "<RS256 over B's key>",
+  "exp": "<unix-ts, in the future>",
+  // issuer signs the canonical claims with ITS private RS256 key; any verifier
+  // validates against the issuer's PUBLISHED public key (JWKS) — no shared secret.
+  "sig": "<RS256 signature over the canonical claims, by org:brightco's private key>",
 }
 ```
 
@@ -281,20 +296,21 @@ cross-org sharing is a real goal.
 Each phase ships something usable, is testable in isolation, and doesn't throw
 away the last.
 
-| Phase | What                                                                                                                                                                                                                                       | Kind     | Ships                                                                   | Cost                                  |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------- | ------------------------------------- |
-| **0** | Node addressing contract: `NodeId`, `ResourceRef`, `resolveNodeId`; the seam types.                                                                                                                                                        | reuse    | the vocabulary; cloud stops being a special case in principle           | low — **started (see below)**         |
-| **1** | `NodeDriver` interface + `resolveNode`; migrate the live-probe `kind==="cloud"` branches behind `LocalNodeDriver`/`RemoteNodeDriver`. **Zero behavior change.** **DONE** for the **diff** + **fs** families (see Progress).                | refactor | live-probes routed by owning node; adding a node = registering a driver | medium — mechanical, covered by tests |
-| **2** | N-transport fold. **Goal already met** — `handler.handle` folds by `sessionId`+`event`, source-blind, and two transports already feed one handler. Deliverable: a **tested contract** pinning node-agnosticism (not a premature registry). | reuse    | the "3rd node folds for free" property can't silently regress           | low — a test                          |
-| **3** | **Option A** relocatable fold-hub; run a hub instance in a cloud worker for Mac-closed.                                                                                                                                                    | ship     | full cloud-in-deus, Mac-closed included, minimal frontend churn         | medium                                |
-| **4** | **Option B** client-federated where the hop hurts: de-singleton the WS client, **node-tag the event envelope**, node-qualify query keys.                                                                                                   | upgrade  | browser → cloud direct, north-star topology                             | high — the event-bus contract change  |
-| **5** | **Option C** capability layer: per-node keypair, signed grants, JWKS discovery, peer role + registry on the relay.                                                                                                                         | new      | "read someone else's repo" with a scoped grant                          | high — the only new crypto            |
+| Phase | What                                                                                                                                                                                                                                                                                           | Kind     | Ships                                                                   | Cost                                  |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------- | ------------------------------------- |
+| **0** | Node addressing contract: `NodeId`, `ResourceRef`, `resolveNodeId`; the seam types.                                                                                                                                                                                                            | reuse    | the vocabulary; cloud stops being a special case in principle           | low — **started (see below)**         |
+| **1** | `NodeDriver` interface + `resolveNode`; migrate the live-probe `kind==="cloud"` branches behind `LocalNodeDriver`/`RemoteNodeDriver`. **Zero behavior change.** **DONE** for the **diff** + **fs** families (see Progress).                                                                    | refactor | live-probes routed by owning node; adding a node = registering a driver | medium — mechanical, covered by tests |
+| **2** | N-transport fold. **Goal already met** for source-agnostic handling — `handler.handle` folds by `sessionId`+`event`, source-blind, two transports already feed one handler. Deliverable: a **tested contract** (node-qualified persistence identity is a separate, deferred step — see State). | reuse    | the source-agnostic-fold property can't silently regress                | low — a test                          |
+| **3** | **Option B — client → agnt-direct** (the Phase-3 spike below revised this from the old "Option A"). The real Mac-closed path: de-singleton the WS client, node-tag the event bus, node-qualify keys; agnt's DO is already the cloud hub.                                                       | ship     | Mac-closed cloud, browser → cloud direct                                | high — frontend + event-bus contract  |
+| **4** | **Option A** relocatable deus-backend hub — **deprioritized** (would duplicate agnt's store); only if a hosted deus hub is ever needed.                                                                                                                                                        | later    | —                                                                       | large                                 |
+| **5** | **Option C** capability layer: per-node keypair, signed grants, JWKS discovery, peer role + registry on the relay.                                                                                                                                                                             | new      | "read someone else's repo" with a scoped grant                          | high — the only new crypto            |
 
-**Near-term scope (what we actually build now):** Phases 0–2, arguably 3. That
-is "clean cloud integration inside deus," which we need regardless of the mesh.
-Phases 4–5 are the teammate-mesh north star — vision, not backlog. Do not build
-Phase 5 early because it is the "amazing" part; resist until a real user asks to
-read someone else's repo.
+**Near-term scope (what we actually build now):** Phases 0–2 — "clean cloud
+integration inside deus," which we need regardless of the mesh, and which shipped
+in PR #321. Phase 3 (client → agnt-direct) is the next real chapter but is a
+frontend-heavy effort with its own design + e2e. Phases 4–5 are the teammate-mesh
+north star — vision, not backlog. Do not build Phase 5 early because it is the
+"amazing" part; resist until a real user asks to read someone else's repo.
 
 ### Cheap invariants to fold into the near-term phases
 
@@ -420,8 +436,9 @@ abstraction:
   (single-flight + TTL + identity-gen, unchanged). `routes/files.ts` delegates
   the four branched routes (media routes stay local). Covered by the existing
   `files.test.ts` + `cloud-files.test.ts` (route-level, both lanes) + live e2e
-  (real local tree/content/search/traversal-reject). **Full backend suite
-  801/801 green under node22; typecheck 0 errors.**
+  (real local tree/content/search/traversal-reject). _(Backend suite was 801/801
+  at this phase; the shipped PR #321 total, after the fs/pty slices, the fold
+  test, and the review fixes, is 816/816 — see the closing note.)_
 
 - **Phase 2 · fold node-agnosticism (2026-08-28):** on reading the actual fold
   wiring, Phase 2's goal is **already met** — `service.ts` feeds one
@@ -429,11 +446,16 @@ abstraction:
   cloud driver (`initCloudDriver`), and `handle()` uses only `sessionId`+`event`.
   So no registry refactor (that would be premature abstraction for two
   structurally-different transports). Instead: a **contract test** in
-  `agent-event-handler.test.ts` ("node-agnostic fold") proving two
-  differently-sourced sessions fold/persist/invalidate/push **identically** — the
-  "a 3rd node slots in for free" property, now regression-proof. Suite 802/802.
+  `agent-event-handler.test.ts` ("node-agnostic fold") proving two sessions fed
+  the same envelope shape fold/persist/invalidate/push **identically** — i.e. the
+  handler is _source-agnostic_. (It does not verify the two live transports build
+  identical envelopes, nor collision-safety for a shared session ID across nodes;
+  those are separate — see State.) Regression-proof from here.
 
-Phases 0–2 are complete (live-probe reads migrated; the fold's node-agnosticism
-locked in). The next substantive, user-facing step is **Phase 3** — the
-relocatable fold-hub so "cloud in deus" works with the Mac closed. Each remaining
-phase is its own PR + explicit go.
+Phases 0–2 are complete (live-probe reads migrated; the fold's source-agnosticism
+locked in) and shipped in **PR #321** (backend suite **816/816**, typecheck +
+lint clean, after the CodeRabbit review fixes: cloud-diff content non-gating, pty
+`cwd` forwarding, typed fs returns, and these doc corrections). The next
+substantive, user-facing step is **Phase 3 — client → agnt-direct** (the spike's
+recommended Mac-closed path; agnt's DO is already the cloud hub), a frontend-heavy
+effort. Each remaining phase is its own PR + explicit go.

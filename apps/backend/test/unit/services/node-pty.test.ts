@@ -64,10 +64,19 @@ describe("ptyRouter — terminal node routing", () => {
       expect(out).toBe("local-pty-id");
     });
 
-    it("cloud → resolves the workspace's session and opens a sandbox pty", async () => {
+    it("cloud → resolves the session and opens a sandbox pty, forwarding cwd", async () => {
       mockGetWorkspaceRaw.mockReturnValue({ current_session_id: "sess-9" });
-      const out = await ptyRouter.open({ ...base, cloudWorkspaceId: "ws-cloud" });
-      expect(mockOpenCloudPty).toHaveBeenCalledWith("sess-9", { ptyId: "t1", cols: 80, rows: 24 });
+      const out = await ptyRouter.open({
+        ...base,
+        cwd: "/project/sub",
+        cloudWorkspaceId: "ws-cloud",
+      });
+      expect(mockOpenCloudPty).toHaveBeenCalledWith("sess-9", {
+        ptyId: "t1",
+        cols: 80,
+        rows: 24,
+        cwd: "/project/sub",
+      });
       expect(mockSpawnPty).not.toHaveBeenCalled();
       expect(out).toBe("t1");
     });
