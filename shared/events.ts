@@ -104,6 +104,8 @@ export const REQUEST_RESOURCES = [
   "repoPrs",
   "repoBranches",
   "agentAuth",
+  "cloudDirectToken",
+  "cloudRepoAccess",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 

@@ -666,7 +666,12 @@ export function HomeView({
 
             {/* Cloud toggle (right) — off by default; on = agnt sandbox */}
             {hasRepos && (
-              <CloudToggle location={location} onLocationChange={setLocation} withTooltip />
+              <CloudToggle
+                location={location}
+                onLocationChange={setLocation}
+                repoId={selectedRepoId || null}
+                withTooltip
+              />
             )}
           </div>
 

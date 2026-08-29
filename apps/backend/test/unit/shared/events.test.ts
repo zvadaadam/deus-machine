@@ -256,7 +256,9 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("repoPrs");
       expect(REQUEST_RESOURCES).toContain("repoBranches");
       expect(REQUEST_RESOURCES).toContain("agentAuth");
-      expect(REQUEST_RESOURCES).toHaveLength(26);
+      expect(REQUEST_RESOURCES).toContain("cloudDirectToken");
+      expect(REQUEST_RESOURCES).toContain("cloudRepoAccess");
+      expect(REQUEST_RESOURCES).toHaveLength(28);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

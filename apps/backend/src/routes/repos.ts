@@ -10,6 +10,7 @@ import { getGitRemoteUrlSync } from "../lib/git-remotes";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
 import { getCloudEnvironmentInfo } from "../services/cloud-environment.service";
+import { resolveCloudRepoAccess } from "../services/cloud-workspace-init.service";
 import { AppError, ValidationError, ConflictError, NotFoundError } from "../lib/errors";
 import { parseBody, CreateRepoBody, InitProjectBody } from "../lib/schemas";
 import { detectDefaultBranch } from "../services/git.service";
@@ -199,6 +200,17 @@ app.get("/repos/:id/cloud-environment", async (c) => {
   if (!repo) throw new NotFoundError("Repository not found");
   if (!repo.git_origin_url) return c.json({ configured: false, name: null });
   return c.json(await getCloudEnvironmentInfo(repo.git_origin_url));
+});
+
+/**
+ * Can a cloud sandbox clone this repo right now? Drives the composer's
+ * proactive "Grant repository access" modal (a private repo the GitHub App
+ * doesn't cover → status "needs_grant"). Repo-not-found / no-origin resolve to
+ * a non-blocking status inside the resolver, never a 404 — the composer only
+ * acts on "needs_grant".
+ */
+app.get("/repos/:id/cloud-access", async (c) => {
+  return c.json(await resolveCloudRepoAccess(c.req.param("id")));
 });
 
 app.post("/repos/inspect", async (c) => {

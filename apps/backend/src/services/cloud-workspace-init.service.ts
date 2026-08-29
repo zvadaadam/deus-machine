@@ -23,6 +23,7 @@ import {
   Environment,
 } from "@deus-hq/sdk";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
+import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
@@ -633,6 +634,74 @@ async function mintRepoInstallationToken(
 }
 
 /**
+ * Is this GitHub repo public — i.e. cloneable by a tokenless sandbox?
+ *
+ * Unauthenticated GitHub API: a public repo answers 200, a private (or
+ * missing) one answers 404 — GitHub hides private repos from anonymous
+ * callers. We deliberately send NO credential so the answer reflects what the
+ * *sandbox* (which has none) can reach, NOT what the user's local git creds
+ * can. TRI-STATE: 200 -> public, 404 -> private (invisible to anon), anything
+ * else (rate-limit — the anon limit is 60/hr PER IP, a shared quota on the
+ * hosted backend — 5xx, network) -> null = "couldn't tell". The null case is
+ * what stops a rate-limited probe from being read as "private" and wrongly
+ * emitting needs_grant on a public repo.
+ */
+async function isPublicGithubRepo(slug: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${slug}`, {
+      headers: { accept: "application/vnd.github+json", "user-agent": "deus-machine" },
+      signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
+    });
+    if (res.status === 200) return true;
+    if (res.status === 404) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The ONE access verdict, classified from an already-resolved mint — so a
+ * caller that mints for its own reasons (provisioning needs the token itself)
+ * reuses that result instead of minting twice. "ok" = the App covers it (a
+ * token minted) OR the repo is public. Anything uncertain (the public probe
+ * couldn't tell, or a non-definitive mint) is "unknown", which must NEVER
+ * block: only a repo the App PROVABLY doesn't cover AND that is PROVABLY not
+ * public becomes "needs_grant". Both the composer modal and the create-time
+ * safety net classify through this, so the preview can't disagree with what
+ * provisioning decides.
+ */
+async function classifyRepoAccess(
+  slug: string,
+  mint: { token: string | null; definitive: boolean }
+): Promise<CloudRepoAccessStatus> {
+  if (mint.token) return "ok";
+  const isPublic = await isPublicGithubRepo(slug);
+  if (isPublic) return "ok";
+  if (isPublic === null) return "unknown"; // probe couldn't tell → never block
+  // isPublic === false: provably not anonymously cloneable.
+  return mint.definitive ? "needs_grant" : "unknown";
+}
+
+/**
+ * Can a cloud sandbox clone this repo right now? (See {@link CloudRepoAccess}.)
+ * Backs the `cloudRepoAccess` request + the composer gate; the create-time
+ * safety net classifies through the same {@link classifyRepoAccess}.
+ *
+ * No cloud session / no origin / non-GitHub origin all resolve to "unknown":
+ * there is nothing to grant, and the composer only ever acts on "needs_grant".
+ */
+export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoAccess> {
+  if (!getCloudConfig()) return { status: "unknown", slug: null };
+  const originUrl = getRepositoryById(getDatabase(), repoId)?.git_origin_url;
+  if (!originUrl) return { status: "unknown", slug: null };
+  const slug = githubRepoSlug(originUrl);
+  if (!slug) return { status: "unknown", slug: null };
+  const mint = await mintRepoInstallationToken(originUrl);
+  return { status: await classifyRepoAccess(slug, mint), slug };
+}
+
+/**
  * Upsert the environment-scoped `github_token` for a named environment.
  *
  * App mints expire in an hour, and an environment-scoped secret SHADOWS the
@@ -769,11 +838,29 @@ async function provisionInBackground(
       // secret: it drives agnt's git-auth step and NEVER lands in pg — the
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
-      const githubToken = (await mintRepoInstallationToken(originUrl)).token;
-      if (githubToken) {
-        recipe = recipe.secrets({ github_token: githubToken });
+      const mint = await mintRepoInstallationToken(originUrl);
+      if (mint.token) {
+        recipe = recipe.secrets({ github_token: mint.token });
         inlineMintStampAtCreate = Date.now();
       } else {
+        // No App token. Classify through the SAME verdict the composer modal
+        // uses, reusing the mint we just did (no second mint): a repo the App
+        // provably doesn't cover AND that isn't public would die at `git clone`
+        // with a cryptic auth error, so fail fast with an actionable message
+        // instead of burning a sandbox. The modal prevents this in the UI; this
+        // backstops any path that reaches create without it (a web race, access
+        // revoked mid-flight). "unknown" (a transient blip / rate-limited probe)
+        // still provisions. NOTE: only the INLINE lane — a repo with a named
+        // environment resolves its token separately and relies on the modal.
+        const slug = githubRepoSlug(originUrl);
+        if (slug && (await classifyRepoAccess(slug, mint)) === "needs_grant") {
+          db.prepare("UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?").run(
+            `GitHub access required — install the Deus GitHub App for ${slug} to run it in the cloud.`,
+            workspaceId
+          );
+          invalidate([...WORKSPACE_RESOURCES], {});
+          return;
+        }
         // The DO map is KNOWN tokenless from birth (nothing baked) — record
         // 0 so a later unknown-outcome restart isn't blocked protecting a
         // token that never existed.

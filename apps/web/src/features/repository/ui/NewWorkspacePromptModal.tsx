@@ -118,7 +118,11 @@ export function NewWorkspacePromptModal({
             )}
           </div>
 
-          <CloudToggle location={location} onLocationChange={setLocation} />
+          <CloudToggle
+            location={location}
+            onLocationChange={setLocation}
+            repoId={selectedRepoId || null}
+          />
         </div>
 
         {/* Typing card — textarea + bottom toolbar, welcome-composer anatomy */}
