@@ -118,6 +118,16 @@ describe("resolveCloudRepoAccess", () => {
     expect(await resolveCloudRepoAccess("r1")).toEqual({ status: "unknown", slug: SLUG });
   });
 
+  it("unknown (not needs_grant) when the App grant path is unconfigured (env-key / PAT-only)", async () => {
+    // No deus-cloud session bits: the mint is definitive for "no context", NOT
+    // "no App installation". A private repo here clones via the org PAT
+    // server-side, so we must not prompt to install an App that isn't in use
+    // (nor let the create-time gate hard-fail a create the PAT would satisfy).
+    mockGetCloudConfig.mockReturnValue({ baseUrl: "https://api.agnt.test", apiKey: "agnt_sk" });
+    stubFetch({ ghApi: () => jsonRes(404, {}) });
+    expect(await resolveCloudRepoAccess("r1")).toEqual({ status: "unknown", slug: SLUG });
+  });
+
   it("unknown (never needs_grant) on a transient mint failure — a blip must not prompt", async () => {
     // 5xx from deus-cloud is UNKNOWN, not definitive: it must not be mistaken
     // for "no access" and interrupt the user, even for a private repo.

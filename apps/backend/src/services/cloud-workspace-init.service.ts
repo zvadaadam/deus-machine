@@ -660,6 +660,12 @@ async function isPublicGithubRepo(slug: string): Promise<boolean | null> {
   }
 }
 
+/** The App grant path is only usable when a deus-cloud session is configured. */
+function isGrantPathConfigured(): boolean {
+  const c = getCloudConfig();
+  return !!(c?.deusCloudUrl && c.deusCloudSessionToken && c.orgId);
+}
+
 /**
  * The ONE access verdict, classified from an already-resolved mint — so a
  * caller that mints for its own reasons (provisioning needs the token itself)
@@ -679,8 +685,14 @@ async function classifyRepoAccess(
   const isPublic = await isPublicGithubRepo(slug);
   if (isPublic) return "ok";
   if (isPublic === null) return "unknown"; // probe couldn't tell → never block
-  // isPublic === false: provably not anonymously cloneable.
-  return mint.definitive ? "needs_grant" : "unknown";
+  // isPublic === false: provably not anonymously cloneable. Emit needs_grant
+  // ONLY when the App IS the configured grant path — a definitive mint without
+  // a deus-cloud session just means "no App configured" (an env-key / org-PAT
+  // setup that clones private repos via the org PAT server-side), so prompting
+  // to install an App that isn't in use would dead-end AND wrongly block a
+  // create that succeeds via the PAT. That stays "unknown".
+  if (mint.definitive && isGrantPathConfigured()) return "needs_grant";
+  return "unknown";
 }
 
 /**
