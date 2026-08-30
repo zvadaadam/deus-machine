@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { capabilities } from "@/platform/capabilities";
+import { useCloudAccessGate } from "./useCloudAccessGate";
+import { GrantRepositoryAccessModal } from "./GrantRepositoryAccessModal";
 
 import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -178,28 +180,35 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
 interface CloudToggleProps {
   location: "local" | "cloud";
   onLocationChange: (location: "local" | "cloud") => void;
+  /** Selected repo — cloud is gated on the GitHub App covering it (private repos). */
+  repoId?: string | null;
   /** Welcome composer explains the toggle; the modal stays quiet. */
   withTooltip?: boolean;
 }
 
 /** Off-by-default cloud switch — on = the workspace runs in an agnt sandbox. */
-export function CloudToggle({ location, onLocationChange, withTooltip = false }: CloudToggleProps) {
-  // Signed-out truth at the moment of intent: flipping Cloud on without a
-  // Deus Cloud session can only end in a failed create, so say it HERE with
-  // the sign-in one click away — not as a 500 after the prompt is written.
+export function CloudToggle({
+  location,
+  onLocationChange,
+  repoId,
+  withTooltip = false,
+}: CloudToggleProps) {
   const cloudStatus = useCloudSettings();
   const signIn = useDeusCloudSignIn();
+  const signedIn = !!cloudStatus.data?.enabled;
+
+  // The cloud-access gate (access probe + Grant modal + auto-continue) lives in
+  // its own hook so this stays a toggle — see useCloudAccessGate.
+  const gate = useCloudAccessGate({ repoId, signedIn, location, onLocationChange });
+
   const handleChange = (on: boolean) => {
-    // Only select cloud once it's CONFIRMED enabled. A still-loading or errored
-    // /settings/cloud leaves `data` undefined — selecting cloud then just arms a
-    // submit the backend guard rejects — so treat "not confirmed enabled" as
-    // unavailable and keep the switch local.
-    if (on && !cloudStatus.data?.enabled) {
-      // Only nudge to sign in once we KNOW it's disabled — a status that hasn't
-      // loaded yet shouldn't cry "not signed in". Deus Cloud sign-in mints a
-      // device credential over Electron IPC; there's no web sign-in yet, so on
-      // app.deusmachine.ai point at the desktop app.
-      if (cloudStatus.data && !cloudStatus.data.enabled) {
+    // Signed-out truth at the moment of intent: flipping Cloud on without a Deus
+    // Cloud session can only end in a failed create, so say it HERE with the
+    // sign-in one click away — not as a 500 after the prompt is written. Only
+    // nudge once we KNOW it's disabled (data loaded); a still-loading status
+    // shouldn't cry "not signed in".
+    if (on && !signedIn) {
+      if (cloudStatus.data) {
         toast("Not signed in to Deus Cloud", {
           description: capabilities.ipcInvoke
             ? "Cloud workspaces need a Deus Cloud account on this device."
@@ -209,12 +218,16 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
           }),
         });
       }
-      // Keep the location LOCAL — re-toggling after sign-in (or once the status
-      // resolves to enabled) takes the cloud path below.
       return;
     }
+    // Second truth at the moment of intent: a private repo the sandbox can't
+    // clone. The gate raises the Grant modal and keeps us local until granted.
+    if (gate.interceptCloud(on)) return;
     onLocationChange(on ? "cloud" : "local");
   };
+  // The switch reflects the COMMITTED location — cloud only once the gate has a
+  // confirmed verdict. A still-resolving intent stays visually off (local), so
+  // the switch and what a submit would create never disagree.
   const label = (
     <label
       className={cn(
@@ -233,8 +246,9 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
     </label>
   );
 
-  if (!withTooltip) return label;
-  return (
+  const control = !withTooltip ? (
+    label
+  ) : (
     <Tooltip delayDuration={200}>
       <TooltipTrigger asChild>{label}</TooltipTrigger>
       <TooltipContent side="bottom">
@@ -245,6 +259,17 @@ export function CloudToggle({ location, onLocationChange, withTooltip = false }:
         </p>
       </TooltipContent>
     </Tooltip>
+  );
+
+  return (
+    <>
+      {control}
+      <GrantRepositoryAccessModal
+        open={gate.grantOpen}
+        onOpenChange={gate.onOpenChange}
+        slug={gate.slug}
+      />
+    </>
   );
 }
 

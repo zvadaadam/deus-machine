@@ -119,13 +119,20 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
  * HTTP queryFn loads all messages (backend caps at 2000). No pagination —
  * the virtualizer handles render-level windowing.
  */
-export function useMessages(sessionId: string | null) {
+export function useMessages(sessionId: string | null, directMode = false) {
   const queryClient = useQueryClient();
+
+  // Cloud-direct (Path B): the browser folds the agnt socket into this same
+  // cache key itself (`useCloudDirect`), so the Mac-backend lanes — the WS
+  // `messages` subscription, the reconnect-invalidate, and the HTTP fetch —
+  // must all stand down for this session, or an authoritative-empty fetch would
+  // clobber the folded transcript.
+  const macLaneEnabled = !!sessionId && !directMode;
 
   useQuerySubscription("messages", {
     queryKey: queryKeys.sessions.messages(sessionId || ""),
     params: { sessionId: sessionId || "" },
-    enabled: !!sessionId,
+    enabled: macLaneEnabled,
     mergeDelta: mergeMessageDelta,
   });
 
@@ -142,18 +149,18 @@ export function useMessages(sessionId: string | null) {
   // socket, and a listener that starts from "never connected" reads the first
   // real re-connect as its first connect and skips this refetch entirely.
   useEffect(() => {
-    if (!sessionId) return;
+    if (!macLaneEnabled || !sessionId) return;
     return onConnectionChange(
       reconnectListener(isConnected(), () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId) });
       })
     );
-  }, [sessionId, queryClient]);
+  }, [sessionId, queryClient, macLaneEnabled]);
 
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
     queryFn: () => SessionService.fetchMessages(sessionId!),
-    enabled: !!sessionId,
+    enabled: macLaneEnabled,
     refetchInterval: false,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -165,9 +172,9 @@ export function useMessages(sessionId: string | null) {
 /**
  * Combined hook for session + messages + status
  */
-export function useSessionWithMessages(sessionId: string | null) {
+export function useSessionWithMessages(sessionId: string | null, directMode = false) {
   const sessionQuery = useSession(sessionId);
-  const messagesQuery = useMessages(sessionId);
+  const messagesQuery = useMessages(sessionId, directMode);
 
   const messages = messagesQuery.data?.messages ?? [];
   const compactions = messagesQuery.data?.compactions;

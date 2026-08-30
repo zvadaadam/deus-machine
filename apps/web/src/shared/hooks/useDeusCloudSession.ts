@@ -32,6 +32,11 @@ export function useDeusCloudSession() {
       ]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
+      // The cloud-access verdict GATES the create action, so a stale verdict
+      // kept alive during a background refetch is worse than none: account B
+      // could reuse A's "ok" and select cloud before B's check lands. RESET it
+      // (drop the data) so the gate holds until B's own verdict arrives.
+      void queryClient.resetQueries({ queryKey: ["cloudRepoAccess"] });
     });
   }, [queryClient]);
 

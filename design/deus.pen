@@ -77950,6 +77950,115 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "QdR52",
+      "x": 17700,
+      "y": -560,
+      "name": "DS/GrantRepositoryAccessModal",
+      "theme": {
+        "mode": "dark"
+      },
+      "reusable": true,
+      "width": 400,
+      "fill": "$bg-elevated",
+      "cornerRadius": "$radius-2xl",
+      "stroke": "$border-subtle",
+      "strokeWidth": 1,
+      "strokeAlignment": "inner",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": 24,
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "u1hpO3",
+          "name": "GitHubBadge",
+          "width": 56,
+          "height": 56,
+          "fill": "$bg-raised",
+          "cornerRadius": "$radius-2xl",
+          "stroke": "$border-subtle",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        {
+          "type": "text",
+          "id": "YQvVu",
+          "name": "Title",
+          "fill": "$text-primary",
+          "content": "Grant repository access",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-lg",
+          "fontWeight": "500"
+        },
+        {
+          "type": "text",
+          "id": "F2hLgT",
+          "name": "Description",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": 340,
+          "content": "Cloud agents work from a clone of owner/repo in a secure, isolated sandbox. Connect to get started.",
+          "lineHeight": 1.45,
+          "textAlign": "center",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "id": "tpJgI",
+          "type": "ref",
+          "ref": "rg2x2",
+          "name": "Grant Access Button",
+          "width": "fill_container",
+          "descendants": {
+            "z4bI4": {
+              "content": "Grant Access"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "YS5Rm",
+      "x": 18220,
+      "y": -560,
+      "name": "62 · Grant repository access",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-base",
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "tgPhU",
+          "x": 0,
+          "y": 0,
+          "name": "Scrim",
+          "opacity": 0.55,
+          "width": 1440,
+          "height": 900,
+          "fill": "#000000"
+        },
+        {
+          "id": "TySlg",
+          "type": "ref",
+          "ref": "QdR52",
+          "name": "Grant modal",
+          "x": 520,
+          "y": 300
+        }
+      ]
     }
   ],
   "themes": {

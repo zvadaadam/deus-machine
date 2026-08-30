@@ -14,6 +14,8 @@ import type { Message } from "../types";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { CloudEnvSetupChip } from "./CloudEnvSetupChip";
 import { useAgentEvents } from "../hooks/useAgentEvents";
+import { useCloudDirect } from "../hooks/useCloudDirect";
+import { isCloudDirectEnabled } from "../cloud/cloudDirectFlag";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { useSessionContextLostNotice } from "../hooks/useSessionContextLostNotice";
 import { SessionProvider } from "../context";
@@ -117,6 +119,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     const { pendingRequests, resolvePlanMode, resolveQuestion } =
       useAgentRpcHandler(agentRpcContext);
 
+    // Path B (behind a flag, default off): a cloud session folds the agnt socket
+    // DIRECTLY in the browser instead of via the Mac backend's q: relay.
+    const cloudDirect = isCloudDirectEnabled() && workspaceKind === "cloud";
+
     // TanStack Query hooks
     const {
       session,
@@ -125,12 +131,17 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       hasOlder,
       sessionStatus,
       loading,
-    } = useSessionWithMessages(sessionId);
+    } = useSessionWithMessages(sessionId, cloudDirect);
 
     // ── Part Events → direct cache mutation (single-store model) ──────
     // WS part events mutate the TanStack Query cache directly.
     // No parallel store, no merge function. One source of truth.
-    useAgentEvents(sessionId);
+    //
+    // Exactly one lane drives that cache key: the Mac q: fold, or — when
+    // cloud-direct — the browser's own agnt socket. So the q: fold stands down
+    // (`null`) for a direct session, and `useCloudDirect` drives it instead.
+    useAgentEvents(cloudDirect ? null : sessionId);
+    useCloudDirect(sessionId, cloudDirect);
 
     // A silent resume failure (session.created → resumed: false) means the
     // model forgot this conversation. Surfaced once, dismissible, never

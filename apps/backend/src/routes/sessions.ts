@@ -1,6 +1,7 @@
 import { Hono } from "hono";
+import { createSessionToken } from "@deus-hq/sdk";
 import { getDatabase } from "../lib/database";
-import { NotFoundError } from "../lib/errors";
+import { NotFoundError, ValidationError } from "../lib/errors";
 import {
   getAllSessions,
   getSessionById,
@@ -12,6 +13,7 @@ import {
   attachParts,
 } from "../db";
 import { invalidate } from "../services/query-engine";
+import { getCloudConfig } from "../services/agent/cloud/config";
 
 /**
  * Session Routes
@@ -94,6 +96,43 @@ app.post("/sessions/:id/stop", (c) => {
 
   const updatedSession = getSessionRaw(db, sessionId);
   return c.json({ success: true, session: updatedSession });
+});
+
+/**
+ * GET /sessions/:id/cloud-direct-token
+ *
+ * The "Mac-up" token seam for Path B (direct-agnt rendering). Mints a
+ * session-scoped token so the BROWSER can open this cloud session's agnt
+ * WebSocket directly, bypassing this backend's `q:` relay. The desktop backend
+ * holds the cloud credentials, so it mints via the SDK's `createSessionToken`
+ * (the same token its own socket uses). The fully-Mac-closed variant instead
+ * mints from the browser's own `deus_cloud_session` via agnt's `/dashboard`
+ * exchange — same engine, different token source.
+ */
+app.get("/sessions/:id/cloud-direct-token", async (c) => {
+  const db = getDatabase();
+  const session = getSessionRaw(db, c.req.param("id"));
+  if (!session) throw new NotFoundError("Session not found");
+  if (!session.provider_session_id) {
+    throw new ValidationError("Not a cloud session");
+  }
+
+  const config = getCloudConfig();
+  if (!config) {
+    throw new ValidationError("Cloud is not configured on this device");
+  }
+
+  const { token } = await createSessionToken(session.provider_session_id, {
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    expiresIn: 60 * 60,
+  });
+
+  return c.json({
+    token,
+    base_url: config.baseUrl,
+    provider_session_id: session.provider_session_id,
+  });
 });
 
 export default app;

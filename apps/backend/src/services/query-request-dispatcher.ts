@@ -98,5 +98,13 @@ export async function runRequest(
     .with("repoPrs", () => repoGet("/prs"))
     .with("repoBranches", () => repoGet("/branches"))
     .with("agentAuth", () => delegateToRoute("GET", "/api/settings/agent-auth"))
+    .with("cloudDirectToken", () => {
+      const sessionId = requireParam(params, "sessionId", "cloudDirectToken");
+      return delegateToRoute(
+        "GET",
+        `/api/sessions/${encodeURIComponent(sessionId)}/cloud-direct-token`
+      );
+    })
+    .with("cloudRepoAccess", () => repoGet("/cloud-access"))
     .exhaustive();
 }
