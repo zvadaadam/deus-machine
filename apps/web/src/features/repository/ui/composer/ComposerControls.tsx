@@ -225,21 +225,20 @@ export function CloudToggle({
     if (gate.interceptCloud(on)) return;
     onLocationChange(on ? "cloud" : "local");
   };
-  // The switch reflects the user's INTENT immediately (on during a pending
-  // access check) even though `location` only commits to cloud once the verdict
-  // resolves — so a toggle click always registers visually.
-  const cloudActive = location === "cloud" || gate.pending;
+  // The switch reflects the COMMITTED location — cloud only once the gate has a
+  // confirmed verdict. A still-resolving intent stays visually off (local), so
+  // the switch and what a submit would create never disagree.
   const label = (
     <label
       className={cn(
         "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150 select-none",
-        cloudActive ? "text-text-secondary" : "text-text-disabled hover:text-text-muted"
+        location === "cloud" ? "text-text-secondary" : "text-text-disabled hover:text-text-muted"
       )}
     >
       <Cloud className="size-3 shrink-0" />
       <span>Cloud</span>
       <Switch
-        checked={cloudActive}
+        checked={location === "cloud"}
         onCheckedChange={handleChange}
         className="scale-75"
         aria-label="Run on a cloud computer"

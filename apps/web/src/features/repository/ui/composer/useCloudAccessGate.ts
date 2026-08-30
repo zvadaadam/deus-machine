@@ -23,8 +23,6 @@ export interface CloudAccessGate {
   grantOpen: boolean;
   /** `owner/name` the open modal is prompting for (for its copy). */
   slug: string | null;
-  /** True while a cloud intent is awaiting its access verdict (show as pending). */
-  pending: boolean;
   onOpenChange: (open: boolean) => void;
   /**
    * Call when the user flips the toggle. Returns true if it intercepted — the
@@ -65,21 +63,23 @@ export function useCloudAccessGate({
     // status === undefined → keep intent; still loading (pending).
   }, [intent, repoId, status, onLocationChange]);
 
-  // A cloud selection that turns out un-cloneable (access revoked mid-session)
-  // → revert to local and raise the intent so the grant prompt appears.
+  // Keep the invariant: location is "cloud" ONLY while the CURRENT repo's verdict
+  // is a confirmed go (ok / unknown). Anything else with cloud selected — the
+  // picker switched to an uncached repo (status undefined) or access was revoked
+  // mid-session (needs_grant) — reverts to local and re-arms the intent, so a
+  // stale cloud selection can't be submitted before the new verdict lands.
   useEffect(() => {
-    if (location === "cloud" && status === "needs_grant" && repoId) {
+    if (signedIn && location === "cloud" && repoId && status !== "ok" && status !== "unknown") {
       onLocationChange("local");
       setIntent({ repoId });
     }
-  }, [location, status, repoId, onLocationChange]);
+  }, [signedIn, location, status, repoId, onLocationChange]);
 
   const grantOpen = intent !== null && status === "needs_grant";
 
   return {
     grantOpen,
     slug: grantOpen ? (access.data?.slug ?? intent?.repoId ?? null) : null,
-    pending: intent !== null && status !== "needs_grant",
     onOpenChange: (open) => {
       if (!open) setIntent(null);
     },
