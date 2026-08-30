@@ -29,6 +29,7 @@ export function useDeusCloudSession() {
         ["settings", "codex-subscription"],
         ["settings", "cloud-environments"],
         ["repo-cloud-environment"],
+        ["cloudRepoAccess"],
       ]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }

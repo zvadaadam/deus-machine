@@ -2,13 +2,18 @@
  * useCloudAccessGate — the cloud-access gate behind the composer's Cloud toggle,
  * lifted out of CloudToggle so the toggle stays a toggle.
  *
- * Owns the whole "can this repo run in the cloud?" state machine in ONE place:
- * it probes access (only while signed in), raises the Grant modal when a private
- * repo the GitHub App doesn't cover is chosen, and — because App installs
- * complete out-of-band on github.com with no callback — polls while the modal is
- * open so returning from GitHub continues into cloud on its own. The grant
- * intent is pinned to the repo it was raised for, so switching the composer's
- * repo picker mid-flow neither auto-continues nor prompts for the wrong repo.
+ * Owns the whole "can this repo run in the cloud?" state machine in ONE place.
+ * A single `intent` (the repo the user asked to run in the cloud) drives it:
+ * - while the verdict is still loading the intent is HELD — cloud is NOT
+ *   selected, so a fast toggle+submit can't create a doomed workspace before the
+ *   verdict arrives;
+ * - `ok` / `unknown` → select cloud;
+ * - `needs_grant` → open the Grant modal (derived from intent + verdict).
+ * App installs finish out-of-band on github.com with no callback, so while an
+ * intent is live the access query re-checks on the window-focus event (see
+ * useCloudRepoAccess) — event-driven, not a poll — and returning from GitHub
+ * continues into cloud on its own. The intent is pinned to its repo, so
+ * switching the picker mid-flow drops it rather than acting on the wrong repo.
  */
 import { useEffect, useState } from "react";
 import { useCloudRepoAccess } from "./useCloudRepoAccess";
@@ -18,10 +23,13 @@ export interface CloudAccessGate {
   grantOpen: boolean;
   /** `owner/name` the open modal is prompting for (for its copy). */
   slug: string | null;
+  /** True while a cloud intent is awaiting its access verdict (show as pending). */
+  pending: boolean;
   onOpenChange: (open: boolean) => void;
   /**
-   * Call when the user flips the toggle. Returns true if it intercepted (the
-   * repo needs a grant) — the caller must then NOT switch to cloud.
+   * Call when the user flips the toggle. Returns true if it intercepted — the
+   * caller must then NOT switch to cloud (the gate drives the transition once
+   * the verdict resolves).
    */
   interceptCloud: (on: boolean) => boolean;
 }
@@ -37,48 +45,56 @@ export function useCloudAccessGate({
   location: "local" | "cloud";
   onLocationChange: (location: "local" | "cloud") => void;
 }): CloudAccessGate {
-  // The grant intent: which repo we prompted for + its slug for the copy.
-  // Non-null == the modal is open. Pinning the repo is what stops a mid-flow
-  // picker switch from auto-continuing (or prompting) for the wrong repo.
-  const [grant, setGrant] = useState<{ repoId: string; slug: string } | null>(null);
-  const access = useCloudRepoAccess(repoId, { enabled: signedIn, watch: grant !== null });
+  // The cloud intent: the repo the user asked to run in the cloud. Non-null =
+  // we're resolving it (holding, prompting, or continuing). Pinned to its repo
+  // so a mid-flow picker switch drops it rather than acting on the wrong repo.
+  const [intent, setIntent] = useState<{ repoId: string } | null>(null);
+  const access = useCloudRepoAccess(repoId, { enabled: signedIn, watch: intent !== null });
   const status = access.data?.status;
 
-  // Resolve an open prompt: the composer moved to another repo → drop the stale
-  // prompt; access granted for the pinned repo → continue into cloud.
+  // Resolve the intent as its verdict arrives (or drop it if the repo changed).
   useEffect(() => {
-    if (!grant) return;
-    if (grant.repoId !== repoId) {
-      setGrant(null);
-    } else if (status === "ok") {
-      setGrant(null);
-      onLocationChange("cloud");
+    if (!intent) return;
+    if (intent.repoId !== repoId) {
+      setIntent(null); // composer moved to another repo
+    } else if (status === "ok" || status === "unknown") {
+      setIntent(null);
+      onLocationChange("cloud"); // cloneable (App/public) or unknowable — allow
     }
-  }, [grant, repoId, status, onLocationChange]);
+    // status === "needs_grant" → keep intent; grantOpen (below) shows the modal.
+    // status === undefined → keep intent; still loading (pending).
+  }, [intent, repoId, status, onLocationChange]);
 
-  // A cloud selection that turns out un-cloneable (the probe resolved after an
-  // optimistic flip, or access was revoked mid-session) → revert to local and
-  // prompt. `needs_grant` is the only definitive-no verdict, so this never
-  // fires on an "unknown" blip.
+  // A cloud selection that turns out un-cloneable (access revoked mid-session)
+  // → revert to local and raise the intent so the grant prompt appears.
   useEffect(() => {
-    if (location === "cloud" && status === "needs_grant" && repoId && access.data) {
+    if (location === "cloud" && status === "needs_grant" && repoId) {
       onLocationChange("local");
-      setGrant({ repoId, slug: access.data.slug ?? repoId });
+      setIntent({ repoId });
     }
-  }, [location, status, repoId, access.data, onLocationChange]);
+  }, [location, status, repoId, onLocationChange]);
+
+  const grantOpen = intent !== null && status === "needs_grant";
 
   return {
-    grantOpen: grant !== null,
-    slug: grant?.slug ?? null,
+    grantOpen,
+    slug: grantOpen ? (access.data?.slug ?? intent?.repoId ?? null) : null,
+    pending: intent !== null && status !== "needs_grant",
     onOpenChange: (open) => {
-      if (!open) setGrant(null);
+      if (!open) setIntent(null);
     },
     interceptCloud: (on) => {
-      if (on && status === "needs_grant" && repoId) {
-        setGrant({ repoId, slug: access.data?.slug ?? repoId });
-        return true;
+      if (!on) {
+        setIntent(null); // toggling off cancels any pending / grant intent
+        return false;
       }
-      return false;
+      if (!repoId) return false;
+      // Only a resolved "go" verdict enables cloud immediately. needs_grant OR a
+      // still-loading verdict HOLDS the intent (no premature cloud); the resolve
+      // effect continues once the verdict arrives.
+      if (status === "ok" || status === "unknown") return false;
+      setIntent({ repoId });
+      return true;
     },
   };
 }
