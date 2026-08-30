@@ -48,7 +48,11 @@ export function useCloudAccessGate({
   // so a mid-flow picker switch drops it rather than acting on the wrong repo.
   const [intent, setIntent] = useState<{ repoId: string } | null>(null);
   const access = useCloudRepoAccess(repoId, { enabled: signedIn, watch: intent !== null });
-  const status = access.data?.status;
+  // A terminal fetch error (retries exhausted) is treated as "unknown" — a
+  // failed access check must NOT strand the intent as forever-loading; it falls
+  // through to the non-blocking path (select cloud), matching the resolver's
+  // "never block on uncertainty" rule. The create-time safety net is the backstop.
+  const status = access.isError ? "unknown" : access.data?.status;
 
   // Resolve the intent as its verdict arrives (or drop it if the repo changed).
   useEffect(() => {
