@@ -22,6 +22,7 @@ import { cn } from "@/shared/lib/utils";
 import { ChatArea } from "./ChatArea";
 import { MobileTabBar } from "./MobileTabBar";
 import type { MobileTab } from "./MobileTabBar";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { MobilePRHeaderAction, MobilePRStatusBar } from "./MobilePRBar";
 
 interface MobileLayoutProps {
@@ -72,11 +73,16 @@ export function MobileLayout({
 }: MobileLayoutProps) {
   const [activeTab, setActiveTab] = useState<MobileTab>("chat");
 
+  // Web-direct is chat-only on mobile too: the Code tab's diff traffic reads
+  // the Mac backend, which the direct lane doesn't have — so the tab bar and
+  // Code panel don't mount and the diff query never fires.
+  const chatOnly = isCloudDirectWebMode();
+
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
   const isReady = workspace.state === "ready";
   const { data: fileChangesData } = useFileChanges(
-    isReady ? workspace.id : null,
+    !chatOnly && isReady ? workspace.id : null,
     workspace.session_status,
     isWatched,
     workspace.state
@@ -153,26 +159,30 @@ export function MobileLayout({
       </div>
 
       {/* Code panel — reuses ChangesView in compact mode (no file tree, keeps header) */}
-      <div
-        className={cn("min-h-0 flex-1 overflow-hidden", activeTab !== "code" && "hidden")}
-        id="mobile-panel-code"
-        role="tabpanel"
-        aria-labelledby="mobile-tab-code"
-      >
-        <ChangesView
-          workspace={workspace}
-          isWatched={isWatched}
-          onReview={handleInsertReviewPrompt}
-          compact
-        />
-      </div>
+      {!chatOnly && (
+        <div
+          className={cn("min-h-0 flex-1 overflow-hidden", activeTab !== "code" && "hidden")}
+          id="mobile-panel-code"
+          role="tabpanel"
+          aria-labelledby="mobile-tab-code"
+        >
+          <ChangesView
+            workspace={workspace}
+            isWatched={isWatched}
+            onReview={handleInsertReviewPrompt}
+            compact
+          />
+        </div>
+      )}
 
-      {/* Bottom tab bar */}
-      <MobileTabBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        fileChangesCount={fileChanges.length}
-      />
+      {/* Bottom tab bar — a one-tab bar is noise, so chat-only drops it */}
+      {!chatOnly && (
+        <MobileTabBar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          fileChangesCount={fileChanges.length}
+        />
+      )}
     </div>
   );
 }

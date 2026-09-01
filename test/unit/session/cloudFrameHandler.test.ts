@@ -514,6 +514,20 @@ describe("makeCloudFrameHandler", () => {
     expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
       "error"
     );
+
+    // `stopReason: "error"` with NO inline error object is a valid terminal
+    // shape (the backend classifies it as an internal error) — still an error.
+    onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t3", timestamp: T });
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t3",
+      stopReason: "error",
+      timestamp: T,
+    });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "error"
+    );
   });
 
   it("projects session.usage onto the context gauge (count always, percent needs a size)", () => {

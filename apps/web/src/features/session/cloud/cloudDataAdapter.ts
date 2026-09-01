@@ -89,6 +89,15 @@ async function fetchAllCloudSessions(): Promise<AgntSession[]> {
 const LIST_TTL_MS = 3000;
 let listCache: { at: number; promise: Promise<AgntSession[]> } | null = null;
 
+/**
+ * Drop the in-flight list cache so the NEXT read hits agnt. Event-driven
+ * refreshes (turn boundaries) call this before invalidating — inside the TTL
+ * they'd otherwise refetch the cached list and see the pre-event status.
+ */
+export function bustCloudSessionsListCache(): void {
+  listCache = null;
+}
+
 function getCloudSessions(): Promise<AgntSession[]> {
   const now = Date.now();
   if (listCache && now - listCache.at < LIST_TTL_MS) return listCache.promise;

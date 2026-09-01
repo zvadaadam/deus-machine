@@ -1,6 +1,8 @@
 import { capabilities } from "../capabilities";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { queryClient } from "@/shared/api/queryClient";
+import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
 import {
   clearWebCloudSession,
   beginWebCloudLogin,
@@ -30,9 +32,14 @@ function webDirectSession(): DeusCloudSessionStatus | null {
     // An expired bearer must not report "signed in" — Settings would offer a
     // dead session until some agnt request 401s. Clear it and fall through to
     // signed-out; this is a passive status read, so no redirect here (the
-    // request-path 401 handler owns re-auth navigation).
+    // request-path 401 handler owns re-auth navigation). It IS an account
+    // boundary though: run the same teardown as sign-out, or the already-minted
+    // direct token keeps its socket streaming (and sendable) under a UI that
+    // says signed out. One-shot — the cleared bearer short-circuits above on
+    // every later heartbeat.
     if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
       clearWebCloudSession();
+      applyDeusCloudAuthChange(queryClient, { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() });
       return null;
     }
     return {

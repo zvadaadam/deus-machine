@@ -34,6 +34,7 @@ import {
   patchSessionDetail,
   type AgentStreamContext,
 } from "../lib/agentEventFold";
+import { bustCloudSessionsListCache } from "./cloudDataAdapter";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 
@@ -82,16 +83,24 @@ export function makeCloudFrameHandler(
       // working indicator / Stop button would never move — project the turn
       // lifecycle onto the row here (the Mac lane gets this from the backend).
       if (type === "turn.started" || type === "turn.ended") {
+        // A terminal error can arrive as `stopReason: "error"` with NO inline
+        // error object (the backend classifies that shape as an internal
+        // error) — status must follow the stop reason, not just the payload.
+        const { error, stopReason } = frame as { error?: unknown; stopReason?: unknown };
         patchSessionDetail(
           ctx.queryClient,
           sessionId,
           type === "turn.started"
             ? { status: "working" }
-            : { status: (frame as { error?: unknown }).error ? "error" : "idle" }
+            : { status: error || stopReason === "error" ? "error" : "idle" }
         );
         // The SIDEBAR row reads the workspaces list, not sessions.detail — a
         // turn boundary is rare enough that a list refetch is the simple way to
-        // move its working dot without inventing a push channel.
+        // move its working dot without inventing a push channel. Bust the
+        // adapter's in-flight list cache first: a boundary inside its 3s TTL
+        // would otherwise refetch the CACHED list and the dot wouldn't move
+        // until the next slow tick.
+        bustCloudSessionsListCache();
         void ctx.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       } else if (type === "session.usage") {
         // The composer's context gauge — mirror the Mac backend's projection

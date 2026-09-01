@@ -36,6 +36,7 @@ import {
 } from "../lib/agentEventFold";
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
+import { dropOptimisticMessage } from "../lib/optimisticMessage";
 import {
   registerDirectSession,
   buildMessageSendFrame,
@@ -125,18 +126,39 @@ export function useCloudDirectSession(
 
     const foldFrame = makeCloudFrameHandler(ctx, sessionId);
 
+    // The turn SENT on this socket that agnt hasn't ADMITTED yet (no
+    // `turn.started` echo). The fold only learns a turn exists when the echo
+    // returns, so a double-Enter inside that round-trip would pass the fold's
+    // guard and agnt would QUEUE the second prompt. Tracked synchronously at
+    // send; cleared on admission, rejection, or a socket boundary (a reconnect
+    // re-syncs the truth from the snapshot). The staleness window is a
+    // self-heal for a frame that gets neither echo nor error.
+    let pendingTurn: { turnId: string; at: number } | null = null;
+    const PENDING_TURN_STALE_MS = 30_000;
+    const pendingTurnActive = () =>
+      pendingTurn !== null && Date.now() - pendingTurn.at < PENDING_TURN_STALE_MS;
+
     const onFrame = (frame: Record<string, unknown>) => {
       // A fresh turn proves the lane works — clear any earlier surfaced error
       // (SessionPanel derives an "error" status from it, which must not outlive
-      // the failure it reported).
-      if (frame.type === "turn.started") setError(null);
+      // the failure it reported) and the pending-admission marker.
+      if (frame.type === "turn.started") {
+        setError(null);
+        pendingTurn = null;
+      }
       // A rejected client command (agnt's `{type:"error"}` channel frame, e.g.
       // MESSAGE_SEND_FAILED) — the send was fire-and-forget, so this frame is
-      // the only rollback signal. Surface it; the socket itself is still fine.
+      // the only rollback signal: surface it AND drop the optimistic bubble of
+      // the pending turn (the frame carries no turnId; one-live-turn means the
+      // pending send is the only candidate). The socket itself is still fine.
       // CATEGORY-bearing error frames are the ENGINE's error events, not command
       // rejections — they fall through to the fold (which records them on the
       // turn), exactly as the Mac driver splits them.
       if (frame.type === "error" && typeof frame.category !== "string") {
+        if (pendingTurn) {
+          dropOptimisticMessage(queryClient, sessionId, pendingTurn.turnId);
+          pendingTurn = null;
+        }
         const message = typeof frame.message === "string" ? frame.message : "Command failed";
         setError(typeof frame.code === "string" ? `${frame.code}: ${message}` : message);
         return;
@@ -167,8 +189,14 @@ export function useCloudDirectSession(
       providerSessionId,
       token,
       onFrame,
-      onOpen: () => setStatus("open"),
+      onOpen: () => {
+        // A (re)connect re-syncs turn truth from the snapshot — a pre-drop
+        // pending marker must not block the first post-reconnect send.
+        pendingTurn = null;
+        setStatus("open");
+      },
       onDown: (reason) => {
+        pendingTurn = null;
         setStatus("down");
         setError(reason);
       },
@@ -183,11 +211,17 @@ export function useCloudDirectSession(
         // Enforce deus's one-live-turn contract here, where the fold state is in
         // reach — agnt itself QUEUES overlapping sends, so without this a
         // double-send starts a second turn (parity with the Mac driver's
-        // `liveTurnId` guard). The throw rolls the optimistic bubble back.
-        if (folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")) {
+        // `liveTurnId` guard). The fold covers ADMITTED turns; `pendingTurn`
+        // covers the echo round-trip a double-Enter fits inside. The throw
+        // rolls the optimistic bubble back.
+        if (
+          pendingTurnActive() ||
+          folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")
+        ) {
           throw new Error("The agent is still working — wait for the current turn to finish.");
         }
         socket.send(buildMessageSendFrame(prompt, turnId, options));
+        pendingTurn = { turnId, at: Date.now() };
       },
       cancel: (turnId) => socket.send(buildCancelFrame(turnId)),
     });

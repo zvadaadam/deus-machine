@@ -150,13 +150,21 @@ jobs:
           command: pages deploy apps/web/dist/web --project-name=deus --branch=main
 
   # ── Deploy Landing + Root Edge Router (Cloudflare Worker) ────────
+  # Serialized AFTER deploy-web: the router reserves `/assets/*` for the
+  # landing, so it must never go live while a Pages build still emits app
+  # bundles under that prefix (`/app-assets` is the web build's prefix) — the
+  # app shell would 404 its own JavaScript until deploy-web caught up. When
+  # deploy-web is skipped (landing-only change), the web side is unchanged and
+  # the landing deploys alone.
   deploy-landing:
     name: Deploy Landing
-    needs: changes
+    needs: [changes, deploy-web]
     runs-on: ubuntu-latest
     if: >-
-      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["landing","all"]'), github.event.inputs.service)) ||
-      (github.event_name == 'push' && needs.changes.outputs.landing == 'true')
+      !cancelled() &&
+      (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped') &&
+      ((github.event_name == 'workflow_dispatch' && contains(fromJSON('["landing","all"]'), github.event.inputs.service)) ||
+      (github.event_name == 'push' && needs.changes.outputs.landing == 'true'))
     steps:
       - uses: actions/checkout@v4
 
