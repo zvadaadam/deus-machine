@@ -606,6 +606,40 @@ describe("makeCloudFrameHandler", () => {
     expect(detail.message_count).toBe(2);
   });
 
+  it("seeds the live turn as ACTIVE from a snapshot (the one-live-turn send guard reads it)", () => {
+    const SESSION = "sess-direct-liveturn";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    // Mid-turn reconnect: the engine is working but hasn't emitted a message
+    // yet — the snapshot restates no `turn.started`, so without the synthesized
+    // seed the reducer would hold no active turn and an overlapping send would
+    // pass the guard.
+    const snapshot = {
+      type: "session.snapshot",
+      state: {
+        sessionId: SESSION,
+        organizationId: "org",
+        workspaceId: "ws",
+        status: "ready",
+        currentTurnId: "t-live",
+        turns: [],
+      },
+      messages: [],
+    };
+    onFrame(snapshot);
+
+    const turns = ctx.folds.get(SESSION)?.state.turns ?? [];
+    expect(turns.some((t) => t.turnId === "t-live" && t.status === "active")).toBe(true);
+
+    // Idempotent on a second snapshot (replay overlap no-ops in the reducer).
+    onFrame(snapshot);
+    const again = ctx.folds.get(SESSION)?.state.turns ?? [];
+    expect(again.filter((t) => t.turnId === "t-live")).toHaveLength(1);
+  });
+
   it("ignores non-render frames (workspace.state, pty.data, …)", () => {
     const SESSION = "sess-direct-noise";
     const qc = new QueryClient();

@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/shared/lib/utils";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { apiClient } from "@/shared/api/client";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
 import { useAutomationForWorkspace } from "@/features/automations";
@@ -52,6 +53,10 @@ function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["works
       type="button"
       onClick={(e) => {
         e.stopPropagation();
+        // Web-direct has no wake transport (agnt's resume is secret-key-only,
+        // Mac-backend territory) — but a send auto-wakes via the DO, which the
+        // tooltip already teaches.
+        if (isCloudDirectWebMode()) return;
         void apiClient.post(`/workspaces/${workspace.id}/cloud-wake`).catch(() => {});
       }}
       title={

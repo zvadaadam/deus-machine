@@ -44,4 +44,11 @@ describe("safe (terminal output wash for response-derived text)", () => {
   it("flattens newlines — response fields print as single lines", () => {
     expect(safe("line one\r\nline two")).toBe("line one  line two");
   });
+
+  it("returns empty for non-string shapes (unvalidated response cast)", () => {
+    expect(safe(42)).toBe("");
+    expect(safe(null)).toBe("");
+    expect(safe(undefined)).toBe("");
+    expect(safe({ nested: true })).toBe("");
+  });
 });

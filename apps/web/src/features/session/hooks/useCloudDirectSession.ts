@@ -126,6 +126,10 @@ export function useCloudDirectSession(
     const foldFrame = makeCloudFrameHandler(ctx, sessionId);
 
     const onFrame = (frame: Record<string, unknown>) => {
+      // A fresh turn proves the lane works — clear any earlier surfaced error
+      // (SessionPanel derives an "error" status from it, which must not outlive
+      // the failure it reported).
+      if (frame.type === "turn.started") setError(null);
       // A rejected client command (agnt's `{type:"error"}` channel frame, e.g.
       // MESSAGE_SEND_FAILED) — the send was fire-and-forget, so this frame is
       // the only rollback signal. Surface it; the socket itself is still fine.

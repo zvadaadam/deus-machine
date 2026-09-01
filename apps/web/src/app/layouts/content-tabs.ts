@@ -20,6 +20,7 @@ import {
 import type { ContentTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 export interface ContentTabVisibility {
   simulatorAvailable?: boolean;
@@ -66,6 +67,11 @@ export function isTabVisible(
   settings?: Settings,
   visibility: ContentTabVisibility = {}
 ): boolean {
+  // Web-direct (fully Mac-closed browser) serves NO content tab: every panel
+  // here reads the Mac backend or the sandbox sidecar relay, neither of which
+  // exists on the direct lane — the browser drives chat only. MainContent
+  // renders the chat pane full-width when nothing here is visible.
+  if (isCloudDirectWebMode()) return false;
   const item = CONTENT_TABS.find((i) => i.id === tab);
   if (!item) return false;
   if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
@@ -74,4 +80,12 @@ export function isTabVisible(
   }
   if (item.visibilityKey) return settings?.[item.visibilityKey] === true;
   return true;
+}
+
+/** Whether the content pane has anything to show — false means chat-only layout. */
+export function anyContentTabVisible(
+  settings?: Settings,
+  visibility: ContentTabVisibility = {}
+): boolean {
+  return CONTENT_TABS.some((item) => isTabVisible(item.id, settings, visibility));
 }

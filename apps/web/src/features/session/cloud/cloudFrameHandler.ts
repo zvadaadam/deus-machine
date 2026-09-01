@@ -117,6 +117,25 @@ function backfillSnapshot(
   route: (event: AnyLifecycleEvent) => void
 ): void {
   const messages = snapshot.messages ?? [];
+  const currentTurnId = snapshot.state.currentTurnId ?? null;
+
+  // A snapshot does NOT restate the live turn's `turn.started` (its
+  // `state.turns` carries only ENDED turns' accounting, and `message.started`
+  // never opens a turn in the reducer) — so a mid-turn (re)connect would leave
+  // `state.turns` without an active entry, and the one-live-turn send guard
+  // would wave an overlapping prompt through (agnt QUEUES it; deus's contract
+  // is one live turn). Synthesize the start before the transcript; the reducer
+  // no-ops on replay overlap. The stamp is connect-time — the true start rode
+  // an event this client never saw, and nothing reads an active turn's clock.
+  if (currentTurnId) {
+    route({
+      type: "turn.started",
+      sessionId: null,
+      turnId: currentTurnId,
+      timestamp: new Date().toISOString(),
+    } as unknown as AnyLifecycleEvent);
+  }
+
   // `messageIndex` is the session-scoped ordinal; folding in that order lands
   // the reconstructed rows in transcript order.
   const ordered = [...messages].sort((a, b) => a.messageIndex - b.messageIndex);
@@ -127,7 +146,6 @@ function backfillSnapshot(
 
   // The live turn's accounting arrives on the live stream as its own
   // `turn.ended`; only the already-ended turns need restating from the snapshot.
-  const currentTurnId = snapshot.state.currentTurnId ?? null;
   for (const turn of snapshot.state.turns ?? []) {
     if (turn.turnId === currentTurnId) continue;
     route(turnEndedEvent(turn));

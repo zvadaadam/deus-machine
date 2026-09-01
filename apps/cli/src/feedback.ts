@@ -95,11 +95,15 @@ export async function sendFeedback(
     return;
   }
 
-  const body = (await response.json().catch(() => ({}))) as FeedbackResponse;
+  // `catch` only covers a parse REJECTION — a literal `null` body resolves, so
+  // coalesce before the cast or `body.thread` throws on a hostile 200.
+  const body = ((await response.json().catch(() => null)) ?? {}) as FeedbackResponse;
   success("Feedback sent to the Deus team.");
-  const threadId = safe(body.thread?.id ?? payload.thread.id);
+  // Sanitize BEFORE falling back: a control-only id must not produce an empty
+  // resume command when we minted a perfectly good local one.
+  const threadId = safe(body.thread?.id) || payload.thread.id;
   hint(
-    `Thread: ${c.cyan(threadId)} — continue with ${c.cyan(`npx hivenet --to deus --resume ${threadId}`)}`
+    `Thread: ${c.cyan(threadId)} — continue with ${c.cyan(`npx --yes hivenet@latest --to deus --resume ${threadId}`)}`
   );
   if (body.known_issue?.title) {
     blank();
@@ -120,10 +124,12 @@ export async function sendFeedback(
 /**
  * Response fields carry server/other-agent text — strip C0/C1 control
  * characters (and DEL) before printing so a hostile value can't drive the
- * terminal (ANSI/OSC escape injection). `thread.id` also feeds a suggested
- * resume command, so it goes through the same wash.
+ * terminal (ANSI/OSC escape injection), and tolerate non-string shapes (the
+ * cast above doesn't validate; a `42` must not crash a successful submit).
+ * `thread.id` also feeds a suggested resume command, so it takes the same wash.
  */
-export function safe(value: string): string {
+export function safe(value: unknown): string {
+  if (typeof value !== "string") return "";
   // eslint-disable-next-line no-control-regex
   return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").trim();
 }

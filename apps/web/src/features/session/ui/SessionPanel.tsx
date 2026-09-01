@@ -151,6 +151,18 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       session?.provider_session_id ?? null
     );
 
+    // Direct-lane failures (token mint, exhausted reconnect, session.error,
+    // rejected command) live only in cloudDirectState — the session row never
+    // learns about them, and Chat gates its error banner on
+    // `sessionStatus === "error"`. Derive the status the UI renders so those
+    // failures show and a stuck working-spinner clears; a fresh `turn.started`
+    // clears the error again (see useCloudDirectSession).
+    const directFailed =
+      cloudDirectState.status === "error" ||
+      cloudDirectState.status === "down" ||
+      cloudDirectState.error !== null;
+    const effectiveSessionStatus = directFailed ? "error" : sessionStatus;
+
     // A silent resume failure (session.created → resumed: false) means the
     // model forgot this conversation. Surfaced once, dismissible, never
     // persisted — see useSessionContextLostNotice.
@@ -347,7 +359,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     if (embedded) {
       return (
         <SessionProvider
-          sessionStatus={sessionStatus}
+          sessionStatus={effectiveSessionStatus}
           workspaceId={workspaceId ?? null}
           workspacePath={workspacePath}
           subagentMessages={subagentMessages}
@@ -364,7 +376,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               messages={messages}
               compactions={compactions}
               loading={loading}
-              sessionStatus={sessionStatus}
+              sessionStatus={effectiveSessionStatus}
               errorMessage={cloudDirectState.error ?? session?.error_message}
               errorCategory={session?.error_category ?? undefined}
               agentHarness={session?.agent_harness}
@@ -466,7 +478,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             {/* Main Content Area */}
             <div className="flex min-h-0 flex-1 flex-col">
               <SessionProvider
-                sessionStatus={sessionStatus}
+                sessionStatus={effectiveSessionStatus}
                 workspaceId={workspaceId ?? null}
                 workspacePath={workspacePath}
                 subagentMessages={subagentMessages}
@@ -476,7 +488,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     messages={messages}
                     compactions={compactions}
                     loading={loading}
-                    sessionStatus={sessionStatus}
+                    sessionStatus={effectiveSessionStatus}
                     errorMessage={cloudDirectState.error ?? session?.error_message}
                     errorCategory={session?.error_category ?? undefined}
                     agentHarness={session?.agent_harness}

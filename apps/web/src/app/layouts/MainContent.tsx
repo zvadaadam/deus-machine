@@ -33,7 +33,9 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { ContentTabBar } from "./ContentTabBar";
-import { isTabVisible } from "./content-tabs";
+import { isTabVisible, anyContentTabVisible } from "./content-tabs";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { toast } from "sonner";
 import { PRActions } from "@/features/workspace/ui/PRActions";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { SidebarInset, useSidebar } from "@/components/ui";
@@ -123,6 +125,9 @@ export function MainContent({
   })
     ? contentTab
     : "changes";
+  // No tab can serve (web-direct hides them all) → chat-only layout: the chat
+  // pane renders full-width and the content pane + splitter don't mount.
+  const contentPaneAvailable = anyContentTabVisible(experimentalSettings, { simulatorAvailable });
 
   const connectionState = useConnectionState().state;
   const isDisconnected = connectionState === "disconnected";
@@ -363,16 +368,22 @@ export function MainContent({
                 {/* ─── SESSION PANEL (left, collapsible) ─── */}
                 <ResizablePanel
                   ref={chatPanelRef}
-                  collapsible
+                  collapsible={contentPaneAvailable}
                   collapsedSize={safeCollapsedSize}
                   minSize={MIN_PANEL_SIZE}
-                  defaultSize={chatPanelCollapsed ? safeCollapsedSize : sessionPanelDefaultSize}
+                  defaultSize={
+                    !contentPaneAvailable
+                      ? 100
+                      : chatPanelCollapsed
+                        ? safeCollapsedSize
+                        : sessionPanelDefaultSize
+                  }
                   onCollapse={handleCollapseChatPanel}
                   onExpand={handleExpandChatPanel}
                   className="min-w-0"
                   order={1}
                 >
-                  {chatPanelCollapsed ? (
+                  {contentPaneAvailable && chatPanelCollapsed ? (
                     <CollapsedChatStrip
                       onExpand={() => chatPanelRef.current?.expand()}
                       isWorking={isSessionWorking}
@@ -401,6 +412,12 @@ export function MainContent({
                           cloudPresence(selectedWorkspace.init_stage) === "waking"
                         }
                         onCloudWake={() => {
+                          // Web-direct has no wake transport (agnt's resume is
+                          // secret-key-only); a send auto-wakes via the DO.
+                          if (isCloudDirectWebMode()) {
+                            toast.info("Send a message to wake this computer");
+                            return;
+                          }
                           void apiClient
                             .post(`/workspaces/${selectedWorkspace.id}/cloud-wake`)
                             .catch(() => {});
@@ -434,74 +451,84 @@ export function MainContent({
                         workspaceChatPanelRef={workspaceChatPanelRef}
                         onCreatePRHandlerChange={setCreatePRHandler}
                         onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
-                        onCollapseChatPanel={handleCollapseChatPanel}
+                        onCollapseChatPanel={
+                          contentPaneAvailable ? handleCollapseChatPanel : undefined
+                        }
                       />
                     </div>
                   )}
                 </ResizablePanel>
 
-                <ResizableHandle
-                  /* Toggle pointer-events on every live <webview> during
-                   * drag. Electron's webview guest eats pointermove before
-                   * they bubble to document; without this, dragging the
-                   * splitter rightward (cursor crosses into the webview)
-                   * freezes because react-resizable-panels loses its
-                   * document-level pointermove stream. */
-                  onDragging={(isDragging) => webviewManager.setPointerEventsEnabled(!isDragging)}
-                />
+                {contentPaneAvailable && (
+                  <>
+                    <ResizableHandle
+                      /* Toggle pointer-events on every live <webview> during
+                       * drag. Electron's webview guest eats pointermove before
+                       * they bubble to document; without this, dragging the
+                       * splitter rightward (cursor crosses into the webview)
+                       * freezes because react-resizable-panels loses its
+                       * document-level pointermove stream. */
+                      onDragging={(isDragging) =>
+                        webviewManager.setPointerEventsEnabled(!isDragging)
+                      }
+                    />
 
-                {/* ─── CONTENT PANEL (right, collapsible) ─── */}
-                <ResizablePanel
-                  ref={contentPanelRef}
-                  collapsible
-                  collapsedSize={safeCollapsedSize}
-                  defaultSize={contentPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize}
-                  minSize={MIN_PANEL_SIZE}
-                  onCollapse={handleCollapseContentPanel}
-                  onExpand={handleExpandContentPanel}
-                  className="min-w-0"
-                  order={2}
-                >
-                  {contentPanelCollapsed ? (
-                    <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
-                  ) : (
-                    <div className="flex h-full flex-col pr-2 pb-2">
-                      {/* Tab header: content tabs (left) + PR actions (right) */}
-                      <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
-                        <ContentTabBar
-                          activeTab={effectiveContentTab}
-                          onTabChange={handleContentTabChange}
-                          workspaceId={selectedWorkspaceId}
-                          simulatorAvailable={simulatorAvailable}
-                        />
-                        <PRActions
-                          prStatus={prStatus}
-                          ghStatus={ghStatus}
-                          onCreatePR={createPRHandler ? handleCreatePR : undefined}
-                          onSendAgentMessage={
-                            sendAgentMessageHandler ? handleSendAgentMessage : undefined
-                          }
-                          onArchive={handleArchive}
-                          targetBranch={selectedTargetBranch}
-                          onTargetBranchChange={setSelectedTargetBranch}
-                          repoId={selectedWorkspace.repository_id}
-                          workspaceId={selectedWorkspaceId ?? undefined}
-                        />
-                      </div>
+                    {/* ─── CONTENT PANEL (right, collapsible) ─── */}
+                    <ResizablePanel
+                      ref={contentPanelRef}
+                      collapsible
+                      collapsedSize={safeCollapsedSize}
+                      defaultSize={
+                        contentPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize
+                      }
+                      minSize={MIN_PANEL_SIZE}
+                      onCollapse={handleCollapseContentPanel}
+                      onExpand={handleExpandContentPanel}
+                      className="min-w-0"
+                      order={2}
+                    >
+                      {contentPanelCollapsed ? (
+                        <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
+                      ) : (
+                        <div className="flex h-full flex-col pr-2 pb-2">
+                          {/* Tab header: content tabs (left) + PR actions (right) */}
+                          <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
+                            <ContentTabBar
+                              activeTab={effectiveContentTab}
+                              onTabChange={handleContentTabChange}
+                              workspaceId={selectedWorkspaceId}
+                              simulatorAvailable={simulatorAvailable}
+                            />
+                            <PRActions
+                              prStatus={prStatus}
+                              ghStatus={ghStatus}
+                              onCreatePR={createPRHandler ? handleCreatePR : undefined}
+                              onSendAgentMessage={
+                                sendAgentMessageHandler ? handleSendAgentMessage : undefined
+                              }
+                              onArchive={handleArchive}
+                              targetBranch={selectedTargetBranch}
+                              onTargetBranchChange={setSelectedTargetBranch}
+                              repoId={selectedWorkspace.repository_id}
+                              workspaceId={selectedWorkspaceId ?? undefined}
+                            />
+                          </div>
 
-                      {/* Content area — rounded corners, subtle border */}
-                      <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
-                        <ContentView
-                          workspace={selectedWorkspace}
-                          activeTab={effectiveContentTab}
-                          isWatched={isWatched}
-                          onReview={handleInsertReviewPrompt}
-                          simulatorAvailable={simulatorAvailable}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </ResizablePanel>
+                          {/* Content area — rounded corners, subtle border */}
+                          <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
+                            <ContentView
+                              workspace={selectedWorkspace}
+                              activeTab={effectiveContentTab}
+                              isWatched={isWatched}
+                              onReview={handleInsertReviewPrompt}
+                              simulatorAvailable={simulatorAvailable}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </ResizablePanel>
+                  </>
+                )}
               </ResizablePanelGroup>
             </div>
           )
