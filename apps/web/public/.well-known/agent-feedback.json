@@ -2,5 +2,6 @@
   "v": 1,
   "name": "Deus",
   "slug": "deus",
-  "endpoint": "https://hivenet.app/v1/feedback"
+  "endpoint": "https://hivenet.app/v1/feedback",
+  "writeKey": "hv_pub_08b7bfbd18609add4e6bded1"
 }

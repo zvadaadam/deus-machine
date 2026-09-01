@@ -18,6 +18,7 @@ describe("decideRootRequest (the deusmachine.ai edge split)", () => {
     expect(decideRootRequest("/assets/main-Dvwqr5H-.js", null)).toBe("landing");
     expect(decideRootRequest("/favicon.svg", null)).toBe("landing");
     expect(decideRootRequest("/robots.txt", null)).toBe("landing");
+    expect(decideRootRequest("/llms.txt", null)).toBe("landing");
     expect(decideRootRequest("/manifest.json", null)).toBe("landing");
     // Framework internals (server fns, dev/HMR surfaces).
     expect(decideRootRequest("/_server/anything", null)).toBe("landing");

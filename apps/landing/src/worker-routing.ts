@@ -24,6 +24,7 @@ const LANDING_STATICS = new Set([
   "/claude-code.svg",
   "/favicon.png",
   "/favicon.svg",
+  "/llms.txt",
   "/logo192.png",
   "/logo512.png",
   "/manifest.json",
