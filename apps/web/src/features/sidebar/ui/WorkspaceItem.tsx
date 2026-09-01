@@ -48,15 +48,29 @@ function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["works
     return <Loader2 className="text-text-muted h-3 w-3 shrink-0 animate-spin" />;
   }
   const asleep = presence === "asleep";
+  // Web-direct has no wake transport (agnt's resume is secret-key-only,
+  // Mac-backend territory) — a send auto-wakes via the DO, so the icon is a
+  // plain status indicator there, not a control promising a click action.
+  if (isCloudDirectWebMode()) {
+    return (
+      <span
+        title={
+          asleep
+            ? `Cloud computer ${workspace.init_stage} — a message wakes it`
+            : "Cloud computer online"
+        }
+        aria-label="Cloud workspace status"
+        className="flex shrink-0 items-center"
+      >
+        <Cloud className={cn("h-3 w-3", asleep ? "text-text-disabled" : "text-accent-green")} />
+      </span>
+    );
+  }
   return (
     <button
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        // Web-direct has no wake transport (agnt's resume is secret-key-only,
-        // Mac-backend territory) — but a send auto-wakes via the DO, which the
-        // tooltip already teaches.
-        if (isCloudDirectWebMode()) return;
         void apiClient.post(`/workspaces/${workspace.id}/cloud-wake`).catch(() => {});
       }}
       title={
