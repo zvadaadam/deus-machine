@@ -167,6 +167,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         defaultThinking={defaultThinking}
         sending={sending}
         sessionStatus={sessionStatus}
+        workspaceKind={session?.workspace_kind}
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
         hasMessages={messages.length > 0}

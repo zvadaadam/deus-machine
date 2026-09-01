@@ -16,8 +16,13 @@ import { useCloudDirectSession, type CloudDirectStatus } from "./useCloudDirectS
 const REMINT_AT_FRACTION = 0.8;
 const DEFAULT_TOKEN_LIFETIME_SEC = 3600;
 
+// Zero/garbage lifetimes fall back to the default: the exchange maps a missing
+// `expires_in` to 0, and `0 * 0.8` would re-mint (and re-cut the socket) every
+// second. 60s is the server-side minimum a real token can carry.
 const tokenLifetimeMs = (expiresInSec: number | undefined): number =>
-  (expiresInSec ?? DEFAULT_TOKEN_LIFETIME_SEC) * 1000;
+  (typeof expiresInSec === "number" && expiresInSec >= 60
+    ? expiresInSec
+    : DEFAULT_TOKEN_LIFETIME_SEC) * 1000;
 
 export interface CloudDirectResult {
   /** True once a token is in hand and the direct lane is driving the fold. */

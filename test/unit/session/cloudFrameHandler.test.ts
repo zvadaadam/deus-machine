@@ -640,6 +640,41 @@ describe("makeCloudFrameHandler", () => {
     expect(again.filter((t) => t.turnId === "t-live")).toHaveLength(1);
   });
 
+  it("folds category-bearing engine errors onto their turn; the turn still closes", () => {
+    const SESSION = "sess-direct-engine-error";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t1", timestamp: T });
+    // The engine's error EVENT (category-bearing) — distinct from a channel
+    // command rejection (category-less), which the socket hook consumes.
+    onFrame({
+      type: "error",
+      sessionId: SESSION,
+      turnId: "t1",
+      category: "overloaded",
+      message: "provider overloaded",
+      recoverable: true,
+      timestamp: T,
+    });
+
+    const turn = ctx.folds.get(SESSION)?.state.turns.find((t) => t.turnId === "t1");
+    expect(turn?.errors).toHaveLength(1);
+    expect(turn?.status).toBe("active"); // an error record alone must not end the turn
+
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t1",
+      stopReason: "end",
+      timestamp: T,
+    });
+    const ended = ctx.folds.get(SESSION)?.state.turns.find((t) => t.turnId === "t1");
+    expect(ended?.status).toBe("ended"); // …so a later send passes the one-live-turn guard
+  });
+
   it("ignores non-render frames (workspace.state, pty.data, …)", () => {
     const SESSION = "sess-direct-noise";
     const qc = new QueryClient();

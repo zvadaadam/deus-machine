@@ -70,7 +70,13 @@ export function makeCloudFrameHandler(
       backfillSnapshot(frame as unknown as SessionSnapshotEvent, ctx, sessionId, route);
       return;
     }
-    if (LIFECYCLE_TYPES.has(type)) {
+    // Category-bearing `error` frames are the engine's error events (the
+    // reducer records them on their turn); category-less ones are command
+    // rejections the socket hook consumes. Same split as the Mac driver's
+    // `pushToFold` gate.
+    const isEngineError =
+      type === "error" && typeof (frame as { category?: unknown }).category === "string";
+    if (LIFECYCLE_TYPES.has(type) || isEngineError) {
       route(frame as unknown as AnyLifecycleEvent);
       // The direct lane has no q: push keeping `sessions.detail` fresh, so the
       // working indicator / Stop button would never move — project the turn

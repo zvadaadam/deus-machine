@@ -133,7 +133,10 @@ export function useCloudDirectSession(
       // A rejected client command (agnt's `{type:"error"}` channel frame, e.g.
       // MESSAGE_SEND_FAILED) — the send was fire-and-forget, so this frame is
       // the only rollback signal. Surface it; the socket itself is still fine.
-      if (frame.type === "error") {
+      // CATEGORY-bearing error frames are the ENGINE's error events, not command
+      // rejections — they fall through to the fold (which records them on the
+      // turn), exactly as the Mac driver splits them.
+      if (frame.type === "error" && typeof frame.category !== "string") {
         const message = typeof frame.message === "string" ? frame.message : "Command failed";
         setError(typeof frame.code === "string" ? `${frame.code}: ${message}` : message);
         return;

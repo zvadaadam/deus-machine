@@ -42,18 +42,41 @@ export async function readWebCloudSessionBearer(): Promise<string | null> {
   }
 }
 
+// The state nonce for a login THIS tab initiated. deus-cloud's callback builds
+// its redirect with `new URL(return_to)` + a hash — the query round-trips
+// verbatim — so `beginWebCloudLogin` plants the nonce in return_to and the
+// capture below only accepts a `#token=` whose echoed nonce matches. Without
+// it, any crafted `deusmachine.ai/#token=<attacker-bearer>` link would log the
+// victim into the ATTACKER's account (login CSRF) and leak their prompts to it.
+const LOGIN_STATE_KEY = "deus.cloudLoginState";
+const LOGIN_STATE_PARAM = "deus_login_state";
+
 /**
  * Capture a `#token=…` deus-cloud session handed back by the login redirect,
- * store it, and scrub the fragment from the URL/history. Call once on app boot.
- * Returns true when a token was captured. Mirrors apps/dashboard's callback.
+ * store it, and scrub the fragment (and state marker) from the URL/history.
+ * Call once on app boot. Returns true when a token was captured — false also
+ * covers a fragment REJECTED for a missing/mismatched state nonce, which still
+ * gets scrubbed so a hostile token never lingers in the address bar.
  */
 export function captureCloudSessionFromFragment(): boolean {
   try {
     const match = window.location.hash.match(/token=([^&]+)/);
     if (!match) return false;
+
+    const params = new URLSearchParams(window.location.search);
+    const echoed = params.get(LOGIN_STATE_PARAM);
+    const expected = sessionStorage.getItem(LOGIN_STATE_KEY);
+    sessionStorage.removeItem(LOGIN_STATE_KEY); // single-use either way
+
+    // Scrub credential + marker from the address bar/history BEFORE deciding.
+    params.delete(LOGIN_STATE_PARAM);
+    const query = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""));
+
+    // Only a login THIS tab started may hand us a session (see LOGIN_STATE_KEY).
+    if (!echoed || !expected || echoed !== expected) return false;
+
     sessionStorage.setItem(BEARER_KEY, decodeURIComponent(match[1]));
-    // Scrub the credential from the address bar + history entry.
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
     return true;
   } catch {
     return false;
@@ -66,8 +89,15 @@ export function captureCloudSessionFromFragment(): boolean {
  * is deus-cloud's default client, passed explicitly for clarity.
  */
 export function beginWebCloudLogin(returnPath = "/"): void {
-  const returnTo = `${window.location.origin}${returnPath}`;
-  const url = `${resolveDeusCloudUrl()}/auth/login?client=deus-web&return_to=${encodeURIComponent(returnTo)}`;
+  const returnTo = new URL(returnPath, window.location.origin);
+  const nonce = crypto.randomUUID();
+  try {
+    sessionStorage.setItem(LOGIN_STATE_KEY, nonce);
+  } catch {
+    // Capture will reject the callback; the login-attempt cooldown stops a spin.
+  }
+  returnTo.searchParams.set(LOGIN_STATE_PARAM, nonce);
+  const url = `${resolveDeusCloudUrl()}/auth/login?client=deus-web&return_to=${encodeURIComponent(returnTo.toString())}`;
   window.location.href = url;
 }
 

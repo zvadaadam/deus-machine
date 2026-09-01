@@ -117,17 +117,42 @@ describe("isCloudDirectWebMode", () => {
 });
 
 describe("captureCloudSessionFromFragment", () => {
-  it("captures a #token= bearer, stores it, and scrubs the fragment", () => {
+  it("captures a #token= bearer when the echoed login-state nonce matches, and scrubs both", () => {
     const replaceState = vi.fn();
+    sessionStorage.setItem("deus.cloudLoginState", "nonce-1");
     vi.stubGlobal("window", {
-      location: { hash: "#token=abc.def.ghi", pathname: "/callback", search: "" },
+      location: {
+        hash: "#token=abc.def.ghi",
+        pathname: "/callback",
+        search: "?deus_login_state=nonce-1",
+      },
       history: { replaceState },
     } as unknown as Window & typeof globalThis);
 
     expect(captureCloudSessionFromFragment()).toBe(true);
     expect(sessionStorage.getItem("deus_cloud_session")).toBe("abc.def.ghi");
-    // The credential is scrubbed from the address bar / history entry.
+    // Credential AND state marker scrubbed from the address bar / history entry.
     expect(replaceState).toHaveBeenCalledWith(null, "", "/callback");
+    // The nonce is single-use.
+    expect(sessionStorage.getItem("deus.cloudLoginState")).toBeNull();
+  });
+
+  it("REJECTS a #token= this tab's login didn't mint (login-CSRF link), still scrubbing it", () => {
+    const replaceState = vi.fn();
+    // No stored nonce — the victim never started a login here.
+    vi.stubGlobal("window", {
+      location: {
+        hash: "#token=attacker.token.here",
+        pathname: "/",
+        search: "?deus_login_state=attacker-nonce",
+      },
+      history: { replaceState },
+    } as unknown as Window & typeof globalThis);
+
+    expect(captureCloudSessionFromFragment()).toBe(false);
+    expect(sessionStorage.getItem("deus_cloud_session")).toBeNull();
+    // The hostile token must not linger in the address bar either.
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/");
   });
 
   it("is a no-op when there is no token fragment", () => {
