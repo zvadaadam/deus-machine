@@ -9,7 +9,13 @@
  *
  * Toggle in dev: `localStorage.setItem("deus.cloudDirect", "1")` then reload.
  */
+import { isCloudDirectWebMode } from "./webCloudDirectConfig";
+
 export function isCloudDirectEnabled(): boolean {
+  // A fully Mac-closed web build IS direct by definition — there is no Mac lane
+  // to relay through — so it implies this flag; otherwise the dev flag opts a
+  // backed build into Path B.
+  if (isCloudDirectWebMode()) return true;
   try {
     return typeof localStorage !== "undefined" && localStorage.getItem("deus.cloudDirect") === "1";
   } catch {

@@ -12,6 +12,7 @@ import {
   Cloud,
 } from "lucide-react";
 import { capabilities } from "@/platform";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import {
   Sidebar,
@@ -46,7 +47,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: "access", label: "Remote Access", icon: Globe, badge: "Experimental" },
 ];
 
-const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability]);
+const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability])
+  // Web-direct has no Mac settings store — every section except Account reads
+  // and writes it, so their controls would optimistically flip and roll back.
+  .filter((item) => !isCloudDirectWebMode() || item.id === "account");
 
 export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);

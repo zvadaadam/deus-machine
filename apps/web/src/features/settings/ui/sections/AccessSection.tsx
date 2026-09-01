@@ -39,7 +39,7 @@ function getDeviceIcon(ua: string | null) {
 
 /** Build the full pairing URL for QR code. */
 function buildPairUrl(accessUrl: string, code: string): string {
-  // accessUrl is like https://app.deusmachine.ai/connect/{serverId}
+  // accessUrl is like https://deusmachine.ai/connect/{serverId}
   // Append ?pair=SOFT+TIGER (URL-encode the space as +)
   const encodedCode = code.replace(/ /g, "+");
   return `${accessUrl}?pair=${encodedCode}`;
@@ -419,13 +419,14 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const devices = devicesQuery.data ?? [];
 
   // Derive web app URL from relay WebSocket URL
-  // wss://relay.deusmachine.ai -> https://app.deusmachine.ai/connect/{serverId}
+  // wss://relay.deusmachine.ai -> https://deusmachine.ai/connect/{serverId}
+  // (The web product lives at the ROOT domain; app.deusmachine.ai remains a
+  // path-preserving 301 alias, so links minted before the move keep working.)
   const accessUrl = (() => {
     if (!relayStatus?.relayUrl || !relayStatus.serverId) return null;
     try {
       const url = new URL(relayStatus.relayUrl);
-      const host = url.hostname;
-      const domain = host.replace(/^relay\./, "app.");
+      const domain = url.hostname.replace(/^relay\./, "");
       return `https://${domain}/connect/${relayStatus.serverId}`;
     } catch {
       return null;

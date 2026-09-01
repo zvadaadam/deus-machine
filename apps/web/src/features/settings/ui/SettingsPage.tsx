@@ -9,6 +9,7 @@ import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSettings, useUpdateSettings } from "../api/settings.queries";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import {
   AccountSection,
   GeneralSection,
@@ -34,7 +35,10 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 export function SettingsPage() {
-  const activeSection = useUIStore((s) => s.activeSettingsSection);
+  const storedSection = useUIStore((s) => s.activeSettingsSection);
+  // Web-direct: only Account works (there is no Mac settings store) — clamp
+  // whatever section the store remembers; the sidebar lists Account alone.
+  const activeSection = isCloudDirectWebMode() ? "account" : storedSection;
   const closeSettings = useUIStore((s) => s.closeSettings);
   const { theme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();

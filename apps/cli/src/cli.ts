@@ -13,6 +13,7 @@
  *   deus pair               Generate a pairing code for remote access
  *   deus login              Configure AI agent authentication
  *   deus status             Show server info and connected devices
+ *   deus feedback           Send feedback / feature requests to the Deus team
  */
 
 import { parseArgs } from "node:util";
@@ -21,6 +22,7 @@ import { installDesktop, hasDisplay, findInstalledApp, launchDesktop } from "./d
 import { pair } from "./pair.js";
 import { runAuthSetup } from "./login.js";
 import { showStatus } from "./status.js";
+import { sendFeedback } from "./feedback.js";
 import { animatedBanner, banner, c, blank, info, hint, success, error } from "./ui.js";
 import { getCliCommand, getCliCommandIndex, isGlobalVersionRequest } from "./args.js";
 
@@ -38,6 +40,7 @@ function printHelp(version: string) {
   console.log(`    ${c.cyan("pair")}         Generate a pairing code for remote access`);
   console.log(`    ${c.cyan("login")}        Configure AI agent authentication`);
   console.log(`    ${c.cyan("status")}       Show server info and connected devices`);
+  console.log(`    ${c.cyan("feedback")}     Send feedback or a feature request to the Deus team`);
   blank();
 
   console.log(`  ${c.bold("Options")} ${c.dim("(start):")}`);
@@ -89,7 +92,7 @@ async function main() {
   }
 
   // Commands that don't need the full banner
-  const quickCommands = ["pair", "status", "login"];
+  const quickCommands = ["pair", "status", "login", "feedback"];
   if (!command || !quickCommands.includes(command)) {
     await animatedBanner(version);
   }
@@ -160,6 +163,24 @@ async function main() {
     // ── Server status ──────────────────────────────────────────────
     case "status": {
       await showStatus();
+      break;
+    }
+
+    // ── Feedback to the Deus team (Hivenet) ────────────────────────
+    case "feedback": {
+      const { values, positionals } = parseArgs({
+        args: commandArgs,
+        options: {
+          subject: { type: "string" },
+          category: { type: "string" },
+        },
+        allowPositionals: true,
+        strict: false,
+      });
+      await sendFeedback(positionals.join(" "), version, {
+        subject: values.subject as string | undefined,
+        category: values.category as string | undefined,
+      });
       break;
     }
 

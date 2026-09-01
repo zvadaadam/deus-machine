@@ -122,16 +122,23 @@ app.get("/sessions/:id/cloud-direct-token", async (c) => {
     throw new ValidationError("Cloud is not configured on this device");
   }
 
+  const expiresIn = 60 * 60;
   const { token } = await createSessionToken(session.provider_session_id, {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
-    expiresIn: 60 * 60,
+    expiresIn,
   });
 
+  // Belt-and-suspenders: this response carries a session-scoped JWT. Today it's
+  // delivered over the `q:` WS (delegateToRoute), so it never becomes a cacheable
+  // HTTP response — but a token endpoint should say no-store regardless.
+  c.header("Cache-Control", "no-store");
   return c.json({
     token,
     base_url: config.baseUrl,
     provider_session_id: session.provider_session_id,
+    // The browser re-mints against this, so it must not outlive the lifetime.
+    expires_in: expiresIn,
   });
 });
 

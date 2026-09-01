@@ -1,1 +1,5 @@
-/*  /index.html  200
+# SPA fallback: unknown paths serve the app shell.
+# (app.deusmachine.ai remains a working alias serving this same app directly;
+# Pages `_redirects` sources are path-only, so the canonical 301 to the root
+# domain is a Cloudflare Redirect Rule configured at deploy time, not this file.)
+/* /index.html 200

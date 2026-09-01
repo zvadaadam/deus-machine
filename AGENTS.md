@@ -9,7 +9,7 @@ Design inspiration: Linear, Vercel, Stripe, Perplexity. Dense, pro-consumer aest
 Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`.
 
 - **Package manager: Bun.** Always `bun add`, `bun install`, `bun run`, `bunx`. Never npm or yarn — CI uses `bun install --frozen-lockfile`.
-- **Desktop + Mobile Web:** Primary target is Electron. Web version (`app.deusmachine.ai`) also supports mobile via `MobileLayout`. Don't write `isElectronEnv` conditionals for feature parity.
+- **Desktop + Mobile Web:** Primary target is Electron. Web version lives at the root domain (`deusmachine.ai` — the landing worker edge-routes `/` to the landing for new visitors and everything else to the app; `app.deusmachine.ai` stays a working alias (canonical 301 configured at the edge)) and also supports mobile via `MobileLayout`. Don't write `isElectronEnv` conditionals for feature parity.
 - **Key libraries:** `ts-pattern` for discriminated unions (prefer `.exhaustive()`), Zustand for UI state, TanStack Query v5 for server state, Framer Motion for presence/layout animations, Tailwind CSS v4.
 
 ## Running the App

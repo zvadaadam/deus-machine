@@ -47,6 +47,8 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import type { Message } from "@shared/types/session";
 import {
   cancelledTurnRow,
+  compactionRow,
+  findConversationCompaction,
   findConversationMessage,
   turnAccountingRow,
 } from "@shared/conversation-rows";
@@ -207,6 +209,24 @@ function foldFor(ctx: AgentStreamContext, sessionId: string): SessionFold {
   return created;
 }
 
+/**
+ * Fold one already-decoded event, for a lane that has no wire `seq`.
+ *
+ * The direct-agnt lane's frames carry no seq, so it can't (and needn't) use
+ * `routeEnvelope`'s gap/reset/duplicate cursor arithmetic — a socket reconnect
+ * heals by re-folding the snapshot (upsert-by-id, idempotent), not by a cursor
+ * reset. This is the seq-free entry point it folds through. `live` derives the
+ * same way `routeEnvelope` computes it, so delta batching still applies to the
+ * mounted session.
+ */
+export function foldEvent(
+  ctx: AgentStreamContext,
+  sessionId: string,
+  event: AnyLifecycleEvent
+): void {
+  applyEvent(ctx, sessionId, event, sessionId === ctx.activeSessionId);
+}
+
 function applyEvent(
   ctx: AgentStreamContext,
   sessionId: string,
@@ -260,6 +280,11 @@ function applyChanges(
         break;
       case "compaction-upserted":
         // Compactions live in a table of their own beside the message page.
+        // Project the folded entity into that list so the direct lane (no
+        // backend to page from) shows the "context compacted" divider; the Mac
+        // lane ALSO refetches, and the two converge on the same COALESCE-merged
+        // row (the projection is idempotent against the refetch's authoritative copy).
+        writeCompaction(ctx.queryClient, sessionId, fold.state, change.compactionId);
         ctx.requestRefetch(sessionId);
         break;
       default:
@@ -444,5 +469,102 @@ function writeTurnAccounting(
       ...(accounting.cancelled_at !== null && { cancelled_at: accounting.cancelled_at }),
     };
     return { ...old, messages };
+  });
+}
+
+// ---- Compactions ----
+
+/**
+ * Mirror the folded compaction entity into the cache's `compactions` list — the
+ * table-of-its-own the "context compacted" divider reads from. This is the
+ * compaction twin of `writeTurnAccounting`: it applies the SAME upsert
+ * `persistCompaction`'s SQL applies, so the row the direct lane writes and the
+ * row the backend writes converge field-for-field.
+ *
+ * `status` REPLACES (the turn's latest word wins); the optional
+ * trigger/token/summary fields COALESCE — `compactionRow` omits whatever the
+ * engine hasn't sent, so the spread keeps a prior event's value rather than
+ * nulling it; and `created_at` stays ANCHORED to the first event (the SQL never
+ * moves it on conflict), so a replayed snapshot doesn't shuffle the divider.
+ */
+function writeCompaction(
+  qc: QueryClient,
+  sessionId: string,
+  state: ConversationState,
+  compactionId: string
+): void {
+  const entity = findConversationCompaction(state, compactionId);
+  if (!entity) return;
+  const row = compactionRow(sessionId, entity);
+
+  qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
+    if (!old) {
+      // Only reachable live before the page has loaded (a background session
+      // with no cached page never gets here — see routeEnvelope's guard). The
+      // real page, once it resolves, supersedes this seed.
+      return { messages: [], compactions: [row], has_older: false, has_newer: false };
+    }
+    const index = old.compactions.findIndex((c) => c.compaction_id === row.compaction_id);
+    if (index === -1) return { ...old, compactions: [...old.compactions, row] };
+
+    const previous = old.compactions[index];
+    const compactions = [...old.compactions];
+    compactions[index] = { ...previous, ...row, created_at: previous.created_at };
+    return { ...old, compactions };
+  });
+}
+
+// ---- Session-detail projection (direct lane) ----
+
+/**
+ * Patch the cached `sessions.detail` row for a DIRECT session.
+ *
+ * The Mac lane's detail row is WS-push-fresh (q:snapshot on every status
+ * change), but web-direct has no push and the query is `staleTime: Infinity` —
+ * so without this, a direct session's status stays wherever discovery left it:
+ * the working indicator and Stop button never appear, or stick forever. The
+ * direct frame handler projects the turn lifecycle (and snapshot facts like
+ * message count) through here instead. Merge-patch by design: only the fields
+ * the caller knows move; an uncached row is left absent (discovery owns
+ * creation).
+ */
+export function patchSessionDetail(
+  qc: QueryClient,
+  sessionId: string,
+  patch: Partial<import("@shared/types/session").Session>
+): void {
+  qc.setQueryData<import("@shared/types/session").Session>(
+    queryKeys.sessions.detail(sessionId),
+    (old) => (old ? { ...old, ...patch } : old)
+  );
+}
+
+// ---- Transcript order (snapshot backfill) ----
+
+/**
+ * Reorder the cached page so `orderedIds` lead, in that order, and every row the
+ * caller doesn't name trails in place. Used once, after a snapshot backfill:
+ * `writeMessage` APPENDS a row it hasn't seen, so an optimistic prompt sent
+ * before the snapshot lands ends up ahead of the reconstructed history — this
+ * repairs that. The snapshot IS the full transcript, so it also stamps
+ * `has_older: false`.
+ *
+ * Lives here with the other `messages`-cache writers (writeMessage,
+ * writeTurnAccounting, writeCompaction) so this key has exactly one writer
+ * module — the direct-lane handler calls it, but doesn't reach into the cache.
+ */
+export function commitTranscriptOrder(
+  qc: QueryClient,
+  sessionId: string,
+  orderedIds: string[]
+): void {
+  const rank = new Map(orderedIds.map((id, i) => [id, i]));
+  qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
+    if (!old) return old;
+    const known = old.messages
+      .filter((m) => rank.has(m.id))
+      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+    const unknown = old.messages.filter((m) => !rank.has(m.id));
+    return { ...old, messages: [...known, ...unknown], has_older: false };
   });
 }

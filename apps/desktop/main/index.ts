@@ -29,6 +29,7 @@ import { setupTray, destroyTray } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
+import { registerDeusCloudDirectTokenHandler } from "./deus-cloud-direct-token";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { provisionAtStartup } from "./deus-cloud-provision";
 import { registerClaudeSubscriptionHandlers } from "./claude-subscription";
@@ -337,6 +338,7 @@ app.whenReady().then(async () => {
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
+  registerDeusCloudDirectTokenHandler();
   registerClaudeSubscriptionHandlers();
   registerGithubAppHandlers();
   registerCodexSubscriptionHandlers();

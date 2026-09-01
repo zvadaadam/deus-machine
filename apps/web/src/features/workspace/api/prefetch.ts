@@ -19,6 +19,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { SessionService } from "@/features/session/api/session.service";
+import { isDirectSessionCached } from "@/features/session/cloud/useIsDirectSession";
 import type { WorkspaceState } from "@shared/enums";
 
 const HOVER_REFRESH_WINDOW_MS = 5_000;
@@ -93,14 +94,20 @@ export function prefetchWorkspace(
   if (!sessionIds.length) return;
 
   for (const sessionId of sessionIds) {
-    warmQuery(
-      queryClient,
-      {
-        queryKey: queryKeys.sessions.messages(sessionId),
-        queryFn: () => SessionService.fetchMessages(sessionId),
-      },
-      refreshIfCached
-    );
+    // A direct-lane session's transcript is owned by its agnt socket fold; an
+    // HTTP messages fetch here would overwrite that fold with the Mac backend's
+    // (empty/foreign) view — the exact clobber the lane stand-down prevents. Skip
+    // the messages warmup for it; the detail warmup below is lane-agnostic.
+    if (!isDirectSessionCached(queryClient, sessionId)) {
+      warmQuery(
+        queryClient,
+        {
+          queryKey: queryKeys.sessions.messages(sessionId),
+          queryFn: () => SessionService.fetchMessages(sessionId),
+        },
+        refreshIfCached
+      );
+    }
 
     warmQuery(
       queryClient,

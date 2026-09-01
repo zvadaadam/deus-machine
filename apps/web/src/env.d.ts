@@ -40,6 +40,18 @@ interface Window {
     startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     getDeusCloudSession: () => Promise<import("@shared/types").DeusCloudSessionStatus>;
+    /** Mint a direct-agnt session token from the stored deus_cloud_session bearer
+     *  (Path B, WorkOS source). The bearer stays in main; only the token returns. */
+    mintDeusCloudDirectToken: (providerSessionId: string) => Promise<
+      | {
+          ok: true;
+          token: string;
+          base_url: string;
+          provider_session_id: string;
+          expires_in: number;
+        }
+      | { ok: false; error: string }
+    >;
     startDeusCloudLogin: () => Promise<{
       success: boolean;
       session: import("@shared/types").DeusCloudSessionStatus;

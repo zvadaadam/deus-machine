@@ -71,6 +71,8 @@ export interface Session {
   workspace_id: string;
   agent_harness: import("../enums").AgentHarness;
   agent_session_id?: string | null;
+  /** agnt cloud session id — the direct lane connects to this (cloud only). */
+  provider_session_id?: string | null;
   title?: string | null;
   status: SessionStatus;
   message_count: number;
@@ -84,4 +86,6 @@ export interface Session {
   // From JOINs (present in list/detail queries)
   slug?: string | null;
   workspace_state?: string | null;
+  /** Owning workspace's kind — joined on s.workspace_id (drives the direct lane). */
+  workspace_kind?: import("../enums").WorkspaceKind | null;
 }

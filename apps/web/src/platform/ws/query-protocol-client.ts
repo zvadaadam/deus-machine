@@ -118,6 +118,18 @@ function nextSubId(): string {
  * In relay mode, pass the serverId so the WS URL can be resolved.
  */
 export async function connect(serverId?: string): Promise<void> {
+  // Web-direct (fully Mac-closed): there is no Mac backend to reach. The request
+  // interceptor serves reads from agnt, so the q: transport stays dark — never
+  // opening it also means no q:snapshot ever clobbers the adapter's cache. But
+  // the app's connection gate keys on `isConnected()`, so present as connected
+  // (the adapter IS the connection here) — otherwise the UI never mounts.
+  if (requestInterceptor) {
+    if (!connected) {
+      connected = true;
+      notifyConnectionChange(true);
+    }
+    return;
+  }
   // Detect stale socket: `connected` flag says yes but the actual WebSocket is dead.
   // This happens after Vite HMR reloads — module state is preserved but the socket
   // reference is stale (readyState !== OPEN). Force reconnect in this case.
@@ -180,6 +192,10 @@ export function subscribe(
   onSnapshot: SnapshotCallback,
   onDelta?: DeltaCallback
 ): () => void {
+  // Web-direct: no live q: transport. The paired useQuery's queryFn (routed to
+  // agnt via the interceptor) is the sole source; freshness comes from refetch,
+  // not a push. A no-op unsubscribe keeps every caller's cleanup valid.
+  if (requestInterceptor) return () => {};
   const id = nextSubId();
   const sub: Subscription = { id, resource, params, onSnapshot, onDelta };
   subscriptions.set(id, sub);
@@ -218,6 +234,13 @@ export function sendCommand(
   params: Record<string, unknown>,
   timeoutMs = 30_000
 ): Promise<CommandResult> {
+  // Web-direct: no Mac backend to command. Reject honestly rather than let
+  // `sendFrame` fail with a "WebSocket not connected" that misdiagnoses a
+  // by-design absence. (Direct-session sends/cancels never reach here — they go
+  // through the direct socket registry.)
+  if (requestInterceptor) {
+    return Promise.reject(new Error(`${command} is not available without a Mac backend`));
+  }
   const id = `cmd_${++commandCounter}`;
 
   return new Promise((resolve, reject) => {
@@ -255,10 +278,31 @@ export function sendCommand(
  * Works with both subscribable (QueryResource) and request-only
  * (RequestResource) resources.
  */
+/**
+ * Web-direct override for `sendRequest`. When registered, it may answer a
+ * resource itself (returning a promise) instead of the q: WS — the fully
+ * Mac-closed web build has no backend to send `q:request` to, so it serves
+ * workspace/session reads from agnt's REST instead. Returning null falls through
+ * to the socket. Dormant (null) on every backed build.
+ */
+export type QueryRequestInterceptor = (
+  resource: string,
+  params?: Record<string, unknown>
+) => Promise<unknown> | null;
+
+let requestInterceptor: QueryRequestInterceptor | null = null;
+
+export function setQueryRequestInterceptor(fn: QueryRequestInterceptor | null): void {
+  requestInterceptor = fn;
+}
+
 export function sendRequest<T = unknown>(
   resource: string,
   params?: Record<string, unknown>
 ): Promise<T> {
+  const intercepted = requestInterceptor?.(resource, params);
+  if (intercepted) return intercepted as Promise<T>;
+
   const id = `req_${++requestCounter}`;
   const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -298,6 +342,10 @@ export function sendMutate<T = unknown>(
   action: string,
   params: Record<string, unknown>
 ): Promise<{ success: boolean; data?: T; error?: string }> {
+  // Web-direct: no Mac backend to mutate — reject honestly (see sendCommand).
+  if (requestInterceptor) {
+    return Promise.reject(new Error(`${action} is not available without a Mac backend`));
+  }
   const id = `mut_${++requestCounter}`;
   const MUTATE_TIMEOUT_MS = 30_000;
 

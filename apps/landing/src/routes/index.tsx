@@ -32,7 +32,7 @@ function LandingPage() {
           Deus Machine
         </a>
         <a
-          href="https://app.deusmachine.ai"
+          href="/login"
           className="bg-foreground text-background hover:bg-foreground/90 inline-flex h-7 items-center rounded-lg px-2.5 text-[0.8rem] font-medium transition-colors"
         >
           Open App
@@ -71,7 +71,7 @@ function LandingPage() {
                 GitHub
               </a>
               <a
-                href="https://app.deusmachine.ai"
+                href="/login"
                 className="text-muted-foreground/40 hover:text-muted-foreground py-1 text-[12px] transition-colors duration-150"
               >
                 Web App
@@ -157,7 +157,7 @@ function LandingPage() {
             ))}
           </ol>
           <a
-            href="https://app.deusmachine.ai"
+            href="/login"
             className="text-foreground/60 hover:text-foreground mt-10 inline-flex items-center gap-1.5 text-[15px] transition-colors duration-150"
           >
             Open Deus Machine

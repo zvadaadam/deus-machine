@@ -9,9 +9,11 @@ export {
   isConnected,
   sendCommand,
   sendRequest,
+  setQueryRequestInterceptor,
   sendMutate,
   sendToolResponse,
   forceReconnect,
   onEvent,
   onConnectionChange,
 } from "./query-protocol-client";
+export type { QueryRequestInterceptor } from "./query-protocol-client";

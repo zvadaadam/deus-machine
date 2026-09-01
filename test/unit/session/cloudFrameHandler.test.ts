@@ -227,12 +227,12 @@ describe("makeCloudFrameHandler", () => {
     expect(JSON.stringify(page?.messages ?? [])).toContain("no seed needed");
   });
 
-  it("a reconnect (fresh handler + persistent seq) re-backfills idempotently, no reset churn", () => {
+  it("a reconnect (fresh handler, shared fold lane) re-folds idempotently, no refetch churn", () => {
     const SESSION = "sess-reconnect";
     const qc = new QueryClient();
     seedEmptyPage(qc, SESSION);
 
-    // A shared fold lane (folds + cursor survive remounts, like the hook's).
+    // A shared fold lane (folds survive remounts, like the hook's).
     const folds = new Map<string, SessionFold>();
     const cursor = createStreamCursor();
     const requestRefetch = vi.fn();
@@ -246,14 +246,6 @@ describe("makeCloudFrameHandler", () => {
         if (fold) flushDeltas(qc, SESSION, fold);
       },
       requestRefetch,
-    };
-
-    // The hook's persistent per-session seq, lifetime-matched to the cursor.
-    const seqCounters = new Map<string, number>();
-    const nextSeq = () => {
-      const n = (seqCounters.get(SESSION) ?? 0) + 1;
-      seqCounters.set(SESSION, n);
-      return n;
     };
 
     const snapshot = {
@@ -285,16 +277,416 @@ describe("makeCloudFrameHandler", () => {
     } as Record<string, unknown>;
 
     // Connection 1.
-    makeCloudFrameHandler(ctx, SESSION, nextSeq)(snapshot);
+    makeCloudFrameHandler(ctx, SESSION)(snapshot);
     expect(qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!.messages).toHaveLength(2);
 
-    // Connection 2 = a remount: a FRESH handler, same ctx, same persistent seq.
+    // Connection 2 = a remount: a FRESH handler over the same fold lane.
     requestRefetch.mockClear();
-    makeCloudFrameHandler(ctx, SESSION, nextSeq)(snapshot);
+    makeCloudFrameHandler(ctx, SESSION)(snapshot);
 
-    // No duplicates (upsert-by-id) and NO forced reset → no refetch churn.
+    // Re-folding the same snapshot is upsert-by-id — no duplicates, and with no
+    // wire seq there is no cursor to reset, so no refetch churn.
     expect(qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!.messages).toHaveLength(2);
     expect(requestRefetch).not.toHaveBeenCalled();
+  });
+
+  it("orders a late snapshot's history BEFORE an optimistic bubble, stamping has_older:false", () => {
+    // The user sent (optimistic bubble in the page) and THEN the snapshot
+    // arrived — the fold appends the reconstructed history, so without the
+    // ordering commit the transcript would read prompt-then-its-own-history.
+    const SESSION = "sess-order";
+    const qc = new QueryClient();
+    qc.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
+      messages: [
+        {
+          id: "optimistic-1",
+          session_id: SESSION,
+          seq: 0,
+          role: "user",
+          turn_id: "t2",
+          sent_at: new Date(T).toISOString(),
+          parts: [textPart("po", SESSION, "optimistic-1", "my new question")],
+        },
+      ],
+      compactions: [],
+      has_older: true, // deliberately wrong — the commit must flip it to false
+      has_newer: false,
+    } as PaginatedMessages);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    onFrame({
+      type: "session.snapshot",
+      state: { sessionId: SESSION, status: "ready", currentTurnId: null, turns: [] },
+      messages: [
+        {
+          id: "m1",
+          messageIndex: 0,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 1,
+          role: "user",
+          createdAt: T,
+          parts: [textPart("p1", SESSION, "m1", "prior question")],
+        },
+        {
+          id: "m2",
+          messageIndex: 1,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 2,
+          role: "assistant",
+          createdAt: T,
+          parts: [textPart("p2", SESSION, "m2", "prior answer")],
+        },
+      ],
+      events: [],
+    } as Record<string, unknown>);
+
+    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    // Snapshot rows lead in messageIndex order; the optimistic bubble trails.
+    expect(page.messages.map((m) => m.id)).toEqual(["m1", "m2", "optimistic-1"]);
+    // The snapshot IS the whole transcript — nothing earlier to page to.
+    expect(page.has_older).toBe(false);
+  });
+
+  it("unrolls a snapshot's state.compactions into the page's compactions list", () => {
+    const SESSION = "sess-snap-compaction";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    onFrame({
+      type: "session.snapshot",
+      state: {
+        sessionId: SESSION,
+        status: "ready",
+        currentTurnId: null,
+        turns: [],
+        compactions: [
+          {
+            compactionId: "c1",
+            turnId: "t1",
+            status: "completed",
+            trigger: "auto",
+            preTokens: 100_000,
+            postTokens: 20_000,
+            summary: "summarized the context",
+            timestamp: T,
+          },
+        ],
+      },
+      messages: [
+        {
+          id: "m1",
+          messageIndex: 0,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 1,
+          role: "user",
+          createdAt: T,
+          parts: [textPart("p1", SESSION, "m1", "a question")],
+        },
+      ],
+      events: [],
+    } as Record<string, unknown>);
+
+    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    expect(page.compactions).toHaveLength(1);
+    expect(page.compactions[0]).toMatchObject({
+      compaction_id: "c1",
+      session_id: SESSION,
+      turn_id: "t1",
+      status: "completed",
+      trigger: "auto",
+      pre_tokens: 100_000,
+      post_tokens: 20_000,
+      summary: "summarized the context",
+      created_at: new Date(T).toISOString(),
+    });
+  });
+
+  it("projects a LIVE session.compaction into the page (not just a refetch)", () => {
+    const SESSION = "sess-live-compaction";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const requestRefetch = vi.fn();
+    const ctx = { ...makeCtx(qc, SESSION), requestRefetch };
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    onFrame({
+      type: "session.compaction",
+      sessionId: SESSION,
+      turnId: "t1",
+      compactionId: "c1",
+      status: "completed",
+      trigger: "auto",
+      preTokens: 90_000,
+      summary: "done",
+      timestamp: T,
+    });
+
+    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    // The direct lane has no backend to page from, so the divider MUST be
+    // projected inline — the refetch fires too (Mac lane), but is not what makes
+    // the divider appear here.
+    expect(page.compactions).toHaveLength(1);
+    expect(page.compactions[0]).toMatchObject({ compaction_id: "c1", status: "completed" });
+    expect(requestRefetch).toHaveBeenCalled();
+  });
+
+  it("merges repeated session.compaction upserts by id (status replaces, fields COALESCE, created_at anchors)", () => {
+    const SESSION = "sess-compaction-merge";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    // "started, 90k in" — no summary yet.
+    onFrame({
+      type: "session.compaction",
+      sessionId: SESSION,
+      turnId: "t1",
+      compactionId: "c1",
+      status: "in_progress",
+      trigger: "auto",
+      preTokens: 90_000,
+      timestamp: T,
+    });
+    // "done, here's the summary" — a LATER stamp, no preTokens restated.
+    onFrame({
+      type: "session.compaction",
+      sessionId: SESSION,
+      turnId: "t1",
+      compactionId: "c1",
+      status: "completed",
+      summary: "the summary",
+      postTokens: 15_000,
+      timestamp: T + 5_000,
+    });
+
+    const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    expect(page.compactions).toHaveLength(1);
+    expect(page.compactions[0]).toMatchObject({
+      compaction_id: "c1",
+      status: "completed", // replaced
+      pre_tokens: 90_000, // kept from the first (second omitted it)
+      post_tokens: 15_000, // added by the second
+      summary: "the summary", // added by the second
+      created_at: new Date(T).toISOString(), // ANCHORED to the first event
+    });
+  });
+
+  it("projects the turn lifecycle onto sessions.detail (web-direct has no q: push)", () => {
+    const SESSION = "sess-status";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    // The detail row exists (discovery wrote it); the projection merge-patches it.
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      message_count: 0,
+    });
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t1", timestamp: T });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "working"
+    );
+
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t1",
+      stopReason: "end_turn",
+      timestamp: T,
+    });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "idle"
+    );
+
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t2",
+      stopReason: "error",
+      error: { category: "network", message: "boom" },
+      timestamp: T,
+    });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "error"
+    );
+
+    // `stopReason: "error"` with NO inline error object is a valid terminal
+    // shape (the backend classifies it as an internal error) — still an error.
+    onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t3", timestamp: T });
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t3",
+      stopReason: "error",
+      timestamp: T,
+    });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "error"
+    );
+  });
+
+  it("projects session.usage onto the context gauge (count always, percent needs a size)", () => {
+    const SESSION = "sess-usage";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      context_token_count: 0,
+      context_used_percent: 12,
+    });
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    // Size known → both fields move.
+    onFrame({
+      type: "session.usage",
+      sessionId: SESSION,
+      turnId: "t",
+      used: 50_000,
+      size: 200_000,
+      timestamp: T,
+    });
+    let d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(50_000);
+    expect(d.context_used_percent).toBe(25);
+
+    // Size unknown → count moves, percent KEEPS its prior value (the Mac
+    // backend's COALESCE semantics, mirrored).
+    onFrame({ type: "session.usage", sessionId: SESSION, turnId: "t", used: 60_000, timestamp: T });
+    d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(60_000);
+    expect(d.context_used_percent).toBe(25);
+  });
+
+  it("snapshot restates session facts: live turn → working, real message_count", () => {
+    const SESSION = "sess-snap-facts";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      message_count: 0,
+    });
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    onFrame({
+      type: "session.snapshot",
+      state: { sessionId: SESSION, status: "running", currentTurnId: "t-live", turns: [] },
+      messages: [
+        {
+          id: "m1",
+          messageIndex: 0,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 1,
+          role: "user",
+          createdAt: T,
+          parts: [textPart("p1", SESSION, "m1", "q")],
+        },
+        {
+          id: "m2",
+          messageIndex: 1,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 2,
+          role: "assistant",
+          createdAt: T,
+          parts: [textPart("p2", SESSION, "m2", "a")],
+        },
+      ],
+      events: [],
+    } as Record<string, unknown>);
+
+    const detail = qc.getQueryData<{ status: string; message_count: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    // A live turn in the snapshot means working NOW; count fixes discovery's zero.
+    expect(detail.status).toBe("working");
+    expect(detail.message_count).toBe(2);
+  });
+
+  it("seeds the live turn as ACTIVE from a snapshot (the one-live-turn send guard reads it)", () => {
+    const SESSION = "sess-direct-liveturn";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    // Mid-turn reconnect: the engine is working but hasn't emitted a message
+    // yet — the snapshot restates no `turn.started`, so without the synthesized
+    // seed the reducer would hold no active turn and an overlapping send would
+    // pass the guard.
+    const snapshot = {
+      type: "session.snapshot",
+      state: {
+        sessionId: SESSION,
+        organizationId: "org",
+        workspaceId: "ws",
+        status: "ready",
+        currentTurnId: "t-live",
+        turns: [],
+      },
+      messages: [],
+    };
+    onFrame(snapshot);
+
+    const turns = ctx.folds.get(SESSION)?.state.turns ?? [];
+    expect(turns.some((t) => t.turnId === "t-live" && t.status === "active")).toBe(true);
+
+    // Idempotent on a second snapshot (replay overlap no-ops in the reducer).
+    onFrame(snapshot);
+    const again = ctx.folds.get(SESSION)?.state.turns ?? [];
+    expect(again.filter((t) => t.turnId === "t-live")).toHaveLength(1);
+  });
+
+  it("folds category-bearing engine errors onto their turn; the turn still closes", () => {
+    const SESSION = "sess-direct-engine-error";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t1", timestamp: T });
+    // The engine's error EVENT (category-bearing) — distinct from a channel
+    // command rejection (category-less), which the socket hook consumes.
+    onFrame({
+      type: "error",
+      sessionId: SESSION,
+      turnId: "t1",
+      category: "overloaded",
+      message: "provider overloaded",
+      recoverable: true,
+      timestamp: T,
+    });
+
+    const turn = ctx.folds.get(SESSION)?.state.turns.find((t) => t.turnId === "t1");
+    expect(turn?.errors).toHaveLength(1);
+    expect(turn?.status).toBe("active"); // an error record alone must not end the turn
+
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t1",
+      stopReason: "end",
+      timestamp: T,
+    });
+    const ended = ctx.folds.get(SESSION)?.state.turns.find((t) => t.turnId === "t1");
+    expect(ended?.status).toBe("ended"); // …so a later send passes the one-live-turn guard
   });
 
   it("ignores non-render frames (workspace.state, pty.data, …)", () => {

@@ -47,6 +47,7 @@ describe("GET /sessions/:id/cloud-direct-token (the Mac-up token seam)", () => {
       token: "jwt-tok",
       base_url: "https://api.agnt",
       provider_session_id: "prov-1",
+      expires_in: 3600,
     });
     expect(mockCreateSessionToken).toHaveBeenCalledWith(
       "prov-1",

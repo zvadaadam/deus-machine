@@ -3,8 +3,10 @@
 # Can also be triggered manually via workflow_dispatch.
 #
 # Services:
-#   relay — Cloudflare Worker (relay.deusmachine.ai)
-#   web   — Cloudflare Pages (app.deusmachine.ai)
+#   relay   — Cloudflare Worker (relay.deusmachine.ai)
+#   web     — Cloudflare Pages (the deus web app; served at deusmachine.ai via
+#             the landing worker's edge router, app.deusmachine.ai = 301 alias)
+#   landing — Cloudflare Worker (deusmachine.ai: landing + root edge router)
 #
 # Required GitHub Secrets:
 #   CLOUDFLARE_API_TOKEN     — Cloudflare API token with Workers/Pages deploy permissions
@@ -18,6 +20,7 @@ on:
     paths:
       - "apps/cloud-relay/**"
       - "apps/web/**"
+      - "apps/landing/**"
       - "shared/**"
       - "package.json"
       - "bun.lock"
@@ -31,8 +34,14 @@ on:
         options:
           - relay
           - web
+          - landing
           - all
         default: all
+
+# Every job only builds and pushes to Cloudflare (via CLOUDFLARE_API_TOKEN);
+# the GITHUB_TOKEN never needs write access.
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -46,6 +55,7 @@ jobs:
     outputs:
       relay: ${{ steps.filter.outputs.relay }}
       web: ${{ steps.filter.outputs.web }}
+      landing: ${{ steps.filter.outputs.landing }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +72,8 @@ jobs:
               - 'package.json'
               - 'bun.lock'
               - 'tsconfig.web.json'
+            landing:
+              - 'apps/landing/**'
 
   # ── Deploy Cloud Relay (Cloudflare Worker) ───────────────────────
   deploy-relay:
@@ -69,7 +81,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.service != 'web') ||
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["relay","all"]'), github.event.inputs.service)) ||
       (github.event_name == 'push' && needs.changes.outputs.relay == 'true')
     steps:
       - uses: actions/checkout@v4
@@ -109,7 +121,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.service != 'relay') ||
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["web","all"]'), github.event.inputs.service)) ||
       (github.event_name == 'push' && needs.changes.outputs.web == 'true')
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +136,11 @@ jobs:
 
       - name: Build web app
         run: bun run build:web
+        env:
+          # The production web app is the fully Mac-closed (web-direct) build:
+          # cloud sessions straight against agnt from the browser. Relay entry
+          # paths (/connect*, /s/*) keep their relay behavior on the same build.
+          VITE_CLOUD_DIRECT: "1"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
@@ -131,3 +148,41 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy apps/web/dist/web --project-name=deus --branch=main
+
+  # ── Deploy Landing + Root Edge Router (Cloudflare Worker) ────────
+  # Serialized AFTER deploy-web: the router reserves `/assets/*` for the
+  # landing, so it must never go live while a Pages build still emits app
+  # bundles under that prefix (`/app-assets` is the web build's prefix) — the
+  # app shell would 404 its own JavaScript until deploy-web caught up. When
+  # deploy-web is skipped (landing-only change), the web side is unchanged and
+  # the landing deploys alone.
+  deploy-landing:
+    name: Deploy Landing
+    needs: [changes, deploy-web]
+    runs-on: ubuntu-latest
+    if: >-
+      !cancelled() &&
+      (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped') &&
+      ((github.event_name == 'workflow_dispatch' && contains(fromJSON('["landing","all"]'), github.event.inputs.service)) ||
+      (github.event_name == 'push' && needs.changes.outputs.landing == 'true'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+
+      - name: Install landing dependencies
+        run: cd apps/landing && bun install --frozen-lockfile
+
+      - name: Build landing (includes the root edge router)
+        run: cd apps/landing && bun run build
+
+      - name: Deploy landing to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing
+          command: deploy

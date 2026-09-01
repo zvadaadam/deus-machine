@@ -72,6 +72,9 @@ interface MessageInputProps {
   workspaceId?: string | null;
   /** Workspace root path for / slash-command discovery. */
   workspacePath?: string | null;
+  /** "cloud" disables plan mode — neither cloud lane carries a permission
+   *  mode (the sandbox sidecar runs bypass), so the toggle would be a lie. */
+  workspaceKind?: string | null;
   /** Seed initial model on first mount if the store doesn't have this
    *  session yet. Ignored afterwards. */
   initialModel?: string;
@@ -202,6 +205,7 @@ export function MessageInput({
   sessionId,
   workspaceId = null,
   workspacePath = null,
+  workspaceKind = null,
   initialModel,
   sending,
   sessionStatus,
@@ -359,7 +363,13 @@ export function MessageInput({
   const showSetupNudge = !hasManifest && !hasMessages;
   const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
 
-  const planModeDisabled = agentHarness === "codex-sdk" || agentHarness === "codex-app-server";
+  // Codex has no plan mode; cloud has no permission-mode transport on either
+  // lane (Mac relay and direct both send none; the sidecar runs bypass) — an
+  // enabled toggle there would promise a policy nothing enforces.
+  const planModeDisabled =
+    agentHarness === "codex-sdk" ||
+    agentHarness === "codex-app-server" ||
+    workspaceKind === "cloud";
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>

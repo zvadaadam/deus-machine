@@ -2,6 +2,12 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { getSession, onAuthChanged } from "@/platform/native/deus-cloud";
+import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
+
+// Re-exported for the existing consumers (AccountSection's sign-out mutation);
+// the implementation moved to shared/api so the platform layer can call it on
+// passive bearer expiry without a hook→platform→hook cycle.
+export { applyDeusCloudAuthChange };
 
 /**
  * The Deus Cloud session, one way. Four surfaces declared this query
@@ -17,27 +23,7 @@ import { getSession, onAuthChanged } from "@/platform/native/deus-cloud";
 export function useDeusCloudSession() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    return onAuthChanged((nextSession) => {
-      queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
-      // EVERY account-scoped cache, not a curated subset — the subset is how
-      // account B kept seeing A's data for a freshness window, three separate
-      // times on this branch.
-      for (const key of [
-        ["settings", "cloud"],
-        ["settings", "github-app"],
-        ["settings", "claude-subscription"],
-        ["settings", "codex-subscription"],
-        ["settings", "cloud-environments"],
-        ["repo-cloud-environment"],
-      ]) {
-        void queryClient.invalidateQueries({ queryKey: key });
-      }
-      // The cloud-access verdict GATES the create action, so a stale verdict
-      // kept alive during a background refetch is worse than none: account B
-      // could reuse A's "ok" and select cloud before B's check lands. RESET it
-      // (drop the data) so the gate holds until B's own verdict arrives.
-      void queryClient.resetQueries({ queryKey: ["cloudRepoAccess"] });
-    });
+    return onAuthChanged((nextSession) => applyDeusCloudAuthChange(queryClient, nextSession));
   }, [queryClient]);
 
   return useQuery({

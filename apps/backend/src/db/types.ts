@@ -127,6 +127,8 @@ export interface SessionRow {
 export interface SessionWithDetailsRow extends SessionRow {
   slug: string | null;
   workspace_state: string | null;
+  /** Owning workspace's kind, joined on s.workspace_id ("worktree" | "cloud"). */
+  workspace_kind: string | null;
 }
 
 // ─── messages ────────────────────────────────────────────────

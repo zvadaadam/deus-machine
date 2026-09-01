@@ -28,11 +28,23 @@ export interface ExchangeCloudSessionTokenResult {
   expiresIn: number;
 }
 
+/** A non-OK exchange, with the HTTP status as data (401 = the bearer lapsed). */
+export class SessionTokenExchangeError extends Error {
+  constructor(
+    readonly status: number,
+    sessionId: string
+  ) {
+    super(`Cloud session token exchange failed (${status}) for session ${sessionId}`);
+    this.name = "SessionTokenExchangeError";
+  }
+}
+
 export async function exchangeCloudSessionToken(
   params: ExchangeCloudSessionTokenParams
 ): Promise<ExchangeCloudSessionTokenResult> {
   const { baseUrl, sessionId, bearer, expiresIn } = params;
-  const url = `${baseUrl}/dashboard/sessions/${sessionId}/token`;
+  // Encode the id so a hostile value can't steer the request onto another route.
+  const url = `${baseUrl}/dashboard/sessions/${encodeURIComponent(sessionId)}/token`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -45,10 +57,9 @@ export async function exchangeCloudSessionToken(
 
   if (!response.ok) {
     // Not-found and not-owned both answer 403 by design (the endpoint refuses
-    // to leak which session ids exist), so the status is the actionable fact.
-    throw new Error(
-      `Cloud session token exchange failed (${response.status}) for session ${sessionId}`
-    );
+    // to leak which session ids exist), so the status is the actionable fact —
+    // carried as a field so callers can route 401 (lapsed bearer) to re-login.
+    throw new SessionTokenExchangeError(response.status, sessionId);
   }
 
   let body: { token?: unknown; expires_in?: unknown };
