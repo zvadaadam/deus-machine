@@ -1,0 +1,2428 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Mac-Closed Cloud Lane — a guided tour of deus-machine × agnt</title>
+    <style>
+      :root {
+        --bg: #fbfbfa;
+        --fg: #1c1c21;
+        --muted: #6d6d78;
+        --line: #dedee4;
+        --box: #ffffff;
+        --accent: #5352c9;
+        --accent-ink: #4341b0;
+        --accent-soft: #efeffb;
+        --warn-bg: #fdf7ed;
+        --warn-line: #e9d8b4;
+        --warn-ink: #7a5c1e;
+        --code-bg: #f1f1f4;
+        --code-ink: #3b3b46;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+        --mono:
+          ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141418;
+          --fg: #e9e9ee;
+          --muted: #9d9daa;
+          --line: #2d2d36;
+          --box: #1c1c22;
+          --accent: #a5a4f2;
+          --accent-ink: #bcbbf7;
+          --accent-soft: #252540;
+          --warn-bg: #26200f;
+          --warn-line: #4c3e1d;
+          --warn-ink: #d9b96a;
+          --code-bg: #232329;
+          --code-ink: #d3d3dd;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15.5px/1.62 var(--sans);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 225px minmax(0, 780px);
+        gap: 56px;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 28px 120px;
+      }
+      nav.toc {
+        position: sticky;
+        top: 0;
+        align-self: start;
+        max-height: 100vh;
+        overflow-y: auto;
+        padding: 56px 0 40px;
+        font-size: 13px;
+      }
+      nav.toc .toc-title {
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 14px;
+      }
+      nav.toc a {
+        display: block;
+        color: var(--muted);
+        text-decoration: none;
+        padding: 4px 10px;
+        border-left: 2px solid transparent;
+        border-radius: 0 6px 6px 0;
+        line-height: 1.4;
+      }
+      nav.toc a:hover {
+        color: var(--fg);
+      }
+      nav.toc a.active {
+        color: var(--accent-ink);
+        border-left-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      nav.toc a.sub {
+        padding-left: 22px;
+        font-size: 12.5px;
+      }
+      main {
+        padding-top: 56px;
+        min-width: 0;
+      }
+      @media (max-width: 900px) {
+        .shell {
+          display: block;
+          padding: 0 18px 80px;
+        }
+        nav.toc {
+          position: static;
+          max-height: none;
+          padding: 32px 0 8px;
+        }
+        main {
+          padding-top: 8px;
+        }
+      }
+
+      h1 {
+        font-size: 30px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        margin: 0 0 8px;
+        font-weight: 700;
+      }
+      .kicker {
+        color: var(--accent-ink);
+        font-weight: 650;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+      .lede {
+        font-size: 17px;
+        color: var(--muted);
+        margin: 0 0 8px;
+        max-width: 64ch;
+      }
+      .meta {
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      h2 {
+        font-size: 22px;
+        letter-spacing: -0.01em;
+        border-top: 1px solid var(--line);
+        padding-top: 30px;
+        margin: 64px 0 6px;
+        font-weight: 700;
+      }
+      h2 .num {
+        color: var(--accent-ink);
+        font-variant-numeric: tabular-nums;
+        margin-right: 8px;
+      }
+      h3 {
+        font-size: 16.5px;
+        margin: 32px 0 6px;
+        font-weight: 650;
+      }
+      h4 {
+        font-size: 14px;
+        margin: 0 0 4px;
+        font-weight: 650;
+      }
+      p {
+        margin: 10px 0;
+        max-width: 72ch;
+      }
+      ul,
+      ol {
+        max-width: 72ch;
+        padding-left: 22px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      a {
+        color: var(--accent-ink);
+      }
+      code {
+        font: 0.86em/1.5 var(--mono);
+        background: var(--code-bg);
+        color: var(--code-ink);
+        padding: 1.5px 5px;
+        border-radius: 5px;
+        white-space: nowrap;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+        overflow-x: auto;
+        font: 12.5px/1.6 var(--mono);
+        color: var(--code-ink);
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        white-space: pre;
+      }
+      .pull {
+        border-left: 3px solid var(--accent);
+        background: var(--accent-soft);
+        border-radius: 0 10px 10px 0;
+        padding: 12px 18px;
+        margin: 22px 0;
+        font-size: 16.5px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        max-width: 66ch;
+      }
+      .pull .who {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      details {
+        border: 1px solid var(--line);
+        background: var(--box);
+        border-radius: 10px;
+        margin: 14px 0;
+        padding: 0 18px;
+      }
+      details[open] {
+        padding-bottom: 12px;
+      }
+      summary {
+        cursor: pointer;
+        padding: 12px 0;
+        font-weight: 650;
+        font-size: 14.5px;
+        color: var(--accent-ink);
+        list-style: none;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::before {
+        content: "▸";
+        font-size: 12px;
+        transition: transform 0.15s ease;
+        color: var(--muted);
+      }
+      details[open] summary::before {
+        transform: rotate(90deg);
+      }
+      details p,
+      details ul,
+      details pre,
+      details table {
+        font-size: 14px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13.5px;
+        margin: 14px 0;
+      }
+      th {
+        text-align: left;
+        font-weight: 650;
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 8px 10px;
+        border-bottom: 1.5px solid var(--line);
+      }
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      td code {
+        white-space: normal;
+      }
+      .gotcha {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        border-radius: 10px;
+        padding: 14px 18px;
+        margin: 14px 0;
+      }
+      .gotcha h4 {
+        color: var(--warn-ink);
+      }
+      .gotcha p {
+        margin: 6px 0 0;
+        font-size: 14px;
+      }
+      dl.concepts {
+        margin: 18px 0;
+      }
+      dl.concepts dt {
+        font-weight: 650;
+        margin-top: 14px;
+      }
+      dl.concepts dt code {
+        font-size: 0.9em;
+      }
+      dl.concepts dd {
+        margin: 3px 0 0 0;
+        color: var(--fg);
+        max-width: 70ch;
+        font-size: 14.5px;
+      }
+      dl.concepts dd .m {
+        color: var(--muted);
+      }
+      figure {
+        margin: 22px 0;
+      }
+      figcaption {
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-top: 8px;
+        max-width: 70ch;
+      }
+      svg.diagram {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      svg .db {
+        fill: var(--box);
+        stroke: var(--line);
+        stroke-width: 1.2;
+      }
+      svg .dba {
+        fill: var(--accent-soft);
+        stroke: var(--accent);
+        stroke-width: 1.2;
+      }
+      svg .dpanel {
+        fill: none;
+        stroke: var(--line);
+        stroke-width: 1.2;
+        stroke-dasharray: 5 4;
+      }
+      svg .dnote {
+        fill: var(--code-bg);
+        stroke: var(--line);
+        stroke-width: 1;
+      }
+      svg text {
+        font-family: var(--sans);
+      }
+      svg .dt {
+        fill: var(--fg);
+        font-size: 12.5px;
+      }
+      svg .dtb {
+        fill: var(--fg);
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      svg .dm {
+        fill: var(--muted);
+        font-size: 11px;
+      }
+      svg .dmm {
+        fill: var(--muted);
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      svg .dh {
+        fill: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+      }
+      svg .dl {
+        stroke: var(--muted);
+        stroke-width: 1.2;
+        fill: none;
+      }
+      svg .dld {
+        stroke: var(--muted);
+        stroke-width: 1.2;
+        fill: none;
+        stroke-dasharray: 4 4;
+      }
+      svg .dla {
+        stroke: var(--accent);
+        stroke-width: 1.4;
+        fill: none;
+      }
+      svg .dlife {
+        stroke: var(--line);
+        stroke-width: 1.2;
+      }
+      .statusrow {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 14px 0;
+      }
+      .chip {
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        padding: 3px 12px;
+        color: var(--muted);
+        background: var(--box);
+      }
+      .chip.on {
+        border-color: var(--accent);
+        color: var(--accent-ink);
+        background: var(--accent-soft);
+      }
+      footer {
+        margin-top: 80px;
+        border-top: 1px solid var(--line);
+        padding-top: 24px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      footer p {
+        max-width: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="toc" aria-label="Table of contents">
+        <div class="toc-title">Tour</div>
+        <a href="#big-picture">The 2-minute picture</a>
+        <a href="#concepts">Key concepts</a>
+        <a href="#auth"><span>1 · Auth &amp; tokens</span></a>
+        <a href="#discovery"><span>2 · Discovery &amp; the adapter</span></a>
+        <a href="#render"><span>3 · The render lane</span></a>
+        <a href="#send"><span>4 · The send lane</span></a>
+        <a href="#gating"><span>5 · Lane gating</span></a>
+        <a href="#files">Where things live</a>
+        <a href="#gotchas">Gotchas</a>
+        <a href="#status">Status &amp; what's left</a>
+        <a href="#provenance">Provenance</a>
+      </nav>
+
+      <main>
+        <div class="kicker">Deus Machine × agnt · architecture tour</div>
+        <h1>The Mac-Closed Cloud Lane</h1>
+        <p class="lede">
+          How a plain browser — with the user's desktop machine switched off — renders and drives
+          cloud agent sessions directly against the agnt platform: auth, discovery, streaming,
+          sending, and the gating that keeps the two data lanes from trampling each other.
+        </p>
+        <p class="meta">
+          Generated 2026-09-01 · synthesized from four parallel code explorations across
+          <code>deus-machine</code> (branch <code>zvadaadam/merge-agnt-codebase</code>, uncommitted)
+          and <code>agnt</code> (merged &amp; deployed). Read top-to-bottom for the model; expand
+          the ▸&nbsp;details blocks when you need expert depth.
+        </p>
+
+        <!-- ============================================================ -->
+        <section id="big-picture">
+          <h2>The 2-minute picture</h2>
+
+          <p>
+            Deus Machine is normally a three-process desktop app: a React frontend talks to a Node
+            backend on your Mac over one WebSocket (the <code>q:</code> protocol), and that backend
+            talks to agents — local ones via agent-server, cloud ones via the
+            <strong>agnt</strong> platform. Every byte the UI renders flows through the Mac.
+          </p>
+
+          <p>
+            <strong>“Mac-closed”</strong> is the scenario where that Mac is off. You open
+            <code>app.deusmachine.ai</code> on your phone or any browser, and the frontend — the
+            same React app — talks to agnt <em>directly</em>: it authenticates, finds your cloud
+            sessions, opens a WebSocket straight to the session's Durable Object, renders the live
+            transcript, and sends new turns. No deus backend anywhere in the path. The same direct
+            machinery also runs on the desktop behind a flag (<code>deus.cloudDirect</code>);
+            collectively it's called <strong>Path&nbsp;B</strong> or the
+            <strong>direct lane</strong>.
+          </p>
+
+          <p>Two repos, five slices:</p>
+          <ul>
+            <li>
+              <strong>Auth &amp; tokens</strong> — WorkOS login via the
+              <code>deus-cloud</code> worker mints a 24-hour <code>deus_cloud_session</code> bearer;
+              a per-session exchange converts it into short-lived, single-session
+              <code>session_token</code>s. (agnt: deployed)
+            </li>
+            <li>
+              <strong>Discovery</strong> — two dashboard REST endpoints list your orgs and their
+              sessions; <code>cloudDataAdapter.ts</code> reshapes them into the sidebar's data
+              model. (agnt: deployed; deus: uncommitted)
+            </li>
+            <li>
+              <strong>Render lane</strong> — <code>cloudSessionSocket</code> →
+              <code>cloudFrameHandler</code> → <code>agentEventFold</code> → TanStack cache → React.
+              A snapshot-first, seq-free stream.
+            </li>
+            <li>
+              <strong>Send lane</strong> — the composer routes through
+              <code>directSessionRegistry</code> to a <code>message.send</code> frame on the same
+              socket; agnt admits, echoes, queues, dispatches.
+            </li>
+            <li>
+              <strong>Lane gating</strong> — <code>useIsDirectSession</code> decides, per session,
+              which lane owns the transcript; the <code>q:</code> client's interceptor seam keeps
+              the Mac transport dark on the web.
+            </li>
+          </ul>
+
+          <figure>
+            <svg
+              class="diagram"
+              viewBox="0 0 940 736"
+              role="img"
+              aria-label="Big-picture architecture: direct lane vs Mac lane"
+            >
+              <defs>
+                <marker
+                  id="ar"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)" />
+                </marker>
+                <marker
+                  id="ara"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)" />
+                </marker>
+              </defs>
+
+              <!-- ==================== DIRECT LANE PANEL ==================== -->
+              <rect class="dpanel" x="14" y="34" width="616" height="676" rx="12" />
+              <text class="dh" x="28" y="24">
+                DIRECT LANE — THE BROWSER IS A FIRST-CLASS AGNT CLIENT (PATH B / “MAC-CLOSED”)
+              </text>
+
+              <!-- browser container -->
+              <rect class="dpanel" x="30" y="56" width="286" height="640" rx="10" />
+              <text class="dh" x="44" y="76">BROWSER · apps/web</text>
+
+              <!-- browser stack -->
+              <rect class="db" x="46" y="90" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="108">React</text>
+              <text class="dm" x="58" y="123">SessionPanel · Chat · sidebar</text>
+
+              <rect class="db" x="46" y="162" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="180">TanStack Query cache</text>
+              <text class="dmm" x="58" y="195">["sessions","messages", id]</text>
+
+              <rect class="db" x="46" y="234" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="252">agentEventFold</text>
+              <text class="dm" x="58" y="267">engine reducer → cache projection</text>
+
+              <rect class="db" x="46" y="306" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="324">cloudFrameHandler</text>
+              <text class="dm" x="58" y="339">provider→deus id · snapshot unroll</text>
+
+              <rect class="db" x="46" y="378" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="396">cloudSessionSocket</text>
+              <text class="dm" x="58" y="411">wss · ping · backoff · ready()</text>
+
+              <rect class="db" x="46" y="474" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="492">cloudDataAdapter</text>
+              <text class="dm" x="58" y="507">discovery via request interceptor</text>
+
+              <rect class="db" x="46" y="560" width="216" height="42" rx="8" />
+              <text class="dtb" x="58" y="578">webCloudDirectConfig</text>
+              <text class="dm" x="58" y="593">bearer in sessionStorage</text>
+
+              <!-- render flow arrows (upward) -->
+              <line class="dl" x1="120" y1="378" x2="120" y2="308" marker-end="url(#ar)" />
+              <line class="dl" x1="120" y1="306" x2="120" y2="236" marker-end="url(#ar)" />
+              <line class="dl" x1="120" y1="234" x2="120" y2="164" marker-end="url(#ar)" />
+              <line class="dl" x1="120" y1="162" x2="120" y2="134" marker-end="url(#ar)" />
+              <text class="dm" x="130" y="150" transform="rotate(0)">frames → rows → pixels</text>
+
+              <!-- send rail (downward), outside the boxes -->
+              <line class="dla" x1="290" y1="134" x2="290" y2="374" marker-end="url(#ara)" />
+              <text class="dm" transform="rotate(90 298 180)" x="298" y="180">
+                message.send (turnId)
+              </text>
+
+              <!-- cloud column -->
+              <text class="dh" x="380" y="76">CLOUD</text>
+
+              <rect class="db" x="366" y="552" width="248" height="58" rx="8" />
+              <text class="dtb" x="378" y="572">deus-cloud worker</text>
+              <text class="dm" x="378" y="587">cloud.deusmachine.ai · WorkOS AuthKit</text>
+              <text class="dm" x="378" y="601">mints the 24 h deus_cloud_session</text>
+
+              <rect class="db" x="366" y="452" width="248" height="66" rx="8" />
+              <text class="dtb" x="378" y="472">agnt REST · /dashboard/*</text>
+              <text class="dm" x="378" y="487">api.deusmachine.ai</text>
+              <text class="dm" x="378" y="501">GET orgs · GET orgs/:id/sessions</text>
+              <text class="dm" x="378" y="514">POST sessions/:id/token</text>
+
+              <rect class="dba" x="366" y="352" width="248" height="60" rx="8" />
+              <text class="dtb" x="378" y="372">AgentSession Durable Object</text>
+              <text class="dm" x="378" y="387">one per session · owns transcript + queue</text>
+              <text class="dm" x="378" y="401">session.snapshot · live frames · message.send</text>
+
+              <!-- horizontal arrows -->
+              <line class="dl" x1="262" y1="572" x2="364" y2="572" marker-end="url(#ar)" />
+              <text class="dm" x="268" y="565">① login redirect</text>
+              <line class="dl" x1="364" y1="592" x2="262" y2="592" marker-end="url(#ar)" />
+              <text class="dm" x="268" y="606">#token= fragment</text>
+
+              <line class="dl" x1="262" y1="482" x2="364" y2="482" marker-end="url(#ar)" />
+              <text class="dm" x="268" y="475">② Bearer JWT</text>
+              <line class="dl" x1="364" y1="502" x2="262" y2="502" marker-end="url(#ar)" />
+              <text class="dm" x="268" y="516">session list</text>
+
+              <line class="dl" x1="262" y1="388" x2="364" y2="388" marker-end="url(#ar)" />
+              <text class="dm" x="268" y="381">③ wss ?v=&amp;token=</text>
+              <line class="dl" x1="364" y1="406" x2="262" y2="406" marker-end="url(#ar)" />
+              <text class="dm" x="268" y="420">snapshot + frames</text>
+
+              <!-- token mint arrow REST -> DO connection -->
+              <line class="dld" x1="490" y1="450" x2="490" y2="416" marker-end="url(#ar)" />
+              <text class="dm" x="500" y="432">session_token</text>
+              <text class="dm" x="500" y="445">(≤24 h, sid-scoped)</text>
+
+              <text class="dm" x="30" y="726">
+                Boot order (main.tsx): capture fragment → install adapter → ensure session — before
+                React mounts.
+              </text>
+
+              <!-- ==================== MAC LANE PANEL ==================== -->
+              <rect class="dpanel" x="650" y="34" width="278" height="676" rx="12" />
+              <text class="dh" x="664" y="24">MAC LANE — BASELINE RELAY</text>
+
+              <rect class="db" x="666" y="90" width="246" height="42" rx="8" />
+              <text class="dtb" x="678" y="108">React (same app)</text>
+              <text class="dm" x="678" y="123">useQuerySubscription · sendCommand</text>
+
+              <rect class="db" x="666" y="182" width="246" height="42" rx="8" />
+              <text class="dtb" x="678" y="200">q: WebSocket · /ws</text>
+              <text class="dm" x="678" y="215">subscribe/snapshot/delta · mutate · command</text>
+
+              <rect class="db" x="666" y="274" width="246" height="56" rx="8" />
+              <text class="dtb" x="678" y="294">deus backend (on the Mac)</text>
+              <text class="dm" x="678" y="309">Hono · SQLite is the history</text>
+              <text class="dm" x="678" y="323">folds agnt frames server-side</text>
+
+              <rect class="db" x="666" y="384" width="246" height="54" rx="8" />
+              <text class="dtb" x="678" y="404">cloud driver</text>
+              <text class="dm" x="678" y="419">services/agent/cloud → same</text>
+              <text class="dm" x="678" y="432">AgentSession DO socket</text>
+
+              <rect class="db" x="666" y="470" width="246" height="54" rx="8" />
+              <text class="dtb" x="678" y="490">agent-server</text>
+              <text class="dm" x="678" y="505">local harnesses (Claude / Codex)</text>
+              <text class="dm" x="678" y="518">JSON-RPC 2.0</text>
+
+              <line class="dl" x1="789" y1="134" x2="789" y2="180" marker-end="url(#ar)" />
+              <line class="dl" x1="809" y1="180" x2="809" y2="134" marker-end="url(#ar)" />
+              <line class="dl" x1="789" y1="226" x2="789" y2="272" marker-end="url(#ar)" />
+              <line class="dl" x1="809" y1="272" x2="809" y2="226" marker-end="url(#ar)" />
+              <line class="dl" x1="740" y1="332" x2="740" y2="382" marker-end="url(#ar)" />
+              <path class="dl" d="M 666 310 L 657 310 L 657 497 L 662 497" marker-end="url(#ar)" />
+
+              <text class="dm" x="666" y="560">Re-emits agnt frames as q:event</text>
+              <text class="dm" x="666" y="575">agent:event with a synthetic seq;</text>
+              <text class="dm" x="666" y="590">history served from Mac SQLite.</text>
+              <text class="dm" x="666" y="620">In web-direct builds this entire</text>
+              <text class="dm" x="666" y="635">column is dark: the q: client opens</text>
+              <text class="dm" x="666" y="650">no socket, the adapter answers reads.</text>
+            </svg>
+            <figcaption>
+              <strong>The whole tour in one picture.</strong> Left: the direct lane — ① WorkOS login
+              via the deus-cloud worker yields a bearer, ② the bearer drives discovery and
+              per-session token exchange over agnt's dashboard REST, ③ the session_token opens a
+              WebSocket to the session's Durable Object, whose frames the fold projects into the
+              TanStack cache React reads. Right: the baseline Mac relay for contrast — same UI, but
+              every read and write rides the <code>q:</code> protocol through the backend on your
+              Mac.
+            </figcaption>
+          </figure>
+
+          <div class="pull">
+            The browser stops being a thin client to your Mac and becomes a first-class agnt client
+            — same React app, different transport underneath.
+          </div>
+
+          <p>
+            Everything below is the same picture at increasing magnification. The five numbered
+            sections give you the working mental model; the collapsible blocks inside them hold the
+            expert detail.
+          </p>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="concepts">
+          <h2>Key concepts</h2>
+          <dl class="concepts">
+            <dt><code>deus_cloud_session</code> bearer</dt>
+            <dd>
+              A 24-hour HS256 JWT minted by the deus-cloud worker after WorkOS login. Claims:
+              <code
+                >{iss:"deus-cloud", aud:"agnt-backend", sub:accountId, type:"deus_cloud_session",
+                client}</code
+              >. It proves <em>who you are</em> to agnt's <code>/dashboard/*</code> surface
+              (discovery, exchange, key minting). It can never open a session socket by itself.
+            </dd>
+
+            <dt><code>session_token</code></dt>
+            <dd>
+              A short-lived JWT (60&nbsp;s–24&nbsp;h, default 1&nbsp;h) from
+              <code>POST /dashboard/sessions/:sessionId/token</code>. Claims:
+              <code>{sub:accountId, aud:orgId, sid:sessionId, type:"session_token"}</code>. Scoped
+              to exactly one session — it can read the session snapshot and open its WebSocket,
+              nothing else. All writes then travel as frames <em>on</em> that socket.
+            </dd>
+
+            <dt><code>provider_session_id</code></dt>
+            <dd>
+              agnt's session id, stored on the deus session row. Its presence (together with
+              <code>workspace_kind === "cloud"</code>) is the single fact that flips a session onto
+              the direct lane. In pure web-direct mode the deus id and the provider id are the same
+              string.
+            </dd>
+
+            <dt>Direct lane (Path B) vs Mac lane</dt>
+            <dd>
+              Two ways to fill the same UI. <span class="m">Mac lane:</span> frontend ⇄ deus backend
+              over <code>q:</code>; the backend owns history (SQLite) and relays agnt.
+              <span class="m">Direct lane:</span> frontend ⇄ agnt with no backend in the path; the
+              DO's snapshot is the history. Path B runs Mac-closed on the web, or flag-gated
+              (<code>deus.cloudDirect</code>) on a desktop that still has its backend.
+            </dd>
+
+            <dt>The <code>q:</code> protocol</dt>
+            <dd>
+              Deus's single-WebSocket query protocol to the Mac backend: <code>q:subscribe</code> /
+              <code>q:snapshot</code> / <code>q:delta</code> for reactive reads,
+              <code>q:mutate</code> for sync writes, <code>q:command</code> for async actions,
+              <code>q:event</code> for ephemeral push. Defined in <code>shared/events.ts</code>;
+              client in <code>apps/web/src/platform/ws/query-protocol-client.ts</code>.
+            </dd>
+
+            <dt>The fold</dt>
+            <dd>
+              <code>agentEventFold.ts</code>: feeds canonical agent events through the engine's
+              reducer (<code>reduceConversationWithChanges</code> from
+              <code>@zvada/agent-server/protocol</code>) and projects the resulting changes into the
+              TanStack messages cache. It is the <em>one writer module</em> for
+              <code>["sessions","messages", id]</code> — both lanes go through it.
+            </dd>
+
+            <dt>The echo</dt>
+            <dd>
+              The user's own message, re-materialized as a transcript row with the derived id
+              <code>echo-${turnId}</code>. Three independent producers (optimistic composer bubble,
+              agnt's admission broadcast, the engine's own echo) all derive the same id, so they
+              converge on one row with zero reconciliation code.
+            </dd>
+
+            <dt>RepoGroup / Workspace-item mapping</dt>
+            <dd>
+              The sidebar's data model. In web-direct mode each agnt session becomes exactly one
+              sidebar “Workspace” item (<code>kind:"cloud"</code>, <code>current_session_id</code> =
+              its own id), grouped by repo name. There's no separate workspace list to reconcile —
+              the session <em>is</em> the item.
+            </dd>
+
+            <dt>AgentSession DO</dt>
+            <dd>
+              agnt's Cloudflare Durable Object, one per session, named by the session id
+              (<code>apps/backend/src/agent-session/agent-session.ts</code>). Owns the folded
+              transcript (DO SQLite), the execute queue, and every connected client socket. Its
+              first frame to any client is always <code>session.snapshot</code>.
+            </dd>
+          </dl>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="auth">
+          <h2><span class="num">1</span>Auth &amp; tokens</h2>
+
+          <p>
+            The auth story is a two-tier token design. The
+            <strong>bearer</strong> (<code>deus_cloud_session</code>) is your identity for a day;
+            the <strong>session_token</strong> is a narrow, per-session capability minted from it on
+            demand. Nothing that can drive an agent ever ships with broad scope, and nothing broad
+            ever touches a WebSocket URL.
+          </p>
+
+          <h3>Getting the bearer — the web login dance</h3>
+          <p>
+            On a Mac-closed boot, <code>webCloudDirectConfig.ts</code> gates the app: no bearer in
+            <code>sessionStorage</code> → redirect to the deus-cloud worker's
+            <code>/auth/login</code>. The worker (<code
+              >agnt: apps/deus-cloud/src/routes/auth.ts</code
+            >
+            + <code>auth/*</code>) runs a standard PKCE dance against WorkOS AuthKit and delivers
+            the minted JWT back to <code>app.deusmachine.ai</code> in a URL <em>fragment</em>:
+          </p>
+
+          <figure>
+            <svg
+              class="diagram"
+              viewBox="0 0 880 452"
+              role="img"
+              aria-label="Web login sequence diagram"
+            >
+              <defs>
+                <marker
+                  id="ar2"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)" />
+                </marker>
+              </defs>
+              <!-- lifeline heads -->
+              <rect class="db" x="40" y="16" width="190" height="40" rx="8" />
+              <text class="dtb" x="135" y="34" text-anchor="middle">Browser</text>
+              <text class="dm" x="135" y="48" text-anchor="middle">app.deusmachine.ai</text>
+              <rect class="db" x="330" y="16" width="200" height="40" rx="8" />
+              <text class="dtb" x="430" y="34" text-anchor="middle">deus-cloud worker</text>
+              <text class="dm" x="430" y="48" text-anchor="middle">cloud.deusmachine.ai</text>
+              <rect class="db" x="650" y="16" width="180" height="40" rx="8" />
+              <text class="dtb" x="740" y="34" text-anchor="middle">WorkOS AuthKit</text>
+              <text class="dm" x="740" y="48" text-anchor="middle">hosted login</text>
+              <!-- lifelines -->
+              <line class="dlife" x1="135" y1="56" x2="135" y2="440" />
+              <line class="dlife" x1="430" y1="56" x2="430" y2="440" />
+              <line class="dlife" x1="740" y1="56" x2="740" y2="440" />
+              <!-- messages -->
+              <line class="dl" x1="135" y1="88" x2="428" y2="88" marker-end="url(#ar2)" />
+              <text class="dm" x="145" y="80">
+                GET /auth/login?client=deus-web&amp;return_to=app…
+              </text>
+              <rect class="dnote" x="300" y="102" width="322" height="34" rx="6" />
+              <text class="dm" x="310" y="116">sets 2 HttpOnly cookies, path=/auth/callback:</text>
+              <text class="dm" x="310" y="129">
+                auth-state {flow,state,client,returnTo} + PKCE verifier
+              </text>
+              <line class="dl" x1="430" y1="162" x2="738" y2="162" marker-end="url(#ar2)" />
+              <text class="dm" x="445" y="154">302 → AuthKit (PKCE challenge)</text>
+              <line class="dl" x1="740" y1="200" x2="432" y2="200" marker-end="url(#ar2)" />
+              <text class="dm" x="445" y="192">
+                302 /auth/callback?code&amp;state (after user signs in)
+              </text>
+              <rect class="dnote" x="290" y="216" width="330" height="48" rx="6" />
+              <text class="dm" x="300" y="231">
+                verify state · exchange code+verifier with WorkOS
+              </text>
+              <text class="dm" x="300" y="244">syncWorkOSIdentity (account = WorkOS user id;</text>
+              <text class="dm" x="300" y="257">
+                first login creates default org + admin membership)
+              </text>
+              <line class="dl" x1="430" y1="296" x2="137" y2="296" marker-end="url(#ar2)" />
+              <text class="dm" x="150" y="288">
+                302 app.deusmachine.ai/#token=JWT (+ Set-Cookie deus-cloud-session on the cloud
+                origin)
+              </text>
+              <rect class="dnote" x="40" y="312" width="330" height="48" rx="6" />
+              <text class="dm" x="50" y="327">
+                captureCloudSessionFromFragment (before React mounts):
+              </text>
+              <text class="dm" x="50" y="340">
+                sessionStorage["deus_cloud_session"] ← JWT, then
+              </text>
+              <text class="dm" x="50" y="353">
+                history.replaceState scrubs #token= from the URL
+              </text>
+              <text class="dm" x="40" y="396">
+                The 24 h HS256 JWT: {iss:"deus-cloud", aud:"agnt-backend", sub:accountId,
+              </text>
+              <text class="dm" x="40" y="411">
+                type:"deus_cloud_session", client:"deus-web"} — SESSION_TTL_SECONDS in
+                session-issuer.ts
+              </text>
+            </svg>
+            <figcaption>
+              <strong>The login redirect dance.</strong> The fragment is the cross-origin courier:
+              usable by JS on the app origin, but never sent to servers, never in access logs, never
+              in <code>Referer</code> headers. Delivery is dual — cookie on the cloud origin (for
+              future silent logins) <em>and</em> fragment for the app.
+            </figcaption>
+          </figure>
+
+          <h3>Three token sources, one shape</h3>
+          <p>
+            The direct lane needs a <code>session_token</code> per session. Where it comes from
+            depends on where you're running — <code>cloudDirectToken.ts</code> picks via
+            <code>pickCloudDirectTokenSource()</code>:
+          </p>
+          <ul>
+            <li>
+              <strong><code>backend</code></strong> (desktop default): ask the local deus backend,
+              which holds cloud credentials pushed at login. The existing seam; no browser-side auth
+              at all.
+            </li>
+            <li>
+              <strong><code>workos-web</code></strong> (web-direct default): use the sessionStorage
+              bearer to call the exchange endpoint straight from the page
+              (<code>exchangeSessionToken.ts</code>).
+            </li>
+            <li>
+              <strong><code>workos-desktop</code></strong> (override-only today): the renderer asks
+              Electron main via IPC (<code>deus_cloud:mint_direct_token</code> in
+              <code>apps/desktop/main/deus-cloud-direct-token.ts</code>); main does the exchange
+              with its stored bearer.
+            </li>
+          </ul>
+          <p>
+            An explicit <code>localStorage deus.cloudDirectTokenSource</code> override wins;
+            otherwise web mode implies <code>workos-web</code>, else <code>backend</code>. All three
+            resolve to the same shape:
+            <code>{token, base_url, provider_session_id, expires_in}</code> — the rest of the lane
+            doesn't know or care which source produced it.
+          </p>
+
+          <div class="pull">
+            The bearer never enters the renderer.<span class="who"
+              >On desktop, the WorkOS-backed bearer lives only in the Electron main process
+              (safeStorage-encrypted); the renderer receives narrow session_tokens over IPC and
+              nothing more.</span
+            >
+          </div>
+
+          <h3>Exchange and acceptance, in one breath</h3>
+          <p>
+            The exchange (<code>agnt: routes/dashboard/session-tokens.ts</code>, PR #165) runs
+            behind <code>dashboardAuthMiddleware</code>: verify the bearer JWT, check the client
+            against <code>DASHBOARD_ALLOWED_CLIENTS</code>, check the account exists and is active.
+            Authorization is then <em>active org membership</em>, re-checked at every mint. The
+            resulting token is accepted by agnt's general <code>authMiddleware</code> (Bearer
+            header, or <code>?token=</code> <em>only</em> on WebSocket upgrades, because browsers
+            can't set WS headers), and <code>validateSessionAccess</code> reduces to a pure claim
+            comparison: <code>sid === :id</code>.
+          </p>
+
+          <h3>Keeping tokens fresh</h3>
+          <p>
+            <code>useCloudDirect.ts</code> owns freshness on the client: a query keyed
+            <code>["cloudDirectToken", sessionId, providerSessionId]</code> with
+            <code>staleTime = 0.8 × expires_in</code> (~48&nbsp;min on the default hour) and a
+            <code>refetchInterval</code> anchored to <code>dataUpdatedAt</code> so component
+            remounts don't reset the clock. <code>useDeusCloudSession.ts</code> runs a 15-minute
+            heartbeat (desktop: triggers main-process silent refresh) and — crucially — on any auth
+            change it <em>resets</em> the <code>["cloudDirectToken"]</code> queries: dropping the
+            token tears down the socket, so account B never streams on account A's token.
+          </p>
+
+          <details>
+            <summary>
+              Desktop login end-to-end: loopback, safeStorage, rotation, and the 503 trick
+            </summary>
+            <p>
+              <code>apps/desktop/main/deus-cloud-auth.ts</code> implements the only client that gets
+              a WorkOS <em>refresh token</em>. Login: spin a loopback server on
+              <code>127.0.0.1</code>, open the system browser with a PKCE challenge, receive the
+              callback locally, and call <code>POST /auth/desktop/exchange</code> on deus-cloud —
+              which returns <code>session_token</code> (the 24&nbsp;h bearer) <em>plus</em>
+              <code>refresh_token</code>. (Browser clients asking for the desktop flow get a 501
+              from <code>parseBrowserClient</code>.)
+            </p>
+            <ul>
+              <li>
+                <strong>Storage:</strong> <code>deus-cloud-session.json</code>,
+                safeStorage-encrypted, mode 0600, atomic writes (<code>safe-storage-file.ts</code>).
+              </li>
+              <li>
+                <strong>Silent refresh:</strong> within 6 h of bearer expiry, single-flight, via
+                <code>POST /auth/desktop/refresh</code>. WorkOS <em>rotates</em> refresh tokens on
+                every use — and deus-cloud goes as far as returning the replacement refresh token
+                inside the body of a 503 error, which the desktop persists
+                <em>from the error path</em>. Losing a rotated token would strand the session, so
+                the rotation is honored even when the request "failed".
+              </li>
+              <li>
+                <strong>Failure taxonomy</strong> (<code>workos.ts: isInvalidRefreshToken</code>):
+                only <code>invalid_grant</code>/400 means the token is dead → full sign-out
+                including device-key revocation. 5xx is operational → keep the session and retry
+                later. 401 on refresh = revoked → sign out.
+              </li>
+              <li>
+                <strong>Provisioning</strong> (<code>deus-cloud-provision.ts</code>): after login,
+                mint a per-device org API key (<code>agnt_sk_live_*</code>, labeled with the
+                hostname, stored hashed with <code>createdBy=accountId</code>) via
+                <code>POST /dashboard/orgs/:orgId/api-keys</code>, then push
+                <code>{apiKey, claudeOauthToken, deusCloudUrl, deusCloudSessionToken, orgId}</code>
+                to the local backend's <code>/api/settings/cloud/credentials</code>. That push is
+                what makes the <code>backend</code> token source work.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>
+              Exchange authorization: membership, not ownership — and why that's correct
+            </summary>
+            <p>
+              The exchange checks that you hold an <em>active membership</em> in the session's
+              organization. It does <strong>not</strong> check per-session ownership — deliberately.
+              agnt sessions record no authenticated owner: <code>user_id</code> is an opaque
+              integrator-supplied value and is <code>null</code> for the deus flow, so an ownership
+              check would 403 every real session. And the exchange is strictly <em>weaker</em> than
+              what any org member can already do: with the org's API key,
+              <code>POST /sessions/tokens</code> (<code>routes/tokens.ts</code>) mints the
+              same-shaped token for any org session. Two more properties worth knowing:
+            </p>
+            <ul>
+              <li>
+                Not-found and not-a-member both return an identical 403 — no session-id probing.
+              </li>
+              <li>
+                The body is tolerant-empty but strict-malformed; <code>expires_in</code> clamps to
+                60…86400, default 3600.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>What a session_token can and cannot do</summary>
+            <p>
+              Acceptance lives in <code>agnt: middleware/auth.ts</code> (which also handles
+              <code>agnt_sk_</code> keys by hashed lookup, and skips <code>/dashboard</code> — that
+              surface is bearer-only). A <code>session_token</code>:
+            </p>
+            <ul>
+              <li>
+                <strong>Can:</strong> read <code>GET /sessions/:id</code> (snapshot) and upgrade
+                <code>GET /sessions/:id/ws</code> — with <code>?token=</code> accepted on the
+                upgrade only.
+              </li>
+              <li>
+                <strong>Cannot:</strong> <code>POST /sessions/:id/messages</code> (rejected
+                outright), list sessions, create sessions, or touch any other org resource. In the
+                direct lane, <em>sending</em> is a <code>message.send</code> frame on the
+                already-authorized socket — the token's only write power is the socket itself.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>JWT plumbing and edge cases</summary>
+            <ul>
+              <li>
+                <strong>One secret, two services.</strong> deus-cloud signs and agnt verifies with
+                the same HS256 <code>JWT_SECRET</code> (hand-rolled WebCrypto in
+                <code>packages/auth/src/jwt.ts</code>). A <code>bad_signature</code> in the wild
+                means secret drift, not an attack — <code>rotate-jwt-secret.sh</code> sets both
+                sides.
+              </li>
+              <li>
+                <strong>A session_token can outlive the bearer.</strong> Both cap at 24 h and
+                there's no revocation list; revoking a membership takes effect at the
+                <em>next mint</em>, not on live tokens.
+              </li>
+              <li>
+                <strong>CORS trivia.</strong> agnt's CORS is <code>*</code> — safe because auth is
+                Bearer, never cookies. deus-cloud's CORS does <em>not</em> include
+                <code>app.deusmachine.ai</code>: the app only ever <em>navigates</em> there, and
+                redirects aren't CORS-gated. <code>DEUS_APP_ORIGIN</code>'s only job is the
+                <code>return_to</code> allowlist (<code>auth-state.ts: resolveReturnTo</code> — PR
+                #166).
+              </li>
+              <li>
+                <strong>Tab-scoped bearer.</strong> sessionStorage means a new tab is a fresh login
+                round-trip — silent if the WorkOS cookie is still alive, but a round-trip
+                nonetheless. <code>redirectToWebCloudLogin</code> carries a 10 s cooldown
+                (<code>deus.cloudLoginAt</code>) to break redirect loops.
+              </li>
+              <li>
+                <strong>The lapsed-bearer edge.</strong> If a bearer dies and the
+                <em>first</em> failing call is the token mint (not discovery), the failure surfaces
+                as a lane error rather than a re-login redirect. In practice discovery fires first
+                and its 401 → <code>handleWebCloudSessionExpired</code> → clean re-login.
+              </li>
+            </ul>
+          </details>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="discovery">
+          <h2><span class="num">2</span>Discovery &amp; the data adapter</h2>
+
+          <p>
+            A bearer that can mint session tokens is useless if you don't know any session ids. PR
+            #167 closed that loop with two read endpoints, and
+            <code>cloudDataAdapter.ts</code> turns their answers into the exact shapes the existing
+            UI already renders — so the sidebar, session header, and routing all work unmodified
+            with no Mac anywhere.
+          </p>
+
+          <h3>The agnt side: two endpoints</h3>
+          <ul>
+            <li>
+              <code>GET /dashboard/orgs</code> — your active memberships joined to organizations
+              (<code>agnt: routes/dashboard/orgs.ts</code>).
+            </li>
+            <li>
+              <code>GET /dashboard/orgs/:orgId/sessions</code> — sessions inner-joined to their
+              workspaces, newest first (<code>routes/dashboard/sessions-list.ts</code>, behind
+              <code>requireOrgAccess</code>). Each row projects a
+              <code>DashboardSessionSummary</code> (contract in <code>@deus-hq/api</code>,
+              snake_case wire, canonical status enums): title from session metadata, repo from
+              workspace config (with managed-repository ids batch-resolved to names), branch, and
+              <code>sandbox_id</code> taken from the <em>workspace</em> row — the session row's copy
+              is often null.
+            </li>
+          </ul>
+
+          <h3>The deus side: the adapter</h3>
+          <p>
+            On a web-direct boot, <code>main.tsx</code> installs the adapter as the
+            <code>q:</code> client's <em>request interceptor</em> before React mounts. From then on,
+            every one-shot resource request the app would have sent to the Mac gets answered
+            locally:
+          </p>
+
+          <pre><code>installCloudDataAdapter() — the interceptor switch
+  "workspaces"  → fetchAllCloudSessions() → mapToRepoGroups()   (the sidebar)
+  "sessions"    → same fetch, session rows for a workspace
+  "session"     → toSession(providerId)                         (the detail row)
+  "settings"    → { onboarding_completed: true }                (a boot key, not data)
+  "messages"    → falls through — the session socket owns the transcript
+  anything else → null → caller sees "not available without a Mac backend"</code></pre>
+
+          <p>
+            The mapping is deliberately lossy-but-sufficient: each agnt session becomes
+            <em>one</em> sidebar Workspace item (<code>kind:"cloud"</code>, id = the agnt session
+            id, <code>current_session_id</code> = itself, <code>provider_session_id</code> = its
+            workspace's id on the session row, worktree fields nulled), grouped by repo name with
+            <code>"Cloud"</code> as the fallback group. Session status maps running→working,
+            error→error, else idle; workspace status maps provisioning→initializing, error→error,
+            deleted→archived, else ready.
+          </p>
+
+          <h3>Keeping the Mac transport dark</h3>
+          <p>
+            The interceptor seam lives in
+            <code>query-protocol-client.ts</code> (<code>setQueryRequestInterceptor</code>, exported
+            via <code>platform/ws</code>). It is <code>null</code> on every Mac-backed build —
+            byte-identical behavior. When set:
+          </p>
+          <ul>
+            <li>
+              <code>connect()</code> opens <em>no socket</em> but reports
+              <code>connected = true</code> and fires <code>notifyConnectionChange(true)</code>.
+              Subscription effects gate on <code>isConnected()</code>; without this the app would
+              render its offline state forever.
+            </li>
+            <li><code>subscribe()</code> returns a no-op unsubscribe — no frame ever leaves.</li>
+            <li>
+              <code>sendRequest()</code> consults the interceptor first; a <code>null</code> answer
+              falls through to the dead socket and rejects.
+            </li>
+            <li>
+              <code>sendCommand()</code> / <code>sendMutate()</code> reject eagerly with
+              <em>“X is not available without a Mac backend”</em> — honest, by-design absence rather
+              than a hang.
+            </li>
+          </ul>
+
+          <div class="pull">
+            The adapter <em>is</em> the connection.<span class="who"
+              >connect() opening no socket yet reporting connected is not a hack — “connected” means
+              “reads will be answered”, and in web-direct mode the answerer is the adapter.</span
+            >
+          </div>
+
+          <p>
+            Why must the socket stay dark rather than coexist? Because
+            <code>useQuerySubscription</code> writes every <code>q:snapshot</code> as a
+            <em>full</em> <code>setQueryData</code> replace. Any live socket answering
+            <code>workspaces</code> or <code>session</code> would clobber the adapter-served cache;
+            a live <code>messages</code> lane would clobber the socket-driven fold. One transport
+            per resource, ever.
+          </p>
+
+          <h3>Boot order (load-bearing)</h3>
+          <pre><code>main.tsx, before ReactDOM.render:
+  1. captureCloudSessionFromFragment()   // fresh redirect's bearer → sessionStorage, scrub URL
+  2. installCloudDataAdapter()           // reads must be answerable before anything fetches
+  3. ensureWebCloudSession()             // no bearer → redirect to login (never flashes UI)</code></pre>
+          <p>
+            Capture-before-install so the very first adapter fetch has the bearer;
+            install-before-ensure so a signed-in boot never flashes the login screen.
+          </p>
+
+          <details>
+            <summary>
+              Adapter mechanics: the 3-second cache, auth guard, and hardcoded harness
+            </summary>
+            <ul>
+              <li>
+                <strong>One round-trip, many consumers.</strong>
+                <code>fetchAllCloudSessions()</code> (orgs → <code>Promise.all</code> per-org
+                session lists → flat array) memoizes its in-flight promise for
+                <code>LIST_TTL_MS = 3000</code>; errors evict immediately. Sidebar and session panel
+                mounting together share a single fetch.
+              </li>
+              <li>
+                <strong>Auth guard.</strong> <code>dashboardGet</code> resolves the base URL
+                (<code>resolveAgntBaseUrl</code>, default <code>api.deusmachine.ai</code>) and
+                attaches the sessionStorage bearer; a missing bearer or a 401 throws
+                <code>CloudSessionExpiredError</code>, and <code>withAuthGuard</code> converts that
+                into <code>handleWebCloudSessionExpired()</code> — clear the bearer,
+                cooldown-guarded redirect to login.
+              </li>
+              <li>
+                <strong
+                  ><code>toSession</code> hardcodes
+                  <code>agent_harness:"claude-code"</code>.</strong
+                >
+                The list endpoint doesn't carry harness; codex cloud sessions misreport until the
+                socket connects. Cosmetic — the send path carries the real harness (§4).
+              </li>
+              <li>
+                <strong
+                  ><code>has_more</code> is surfaced by agnt (limit 101) but ignored by the
+                  adapter</strong
+                >
+                — more than 100 sessions per org silently truncates. Known, accepted for now.
+              </li>
+              <li>
+                <strong>Paused/stopped sandboxes map to “ready”.</strong>
+                <code>mapWorkspaceState</code> flattens them deliberately: wake-on-send carries the
+                real truth in-chat, and a “paused” sidebar would just be noise.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>Cold-boot request census and the freshness gap</summary>
+            <p>Everything a Mac-closed boot sends, in order:</p>
+            <pre><code>GET  cloud.deusmachine.ai/auth/…            (only if no bearer — the login dance)
+GET  api.deusmachine.ai/dashboard/orgs
+GET  api.deusmachine.ai/dashboard/orgs/:id/sessions   (× orgs, shared via 3 s cache)
+     — on opening a session —
+POST api.deusmachine.ai/dashboard/sessions/:providerId/token
+WSS  api.deusmachine.ai/sessions/:providerId/ws?v=…&amp;token=…</code></pre>
+            <p>Nothing else succeeds — and that's the point. Two consequences:</p>
+            <ul>
+              <li>
+                <strong>No push for the list.</strong> The workspaces query keeps its Mac-lane
+                settings (<code>staleTime: Infinity</code>, no focus/interval refetch) because the
+                WS normally provides freshness — but here there is no WS for the list. Refresh
+                happens via mutation-side invalidations and remounts. A cloud session started
+                elsewhere won't appear until something invalidates. Known gap (§Status).
+              </li>
+              <li>
+                <strong>Harmless Mac-only chatter.</strong> A few calls fire and reject by design:
+                bulk <code>diffStats</code> rides <code>Promise.allSettled</code>, the cloud-connect
+                POST is best-effort wrapped in a catch. Expected console noise, not bugs.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>Why the list endpoint exists at all</summary>
+            <p>
+              PR #165 gave the bearer a per-session token exchange — but you had to already
+              <em>know</em> a session id, which only a Mac-synced client would. PR #167's list is
+              what makes a Mac-closed browser able to <em>find</em> its sessions. #165 = “may I open
+              this door?”; #167 = “which doors are mine?”.
+            </p>
+          </details>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="render">
+          <h2><span class="num">3</span>The render lane</h2>
+
+          <p>
+            Open a cloud session and the direct lane assembles per session:
+            <code>useCloudDirect</code> mints the token and owns the socket lifecycle;
+            <code>cloudSessionSocket.ts</code> speaks the wire;
+            <code>cloudFrameHandler.ts</code> adapts agnt frames into the fold;
+            <code>agentEventFold.ts</code> turns them into cache rows React renders. The design
+            premise: <strong>the DO's snapshot is authoritative and cheap to re-apply</strong>, so
+            the client never needs sequence-number bookkeeping.
+          </p>
+
+          <h3>What agnt sends</h3>
+          <p>
+            <code>GET /sessions/:id/ws</code> → <code>validateSessionAccess</code> → the
+            <code>AgentSession</code> Durable Object accepts the socket (Cloudflare hibernation API)
+            and <em>immediately</em> sends <code>session.snapshot</code>. After that, live frames:
+            the admission bracket for user messages (<code>turn.started</code> then
+            <code>message.started/part/ended</code>), the sidecar engine's events re-broadcast
+            verbatim (assistant messages, full-snapshot <code>message.part</code> upserts, typed
+            <code>message.part.delta</code>s), every terminal funneled through one
+            <code>emitTurnEnded</code> → <code>turn.ended</code>, plus <code>session.usage</code> /
+            <code>session.compaction</code> / <code>session.error</code>. The same socket also
+            carries non-render traffic (<code>workspace.state</code>, <code>pty.*</code>,
+            <code>fs.*</code>, <code>diff.*</code>, <code>browser.*</code>, permission/question
+            frames) — the direct lane currently consumes only the render frames.
+          </p>
+
+          <div class="pull">
+            The snapshot is not a log.<span class="who"
+              >It is the current truth — already-folded messages plus durable turn outcomes —
+              re-sent whole on every (re)connect. Its events array is filtered to workspace
+              lifecycle only; nothing about it is replayable history.</span
+            >
+          </div>
+
+          <h3>The unroll: snapshot → fold</h3>
+          <p>
+            <code>makeCloudFrameHandler</code> does one tiny, critical rewrite — the frame's
+            <code>sessionId</code> from agnt's provider id to the <em>deus</em> session id, the key
+            the fold uses everywhere — then hands the frame to <code>foldEvent</code>. On every
+            snapshot, <code>backfillSnapshot</code> unrolls the document into the very same funnel
+            the live frames use:
+          </p>
+
+          <figure>
+            <svg
+              class="diagram"
+              viewBox="0 0 880 596"
+              role="img"
+              aria-label="Snapshot unroll pipeline"
+            >
+              <defs>
+                <marker
+                  id="ar3"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)" />
+                </marker>
+              </defs>
+              <rect class="db" x="60" y="14" width="560" height="88" rx="10" />
+              <text class="dtb" x="76" y="36">
+                session.snapshot — first frame after every (re)connect
+              </text>
+              <text class="dm" x="76" y="54">
+                state: status · currentTurnId · turns ≤ 100 (durable TurnOutcomes) · compactions
+              </text>
+              <text class="dm" x="76" y="69">
+                messages[]: already-folded rows (messageIndex, outputIndex 0=echo/1..n=assistant,
+                parts)
+              </text>
+              <text class="dm" x="76" y="84">
+                events: workspace.lifecycle only — not a replayable log
+              </text>
+
+              <line class="dl" x1="340" y1="102" x2="340" y2="128" marker-end="url(#ar3)" />
+
+              <rect class="dpanel" x="60" y="130" width="560" height="292" rx="10" />
+              <text class="dh" x="76" y="150">
+                backfillSnapshot — UNROLLS THE DOCUMENT INTO THE LIVE FUNNEL
+              </text>
+
+              <rect class="db" x="84" y="162" width="512" height="48" rx="8" />
+              <text class="dt" x="98" y="182">
+                1 · sort messages by messageIndex → route(message.started)
+              </text>
+              <text class="dt" x="98" y="199">+ route(message.part) for each part</text>
+
+              <rect class="db" x="84" y="226" width="512" height="46" rx="8" />
+              <text class="dt" x="98" y="246">
+                2 · each finished turn in state.turns (turnId ≠ currentTurnId)
+              </text>
+              <text class="dt" x="98" y="263">
+                → restated turn.ended (the live turn's terminal arrives live)
+              </text>
+
+              <rect class="db" x="84" y="288" width="512" height="36" rx="8" />
+              <text class="dt" x="98" y="311">
+                3 · each state.compactions entry → restated session.compaction
+              </text>
+
+              <rect class="db" x="84" y="340" width="512" height="60" rx="8" />
+              <text class="dt" x="98" y="361">
+                4 · ONE commitTranscriptOrder(qc, sessionId, orderedIds)
+              </text>
+              <text class="dm" x="98" y="378">
+                snapshot ids lead in messageIndex order; unknown rows (optimistic
+              </text>
+              <text class="dm" x="98" y="391">
+                bubble, mid-flight) trail in place · idempotent · direct cache write
+              </text>
+
+              <line class="dl" x1="340" y1="422" x2="340" y2="450" marker-end="url(#ar3)" />
+
+              <rect class="db" x="660" y="162" width="204" height="96" rx="8" />
+              <text class="dtb" x="672" y="182">live frames</text>
+              <text class="dm" x="672" y="199">message.started/part/part.delta</text>
+              <text class="dm" x="672" y="213">turn.started / turn.ended</text>
+              <text class="dm" x="672" y="227">session.usage / .compaction / .error</text>
+              <text class="dm" x="672" y="241">(same route, same fold)</text>
+              <path class="dl" d="M 700 258 C 700 380, 662 450, 624 468" marker-end="url(#ar3)" />
+
+              <rect class="dba" x="60" y="452" width="560" height="58" rx="10" />
+              <text class="dtb" x="76" y="474">
+                foldEvent → reduceConversationWithChanges (engine reducer)
+              </text>
+              <text class="dm" x="76" y="491">
+                upsert by part id · snapshots beat deltas · late tool parts land on the original
+                message;
+              </text>
+              <text class="dm" x="76" y="504">
+                changes projected as cache writes, deltas rAF-batched (one write per animation
+                frame)
+              </text>
+
+              <line class="dl" x1="340" y1="510" x2="340" y2="536" marker-end="url(#ar3)" />
+
+              <rect class="db" x="60" y="538" width="560" height="44" rx="10" />
+              <text class="dtb" x="76" y="557">TanStack: ["sessions","messages", id]</text>
+              <text class="dm" x="76" y="573">
+                read by useMessages (enabled:false) — a disabled query still returns cached data
+              </text>
+            </svg>
+            <figcaption>
+              <strong>The snapshot-unroll pipeline.</strong> History and live traffic take the same
+              road; reconnects are just “apply the fresh snapshot again”. Step 4 is the only write
+              that bypasses the fold — and it lives in the fold's module on purpose (one writer
+              module).
+            </figcaption>
+          </figure>
+
+          <h3>Seq-free by design</h3>
+          <p>
+            The Mac lane's event stream carries per-session sequence numbers, and the frontend runs
+            the engine's <code>SeqCursor</code>: skip duplicates, on reset delete the fold and
+            refetch, on gap seek and refetch. The direct lane has <strong>none of that</strong> —
+            agnt frames carry no seq, so gap/reset/duplicate arithmetic can't even fire. Correctness
+            comes from a different invariant: every write is an upsert by derived id, and every
+            reconnect re-folds a fresh snapshot. Idempotence replaces ordering. (Pinned by
+            <code>test/unit/session/directLaneRoundtrip.test.ts</code>.)
+          </p>
+
+          <details>
+            <summary>
+              The socket contract: query token, hibernation pings, backoff, and hard throws
+            </summary>
+            <ul>
+              <li>
+                <strong>URL:</strong>
+                <code>wss://{base}/sessions/{providerSessionId}/ws?v=API_VERSION&amp;token=…</code>.
+                The token rides the query string because browser WebSockets can't set headers; agnt
+                accepts query tokens <em>only</em> on upgrades. <code>?v=</code> older than
+                <code>API_VERSION</code> (“2026-08-14”) gets a typed 400; non-upgrade requests get
+                426.
+              </li>
+              <li>
+                <strong>Pings:</strong> a literal <code>"ping"</code> every 30 s, answered by the
+                DO's <code>setWebSocketAutoResponse("ping","pong")</code> pair — the Cloudflare
+                runtime answers <em>without waking a hibernated DO</em>. Liveness costs zero
+                compute.
+              </li>
+              <li>
+                <strong>Deadlines:</strong> 10 s handshake deadline; reconnect backoff
+                <code>min(500·2ⁿ, 15000)</code> with max 8 retries before <code>onDown</code>;
+                <code>ready()</code> bounded at 30 s.
+              </li>
+              <li>
+                <strong><code>send()</code> throws synchronously</strong> (“Cloud session socket is
+                not connected”) when the socket isn't OPEN — the send lane leans on this for clean
+                mutation rejection (§4).
+              </li>
+              <li>
+                <strong>Token re-mint ≈ every 48 min is a full reconnect, on purpose.</strong> New
+                token → new URL → new socket → fresh snapshot re-fold. The unroll makes it visually
+                seamless, so no in-place re-auth protocol was worth building.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>
+              Cache-write semantics: merges, COALESCE, the cancelled divider, and the one-writer
+              rule
+            </summary>
+            <ul>
+              <li>
+                <strong><code>writeMessage</code></strong> upserts by row id into the
+                <code>PaginatedMessages</code> page. An existing row keeps its previous
+                <code>seq</code> and first <code>sent_at</code>; parts go through
+                <code>mergePartsById</code> — for a shared part id the next value wins, but
+                cache-only parts <em>survive</em>. Never a wholesale parts replace. (Seeding the
+                fold from the HTTP page was considered and <em>rejected</em>: unlike agnt's
+                in-channel snapshot, deus's page fetch races the WS.) If the session is live and no
+                page exists, the fold seeds a fresh one (<code
+                  >{messages:[row], compactions:[], has_older:false}</code
+                >) — the Mac-closed no-HTTP-seed case.
+              </li>
+              <li>
+                <strong>Turn accounting</strong> (<code>writeTurnAccounting</code>) stamps the
+                turn's <em>last top-level assistant row</em>: null tokens/cost/cancelled_at leave
+                the cached value (COALESCE expressed as conditional spread), while
+                <code>turn_stop_reason</code> writes unconditionally. A cancelled turn with no
+                assistant row appends <code>cancelled-${turnId}</code> — the live “Response stopped”
+                divider, same derived id the backend would write, so replay dedupes.
+              </li>
+              <li>
+                <strong>Compactions</strong> upsert by <code>compaction_id</code> (status replaces,
+                optional fields COALESCE, <code>created_at</code> anchored) and schedule a debounced
+                <code>requestRefetch</code> — which is <em>inert</em> in direct mode because the
+                messages query is <code>enabled:false</code>: TanStack skips the fetch, and the
+                projection is already the delivery.
+              </li>
+              <li>
+                <strong>One writer module.</strong> <code>commitTranscriptOrder</code> lives inside
+                <code>agentEventFold.ts</code> even though it's a plain cache write, so the messages
+                key has exactly one writer module in the codebase. If you're writing that key from
+                anywhere else, you're building a bug.
+              </li>
+              <li>
+                <strong>Shared row doctrine</strong> (<code>shared/conversation-rows.ts</code>): one
+                row implementation, two stores. The backend binds it to SQL — messages use
+                <code>ON CONFLICT</code> updates, never <code>INSERT OR REPLACE</code> (which would
+                cascade-delete parts); parts <em>do</em> use <code>INSERT OR REPLACE</code> because
+                a part owns all its columns. The frontend spreads the same semantics onto cache
+                rows. Same derived ids (<code>echo-${turnId}</code>,
+                <code>cancelled-${turnId}</code>) keep the stores convergent.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>Contrast: how the Mac lane consumes the very same agnt socket</summary>
+            <p>
+              The deus backend's cloud driver (<code>apps/backend/src/services/agent/cloud/</code>)
+              connects to the same DO but plays a different role: it mints a
+              <em>synthetic</em> per-session seq for the
+              <code>q:event agent:event</code> re-broadcast, and it does
+              <strong>not</strong> backfill snapshot history — Mac SQLite already <em>is</em> the
+              history; it only gap-heals a live turn's missed <code>turn.ended</code> from
+              <code>state.turns</code>. The browser's <code>backfillSnapshot</code>, by contrast, is
+              the <em>only</em> history source in the direct lane. Both lanes share the fold module
+              but keep separate module-level <code>folds</code> maps — a desktop running flag-on
+              Path B never cross-contaminates its Mac-lane folds.
+            </p>
+          </details>
+
+          <details>
+            <summary>Accepted roughness and open items in the render lane</summary>
+            <ul>
+              <li>
+                <strong><code>session.error</code> shape mismatch:</strong> the hook reads
+                <code>frame.error</code> as a string, but agnt sends
+                <code>{error:{code,message}, recoverable, turnId?}</code> — real errors surface as a
+                generic “Session error”, and <code>recoverable</code>/<code>turnId</code> are
+                ignored. Known, accepted for now.
+              </li>
+              <li>
+                <strong><code>workspace.state</code> frames are ignored</strong> — no
+                provisioning/wake UI in the direct lane yet (on the punch-list, §Status).
+              </li>
+              <li>
+                <strong>Restated <code>turn.ended</code>s drop L2 payloads</strong> (files/gitSync)
+                — turn-diff UI after a reconnect won't see them.
+              </li>
+              <li>
+                <strong
+                  >The file-header comment in <code>cloudFrameHandler.ts</code> is stale</strong
+                >
+                — it still mentions routeEnvelope/synthetic-seq, describing the backend twin. The
+                function docblocks and code are the seq-free truth. (Gotcha card below.)
+              </li>
+            </ul>
+          </details>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="send">
+          <h2><span class="num">4</span>The send lane</h2>
+
+          <p>
+            Sending is where the direct lane earns its keep: type on a phone, and an agent turn
+            starts in a cloud sandbox with no Mac involved. The design has three pillars: the
+            <strong>caller mints the turnId</strong> (the correlation key exists before anything is
+            sent), the wire carries <strong>no credentials ever</strong> (agnt resolves them at
+            dispatch), and the user's message converges from
+            <strong>three producers onto one row</strong> by derived id.
+          </p>
+
+          <h3>Routing the mutation</h3>
+          <pre><code>useSessionActions.sendMessage → useSendMessage.mutateAsync({ …, turnId: newTurnId() })  // uuidv7, caller-minted
+
+onMutate (BOTH lanes):
+  cancel in-flight messages queries · snapshot workspaces cache
+  push optimistic bubble = the future echo  (id echoMessageId(turnId), parts createUserEchoParts — byte-for-byte, incl. multimodal)
+  sidebar status → working
+
+mutationFn, in order:
+  1. getDirectSession(sessionId)?   → YES → direct.sendMessage(…)   // fire-and-forget; return
+  2. isDirectSessionCached(id)?     → YES → throw SendRejectedError("The cloud connection isn't ready yet")
+  3. Mac lane: sendCommand("sendMessage") → !ack.accepted → SendRejectedError
+     transport failure              → HTTP fallback, same fields</code></pre>
+
+          <p>
+            Step 2 is the subtle one: the session is <em>known</em> to be direct, but its channel
+            isn't registered (socket mid-connect, or the token mint failed). Falling through to the
+            Mac/HTTP path would dispatch a real turn whose response the disarmed read-lanes could
+            never render — a bubble stuck forever. Failing fast is the only honest outcome.
+          </p>
+
+          <div class="pull">
+            “Accepted” means the frame left an open socket.<span class="who"
+              >The direct lane awaits no ack — unlike the Mac lane's quick-ack. Business rejection
+              arrives later as an error frame; transport failure throws synchronously and rolls the
+              optimistic state back.</span
+            >
+          </div>
+
+          <h3>Inside the direct channel</h3>
+          <p>
+            <code>useCloudDirectSession</code> registers the live channel in
+            <code>directSessionRegistry</code>. Its <code>sendMessage</code> first enforces
+            <strong>one-live-turn</strong> — if the fold shows an active turn, throw
+            <em>“The agent is still working…”</em> — then sends:
+          </p>
+          <pre><code>{ type: "message.send",
+  text, turnId,
+  idempotencyKey: turnId,                  // names the DELIVERY, not the content
+  options: { harness,                      // ALWAYS when known — agnt keys credential resolution on it
+             model?, thinkingLevel? } }    // NEVER apiKey / authKind / codexAuthJson (pinned by test)</code></pre>
+          <p>
+            The guard lives in the channel because that's where the fold state is in reach — and it
+            must live <em>somewhere</em> client-side, because agnt itself queues overlapping sends
+            (<code>MAX_QUEUED_EXECUTES = 16</code>; “overlapping messages are the normal case for
+            chat integrations”). The harness field matters more than it looks: agnt resolves the org
+            credential at dispatch time <em>by harness</em>, so a codex turn sent bare would resolve
+            the Claude credential and run as claude. Pinned by test.
+          </p>
+
+          <h3>Three producers, one echo row</h3>
+          <figure>
+            <svg
+              class="diagram"
+              viewBox="0 0 880 312"
+              role="img"
+              aria-label="Three-way echo convergence"
+            >
+              <defs>
+                <marker
+                  id="ar4"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)" />
+                </marker>
+              </defs>
+              <rect class="db" x="20" y="20" width="262" height="72" rx="8" />
+              <text class="dtb" x="34" y="42">1 · Composer optimistic bubble</text>
+              <text class="dm" x="34" y="59">useSendMessage.onMutate</text>
+              <text class="dm" x="34" y="73">createUserEchoParts — byte-for-byte</text>
+
+              <rect class="db" x="308" y="20" width="262" height="72" rx="8" />
+              <text class="dtb" x="322" y="42">2 · agnt DO admission echo</text>
+              <text class="dm" x="322" y="59">postMessage → buildUserMessage bracket</text>
+              <text class="dm" x="322" y="73">broadcast to every client, incl. sender</text>
+
+              <rect
+                class="db"
+                x="596"
+                y="20"
+                width="262"
+                height="72"
+                rx="8"
+                stroke-dasharray="5 4"
+              />
+              <text class="dtb" x="610" y="42">3 · Engine's own echo</text>
+              <text class="dm" x="610" y="59">suppressed in the DO (isEcho) —</text>
+              <text class="dm" x="610" y="73">never rebroadcast; #2 already covered it</text>
+
+              <line class="dl" x1="151" y1="92" x2="360" y2="176" marker-end="url(#ar4)" />
+              <line class="dl" x1="439" y1="92" x2="439" y2="176" marker-end="url(#ar4)" />
+              <line class="dld" x1="727" y1="92" x2="518" y2="176" marker-end="url(#ar4)" />
+              <text class="dm" x="640" y="150">(suppressed)</text>
+
+              <rect class="dba" x="240" y="180" width="400" height="66" rx="10" />
+              <text class="dtb" x="256" y="203">ONE transcript row, upserted thrice</text>
+              <text class="dmm" x="256" y="222">id = echo-${turnId}</text>
+              <text class="dmm" x="256" y="237">parts = echo-${turnId}-0 … echo-${turnId}-n</text>
+
+              <text class="dm" x="240" y="278">
+                turn.started is broadcast at ADMISSION (protocol §7.1), so the fold marks the turn
+              </text>
+              <text class="dm" x="240" y="293">
+                active the instant the echo arrives. Zero reconciliation code anywhere.
+              </text>
+            </svg>
+            <figcaption>
+              <strong>Three-way echo convergence.</strong> Everyone derives the same ids from the
+              caller-minted turnId — convergence by construction, not by matching.
+            </figcaption>
+          </figure>
+
+          <details>
+            <summary>agnt admission &amp; dispatch, precisely</summary>
+            <ul>
+              <li>
+                <strong>Credential boundary.</strong> <code>postMessage</code> rejects inline
+                <code>codexAuthJson</code> outright — the durable queue must never put a refresh
+                token at rest. (Claude's inline <code>apiKey</code> predates the rule; recorded
+                follow-up.)
+              </li>
+              <li>
+                <strong>Idempotency receipts.</strong> <code>sha256(prompt)</code> stored under
+                <code>idem:${key}</code>. Same key + same hash → replay
+                <code>{deduplicated:true}</code>, no second turn. Same key + different hash →
+                conflict. Receipt and user row are written in <em>one synchronous DO block</em>; the
+                queue-capacity check runs <em>before</em> persist so a 429 never orphans a prompt.
+              </li>
+              <li>
+                <strong>The turnId crack.</strong> agnt accepts the client's turnId unless it was
+                already used in the session — then it silently mints its own. The optimistic bubble
+                keyed on the old id never reconciles and is retired only by a refetch. Deliberate:
+                honoring a colliding id would corrupt history; a stuck bubble is the cheaper
+                failure.
+              </li>
+              <li>
+                <strong>Dispatch</strong> (<code>execute-queue.ts</code>): harness verdict (defer
+                unknown, reject unsupported) → <code>buildDispatchedCommand</code>: a client
+                credential wins if present, else <code>resolveTurnCredential(harness)</code> — a
+                <em>bounded</em> (<code>Promise.race</code> timeout) Postgres lookup of the org
+                secret (<code>CLAUDE_CODE_OAUTH_TOKEN</code> → oauth, or
+                <code>CODEX_AUTH_JSON</code>), decrypted at dispatch, injected into the sidecar's
+                <code>agent:execute</code>, never persisted in DO state. On failure/timeout:
+                dispatch credential-less and let the sidecar's ambient fallback try. This is the
+                “phone / Mac-off” path in one sentence.
+              </li>
+            </ul>
+          </details>
+
+          <details>
+            <summary>One-live-turn: who enforces it on which path</summary>
+            <table>
+              <tr>
+                <th>Path</th>
+                <th>Enforcement</th>
+              </tr>
+              <tr>
+                <td>Direct lane (browser → agnt)</td>
+                <td>
+                  Fold guard in the channel (<code>useCloudDirectSession</code>): any
+                  <code>state.turns</code> entry active → throw before send.
+                </td>
+              </tr>
+              <tr>
+                <td>Mac → cloud</td>
+                <td>
+                  Backend cloud driver's in-memory <code>liveTurnId</code> +
+                  <code>commands.ts ACTIVE_TURN_STATUSES</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>Mac → local</td>
+                <td>
+                  Status guard + the agent-server wire's own <code>turnActive</code> rejection.
+                </td>
+              </tr>
+              <tr>
+                <td>agnt itself</td>
+                <td>
+                  <strong>None.</strong> Queues up to 16 overlapping sends and runs them in order —
+                  the guard is client courtesy, not a platform invariant.
+                </td>
+              </tr>
+            </table>
+            <p>
+              <strong>The known hole:</strong> the guard is per-client best-effort. A client
+              connecting <em>mid-turn</em> gets a snapshot whose backfill skips
+              <code>currentTurnId</code> (no <code>turn.started</code> restated for the live turn),
+              so its guard won't trip and agnt queues the overlap. Same class of gap as the Mac
+              driver's in-memory <code>liveTurnId</code> after a backend restart.
+              <code>snapshot.state.currentTurnId</code> is available and unused by the guard — an
+              open question, not an oversight anyone defends.
+            </p>
+          </details>
+
+          <details>
+            <summary>Stop flow and client-side error handling</summary>
+            <ul>
+              <li>
+                <strong>Stop:</strong> <code>useStopSession</code> →
+                <code>direct.cancel()</code> sends <code>{type:"agent.cancel"}</code> with no turnId
+                — the DO targets <code>state.currentTurnId</code>. A still-queued turn is spliced
+                out with an immediate <code>turn.ended{cancelled}</code>; a dispatched turn sets
+                <code>pendingCancelTurnId</code>, fires best-effort <code>agent:cancel</code>, and a
+                cancel-confirmation watchdog guarantees the terminal. The fold projects the
+                “Response stopped” divider (<code>cancelled-${turnId}</code>) either way.
+              </li>
+              <li>
+                <strong>onError:</strong> <code>emitSendAttemptFailed</code> — which escalates the
+                <em>Mac</em> connection-health store — is gated on
+                <code>!isDirectSessionCached</code>, because the direct socket's “Cloud session
+                socket is not connected” matches the same substrings while being a different
+                transport entirely. Then <code>dropOptimisticMessage</code> filters exactly this
+                send's bubble by <code>echoMessageId(turnId)</code>, and
+                <code>rollbackSendStatus</code> picks its remedy: <code>SendRejectedError</code> →
+                refetch; transport death → restore the workspaces snapshot.
+              </li>
+              <li>
+                <strong>Flag-off fleet:</strong> with <code>deus.cloudDirect</code> unset the
+                registry is always empty, so both direct branches of the mutation are provably dead
+                code — the flag's blast radius is zero.
+              </li>
+            </ul>
+          </details>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="gating">
+          <h2><span class="num">5</span>Lane gating</h2>
+
+          <p>
+            Both lanes ultimately write the same TanStack key —
+            <code>["sessions","messages", id]</code>. The entire gating design exists to enforce one
+            sentence:
+          </p>
+
+          <div class="pull">
+            Exactly one lane may drive the messages cache key for a given session at any moment.
+          </div>
+
+          <h3>The oracle: <code>useIsDirectSession</code></h3>
+          <p>
+            One predicate decides everything:
+            <code>isDirectRow = workspace_kind === "cloud" &amp;&amp; !!provider_session_id</code>,
+            computed with a <code>select:</code> over the <em>same</em>
+            <code>sessions.detail</code> cache entry that <code>useSession</code> keeps WS-fresh —
+            an added observer, not a second fetch. (<code>sessionDetailQueryOptions(id)</code> is
+            the one shared query definition, spread by <code>useSession</code>,
+            <code>useWorkingSessionIds</code>, this hook, and the hover prefetch.) The result is
+            tri-state, and the third state is the point:
+          </p>
+
+          <pre><code>useIsDirectSession(sessionId) — over the sessions.detail row
+  row not loaded yet                    → undefined  → arm NEITHER lane
+  workspace_kind ≠ "cloud" (worktree),
+    or flag off                         → false      → Mac lane owns the session
+  cloud, provider_session_id null       → false      → Mac lane (a brand-new cloud tab renders
+                                                       via the Mac lane until the first send
+                                                       assigns provider_session_id — then flips)
+  cloud + provider_session_id set       → true       → direct lane owns the session</code></pre>
+
+          <h3>Strict arming — <code>=== false</code>, never falsy</h3>
+          <ul>
+            <li>
+              <code>useMessages</code> arms its HTTP <code>queryFn</code>, the WS messages
+              subscription, and the reconnect-invalidate <strong>only when</strong>
+              <code>direct === false</code>.
+            </li>
+            <li>
+              <code>SessionPanel</code> arms
+              <code>useAgentEvents(direct === false ? id : null)</code> and
+              <code>useCloudDirect(id, direct === true, provider_session_id)</code>.
+            </li>
+          </ul>
+          <p>
+            <code>undefined</code> arms <em>neither</em>, and the strictness is justified by
+            asymmetric failure modes: a wrongly-armed Mac lane clobbers a fold
+            <em>irrecoverably</em> (an authoritative-empty HTTP fetch overwrites the folded
+            transcript, and under <code>staleTime: Infinity</code> nothing ever heals it), while a
+            wrongly-held lane merely delays a fetch by one round-trip. When in doubt, hold.
+          </p>
+
+          <h3>Below hook-space</h3>
+          <p>
+            Mutations and prefetchers can't call hooks, so
+            <code>isDirectSessionCached(id)</code> runs the same predicate over
+            <code>queryClient.getQueryData</code> — with <em>uncached = not-direct</em>. It powers
+            the send lane's fail-fast and error gating (§4), and <code>prefetchWorkspace</code> uses
+            it to <strong>skip the messages warmup</strong> for direct sessions: the hover prefetch
+            is a <code>fetchQuery</code> with <code>staleTime: 0</code>, i.e. a forced overwrite —
+            pointed at a folded transcript it would be the exact clobber the arming rules exist to
+            prevent.
+          </p>
+
+          <p>
+            The second, sharper signal is the
+            <strong>registry</strong> (<code>directSessionRegistry.ts</code>): presence in the map
+            means “this session is served by a live direct channel <em>right now</em>” — not “this
+            session is direct in principle”. Its disposer compares-before-delete because React 18
+            can run a fast remount's new effect before the old cleanup, and blind deletion would
+            deregister the new channel.
+          </p>
+
+          <details>
+            <summary>The oracle's plumbing: where workspace_kind actually comes from</summary>
+            <p>
+              The backend's <code>SESSION_DETAILS_SELECT</code> joins workspaces twice:
+              <code>owner_ws</code> on <code>s.workspace_id</code> — always present, and the source
+              of <code>workspace_kind</code> — versus <code>current_ws</code> on
+              <code>current_session_id</code>, which contributes slug/state only for the active
+              session. So <code>workspace_kind</code> is a property of the session's owning
+              workspace, stable across the session's life; in web-direct mode the adapter
+              synthesizes the same shape client-side (<code>toSession</code>). Either way the oracle
+              reads one cache row and nothing else — the gating decision is O(1) and always as fresh
+              as the sessions.detail entry.
+            </p>
+          </details>
+
+          <details>
+            <summary>Why the tri-state flip on first send is safe</summary>
+            <p>
+              A brand-new cloud session has no provider session yet: it renders via the Mac lane
+              (backend-served history, empty), and the first send — routed through the Mac lane,
+              step 3 of the mutation — causes the backend to provision the agnt session and write
+              <code>provider_session_id</code> onto the row. The sessions.detail subscription
+              delivers the update, <code>isDirectRow</code> flips to true, the Mac read lanes
+              disarm, and <code>useCloudDirect</code> arms and connects. The handoff is glitch-free
+              because both lanes write upsert-style into the same key with the same derived ids —
+              the fold simply takes over rows the Mac lane seeded.
+            </p>
+          </details>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="files">
+          <h2>Where things live</h2>
+          <p>
+            The load-bearing files only. deus-machine paths are relative to the repo root; agnt
+            likewise.
+          </p>
+          <table>
+            <tr>
+              <th>Area</th>
+              <th>File</th>
+              <th>Why it exists</th>
+            </tr>
+            <tr>
+              <td rowspan="10">deus-machine · web</td>
+              <td><code>apps/web/src/features/session/cloud/webCloudDirectConfig.ts</code></td>
+              <td>
+                Web bearer lifecycle: fragment capture &amp; scrub, login redirect + cooldown, boot
+                gate, web-mode flag.
+              </td>
+            </tr>
+            <tr>
+              <td><code>…/cloud/cloudDirectFlag.ts</code></td>
+              <td>
+                The Path B switch — web mode implies on; desktop via <code>deus.cloudDirect</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>…/cloud/cloudDirectToken.ts</code> + <code>exchangeSessionToken.ts</code>
+              </td>
+              <td>
+                Token source picker (backend / workos-web / workos-desktop) + the exchange call; one
+                output shape.
+              </td>
+            </tr>
+            <tr>
+              <td><code>…/cloud/cloudDataAdapter.ts</code></td>
+              <td>
+                The Mac-closed data plane: discovery fetches, RepoGroup mapping, the interceptor
+                switch.
+              </td>
+            </tr>
+            <tr>
+              <td><code>…/cloud/cloudSessionSocket.ts</code></td>
+              <td>
+                The wire: query-token URL, hibernation pings, backoff, bounded ready, hard-throw
+                send.
+              </td>
+            </tr>
+            <tr>
+              <td><code>…/cloud/cloudFrameHandler.ts</code></td>
+              <td>
+                Provider→deus id rewrite + <code>backfillSnapshot</code>: turns snapshots into fold
+                input.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>…/cloud/directSessionRegistry.ts</code> + <code>useIsDirectSession.ts</code>
+              </td>
+              <td>The two gating signals: “live channel right now” and “direct in principle”.</td>
+            </tr>
+            <tr>
+              <td>
+                <code>…/hooks/useCloudDirect.ts</code> + <code>useCloudDirectSession.ts</code>
+              </td>
+              <td>
+                Token query + socket lifecycle; channel registration, one-live-turn guard,
+                send/cancel.
+              </td>
+            </tr>
+            <tr>
+              <td><code>…/lib/agentEventFold.ts</code></td>
+              <td>
+                The fold: engine reducer → cache projection. The one writer of the messages key.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>…/api/session.queries.ts</code> + <code>…/hooks/useSessionActions.ts</code>
+              </td>
+              <td>
+                useMessages arming; the send/stop mutations with lane routing and optimistic echo.
+              </td>
+            </tr>
+            <tr>
+              <td rowspan="4">deus-machine · shell</td>
+              <td><code>apps/web/src/platform/ws/query-protocol-client.ts</code></td>
+              <td>
+                The <code>q:</code> client and its interceptor seam — how the Mac transport goes
+                dark.
+              </td>
+            </tr>
+            <tr>
+              <td><code>apps/web/src/app/main.tsx</code></td>
+              <td>Boot order: capture → install adapter → ensure session, before React mounts.</td>
+            </tr>
+            <tr>
+              <td><code>apps/web/src/shared/hooks/useDeusCloudSession.ts</code></td>
+              <td>
+                15-min auth heartbeat; resets token queries on auth change (tears down sockets).
+              </td>
+            </tr>
+            <tr>
+              <td><code>shared/conversation-rows.ts</code></td>
+              <td>One row doctrine, two stores (SQL and cache) with matching upsert semantics.</td>
+            </tr>
+            <tr>
+              <td rowspan="3">deus-machine · desktop</td>
+              <td><code>apps/desktop/main/deus-cloud-auth.ts</code></td>
+              <td>
+                Desktop WorkOS login: loopback + PKCE, safeStorage session file, refresh rotation.
+              </td>
+            </tr>
+            <tr>
+              <td><code>apps/desktop/main/deus-cloud-direct-token.ts</code></td>
+              <td>IPC mint — the bearer never crosses into the renderer.</td>
+            </tr>
+            <tr>
+              <td><code>apps/desktop/main/deus-cloud-provision.ts</code></td>
+              <td>
+                Per-device org API key + credential push to the local backend (the
+                <code>backend</code> token source).
+              </td>
+            </tr>
+            <tr>
+              <td rowspan="2">deus-machine · backend</td>
+              <td><code>apps/backend/src/services/agent/cloud/</code></td>
+              <td>
+                The Mac lane's agnt consumer (contrast): synthetic seq, no snapshot backfill,
+                live-turn gap-heal.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>test/unit/session/</code> (<code>cloudFrameHandler</code>,
+                <code>cloudDataAdapter</code>, <code>cloudDirectTokenSource</code>,
+                <code>directLaneRoundtrip</code>, <code>directSessionRegistry</code>)
+              </td>
+              <td>
+                The pins: reconnect re-fold, no-credential-on-wire, source picking, registry
+                semantics.
+              </td>
+            </tr>
+            <tr>
+              <td rowspan="6">agnt</td>
+              <td>
+                <code>packages/auth/src/tokens.ts</code> · <code>jwt.ts</code> ·
+                <code>session.ts</code>
+              </td>
+              <td>
+                Claim schemas + client allowlists; hand-rolled HS256; bearer extraction
+                (header-first, cookie fallback).
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>apps/deus-cloud/src/routes/auth.ts</code> +
+                <code>auth/</code> (<code>session-issuer</code>, <code>auth-state</code>,
+                <code>workos</code>, <code>workos-cache</code>)
+              </td>
+              <td>
+                Login/callback/exchange/refresh; return_to allowlist; identity sync; 24 h bearer
+                minting.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>apps/backend/src/middleware/dashboard-auth.ts</code> +
+                <code>middleware/auth.ts</code>
+              </td>
+              <td>
+                Bearer gate for <code>/dashboard/*</code>; key/token acceptance incl.
+                query-token-on-upgrade.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>apps/backend/src/routes/dashboard/</code> (<code>orgs</code>,
+                <code>sessions-list</code>, <code>session-tokens</code>, <code>api-keys</code>)
+              </td>
+              <td>Discovery (#167), token exchange (#165), device-key minting.</td>
+            </tr>
+            <tr>
+              <td><code>apps/backend/src/agent-session/agent-session.ts</code></td>
+              <td>
+                The AgentSession DO: snapshot, admission echo, engine re-broadcast, idempotency,
+                cancel.
+              </td>
+            </tr>
+            <tr>
+              <td><code>apps/backend/src/agent-session/execute-queue.ts</code></td>
+              <td>
+                Queue (16) + dispatch: harness verdicts, bounded credential resolution, sidecar
+                handoff.
+              </td>
+            </tr>
+          </table>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="gotchas">
+          <h2>Gotchas</h2>
+
+          <div class="gotcha">
+            <h4>Arm on <code>=== false</code>, never on falsy</h4>
+            <p>
+              <code>useIsDirectSession</code> returns <code>undefined</code> while the row loads,
+              and <code>undefined</code> must arm <em>neither</em> lane. A truthiness check would
+              arm the Mac lane during load — and a wrongly-armed Mac lane overwrites the folded
+              transcript with an authoritative-empty fetch that
+              <code>staleTime: Infinity</code> then preserves forever.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>The snapshot is not a log</h4>
+            <p>
+              <code>session.snapshot.events</code> is filtered to workspace lifecycle only. History
+              is <code>messages[]</code> (already folded) plus <code>state.turns</code> (durable
+              outcomes, ≤100). Never write code that expects to replay events from a snapshot.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>The settings stub is a boot key, not data</h4>
+            <p>
+              The adapter answers <code>settings</code> with
+              <code>{onboarding_completed:true}</code> because the app shell gates mounting on that
+              query resolving. Don't extend it into a settings implementation — it exists to open a
+              gate, nothing more.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>Parts merge by id — never wholesale</h4>
+            <p>
+              <code>mergePartsById</code>: for a shared part id the next value wins, but cache-only
+              parts survive. A wholesale <code>parts:</code> replace would drop optimistic and
+              mid-flight parts and is always wrong in this codebase. (Mirrored in SQL: parts may
+              <code>INSERT OR REPLACE</code>; messages must not.)
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>The mid-turn-joiner guard hole</h4>
+            <p>
+              A client connecting mid-turn sees no <code>turn.started</code> for the live turn
+              (backfill skips <code>currentTurnId</code>), so its one-live-turn guard won't trip —
+              and agnt happily queues the overlap. <code>snapshot.state.currentTurnId</code> is
+              available and unused by the guard; open question.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>sessionStorage bearer is tab-scoped</h4>
+            <p>
+              Every new tab is a fresh login round-trip (silent if the WorkOS cookie is alive).
+              Don't “fix” it by moving to localStorage without deciding the multi-account and logout
+              story first — tab-scoping is currently doing quiet isolation work.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>A session_token can outlive the bearer</h4>
+            <p>
+              No revocation list exists. Revoking a membership bites at the next mint, not on tokens
+              already in flight (≤24 h worst case). Design reviews of new endpoints should assume
+              this.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>Web-direct list freshness is invalidation-only</h4>
+            <p>
+              No WS pushes the session list in web-direct mode; the workspaces query is
+              <code>staleTime: Infinity</code> with no focus/interval refetch. A session started
+              elsewhere won't appear until a mutation invalidates or the app remounts. Known gap, on
+              the punch-list.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>The stale header comment in <code>cloudFrameHandler.ts</code></h4>
+            <p>
+              The file-top comment still describes routeEnvelope/synthetic-seq — that's the
+              <em>backend twin's</em> world. The function docblocks and the code are the seq-free
+              truth. Trust them, and fix the header when you touch the file.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>agnt queues; deus enforces</h4>
+            <p>
+              One-live-turn is client-side courtesy, per path (see the table in §4). agnt itself
+              queues up to 16 overlapping sends and runs them in order. If you see a double-run,
+              suspect a guard that didn't trip — not platform breakage.
+            </p>
+          </div>
+
+          <div class="gotcha">
+            <h4>Discovery hardcodes <code>claude-code</code></h4>
+            <p>
+              <code>toSession</code> stamps every discovered session
+              <code>agent_harness:"claude-code"</code> — the list endpoint doesn't carry harness.
+              Codex cloud sessions misreport until the socket connects; the send frame's
+              <code>options.harness</code> carries the truth where it matters (credential
+              resolution).
+            </p>
+          </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <section id="status">
+          <h2>Status &amp; what's left</h2>
+          <div class="statusrow">
+            <span class="chip on">agnt: merged + deployed (#165 · #166 · #167)</span>
+            <span class="chip on">Proven live end-to-end vs production agnt</span>
+            <span class="chip">deus consumer: uncommitted, one branch</span>
+          </div>
+          <p>
+            <strong>Where it stands.</strong> The agnt side — token exchange (#165),
+            <code>return_to</code> origin handling (#166), the session list (#167) — is merged and
+            running in production. The deus consumer (every web/desktop file in this tour's map)
+            lives uncommitted on <code>zvadaadam/merge-agnt-codebase</code>. The whole chain has
+            been proven live against production agnt: WorkOS login and exchange, discovery, the
+            render lane, and sends — the live proof ran on a localhost web-dev build with the
+            web-mode override.
+          </p>
+          <p><strong>Honestly remaining:</strong></p>
+          <ul>
+            <li>
+              <strong>The <code>app.deusmachine.ai</code> deployment itself</strong> — and its
+              router/gate story: the router still redirects <code>/</code> →
+              <code>/connect</code> for non-web-dev web builds, and there's no
+              <code>isCloudDirectWebMode</code> branch in <code>router.ts</code>/<code
+                >ServerLayout</code
+              >
+              yet. The one deploy-time gap between “proven” and “shipped”.
+            </li>
+            <li>
+              <strong><code>workspace.state</code> in the direct lane</strong> — no
+              provisioning/wake UI equivalent yet; the frames arrive and are ignored.
+            </li>
+            <li>
+              <strong>Web-direct list freshness</strong> — push or poll, something must invalidate
+              the session list when work starts elsewhere.
+            </li>
+          </ul>
+          <p>
+            Smaller recorded follow-ups from the sections above: the
+            <code>session.error</code> shape mismatch, restated <code>turn.ended</code>s dropping L2
+            files/gitSync, <code>has_more</code> ignored past 100 sessions, the mid-turn-joiner
+            guard, and the stale <code>cloudFrameHandler</code> header comment.
+          </p>
+        </section>
+
+        <!-- ============================================================ -->
+        <footer id="provenance">
+          <p>
+            <strong>Provenance.</strong> This tour answers:
+            <em
+              >“The Mac-closed cloud architecture in deus-machine: how a browser (or the desktop
+              app) renders and drives cloud agent sessions directly against agnt, end to end — auth,
+              token sources, session discovery, the direct render lane, the send lane, and the lane
+              gating.”</em
+            >
+            Generated 2026-09-01 from four parallel code explorations: (1)&nbsp;auth + the token
+            layer, (2)&nbsp;discovery + web-direct data layer + transport gating, (3)&nbsp;the
+            direct render lane, (4)&nbsp;the send lane + lane gating. Repos:
+            <code>deus-machine</code> at branch <code>zvadaadam/merge-agnt-codebase</code> (consumer
+            work uncommitted) and <code>agnt</code> (production). Key paths were re-verified against
+            both working trees at generation time.
+          </p>
+          <details>
+            <summary>Files read during exploration</summary>
+            <p>
+              <strong>deus-machine</strong>
+              (<code>/Users/zvada/conductor/workspaces/deus-machine/sao-tome</code>):
+            </p>
+            <ul>
+              <li>
+                apps/web/src/features/session/cloud/webCloudDirectConfig.ts · cloudDirectFlag.ts ·
+                cloudDirectToken.ts · exchangeSessionToken.ts · cloudDataAdapter.ts ·
+                cloudSessionSocket.ts · cloudFrameHandler.ts · directSessionRegistry.ts ·
+                useIsDirectSession.ts
+              </li>
+              <li>
+                apps/web/src/features/session/hooks/useCloudDirect.ts · useCloudDirectSession.ts ·
+                useSessionActions.ts · useAgentEvents.ts
+              </li>
+              <li>
+                apps/web/src/features/session/lib/agentEventFold.ts ·
+                apps/web/src/features/session/api/session.queries.ts ·
+                apps/web/src/features/session/ui/SessionPanel.tsx
+              </li>
+              <li>
+                apps/web/src/features/workspace/api/prefetch.ts ·
+                apps/web/src/platform/ws/query-protocol-client.ts ·
+                apps/web/src/platform/ws/index.ts
+              </li>
+              <li>
+                apps/web/src/shared/hooks/useDeusCloudSession.ts · apps/web/src/app/main.tsx ·
+                apps/web/src/env.d.ts
+              </li>
+              <li>
+                apps/desktop/main/deus-cloud-auth.ts · deus-cloud-direct-token.ts ·
+                deus-cloud-provision.ts · deus-cloud-auth-contract.ts · safe-storage-file.ts ·
+                index.ts · preload/index.ts
+              </li>
+              <li>
+                apps/backend/src/services/agent/cloud/ (driver + persistence) ·
+                apps/backend/src/db/queries.ts (SESSION_DETAILS_SELECT) ·
+                apps/backend/src/routes/sessions.ts
+              </li>
+              <li>
+                shared/conversation-rows.ts · shared/events.ts · shared/protocol-types.ts ·
+                shared/types/session.ts · shared/agent-side-channel.ts
+              </li>
+              <li>
+                test/unit/session/cloudFrameHandler.test.ts · cloudDataAdapter.test.ts ·
+                cloudDirectTokenSource.test.ts · directLaneRoundtrip.test.ts ·
+                directSessionRegistry.test.ts
+              </li>
+            </ul>
+            <p>
+              <strong>agnt</strong> (<code>/Users/zvada/conductor/workspaces/agnt/tbilisi</code>):
+            </p>
+            <ul>
+              <li>
+                packages/auth/src/tokens.ts · jwt.ts · session.ts · packages/api
+                (DashboardSessionSummary, API_VERSION)
+              </li>
+              <li>
+                apps/deus-cloud/src/routes/auth.ts · auth/session-issuer.ts · auth/auth-state.ts ·
+                auth/workos.ts · auth/workos-cache.ts · auth/desktop-auth.ts · wrangler.toml
+              </li>
+              <li>apps/backend/src/middleware/dashboard-auth.ts · middleware/auth.ts</li>
+              <li>
+                apps/backend/src/routes/dashboard/orgs.ts · sessions-list.ts · session-tokens.ts ·
+                api-keys.ts · routes/tokens.ts · routes/sessions.ts
+              </li>
+              <li>apps/backend/src/agent-session/agent-session.ts · execute-queue.ts · types.ts</li>
+            </ul>
+          </details>
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      // Scrollspy — purely progressive enhancement; the page is fully readable without it.
+      (function () {
+        var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a[href^="#"]'));
+        var byId = {};
+        links.forEach(function (a) {
+          byId[a.getAttribute("href").slice(1)] = a;
+        });
+        var targets = Array.prototype.slice.call(
+          document.querySelectorAll("main section[id], main footer[id]")
+        );
+        if (!("IntersectionObserver" in window) || !targets.length) return;
+        var current = null;
+        var obs = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (e.isIntersecting) {
+                var a = byId[e.target.id];
+                if (!a) return;
+                if (current) current.classList.remove("active");
+                a.classList.add("active");
+                current = a;
+              }
+            });
+          },
+          { rootMargin: "-15% 0px -75% 0px" }
+        );
+        targets.forEach(function (t) {
+          obs.observe(t);
+        });
+      })();
+    </script>
+  </body>
+</html>
