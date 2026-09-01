@@ -97,22 +97,33 @@ export async function sendFeedback(
 
   const body = (await response.json().catch(() => ({}))) as FeedbackResponse;
   success("Feedback sent to the Deus team.");
-  const threadId = body.thread?.id ?? payload.thread.id;
+  const threadId = safe(body.thread?.id ?? payload.thread.id);
   hint(
     `Thread: ${c.cyan(threadId)} — continue with ${c.cyan(`npx hivenet --to deus --resume ${threadId}`)}`
   );
   if (body.known_issue?.title) {
     blank();
-    info(`Known issue: ${body.known_issue.title}`);
-    if (body.known_issue.note) info(`Deus team: ${body.known_issue.note}`);
+    info(`Known issue: ${safe(body.known_issue.title)}`);
+    if (body.known_issue.note) info(`Deus team: ${safe(body.known_issue.note)}`);
   }
   if (body.guidance) {
     blank();
-    info(`Deus team: ${body.guidance}`);
+    info(`Deus team: ${safe(body.guidance)}`);
   }
   if (body.ask?.prompt) {
     blank();
-    info(`Deus asks: ${body.ask.prompt}`);
-    if (body.ask.command) hint(`Answer (only if grounded): ${c.cyan(body.ask.command)}`);
+    info(`Deus asks: ${safe(body.ask.prompt)}`);
+    if (body.ask.command) hint(`Answer (only if grounded): ${c.cyan(safe(body.ask.command))}`);
   }
+}
+
+/**
+ * Response fields carry server/other-agent text — strip C0/C1 control
+ * characters (and DEL) before printing so a hostile value can't drive the
+ * terminal (ANSI/OSC escape injection). `thread.id` also feeds a suggested
+ * resume command, so it goes through the same wash.
+ */
+export function safe(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").trim();
 }

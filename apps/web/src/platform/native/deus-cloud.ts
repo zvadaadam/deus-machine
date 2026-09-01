@@ -27,6 +27,14 @@ function webDirectSession(): DeusCloudSessionStatus | null {
     const bearer = sessionStorage.getItem("deus_cloud_session");
     if (!bearer) return null;
     const payload = JSON.parse(atob(bearer.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    // An expired bearer must not report "signed in" — Settings would offer a
+    // dead session until some agnt request 401s. Clear it and fall through to
+    // signed-out; this is a passive status read, so no redirect here (the
+    // request-path 401 handler owns re-auth navigation).
+    if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
+      clearWebCloudSession();
+      return null;
+    }
     return {
       signedIn: true,
       accountId: typeof payload.sub === "string" ? payload.sub : null,

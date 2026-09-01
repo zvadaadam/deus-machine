@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildFeedbackPayload } from "../../../apps/cli/src/feedback";
+import { buildFeedbackPayload, safe } from "../../../apps/cli/src/feedback";
 
 describe("buildFeedbackPayload (deus feedback → Hivenet wire shape)", () => {
   it("builds the keyless v1 payload with cli defaults", () => {
@@ -31,5 +31,17 @@ describe("buildFeedbackPayload (deus feedback → Hivenet wire shape)", () => {
   it("mints a 32-char hex-ish thread id when none is given", () => {
     const p = buildFeedbackPayload("msg", "1.0.0");
     expect(p.thread.id).toMatch(/^[0-9a-f]{32}$/);
+  });
+});
+
+describe("safe (terminal output wash for response-derived text)", () => {
+  it("strips ANSI/OSC escapes and C0/C1 controls, keeps ordinary text", () => {
+    expect(safe("\u001b[31mred\u001b[0m alert")).toBe("[31mred [0m alert");
+    expect(safe("\u009d\u0007ding")).toBe("ding");
+    expect(safe("plain guidance text.")).toBe("plain guidance text.");
+  });
+
+  it("flattens newlines — response fields print as single lines", () => {
+    expect(safe("line one\r\nline two")).toBe("line one  line two");
   });
 });

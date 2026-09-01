@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
@@ -304,6 +305,14 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const handleTabAdd = useCallback(
     async (initialModel?: string) => {
+      // Web-direct has no session-create path yet (the mutate lane needs the
+      // Mac backend; agnt-side creation is a follow-up) — every entry point
+      // funnels through here (+ button, Cmd+T, open-in-new-tab), so one guard
+      // keeps them all honest instead of rejecting after the fact.
+      if (isCloudDirectWebMode()) {
+        toast.error("New chats are started from the desktop app for now");
+        return;
+      }
       try {
         const newSession = await createSessionMutation.mutateAsync(workspaceId);
         const agentHarness = initialModel ? getAgentHarnessForModel(initialModel) : "claude-code";

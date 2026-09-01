@@ -122,6 +122,20 @@ function repoLabel(repo: string | null): string {
 }
 
 /**
+ * agnt workspace statuses that `cloudPresence` parks on (asleep / waking).
+ * The Mac driver mirrors these into `init_stage`; discovery must do the same
+ * or a paused sandbox presents as awake — the wake affordance hides and the
+ * Files/Changes/Terminal panels fire at a sidecar that isn't running.
+ */
+function parkedInitStage(workspaceStatus: string): string | null {
+  return workspaceStatus === "paused" ||
+    workspaceStatus === "stopped" ||
+    workspaceStatus === "resuming"
+    ? workspaceStatus
+    : null;
+}
+
+/**
  * Each cloud session presents as its own sidebar item — 1:1 session↔item, keyed
  * by the agnt session id (which is also the provider session id the direct lane
  * connects to). Worktree-only fields (root_path, git worktree, PR) are
@@ -149,7 +163,7 @@ function toWorkspace(s: AgntSession): Workspace {
     root_path: "",
     workspace_path: "",
     setup_status: "completed",
-    init_stage: null,
+    init_stage: parkedInitStage(s.workspace_status),
     error_message: null,
   };
 }
@@ -183,7 +197,11 @@ export function toSession(s: AgntSession): Session {
     workspace_kind: "cloud",
     title: s.title,
     status: mapSessionStatus(s.status),
-    message_count: 0,
+    // Discovery carries no count, but the chat tabs hydrate ONCE from this row
+    // and label `message_count === 0` "New chat" — a title is only ever minted
+    // after the first turn, so it's an honest has-started proxy. The real count
+    // lands on `sessions.detail` when the socket snapshot arrives.
+    message_count: s.title ? 1 : 0,
     context_token_count: 0,
     context_used_percent: 0,
     is_hidden: false,
@@ -258,11 +276,22 @@ function withAuthGuard<T>(promise: Promise<T>): Promise<T> {
  */
 const DISCOVERY_REFRESH_MS = 60_000;
 
+function refreshDiscovery(): void {
+  void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+  void queryClient.invalidateQueries({ queryKey: ["sessions", "by-workspace"] });
+}
+
 function startDiscoveryRefresh(): void {
+  // Hidden tabs skip the tick (a backgrounded tab shouldn't poll agnt all
+  // day); regaining visibility refreshes immediately, so returning to the tab
+  // never waits out the interval. A true push source is the agnt-side
+  // follow-up — the dashboard has no event channel to subscribe to yet.
   setInterval(() => {
-    void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-    void queryClient.invalidateQueries({ queryKey: ["sessions", "by-workspace"] });
+    if (!document.hidden) refreshDiscovery();
   }, DISCOVERY_REFRESH_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshDiscovery();
+  });
 }
 
 /** Register the adapter — a no-op unless this is a fully Mac-closed web build. */

@@ -16,9 +16,20 @@ export function applyDeusCloudAuthChange(
   nextSession: DeusCloudSessionStatus
 ): void {
   queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
-  // EVERY account-scoped cache, not a curated subset — the subset is how
-  // account B kept seeing A's data for a freshness window, three separate
-  // times on this branch.
+  // EVERY account-scoped cache, and RESET rather than invalidate — invalidate
+  // keeps the old account's data rendering while the refetch runs, and with
+  // `retry: false` a failed refetch strands it indefinitely. The curated-subset
+  // + invalidate combination is how account B kept seeing A's data, four
+  // separate times on this branch. Concretely:
+  //  - settings/* + repo-cloud-environment: A's subscriptions and environments.
+  //  - workspaces + sessions (detail, by-workspace, messages): in web-direct
+  //    these are A's repo names and TRANSCRIPTS, cached with staleTime
+  //    Infinity; on desktop the mixed list carries A's cloud rows (the local
+  //    rows refetch from the Mac backend in the same beat).
+  //  - cloudRepoAccess GATES the create action (B must not reuse A's "ok").
+  //  - cloudDirectToken is an account-scoped JWT driving a live agnt socket —
+  //    dropping the data tears the socket down (useCloudDirect passes null
+  //    params once it's gone).
   for (const key of [
     ["settings", "cloud"],
     ["settings", "github-app"],
@@ -26,17 +37,13 @@ export function applyDeusCloudAuthChange(
     ["settings", "codex-subscription"],
     ["settings", "cloud-environments"],
     ["repo-cloud-environment"],
+    ["workspaces"],
+    ["sessions"],
+    ["cloudRepoAccess"],
+    ["cloudDirectToken"],
   ]) {
-    void queryClient.invalidateQueries({ queryKey: key });
+    void queryClient.resetQueries({ queryKey: key });
   }
-  // Both of these are account-scoped and worse-than-useless when stale:
-  // `cloudRepoAccess` GATES the create action (account B must not reuse A's
-  // "ok"), and `cloudDirectToken` carries an account-scoped JWT that drives a
-  // live agnt socket (account B must not keep streaming on A's token). RESET
-  // (drop the data), not invalidate — dropping the direct token also tears
-  // its socket down (useCloudDirect passes null params once the data is gone).
-  void queryClient.resetQueries({ queryKey: ["cloudRepoAccess"] });
-  void queryClient.resetQueries({ queryKey: ["cloudDirectToken"] });
 }
 
 /**

@@ -38,6 +38,11 @@ on:
           - all
         default: all
 
+# Every job only builds and pushes to Cloudflare (via CLOUDFLARE_API_TOKEN);
+# the GITHUB_TOKEN never needs write access.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false

@@ -15,6 +15,7 @@ import {
 } from "@/features/session";
 import type { SessionPanelRef } from "@/features/session";
 import { useWorkingSessionIds } from "@/features/session/api/session.queries";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
 import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
 import type { Workspace } from "@/shared/types";
@@ -116,7 +117,10 @@ export function ChatArea({
         focusActiveTabKey={focusActiveTabKey}
         onTabChange={handleTabChangeWithRead}
         onTabClose={handleTabClose}
-        onTabAdd={handleTabAdd}
+        // No + in web-direct — session creation needs the Mac backend, and an
+        // affordance that can only toast is clutter (handleTabAdd still guards
+        // the Cmd+T path).
+        onTabAdd={isCloudDirectWebMode() ? undefined : handleTabAdd}
         onTabReorder={handleTabReorder}
         closedTabs={closedTabs}
         onTabRestore={handleTabRestore}
