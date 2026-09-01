@@ -5,6 +5,11 @@ import { PostHogProvider } from "posthog-js/react";
 import App from "./App";
 import "../global.css";
 import { reportError } from "@/shared/utils/errorReporting";
+import {
+  captureCloudSessionFromFragment,
+  ensureWebCloudSession,
+} from "@/features/session/cloud/webCloudDirectConfig";
+import { installCloudDataAdapter } from "@/features/session/cloud/cloudDataAdapter";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -20,6 +25,20 @@ Sentry.init({
 if ((window as any).electronAPI) {
   document.documentElement.classList.add("electron");
 }
+
+// Fully Mac-closed web: capture a `#token=…` deus_cloud_session handed back by
+// the deus-cloud login redirect, store it, and scrub the fragment — before React
+// mounts and any route reads the URL. A no-op when there's no such fragment
+// (electron/web-dev/relay never carry one).
+captureCloudSessionFromFragment();
+
+// Fully Mac-closed web: serve workspace/session reads from agnt (no Mac backend
+// to answer q:request). A no-op on every backed build.
+installCloudDataAdapter();
+
+// Fully Mac-closed web: with no deus_cloud_session in hand, go sign in (loop
+// guarded). A no-op on every backed build and once signed in.
+ensureWebCloudSession();
 
 // Window focus/blur tracking — toggles .window-inactive for vibrancy dimming
 window.addEventListener("focus", () =>
