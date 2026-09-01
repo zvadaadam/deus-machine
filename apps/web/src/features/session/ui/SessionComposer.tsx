@@ -28,6 +28,7 @@ import {
   getAgentHarnessForModel,
   type AgentHarness,
   type ThinkingLevel,
+  getDefaultModelForHarness,
 } from "@/shared/agents";
 import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
 import { readThinkingLevel } from "@shared/protocol";
@@ -154,6 +155,17 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       [sendMessage, stopSession, compactConversation, createPR, sessionId, defaultThinking]
     );
 
+    // The composer seeds its model ONCE (seedIfAbsent on first mount), so the
+    // seed must be right the first time: an explicit pick (a new tab) wins,
+    // else the session's own harness — which needs the session row. Until the
+    // row is known, hold the pill rather than seed the global default and
+    // reopen a Codex session as Claude (the send derives its harness from the
+    // picked model, so that isn't cosmetic).
+    if (!session && !initialModel) {
+      return <DisabledComposerPlaceholder className={className} />;
+    }
+    const seedModel = initialModel ?? getDefaultModelForHarness(session!.agent_harness);
+
     return (
       // Key on sessionId so MessageInput's LOCAL UI state (popover open,
       // query buffers) resets when the session changes. Staged content
@@ -163,7 +175,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         sessionId={sessionId}
         workspaceId={workspaceId}
         workspacePath={workspacePath}
-        initialModel={initialModel}
+        initialModel={seedModel}
         defaultThinking={defaultThinking}
         sending={sending}
         sessionStatus={sessionStatus}

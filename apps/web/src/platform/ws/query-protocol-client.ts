@@ -387,12 +387,51 @@ export function onEvent(callback: EventCallback): () => void {
   };
 }
 
+function dispatchEvent(event: string, data: unknown): void {
+  for (const cb of eventListeners) {
+    try {
+      cb(event, data);
+    } catch (err) {
+      console.error("[WS] Event listener error:", err);
+    }
+  }
+}
+
+/**
+ * Deliver an event to the q:event listeners WITHOUT a backend frame. The
+ * Mac-closed direct lane uses this to hand the agent's own frames (e.g. an
+ * `mcp.question`) to the same `tool:request` handlers the backed lanes feed,
+ * so the overlays that answer them don't know which lane asked.
+ */
+export function emitLocalEvent(event: string, data: unknown): void {
+  dispatchEvent(event, data);
+}
+
+/**
+ * A tool response that should NOT go to the backend: the direct lane answers
+ * its own questions over the agnt socket. Consulted first by `sendToolResponse`;
+ * returning true means the interceptor delivered it. Dormant (null) on every
+ * backed build.
+ */
+export type ToolResponseInterceptor = (
+  requestId: string,
+  result: unknown,
+  error: string | undefined
+) => boolean;
+
+let toolResponseInterceptor: ToolResponseInterceptor | null = null;
+
+export function setToolResponseInterceptor(fn: ToolResponseInterceptor | null): void {
+  toolResponseInterceptor = fn;
+}
+
 /**
  * Send a tool response back to the backend (q:tool_response frame).
  * Used by frontend RPC handlers to respond to tool relay requests
  * received via q:event with event: "tool:request".
  */
 export function sendToolResponse(requestId: string, result?: unknown, error?: string): boolean {
+  if (toolResponseInterceptor?.(requestId, result, error)) return true;
   const frame: Record<string, unknown> = {
     type: "q:tool_response",
     requestId,
@@ -603,15 +642,7 @@ async function openSocket(serverId?: string): Promise<void> {
         }
       })
       .with("q:event", () => {
-        const event = msg.event as string;
-        const data = msg.data;
-        for (const cb of eventListeners) {
-          try {
-            cb(event, data);
-          } catch (err) {
-            console.error("[WS] Event listener error:", err);
-          }
-        }
+        dispatchEvent(msg.event as string, msg.data);
       })
       .with("q:response", () => {
         // One-shot q:request response

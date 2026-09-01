@@ -10,7 +10,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
-import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
+import {
+  getAgentLabel,
+  getAgentHarnessForModel,
+  getDefaultModelForHarness,
+  type AgentHarness,
+} from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import type { Session } from "@/features/session/types";
@@ -77,6 +82,12 @@ function sessionToTab(session: Session, sequence: number): SessionChatTab {
     label: hasStarted ? buildStartedChatLabel(session.agent_harness, sequence) : NEW_CHAT_LABEL,
     agentHarness: session.agent_harness,
     hasStarted,
+    // Seed the composer from the session's OWN harness. The composer store is
+    // in-memory, so a reopened session (web reload, desktop restart) otherwise
+    // starts on the global default (Claude) — and since the wire harness is
+    // derived from the picked model, a Codex session's next send ran as Claude
+    // and forked a fresh native conversation.
+    initialModel: getDefaultModelForHarness(session.agent_harness),
   };
 }
 

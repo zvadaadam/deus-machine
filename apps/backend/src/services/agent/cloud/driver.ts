@@ -18,6 +18,10 @@ import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
 import { CloudEnvStateSchema, type CloudEnvEvent } from "@shared/events";
+import {
+  answeredAskUserQuestionInput,
+  questionsFromAskUserQuestionInput,
+} from "@shared/ask-user-question";
 import { getCloudConfig, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
@@ -381,14 +385,24 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "permission.request": {
-      const data = (frame.data ?? {}) as { requestId?: string };
+      const data = (frame.data ?? {}) as {
+        requestId?: string;
+        toolName?: unknown;
+        input?: unknown;
+      };
       if (!data.requestId) return;
-      session.socket.send({
-        type: "permission.response",
-        requestId: data.requestId,
-        sessionId: session.providerSessionId,
-        result: { behavior: "allow" },
-      });
+      // Claude Code's built-in AskUserQuestion collects its answers THROUGH
+      // this bridge (questions in `input`, answers back in `updatedInput`) —
+      // and it is the question tool the model actually uses. Auto-allowing it
+      // returned an empty answer set: the agent reported the question as
+      // dismissed. Route it to the same overlay as the MCP question tool.
+      const questions =
+        data.toolName === "AskUserQuestion" ? questionsFromAskUserQuestionInput(data.input) : [];
+      if (questions.length > 0) {
+        void relayAskUserQuestionPermission(session, data.requestId, data.input, questions);
+        return;
+      }
+      sendPermissionResponse(session, data.requestId, { behavior: "allow" });
       return;
     }
 
@@ -415,6 +429,63 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
 }
 
 /** Relay an AskUserQuestion to the frontend and answer over the socket. */
+function sendPermissionResponse(
+  session: CloudSession,
+  requestId: string,
+  result:
+    | { behavior: "allow"; updatedInput?: Record<string, unknown> }
+    | { behavior: "deny"; message: string }
+): void {
+  session.socket.send({
+    type: "permission.response",
+    // Nested under `data` like every ClientCommand payload (see mcp.answer).
+    data: { requestId, sessionId: session.providerSessionId, result },
+  });
+}
+
+/** The permission-bridge twin of `relayQuestion`: same overlay, answered as
+ *  an allow whose `updatedInput` carries the answers (deny on cancel/failure —
+ *  the agent sees "declined" rather than a silent empty answer set). */
+async function relayAskUserQuestionPermission(
+  session: CloudSession,
+  requestId: string,
+  input: unknown,
+  questions: ReturnType<typeof questionsFromAskUserQuestionInput>
+): Promise<void> {
+  const sessionId = session.deusSessionId;
+  const needs = persistSessionNeedsResponse(sessionId);
+  if (needs.ok)
+    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  try {
+    const response = await relay({
+      requestId: crypto.randomUUID(),
+      sessionId,
+      method: "askUserQuestion",
+      params: { sessionId, questions },
+      timeoutMs: 24 * 60 * 60 * 1000,
+    });
+    const answers = extractAnswers(response);
+    const cancelled = answers.length === 0 || answers[0] === "USER_CANCELLED";
+    sendPermissionResponse(
+      session,
+      requestId,
+      cancelled
+        ? { behavior: "deny", message: "The user dismissed the question" }
+        : { behavior: "allow", updatedInput: answeredAskUserQuestionInput(input, answers) }
+    );
+  } catch (err) {
+    console.warn(`[CloudDriver] askUserQuestion (permission) relay failed: ${String(err)}`);
+    sendPermissionResponse(session, requestId, {
+      behavior: "deny",
+      message: "Question relay failed",
+    });
+  } finally {
+    const back = persistSessionBackToWorking(sessionId);
+    if (back.ok)
+      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  }
+}
+
 async function relayQuestion(
   session: CloudSession,
   data: { questionId: string; questions?: unknown[] }
@@ -432,11 +503,12 @@ async function relayQuestion(
       timeoutMs: 24 * 60 * 60 * 1000,
     });
     const answers = extractAnswers(response);
+    // The ClientCommand schema nests the payload under `data` (the DO spreads
+    // `command.data` toward the sidecar); a flat frame fails its parse and the
+    // agent waits out the sidecar's question timeout unanswered.
     session.socket.send({
       type: "mcp.answer",
-      questionId: data.questionId,
-      sessionId: session.providerSessionId,
-      answers,
+      data: { questionId: data.questionId, sessionId: session.providerSessionId, answers },
     });
   } catch (err) {
     console.warn(`[CloudDriver] askUserQuestion relay failed: ${String(err)}`);
@@ -537,6 +609,12 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       // send would run the turn under the wrong agent + credential.
       metadata: { harness: row.agent_harness },
     });
+    // `createSession` CONVERGES on a session the workspace pipeline already
+    // made (before any harness was known), and that path keeps the existing
+    // row's metadata — so the create-time stamp above never landed in
+    // production. Stamp after the fact, every time (idempotent, best-effort:
+    // discovery merely degrades to its claude default if this is lost).
+    void pushCloudSessionMetadata(created.id, { harness: row.agent_harness }, config);
     if (generationAtStart !== identityGeneration) {
       // The account changed while createSession was in flight. Persisting the
       // OLD identity's provider id would poison the row: every later connect
@@ -589,6 +667,57 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
   sessions.set(deusSessionId, session);
   await session.socket.ready();
   return session;
+}
+
+// ---- Session metadata (what discovery shows the Mac-closed web) ----
+
+/**
+ * Merge client-owned facts (`title`, `harness`) into the platform session's
+ * metadata via `PATCH /sessions/:id/metadata`. Best-effort by design: the web
+ * list degrades (untitled row, claude default) if it's lost, and the platform
+ * may predate the endpoint — a 404 is logged once, never thrown.
+ */
+async function pushCloudSessionMetadata(
+  providerSessionId: string,
+  metadata: Record<string, string>,
+  config: { baseUrl: string; apiKey: string }
+): Promise<void> {
+  try {
+    const res = await fetch(
+      `${config.baseUrl}/sessions/${encodeURIComponent(providerSessionId)}/metadata`,
+      {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ metadata }),
+      }
+    );
+    if (!res.ok) {
+      console.warn(
+        `[CloudDriver] session metadata push failed (${res.status}) for ${providerSessionId}`
+      );
+    }
+  } catch (err) {
+    console.warn(`[CloudDriver] session metadata push failed: ${String(err)}`);
+  }
+}
+
+/**
+ * Mirror a deus session's title onto its cloud twin so the Mac-closed web
+ * lists it by name instead of an id prefix. No-op for local sessions and for
+ * cloud sessions whose twin doesn't exist yet (the create path stamps then).
+ */
+export function pushCloudSessionTitle(deusSessionId: string, title: string): void {
+  const config = getCloudConfig();
+  if (!config) return;
+  const row = getDatabase()
+    .prepare(
+      `SELECT s.provider_session_id AS provider_session_id, w.kind AS kind
+         FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+        WHERE s.id = ?`
+    )
+    .get(deusSessionId) as { provider_session_id?: string | null; kind?: string } | undefined;
+  if (row?.kind !== "cloud" || !row.provider_session_id) return;
+  void pushCloudSessionMetadata(row.provider_session_id, { title }, config);
 }
 
 // ---- Turn API (mirrors the local agentService surface) ----

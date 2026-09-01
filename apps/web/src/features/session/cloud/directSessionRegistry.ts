@@ -100,3 +100,91 @@ export function buildMessageSendFrame(
 export function buildCancelFrame(turnId?: string): Record<string, unknown> {
   return { type: "agent.cancel", ...(turnId ? { turnId } : {}) };
 }
+
+// ---- Question round-trip (pure; the agnt mcp.question ↔ mcp.answer wire) ----
+
+/** The `tool:request` payload the renderer's RPC handlers consume (mirrors
+ *  `ToolRequestEventData` in shared/types/query-protocol). */
+export interface DirectToolRequest {
+  requestId: string;
+  sessionId: string;
+  method: "askUserQuestion";
+  params: { sessionId: string; questions: Array<Record<string, unknown>> };
+  timeoutMs: number;
+}
+
+/** Long: the sidecar owns the real deadline; this mirrors the Mac driver's relay. */
+const QUESTION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * An agnt `mcp.question` frame (the agent's AskUserQuestion) → the same
+ * `tool:request` the Mac lane delivers via q:event, so `useAgentRpcHandler`
+ * shows the existing overlay without knowing which lane asked. agnt's items
+ * are `{text, options?, allowsMultiSelect?}`; the handler's tolerant reader
+ * wants `{question, options, multiSelect}`. The deus session id replaces the
+ * wire's provider id, exactly as the fold does. Returns null for a frame with
+ * no usable question id.
+ */
+export function toolRequestFromMcpQuestion(
+  frame: Record<string, unknown>,
+  deusSessionId: string
+): DirectToolRequest | null {
+  const data = (frame.data ?? {}) as {
+    questionId?: unknown;
+    questions?: unknown;
+  };
+  if (typeof data.questionId !== "string" || !data.questionId) return null;
+  const items = Array.isArray(data.questions) ? data.questions : [];
+  const questions = items.flatMap((item): Array<Record<string, unknown>> => {
+    if (!item || typeof item !== "object") return [];
+    const q = item as { text?: unknown; options?: unknown; allowsMultiSelect?: unknown };
+    if (typeof q.text !== "string" || !q.text.trim()) return [];
+    return [
+      {
+        question: q.text,
+        options: Array.isArray(q.options) ? q.options.filter((o) => typeof o === "string") : [],
+        ...(typeof q.allowsMultiSelect === "boolean" ? { multiSelect: q.allowsMultiSelect } : {}),
+      },
+    ];
+  });
+  return {
+    requestId: data.questionId,
+    sessionId: deusSessionId,
+    method: "askUserQuestion",
+    params: { sessionId: deusSessionId, questions },
+    timeoutMs: QUESTION_TIMEOUT_MS,
+  };
+}
+
+/**
+ * The `mcp.answer` client command for a handled question. `result` is what the
+ * RPC handler responded with (`{answers: string[]}`); anything else — including
+ * an error response — becomes the schema-valid cancellation, which UNBLOCKS the
+ * agent instead of leaving it on the sidecar's timeout.
+ */
+export function buildMcpAnswerFrame(
+  questionId: string,
+  providerSessionId: string,
+  result: unknown
+): Record<string, unknown> {
+  const maybe =
+    result && typeof result === "object" ? (result as { answers?: unknown }).answers : undefined;
+  const answers = Array.isArray(maybe) && maybe.length > 0 ? maybe.map(String) : ["USER_CANCELLED"];
+  return { type: "mcp.answer", data: { questionId, sessionId: providerSessionId, answers } };
+}
+
+/**
+ * The `permission.response` client command. AskUserQuestion answers ride
+ * `result.updatedInput` (see shared/ask-user-question); every other tool is
+ * allowed as-is — parity with the Mac driver, since the sandbox VM is the
+ * isolation boundary and deus has no interactive permission UI.
+ */
+export function buildPermissionResponseFrame(
+  requestId: string,
+  providerSessionId: string,
+  result:
+    | { behavior: "allow"; updatedInput?: Record<string, unknown> }
+    | { behavior: "deny"; message: string }
+): Record<string, unknown> {
+  return { type: "permission.response", data: { requestId, sessionId: providerSessionId, result } };
+}

@@ -29,6 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   createStreamCursor,
   flushDeltas,
+  patchSessionDetail,
   pruneFolds,
   refetchMessages,
   type AgentStreamContext,
@@ -41,7 +42,74 @@ import {
   registerDirectSession,
   buildMessageSendFrame,
   buildCancelFrame,
+  buildMcpAnswerFrame,
+  buildPermissionResponseFrame,
+  toolRequestFromMcpQuestion,
 } from "../cloud/directSessionRegistry";
+import {
+  answeredAskUserQuestionInput,
+  questionsFromAskUserQuestionInput,
+} from "@shared/ask-user-question";
+import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
+import type { QueryClient } from "@tanstack/react-query";
+
+// ---- Question round-trip ----------------------------------------------------
+// The agent's AskUserQuestion arrives as an `mcp.question` frame on the direct
+// socket. The Mac lane relays it to the renderer as a `tool:request` q:event
+// and answers over its own socket; here the renderer IS the client, so the
+// frame is handed to the same handlers locally and the answer goes back on
+// this socket as `mcp.answer`. One registry per renderer: a question is keyed
+// by its wire id, and `sendToolResponse` consults it before the (dark) q: lane.
+interface PendingDirectQuestion {
+  sessionId: string;
+  providerSessionId: string;
+  send: (frame: Record<string, unknown>) => void;
+  queryClient: QueryClient;
+  /** Which wire asked: the sidecar's MCP question tool, or Claude Code's
+   *  built-in AskUserQuestion (which collects answers through the permission
+   *  bridge — `input` is echoed back with the answers). */
+  kind: "mcp" | "permission";
+  input?: unknown;
+}
+const pendingDirectQuestions = new Map<string, PendingDirectQuestion>();
+
+setToolResponseInterceptor((requestId, result, error) => {
+  const pending = pendingDirectQuestions.get(requestId);
+  if (!pending) return false;
+  pendingDirectQuestions.delete(requestId);
+  const answers =
+    error === undefined && result && typeof result === "object"
+      ? (result as { answers?: unknown }).answers
+      : undefined;
+  if (pending.kind === "permission") {
+    // Built-in AskUserQuestion: allow the tool with the answers folded into
+    // its input; a cancellation is an honest deny (the agent sees "declined",
+    // not a silent empty answer set).
+    pending.send(
+      buildPermissionResponseFrame(
+        requestId,
+        pending.providerSessionId,
+        Array.isArray(answers) && answers.length > 0
+          ? {
+              behavior: "allow",
+              updatedInput: answeredAskUserQuestionInput(pending.input, answers),
+            }
+          : { behavior: "deny", message: "The user dismissed the question" }
+      )
+    );
+  } else {
+    // An error response still UNBLOCKS the agent (schema-valid cancellation).
+    pending.send(
+      buildMcpAnswerFrame(
+        requestId,
+        pending.providerSessionId,
+        error === undefined ? result : undefined
+      )
+    );
+  }
+  patchSessionDetail(pending.queryClient, pending.sessionId, { status: "working" });
+  return true;
+});
 
 /** A burst of gaps must not become a burst of full-page refetches. */
 const REFETCH_DEBOUNCE_MS = 250;
@@ -139,6 +207,64 @@ export function useCloudDirectSession(
       pendingTurn !== null && Date.now() - pendingTurn.at < PENDING_TURN_STALE_MS;
 
     const onFrame = (frame: Record<string, unknown>) => {
+      // The agent asked the user something: park it for the overlay (the same
+      // `tool:request` the Mac lane delivers) and mark the row as waiting so
+      // the sidebar shows attention, not a spinner. Answered via the
+      // interceptor above; the sidecar's own timeout is the fallback.
+      if (frame.type === "mcp.question") {
+        const request = toolRequestFromMcpQuestion(frame, sessionId);
+        if (request) {
+          pendingDirectQuestions.set(request.requestId, {
+            sessionId,
+            providerSessionId,
+            send: (answer) => socket.send(answer),
+            queryClient,
+            kind: "mcp",
+          });
+          patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
+          emitLocalEvent("tool:request", request);
+        }
+        return;
+      }
+      // The permission bridge: the sidecar forwards EVERY SDK approval request.
+      // Claude Code's built-in AskUserQuestion is one of them — its questions
+      // ride `input`, its answers ride back in `updatedInput` — and it is the
+      // question tool the model actually reaches for. Everything else is
+      // allowed on the spot (the sandbox is the isolation boundary; parity
+      // with the Mac driver), or the agent would park on the sidecar's timeout.
+      if (frame.type === "permission.request") {
+        const data = (frame.data ?? {}) as {
+          requestId?: unknown;
+          toolName?: unknown;
+          input?: unknown;
+        };
+        if (typeof data.requestId !== "string" || !data.requestId) return;
+        const questions =
+          data.toolName === "AskUserQuestion" ? questionsFromAskUserQuestionInput(data.input) : [];
+        if (questions.length === 0) {
+          socket.send(
+            buildPermissionResponseFrame(data.requestId, providerSessionId, { behavior: "allow" })
+          );
+          return;
+        }
+        pendingDirectQuestions.set(data.requestId, {
+          sessionId,
+          providerSessionId,
+          send: (answer) => socket.send(answer),
+          queryClient,
+          kind: "permission",
+          input: data.input,
+        });
+        patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
+        emitLocalEvent("tool:request", {
+          requestId: data.requestId,
+          sessionId,
+          method: "askUserQuestion",
+          params: { sessionId, questions },
+          timeoutMs: 24 * 60 * 60 * 1000,
+        });
+        return;
+      }
       // A fresh turn proves the lane works — clear any earlier surfaced error
       // (SessionPanel derives an "error" status from it, which must not outlive
       // the failure it reported) and the pending-admission marker.
@@ -229,6 +355,12 @@ export function useCloudDirectSession(
     return () => {
       disposeChannel();
       socket.close();
+      // Questions parked on this socket can't be answered on it any more; the
+      // sidecar's timeout resolves them, and a reconnect's snapshot re-syncs
+      // the row status.
+      for (const [id, pending] of pendingDirectQuestions) {
+        if (pending.sessionId === sessionId) pendingDirectQuestions.delete(id);
+      }
       if (frame !== null) cancelAnimationFrame(frame);
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();

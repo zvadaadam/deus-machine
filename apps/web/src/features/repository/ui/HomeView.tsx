@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
 import { DEFAULT_MODEL, resolveModelSelection } from "@/shared/agents";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
@@ -311,6 +312,20 @@ export function HomeView({
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 192)}px`;
   }, []);
+
+  // Fully Mac-closed web: there is no local project to start from — the home
+  // is the user's cloud sessions (the sidebar's rows, surfaced) or an honest
+  // pointer to where new ones come from. Every other affordance on this screen
+  // (repo picker, clone, new project, composer) needs the Mac backend.
+  if (isCloudDirectWebMode()) {
+    return (
+      <CloudSessionsHome
+        groups={recentWorkspaceGroups}
+        selectedWorkspaceId={selectedWorkspaceId}
+        onWorkspaceClick={onWorkspaceClick}
+      />
+    );
+  }
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
@@ -943,6 +958,75 @@ export function HomeView({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Web-direct home ─────────────────────────────────────────────────
+const DESKTOP_DOWNLOAD_URL = "https://github.com/zvadaadam/deus-machine/releases";
+
+/**
+ * The home for a browser with no Mac behind it: the cloud sessions discovery
+ * found, or — for a brand-new account — where to start one. Sessions are
+ * created from the desktop app for now (creation needs the Mac backend), so
+ * the empty state says exactly that instead of offering dead controls.
+ */
+function CloudSessionsHome({
+  groups,
+  selectedWorkspaceId,
+  onWorkspaceClick,
+}: {
+  groups: ReturnType<typeof buildRecentWorkspaceGroups>;
+  selectedWorkspaceId: string | null;
+  onWorkspaceClick?: (workspace: Workspace) => void;
+}) {
+  const hasSessions = groups.length > 0;
+  return (
+    <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
+      <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
+      <motion.h1
+        key={hasSessions ? "sessions" : "no-sessions"}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
+        className="text-text-primary mb-2 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight sm:px-6"
+      >
+        {hasSessions ? "Your cloud sessions" : "No cloud sessions yet"}
+      </motion.h1>
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.06, ease: EASE_OUT_QUART }}
+        className="text-text-muted mb-8 w-full max-w-[560px] px-4 text-center text-sm sm:px-6"
+      >
+        {hasSessions
+          ? "Pick up any conversation from here. New sessions start from the Deus desktop app and show up the moment they exist."
+          : "Start one from the Deus desktop app — it shows up here, and you can keep the conversation going from any browser or your phone."}
+      </motion.p>
+      {!hasSessions && (
+        <motion.a
+          href={DESKTOP_DOWNLOAD_URL}
+          target="_blank"
+          rel="noreferrer"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
+          className="bg-foreground text-background rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
+        >
+          Download Deus for macOS
+        </motion.a>
+      )}
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-32">
+        <AnimatePresence>
+          {hasSessions && (
+            <RecentWorkspaces
+              groups={groups}
+              selectedWorkspaceId={selectedWorkspaceId}
+              onWorkspaceClick={onWorkspaceClick}
+            />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

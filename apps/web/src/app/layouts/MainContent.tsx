@@ -245,7 +245,8 @@ export function MainContent({
 
   // --- Keyboard shortcuts ---
   usePanelShortcuts({
-    enabled: selectedWorkspace !== null && !isMobile,
+    // No panel toggles in chat-only: the single panel isn't collapsible.
+    enabled: selectedWorkspace !== null && !isMobile && contentPaneAvailable,
     chatPanelCollapsed,
     chatPanelRef,
     contentPanelCollapsed,
@@ -260,6 +261,11 @@ export function MainContent({
   // per-workspace Zustand state when the selected workspace changes.
   useEffect(() => {
     if (!selectedWorkspaceId) return;
+    // Chat-only (web-direct): the group holds ONE panel, so there is nothing to
+    // size against — a `resize(40)` here makes react-resizable-panels look up
+    // the missing neighbour and assert ("Previous layout not found for panel
+    // index -1"), which took the whole MainContent down.
+    if (!contentPaneAvailable) return;
     if (chatPanelCollapsed) {
       chatPanelRef.current?.collapse();
     } else {

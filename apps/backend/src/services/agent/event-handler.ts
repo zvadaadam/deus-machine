@@ -25,6 +25,7 @@ import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
 import { persistChanges, persistSessionTitle, type WriteResult } from "./persistence";
+import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 
@@ -184,6 +185,8 @@ export function createAgentEventHandler(): AgentEventHandler {
     handleTitle(sessionId, title) {
       console.log(`[AgentEvent] deus/title: session=${sessionId} title="${title}"`);
       persistAndInvalidate(persistSessionTitle(sessionId, title), SESSION_RESOURCES, sessionId);
+      // The cloud twin carries the title too — that's what the Mac-closed web lists.
+      pushCloudSessionTitle(sessionId, title);
     },
 
     handle(envelope) {
