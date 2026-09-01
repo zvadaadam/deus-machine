@@ -531,6 +531,11 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       apiKey: config.apiKey,
       workspaceId: workspace.provider_workspace_id,
       sessionId: deusSessionId,
+      // Which engine runs this session. Discovery (the Mac-closed web list)
+      // projects it back, so a codex session keeps its harness — a bare
+      // discovery row would otherwise default to claude and the next direct
+      // send would run the turn under the wrong agent + credential.
+      metadata: { harness: row.agent_harness },
     });
     if (generationAtStart !== identityGeneration) {
       // The account changed while createSession was in flight. Persisting the

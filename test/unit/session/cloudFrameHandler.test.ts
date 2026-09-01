@@ -475,6 +475,96 @@ describe("makeCloudFrameHandler", () => {
     });
   });
 
+  it("projects the turn lifecycle onto sessions.detail (web-direct has no q: push)", () => {
+    const SESSION = "sess-status";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    // The detail row exists (discovery wrote it); the projection merge-patches it.
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      message_count: 0,
+    });
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    onFrame({ type: "turn.started", sessionId: SESSION, turnId: "t1", timestamp: T });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "working"
+    );
+
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t1",
+      stopReason: "end_turn",
+      timestamp: T,
+    });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "idle"
+    );
+
+    onFrame({
+      type: "turn.ended",
+      sessionId: SESSION,
+      turnId: "t2",
+      stopReason: "error",
+      error: { category: "network", message: "boom" },
+      timestamp: T,
+    });
+    expect(qc.getQueryData<{ status: string }>(["sessions", "detail", SESSION])!.status).toBe(
+      "error"
+    );
+  });
+
+  it("snapshot restates session facts: live turn → working, real message_count", () => {
+    const SESSION = "sess-snap-facts";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      message_count: 0,
+    });
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    onFrame({
+      type: "session.snapshot",
+      state: { sessionId: SESSION, status: "running", currentTurnId: "t-live", turns: [] },
+      messages: [
+        {
+          id: "m1",
+          messageIndex: 0,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 1,
+          role: "user",
+          createdAt: T,
+          parts: [textPart("p1", SESSION, "m1", "q")],
+        },
+        {
+          id: "m2",
+          messageIndex: 1,
+          sessionId: SESSION,
+          turnId: "t1",
+          outputIndex: 2,
+          role: "assistant",
+          createdAt: T,
+          parts: [textPart("p2", SESSION, "m2", "a")],
+        },
+      ],
+      events: [],
+    } as Record<string, unknown>);
+
+    const detail = qc.getQueryData<{ status: string; message_count: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    // A live turn in the snapshot means working NOW; count fixes discovery's zero.
+    expect(detail.status).toBe("working");
+    expect(detail.message_count).toBe(2);
+  });
+
   it("ignores non-render frames (workspace.state, pty.data, …)", () => {
     const SESSION = "sess-direct-noise";
     const qc = new QueryClient();

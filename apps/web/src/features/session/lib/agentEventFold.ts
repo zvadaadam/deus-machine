@@ -514,6 +514,31 @@ function writeCompaction(
   });
 }
 
+// ---- Session-detail projection (direct lane) ----
+
+/**
+ * Patch the cached `sessions.detail` row for a DIRECT session.
+ *
+ * The Mac lane's detail row is WS-push-fresh (q:snapshot on every status
+ * change), but web-direct has no push and the query is `staleTime: Infinity` —
+ * so without this, a direct session's status stays wherever discovery left it:
+ * the working indicator and Stop button never appear, or stick forever. The
+ * direct frame handler projects the turn lifecycle (and snapshot facts like
+ * message count) through here instead. Merge-patch by design: only the fields
+ * the caller knows move; an uncached row is left absent (discovery owns
+ * creation).
+ */
+export function patchSessionDetail(
+  qc: QueryClient,
+  sessionId: string,
+  patch: Partial<import("@shared/types/session").Session>
+): void {
+  qc.setQueryData<import("@shared/types/session").Session>(
+    queryKeys.sessions.detail(sessionId),
+    (old) => (old ? { ...old, ...patch } : old)
+  );
+}
+
 // ---- Transcript order (snapshot backfill) ----
 
 /**

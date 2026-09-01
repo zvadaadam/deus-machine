@@ -126,15 +126,28 @@ export function useCloudDirectSession(
     const foldFrame = makeCloudFrameHandler(ctx, sessionId);
 
     const onFrame = (frame: Record<string, unknown>) => {
+      // A rejected client command (agnt's `{type:"error"}` channel frame, e.g.
+      // MESSAGE_SEND_FAILED) — the send was fire-and-forget, so this frame is
+      // the only rollback signal. Surface it; the socket itself is still fine.
+      if (frame.type === "error") {
+        const message = typeof frame.message === "string" ? frame.message : "Command failed";
+        setError(typeof frame.code === "string" ? `${frame.code}: ${message}` : message);
+        return;
+      }
       // A fatal agent error is its OWN ws event (`session.error`), not a fold
       // lifecycle event — surface it so a failed session doesn't look idle.
+      // agnt's shape is `{error: {code, message}, recoverable?}`; older/other
+      // producers may send a plain string, so read both.
       if (frame.type === "session.error") {
+        const nested = frame.error as { code?: unknown; message?: unknown } | string | undefined;
         const message =
-          typeof frame.error === "string"
-            ? frame.error
-            : typeof frame.message === "string"
-              ? frame.message
-              : "Session error";
+          typeof nested === "string"
+            ? nested
+            : typeof nested?.message === "string"
+              ? nested.message
+              : typeof frame.message === "string"
+                ? frame.message
+                : "Session error";
         setStatus("error");
         setError(message);
         return;

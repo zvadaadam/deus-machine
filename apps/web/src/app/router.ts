@@ -124,9 +124,28 @@ const directSettingsRoute = createRoute({
   component: SettingsRoute,
 });
 
+// The product ENTRY for a browser the edge router doesn't know yet: `/` serves
+// the landing until the `deus_user` marker cookie exists (set on first product
+// mount), so the landing's "Open App" links point here — any non-root path
+// reaches the app. In web-direct it normalizes to `/` client-side (no worker
+// round-trip); the signed-out boot gate has already redirected to login by now.
+const directLoginRoute = createRoute({
+  getParentRoute: () => directLayoutRoute,
+  path: "/login",
+  beforeLoad: () => {
+    guardWebDirect();
+    throw redirect({ to: "/" });
+  },
+});
+
 // --- Route tree ---
 const routeTree = rootRoute.addChildren([
-  directLayoutRoute.addChildren([directIndexRoute, directWorkspaceRoute, directSettingsRoute]),
+  directLayoutRoute.addChildren([
+    directIndexRoute,
+    directWorkspaceRoute,
+    directSettingsRoute,
+    directLoginRoute,
+  ]),
   connectRoute,
   connectServerRoute,
   serverRoute.addChildren([serverIndexRoute, workspaceRoute, settingsRoute]),

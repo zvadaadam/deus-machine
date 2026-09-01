@@ -19,11 +19,12 @@
 
 import { sendRequest } from "@/platform/ws";
 import { capabilities } from "@/platform/capabilities";
-import { exchangeCloudSessionToken } from "./exchangeSessionToken";
+import { exchangeCloudSessionToken, SessionTokenExchangeError } from "./exchangeSessionToken";
 import {
   resolveAgntBaseUrl,
   readWebCloudSessionBearer,
   isCloudDirectWebMode,
+  handleWebCloudSessionExpired,
 } from "./webCloudDirectConfig";
 
 export interface CloudDirectTokenResponse {
@@ -105,15 +106,25 @@ async function mintViaWebExchange(
   const baseUrl = resolveAgntBaseUrl();
   const bearer = await readWebCloudSessionBearer();
   if (!bearer) throw new Error("Sign in to Deus Cloud to open this session");
-  const { token, expiresIn } = await exchangeCloudSessionToken({
-    baseUrl,
-    sessionId: providerSessionId,
-    bearer,
-  });
-  return {
-    token,
-    base_url: baseUrl,
-    provider_session_id: providerSessionId,
-    expires_in: expiresIn,
-  };
+  try {
+    const { token, expiresIn } = await exchangeCloudSessionToken({
+      baseUrl,
+      sessionId: providerSessionId,
+      bearer,
+    });
+    return {
+      token,
+      base_url: baseUrl,
+      provider_session_id: providerSessionId,
+      expires_in: expiresIn,
+    };
+  } catch (err) {
+    // A 401 here means the bearer lapsed while the SPA stayed open (the token
+    // re-mint runs on a timer, so this path can be the FIRST to notice) — route
+    // it through the same drop-bearer + re-login flow the discovery reads use.
+    if (err instanceof SessionTokenExchangeError && err.status === 401) {
+      handleWebCloudSessionExpired();
+    }
+    throw err;
+  }
 }

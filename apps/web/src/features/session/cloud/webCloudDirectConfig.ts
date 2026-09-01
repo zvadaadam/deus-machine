@@ -28,7 +28,7 @@ export function resolveAgntBaseUrl(): string {
 }
 
 /** The deus-cloud auth origin — the WorkOS `deus-web` login lives here. */
-function resolveDeusCloudUrl(): string {
+export function resolveDeusCloudUrl(): string {
   const configured = import.meta.env.VITE_DEUS_CLOUD_URL as string | undefined;
   return stripTrailingSlash(configured || "https://cloud.deusmachine.ai");
 }

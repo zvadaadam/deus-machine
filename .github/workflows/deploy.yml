@@ -161,7 +161,7 @@ jobs:
           bun-version: 1.2.19
 
       - name: Install landing dependencies
-        run: cd apps/landing && bun install
+        run: cd apps/landing && bun install --frozen-lockfile
 
       - name: Build landing (includes the root edge router)
         run: cd apps/landing && bun run build

@@ -1,5 +1,11 @@
 import { capabilities } from "../capabilities";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import {
+  clearWebCloudSession,
+  beginWebCloudLogin,
+  resolveDeusCloudUrl,
+} from "@/features/session/cloud/webCloudDirectConfig";
 
 const WEB_SESSION: DeusCloudSessionStatus = {
   signedIn: false,
@@ -10,8 +16,36 @@ const WEB_SESSION: DeusCloudSessionStatus = {
   hasPlatformKey: false,
 };
 
+/**
+ * In web-direct mode the browser's own bearer IS the Deus Cloud session — the
+ * canonical session query must reflect it, or Settings tells a signed-in web
+ * user they're signed out and offers desktop-only buttons. Claims are read from
+ * the JWT payload (display only; agnt verifies the signature on every request).
+ */
+function webDirectSession(): DeusCloudSessionStatus | null {
+  try {
+    const bearer = sessionStorage.getItem("deus_cloud_session");
+    if (!bearer) return null;
+    const payload = JSON.parse(atob(bearer.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return {
+      signedIn: true,
+      accountId: typeof payload.sub === "string" ? payload.sub : null,
+      expiresAt:
+        typeof payload.exp === "number" ? new Date(payload.exp * 1000).toISOString() : null,
+      tokenType: "Bearer",
+      cloudUrl: resolveDeusCloudUrl(),
+      hasPlatformKey: false,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getSession(): Promise<DeusCloudSessionStatus> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.getDeusCloudSession) {
+    if (isCloudDirectWebMode()) {
+      return webDirectSession() ?? { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() };
+    }
     return WEB_SESSION;
   }
 
@@ -20,6 +54,12 @@ export async function getSession(): Promise<DeusCloudSessionStatus> {
 
 export async function startLogin(): Promise<DeusCloudAuthResult> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.startDeusCloudLogin) {
+    if (isCloudDirectWebMode()) {
+      // Full-page redirect through the deus-web WorkOS flow; the promise result
+      // is moot once navigation starts.
+      beginWebCloudLogin(`${window.location.pathname}${window.location.search}`);
+      return { success: true, session: webDirectSession() ?? WEB_SESSION };
+    }
     return {
       success: false,
       session: WEB_SESSION,
@@ -32,6 +72,10 @@ export async function startLogin(): Promise<DeusCloudAuthResult> {
 
 export async function signOut(): Promise<DeusCloudAuthResult> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.signOutDeusCloud) {
+    if (isCloudDirectWebMode()) {
+      clearWebCloudSession();
+      return { success: true, session: { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() } };
+    }
     return {
       success: false,
       session: WEB_SESSION,

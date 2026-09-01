@@ -33,8 +33,20 @@ interface AgntSession {
   title: string | null;
   repo: string | null;
   branch: string | null;
+  /** The engine the session runs (from its create-time metadata); absent on
+   *  rows created before the harness was stamped. */
+  harness?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+const KNOWN_HARNESSES = new Set(["claude-code", "codex-sdk", "codex-app-server"]);
+
+/** Discovery's harness, defended to the enum — legacy rows default to claude. */
+function mapHarness(harness: string | null | undefined): import("@/shared/agents").AgentHarness {
+  return (
+    harness && KNOWN_HARNESSES.has(harness) ? harness : "claude-code"
+  ) as import("@/shared/agents").AgentHarness;
 }
 
 /** A 401 from agnt — the deus_cloud_session lapsed; the caller re-triggers login. */
@@ -165,7 +177,7 @@ export function toSession(s: AgntSession): Session {
   return {
     id: s.id,
     workspace_id: s.workspace_id,
-    agent_harness: "claude-code",
+    agent_harness: mapHarness(s.harness),
     provider_session_id: s.id,
     workspace_kind: "cloud",
     title: s.title,

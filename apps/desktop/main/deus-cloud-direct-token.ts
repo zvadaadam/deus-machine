@@ -34,7 +34,10 @@ export async function mintDeusCloudDirectToken(
   if (!bearer) throw new Error("Not signed in to Deus Cloud");
 
   const baseUrl = resolveAgntBaseUrl();
-  const response = await fetch(`${baseUrl}/dashboard/sessions/${providerSessionId}/token`, {
+  // Renderer-supplied id: encode so `../`/`?`/`#` can't steer the authed
+  // request onto a different agnt route.
+  const sessionPath = encodeURIComponent(providerSessionId);
+  const response = await fetch(`${baseUrl}/dashboard/sessions/${sessionPath}/token`, {
     method: "POST",
     headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
     // Empty body — `expires_in` defaults server-side. The exchange is tolerant of

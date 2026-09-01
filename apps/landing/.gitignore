@@ -23,5 +23,3 @@ todos.json
 worker-configuration.d.ts
 src/routeTree.gen.ts
 
-# Workspace lock — root bun.lock is source of truth
-bun.lock

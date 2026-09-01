@@ -28,7 +28,12 @@
 import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { SessionSnapshotEvent } from "@deus-hq/api";
 import type { AnyLifecycleEvent } from "@shared/protocol-types";
-import { foldEvent, commitTranscriptOrder, type AgentStreamContext } from "../lib/agentEventFold";
+import {
+  foldEvent,
+  commitTranscriptOrder,
+  patchSessionDetail,
+  type AgentStreamContext,
+} from "../lib/agentEventFold";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 
@@ -67,6 +72,16 @@ export function makeCloudFrameHandler(
     }
     if (LIFECYCLE_TYPES.has(type)) {
       route(frame as unknown as AnyLifecycleEvent);
+      // The direct lane has no q: push keeping `sessions.detail` fresh, so the
+      // working indicator / Stop button would never move — project the turn
+      // lifecycle onto the row here (the Mac lane gets this from the backend).
+      if (type === "turn.started") {
+        patchSessionDetail(ctx.queryClient, sessionId, { status: "working" });
+      } else if (type === "turn.ended") {
+        patchSessionDetail(ctx.queryClient, sessionId, {
+          status: (frame as { error?: unknown }).error ? "error" : "idle",
+        });
+      }
     }
     // else: a non-render frame — see the file header.
   };
@@ -122,6 +137,14 @@ function backfillSnapshot(
     sessionId,
     ordered.map((m) => m.id)
   );
+
+  // Restate the snapshot's session facts onto the detail row (web-direct has no
+  // q: push): a live turn means working NOW, and the real message count fixes
+  // discovery's zero (which otherwise mislabels an old conversation "New chat").
+  patchSessionDetail(ctx.queryClient, sessionId, {
+    status: currentTurnId ? "working" : snapshot.state.status === "error" ? "error" : "idle",
+    message_count: ordered.length,
+  });
 }
 
 function messageStartedEvent(message: SnapshotMessage): AnyLifecycleEvent {

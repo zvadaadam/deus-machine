@@ -1,8 +1,5 @@
-# app.deusmachine.ai is a permanent alias of the root product — path-preserving
-# redirect so pairing/deep links minted before the root move keep working.
-# (Host-scoped rules only fire on that domain; the root worker proxies to the
-# pages.dev origin, which this rule never matches.)
-https://app.deusmachine.ai/* https://deusmachine.ai/:splat 301
-
 # SPA fallback: unknown paths serve the app shell.
+# (app.deusmachine.ai remains a working alias serving this same app directly;
+# Pages `_redirects` sources are path-only, so the canonical 301 to the root
+# domain is a Cloudflare Redirect Rule configured at deploy time, not this file.)
 /* /index.html 200
