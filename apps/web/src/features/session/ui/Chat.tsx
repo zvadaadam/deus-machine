@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, TerminalSquare, MessageSquarePlus, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 import { useWorkingDuration } from "@/shared/hooks";
 import { useAutoScroll } from "../hooks";
@@ -82,6 +83,10 @@ export function Chat({
 }: ChatProps) {
   // Chat owns its scroll behavior entirely — refs, hook, and button.
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // "Retry in new chat" opens a fresh tab through the Mac backend; web-direct
+  // has no such lane, so the offer hides rather than failing on click.
+  const retryInNewChat = isCloudDirectWebMode() ? undefined : onRetryInNewChat;
 
   const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
     messages,
@@ -457,48 +462,48 @@ export function Chat({
                             ) : null
                           )
                           .with("rate_limit", () =>
-                            onRetryInNewChat ? (
+                            retryInNewChat ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-xs"
-                                onClick={onRetryInNewChat}
+                                onClick={retryInNewChat}
                               >
                                 Retry in new chat
                               </Button>
                             ) : null
                           )
                           .with("network", () =>
-                            onRetryInNewChat ? (
+                            retryInNewChat ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-xs"
-                                onClick={onRetryInNewChat}
+                                onClick={retryInNewChat}
                               >
                                 Retry in new chat
                               </Button>
                             ) : null
                           )
                           .with("process_exit", () =>
-                            onRetryInNewChat ? (
+                            retryInNewChat ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-xs"
-                                onClick={onRetryInNewChat}
+                                onClick={retryInNewChat}
                               >
                                 Retry in new chat
                               </Button>
                             ) : null
                           )
                           .otherwise(() =>
-                            onRetryInNewChat ? (
+                            retryInNewChat ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-xs"
-                                onClick={onRetryInNewChat}
+                                onClick={retryInNewChat}
                               >
                                 Retry in new chat
                               </Button>

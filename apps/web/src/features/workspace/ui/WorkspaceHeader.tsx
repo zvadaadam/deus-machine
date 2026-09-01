@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
@@ -191,8 +192,9 @@ export function WorkspaceHeader({
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  Runs on a cloud computer — files live remotely; the Changes tab shows the live
-                  diff
+                  {isCloudDirectWebMode()
+                    ? "Runs on a cloud computer — files live remotely"
+                    : "Runs on a cloud computer — files live remotely; the Changes tab shows the live diff"}
                 </p>
               </TooltipContent>
             </Tooltip>

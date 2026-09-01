@@ -15,6 +15,8 @@
  * (relay URLs keep their relay behavior on the same build).
  */
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { queryClient } from "@/shared/api/queryClient";
+import { queryKeys } from "@/shared/api/queryKeys";
 export { isCloudDirectWebMode };
 
 const BEARER_KEY = "deus_cloud_session";
@@ -137,24 +139,32 @@ export function redirectToWebCloudLogin(
 
 /**
  * Boot gate for a fully Mac-closed web build: with no bearer in hand, send the
- * user to sign in. A no-op on every backed build (electron/web-dev/relay), and a
- * no-op once signed in (which also resets the loop guard).
+ * user to sign in. A no-op on every backed build (electron/web-dev/relay) and
+ * once signed in. The login-attempt marker deliberately survives a successful
+ * login: it is how the 401 handler below tells "agnt rejects the bearer login
+ * just minted" from an ordinary expiry.
  */
 export function ensureWebCloudSession(): void {
   if (!isCloudDirectWebMode()) return;
   try {
-    if (sessionStorage.getItem(BEARER_KEY)) {
-      sessionStorage.removeItem(LOGIN_ATTEMPT_KEY);
-      return;
-    }
+    if (sessionStorage.getItem(BEARER_KEY)) return;
   } catch {
     return;
   }
   redirectToWebCloudLogin();
 }
 
-/** The bearer lapsed (agnt answered 401) — drop it and re-authenticate. */
+/**
+ * The bearer lapsed (agnt answered 401) — drop it and re-authenticate, under
+ * the same cooldown as the boot gate. A 401 within seconds of a login means
+ * agnt rejects what deus-cloud just minted; redirecting again would loop
+ * login→token→401→login. Inside the cooldown the app stays signed out instead,
+ * and Settings → Account still offers a manual sign-in.
+ */
 export function handleWebCloudSessionExpired(): void {
   clearWebCloudSession();
-  redirectToWebCloudLogin();
+  if (redirectToWebCloudLogin()) return;
+  // Staying put: flip the account status now rather than on the next
+  // heartbeat, so the UI says signed out while the bearer is already gone.
+  void queryClient.invalidateQueries({ queryKey: queryKeys.deusCloud.session });
 }

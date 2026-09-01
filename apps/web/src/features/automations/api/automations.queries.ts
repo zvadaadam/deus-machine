@@ -10,6 +10,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { sendCommand, sendMutate, sendRequest } from "@/platform/ws/query-protocol-client";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import type { Automation, AutomationRun } from "@shared/types";
 
 export const automationKeys = {
@@ -30,12 +31,17 @@ export interface AutomationFormInput {
 }
 
 export function useAutomations(): { data: Automation[] | undefined; isLoading: boolean } {
-  useQuerySubscription("automations", { queryKey: automationKeys.list, params: {} });
+  // Automations are Mac-backend state; web-direct has none to read and no
+  // transport to ask — an enabled query would reject and retry for the page's
+  // lifetime.
+  const enabled = !isCloudDirectWebMode();
+  useQuerySubscription("automations", { queryKey: automationKeys.list, params: {}, enabled });
   const query = useQuery({
     queryKey: automationKeys.list,
     queryFn: () => sendRequest<Automation[]>("automations", {}),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+    enabled,
   });
   return { data: query.data, isLoading: query.isLoading };
 }
@@ -53,7 +59,7 @@ export function useAutomationForWorkspace(
     queryFn: () => sendRequest<Automation[]>("automations", {}),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isCloudDirectWebMode(),
     select: (list) => list.find((a) => a.workspace_id === workspaceId),
   });
   return query.data ?? undefined;

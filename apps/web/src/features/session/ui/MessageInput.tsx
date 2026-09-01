@@ -21,6 +21,7 @@
 
 import type { SessionStatus } from "@/shared/types";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
@@ -465,7 +466,13 @@ export function MessageInput({
             fileMention.handleCursorChange(e);
           }}
           onPaste={handlePaste}
-          placeholder="Ask a follow-up ... (@ files, / skills)"
+          // @ files and / skills read the Mac backend — web-direct has none, so
+          // the hint would promise pickers that come back empty.
+          placeholder={
+            isCloudDirectWebMode()
+              ? "Ask a follow-up ..."
+              : "Ask a follow-up ... (@ files, / skills)"
+          }
           disabled={sending}
           onKeyDown={handleKeyDown}
           onSelect={fileMention.handleCursorChange}

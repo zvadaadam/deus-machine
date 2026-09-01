@@ -88,6 +88,14 @@ export async function startLogin(): Promise<DeusCloudAuthResult> {
 export async function signOut(): Promise<DeusCloudAuthResult> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.signOutDeusCloud) {
     if (isCloudDirectWebMode()) {
+      // The browser also holds deus-cloud's own session cookie (set by the
+      // login callback) and POST /auth/logout is what clears it. Best-effort:
+      // local sign-out must not hang on an unreachable auth origin, and
+      // WorkOS's hosted session isn't ours to end from here.
+      await fetch(`${resolveDeusCloudUrl()}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => {});
       clearWebCloudSession();
       return { success: true, session: { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() } };
     }

@@ -15,6 +15,7 @@
 import type { RepoGroup, Workspace } from "@shared/types/workspace";
 import type { Session } from "@shared/types/session";
 import type { SessionStatus, WorkspaceState } from "@shared/enums";
+import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
 import { queryClient } from "@/shared/api/queryClient";
 import {
@@ -71,16 +72,59 @@ async function dashboardGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * agnt's list envelope. `has_more` flags the server-side cap — a cursor is the
+ * follow-up there; until then the cut must at least never be silent here.
+ */
+interface DashboardList<T> {
+  items?: T[];
+  has_more?: boolean;
+}
+
+// One notice per outage, not one per discovery tick: latched until a fully
+// successful fetch re-arms it.
+let orgFailureNoticed = false;
+
 async function fetchAllCloudSessions(): Promise<AgntSession[]> {
-  const orgs = await dashboardGet<{ items?: { id: string }[] }>("/dashboard/orgs");
-  const perOrg = await Promise.all(
-    (orgs.items ?? []).map((org) =>
-      dashboardGet<{ items?: AgntSession[] }>(
+  const orgs = await dashboardGet<DashboardList<{ id: string }>>("/dashboard/orgs");
+  if (orgs.has_more) {
+    console.warn(
+      "[cloudDataAdapter] /dashboard/orgs truncated (has_more) — sessions in the orgs past the cap are not listed"
+    );
+  }
+  const results = await Promise.allSettled(
+    (orgs.items ?? []).map(async (org) => {
+      const page = await dashboardGet<DashboardList<AgntSession>>(
         `/dashboard/orgs/${encodeURIComponent(org.id)}/sessions`
-      ).then((r) => r.items ?? [])
-    )
+      );
+      if (page.has_more) {
+        console.warn(
+          `[cloudDataAdapter] org ${org.id} has more sessions than the server cap (has_more) — older ones are not listed`
+        );
+      }
+      return page.items ?? [];
+    })
   );
-  return perOrg.flat();
+  // One org failing must not blank the others. An auth failure is not "one
+  // org", though — the bearer is dead for all of them — so it propagates.
+  const sessions: AgntSession[] = [];
+  let failed = 0;
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      sessions.push(...result.value);
+      continue;
+    }
+    if (result.reason instanceof CloudSessionExpiredError) throw result.reason;
+    failed += 1;
+    console.warn("[cloudDataAdapter] org session list failed:", result.reason);
+  }
+  if (failed === 0) {
+    orgFailureNoticed = false;
+  } else if (!orgFailureNoticed) {
+    orgFailureNoticed = true;
+    toast.error("Couldn't load sessions for one of your organizations");
+  }
+  return sessions;
 }
 
 // A short in-flight cache so the near-simultaneous "workspaces" (sidebar) and
@@ -154,7 +198,10 @@ function toWorkspace(s: AgntSession): Workspace {
   return {
     id: s.id,
     repository_id: repoLabel(s.repo),
-    slug: s.title ?? s.id.slice(0, 8),
+    // Not the title: under a titled row the sidebar shows `slug` as the
+    // secondary line, where it would just repeat the title. The branch is
+    // real context; the id prefix keeps untitled rows labelled.
+    slug: s.branch ?? s.id.slice(0, 8),
     title: s.title,
     git_branch: s.branch,
     git_target_branch: null,

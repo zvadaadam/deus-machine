@@ -41,6 +41,10 @@ interface MobileLayoutProps {
   hasManifest?: boolean;
   onRunTask?: (taskName: string) => void;
   onStatusChange?: (status: WorkspaceStatus) => void;
+  /** Cloud presence, derived once by MainContent (same values as the desktop header). */
+  cloudAsleep?: boolean;
+  cloudWaking?: boolean;
+  onCloudWake?: () => void;
   // PR actions
   prStatus: PRStatus | null;
   ghStatus?: GhCliStatus | null;
@@ -64,6 +68,9 @@ export function MobileLayout({
   hasManifest,
   onRunTask,
   onStatusChange,
+  cloudAsleep,
+  cloudWaking,
+  onCloudWake,
   prStatus,
   ghStatus,
   onCreatePR,
@@ -121,6 +128,9 @@ export function MobileLayout({
           branch={workspace.git_branch ?? undefined}
           workspacePath={workspace.workspace_path}
           kind={workspace.kind}
+          cloudAsleep={cloudAsleep}
+          cloudWaking={cloudWaking}
+          onCloudWake={onCloudWake}
           setupStatus={workspace.setup_status}
           setupError={workspace.error_message}
           onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
@@ -133,11 +143,13 @@ export function MobileLayout({
           onRunTask={onRunTask}
           mobile
         />
-        <MobilePRHeaderAction {...prBarProps} />
+        {/* PRs are Mac-side (gh + the worktree): web-direct has neither, so the
+            Create PR sheet and the status bar don't mount. */}
+        {!chatOnly && <MobilePRHeaderAction {...prBarProps} />}
       </div>
 
       {/* PR status bar -- only shown when a PR exists, 32px */}
-      <MobilePRStatusBar {...prBarProps} />
+      {!chatOnly && <MobilePRStatusBar {...prBarProps} />}
 
       {/* Content area -- both views always mounted, inactive hidden via display:none */}
       <div
