@@ -509,9 +509,9 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       // sandbox that is genuinely asleep. No open channel = state unknown =
       // refresh. On a live sandbox this stays off the hot path.
       //
-      // ENVIRONMENT lane only: inline workspaces baked their mint into the
-      // DO's secret map at create time and no wake path can rewrite it — see
-      // refreshWorkspaceGithubToken. This does NOT cover them.
+      // Both lanes: refreshWorkspaceGithubToken re-mints and rewrites the DO's
+      // secret map for inline workspaces (agntCreateWorkspace on the existing
+      // id) and re-upserts the environment-scoped secret for named ones.
       if (asleepStage && workspace) {
         // The wake takes tens of seconds (mint + reprovision/resume) and the
         // real agnt state frames only start once the workspace DO picks the

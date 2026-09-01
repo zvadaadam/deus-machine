@@ -3,7 +3,9 @@
 _Settled 2026-08-18. Sprint 1 + 1.5 shipped on `zvadaadam/cloud-workspaces-phase1`
 (PR #310). This is the durable copy of the plan; the exploration history that
 produced it (Conductor/t3code/Cursor teardowns, the sync-engine debate) lived in
-the session's `.context/` and is summarized here where it drives a decision._
+the session's `.context/` and is summarized here where it drives a decision. **Status audit 2026-09-01 at the end of this doc** — what is verified
+shipped, what the plan missed, what is still open. D3 ("Mac closed") shipped on
+2026-09-01 in a different shape than Sprint 4 sketched; see its section._
 
 ## The model
 
@@ -428,10 +430,14 @@ dead but `refs/agnt/wip/<id>` exists, the workspace offers **Recover work**
 
 ### Sprint 4 — the reach
 
-Web/phone direct-to-agnt mode (deus SQLite becomes a projection of agnt PG for
-cloud sessions — reconnect = snapshot diff by engine ids + idempotent upserts);
-ACP-shaped `fs/*` + `terminal/*` on the sidecar (tmux-backed); `fs/list` file
-tree; port forwarding for localhost previews.
+_Mostly superseded._ The web/phone direct-to-agnt mode shipped as D3 (below)
+with a DIFFERENT design than sketched here: there is no SQLite projection — the
+browser folds agnt's session frames straight into the same TanStack cache the
+chat reads, and discovery is a dashboard REST list. `fs`/`pty` shipped in Sprint
+T. **Still open from this package: port forwarding for localhost previews** —
+agnt already emits the sandbox host template (`sandboxUrlTemplate` on
+`workspace.state`, SDK `getHost(port)`); deus shows a placeholder in the Browser
+tab (`CloudBrowserUnavailable`).
 
 ### Environment follow-ups (deus-heavy, small pieces, any order)
 
@@ -766,9 +772,117 @@ Queued follow-ups out of the review waves (real, deliberately not v1):
   Deleting it is an enum + `.exhaustive()` + PRELAUNCH_RETIRED sweep of its
   own, not a rider.
 
-### D3 (next) — "Mac closed": mobile direct-to-cloud
+### D3 — "Mac closed": SHIPPED 2026-09-01 (as built)
 
-Phone today is a paired remote to the DESKTOP backend; with the Mac closed
-there is no backend. The platform-canonical secrets exist precisely so a
-web client can go deus-cloud auth → agnt session DO directly. Own sprint;
-D2.2's mint work is a prerequisite it now has.
+deus #323/#324 + agnt #165/#166/#167/#169/#170; deusmachine.ai root
+live-verified. The browser is a first-class agnt client with no Mac behind it:
+
+- **Auth**: the WorkOS `deus_cloud_session` bearer (deus-cloud `deus-web` login,
+  `#token=` fragment bound to a per-tab state nonce — login-CSRF closed) is
+  exchanged per session for an agnt session token (`POST
+/dashboard/sessions/:id/token`); the token opens the AgentSession DO socket.
+  Direct sends carry NO credential — the DO resolves the org credential at
+  dispatch (`resolveTurnCredential`, the "phone / Mac-off clients" path).
+- **Render**: `cloudFrameHandler` folds agnt frames (snapshot backfill + live
+  stream) into the SAME message cache the chat reads; exactly one lane drives a
+  session's key (`useIsDirectSession`). Session facts (status, count, context
+  gauge) are projected onto `sessions.detail` from turn/usage frames.
+- **Discovery**: `GET /dashboard/orgs/:id/sessions` → `cloudDataAdapter` maps
+  agnt rows onto `RepoGroup[]`/`Session` and serves the q: read resources via a
+  request interceptor; the q: transport is dark; a visibility-gated 60s
+  invalidation stands in for a push channel.
+- **Product surface**: deusmachine.ai IS the product (Linear model): the landing
+  worker edge-routes `/` to the landing for unmarked browsers and everything
+  else to the Pages app; `/login` is the product entry; `web-direct` is a
+  DeploymentMode (entry-path scoped; Electron never enters it). Web-direct v1 is
+  CHAT-ONLY: content tabs, Settings (except Account), creation, archive, status
+  and wake affordances are hidden or disabled with honest copy.
+- **Not this design**: no SQLite projection of agnt PG (Sprint 4's sketch) — the
+  cache is the projection, and a reconnect re-folds the snapshot.
+
+What it took to make it real is in the status audit below.
+
+## Status audit — 2026-09-01 (code-verified against deus + agnt main)
+
+Three independent code audits after D3 shipped, each item checked for the
+described BEHAVIOR (file:line evidence in the PR threads), not for a name.
+
+### Verified shipped (matches this doc)
+
+Sprints 1–2, environments, D1 + D1.5 wiring, **D2.1 credential durability
+(both halves, both lanes: wake AND send, inline AND named environments)**,
+**D2.2 wider mint (4-step 422 cascade)**, D2.3 Codex in the cloud, the sidecar
+capability handshake (D2.5), Sprint T fs + pty, D3. Decisions that are LIVE:
+BYO subscription/key only (no platform-billed path exists), sandbox idle TTL
+5 min hard-coded, GitHub App via private install link (no marketplace).
+
+### The post-launch web package (new — nothing here was in the plan)
+
+Found only by building and reviewing D3. Done as of 2026-09-02 (deus #326,
+#325; agnt #171):
+
+- Reopened Codex sessions ran as Claude (composer seeded from the global default
+  before the session row arrived) — fixed; the seed comes from the session's
+  harness.
+- Brand-new web users landed on the desktop onboarding — web-direct home shows
+  cloud sessions or an honest "start one from the desktop app" empty state.
+- AskUserQuestion stalled on BOTH cloud lanes: Claude Code's built-in question
+  tool arrives as a `permission.request` and was auto-allowed without answers.
+  Both lanes now relay it to the overlay and answer through `updatedInput`
+  (`shared/ask-user-question.ts`). Also: the Mac driver's mcp.answer /
+  permission.response were sent flat (never validated).
+- The harness stamp never landed (the workspace pipeline creates the agnt
+  session before the harness is known; createSession converges) — agnt gained
+  `PATCH /sessions/:id/metadata`; deus stamps harness after converge and
+  mirrors titles, so the web list shows names + engines.
+- Sidecar: `CODEX_HOME` wasn't created without a credential — the CLI died on a
+  path error instead of "connect Codex under Settings → Cloud".
+- Gate sweep: archive/status/+/Automations/palette/mobile-PR affordances hidden
+  in web-direct; sign-out also logs out deus-cloud; account change busts the
+  discovery cache; persistent-401 login loop guarded; multi-org discovery
+  tolerant; URL-synced selection.
+
+Still open in this package:
+
+- **Browser-side session creation** (needs an agnt create path with stamped
+  harness + DO ensure) — today new chats start from the desktop.
+- **Dashboard-auth wake endpoint** (agnt resume is secret-key-only; sends
+  auto-wake via the DO, so this is a convenience, not a blocker).
+- **Discovery push channel** (the 60s invalidation is the bridge).
+- **fs/diff/pty over the direct socket** (content tabs in web-direct).
+- **HttpOnly-cookie bearer** hardening; the canonical `app.` → root 301 edge rule.
+- **Design sync**: `design/deus.pen` lacks the web-direct screens (cloud home,
+  chat-only layout, Account-only settings, hidden New-chat).
+
+### Missing from this plan (never started)
+
+- **All of Sprint 3** — no fetch+checkout primitive, no Restore, Open files,
+  Send to cloud, kind flip, or Recover work. The cloud driver still stubs
+  `checkpoint:*`; agnt's execute queue has no patch entry; the only wip-ref
+  code in deus DELETES it.
+- **Port forwarding / localhost preview** (Sprint 4 remnant, above).
+- **Sprint 2 follow-ups**: durability indicator (deus never reads `gitSync`),
+  push size guard, orphan wip-ref GC, checkpoint history refs.
+- **Environment follow-ups**: the per-repo card is a read-only summary (no
+  setup/packages, no editing, no `requiredEnv` value inputs); no setup-failure
+  → reconfigure chip; the sidecar MCP tool renders its raw name; no repo
+  removal path so no env GC; warm-start cache (`deriveSnapshotKey` is dead
+  code).
+- **Test tax**: no capability × workspace-kind table test; no deus CI cloud
+  smoke with `USE_MOCK_SANDBOX`.
+- **Small queued items**: stable welcome-delivery identity (retry mints a new
+  turnId — can double-run), Codex resume state outside the pause snapshot,
+  `codex-sdk` removal, terminal-panel unification, PTY reattach, SDK fs/pty
+  surface.
+- **Weakness #5 spend control**: no cap at turn admission; `usage_records` has
+  zero writers.
+- **Re-mint on agnt-internal reprovisions** (heartbeat timeout, resume
+  failure, resume-wait timeout replay the DO's last-stored secrets with no
+  callback to deus).
+
+### The queue, in order
+
+1. Post-launch web open items above (session creation, wake endpoint, push).
+2. Sprint 3 handoffs — Recover work first (the durability payoff surface).
+3. Preview tunnel (Browser tab ← sandbox host template).
+4. Spend cap (usage_records writer + admission check + 80% warning).
