@@ -13,6 +13,12 @@ import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
 import { SendRejectedError, rollbackSendStatus } from "../lib/sendRollback";
+import {
+  useIsDirectSession,
+  isDirectSessionCached,
+  sessionDetailQueryOptions,
+} from "../cloud/useIsDirectSession";
+import { getDirectSession } from "../cloud/directSessionRegistry";
 import { uuidv7 } from "@shared/lib/uuid";
 import type { Message, Session, SessionStatus } from "../types";
 import type { RepoGroup } from "@shared/types/workspace";
@@ -58,11 +64,8 @@ export function useSession(sessionId: string | null) {
   });
 
   return useQuery({
-    queryKey: queryKeys.sessions.detail(sessionId || ""),
-    queryFn: () => SessionService.fetchById(sessionId!),
+    ...sessionDetailQueryOptions(sessionId || ""),
     enabled: !!sessionId,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
   });
 }
 
@@ -93,10 +96,7 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
 
   const queries = useQueries({
     queries: sessionIds.map((id) => ({
-      queryKey: queryKeys.sessions.detail(id),
-      queryFn: () => SessionService.fetchById(id),
-      staleTime: Infinity, // WS handles freshness now
-      refetchOnWindowFocus: false,
+      ...sessionDetailQueryOptions(id),
       select: (data: Session): SessionStatus => data.status,
     })),
   });
@@ -119,15 +119,20 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
  * HTTP queryFn loads all messages (backend caps at 2000). No pagination —
  * the virtualizer handles render-level windowing.
  */
-export function useMessages(sessionId: string | null, directMode = false) {
+export function useMessages(sessionId: string | null) {
   const queryClient = useQueryClient();
 
   // Cloud-direct (Path B): the browser folds the agnt socket into this same
   // cache key itself (`useCloudDirect`), so the Mac-backend lanes — the WS
-  // `messages` subscription, the reconnect-invalidate, and the HTTP fetch —
-  // must all stand down for this session, or an authoritative-empty fetch would
-  // clobber the folded transcript.
-  const macLaneEnabled = !!sessionId && !directMode;
+  // `messages` subscription, the reconnect-invalidate, and the HTTP fetch — must
+  // all stand down for a direct session, or an authoritative-empty fetch would
+  // clobber the folded transcript. Direct mode is DERIVED here (not a threaded
+  // param) so EVERY consumer respects it — including the composer mounted outside
+  // SessionPanel's tree. `direct === false` is strict, so the unknown beat
+  // (session row unloaded) holds the Mac lane DOWN: a wrongly-armed Mac lane
+  // clobbers a fold; a wrongly-held one only delays a fetch by one round-trip.
+  const direct = useIsDirectSession(sessionId);
+  const macLaneEnabled = !!sessionId && direct === false;
 
   useQuerySubscription("messages", {
     queryKey: queryKeys.sessions.messages(sessionId || ""),
@@ -172,9 +177,9 @@ export function useMessages(sessionId: string | null, directMode = false) {
 /**
  * Combined hook for session + messages + status
  */
-export function useSessionWithMessages(sessionId: string | null, directMode = false) {
+export function useSessionWithMessages(sessionId: string | null) {
   const sessionQuery = useSession(sessionId);
-  const messagesQuery = useMessages(sessionId, directMode);
+  const messagesQuery = useMessages(sessionId);
 
   const messages = messagesQuery.data?.messages ?? [];
   const compactions = messagesQuery.data?.compactions;
@@ -259,6 +264,27 @@ export function useSendMessage() {
       permissionMode,
       thinkingLevel,
     }: SendMessageVariables): Promise<Message | void> => {
+      // Mac-CLOSED direct lane: a live direct channel means this session streams
+      // straight from agnt, so its prompt goes there too — no Mac backend to relay
+      // it, and no HTTP fallback (that path targets the same closed backend). The
+      // optimistic bubble + the socket's echo reconcile it exactly as the q:delta
+      // does on the Mac path; `sendMessage` throws if the socket is mid-reconnect,
+      // which falls through to onError's rollback. No credential rides the wire —
+      // agnt resolves the org key at dispatch.
+      const direct = getDirectSession(sessionId);
+      if (direct) {
+        direct.sendMessage(content, turnId, { model, agentHarness, thinkingLevel });
+        return;
+      }
+      // A direct session whose channel isn't registered yet (socket mid-connect,
+      // or a mint that failed): do NOT fall through to the Mac path below. That
+      // relay is closed, and its HTTP fallback would dispatch a real turn whose
+      // response the disarmed read-lanes can never render — a bubble stuck
+      // forever. Reject so onError rolls it back deterministically.
+      if (isDirectSessionCached(queryClient, sessionId)) {
+        throw new SendRejectedError("The cloud connection isn't ready yet — try again in a moment");
+      }
+
       // Send message via WS command: backend flips the session to working,
       // forwards to agent-server, and pushes q:delta to subscribers.
       try {
@@ -347,12 +373,15 @@ export function useSendMessage() {
     },
 
     onError: (_err, variables, context) => {
-      // If the error is a WS connectivity issue, escalate the connection state
-      // immediately. The WS client produces three distinct error messages:
+      // If the error is a Mac q: connectivity issue, escalate the connection
+      // state immediately. The WS client produces three distinct error messages:
       //   "WebSocket not connected"     — socket already down before send
       //   "WebSocket disconnected"      — connection dropped mid-flight
       //   "WebSocket connection failed" — connect() rejected (initial open failed)
-      if (_err instanceof Error) {
+      // Gate on NOT-direct: a direct-socket failure ("Cloud session socket is not
+      // connected") matches the same substrings but must not flag the Mac
+      // connection UI — that's a different transport.
+      if (_err instanceof Error && !isDirectSessionCached(queryClient, variables.sessionId)) {
         const msg = _err.message.toLowerCase();
         if (
           msg.includes("not connected") ||
@@ -409,7 +438,17 @@ export function useStopSession() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (sessionId: string) => SessionService.stop(sessionId),
+    mutationFn: (sessionId: string) => {
+      // Mac-CLOSED direct lane: cancel straight to agnt. The `turn.ended`
+      // (cancelled) flows back over the render socket and the fold projects the
+      // "Response stopped" divider — the same outcome the Mac stop produces.
+      const direct = getDirectSession(sessionId);
+      if (direct) {
+        direct.cancel();
+        return Promise.resolve();
+      }
+      return SessionService.stop(sessionId);
+    },
     onSuccess: (_, sessionId) => {
       const session = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
       track("session_stopped", {

@@ -20,8 +20,13 @@
 // Nothing here touches a database or a QueryClient: the backend binds the
 // returned object to SQL placeholders, the frontend spreads it onto a row.
 
-import type { ConversationMessage, ConversationState, ConversationTurn } from "./protocol-types";
-import { cancelledTurnMessageId, type Message } from "./types/session";
+import type {
+  ConversationCompaction,
+  ConversationMessage,
+  ConversationState,
+  ConversationTurn,
+} from "./protocol-types";
+import { cancelledTurnMessageId, type Compaction, type Message } from "./types/session";
 
 /**
  * The folded message a change addressed.
@@ -37,6 +42,23 @@ export function findConversationMessage(
   for (let i = state.timeline.length - 1; i >= 0; i--) {
     const entry = state.timeline[i];
     if (entry.kind === "message" && entry.messageId === messageId) return entry;
+  }
+  return undefined;
+}
+
+/**
+ * The folded compaction a change addressed — the twin of
+ * `findConversationMessage`, so both stores resolve a `compaction-upserted`
+ * change to its entity the same way (the backend to persist it, the frontend
+ * to mirror it into the cache).
+ */
+export function findConversationCompaction(
+  state: ConversationState,
+  compactionId: string
+): ConversationCompaction | undefined {
+  for (let i = state.timeline.length - 1; i >= 0; i--) {
+    const entry = state.timeline[i];
+    if (entry.kind === "compaction" && entry.compactionId === compactionId) return entry;
   }
   return undefined;
 }
@@ -103,5 +125,31 @@ export function cancelledTurnRow(sessionId: string, turn: ConversationTurn): Mes
     tokens: accounting.tokens,
     cost: accounting.cost,
     parts: [],
+  };
+}
+
+/**
+ * The folded compaction entity → the `compactions` row shape both stores hold.
+ *
+ * The twin of `persistCompaction`'s INSERT: same columns, same spelling, so the
+ * cache the direct lane writes and the SQLite row the backend writes are ONE
+ * row. `created_at` anchors to the compaction's first `timestamp` (the backend
+ * never moves it on later upserts); the optional token/summary fields are
+ * OMITTED when the engine hasn't sent them, so a caller's COALESCE-merge keeps
+ * whatever a prior event already set — the merge semantics the entity itself
+ * documents (fields arrive across events; a later one that omits `summary` must
+ * not erase it).
+ */
+export function compactionRow(sessionId: string, c: ConversationCompaction): Compaction {
+  return {
+    compaction_id: c.compactionId,
+    session_id: sessionId,
+    turn_id: c.turnId,
+    status: c.status,
+    ...(c.trigger !== undefined && { trigger: c.trigger }),
+    ...(c.preTokens !== undefined && { pre_tokens: c.preTokens }),
+    ...(c.postTokens !== undefined && { post_tokens: c.postTokens }),
+    ...(c.summary !== undefined && { summary: c.summary }),
+    created_at: new Date(c.timestamp).toISOString(),
   };
 }

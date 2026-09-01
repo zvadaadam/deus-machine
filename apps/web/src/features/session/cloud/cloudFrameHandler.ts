@@ -27,57 +27,42 @@
 
 import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { SessionSnapshotEvent } from "@deus-hq/api";
-import type { AnyLifecycleEvent, DecodedWireEventEnvelope } from "@shared/protocol-types";
-import { routeEnvelope, type AgentStreamContext } from "../lib/agentEventFold";
+import type { AnyLifecycleEvent } from "@shared/protocol-types";
+import { foldEvent, commitTranscriptOrder, type AgentStreamContext } from "../lib/agentEventFold";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 
 type SnapshotMessage = NonNullable<SessionSnapshotEvent["messages"]>[number];
 type SnapshotPart = SnapshotMessage["parts"][number];
 type SnapshotTurn = NonNullable<SessionSnapshotEvent["state"]["turns"]>[number];
-
-/** A fresh per-handler seq counter — the default when no persistent one is given. */
-function localSeqSource(): () => number {
-  let seq = 0;
-  return () => ++seq;
-}
+type SnapshotCompaction = NonNullable<SessionSnapshotEvent["state"]["compactions"]>[number];
 
 /**
- * A frame sink. The synthetic `seq` it stamps must be monotonic ACROSS the
- * fold's cursor lifetime, not just this handler's — the cursor is module-level
- * (it survives panel remounts) while a handler is per-connection. If the seq
- * reset to 0 on every remount, the next snapshot's first envelope (seq 1) would
- * read as a fresh log to a cursor already past 1, forcing a spurious reset +
- * refetch each time. So the hook supplies a PERSISTENT per-session `nextSeq`
- * whose lifetime matches the cursor's; the default is only for standalone use
- * (tests). Either way the envelopes are contiguous and monotonic across the
- * snapshot backfill and the live stream, and a reconnect's fresh snapshot simply
- * re-folds under ever-higher seqs — upsert-by-id, idempotent.
+ * Build the frame sink for one direct-agnt socket. agnt session frames carry no
+ * wire `seq`, so — unlike the Mac `q:` lane — there is no cursor to feed: the
+ * gap/reset/duplicate arithmetic can't fire on a lane with no seq, and a
+ * reconnect heals by re-folding the fresh snapshot (upsert-by-id), not by a
+ * cursor reset. So each frame folds straight through `foldEvent`.
  */
 export function makeCloudFrameHandler(
   ctx: AgentStreamContext,
-  sessionId: string,
-  nextSeq: () => number = localSeqSource()
+  sessionId: string
 ): (frame: Record<string, unknown>) => void {
   const route = (event: AnyLifecycleEvent): void => {
-    // The deus session id is the fold's key everywhere (cache, cursor, the
-    // active-session check); the wire carries the agnt PROVIDER id, so rewrite
-    // it exactly as the backend driver's `pushToFold` does.
+    // The deus session id is the fold's key everywhere; the wire carries the
+    // agnt PROVIDER id, so rewrite it exactly as the backend driver's
+    // `pushToFold` does.
     const withSession = {
       ...(event as Record<string, unknown>),
       sessionId,
     } as AnyLifecycleEvent;
-    routeEnvelope(ctx, {
-      sessionId,
-      seq: nextSeq(),
-      event: withSession,
-    } as DecodedWireEventEnvelope);
+    foldEvent(ctx, sessionId, withSession);
   };
 
   return (frame: Record<string, unknown>): void => {
     const type = typeof frame.type === "string" ? frame.type : "";
     if (type === "session.snapshot") {
-      backfillSnapshot(frame as unknown as SessionSnapshotEvent, route);
+      backfillSnapshot(frame as unknown as SessionSnapshotEvent, ctx, sessionId, route);
       return;
     }
     if (LIFECYCLE_TYPES.has(type)) {
@@ -89,11 +74,15 @@ export function makeCloudFrameHandler(
 
 /**
  * Unroll the snapshot's already-folded transcript back into the event stream
- * that produced it, then restate each ended turn's accounting. Rows first (the
- * messages), then `turn.ended` — so accounting lands on a row that exists.
+ * that produced it, then restate each ended turn's accounting and every
+ * historical compaction. Rows first (the messages), then `turn.ended` and
+ * `session.compaction` — so both land on a transcript that exists — and finally
+ * one commit that fixes the render ORDER.
  */
 function backfillSnapshot(
   snapshot: SessionSnapshotEvent,
+  ctx: AgentStreamContext,
+  sessionId: string,
   route: (event: AnyLifecycleEvent) => void
 ): void {
   const messages = snapshot.messages ?? [];
@@ -112,6 +101,27 @@ function backfillSnapshot(
     if (turn.turnId === currentTurnId) continue;
     route(turnEndedEvent(turn));
   }
+
+  // Historical compaction dividers ride the snapshot's `state.compactions`, NOT
+  // its messages — unroll each back through the same reducer path the live
+  // stream uses (`session.compaction` → `compaction-upserted` → the page's
+  // `compactions` list), or a direct session's transcript loses every "context
+  // compacted" marker on reconnect.
+  for (const compaction of snapshot.state.compactions ?? []) {
+    route(compactionEvent(compaction));
+  }
+
+  // Commit the transcript ORDER. The fold APPENDS a message whose id it has not
+  // seen, so if the user sent before this snapshot arrived, the optimistic
+  // prompt is already first and the unrolled history landed AFTER it. Reorder
+  // once: snapshot rows in `messageIndex` order, then any row the snapshot does
+  // not know (an optimistic bubble, a mid-flight live row) after them, in place.
+  // Idempotent on reconnect — a second snapshot with the same ids is a no-op.
+  commitTranscriptOrder(
+    ctx.queryClient,
+    sessionId,
+    ordered.map((m) => m.id)
+  );
 }
 
 function messageStartedEvent(message: SnapshotMessage): AnyLifecycleEvent {
@@ -165,5 +175,19 @@ function turnEndedEvent(turn: SnapshotTurn): AnyLifecycleEvent {
     ...(turn.tokens !== undefined ? { tokens: turn.tokens } : {}),
     ...(turn.cost !== undefined ? { cost: turn.cost } : {}),
     ...(turn.error !== undefined ? { error: turn.error } : {}),
+  } as unknown as AnyLifecycleEvent;
+}
+
+/**
+ * A snapshot's `state.compactions` entry → the `session.compaction` event that
+ * produced it. The entry carries every field the event does except `sessionId`,
+ * which `route` stamps on the way through — so the reducer folds it into the
+ * timeline exactly as the live event would, and the fold's `compaction-upserted`
+ * projection lands the divider in the page.
+ */
+function compactionEvent(compaction: SnapshotCompaction): AnyLifecycleEvent {
+  return {
+    type: "session.compaction",
+    ...compaction,
   } as unknown as AnyLifecycleEvent;
 }

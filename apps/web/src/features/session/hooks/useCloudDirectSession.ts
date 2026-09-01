@@ -12,16 +12,16 @@
  * of `useAgentEvents` when the session is served direct. So it keeps its own
  * `folds`/`cursor` module state, isolated from the Mac lane's.
  *
- * The token is provided by the caller (minted via the dashboard exchange —
- * `exchangeSessionToken.ts`). Where the browser gets its `deus_cloud_session` to
- * mint that token is a separate, upstream concern.
+ * The token is provided by the caller (`useCloudDirect`, minted at the backend
+ * seam or via the dashboard exchange — `exchangeSessionToken.ts`). Where the
+ * browser gets its `deus_cloud_session` to mint that token is a separate,
+ * upstream concern.
  *
- * INTEGRATION GATE — this hook has no callers yet. The direct lane writes the
- * SAME cache key `useMessages` owns (`queryKeys.sessions.messages(sessionId)`).
- * Whoever wires it in MUST disable `useMessages`' own HTTP `queryFn` and its
- * `messages` WS subscription for a cloud-direct session — otherwise that fetch
- * (which resolves authoritative-EMPTY in Mac-closed mode) will clobber the
- * folded transcript. Gate the lanes so exactly one drives that key.
+ * LANE GATING — the direct lane writes the SAME cache key `useMessages` owns
+ * (`queryKeys.sessions.messages(sessionId)`), so exactly one lane may drive it.
+ * `useMessages` gates its HTTP `queryFn`, its `messages` WS subscription, and its
+ * reconnect-invalidate on `direct === false` (derived via `useIsDirectSession`),
+ * so a cloud-direct session's Mac lanes all stand down and this fold owns the key.
  */
 
 import { useEffect, useState } from "react";
@@ -36,24 +36,24 @@ import {
 } from "../lib/agentEventFold";
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
+import {
+  registerDirectSession,
+  buildMessageSendFrame,
+  buildCancelFrame,
+} from "../cloud/directSessionRegistry";
 
 /** A burst of gaps must not become a burst of full-page refetches. */
 const REFETCH_DEBOUNCE_MS = 250;
 
 /**
- * The direct-agnt lane's own fold set + cursor — module state, separate from the
- * Mac lane's in `useAgentEvents`, for the same reasons documented there (the
- * stream outlives the panel; the cursor makes a real gap visible).
+ * The direct-agnt lane's own fold set — module state, separate from the Mac
+ * lane's in `useAgentEvents`, because the stream outlives the panel. Unlike the
+ * Mac lane it keeps no cursor: agnt frames carry no seq, so `makeCloudFrameHandler`
+ * folds straight through (see its header); the throwaway `cursor` below only
+ * satisfies the shared `AgentStreamContext` type, which the Mac lane needs.
  */
 const folds = new Map<string, SessionFold>();
 const cursor = createStreamCursor();
-/**
- * A PERSISTENT per-session synthetic seq, lifetime-matched to `cursor` above.
- * A remount builds a fresh handler but must keep counting from where the last
- * left off, or the next snapshot's first envelope (seq 1) reads as a fresh log
- * to a cursor already past it — a spurious reset + refetch every remount.
- */
-const seqCounters = new Map<string, number>();
 
 export interface CloudDirectSessionParams {
   /** deus session id — the fold/cache key everywhere the UI reads. */
@@ -123,12 +123,7 @@ export function useCloudDirectSession(
       },
     };
 
-    const nextSeq = () => {
-      const n = (seqCounters.get(sessionId) ?? 0) + 1;
-      seqCounters.set(sessionId, n);
-      return n;
-    };
-    const foldFrame = makeCloudFrameHandler(ctx, sessionId, nextSeq);
+    const foldFrame = makeCloudFrameHandler(ctx, sessionId);
 
     const onFrame = (frame: Record<string, unknown>) => {
       // A fatal agent error is its OWN ws event (`session.error`), not a fold
@@ -159,7 +154,26 @@ export function useCloudDirectSession(
       },
     });
 
+    // Expose the SEND half: while this socket is mounted, sends and cancels for
+    // this session go straight to agnt (the Mac `q:` relay is closed). The frame
+    // builders are the agnt ClientCommand wire; `socket.send` throws if the socket
+    // is not open yet, which surfaces as the send mutation's normal rollback.
+    const disposeChannel = registerDirectSession(sessionId, {
+      sendMessage: (prompt, turnId, options) => {
+        // Enforce deus's one-live-turn contract here, where the fold state is in
+        // reach — agnt itself QUEUES overlapping sends, so without this a
+        // double-send starts a second turn (parity with the Mac driver's
+        // `liveTurnId` guard). The throw rolls the optimistic bubble back.
+        if (folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")) {
+          throw new Error("The agent is still working — wait for the current turn to finish.");
+        }
+        socket.send(buildMessageSendFrame(prompt, turnId, options));
+      },
+      cancel: (turnId) => socket.send(buildCancelFrame(turnId)),
+    });
+
     return () => {
+      disposeChannel();
       socket.close();
       if (frame !== null) cancelAnimationFrame(frame);
       refetchTimers.forEach((timer) => clearTimeout(timer));

@@ -82,6 +82,7 @@ export type {
   ConversationState,
   ConversationChange,
   ConversationMessage,
+  ConversationCompaction,
   ConversationTurn,
   TimelineEntry,
   // ---- wire ----

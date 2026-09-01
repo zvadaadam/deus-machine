@@ -178,6 +178,8 @@ const electronAPI = {
   logoutGhAuth: (): Promise<{ success: boolean; path: string | null; error?: string }> =>
     ipcRenderer.invoke("native:logoutGhAuth"),
   getDeusCloudSession: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:get_session"),
+  mintDeusCloudDirectToken: (providerSessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke("deus_cloud:mint_direct_token", providerSessionId),
   startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
   retryDeusCloudProvision: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:retry_provision"),

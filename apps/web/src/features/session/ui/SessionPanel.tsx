@@ -15,7 +15,7 @@ import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { CloudEnvSetupChip } from "./CloudEnvSetupChip";
 import { useAgentEvents } from "../hooks/useAgentEvents";
 import { useCloudDirect } from "../hooks/useCloudDirect";
-import { isCloudDirectEnabled } from "../cloud/cloudDirectFlag";
+import { useIsDirectSession } from "../cloud/useIsDirectSession";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
 import { useSessionContextLostNotice } from "../hooks/useSessionContextLostNotice";
 import { SessionProvider } from "../context";
@@ -120,8 +120,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       useAgentRpcHandler(agentRpcContext);
 
     // Path B (behind a flag, default off): a cloud session folds the agnt socket
-    // DIRECTLY in the browser instead of via the Mac backend's q: relay.
-    const cloudDirect = isCloudDirectEnabled() && workspaceKind === "cloud";
+    // DIRECTLY in the browser instead of via the Mac backend's q: relay. Direct
+    // mode is DERIVED centrally (useIsDirectSession) — `undefined` while the
+    // session row loads, so neither lane arms until it's known.
+    const direct = useIsDirectSession(sessionId);
 
     // TanStack Query hooks
     const {
@@ -131,17 +133,23 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       hasOlder,
       sessionStatus,
       loading,
-    } = useSessionWithMessages(sessionId, cloudDirect);
+    } = useSessionWithMessages(sessionId);
 
     // ── Part Events → direct cache mutation (single-store model) ──────
-    // WS part events mutate the TanStack Query cache directly.
-    // No parallel store, no merge function. One source of truth.
+    // WS part events mutate the TanStack Query cache directly. No parallel store,
+    // no merge function. One source of truth.
     //
     // Exactly one lane drives that cache key: the Mac q: fold, or — when
-    // cloud-direct — the browser's own agnt socket. So the q: fold stands down
-    // (`null`) for a direct session, and `useCloudDirect` drives it instead.
-    useAgentEvents(cloudDirect ? null : sessionId);
-    useCloudDirect(sessionId, cloudDirect);
+    // cloud-direct — the browser's own agnt socket. `direct === false`/`true` are
+    // strict, so the unknown beat arms NEITHER. The direct lane's state is kept
+    // so its token/socket failures surface in the transcript instead of showing
+    // an empty, silent conversation.
+    useAgentEvents(direct === false ? sessionId : null);
+    const cloudDirectState = useCloudDirect(
+      sessionId,
+      direct === true,
+      session?.provider_session_id ?? null
+    );
 
     // A silent resume failure (session.created → resumed: false) means the
     // model forgot this conversation. Surfaced once, dismissible, never
@@ -357,7 +365,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               compactions={compactions}
               loading={loading}
               sessionStatus={sessionStatus}
-              errorMessage={session?.error_message}
+              errorMessage={cloudDirectState.error ?? session?.error_message}
               errorCategory={session?.error_category ?? undefined}
               agentHarness={session?.agent_harness}
               latestMessageSentAt={latestMessageSentAt}
@@ -469,7 +477,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     compactions={compactions}
                     loading={loading}
                     sessionStatus={sessionStatus}
-                    errorMessage={session?.error_message}
+                    errorMessage={cloudDirectState.error ?? session?.error_message}
                     errorCategory={session?.error_category ?? undefined}
                     agentHarness={session?.agent_harness}
                     latestMessageSentAt={latestMessageSentAt}

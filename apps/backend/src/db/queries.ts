@@ -189,10 +189,15 @@ function coerceSessionBooleans<T extends SessionRow>(row: T): T {
  * Session query — uses denormalized message_count column
  * instead of COUNT(m.id) JOIN, eliminating expensive aggregation.
  */
+// Two workspace joins with distinct meanings: `current_ws` is the workspace this
+// session is the CURRENT session of (its slug/state surface only for the active
+// session); `owner_ws` is the workspace this session belongs to (always present —
+// the source of `workspace_kind`, which drives the direct render lane).
 const SESSION_DETAILS_SELECT = `
-  SELECT s.*, w.slug, w.state as workspace_state
+  SELECT s.*, current_ws.slug, current_ws.state as workspace_state, owner_ws.kind as workspace_kind
   FROM sessions s
-  LEFT JOIN workspaces w ON s.id = w.current_session_id
+  LEFT JOIN workspaces current_ws ON s.id = current_ws.current_session_id
+  LEFT JOIN workspaces owner_ws ON owner_ws.id = s.workspace_id
 `;
 
 export function getAllSessions(db: Database.Database): SessionWithDetailsRow[] {

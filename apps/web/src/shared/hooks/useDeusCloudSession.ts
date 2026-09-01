@@ -32,11 +32,14 @@ export function useDeusCloudSession() {
       ]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
-      // The cloud-access verdict GATES the create action, so a stale verdict
-      // kept alive during a background refetch is worse than none: account B
-      // could reuse A's "ok" and select cloud before B's check lands. RESET it
-      // (drop the data) so the gate holds until B's own verdict arrives.
+      // Both of these are account-scoped and worse-than-useless when stale:
+      // `cloudRepoAccess` GATES the create action (account B must not reuse A's
+      // "ok"), and `cloudDirectToken` carries an account-scoped JWT that drives a
+      // live agnt socket (account B must not keep streaming on A's token). RESET
+      // (drop the data), not invalidate — dropping the direct token also tears
+      // its socket down (useCloudDirect passes null params once the data is gone).
       void queryClient.resetQueries({ queryKey: ["cloudRepoAccess"] });
+      void queryClient.resetQueries({ queryKey: ["cloudDirectToken"] });
     });
   }, [queryClient]);
 

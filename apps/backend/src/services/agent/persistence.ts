@@ -33,6 +33,7 @@ import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
 import {
   cancelledTurnRow,
+  findConversationCompaction,
   findConversationMessage,
   turnAccountingRow,
 } from "@shared/conversation-rows";
@@ -598,10 +599,7 @@ export function persistChanges(
         break;
       }
       case "compaction-upserted": {
-        const entry = state.timeline.find(
-          (e): e is ConversationCompaction =>
-            e.kind === "compaction" && e.compactionId === change.compactionId
-        );
+        const entry = findConversationCompaction(state, change.compactionId);
         if (!entry) break;
         writes.push({ change, result: persistCompaction(sessionId, entry) });
         break;
