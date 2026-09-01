@@ -75,12 +75,28 @@ export function makeCloudFrameHandler(
       // The direct lane has no q: push keeping `sessions.detail` fresh, so the
       // working indicator / Stop button would never move — project the turn
       // lifecycle onto the row here (the Mac lane gets this from the backend).
-      if (type === "turn.started") {
-        patchSessionDetail(ctx.queryClient, sessionId, { status: "working" });
-      } else if (type === "turn.ended") {
-        patchSessionDetail(ctx.queryClient, sessionId, {
-          status: (frame as { error?: unknown }).error ? "error" : "idle",
-        });
+      if (type === "turn.started" || type === "turn.ended") {
+        patchSessionDetail(
+          ctx.queryClient,
+          sessionId,
+          type === "turn.started"
+            ? { status: "working" }
+            : { status: (frame as { error?: unknown }).error ? "error" : "idle" }
+        );
+        // The SIDEBAR row reads the workspaces list, not sessions.detail — a
+        // turn boundary is rare enough that a list refetch is the simple way to
+        // move its working dot without inventing a push channel.
+        void ctx.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      } else if (type === "session.usage") {
+        // The composer's context gauge — mirror the Mac backend's projection
+        // (persistUsage): count always, percent only when a size is known.
+        const { used, size } = frame as { used?: number; size?: number };
+        if (typeof used === "number") {
+          patchSessionDetail(ctx.queryClient, sessionId, {
+            context_token_count: used,
+            ...(size ? { context_used_percent: Math.min((used / size) * 100, 100) } : {}),
+          });
+        }
       }
     }
     // else: a non-render frame — see the file header.
@@ -139,11 +155,22 @@ function backfillSnapshot(
   );
 
   // Restate the snapshot's session facts onto the detail row (web-direct has no
-  // q: push): a live turn means working NOW, and the real message count fixes
-  // discovery's zero (which otherwise mislabels an old conversation "New chat").
+  // q: push): a live turn means working NOW, the real message count fixes
+  // discovery's zero (which otherwise mislabels an old conversation "New chat"),
+  // and the context gauge resumes from where the session left off.
+  const contextUsed = snapshot.state.contextUsed;
+  const contextSize = snapshot.state.contextSize;
   patchSessionDetail(ctx.queryClient, sessionId, {
     status: currentTurnId ? "working" : snapshot.state.status === "error" ? "error" : "idle",
     message_count: ordered.length,
+    ...(typeof contextUsed === "number"
+      ? {
+          context_token_count: contextUsed,
+          ...(contextSize
+            ? { context_used_percent: Math.min((contextUsed / contextSize) * 100, 100) }
+            : {}),
+        }
+      : {}),
   });
 }
 

@@ -1,7 +1,43 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { getSession, onAuthChanged } from "@/platform/native/deus-cloud";
+import type { DeusCloudSessionStatus } from "@shared/types";
+
+/**
+ * Apply an account change to EVERY account-scoped cache — one implementation
+ * for both triggers: the desktop's auth-changed broadcast (the listener below)
+ * and the web sign-out mutation, whose browser `onAuthChanged` is a no-op, so
+ * without this a signed-out web user kept a live direct token + agnt socket
+ * until the token expired.
+ */
+export function applyDeusCloudAuthChange(
+  queryClient: QueryClient,
+  nextSession: DeusCloudSessionStatus
+): void {
+  queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
+  // EVERY account-scoped cache, not a curated subset — the subset is how
+  // account B kept seeing A's data for a freshness window, three separate
+  // times on this branch.
+  for (const key of [
+    ["settings", "cloud"],
+    ["settings", "github-app"],
+    ["settings", "claude-subscription"],
+    ["settings", "codex-subscription"],
+    ["settings", "cloud-environments"],
+    ["repo-cloud-environment"],
+  ]) {
+    void queryClient.invalidateQueries({ queryKey: key });
+  }
+  // Both of these are account-scoped and worse-than-useless when stale:
+  // `cloudRepoAccess` GATES the create action (account B must not reuse A's
+  // "ok"), and `cloudDirectToken` carries an account-scoped JWT that drives a
+  // live agnt socket (account B must not keep streaming on A's token). RESET
+  // (drop the data), not invalidate — dropping the direct token also tears
+  // its socket down (useCloudDirect passes null params once the data is gone).
+  void queryClient.resetQueries({ queryKey: ["cloudRepoAccess"] });
+  void queryClient.resetQueries({ queryKey: ["cloudDirectToken"] });
+}
 
 /**
  * The Deus Cloud session, one way. Four surfaces declared this query
@@ -17,30 +53,7 @@ import { getSession, onAuthChanged } from "@/platform/native/deus-cloud";
 export function useDeusCloudSession() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    return onAuthChanged((nextSession) => {
-      queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
-      // EVERY account-scoped cache, not a curated subset — the subset is how
-      // account B kept seeing A's data for a freshness window, three separate
-      // times on this branch.
-      for (const key of [
-        ["settings", "cloud"],
-        ["settings", "github-app"],
-        ["settings", "claude-subscription"],
-        ["settings", "codex-subscription"],
-        ["settings", "cloud-environments"],
-        ["repo-cloud-environment"],
-      ]) {
-        void queryClient.invalidateQueries({ queryKey: key });
-      }
-      // Both of these are account-scoped and worse-than-useless when stale:
-      // `cloudRepoAccess` GATES the create action (account B must not reuse A's
-      // "ok"), and `cloudDirectToken` carries an account-scoped JWT that drives a
-      // live agnt socket (account B must not keep streaming on A's token). RESET
-      // (drop the data), not invalidate — dropping the direct token also tears
-      // its socket down (useCloudDirect passes null params once the data is gone).
-      void queryClient.resetQueries({ queryKey: ["cloudRepoAccess"] });
-      void queryClient.resetQueries({ queryKey: ["cloudDirectToken"] });
-    });
+    return onAuthChanged((nextSession) => applyDeusCloudAuthChange(queryClient, nextSession));
   }, [queryClient]);
 
   return useQuery({

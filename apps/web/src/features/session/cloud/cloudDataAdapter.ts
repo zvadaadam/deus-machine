@@ -16,6 +16,7 @@ import type { RepoGroup, Workspace } from "@shared/types/workspace";
 import type { Session } from "@shared/types/session";
 import type { SessionStatus, WorkspaceState } from "@shared/enums";
 import { setQueryRequestInterceptor } from "@/platform/ws";
+import { queryClient } from "@/shared/api/queryClient";
 import {
   resolveAgntBaseUrl,
   readWebCloudSessionBearer,
@@ -247,8 +248,26 @@ function withAuthGuard<T>(promise: Promise<T>): Promise<T> {
   });
 }
 
+/**
+ * Discovery has no push in web-direct (the q: subscriptions are no-ops), and
+ * the workspace/session hooks assume push freshness (`staleTime: Infinity`, no
+ * focus refetch) — so without a cadence, a session created on another client or
+ * a background status change never appears for the page's lifetime. A modest
+ * interval invalidates the discovery-served keys; only ACTIVE queries refetch,
+ * and the adapter's in-flight cache coalesces the fan-out to one agnt list call.
+ */
+const DISCOVERY_REFRESH_MS = 60_000;
+
+function startDiscoveryRefresh(): void {
+  setInterval(() => {
+    void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    void queryClient.invalidateQueries({ queryKey: ["sessions", "by-workspace"] });
+  }, DISCOVERY_REFRESH_MS);
+}
+
 /** Register the adapter — a no-op unless this is a fully Mac-closed web build. */
 export function installCloudDataAdapter(): void {
   if (!isCloudDirectWebMode()) return;
   setQueryRequestInterceptor(cloudDataRequestInterceptor);
+  startDiscoveryRefresh();
 }

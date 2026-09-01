@@ -516,6 +516,47 @@ describe("makeCloudFrameHandler", () => {
     );
   });
 
+  it("projects session.usage onto the context gauge (count always, percent needs a size)", () => {
+    const SESSION = "sess-usage";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      context_token_count: 0,
+      context_used_percent: 12,
+    });
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+    // Size known → both fields move.
+    onFrame({
+      type: "session.usage",
+      sessionId: SESSION,
+      turnId: "t",
+      used: 50_000,
+      size: 200_000,
+      timestamp: T,
+    });
+    let d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(50_000);
+    expect(d.context_used_percent).toBe(25);
+
+    // Size unknown → count moves, percent KEEPS its prior value (the Mac
+    // backend's COALESCE semantics, mirrored).
+    onFrame({ type: "session.usage", sessionId: SESSION, turnId: "t", used: 60_000, timestamp: T });
+    d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(60_000);
+    expect(d.context_used_percent).toBe(25);
+  });
+
   it("snapshot restates session facts: live turn → working, real message_count", () => {
     const SESSION = "sess-snap-facts";
     const qc = new QueryClient();

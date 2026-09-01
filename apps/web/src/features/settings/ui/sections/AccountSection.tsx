@@ -1,4 +1,4 @@
-import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { useDeusCloudSession, applyDeusCloudAuthChange } from "@/shared/hooks/useDeusCloudSession";
 import { initialsFrom } from "@/shared/lib/formatters";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Cloud, Loader2, LogIn, LogOut } from "lucide-react";
@@ -37,7 +37,11 @@ export function AccountSection() {
   const signOutMutation = useMutation({
     mutationFn: () => native.deusCloud.signOut(),
     onSuccess: (result) => {
-      queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
+      // Full account-scoped teardown, not just the session row: on the web
+      // there is no auth-changed broadcast, so this call is what drops the
+      // direct token and tears down any live agnt socket. Idempotent on
+      // desktop, where the broadcast fires the same routine.
+      applyDeusCloudAuthChange(queryClient, result.session);
       if (result.success) {
         toast.success("Signed out of Deus Cloud");
         return;
