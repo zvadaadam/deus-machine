@@ -39,6 +39,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
     sourcemap: "hidden",
     outDir: resolve(root, "out/renderer"),
+    // The production web app is served from the ROOT domain behind the landing
+    // worker's edge router; a distinct asset prefix is how that router tells the
+    // app's bundles (/app-assets/*) apart from the landing's (/assets/*).
+    assetsDir: "app-assets",
   },
   server: {
     port: 1420,

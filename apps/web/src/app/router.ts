@@ -3,12 +3,20 @@
  *
  * Route tree:
  *   / (RootLayout)
- *   +-- /connect           -> ConnectPage (enter server ID)
- *   +-- /connect/$serverId  -> ConnectPage (pre-filled server)
- *   +-- /s/$serverId        -> ServerLayout (wraps nested routes)
- *       +-- /               -> redirects to last workspace
- *       +-- /w/$workspaceId -> WorkspaceRoute
- *       +-- /settings       -> SettingsRoute
+ *   +-- web-direct product, AT THE ROOT (deusmachine.ai IS the app):
+ *   |   +-- /               -> WorkspaceRoute (web-direct; else redirects)
+ *   |   +-- /w/$workspaceId -> WorkspaceRoute
+ *   |   +-- /settings       -> SettingsRoute
+ *   +-- relay (Mac remote control), under its own URLs:
+ *       +-- /connect            -> ConnectPage (enter server ID)
+ *       +-- /connect/$serverId  -> ConnectPage (pre-filled server)
+ *       +-- /s/$serverId        -> ServerLayout (wraps nested routes)
+ *           +-- /               -> redirects to last workspace
+ *           +-- /w/$workspaceId -> WorkspaceRoute
+ *           +-- /settings       -> SettingsRoute
+ *
+ * One deployed build serves both audiences; `getDeploymentMode()` is
+ * entry-path-scoped, so a relay URL keeps relay behavior on a web-direct build.
  *
  * Shared components (MainLayout, SettingsPage, etc.) NEVER import from
  * @tanstack/react-router. Route components are thin wrappers that extract
@@ -72,23 +80,53 @@ const settingsRoute = createRoute({
   component: SettingsRoute,
 });
 
-// --- / (root index, redirect) ---
-const indexRoute = createRoute({
+// --- Web-direct product at the ROOT (deusmachine.ai IS the app) ---
+// A pathless layout so `/`, `/w/:id` and `/settings` render inside the same
+// ServerLayout shell the /s tree uses (settings gate, q: protocol wiring — in
+// web-direct the request interceptor answers instead of a socket). Guarded per
+// route: on a non-web-direct build these paths bounce to the relay flows.
+
+/** Redirect a product-root path to where this deployment actually serves the app. */
+function guardWebDirect(): void {
+  const mode = getDeploymentMode();
+  if (mode === "web-direct") return;
+  // web-dev serves the app under its synthetic server path.
+  if (mode === "web-dev") {
+    throw redirect({ to: "/s/$serverId", params: { serverId: "local" } });
+  }
+  throw redirect({ to: "/connect" });
+}
+
+const directLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: "webDirect",
+  component: ServerLayout,
+});
+
+const directIndexRoute = createRoute({
+  getParentRoute: () => directLayoutRoute,
   path: "/",
-  beforeLoad: () => {
-    // In web-dev mode, skip the connect screen — go straight to the app
-    // with a dummy serverId (the actual connection uses VITE_BACKEND_PORT).
-    if (getDeploymentMode() === "web-dev") {
-      throw redirect({ to: "/s/$serverId", params: { serverId: "local" } });
-    }
-    throw redirect({ to: "/connect" });
-  },
+  beforeLoad: guardWebDirect,
+  component: WorkspaceRoute,
+});
+
+const directWorkspaceRoute = createRoute({
+  getParentRoute: () => directLayoutRoute,
+  path: "/w/$workspaceId",
+  beforeLoad: guardWebDirect,
+  component: WorkspaceRoute,
+});
+
+const directSettingsRoute = createRoute({
+  getParentRoute: () => directLayoutRoute,
+  path: "/settings",
+  beforeLoad: guardWebDirect,
+  component: SettingsRoute,
 });
 
 // --- Route tree ---
 const routeTree = rootRoute.addChildren([
-  indexRoute,
+  directLayoutRoute.addChildren([directIndexRoute, directWorkspaceRoute, directSettingsRoute]),
   connectRoute,
   connectServerRoute,
   serverRoute.addChildren([serverIndexRoute, workspaceRoute, settingsRoute]),

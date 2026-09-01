@@ -12,13 +12,25 @@
 
 import { capabilities } from "@/platform/capabilities";
 import { getBackendPort } from "./api.config";
+import { isCloudDirectWebMode } from "./webDirectMode";
 
-export type DeploymentMode = "electron" | "web-dev" | "web-standalone" | "web-production";
+export type DeploymentMode =
+  | "electron"
+  | "web-dev"
+  | "web-direct"
+  | "web-standalone"
+  | "web-production";
 
 /** Detect the current deployment mode. */
 export function getDeploymentMode(): DeploymentMode {
   if (capabilities.ipcInvoke) return "electron";
   if (import.meta.env.VITE_BACKEND_PORT) return "web-dev";
+
+  // Fully Mac-closed web (deusmachine.ai): the browser drives cloud agents
+  // against agnt directly — no Mac backend, no relay. Entry-path-scoped: a
+  // relay URL (/connect*, /s/*) on the same build keeps its relay mode (the
+  // check lives inside isCloudDirectWebMode).
+  if (isCloudDirectWebMode()) return "web-direct";
 
   // Standalone mode: served from a CLI server that proxies /api and /ws to backend.
   // Detected when there's no relay server ID in the URL (no /s/{id}/... path).
@@ -77,9 +89,11 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
     return cachedEndpoints;
   }
 
-  if (mode === "web-standalone") {
+  if (mode === "web-standalone" || mode === "web-direct") {
     // Standalone mode: the CLI server proxies /api and /ws to the backend.
     // Connect using the same origin the page was loaded from.
+    // (web-direct never actually connects — the request interceptor answers
+    // before the transport is touched — this is just a harmless default.)
     if (cachedEndpoints) return cachedEndpoints;
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     cachedEndpoints = {

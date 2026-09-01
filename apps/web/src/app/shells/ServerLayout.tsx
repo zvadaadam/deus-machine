@@ -23,6 +23,7 @@ import { useSettings } from "@/features/settings";
 import { useAuth, PairGatePage } from "@/features/auth";
 import { ServerOfflinePage } from "@/features/connection";
 import { isRelayMode } from "@/shared/config/backend.config";
+import { markReturningUser } from "@/shared/lib/returningUser";
 
 export function ServerLayout() {
   // Extract serverId from route params for relay WS connection
@@ -67,6 +68,13 @@ export function ServerLayout() {
  */
 function ServerContent({ serverId }: { serverId: string }) {
   const settingsQuery = useSettings();
+
+  // The product shell mounted, so this browser is a user — mark it so the root
+  // domain's edge router serves the app (not the landing) at `/` next time.
+  // A no-op off the deusmachine.ai domain family.
+  useEffect(() => {
+    markReturningUser();
+  }, []);
 
   // Global listeners -- same as DesktopShell
   useGlobalSessionNotifications();
