@@ -51,7 +51,7 @@ import {
   toolRequestFromMcpQuestion,
 } from "../cloud/directSessionRegistry";
 import { questionsFromAskUserQuestionInput } from "@shared/ask-user-question";
-import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
+import { emitLocalEvent, setToolResponseInterceptor, TOOL_CANCEL_EVENT } from "@/platform/ws";
 import type { QueryClient } from "@tanstack/react-query";
 
 // ---- Question round-trip ----------------------------------------------------
@@ -79,6 +79,11 @@ interface PendingDirectQuestion {
   providerSessionId: string;
   queryClient: QueryClient;
   ask: PendingQuestionKind;
+  /** The turn that was live when the question arrived (the wire carries no
+   *  turn id; the fold's active turn is the binding). A reconnect snapshot
+   *  re-presents the question only for THAT turn — undefined (no admitted
+   *  turn in the fold yet) falls back to "any live turn". */
+  turnId?: string;
   /** What the overlay was shown — re-emitted verbatim after a remount. */
   request: Omit<ToolRequestEventData, "requestId">;
 }
@@ -98,11 +103,23 @@ function parkDirectQuestion(pending: PendingDirectQuestion): void {
   presentDirectQuestion(pending);
 }
 
+/** The fold's active turn — what a freshly arrived question belongs to. */
+function activeTurnId(sessionId: string): string | undefined {
+  return folds.get(sessionId)?.state.turns.find((turn) => turn.status === "active")?.turnId;
+}
+
+/** Retract a presented question: the registry forgets it AND the overlay
+ *  drops it (a card the agent no longer accepts must not stay answerable). */
+function retractDirectQuestion(localId: string, pending: PendingDirectQuestion): void {
+  pendingDirectQuestions.delete(localId);
+  emitLocalEvent(TOOL_CANCEL_EVENT, { sessionId: pending.sessionId, requestId: localId });
+}
+
 /** Drop every parked question of a session (its turn ended — a late answer
  *  must not revive it) without answering. */
 function dropDirectQuestions(sessionId: string): void {
-  for (const [id, pending] of pendingDirectQuestions) {
-    if (pending.sessionId === sessionId) pendingDirectQuestions.delete(id);
+  for (const [id, pending] of [...pendingDirectQuestions]) {
+    if (pending.sessionId === sessionId) retractDirectQuestion(id, pending);
   }
 }
 
@@ -261,6 +278,7 @@ export function useCloudDirectSession(
             sessionId,
             providerSessionId,
             queryClient,
+            turnId: activeTurnId(sessionId),
             ask: { kind: "mcp" },
             request: rest,
           });
@@ -293,6 +311,7 @@ export function useCloudDirectSession(
           sessionId,
           providerSessionId,
           queryClient,
+          turnId: activeTurnId(sessionId),
           ask: { kind: "permission", input: data.input },
           request: {
             sessionId,
@@ -309,16 +328,23 @@ export function useCloudDirectSession(
       // sidecar's clock. No live turn: it ended while this socket was down
       // (stopped from another client, timed out) and the agent no longer
       // accepts the answer — drop it, or a stale card lives across remounts.
+      // A question bound to a turn other than the live one (turn A ended and
+      // turn B started while disconnected) is stale too: its answer would
+      // carry A's request id to an agent already past it.
       if (frame.type === "session.snapshot") {
         const state = frame.state as { currentTurnId?: unknown } | undefined;
-        if (typeof state?.currentTurnId === "string" && state.currentTurnId) {
-          for (const [id, pending] of [...pendingDirectQuestions]) {
-            if (pending.sessionId !== sessionId) continue;
+        const live =
+          typeof state?.currentTurnId === "string" && state.currentTurnId
+            ? state.currentTurnId
+            : null;
+        for (const [id, pending] of [...pendingDirectQuestions]) {
+          if (pending.sessionId !== sessionId) continue;
+          if (live && (pending.turnId === undefined || pending.turnId === live)) {
             pendingDirectQuestions.delete(id);
             presentDirectQuestion(pending);
+          } else {
+            retractDirectQuestion(id, pending);
           }
-        } else {
-          dropDirectQuestions(sessionId);
         }
       }
       // A fresh turn proves the lane works — clear any earlier surfaced error

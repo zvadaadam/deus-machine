@@ -407,6 +407,11 @@ export function emitLocalEvent(event: string, data: unknown): void {
   dispatchEvent(event, data);
 }
 
+/** Local-only event: a question the direct lane can no longer answer (its
+ *  turn ended while the socket was down) — the overlay drops that request.
+ *  Payload: `{ sessionId, requestId }` (the local id the overlay was shown). */
+export const TOOL_CANCEL_EVENT = "tool:cancel" as const;
+
 /**
  * A tool response that should NOT go to the backend: the direct lane answers
  * its own questions over the agnt socket. Consulted first by `sendToolResponse`;

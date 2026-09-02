@@ -396,14 +396,19 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("serializes metadata pushes per provider session — a slow default stamp cannot land after the first-send restamp", async () => {
-    const calls: Array<{ body: string; resolve: () => void }> = [];
+    // Only OUR two pushes are held back; the scaffolding's connect-time stamps
+    // (queued on the same chain by beforeEach) settle at once.
+    const held: Array<{ body: string; resolve: () => void }> = [];
     const fetchMock = vi.fn(
       (_url: string, init?: { body?: string }) =>
         new Promise<Response>((resolve) => {
-          calls.push({
-            body: String(init?.body),
-            resolve: () => resolve(new Response("{}", { status: 200 })),
-          });
+          const body = String(init?.body);
+          const done = () => resolve(new Response("{}", { status: 200 }));
+          if (body.includes("claude-code") || body.includes("codex-app-server")) {
+            held.push({ body, resolve: done });
+          } else {
+            done();
+          }
         })
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -413,16 +418,16 @@ describe("cloud driver frame → fold contract", () => {
       pushCloudSessionFacts("deus-session-1", { harness: "claude-code" });
       pushCloudSessionFacts("deus-session-1", { harness: "codex-app-server" });
 
-      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1), { timeout: 5000 });
-      expect(calls[0].body).toContain("claude-code");
+      await vi.waitFor(() => expect(held).toHaveLength(1), { timeout: 5000 });
+      expect(held[0].body).toContain("claude-code");
       // The second waits for the first to settle.
       await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(held).toHaveLength(1);
 
-      calls[0].resolve();
-      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-      expect(calls[1].body).toContain("codex-app-server");
-      calls[1].resolve();
+      held[0].resolve();
+      await vi.waitFor(() => expect(held).toHaveLength(2));
+      expect(held[1].body).toContain("codex-app-server");
+      held[1].resolve();
     } finally {
       vi.unstubAllGlobals();
     }

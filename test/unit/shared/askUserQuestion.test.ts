@@ -45,6 +45,16 @@ describe("answeredAskUserQuestionInput (the updatedInput that answers it)", () =
     expect(answered.questions).toBe(input.questions);
   });
 
+  it("keeps a question worded __proto__ as an own answer key", () => {
+    const answered = answeredAskUserQuestionInput(
+      { questions: [{ question: "__proto__", options: ["yes"] }] },
+      ["yes"]
+    );
+    expect(Object.hasOwn(answered.answers as object, "__proto__")).toBe(true);
+    // (An object literal with a __proto__ key sets the prototype, so compare the wire form.)
+    expect(JSON.stringify(answered.answers)).toBe('{"__proto__":"yes"}');
+  });
+
   it("tolerates fewer answers than questions", () => {
     expect(answeredAskUserQuestionInput(input, ["B"]).answers).toEqual({
       "Which letter do you prefer?": "B",

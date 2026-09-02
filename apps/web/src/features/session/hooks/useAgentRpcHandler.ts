@@ -21,7 +21,7 @@ import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react
 import { getErrorMessage } from "@shared/lib/errors";
 import { sendRequest } from "@/platform/ws";
 import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
-import { sendToolResponse } from "@/platform/ws";
+import { onEvent, sendToolResponse, TOOL_CANCEL_EVENT } from "@/platform/ws";
 
 // ============================================================================
 // Types
@@ -180,6 +180,29 @@ export function useAgentRpcHandler(
       setPendingRequests((prev) => updater(prev));
     },
     []
+  );
+
+  // The direct lane retracts a question it can no longer answer (its turn
+  // ended while the socket was down): drop that request's overlay, or a stale
+  // card stays answerable for an agent that has moved on.
+  useEffect(
+    () =>
+      onEvent((event, data) => {
+        if (event !== TOOL_CANCEL_EVENT) return;
+        const { sessionId, requestId } = (data ?? {}) as {
+          sessionId?: unknown;
+          requestId?: unknown;
+        };
+        if (typeof sessionId !== "string" || typeof requestId !== "string") return;
+        setPendingAndNotify((prev) => {
+          const current = prev.get(sessionId);
+          if (!current || current.wsRequestId !== requestId) return prev;
+          const next = new Map(prev);
+          next.delete(sessionId);
+          return next;
+        });
+      }),
+    [setPendingAndNotify]
   );
 
   // ============================================================================

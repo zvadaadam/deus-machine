@@ -69,7 +69,9 @@ export function answeredAskUserQuestionInput(
 ): Record<string, unknown> {
   const base = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
   const questions = questionsFromAskUserQuestionInput(base);
-  const map: Record<string, string> = {};
+  // Null-prototype: a question worded "__proto__" must land as an own key,
+  // not hit the prototype setter and vanish from the answers.
+  const map: Record<string, string> = Object.create(null) as Record<string, string>;
   questions.forEach((entry, index) => {
     const answer = answers[index];
     if (answer === undefined) return;
