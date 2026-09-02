@@ -443,6 +443,47 @@ describe("cloud driver frame → fold contract", () => {
     );
   });
 
+  it("keeps an answer submitted AFTER a terminal drop when the reconnect's setup fails", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-late",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // The socket gives up before the user answers; the answer's own reconnect
+    // then fails at the token mint.
+    socketOpen = false;
+    capturedOnDown!("session socket down after 8 retries");
+    mockCreateSessionToken.mockRejectedValueOnce(new Error("mint failed"));
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "permission.response" })
+    );
+
+    // The next connect delivers it.
+    socketOpen = true;
+    await ensureCloudSession("deus-session-1");
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({ requestId: "req-late" }),
+      })
+    );
+  });
+
   it("serializes metadata pushes per provider session — a slow default stamp cannot land after the first-send restamp", async () => {
     // Only OUR two pushes are held back; the scaffolding's connect-time stamps
     // (queued on the same chain by beforeEach) settle at once.

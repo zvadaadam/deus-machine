@@ -510,19 +510,17 @@ async function sendOnLiveSocket(
     live.outbox.push(frame);
     return;
   }
-  try {
-    const session = await ensureCloudSession(deusSessionId);
-    session.socket.send(frame);
-  } catch (err) {
-    // ready()'s deadline rejects while the fresh socket keeps retrying, and
-    // that socket is already in the map — the frame waits there instead of
-    // dying with the deadline. Anything else (no session, identity change)
-    // is a real failure for the caller.
-    const retrying = sessions.get(deusSessionId);
-    if (!retrying) throw err;
-    if (retrying.socket.isOpen()) retrying.socket.send(frame);
-    else retrying.outbox.push(frame);
-  }
+  // No session at all (the socket gave up earlier): park the frame FIRST — a
+  // reconnect whose setup fails (mint, token exchange) must not lose a freshly
+  // submitted answer — then connect. The replacement inherits the parked
+  // queue when it registers and drains it on open; if setup fails the frame
+  // simply waits for the next connect. ready()'s deadline rejecting while the
+  // fresh socket keeps retrying is covered the same way: the registered
+  // session already holds the frame.
+  orphanedOutboxes.set(deusSessionId, [...(orphanedOutboxes.get(deusSessionId) ?? []), frame]);
+  await ensureCloudSession(deusSessionId);
+  const opened = sessions.get(deusSessionId);
+  if (opened?.socket.isOpen()) flushOutbox(opened);
 }
 
 function flushOutbox(session: CloudSession): void {
