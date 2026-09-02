@@ -37,7 +37,7 @@ import {
   patchWorkspaceSessionStatus,
 } from "../lib/agentEventFold";
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
-import { setDirectQuestionParked } from "../cloud/directQuestionState";
+import { hasParkedDirectQuestion, setDirectQuestionParked } from "../cloud/directQuestionState";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
 import { dropOptimisticMessage } from "../lib/optimisticMessage";
 import { match } from "ts-pattern";
@@ -238,6 +238,10 @@ export function useCloudDirectSession(
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<CloudDirectStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Bumped when a terminally-down socket is asked to deliver something: the
+  // effect below re-runs and opens a fresh socket (reconnect on demand, not
+  // on a timer — a dead network would otherwise loop through retry cycles).
+  const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const sessionId = params?.sessionId ?? null;
   const providerSessionId = params?.providerSessionId ?? null;
@@ -427,8 +431,29 @@ export function useCloudDirectSession(
         return;
       }
       foldFrame(frame);
+      // The snapshot's projection (`backfillSnapshot`) writes "working" for a
+      // session with a current turn — but a turn parked on a question is
+      // waiting on the user, not generating. Re-assert it after the fold.
+      if (frame.type === "session.snapshot" && hasParkedDirectQuestion(sessionId)) {
+        patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
+        patchWorkspaceSessionStatus(queryClient, sessionId, "needs_response");
+      }
     };
 
+    // Terminal failure (retries exhausted) leaves a dead socket registered.
+    // The next delivery attempt through the channel — an answer, a send — asks
+    // for a fresh one instead of failing forever until the panel remounts.
+    let terminallyDown = false;
+    const requestReconnect = () => {
+      if (!terminallyDown) return;
+      terminallyDown = false;
+      setReconnectNonce((n) => n + 1);
+    };
+    const assertDeliverable = () => {
+      if (!terminallyDown) return;
+      requestReconnect();
+      throw new Error("The session lost its connection — reconnecting, try again in a moment.");
+    };
     const socket = connectCloudSessionSocket({
       baseUrl,
       providerSessionId,
@@ -442,6 +467,7 @@ export function useCloudDirectSession(
         setStatus("open");
       },
       onDown: (reason) => {
+        terminallyDown = true;
         pendingTurn = null;
         setStatus("down");
         setError(reason);
@@ -466,11 +492,18 @@ export function useCloudDirectSession(
         ) {
           throw new Error("The agent is still working — wait for the current turn to finish.");
         }
+        assertDeliverable();
         socket.send(buildMessageSendFrame(prompt, turnId, options));
         pendingTurn = { turnId, at: Date.now() };
       },
-      cancel: (turnId) => socket.send(buildCancelFrame(turnId)),
-      sendRaw: (raw) => socket.send(raw),
+      cancel: (turnId) => {
+        assertDeliverable();
+        socket.send(buildCancelFrame(turnId));
+      },
+      sendRaw: (raw) => {
+        assertDeliverable();
+        socket.send(raw);
+      },
     });
 
     return () => {
@@ -484,7 +517,7 @@ export function useCloudDirectSession(
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();
     };
-  }, [sessionId, providerSessionId, baseUrl, token, queryClient]);
+  }, [sessionId, providerSessionId, baseUrl, token, queryClient, reconnectNonce]);
 
   return { status, error };
 }
