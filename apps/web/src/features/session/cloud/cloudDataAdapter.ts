@@ -120,6 +120,11 @@ async function fetchAllCloudSessions(): Promise<AgntSession[]> {
   }
   if (failed === 0) {
     orgFailureNoticed = false;
+  } else if (failed === results.length) {
+    // EVERY org failed (a single-org account, or agnt down): rejecting keeps
+    // TanStack's last good list on screen instead of replacing it with a
+    // misleading "no sessions".
+    throw new Error("Couldn't load your cloud sessions");
   } else if (!orgFailureNoticed) {
     orgFailureNoticed = true;
     toast.error("Couldn't load sessions for one of your organizations");
@@ -201,7 +206,10 @@ function toWorkspace(s: AgntSession): Workspace {
     // Not the title: under a titled row the sidebar shows `slug` as the
     // secondary line, where it would just repeat the title. The branch is
     // real context; the id prefix keeps untitled rows labelled.
-    slug: s.branch ?? s.id.slice(0, 8),
+    // Titled rows get the branch as their secondary line; UNTITLED rows are
+    // labelled by the id prefix so several fresh sessions on `main` stay
+    // distinguishable.
+    slug: s.title ? (s.branch ?? s.id.slice(0, 8)) : s.id.slice(0, 8),
     title: s.title,
     git_branch: s.branch,
     git_target_branch: null,

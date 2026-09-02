@@ -166,12 +166,6 @@ export function MainContent({
     selectedWorkspace?.kind === "cloud" && cloudPresence(selectedWorkspace.init_stage) === "waking";
   const handleCloudWake = useCallback(() => {
     if (!selectedWorkspaceId) return;
-    // Web-direct has no wake transport (agnt's resume is secret-key-only); a
-    // send auto-wakes via the DO.
-    if (isCloudDirectWebMode()) {
-      toast.info("Send a message to wake this computer");
-      return;
-    }
     void apiClient.post(`/workspaces/${selectedWorkspaceId}/cloud-wake`).catch(() => {});
   }, [selectedWorkspaceId]);
 
@@ -378,7 +372,7 @@ export function MainContent({
               }
               cloudAsleep={cloudAsleep}
               cloudWaking={cloudWaking}
-              onCloudWake={handleCloudWake}
+              onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
               prStatus={prStatus}
               ghStatus={ghStatus}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
@@ -430,7 +424,7 @@ export function MainContent({
                         }
                         cloudAsleep={cloudAsleep}
                         cloudWaking={cloudWaking}
-                        onCloudWake={handleCloudWake}
+                        onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}
                         onSendAgentMessage={

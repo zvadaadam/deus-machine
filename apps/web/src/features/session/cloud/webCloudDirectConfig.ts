@@ -16,7 +16,6 @@
  */
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { queryClient } from "@/shared/api/queryClient";
-import { queryKeys } from "@/shared/api/queryKeys";
 export { isCloudDirectWebMode };
 
 const BEARER_KEY = "deus_cloud_session";
@@ -52,6 +51,9 @@ export async function readWebCloudSessionBearer(): Promise<string | null> {
 // victim into the ATTACKER's account (login CSRF) and leak their prompts to it.
 const LOGIN_STATE_KEY = "deus.cloudLoginState";
 const LOGIN_STATE_PARAM = "deus_login_state";
+// The last login attempt's timestamp — a loop guard (see redirectToWebCloudLogin).
+const LOGIN_ATTEMPT_KEY = "deus.cloudLoginAt";
+const LOGIN_COOLDOWN_MS = 10_000;
 
 /**
  * Capture a `#token=…` deus-cloud session handed back by the login redirect,
@@ -79,6 +81,10 @@ export function captureCloudSessionFromFragment(): boolean {
     if (!echoed || !expected || echoed !== expected) return false;
 
     sessionStorage.setItem(BEARER_KEY, decodeURIComponent(match[1]));
+    // Anchor the 401 cooldown to the CALLBACK, not the outbound redirect: a
+    // hosted login that takes longer than the cooldown would otherwise return
+    // with an already-stale marker, and a rejected fresh bearer would loop.
+    sessionStorage.setItem(LOGIN_ATTEMPT_KEY, String(Date.now()));
     return true;
   } catch {
     return false;
@@ -115,8 +121,6 @@ export function clearWebCloudSession(): void {
 // The last login redirect's timestamp — a loop guard. If login returns without a
 // token (misconfig, WorkOS hiccup), a boot gate that redirects on every missing
 // bearer would spin; the cooldown breaks that, surfacing "signed out" instead.
-const LOGIN_ATTEMPT_KEY = "deus.cloudLoginAt";
-const LOGIN_COOLDOWN_MS = 10_000;
 
 /**
  * Redirect to the deus-web login — unless we JUST tried (within the cooldown),
@@ -164,7 +168,19 @@ export function ensureWebCloudSession(): void {
 export function handleWebCloudSessionExpired(): void {
   clearWebCloudSession();
   if (redirectToWebCloudLogin()) return;
-  // Staying put: flip the account status now rather than on the next
-  // heartbeat, so the UI says signed out while the bearer is already gone.
-  void queryClient.invalidateQueries({ queryKey: queryKeys.deusCloud.session });
+  // Staying put is still an account boundary: run the SAME teardown as
+  // sign-out (session status, workspaces, transcripts, the direct token and
+  // its socket), not just the account query — otherwise the dead bearer's
+  // data keeps rendering and its direct socket keeps streaming. Loaded
+  // lazily: the cache module imports the adapter, which imports this file.
+  void import("@/shared/api/cloudAuthCache").then(({ applyDeusCloudAuthChange }) =>
+    applyDeusCloudAuthChange(queryClient, {
+      signedIn: false,
+      accountId: null,
+      expiresAt: null,
+      tokenType: null,
+      cloudUrl: resolveDeusCloudUrl(),
+      hasPlatformKey: false,
+    })
+  );
 }

@@ -92,11 +92,15 @@ export async function signOut(): Promise<DeusCloudAuthResult> {
       // login callback) and POST /auth/logout is what clears it. Best-effort:
       // local sign-out must not hang on an unreachable auth origin, and
       // WorkOS's hosted session isn't ours to end from here.
+      // Local state goes FIRST — a stalled auth origin must never keep the
+      // bearer (and its live direct socket) alive; the cookie cleanup is
+      // best-effort and bounded.
+      clearWebCloudSession();
       await fetch(`${resolveDeusCloudUrl()}/auth/logout`, {
         method: "POST",
         credentials: "include",
+        signal: AbortSignal.timeout(3000),
       }).catch(() => {});
-      clearWebCloudSession();
       return { success: true, session: { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() } };
     }
     return {

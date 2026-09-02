@@ -164,18 +164,28 @@ export function WorkspaceHeader({
           ) : cloudAsleep ? (
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onCloudWake}
-                  className="text-text-disabled border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <CloudOff className="h-3 w-3" />
-                  Asleep
-                </button>
+                {onCloudWake ? (
+                  <button
+                    type="button"
+                    onClick={onCloudWake}
+                    className="text-text-disabled border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <CloudOff className="h-3 w-3" />
+                    Asleep
+                  </button>
+                ) : (
+                  // No wake transport (web-direct): a status, not a control.
+                  <span className="text-text-disabled border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium">
+                    <CloudOff className="h-3 w-3" />
+                    Asleep
+                  </span>
+                )}
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  Computer asleep — click to wake it, or just send a message
+                  {onCloudWake
+                    ? "Computer asleep — click to wake it, or just send a message"
+                    : "Computer asleep — sending a message wakes it"}
                 </p>
               </TooltipContent>
             </Tooltip>
