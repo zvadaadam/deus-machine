@@ -262,7 +262,8 @@ describe("shared/events", () => {
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
-      expect(PROTOCOL_EVENTS).toContain("tool:request", "tool:cancel");
+      expect(PROTOCOL_EVENTS).toContain("tool:request");
+      expect(PROTOCOL_EVENTS).toContain("tool:cancel");
       // ONE agent event carries the whole lifecycle stream.
       expect(PROTOCOL_EVENTS).toContain("agent:event");
       expect(PROTOCOL_EVENTS).toContain("pty-data");
