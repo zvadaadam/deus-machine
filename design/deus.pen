@@ -80593,6 +80593,553 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "lQMZp",
+      "x": 1560,
+      "y": 15180,
+      "name": "42c · Web-direct — Home (loading)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-sidebar",
+      "children": [
+        {
+          "type": "frame",
+          "id": "e9qteL",
+          "name": "Sidebar",
+          "width": 256,
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "qmcE2",
+              "name": "SidebarHeader",
+              "width": "fill_container",
+              "height": 48,
+              "gap": 4,
+              "padding": [
+                0,
+                6
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "h69lW5",
+                  "name": "Account",
+                  "width": "fill_container",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    6,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "j4Vrlx",
+                      "type": "ref",
+                      "ref": "a0JI15",
+                      "name": "Avatar",
+                      "theme": {
+                        "mode": "dark"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "lgNbm",
+                      "name": "Name",
+                      "fill": "$text-primary",
+                      "content": "Adam Zvada",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kwFgU",
+                  "name": "Actions",
+                  "gap": 2,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "QtvGW",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "New session",
+                      "theme": {
+                        "mode": "dark"
+                      }
+                    },
+                    {
+                      "id": "n31yJ",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "Collapse",
+                      "theme": {
+                        "mode": "dark"
+                      },
+                      "descendants": {
+                        "AaONw": {
+                          "icon": "panel-left-close",
+                          "width": 18,
+                          "height": 18
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "c59VF",
+              "name": "SidebarContent",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                8,
+                6
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "AFuai",
+                  "name": "Sidebar empty (web-direct)",
+                  "width": 244,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 24,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "A48zrJ",
+                      "name": "i",
+                      "opacity": 0.3,
+                      "width": 40,
+                      "height": 40,
+                      "icon": "folder-open",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "j8fzX0",
+                      "name": "No projects yet",
+                      "fill": "$text-secondary",
+                      "content": "No cloud sessions yet",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "q31E2",
+                      "name": "Add your first project to get started",
+                      "fill": "$text-muted",
+                      "content": "Start one from the Deus desktop app — it shows up here, and you can keep the conversation going from any browser or your phone.",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cK5r6",
+              "name": "SidebarFooter",
+              "width": "fill_container",
+              "height": 46,
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Ht1zs",
+                  "name": "Status",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "wFcHJ",
+                      "name": "ConnectionOrb",
+                      "fill": "$accent-green",
+                      "width": 8,
+                      "height": 8
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "AdBFm",
+          "name": "MainContent",
+          "clip": true,
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "$bg-surface",
+          "cornerRadius": [
+            "$radius-xl",
+            0,
+            0,
+            0
+          ],
+          "stroke": "$border-subtle",
+          "strokeWidth": {
+            "top": 1,
+            "bottom": 1,
+            "left": 1
+          },
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "padding": [
+            126,
+            0,
+            0,
+            0
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "aslDN",
+              "name": "H1",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": 720,
+              "content": "Loading your cloud sessions…",
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-2xl",
+              "fontWeight": "500",
+              "letterSpacing": -0.34
+            },
+            {
+              "type": "frame",
+              "id": "BtA6s",
+              "name": "Gap",
+              "width": 1,
+              "height": 24
+            },
+            {
+              "type": "text",
+              "id": "lW6jf",
+              "name": "Subtitle",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": 560,
+              "content": "Fetching them from Deus Cloud.",
+              "lineHeight": 1.45,
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "bL5DV",
+      "x": 1560,
+      "y": 16200,
+      "name": "42d · Web-direct — Home (discovery failed)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-sidebar",
+      "children": [
+        {
+          "type": "frame",
+          "id": "OUgyc",
+          "name": "Sidebar",
+          "width": 256,
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "PSatN",
+              "name": "SidebarHeader",
+              "width": "fill_container",
+              "height": 48,
+              "gap": 4,
+              "padding": [
+                0,
+                6
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "s9jVcE",
+                  "name": "Account",
+                  "width": "fill_container",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    6,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "Xzt3O",
+                      "type": "ref",
+                      "ref": "a0JI15",
+                      "name": "Avatar",
+                      "theme": {
+                        "mode": "dark"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "Q0vjXG",
+                      "name": "Name",
+                      "fill": "$text-primary",
+                      "content": "Adam Zvada",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Mj3Uw",
+                  "name": "Actions",
+                  "gap": 2,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "KfcXu",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "New session",
+                      "theme": {
+                        "mode": "dark"
+                      }
+                    },
+                    {
+                      "id": "uVn75",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "Collapse",
+                      "theme": {
+                        "mode": "dark"
+                      },
+                      "descendants": {
+                        "AaONw": {
+                          "icon": "panel-left-close",
+                          "width": 18,
+                          "height": 18
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "acN9k",
+              "name": "SidebarContent",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                8,
+                6
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "z9gPk",
+                  "name": "Sidebar empty (web-direct)",
+                  "width": 244,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 24,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "S6yCPO",
+                      "name": "i",
+                      "opacity": 0.3,
+                      "width": 40,
+                      "height": 40,
+                      "icon": "folder-open",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "XPawD",
+                      "name": "No projects yet",
+                      "fill": "$text-secondary",
+                      "content": "No cloud sessions yet",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "nMmUT",
+                      "name": "Add your first project to get started",
+                      "fill": "$text-muted",
+                      "content": "Start one from the Deus desktop app — it shows up here, and you can keep the conversation going from any browser or your phone.",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "FMP7u",
+              "name": "SidebarFooter",
+              "width": "fill_container",
+              "height": 46,
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "XDT8P",
+                  "name": "Status",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "KsyHI",
+                      "name": "ConnectionOrb",
+                      "fill": "$accent-green",
+                      "width": 8,
+                      "height": 8
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "lIZE0",
+          "name": "MainContent",
+          "clip": true,
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "$bg-surface",
+          "cornerRadius": [
+            "$radius-xl",
+            0,
+            0,
+            0
+          ],
+          "stroke": "$border-subtle",
+          "strokeWidth": {
+            "top": 1,
+            "bottom": 1,
+            "left": 1
+          },
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "padding": [
+            126,
+            0,
+            0,
+            0
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "VtOCe",
+              "name": "H1",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": 720,
+              "content": "Couldn't load your cloud sessions",
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-2xl",
+              "fontWeight": "500",
+              "letterSpacing": -0.34
+            },
+            {
+              "type": "frame",
+              "id": "IkOCp",
+              "name": "Gap",
+              "width": 1,
+              "height": 24
+            },
+            {
+              "type": "text",
+              "id": "d7tW3u",
+              "name": "Subtitle",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": 560,
+              "content": "Session discovery failed: 502 from api.deusmachine.ai",
+              "lineHeight": 1.45,
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "jmE0K",
+              "type": "ref",
+              "ref": "rg2x2",
+              "name": "Download CTA",
+              "descendants": {
+                "z4bI4": {
+                  "content": "Try again"
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "themes": {

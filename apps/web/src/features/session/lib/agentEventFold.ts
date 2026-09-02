@@ -45,6 +45,8 @@ import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-s
 import { createSeqCursor, type SeqCursor } from "@zvada/agent-server/protocol/seq-cursor";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Message } from "@shared/types/session";
+import type { RepoGroup } from "@shared/types/workspace";
+import type { SessionStatus } from "@shared/enums";
 import {
   cancelledTurnRow,
   compactionRow,
@@ -536,6 +538,32 @@ export function patchSessionDetail(
   qc.setQueryData<import("@shared/types/session").Session>(
     queryKeys.sessions.detail(sessionId),
     (old) => (old ? { ...old, ...patch } : old)
+  );
+}
+
+/**
+ * Mirror a direct session's status onto its workspace row in the sidebar/home
+ * cache: `Workspace.session_status` is what those rows derive attention from,
+ * and discovery (agnt's dashboard) keeps reporting a session blocked on a
+ * question as running. Every by-repo state key is patched — the row shows up
+ * under whichever filter the sidebar has active.
+ */
+export function patchWorkspaceSessionStatus(
+  qc: QueryClient,
+  sessionId: string,
+  status: SessionStatus
+): void {
+  qc.setQueriesData<RepoGroup[]>({ queryKey: ["workspaces", "by-repo"] }, (old) =>
+    Array.isArray(old)
+      ? old.map((group) => ({
+          ...group,
+          workspaces: group.workspaces.map((workspace) =>
+            workspace.current_session_id === sessionId
+              ? { ...workspace, session_status: status }
+              : workspace
+          ),
+        }))
+      : old
   );
 }
 

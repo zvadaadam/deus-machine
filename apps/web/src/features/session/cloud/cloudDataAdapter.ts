@@ -18,6 +18,7 @@ import type { SessionStatus, WorkspaceState } from "@shared/enums";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
 import { queryClient } from "@/shared/api/queryClient";
+import { hasParkedDirectQuestion } from "./directQuestionState";
 import {
   resolveAgntBaseUrl,
   readWebCloudSessionBearer,
@@ -218,7 +219,9 @@ function toWorkspace(s: AgntSession): Workspace {
     state: mapWorkspaceState(s.workspace_status),
     status: "in-progress",
     current_session_id: s.id,
-    session_status: mapSessionStatus(s.status),
+    // A session blocked on a question is "running" to agnt; the renderer
+    // holding the question knows better (see directQuestionState).
+    session_status: hasParkedDirectQuestion(s.id) ? "needs_response" : mapSessionStatus(s.status),
     session_error_category: null,
     session_error_message: null,
     latest_message_sent_at: s.updated_at,
@@ -260,7 +263,7 @@ export function toSession(s: AgntSession): Session {
     provider_session_id: s.id,
     workspace_kind: "cloud",
     title: s.title,
-    status: mapSessionStatus(s.status),
+    status: hasParkedDirectQuestion(s.id) ? "needs_response" : mapSessionStatus(s.status),
     // Discovery carries no count, but the chat tabs hydrate ONCE from this row
     // and label `message_count === 0` "New chat" — a title is only ever minted
     // after the first turn, so it's an honest has-started proxy. The real count

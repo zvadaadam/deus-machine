@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/shared/api/queryKeys";
 import {
   ArrowUp,
   ChevronDown,
@@ -11,6 +13,7 @@ import {
   Upload,
 } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
 import { DEFAULT_MODEL, resolveModelSelection } from "@/shared/agents";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
@@ -84,6 +87,9 @@ const QUICK_PROMPTS = [
 interface HomeViewProps {
   repos: Repository[];
   repoGroups?: RepoGroup[];
+  /** Web-direct discovery state: loading and a failed load are not an empty account. */
+  repoGroupsLoading?: boolean;
+  repoGroupsError?: string | null;
   selectedWorkspaceId?: string | null;
   onSendMessage: (
     repoId: string,
@@ -119,6 +125,8 @@ function abbreviatePath(path: string): string {
 export function HomeView({
   repos = [],
   repoGroups = [],
+  repoGroupsLoading = false,
+  repoGroupsError = null,
   selectedWorkspaceId = null,
   onSendMessage,
   onWorkspaceClick,
@@ -311,6 +319,22 @@ export function HomeView({
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 192)}px`;
   }, []);
+
+  // Fully Mac-closed web: there is no local project to start from — the home
+  // is the user's cloud sessions (the sidebar's rows, surfaced) or an honest
+  // pointer to where new ones come from. Every other affordance on this screen
+  // (repo picker, clone, new project, composer) needs the Mac backend.
+  if (isCloudDirectWebMode()) {
+    return (
+      <CloudSessionsHome
+        groups={recentWorkspaceGroups}
+        selectedWorkspaceId={selectedWorkspaceId}
+        onWorkspaceClick={onWorkspaceClick}
+        loading={repoGroupsLoading}
+        error={repoGroupsError}
+      />
+    );
+  }
 
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
@@ -943,6 +967,111 @@ export function HomeView({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Web-direct home ─────────────────────────────────────────────────
+const DESKTOP_DOWNLOAD_URL = "https://github.com/zvadaadam/deus-machine/releases";
+
+/**
+ * The home for a browser with no Mac behind it: the cloud sessions discovery
+ * found, or — for a brand-new account — where to start one. Sessions are
+ * created from the desktop app for now (creation needs the Mac backend), so
+ * the empty state says exactly that instead of offering dead controls.
+ */
+const CLOUD_HOME_COPY = {
+  loading: ["Loading your cloud sessions…", "Fetching them from Deus Cloud."],
+  error: ["Couldn't load your cloud sessions", "Discovery failed."],
+  sessions: [
+    "Your cloud sessions",
+    "Pick up any conversation from here. New sessions start from the Deus desktop app and show up the moment they exist.",
+  ],
+  empty: [
+    "No cloud sessions yet",
+    "Start one from the Deus desktop app — it shows up here, and you can keep the conversation going from any browser or your phone.",
+  ],
+} as const;
+
+function CloudSessionsHome({
+  groups,
+  selectedWorkspaceId,
+  onWorkspaceClick,
+  loading,
+  error,
+}: {
+  groups: ReturnType<typeof buildRecentWorkspaceGroups>;
+  selectedWorkspaceId: string | null;
+  onWorkspaceClick?: (workspace: Workspace) => void;
+  /** Discovery in flight. */
+  loading: boolean;
+  /** Discovery failed (the message). */
+  error: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const hasSessions = groups.length > 0;
+  // Loading and a failed load are NOT the empty state: on a cold load the
+  // groups are [] for a beat, and the empty screen would tell a user with
+  // sessions to go download the desktop app. A failed BACKGROUND refresh
+  // keeps the cached list on screen: the error screen is for having nothing.
+  const state = loading ? "loading" : hasSessions ? "sessions" : error ? "error" : "empty";
+  const [title, subtitle] = CLOUD_HOME_COPY[state];
+  return (
+    <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">
+      <div className="flex-[0_0_14%] shrink-0 sm:flex-[0_0_18%]" />
+      <motion.h1
+        key={state}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
+        className="text-text-primary mb-2 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight sm:px-6"
+      >
+        {title}
+      </motion.h1>
+      <motion.p
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.06, ease: EASE_OUT_QUART }}
+        className="text-text-muted mb-8 w-full max-w-[560px] px-4 text-center text-sm sm:px-6"
+      >
+        {state === "error" && error ? error : subtitle}
+      </motion.p>
+      {state === "error" && (
+        <motion.button
+          type="button"
+          onClick={() => void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all })}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
+          className="bg-foreground text-background rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
+        >
+          Try again
+        </motion.button>
+      )}
+      {state === "empty" && (
+        <motion.a
+          href={DESKTOP_DOWNLOAD_URL}
+          target="_blank"
+          rel="noreferrer"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
+          className="bg-foreground text-background rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
+        >
+          Download Deus for macOS
+        </motion.a>
+      )}
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-32">
+        <AnimatePresence>
+          {state === "sessions" && (
+            <RecentWorkspaces
+              groups={groups}
+              selectedWorkspaceId={selectedWorkspaceId}
+              onWorkspaceClick={onWorkspaceClick}
+            />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

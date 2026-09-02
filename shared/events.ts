@@ -184,8 +184,14 @@ export const COMMAND_NAMES = [
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
 /** Protocol events — ephemeral notifications pushed to all connected clients. */
+/** The relay retracts a request the agent has abandoned (its turn ended):
+ *  the renderer drops that request's overlay. Payload `{ sessionId, requestId }`.
+ *  Emitted by the backend relay (q:event) AND locally by the direct lane. */
+export const TOOL_CANCEL_EVENT = "tool:cancel" as const;
+
 export const PROTOCOL_EVENTS = [
   "tool:request",
+  TOOL_CANCEL_EVENT,
   // The agent lifecycle stream: ONE event carrying a sequenced
   // @zvada/agent-server WireEventEnvelope verbatim (session/turn/message/part/
   // compaction/error). The frontend folds it with the ENGINE's

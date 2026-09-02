@@ -80,6 +80,18 @@ export function getAgentLabel(agentHarness: AgentHarness): string {
   return getAgentConfig(agentHarness).label;
 }
 
+/**
+ * The picker value a session should open with when nothing else says: its
+ * harness's first catalog model. This is what seeds the composer for a
+ * HYDRATED tab (a session reopened from the sidebar) — without it the composer
+ * fell back to the global default (Claude), and a Codex session's first send
+ * ran as Claude, forking a fresh native conversation.
+ */
+export function getDefaultModelForHarness(agentHarness: AgentHarness): string {
+  const config = getAgentConfig(agentHarness);
+  return `${config.id}:${config.models[0].model}`;
+}
+
 export function resolveModelSelection(model: string): string | undefined {
   const candidate = model.toLowerCase().trim();
   if (MODEL_OPTIONS.some((option) => option.value === candidate)) {

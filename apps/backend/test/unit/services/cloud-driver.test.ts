@@ -13,20 +13,25 @@ const mockSend = vi.fn();
 const mockClose = vi.fn();
 let capturedOnFrame: ((frame: Record<string, unknown>) => void) | null = null;
 let capturedOnDown: ((reason: string) => void) | null = null;
+let capturedOnOpen: (() => void) | null = null;
 let connectCount = 0;
+/** Toggled by the reconnect tests: a closed socket reads false. */
+let socketOpen = true;
 
 vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
   connectSessionSocket: (options: {
     onFrame: (frame: Record<string, unknown>) => void;
+    onOpen?: () => void;
     onDown?: (reason: string) => void;
   }) => {
     connectCount += 1;
     capturedOnFrame = options.onFrame;
+    capturedOnOpen = options.onOpen ?? null;
     capturedOnDown = options.onDown ?? null;
     return {
       ready: () => Promise.resolve(),
       send: mockSend,
-      isOpen: () => true,
+      isOpen: () => socketOpen,
       close: mockClose,
     };
   },
@@ -46,14 +51,17 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
 }));
 
 const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
+const mockCreateSessionToken = vi.fn(async () => ({ token: "session-jwt" }));
 vi.mock("@deus-hq/sdk", () => ({
-  createSessionToken: vi.fn(async () => ({ token: "session-jwt" })),
+  createSessionToken: () => mockCreateSessionToken(),
   createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
 }));
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
+const mockCancelSessionRelays = vi.fn((..._args: unknown[]) => [] as string[]);
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   relay: (...args: unknown[]) => mockRelay(...args),
+  cancelSessionRelays: (...args: unknown[]) => mockCancelSessionRelays(...args),
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
@@ -92,6 +100,7 @@ import {
   ensureCloudSession,
   startCloudTurn,
   requestCloudDiff,
+  pushCloudSessionFacts,
 } from "../../../src/services/agent/cloud/driver";
 
 function makeHandler() {
@@ -110,6 +119,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   capturedOnFrame = null;
   capturedOnDown = null;
+  socketOpen = true;
   handler = makeHandler();
   initCloudDriver(handler);
   await ensureCloudSession("deus-session-1");
@@ -234,16 +244,294 @@ describe("cloud driver frame → fold contract", () => {
     expect(handler.handle).not.toHaveBeenCalled();
   });
 
-  it("auto-allows permission requests over the socket", () => {
-    capturedOnFrame!({ type: "permission.request", data: { requestId: "req-1" } });
+  it("auto-allows permission requests over the socket (ClientCommand shape: data-nested)", () => {
+    capturedOnFrame!({
+      type: "permission.request",
+      data: { requestId: "req-1", toolName: "Bash" },
+    });
 
     expect(mockSend).toHaveBeenCalledWith({
       type: "permission.response",
-      requestId: "req-1",
-      sessionId: "agnt-session-1",
-      result: { behavior: "allow" },
+      data: { requestId: "req-1", sessionId: "agnt-session-1", result: { behavior: "allow" } },
     });
     expect(handler.handle).not.toHaveBeenCalled();
+  });
+
+  it("relays the built-in AskUserQuestion (a permission request) through the overlay and answers in updatedInput", async () => {
+    mockRelay.mockResolvedValueOnce({ answers: ["A"] });
+    const input = {
+      questions: [
+        {
+          question: "Which letter?",
+          options: [{ label: "A" }, { label: "B" }],
+          multiSelect: false,
+        },
+      ],
+    };
+    capturedOnFrame!({
+      type: "permission.request",
+      data: { requestId: "req-q", toolName: "AskUserQuestion", input },
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "permission.response",
+          data: expect.objectContaining({
+            requestId: "req-q",
+            result: {
+              behavior: "allow",
+              updatedInput: { ...input, answers: { "Which letter?": "A" } },
+            },
+          }),
+        })
+      )
+    );
+    // The overlay saw the question in the RPC handler's shape.
+    expect(mockRelay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "askUserQuestion",
+        params: {
+          sessionId: "deus-session-1",
+          questions: [{ question: "Which letter?", options: ["A", "B"], multiSelect: false }],
+        },
+      })
+    );
+  });
+
+  it("denies a dismissed AskUserQuestion — the overlay's sentinel is not an answer", async () => {
+    mockRelay.mockResolvedValueOnce({ answers: ["USER_CANCELLED"] });
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-c",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "permission.response",
+          data: expect.objectContaining({
+            requestId: "req-c",
+            result: { behavior: "deny", message: "The user dismissed the question" },
+          }),
+        })
+      )
+    );
+  });
+
+  it("delivers an answer given after the socket dropped by reconnecting, not by dropping it", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-r",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // The socket goes down while the overlay waits: the driver forgets the
+    // session and nothing reopens it until the next send.
+    socketOpen = false;
+    capturedOnDown!("read ECONNRESET");
+    const connectsBefore = connectCount;
+    socketOpen = true; // the reconnect the answer triggers comes up fine
+
+    settle({ answers: ["A"] });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "permission.response",
+          data: expect.objectContaining({
+            requestId: "req-r",
+            result: expect.objectContaining({ behavior: "allow" }),
+          }),
+        })
+      )
+    );
+    expect(connectCount).toBe(connectsBefore + 1);
+  });
+
+  it("queues an answer while the socket is between retries and delivers it when it reopens", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-o",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // Not open, not down: the socket is retrying in the background (an
+    // outage longer than ready()'s deadline looks exactly like this).
+    socketOpen = false;
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "permission.response" })
+    );
+
+    socketOpen = true;
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({ requestId: "req-o" }),
+      })
+    );
+  });
+
+  it("carries queued answers across a socket replacement and a terminal drop", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-x",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // Answer lands between retries: queued on the current session.
+    socketOpen = false;
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "permission.response" })
+    );
+
+    // That socket gives up (terminal onDown) — the queue must not die with it.
+    capturedOnDown!("session socket down after 8 retries");
+    // The first reconnect attempt fails at the token mint: the queue must
+    // survive that too (it is only handed over once a session is registered).
+    mockCreateSessionToken.mockRejectedValueOnce(new Error("mint failed"));
+    await expect(ensureCloudSession("deus-session-1")).rejects.toThrow("mint failed");
+    // The next caller reconnects: the replacement inherits the queue and its
+    // onOpen delivers it.
+    socketOpen = true;
+    await ensureCloudSession("deus-session-1");
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({ requestId: "req-x" }),
+      })
+    );
+  });
+
+  it("keeps an answer submitted AFTER a terminal drop when the reconnect's setup fails", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-late",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // The socket gives up before the user answers; the answer's own reconnect
+    // then fails at the token mint.
+    socketOpen = false;
+    capturedOnDown!("session socket down after 8 retries");
+    mockCreateSessionToken.mockRejectedValueOnce(new Error("mint failed"));
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "permission.response" })
+    );
+
+    // The next connect delivers it.
+    socketOpen = true;
+    await ensureCloudSession("deus-session-1");
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({ requestId: "req-late" }),
+      })
+    );
+  });
+
+  it("serializes metadata pushes per provider session — a slow default stamp cannot land after the first-send restamp", async () => {
+    // Only OUR two pushes are held back; the scaffolding's connect-time stamps
+    // (queued on the same chain by beforeEach) settle at once.
+    const held: Array<{ body: string; resolve: () => void }> = [];
+    const fetchMock = vi.fn(
+      (_url: string, init?: { body?: string }) =>
+        new Promise<Response>((resolve) => {
+          const body = String(init?.body);
+          const done = () => resolve(new Response("{}", { status: 200 }));
+          if (body.includes("claude-code") || body.includes("codex-app-server")) {
+            held.push({ body, resolve: done });
+          } else {
+            done();
+          }
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    mockGet.mockReturnValueOnce({ kind: "cloud", provider_session_id: "agnt-session-1" } as never);
+    mockGet.mockReturnValueOnce({ kind: "cloud", provider_session_id: "agnt-session-1" } as never);
+    try {
+      pushCloudSessionFacts("deus-session-1", { harness: "claude-code" });
+      pushCloudSessionFacts("deus-session-1", { harness: "codex-app-server" });
+
+      await vi.waitFor(() => expect(held).toHaveLength(1), { timeout: 5000 });
+      expect(held[0].body).toContain("claude-code");
+      // The second waits for the first to settle.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(held).toHaveLength(1);
+
+      held[0].resolve();
+      await vi.waitFor(() => expect(held).toHaveLength(2));
+      expect(held[1].body).toContain("codex-app-server");
+      held[1].resolve();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("settles the session's pending relays when its turn ends (a stopped turn's question is retracted)", () => {
+    capturedOnFrame!({
+      type: "turn.ended",
+      sessionId: "agnt-session-1",
+      turnId: "t1",
+      stopReason: "cancelled",
+    });
+    expect(mockCancelSessionRelays).toHaveBeenCalledWith("deus-session-1", "turn ended");
+    // The lifecycle event itself still reaches the fold.
+    expect(handler.handle).toHaveBeenCalledTimes(1);
   });
 
   it("updates the workspace row from workspace.state frames", () => {

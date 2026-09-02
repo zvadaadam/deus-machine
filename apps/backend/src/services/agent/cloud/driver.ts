@@ -18,10 +18,15 @@ import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
 import { CloudEnvStateSchema, type CloudEnvEvent } from "@shared/events";
+import {
+  answeredAskUserQuestionInput,
+  questionsFromAskUserQuestionInput,
+  isCancelledAnswers,
+} from "@shared/ask-user-question";
 import { getCloudConfig, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
-import { relay } from "../tool-relay";
+import { relay, cancelSessionRelays } from "../tool-relay";
 import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../persistence";
 import { invalidate } from "../../query-engine";
 import { broadcast } from "../../ws.service";
@@ -50,10 +55,16 @@ interface CloudSession {
   /** Armed grace timer for a stopped/error state seen while a turn is live —
    *  see scheduleTurnKill. */
   pendingTurnKill: ReturnType<typeof setTimeout> | null;
+  /** Client commands (permission/question answers) that arrived while the
+   *  socket was between retries — drained by onOpen. */
+  outbox: Record<string, unknown>[];
 }
 
 let handler: AgentEventHandler | null = null;
 const sessions = new Map<string, CloudSession>();
+/** Queued commands of a session whose socket gave up (terminal onDown) —
+ *  handed to the next connect for that session. See sendOnLiveSocket. */
+const orphanedOutboxes = new Map<string, Record<string, unknown>[]>();
 
 /** Wire the driver to the process's one event handler. Called from service init. */
 export function initCloudDriver(eventHandler: AgentEventHandler): void {
@@ -66,6 +77,7 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     // after B signs in, and new callers must not adopt A's pending promise.
     identityGeneration += 1;
     connecting.clear();
+    orphanedOutboxes.clear();
     clearGithubTokenRefreshFlights();
     for (const s of sessions.values()) {
       rejectPendingDiffs(s, "platform identity changed");
@@ -275,6 +287,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   const type = typeof frame.type === "string" ? frame.type : "";
   if (!type || !handler) return;
 
+  // A question relayed during this turn can no longer be answered once the
+  // turn is over (stopped, killed, timed out): settle its relay now — the
+  // renderer drops the overlay on the tool:cancel it broadcasts — instead of
+  // leaving a 24h wait whose eventual answer would reach a request the agent
+  // has abandoned. (The relay's catch answers the sidecar with a deny, which
+  // it ignores for a request it no longer holds.)
+  if (type === "turn.ended") cancelSessionRelays(session.deusSessionId, "turn ended");
+
   // Engine lifecycle events pass through verbatim under the deus session id.
   // agnt's published set omits the engine `error` member (it re-wraps errors
   // in its own envelopes below), but a frame that IS engine-shaped — carrying
@@ -424,14 +444,24 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "permission.request": {
-      const data = (frame.data ?? {}) as { requestId?: string };
+      const data = (frame.data ?? {}) as {
+        requestId?: string;
+        toolName?: unknown;
+        input?: unknown;
+      };
       if (!data.requestId) return;
-      session.socket.send({
-        type: "permission.response",
-        requestId: data.requestId,
-        sessionId: session.providerSessionId,
-        result: { behavior: "allow" },
-      });
+      // Claude Code's built-in AskUserQuestion collects its answers THROUGH
+      // this bridge (questions in `input`, answers back in `updatedInput`) —
+      // and it is the question tool the model actually uses. Auto-allowing it
+      // returned an empty answer set: the agent reported the question as
+      // dismissed. Route it to the same overlay as the MCP question tool.
+      const questions =
+        data.toolName === "AskUserQuestion" ? questionsFromAskUserQuestionInput(data.input) : [];
+      if (questions.length > 0) {
+        void relayAskUserQuestionPermission(session, data.requestId, data.input, questions);
+        return;
+      }
+      void sendPermissionResponse(session, data.requestId, { behavior: "allow" });
       return;
     }
 
@@ -457,7 +487,116 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   }
 }
 
-/** Relay an AskUserQuestion to the frontend and answer over the socket. */
+/**
+ * The socket serving the session NOW. The one a question arrived on may be
+ * gone by the time the user answers — `onDown` drops it from the map and
+ * nothing reopens it until the next send — while the sidecar's request is
+ * still pending (24h). So an answer reconnects rather than being dropped: a
+ * dropped answer left the agent blocked behind an overlay the user had
+ * already closed.
+ */
+async function sendOnLiveSocket(
+  deusSessionId: string,
+  frame: Record<string, unknown>
+): Promise<void> {
+  const live = sessions.get(deusSessionId);
+  if (live?.socket.isOpen()) {
+    live.socket.send(frame);
+    return;
+  }
+  if (live) {
+    // In the map but not open: the socket is between retries (it keeps
+    // reconnecting in the background). Park the frame; onOpen drains it.
+    live.outbox.push(frame);
+    return;
+  }
+  // No session at all (the socket gave up earlier): park the frame FIRST — a
+  // reconnect whose setup fails (mint, token exchange) must not lose a freshly
+  // submitted answer — then connect. The replacement inherits the parked
+  // queue when it registers and drains it on open; if setup fails the frame
+  // simply waits for the next connect. ready()'s deadline rejecting while the
+  // fresh socket keeps retrying is covered the same way: the registered
+  // session already holds the frame.
+  orphanedOutboxes.set(deusSessionId, [...(orphanedOutboxes.get(deusSessionId) ?? []), frame]);
+  await ensureCloudSession(deusSessionId);
+  const opened = sessions.get(deusSessionId);
+  if (opened?.socket.isOpen()) flushOutbox(opened);
+}
+
+function flushOutbox(session: CloudSession): void {
+  for (const frame of session.outbox.splice(0)) {
+    try {
+      session.socket.send(frame);
+    } catch (err) {
+      console.warn(`[CloudDriver] queued command not delivered: ${String(err)}`);
+    }
+  }
+}
+
+/** Answer a permission request over the session's live socket. Never throws
+ *  out of the relay's settle path: a failed delivery is logged and the
+ *  sidecar's own timeout settles the request. */
+async function sendPermissionResponse(
+  session: CloudSession,
+  requestId: string,
+  result:
+    | { behavior: "allow"; updatedInput?: Record<string, unknown> }
+    | { behavior: "deny"; message: string }
+): Promise<void> {
+  try {
+    await sendOnLiveSocket(session.deusSessionId, {
+      type: "permission.response",
+      // Nested under `data` like every ClientCommand payload (see mcp.answer).
+      data: { requestId, sessionId: session.providerSessionId, result },
+    });
+  } catch (err) {
+    console.warn(`[CloudDriver] permission response not delivered (${requestId}): ${String(err)}`);
+  }
+}
+
+/** The permission-bridge twin of `relayQuestion`: same overlay, answered as
+ *  an allow whose `updatedInput` carries the answers (deny on cancel/failure —
+ *  the agent sees "declined" rather than a silent empty answer set). */
+async function relayAskUserQuestionPermission(
+  session: CloudSession,
+  requestId: string,
+  input: unknown,
+  questions: ReturnType<typeof questionsFromAskUserQuestionInput>
+): Promise<void> {
+  const sessionId = session.deusSessionId;
+  const needs = persistSessionNeedsResponse(sessionId);
+  if (needs.ok)
+    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  try {
+    const response = await relay({
+      requestId: crypto.randomUUID(),
+      sessionId,
+      method: "askUserQuestion",
+      params: { sessionId, questions },
+      timeoutMs: 24 * 60 * 60 * 1000,
+    });
+    const answers = extractAnswers(response);
+    const cancelled = isCancelledAnswers(answers);
+    await sendPermissionResponse(
+      session,
+      requestId,
+      cancelled
+        ? { behavior: "deny", message: "The user dismissed the question" }
+        : { behavior: "allow", updatedInput: answeredAskUserQuestionInput(input, answers) }
+    );
+  } catch (err) {
+    console.warn(`[CloudDriver] askUserQuestion (permission) relay failed: ${String(err)}`);
+    await sendPermissionResponse(session, requestId, {
+      behavior: "deny",
+      message: "Question relay failed",
+    });
+  } finally {
+    const back = persistSessionBackToWorking(sessionId);
+    if (back.ok)
+      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  }
+}
+
 async function relayQuestion(
   session: CloudSession,
   data: { questionId: string; questions?: unknown[] }
@@ -475,11 +614,12 @@ async function relayQuestion(
       timeoutMs: 24 * 60 * 60 * 1000,
     });
     const answers = extractAnswers(response);
-    session.socket.send({
+    // The ClientCommand schema nests the payload under `data` (the DO spreads
+    // `command.data` toward the sidecar); a flat frame fails its parse and the
+    // agent waits out the sidecar's question timeout unanswered.
+    await sendOnLiveSocket(session.deusSessionId, {
       type: "mcp.answer",
-      questionId: data.questionId,
-      sessionId: session.providerSessionId,
-      answers,
+      data: { questionId: data.questionId, sessionId: session.providerSessionId, answers },
     });
   } catch (err) {
     console.warn(`[CloudDriver] askUserQuestion relay failed: ${String(err)}`);
@@ -539,6 +679,17 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
 async function connectCloudSession(deusSessionId: string): Promise<CloudSession> {
   const existing = sessions.get(deusSessionId);
   if (existing?.socket.isOpen()) return existing;
+  // Answers queued on the replaced (or given-up) socket belong to the session,
+  // not the socket: the sidecar's request is still pending, so they ride the
+  // replacement instead of dying with the old channel. They wait in
+  // `orphanedOutboxes` until the replacement is REGISTERED — a failed mint or
+  // token exchange below must not be the moment they vanish.
+  if (existing && existing.outbox.length > 0) {
+    orphanedOutboxes.set(deusSessionId, [
+      ...(orphanedOutboxes.get(deusSessionId) ?? []),
+      ...existing.outbox.splice(0),
+    ]);
+  }
   if (existing) {
     clearTurnKill(existing);
     // The replaced channel's in-flight reads AND its terminals die here —
@@ -593,6 +744,13 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     row.provider_session_id = created.id;
   }
 
+  // Stamp the harness on EVERY connect, not just the lazy-create branch: the
+  // workspace pipeline pre-creates the provider session (before any harness is
+  // known) and stores its id, so that branch is skipped for a workspace's
+  // first session — and `createSession` converging on an existing row keeps
+  // its metadata anyway. Idempotent and best-effort; discovery merely degrades
+  // to its claude default if it's lost.
+  void pushCloudSessionMetadata(row.provider_session_id, { harness: row.agent_harness }, config);
   const { token } = await createSessionToken(row.provider_session_id, {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
@@ -606,6 +764,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     seq: 0,
     pending: new Map(),
     pendingTurnKill: null,
+    outbox: [...(orphanedOutboxes.get(deusSessionId) ?? [])],
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -614,8 +773,17 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     providerSessionId: row.provider_session_id,
     token,
     onFrame: (frame) => dispatchFrame(session, frame),
+    onOpen: () => flushOutbox(session),
     onDown: (reason) => {
       console.warn(`[CloudDriver] socket down session=${deusSessionId}: ${reason}`);
+      // Queued answers outlive the socket that gave up: the next connect for
+      // this session (the next send, or the next answer) inherits them.
+      if (session.outbox.length > 0) {
+        orphanedOutboxes.set(deusSessionId, [
+          ...(orphanedOutboxes.get(deusSessionId) ?? []),
+          ...session.outbox.splice(0),
+        ]);
+      }
       rejectPendingDiffs(session, reason);
       // The armed kill (if any) must not fire against a torn-down session —
       // the reconnect's own snapshot re-evaluates the sandbox truthfully.
@@ -630,8 +798,89 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     throw new Error("Platform identity changed during connect — retry under the new account");
   }
   sessions.set(deusSessionId, session);
+  // Registered: the queue now lives on the session (drained by onOpen).
+  orphanedOutboxes.delete(deusSessionId);
   await session.socket.ready();
   return session;
+}
+
+// ---- Session metadata (what discovery shows the Mac-closed web) ----
+
+/**
+ * Merge client-owned facts (`title`, `harness`) into the platform session's
+ * metadata via `PATCH /sessions/:id/metadata`. Best-effort by design: the web
+ * list degrades (untitled row, claude default) if it's lost, and the platform
+ * may predate the endpoint — a 404 is logged once, never thrown.
+ */
+async function pushCloudSessionMetadata(
+  providerSessionId: string,
+  metadata: Record<string, string>,
+  config: { baseUrl: string; apiKey: string }
+): Promise<void> {
+  // One provider session's pushes run in order. The connect-time default
+  // stamp and the first-send restamp both write `harness`; two independent
+  // fire-and-forget PATCHes could land with the older value last and hand
+  // discovery a Codex session labelled Claude.
+  const prev = metadataPushChains.get(providerSessionId) ?? Promise.resolve();
+  const run = prev.then(() => patchCloudSessionMetadata(providerSessionId, metadata, config));
+  metadataPushChains.set(providerSessionId, run);
+  await run;
+  if (metadataPushChains.get(providerSessionId) === run)
+    metadataPushChains.delete(providerSessionId);
+}
+
+const metadataPushChains = new Map<string, Promise<void>>();
+
+async function patchCloudSessionMetadata(
+  providerSessionId: string,
+  metadata: Record<string, string>,
+  config: { baseUrl: string; apiKey: string }
+): Promise<void> {
+  try {
+    const res = await fetch(
+      `${config.baseUrl}/sessions/${encodeURIComponent(providerSessionId)}/metadata`,
+      {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ metadata }),
+      }
+    );
+    if (!res.ok) {
+      console.warn(
+        `[CloudDriver] session metadata push failed (${res.status}) for ${providerSessionId}`
+      );
+    }
+  } catch (err) {
+    console.warn(`[CloudDriver] session metadata push failed: ${String(err)}`);
+  }
+}
+
+/**
+ * Merge client-owned facts (`title`, `harness`) onto a deus session's cloud
+ * twin, so the Mac-closed web lists it by name and seeds the right agent.
+ * No-op for local sessions and for cloud sessions whose twin doesn't exist
+ * yet (the create path stamps then).
+ */
+export function pushCloudSessionFacts(
+  deusSessionId: string,
+  metadata: Record<string, string>
+): void {
+  const config = getCloudConfig();
+  if (!config) return;
+  const row = getDatabase()
+    .prepare(
+      `SELECT s.provider_session_id AS provider_session_id, w.kind AS kind
+         FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+        WHERE s.id = ?`
+    )
+    .get(deusSessionId) as { provider_session_id?: string | null; kind?: string } | undefined;
+  if (row?.kind !== "cloud" || !row.provider_session_id) return;
+  void pushCloudSessionMetadata(row.provider_session_id, metadata, config);
+}
+
+/** Mirror a deus session's title onto its cloud twin. */
+export function pushCloudSessionTitle(deusSessionId: string, title: string): void {
+  pushCloudSessionFacts(deusSessionId, { title });
 }
 
 // ---- Turn API (mirrors the local agentService surface) ----

@@ -21,7 +21,8 @@ import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react
 import { getErrorMessage } from "@shared/lib/errors";
 import { sendRequest } from "@/platform/ws";
 import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
-import { sendToolResponse } from "@/platform/ws";
+import { onEvent, sendToolResponse } from "@/platform/ws";
+import { TOOL_CANCEL_EVENT } from "@shared/events";
 
 // ============================================================================
 // Types
@@ -57,20 +58,43 @@ function normalizeQuestions(params: Record<string, unknown>): AskQuestionRequest
     }
     if (value && typeof value === "object") {
       const obj = value as Record<string, unknown>;
+      // `text`/`allowsMultiSelect` is the cloud sidecar's own AskUserQuestion
+      // shape (agnt's McpQuestionItem), which the Mac driver relays verbatim —
+      // without these spellings every cloud question normalized to nothing and
+      // was cancelled on arrival, and the agent reported "no answer selected".
       const question =
         typeof obj.question === "string"
           ? obj.question
           : typeof obj.prompt === "string"
             ? obj.prompt
-            : null;
+            : typeof obj.text === "string"
+              ? obj.text
+              : null;
       if (!question || !question.trim()) return null;
+      // Options arrive as strings (the MCP tool) or as `{label, description}`
+      // objects (Claude Code's built-in AskUserQuestion, relayed through the
+      // permission bridge) — the chip shows the label either way.
       const options = Array.isArray(obj.options)
-        ? obj.options.filter((o): o is string => typeof o === "string" && o.trim().length > 0)
+        ? obj.options
+            .map((o) =>
+              typeof o === "string"
+                ? o
+                : o && typeof o === "object" && typeof (o as { label?: unknown }).label === "string"
+                  ? (o as { label: string }).label
+                  : ""
+            )
+            .filter((o) => o.trim().length > 0)
         : [];
+      const multiSelect =
+        typeof obj.multiSelect === "boolean"
+          ? obj.multiSelect
+          : typeof obj.allowsMultiSelect === "boolean"
+            ? obj.allowsMultiSelect
+            : undefined;
       return {
         question: question.trim(),
         options,
-        ...(typeof obj.multiSelect === "boolean" ? { multiSelect: obj.multiSelect } : {}),
+        ...(multiSelect !== undefined ? { multiSelect } : {}),
       };
     }
     return null;
@@ -157,6 +181,29 @@ export function useAgentRpcHandler(
       setPendingRequests((prev) => updater(prev));
     },
     []
+  );
+
+  // The direct lane retracts a question it can no longer answer (its turn
+  // ended while the socket was down): drop that request's overlay, or a stale
+  // card stays answerable for an agent that has moved on.
+  useEffect(
+    () =>
+      onEvent((event, data) => {
+        if (event !== TOOL_CANCEL_EVENT) return;
+        const { sessionId, requestId } = (data ?? {}) as {
+          sessionId?: unknown;
+          requestId?: unknown;
+        };
+        if (typeof sessionId !== "string" || typeof requestId !== "string") return;
+        setPendingAndNotify((prev) => {
+          const current = prev.get(sessionId);
+          if (!current || current.wsRequestId !== requestId) return prev;
+          const next = new Map(prev);
+          next.delete(sessionId);
+          return next;
+        });
+      }),
+    [setPendingAndNotify]
   );
 
   // ============================================================================

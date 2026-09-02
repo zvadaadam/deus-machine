@@ -14,6 +14,7 @@
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
 
 import type { ToolRequestEventData, QServerFrame } from "@shared/types/query-protocol";
+import { TOOL_CANCEL_EVENT } from "@shared/events";
 import { broadcast } from "../ws.service";
 
 // ---- Types ----
@@ -109,6 +110,31 @@ export function reject(requestId: string, error: string): boolean {
   pending.delete(requestId);
   entry.reject(new Error(error));
   return true;
+}
+
+/**
+ * Reject every pending relay of a session and tell the renderer to drop their
+ * overlays: the turn that asked has ended (stopped, killed, timed out), so a
+ * later answer would reach a request the agent has already abandoned — and
+ * the overlay would otherwise stay answerable for up to the relay's timeout.
+ * Returns the cancelled request ids.
+ */
+export function cancelSessionRelays(sessionId: string, reason: string): string[] {
+  const cancelled: string[] = [];
+  for (const [requestId, entry] of pending) {
+    if (entry.sessionId !== sessionId) continue;
+    clearTimeout(entry.timer);
+    pending.delete(requestId);
+    cancelled.push(requestId);
+    entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
+    const frame: QServerFrame = {
+      type: "q:event",
+      event: TOOL_CANCEL_EVENT,
+      data: { sessionId, requestId },
+    };
+    broadcast(JSON.stringify(frame));
+  }
+  return cancelled;
 }
 
 /**

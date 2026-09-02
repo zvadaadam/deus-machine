@@ -41,6 +41,7 @@ import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { runCommand } from "../../../src/services/agent/commands";
 import * as agentService from "../../../src/services/agent/service";
+import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 
 const SESSION = "sess-send";
 /** A session whose workspace row is gone — the worktree-deleted case. */
@@ -291,6 +292,25 @@ describeWithDb("sendMessage", () => {
       // lock would then reject every follow-up send under the real one.
       expect(harness()).toBe("claude-code");
       expect(startTurn).toHaveBeenCalledOnce();
+    });
+
+    it("restamps the cloud twin's harness on the first-send choice", async () => {
+      // The driver's connect-time stamp ran when the workspace pipeline
+      // pre-opened the socket — under the default harness — and the open
+      // socket short-circuits every later connect. The first send is the only
+      // place the real choice can reach discovery.
+      vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+      vi.spyOn(cloudDriver, "hasLiveCloudSession").mockReturnValue(true);
+      vi.spyOn(cloudDriver, "startCloudTurn").mockResolvedValue(undefined as never);
+      const push = vi.spyOn(cloudDriver, "pushCloudSessionFacts").mockImplementation(() => {});
+      db.prepare(`UPDATE workspaces SET kind = 'cloud', state = 'ready' WHERE id = 'w1'`).run();
+
+      await expect(sendWith("codex-app-server", "turn-1")).resolves.toEqual({
+        commandId: "turn-1",
+      });
+
+      expect(harness()).toBe("codex-app-server");
+      expect(push).toHaveBeenCalledWith(SESSION, { harness: "codex-app-server" });
     });
 
     it("is locked once the session has messages", async () => {

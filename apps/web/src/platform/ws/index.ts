@@ -10,10 +10,12 @@ export {
   sendCommand,
   sendRequest,
   setQueryRequestInterceptor,
+  setToolResponseInterceptor,
+  emitLocalEvent,
   sendMutate,
   sendToolResponse,
   forceReconnect,
   onEvent,
   onConnectionChange,
 } from "./query-protocol-client";
-export type { QueryRequestInterceptor } from "./query-protocol-client";
+export type { QueryRequestInterceptor, ToolResponseInterceptor } from "./query-protocol-client";
