@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { DeusCloudSessionStatus } from "@shared/types";
+import { bustCloudSessionsListCache } from "@/features/session/cloud/cloudDataAdapter";
 
 /**
  * Apply an account change to EVERY account-scoped cache — one implementation
@@ -14,6 +15,10 @@ export function applyDeusCloudAuthChange(
   nextSession: DeusCloudSessionStatus
 ): void {
   queryClient.setQueryData(queryKeys.deusCloud.session, nextSession);
+  // The web-direct adapter coalesces list reads through a short in-flight
+  // cache; without dropping it, the reset below refetches the OLD account's
+  // list. A no-op on backed builds (the cache is only ever filled in web-direct).
+  bustCloudSessionsListCache();
   // EVERY account-scoped cache, and RESET rather than invalidate — invalidate
   // keeps the old account's data rendering while the refetch runs, and with
   // `retry: false` a failed refetch strands it indefinitely. The curated-subset

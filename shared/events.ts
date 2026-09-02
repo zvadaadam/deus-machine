@@ -254,6 +254,8 @@ export const CloudEnvStateSchema = z
     errorMessage: z.string().optional(),
     /** running only: the sandbox came back with session state restored. */
     snapshotRestored: z.boolean().optional(),
+    /** running only: the sandbox's public host template (`{{port}}` placeholder). */
+    sandboxUrlTemplate: z.string().nullable().optional(),
   })
   .loose();
 export type CloudEnvState = z.infer<typeof CloudEnvStateSchema>;
@@ -286,6 +288,9 @@ export type PtyExitEvent = z.infer<typeof PtyExitSchema>;
 const BrowserNewTabRequestedSchema = z.object({
   url: z.string(),
   disposition: z.string().optional(),
+  /** The guest webContents that asked — the event is window-wide, and only
+   *  the panel owning that webview may act on it. */
+  sourceWebContentsId: z.number().optional(),
 });
 type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
 

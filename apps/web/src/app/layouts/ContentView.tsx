@@ -13,6 +13,7 @@ import { useLayoutEffect, useState } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
+import { CloudPreviewPanel } from "@/features/browser/ui/CloudPreviewPanel";
 import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUnavailable";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
@@ -135,7 +136,20 @@ export function ContentView({
         )}
         {workspace.kind === "cloud" && (
           <div className="absolute inset-0 z-10">
-            <CloudBrowserUnavailable />
+            {cloudStage ? (
+              // Asleep / provisioning: nothing inside the sandbox can answer.
+              <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+            ) : workspace.cloud_preview_template ? (
+              // Keyed: switching between two cloud computers must not carry
+              // the first one's port (and its draft) onto the second.
+              <CloudPreviewPanel
+                key={workspace.id}
+                workspace={workspace}
+                visible={activeTab === "browser"}
+              />
+            ) : (
+              <CloudBrowserUnavailable />
+            )}
           </div>
         )}
       </div>

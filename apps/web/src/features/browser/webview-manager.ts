@@ -223,6 +223,18 @@ class WebviewManagerImpl {
     return this.instances.get(id) ?? null;
   }
 
+  /** The guest webContents id behind a tab's webview — null before the guest
+   *  attaches (getWebContentsId throws until then) or for an unknown tab. */
+  webContentsIdOf(id: string): number | null {
+    const inst = this.instances.get(id);
+    if (!inst) return null;
+    try {
+      return inst.webview.getWebContentsId();
+    } catch {
+      return null;
+    }
+  }
+
   dispose(id: string): void {
     const inst = this.instances.get(id);
     if (!inst) return;

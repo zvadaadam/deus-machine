@@ -15,10 +15,11 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ClockFading, FolderOpen } from "lucide-react";
+import { ClockFading, Cloud, FolderOpen } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useSidebarStore } from "../store/sidebarStore";
 import type { AppSidebarProps } from "../model/types";
 import { DraggableRepository } from "./DraggableRepository";
@@ -52,6 +53,10 @@ export function AppSidebar({
   const reorderRepositories = useSidebarStore((s) => s.reorderRepositories);
 
   const isExpanded = state === "expanded" || hoverOpen;
+  // Web-direct lists cloud sessions the browser can't create or automate (no
+  // Mac backend): the Automations row hides and the empty state points at the
+  // desktop app instead of a project picker that isn't there.
+  const webDirect = isCloudDirectWebMode();
 
   // On mobile, close the sidebar sheet after selecting a workspace
   const handleWorkspaceClick = React.useCallback(
@@ -115,47 +120,59 @@ export function AppSidebar({
       />
 
       {/* App-level nav — sits under the header, above the repo list */}
-      <div className="px-1.5 pb-1">
-        <SidebarRow variant="action" isActive={automationsActive} asChild>
-          <button
-            type="button"
-            onClick={() => {
-              onOpenAutomations?.();
-              // Same mobile behavior as workspace selection: the off-canvas
-              // sheet must not stay open over the page it just navigated to.
-              if (isMobile) setOpenMobile(false);
-            }}
-          >
-            <SidebarRowMain>
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                <ClockFading
+      {!webDirect && (
+        <div className="px-1.5 pb-1">
+          <SidebarRow variant="action" isActive={automationsActive} asChild>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenAutomations?.();
+                // Same mobile behavior as workspace selection: the off-canvas
+                // sheet must not stay open over the page it just navigated to.
+                if (isMobile) setOpenMobile(false);
+              }}
+            >
+              <SidebarRowMain>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                  <ClockFading
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      automationsActive ? "text-text-primary" : "text-text-muted"
+                    )}
+                  />
+                </span>
+                <span
                   className={cn(
-                    "h-3.5 w-3.5",
-                    automationsActive ? "text-text-primary" : "text-text-muted"
+                    "truncate text-sm",
+                    automationsActive ? "text-text-primary font-medium" : "text-text-secondary"
                   )}
-                />
-              </span>
-              <span
-                className={cn(
-                  "truncate text-sm",
-                  automationsActive ? "text-text-primary font-medium" : "text-text-secondary"
-                )}
-              >
-                Automations
-              </span>
-            </SidebarRowMain>
-          </button>
-        </SidebarRow>
-      </div>
+                >
+                  Automations
+                </span>
+              </SidebarRowMain>
+            </button>
+          </SidebarRow>
+        </div>
+      )}
 
       {/* Repositories List or Empty State */}
       {repositories.length === 0 ? (
         <SidebarContent className="flex h-full items-center justify-center">
           <div className="flex flex-col items-center gap-3 px-6 text-center">
-            <FolderOpen className="text-text-muted/30 h-10 w-10" strokeWidth={1.5} />
+            {webDirect ? (
+              <Cloud className="text-text-muted/30 h-10 w-10" strokeWidth={1.5} />
+            ) : (
+              <FolderOpen className="text-text-muted/30 h-10 w-10" strokeWidth={1.5} />
+            )}
             <div className="space-y-1">
-              <p className="text-text-secondary text-sm font-medium">No projects yet</p>
-              <p className="text-text-muted text-xs">Add your first project to get started</p>
+              <p className="text-text-secondary text-sm font-medium">
+                {webDirect ? "No cloud sessions yet" : "No projects yet"}
+              </p>
+              <p className="text-text-muted text-xs">
+                {webDirect
+                  ? "Start one from the Deus desktop app"
+                  : "Add your first project to get started"}
+              </p>
             </div>
           </div>
         </SidebarContent>

@@ -37,8 +37,11 @@ vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
   },
 }));
 
+let identityChanged: (() => void) | null = null;
 vi.mock("../../../src/services/agent/cloud/config", () => ({
-  setCloudIdentityChangedHandler: vi.fn(),
+  setCloudIdentityChangedHandler: (fn: () => void) => {
+    identityChanged = fn;
+  },
   getCloudConfig: () => ({
     baseUrl: "http://agnt.test",
     apiKey: "agnt_sk_test_x",
@@ -75,8 +78,9 @@ vi.mock("../../../src/services/ws.service", () => ({
 
 const mockRun = vi.fn();
 const mockGet = vi.fn(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
+const mockPrepare = vi.fn((_sql: string) => ({ run: mockRun, get: mockGet }));
 vi.mock("../../../src/lib/database", () => ({
-  getDatabase: () => ({ prepare: () => ({ run: mockRun, get: mockGet }) }),
+  getDatabase: () => ({ prepare: mockPrepare }),
 }));
 
 vi.mock("../../../src/db", () => ({
@@ -428,6 +432,47 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
     expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
+  });
+
+  it("keeps the sandbox's public host template on the row (running state + snapshot)", () => {
+    mockRun.mockClear();
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: "https://{{port}}-sb123.e2b.app" },
+    });
+    expect(mockRun).toHaveBeenCalledWith("https://{{port}}-sb123.e2b.app", "deus-ws-1");
+
+    mockRun.mockClear();
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { status: "ready", sandboxUrlTemplate: "https://{{port}}-sb456.e2b.app", turns: [] },
+      messages: [],
+    });
+    expect(mockRun).toHaveBeenCalledWith("https://{{port}}-sb456.e2b.app", "deus-ws-1");
+  });
+
+  it("clears the host template when the platform reports none (no sandbox behind the session)", () => {
+    mockRun.mockClear();
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: null },
+    });
+    expect(mockRun).toHaveBeenCalledWith(null, "deus-ws-1");
+
+    // Absent (an older platform, or a state that never carries it): untouched.
+    mockRun.mockClear();
+    capturedOnFrame!({ type: "workspace.state", data: { status: "provisioning" } });
+    expect(mockRun).not.toHaveBeenCalledWith(null, "deus-ws-1");
+  });
+
+  it("clears every cloud preview template when the platform identity changes", () => {
+    mockPrepare.mockClear();
+    mockInvalidate.mockClear();
+    identityChanged!();
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.stringContaining("SET cloud_preview_template = NULL")
+    );
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"], {});
   });
 
   it("broadcasts workspace.state as an ephemeral cloud:env q:event", () => {

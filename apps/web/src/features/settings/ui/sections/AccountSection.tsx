@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { native } from "@/platform";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 function formatAccountId(accountId: string | null): string {
   if (!accountId) return "";
@@ -63,7 +64,9 @@ export function AccountSection() {
       <div>
         <h3 className="text-base font-semibold">Account</h3>
         <p className="text-muted-foreground mt-1 text-base">
-          Deus Cloud identity for this desktop app.
+          {isCloudDirectWebMode()
+            ? "Your Deus Cloud identity."
+            : "Deus Cloud identity for this desktop app."}
         </p>
       </div>
 

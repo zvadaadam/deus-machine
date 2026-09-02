@@ -250,19 +250,27 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           isInitializing && "animate-[shimmer_2s_ease-in-out_infinite]"
         )}
       >
-        <WorkspaceStatusMenu
-          currentStatus={workspace.status}
-          onStatusChange={(status) => onStatusChange?.(workspace.id, status)}
-        >
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="flex h-5 w-3.5 shrink-0 items-center transition-opacity hover:opacity-80"
-            aria-label={`Status: ${workspace.status}`}
+        {onStatusChange ? (
+          <WorkspaceStatusMenu
+            currentStatus={workspace.status}
+            onStatusChange={(status) => onStatusChange(workspace.id, status)}
           >
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-5 w-3.5 shrink-0 items-center transition-opacity hover:opacity-80"
+              aria-label={`Status: ${workspace.status}`}
+            >
+              <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
+            </button>
+          </WorkspaceStatusMenu>
+        ) : (
+          // No status mutation on this build (web-direct: workflow status is
+          // Mac-side state) — the icon stays, the menu doesn't.
+          <span className="flex h-5 w-3.5 shrink-0 items-center">
             <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
-          </button>
-        </WorkspaceStatusMenu>
+          </span>
+        )}
         <span
           className={cn(
             "truncate text-base",

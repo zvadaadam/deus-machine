@@ -5,6 +5,7 @@ import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { getCleanRepoName, splitByRecency } from "../lib/utils";
@@ -45,6 +46,9 @@ export function RepositoryItem({
 }: RepositoryItemProps) {
   const reduceMotion = useReducedMotion();
   const repoName = getCleanRepoName(repository.repo_name);
+  // Web-direct can't create workspaces (no Mac backend) — the hover actions
+  // would only open a picker with nothing in it.
+  const canCreate = !isCloudDirectWebMode();
 
   // Build set of workspace IDs that have any unread tab session,
   // checking all tab sessions (matching WorkspaceItem's logic).
@@ -99,7 +103,7 @@ export function RepositoryItem({
                 />
               </div>
             </SidebarRowMain>
-            {sidebarExpanded && (
+            {sidebarExpanded && canCreate && (
               <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
                 {isGitHubUrl(repository.git_origin_url) && onNewWorkspaceFromGitHub && (
                   <Tooltip>
@@ -197,6 +201,8 @@ function RepositoryWorkspaceList({
 }: RepositoryWorkspaceListProps) {
   const isExpanded = useSidebarStore((s) => s.expandedOldWorkspaces.has(repository.repo_id));
   const toggleOldWorkspaces = useSidebarStore((s) => s.toggleOldWorkspaces);
+  // Same gate as the header "+": no creation prompts on a build that can't create.
+  const canCreate = !isCloudDirectWebMode();
 
   const sortedWorkspaces = sortByStatusPriority(
     repository.workspaces.filter((w) => w.state !== "archived"),
@@ -209,13 +215,13 @@ function RepositoryWorkspaceList({
 
   return (
     <>
-      {isDeus && (
+      {isDeus && canCreate && (
         <li>
           <DeusRepositoryBanner onNewWorkspace={() => onNewWorkspace(repository.repo_id)} />
         </li>
       )}
 
-      {sortedWorkspaces.length === 0 && (
+      {sortedWorkspaces.length === 0 && canCreate && (
         <li>
           <SidebarRow
             variant="action"

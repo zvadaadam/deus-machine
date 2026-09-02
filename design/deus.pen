@@ -79927,6 +79927,672 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "wtF9a",
+      "x": 0,
+      "y": 15180,
+      "name": "43 · Workspace — Browser (cloud preview)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-sidebar",
+      "children": [
+        {
+          "id": "u9KgH",
+          "type": "ref",
+          "ref": "xm4H4",
+          "name": "Sidebar",
+          "height": "fill_container",
+          "descendants": {
+            "KQIuE": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "XtnSo": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "wxyab": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "h4uDG": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "TUtiy": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "rqo8B": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "d5rHH": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "JAWV0": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "b5LyR": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "K6qJM": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "SKnsD": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "LRG5p": {
+              "theme": {
+                "mode": "dark"
+              }
+            },
+            "m80gWj": {
+              "theme": {
+                "mode": "dark"
+              }
+            }
+          }
+        },
+        {
+          "type": "frame",
+          "id": "N9fnww",
+          "name": "MainContent",
+          "clip": true,
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "$bg-surface",
+          "cornerRadius": [
+            "$radius-xl",
+            0,
+            0,
+            0
+          ],
+          "stroke": "$border-subtle",
+          "strokeWidth": {
+            "top": 1,
+            "bottom": 1,
+            "left": 1
+          },
+          "strokeAlignment": "inner",
+          "children": [
+            {
+              "id": "P4AbRb",
+              "type": "ref",
+              "ref": "GXGXd",
+              "name": "SessionPanel",
+              "height": "fill_container",
+              "descendants": {
+                "DH9iK": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "RKBr2": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "BohU5": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "M3keN9": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "E12E1": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "t2tUb": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "uzfzE": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "w7sSo": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "BpSJo": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "g9X29": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "ltzy6": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "J4CFVC": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "HJTBJ": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "FFlwv": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "BDHdU": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                },
+                "BGLS9": {
+                  "theme": {
+                    "mode": "dark"
+                  }
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "Qo5HO",
+              "name": "ContentPanel",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                0,
+                8,
+                8,
+                0
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "T2mnZ",
+                  "name": "ContentHeader",
+                  "width": "fill_container",
+                  "height": 44,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    10
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "rc16d",
+                      "name": "ContentTabBar",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "yfgpG",
+                          "type": "ref",
+                          "ref": "YWfmp",
+                          "name": "Changes",
+                          "descendants": {
+                            "h701Y": {
+                              "icon": "git-branch"
+                            },
+                            "SgEjB": {
+                              "content": "Changes"
+                            }
+                          }
+                        },
+                        {
+                          "id": "L6SwYJ",
+                          "type": "ref",
+                          "ref": "IGG8T",
+                          "name": "Files",
+                          "descendants": {
+                            "VM51c": {
+                              "icon": "folder-open"
+                            }
+                          }
+                        },
+                        {
+                          "id": "MG3ro",
+                          "type": "ref",
+                          "ref": "IGG8T",
+                          "name": "Terminal",
+                          "descendants": {
+                            "VM51c": {
+                              "icon": "terminal"
+                            }
+                          }
+                        },
+                        {
+                          "id": "oXClT",
+                          "type": "ref",
+                          "ref": "IGG8T",
+                          "name": "Browser",
+                          "descendants": {
+                            "VM51c": {
+                              "icon": "globe"
+                            }
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "k5MMte",
+                          "name": "Overflow",
+                          "width": 30,
+                          "height": 28,
+                          "cornerRadius": "$radius-lg",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "cqCVx",
+                              "name": "ellipsis",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "ellipsis",
+                              "library": "lucide",
+                              "fill": "$text-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "TBECy",
+                      "name": "PRActions",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "UCogx",
+                          "name": "PRLink",
+                          "cornerRadius": "$radius-lg",
+                          "gap": 4,
+                          "padding": [
+                            4,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "I0AXMN",
+                              "name": "git-pull-request-create",
+                              "width": 12,
+                              "height": 12,
+                              "icon": "git-pull-request-create",
+                              "library": "lucide",
+                              "fill": "$accent-green"
+                            },
+                            {
+                              "type": "text",
+                              "id": "RNDLz",
+                              "name": "#312",
+                              "fill": "$accent-green",
+                              "content": "#312",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-sm",
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "c1iVxF",
+                          "name": "Merge",
+                          "height": 28,
+                          "fill": "$success",
+                          "cornerRadius": "$radius-lg",
+                          "gap": 6,
+                          "padding": [
+                            0,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "JYIAa",
+                              "name": "git-merge",
+                              "width": 10,
+                              "height": 10,
+                              "icon": "git-merge",
+                              "library": "lucide",
+                              "fill": "$primary-foreground"
+                            },
+                            {
+                              "type": "text",
+                              "id": "u2iJ91",
+                              "name": "Merge into main",
+                              "fill": "$primary-foreground",
+                              "content": "Merge into main",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-sm",
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "lc6Mw",
+                  "name": "ContentArea",
+                  "clip": true,
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg-elevated",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-subtle",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "OKpwp",
+                      "name": "PreviewToolbar",
+                      "width": "fill_container",
+                      "height": 40,
+                      "stroke": "$border-subtle",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Y1eOTr",
+                          "name": "Port label",
+                          "fill": "$text-muted",
+                          "content": "Port",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "tf8SE",
+                          "name": "Port input",
+                          "width": 80,
+                          "height": 28,
+                          "fill": "$bg-elevated",
+                          "cornerRadius": 8,
+                          "stroke": "$border-subtle",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "padding": [
+                            0,
+                            8
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "t8jmm5",
+                              "name": "Port value",
+                              "fill": "$text-primary",
+                              "content": "3000",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "q7U801",
+                          "name": "Quick ports",
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "pQuOL",
+                              "name": "Chip 3000",
+                              "fill": "$bg-muted",
+                              "cornerRadius": 6,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "EqI4U",
+                                  "name": "Chip label 3000",
+                                  "fill": "$text-primary",
+                                  "content": "3000",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "vcgqf",
+                              "name": "Chip 5173",
+                              "fill": "#00000000",
+                              "cornerRadius": 6,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "C71nhl",
+                                  "name": "Chip label 5173",
+                                  "fill": "$text-muted",
+                                  "content": "5173",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "iAUsE",
+                              "name": "Chip 8080",
+                              "fill": "#00000000",
+                              "cornerRadius": 6,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "rvZ30",
+                                  "name": "Chip label 8080",
+                                  "fill": "$text-muted",
+                                  "content": "8080",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "xhdyW",
+                          "name": "Preview URL",
+                          "fill": "$text-disabled",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "https://3000-ikbktoweb26nfewlisg61.e2b.app",
+                          "fontFamily": "Roboto Mono",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "AvpNL",
+                          "name": "Reload",
+                          "width": 28,
+                          "height": 28,
+                          "cornerRadius": 6,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "x662nU",
+                              "name": "Reload icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "rotate-cw",
+                              "library": "lucide",
+                              "fill": "$text-muted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "HMk49",
+                          "name": "Open externally",
+                          "width": 28,
+                          "height": 28,
+                          "cornerRadius": 6,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "GVckq",
+                              "name": "Open externally icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "external-link",
+                              "library": "lucide",
+                              "fill": "$text-muted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "X0EQ8",
+                      "name": "Webview (guest page)",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#ffffff",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "g4v6Il",
+                          "name": "Guest headline",
+                          "fill": "#111111",
+                          "content": "Fork me? Fork you, @octocat!",
+                          "fontFamily": "Roboto Mono",
+                          "fontSize": 28,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QGajv",
+                          "name": "Guest caption",
+                          "fill": "#777777",
+                          "content": "the dev server running inside the cloud computer, at https://3000-<sandboxId>.e2b.app",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "i6sQc",
+                      "name": "Bind note",
+                      "width": "fill_container",
+                      "height": 28,
+                      "stroke": "$border-subtle",
+                      "strokeWidth": {
+                        "top": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "WqPe2",
+                          "name": "Bind note text",
+                          "fill": "$text-disabled",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Your dev server must listen on 0.0.0.0, not localhost — the cloud computer's edge routes to its network interface.",
+                          "fontFamily": "Inter",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "themes": {
