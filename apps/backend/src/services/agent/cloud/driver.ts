@@ -73,6 +73,23 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
       s.socket.close();
     }
     sessions.clear();
+    // The preview template is a capability URL (the sandbox id is its only
+    // secret) persisted on the row: it must not outlive the account that
+    // owns the sandbox — the Browser tab would keep previewing account A's
+    // computer under account B. The next running frame / snapshot under the
+    // right account restores it.
+    try {
+      getDatabase()
+        .prepare(
+          "UPDATE workspaces SET cloud_preview_template = NULL WHERE kind = 'cloud' AND cloud_preview_template IS NOT NULL"
+        )
+        .run();
+      invalidate(["workspaces"], {});
+    } catch (err) {
+      console.warn(
+        `[CloudDriver] preview templates not cleared on identity change: ${String(err)}`
+      );
+    }
   });
 }
 
@@ -105,9 +122,23 @@ export function shutdownCloudDriver(): void {
 
 // ---- Workspace row effects ----
 
-function updateCloudWorkspace(workspaceId: string, data: { status?: string; step?: string }): void {
+function updateCloudWorkspace(
+  workspaceId: string,
+  data: { status?: string; step?: string; sandboxUrlTemplate?: string | null }
+): void {
   const db = getDatabase();
   const status = data.status ?? "";
+  // The sandbox's public host template rides the running state (and the
+  // snapshot). Keep it on the row: the Browser tab previews a dev server
+  // through it. A new sandbox (reprovision) brings a new template, and a
+  // platform-reported `null` (no sandbox behind the session) clears it —
+  // otherwise the Browser tab would keep previewing a computer that is gone.
+  if (data.sandboxUrlTemplate !== undefined) {
+    db.prepare("UPDATE workspaces SET cloud_preview_template = ? WHERE id = ?").run(
+      data.sandboxUrlTemplate || null,
+      workspaceId
+    );
+  }
   if (status === "running") {
     db.prepare(
       "UPDATE workspaces SET state = 'ready', init_stage = NULL, error_message = NULL WHERE id = ? AND state != 'archived'"
@@ -263,6 +294,13 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // states hit the row AND the chat stack ("paused — wakes on your next
       // message"); awake ones just clear a stale asleep marker, silently.
       const sessionStatus = typeof state.status === "string" ? state.status : "";
+      // The snapshot carries the host template too — the only source after a
+      // backend restart, when no `running` transition will fire again.
+      if (typeof state.sandboxUrlTemplate === "string" || state.sandboxUrlTemplate === null) {
+        updateCloudWorkspace(session.deusWorkspaceId, {
+          sandboxUrlTemplate: state.sandboxUrlTemplate,
+        });
+      }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
         broadcastCloudEnv(session, { status: sessionStatus });
@@ -316,7 +354,12 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "workspace.state": {
-      const data = (frame.data ?? {}) as { status?: string; step?: string; reason?: string };
+      const data = (frame.data ?? {}) as {
+        status?: string;
+        step?: string;
+        reason?: string;
+        sandboxUrlTemplate?: string | null;
+      };
       updateCloudWorkspace(session.deusWorkspaceId, data);
       broadcastCloudEnv(session, data);
       // Real case: sidecar dies on a credential error → clean WS close →

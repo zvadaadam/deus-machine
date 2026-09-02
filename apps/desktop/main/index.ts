@@ -167,7 +167,11 @@ async function createWindow(): Promise<void> {
         // Unparseable URL — deny silently.
         return { action: "deny" };
       }
-      mainWindow?.webContents.send("browser:new-tab-requested", { url, disposition });
+      mainWindow?.webContents.send("browser:new-tab-requested", {
+        url,
+        disposition,
+        sourceWebContentsId: guestContents.id,
+      });
       return { action: "deny" };
     });
   });

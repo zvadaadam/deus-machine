@@ -48,6 +48,8 @@ export interface WorkspaceRow {
   setup_status: string;
   init_stage: string | null;
   error_message: string | null;
+  /** Cloud: `https://{{port}}-<sandboxId>.e2b.app`, learned from the running state. */
+  cloud_preview_template?: string | null;
   updated_at: string;
 }
 
