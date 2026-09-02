@@ -154,6 +154,20 @@ export function MainContent({
   });
 
   const statusMutation = useUpdateWorkspaceStatus();
+  // Web-direct has no status mutation (workflow status is Mac-side state), so
+  // the header menu doesn't render — WorkspaceHeader gates on the handler.
+  const webDirect = isCloudDirectWebMode();
+
+  // Cloud presence — ONE derivation for the desktop and mobile headers, so a
+  // paused sandbox reads "Asleep" on both rather than a plain "Cloud" chip.
+  const cloudAsleep =
+    selectedWorkspace?.kind === "cloud" && cloudPresence(selectedWorkspace.init_stage) === "asleep";
+  const cloudWaking =
+    selectedWorkspace?.kind === "cloud" && cloudPresence(selectedWorkspace.init_stage) === "waking";
+  const handleCloudWake = useCallback(() => {
+    if (!selectedWorkspaceId) return;
+    void apiClient.post(`/workspaces/${selectedWorkspaceId}/cloud-wake`).catch(() => {});
+  }, [selectedWorkspaceId]);
 
   // Only start watching and querying diffs once the worktree checkout is complete.
   const isReady = selectedWorkspace?.state === "ready";
@@ -351,9 +365,14 @@ export function MainContent({
               manifestTasks={manifestTasks}
               hasManifest={hasManifest}
               onRunTask={handleRunTask}
-              onStatusChange={(status) =>
-                statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
+              onStatusChange={
+                webDirect
+                  ? undefined
+                  : (status) => statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
               }
+              cloudAsleep={cloudAsleep}
+              cloudWaking={cloudWaking}
+              onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
               prStatus={prStatus}
               ghStatus={ghStatus}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
@@ -403,25 +422,9 @@ export function MainContent({
                             ? () => uiActions.openAutomations(workspaceAutomation.id)
                             : undefined
                         }
-                        cloudAsleep={
-                          selectedWorkspace.kind === "cloud" &&
-                          cloudPresence(selectedWorkspace.init_stage) === "asleep"
-                        }
-                        cloudWaking={
-                          selectedWorkspace.kind === "cloud" &&
-                          cloudPresence(selectedWorkspace.init_stage) === "waking"
-                        }
-                        onCloudWake={() => {
-                          // Web-direct has no wake transport (agnt's resume is
-                          // secret-key-only); a send auto-wakes via the DO.
-                          if (isCloudDirectWebMode()) {
-                            toast.info("Send a message to wake this computer");
-                            return;
-                          }
-                          void apiClient
-                            .post(`/workspaces/${selectedWorkspace.id}/cloud-wake`)
-                            .catch(() => {});
-                        }}
+                        cloudAsleep={cloudAsleep}
+                        cloudWaking={cloudWaking}
+                        onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}
                         onSendAgentMessage={
@@ -436,8 +439,11 @@ export function MainContent({
                             : undefined
                         }
                         workspaceStatus={selectedWorkspace.status}
-                        onStatusChange={(status) =>
-                          statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
+                        onStatusChange={
+                          webDirect
+                            ? undefined
+                            : (status) =>
+                                statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
                         }
                         tasks={manifestTasks}
                         hasManifest={hasManifest}

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
@@ -163,18 +164,31 @@ export function WorkspaceHeader({
           ) : cloudAsleep ? (
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onCloudWake}
-                  className="text-text-disabled border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <CloudOff className="h-3 w-3" />
-                  Asleep
-                </button>
+                {onCloudWake ? (
+                  <button
+                    type="button"
+                    onClick={onCloudWake}
+                    className="text-text-disabled border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <CloudOff className="h-3 w-3" />
+                    Asleep
+                  </button>
+                ) : (
+                  // No wake transport (web-direct): a status, not a control.
+                  <span
+                    tabIndex={0}
+                    className="text-text-disabled border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <CloudOff className="h-3 w-3" />
+                    Asleep
+                  </span>
+                )}
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  Computer asleep — click to wake it, or just send a message
+                  {onCloudWake
+                    ? "Computer asleep — click to wake it, or just send a message"
+                    : "Computer asleep — sending a message wakes it"}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -191,8 +205,9 @@ export function WorkspaceHeader({
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  Runs on a cloud computer — files live remotely; the Changes tab shows the live
-                  diff
+                  {isCloudDirectWebMode()
+                    ? "Runs on a cloud computer — files live remotely"
+                    : "Runs on a cloud computer — files live remotely; the Changes tab shows the live diff"}
                 </p>
               </TooltipContent>
             </Tooltip>

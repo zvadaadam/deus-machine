@@ -38,6 +38,7 @@ import type { Workspace } from "@/shared/types";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
@@ -364,7 +365,11 @@ export function MainLayout() {
         });
       } catch (error) {
         console.error("Error archiving workspace:", error);
-        toast.error(getErrorMessage(error));
+        toast.error(
+          isCloudDirectWebMode()
+            ? "Archiving is done from the desktop app for now"
+            : getErrorMessage(error)
+        );
       }
     },
     [selectWorkspace]
@@ -382,7 +387,14 @@ export function MainLayout() {
     (workspaceId: string, status: import("@shared/enums").WorkspaceStatus) => {
       statusMutationRef.current.mutate(
         { workspaceId, status },
-        { onError: (error) => toast.error(getErrorMessage(error)) }
+        {
+          onError: (error) =>
+            toast.error(
+              isCloudDirectWebMode()
+                ? "Workflow status is set from the desktop app for now"
+                : getErrorMessage(error)
+            ),
+        }
       );
     },
     []
@@ -440,6 +452,11 @@ export function MainLayout() {
     },
   });
 
+  // Archive + workflow status are Mac-backend mutations; web-direct has no
+  // transport for them, so the sidebar gets no handlers and never renders the
+  // hover archive button or the status menu (the toasts above stay as a net).
+  const webDirect = isCloudDirectWebMode();
+
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
       // The Automations view overlays MainContent — a workspace click while
@@ -485,8 +502,8 @@ export function MainLayout() {
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
-          onArchive={archiveWorkspace}
-          onStatusChange={handleStatusChange}
+          onArchive={webDirect ? undefined : archiveWorkspace}
+          onStatusChange={webDirect ? undefined : handleStatusChange}
           onNewSession={() => {
             uiActions.closeAutomations();
             selectWorkspace(null);

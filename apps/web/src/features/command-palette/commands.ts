@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 
 export type CommandGroup = "workspace" | "project" | "navigation" | "settings";
@@ -40,6 +41,13 @@ export const GROUP_LABELS: Record<CommandGroup, string> = {
 };
 
 /**
+ * Web-direct (deusmachine.ai driving cloud sessions with no desktop behind
+ * it) has no Mac backend: workspace creation, project setup, automations and
+ * every settings section but Account are dark there, so their commands hide.
+ */
+const macBackendAvailable = () => !isCloudDirectWebMode();
+
+/**
  * Centralized command registry.
  *
  * Commands that need runtime context (native dialogs, mutations, etc.)
@@ -54,6 +62,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: Plus,
     group: "workspace",
     keywords: ["create", "add", "workspace", "agent"],
+    when: macBackendAvailable,
     action: () => uiActions.openNewWorkspaceModal(),
   },
   {
@@ -62,6 +71,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: GitPullRequest,
     group: "workspace",
     keywords: ["create", "pr", "pull request", "branch", "github", "from"],
+    when: macBackendAvailable,
     action: () => uiActions.openNewWorkspaceModal("from-github"),
   },
 
@@ -92,6 +102,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: GitBranch,
     group: "project",
     keywords: ["git", "clone", "github", "repo"],
+    when: macBackendAvailable,
     action: () => {},
   },
   {
@@ -100,6 +111,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: FolderGit2,
     group: "project",
     keywords: ["create", "new", "init", "template", "scratch", "blank"],
+    when: macBackendAvailable,
     action: () => {},
   },
 
@@ -119,6 +131,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: ClockFading,
     group: "navigation",
     keywords: ["automations", "scheduled", "cron", "recurring", "tasks"],
+    when: macBackendAvailable,
     action: () => uiActions.openAutomations(),
   },
 
@@ -140,6 +153,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: Settings,
     group: "settings",
     keywords: ["theme", "appearance", "name", "preferences"],
+    when: macBackendAvailable,
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("general");
@@ -151,6 +165,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: GitHubIcon,
     group: "settings",
     keywords: ["github", "gh", "pull request", "pr", "branch", "auth", "login"],
+    when: macBackendAvailable,
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("github");
@@ -162,6 +177,7 @@ export const staticCommands: CommandDefinition[] = [
     icon: Bot,
     group: "settings",
     keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
+    when: macBackendAvailable,
     action: () => {
       uiActions.openSettings();
       uiActions.setActiveSettingsSection("ai");
