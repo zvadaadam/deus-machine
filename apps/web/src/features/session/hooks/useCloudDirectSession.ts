@@ -303,6 +303,24 @@ export function useCloudDirectSession(
         });
         return;
       }
+      // The (re)connect snapshot is the truth about a parked question's turn.
+      // Live turn: put the overlay back — the frame that asked is consumed
+      // (the snapshot won't replay it) and the agent is still waiting on the
+      // sidecar's clock. No live turn: it ended while this socket was down
+      // (stopped from another client, timed out) and the agent no longer
+      // accepts the answer — drop it, or a stale card lives across remounts.
+      if (frame.type === "session.snapshot") {
+        const state = frame.state as { currentTurnId?: unknown } | undefined;
+        if (typeof state?.currentTurnId === "string" && state.currentTurnId) {
+          for (const [id, pending] of [...pendingDirectQuestions]) {
+            if (pending.sessionId !== sessionId) continue;
+            pendingDirectQuestions.delete(id);
+            presentDirectQuestion(pending);
+          }
+        } else {
+          dropDirectQuestions(sessionId);
+        }
+      }
       // A fresh turn proves the lane works — clear any earlier surfaced error
       // (SessionPanel derives an "error" status from it, which must not outlive
       // the failure it reported) and the pending-admission marker.
@@ -360,16 +378,9 @@ export function useCloudDirectSession(
       onOpen: () => {
         // A (re)connect re-syncs turn truth from the snapshot — a pre-drop
         // pending marker must not block the first post-reconnect send.
+        // Parked questions wait for that snapshot too (see onFrame).
         pendingTurn = null;
         setStatus("open");
-        // Questions parked before a remount/reconnect: the frame that asked
-        // them is consumed (the snapshot won't replay it), so put the overlay
-        // back — the agent is still waiting on the sidecar's clock.
-        for (const [id, pending] of [...pendingDirectQuestions]) {
-          if (pending.sessionId !== sessionId) continue;
-          pendingDirectQuestions.delete(id);
-          presentDirectQuestion(pending);
-        }
       },
       onDown: (reason) => {
         pendingTurn = null;
@@ -407,8 +418,9 @@ export function useCloudDirectSession(
       disposeChannel();
       socket.close();
       // Parked questions deliberately SURVIVE this teardown: the next socket
-      // for the session re-presents them (onOpen), and the answer resolves the
-      // channel at send time. The sidecar's timeout is the only other exit.
+      // for the session re-presents them off its snapshot (or drops them if
+      // the turn is gone), and the answer resolves the channel at send time.
+      // The sidecar's timeout is the only other exit.
       if (frame !== null) cancelAnimationFrame(frame);
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();

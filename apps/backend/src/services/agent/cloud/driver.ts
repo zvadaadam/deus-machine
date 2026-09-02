@@ -55,6 +55,9 @@ interface CloudSession {
   /** Armed grace timer for a stopped/error state seen while a turn is live —
    *  see scheduleTurnKill. */
   pendingTurnKill: ReturnType<typeof setTimeout> | null;
+  /** Client commands (permission/question answers) that arrived while the
+   *  socket was between retries — drained by onOpen. */
+  outbox: Record<string, unknown>[];
 }
 
 let handler: AgentEventHandler | null = null;
@@ -442,8 +445,39 @@ async function sendOnLiveSocket(
   frame: Record<string, unknown>
 ): Promise<void> {
   const live = sessions.get(deusSessionId);
-  const target = live?.socket.isOpen() ? live : await ensureCloudSession(deusSessionId);
-  target.socket.send(frame);
+  if (live?.socket.isOpen()) {
+    live.socket.send(frame);
+    return;
+  }
+  if (live) {
+    // In the map but not open: the socket is between retries (it keeps
+    // reconnecting in the background). Park the frame; onOpen drains it.
+    live.outbox.push(frame);
+    return;
+  }
+  try {
+    const session = await ensureCloudSession(deusSessionId);
+    session.socket.send(frame);
+  } catch (err) {
+    // ready()'s deadline rejects while the fresh socket keeps retrying, and
+    // that socket is already in the map — the frame waits there instead of
+    // dying with the deadline. Anything else (no session, identity change)
+    // is a real failure for the caller.
+    const retrying = sessions.get(deusSessionId);
+    if (!retrying) throw err;
+    if (retrying.socket.isOpen()) retrying.socket.send(frame);
+    else retrying.outbox.push(frame);
+  }
+}
+
+function flushOutbox(session: CloudSession): void {
+  for (const frame of session.outbox.splice(0)) {
+    try {
+      session.socket.send(frame);
+    } catch (err) {
+      console.warn(`[CloudDriver] queued command not delivered: ${String(err)}`);
+    }
+  }
 }
 
 /** Answer a permission request over the session's live socket. Never throws
@@ -666,6 +700,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     seq: 0,
     pending: new Map(),
     pendingTurnKill: null,
+    outbox: [],
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -674,8 +709,14 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     providerSessionId: row.provider_session_id,
     token,
     onFrame: (frame) => dispatchFrame(session, frame),
+    onOpen: () => flushOutbox(session),
     onDown: (reason) => {
       console.warn(`[CloudDriver] socket down session=${deusSessionId}: ${reason}`);
+      if (session.outbox.length > 0) {
+        console.warn(
+          `[CloudDriver] ${session.outbox.length} queued command(s) lost with the socket (${deusSessionId})`
+        );
+      }
       rejectPendingDiffs(session, reason);
       // The armed kill (if any) must not fire against a torn-down session —
       // the reconnect's own snapshot re-evaluates the sandbox truthfully.
@@ -703,6 +744,25 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
  * may predate the endpoint — a 404 is logged once, never thrown.
  */
 async function pushCloudSessionMetadata(
+  providerSessionId: string,
+  metadata: Record<string, string>,
+  config: { baseUrl: string; apiKey: string }
+): Promise<void> {
+  // One provider session's pushes run in order. The connect-time default
+  // stamp and the first-send restamp both write `harness`; two independent
+  // fire-and-forget PATCHes could land with the older value last and hand
+  // discovery a Codex session labelled Claude.
+  const prev = metadataPushChains.get(providerSessionId) ?? Promise.resolve();
+  const run = prev.then(() => patchCloudSessionMetadata(providerSessionId, metadata, config));
+  metadataPushChains.set(providerSessionId, run);
+  await run;
+  if (metadataPushChains.get(providerSessionId) === run)
+    metadataPushChains.delete(providerSessionId);
+}
+
+const metadataPushChains = new Map<string, Promise<void>>();
+
+async function patchCloudSessionMetadata(
   providerSessionId: string,
   metadata: Record<string, string>,
   config: { baseUrl: string; apiKey: string }

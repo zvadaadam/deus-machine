@@ -13,6 +13,7 @@ const mockSend = vi.fn();
 const mockClose = vi.fn();
 let capturedOnFrame: ((frame: Record<string, unknown>) => void) | null = null;
 let capturedOnDown: ((reason: string) => void) | null = null;
+let capturedOnOpen: (() => void) | null = null;
 let connectCount = 0;
 /** Toggled by the reconnect tests: a closed socket reads false. */
 let socketOpen = true;
@@ -20,10 +21,12 @@ let socketOpen = true;
 vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
   connectSessionSocket: (options: {
     onFrame: (frame: Record<string, unknown>) => void;
+    onOpen?: () => void;
     onDown?: (reason: string) => void;
   }) => {
     connectCount += 1;
     capturedOnFrame = options.onFrame;
+    capturedOnOpen = options.onOpen ?? null;
     capturedOnDown = options.onDown ?? null;
     return {
       ready: () => Promise.resolve(),
@@ -90,6 +93,7 @@ import {
   ensureCloudSession,
   startCloudTurn,
   requestCloudDiff,
+  pushCloudSessionFacts,
 } from "../../../src/services/agent/cloud/driver";
 
 function makeHandler() {
@@ -348,6 +352,76 @@ describe("cloud driver frame → fold contract", () => {
       )
     );
     expect(connectCount).toBe(connectsBefore + 1);
+  });
+
+  it("queues an answer while the socket is between retries and delivers it when it reopens", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-o",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // Not open, not down: the socket is retrying in the background (an
+    // outage longer than ready()'s deadline looks exactly like this).
+    socketOpen = false;
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "permission.response" })
+    );
+
+    socketOpen = true;
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({ requestId: "req-o" }),
+      })
+    );
+  });
+
+  it("serializes metadata pushes per provider session — a slow default stamp cannot land after the first-send restamp", async () => {
+    const calls: Array<{ body: string; resolve: () => void }> = [];
+    const fetchMock = vi.fn(
+      (_url: string, init?: { body?: string }) =>
+        new Promise<Response>((resolve) => {
+          calls.push({
+            body: String(init?.body),
+            resolve: () => resolve(new Response("{}", { status: 200 })),
+          });
+        })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    mockGet.mockReturnValueOnce({ kind: "cloud", provider_session_id: "agnt-session-1" } as never);
+    mockGet.mockReturnValueOnce({ kind: "cloud", provider_session_id: "agnt-session-1" } as never);
+    try {
+      pushCloudSessionFacts("deus-session-1", { harness: "claude-code" });
+      pushCloudSessionFacts("deus-session-1", { harness: "codex-app-server" });
+
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1), { timeout: 5000 });
+      expect(calls[0].body).toContain("claude-code");
+      // The second waits for the first to settle.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      calls[0].resolve();
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      expect(calls[1].body).toContain("codex-app-server");
+      calls[1].resolve();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("updates the workspace row from workspace.state frames", () => {
