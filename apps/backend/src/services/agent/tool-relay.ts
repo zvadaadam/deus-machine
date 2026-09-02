@@ -112,6 +112,31 @@ export function reject(requestId: string, error: string): boolean {
 }
 
 /**
+ * Reject every pending relay of a session and tell the renderer to drop their
+ * overlays: the turn that asked has ended (stopped, killed, timed out), so a
+ * later answer would reach a request the agent has already abandoned — and
+ * the overlay would otherwise stay answerable for up to the relay's timeout.
+ * Returns the cancelled request ids.
+ */
+export function cancelSessionRelays(sessionId: string, reason: string): string[] {
+  const cancelled: string[] = [];
+  for (const [requestId, entry] of pending) {
+    if (entry.sessionId !== sessionId) continue;
+    clearTimeout(entry.timer);
+    pending.delete(requestId);
+    cancelled.push(requestId);
+    entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
+    const frame: QServerFrame = {
+      type: "q:event",
+      event: "tool:cancel",
+      data: { sessionId, requestId },
+    };
+    broadcast(JSON.stringify(frame));
+  }
+  return cancelled;
+}
+
+/**
  * Get the number of pending relays (for diagnostics / tests).
  */
 export function getPendingCount(): number {

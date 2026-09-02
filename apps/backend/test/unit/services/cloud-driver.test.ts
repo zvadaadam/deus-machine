@@ -58,8 +58,10 @@ vi.mock("@deus-hq/sdk", () => ({
 }));
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
+const mockCancelSessionRelays = vi.fn((..._args: unknown[]) => [] as string[]);
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   relay: (...args: unknown[]) => mockRelay(...args),
+  cancelSessionRelays: (...args: unknown[]) => mockCancelSessionRelays(...args),
 }));
 
 vi.mock("../../../src/services/agent/persistence", () => ({
@@ -477,6 +479,18 @@ describe("cloud driver frame → fold contract", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("settles the session's pending relays when its turn ends (a stopped turn's question is retracted)", () => {
+    capturedOnFrame!({
+      type: "turn.ended",
+      sessionId: "agnt-session-1",
+      turnId: "t1",
+      stopReason: "cancelled",
+    });
+    expect(mockCancelSessionRelays).toHaveBeenCalledWith("deus-session-1", "turn ended");
+    // The lifecycle event itself still reaches the fold.
+    expect(handler.handle).toHaveBeenCalledTimes(1);
   });
 
   it("updates the workspace row from workspace.state frames", () => {

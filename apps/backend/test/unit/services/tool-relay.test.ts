@@ -22,6 +22,7 @@ import {
   reject,
   getPendingCount,
   clearAll,
+  cancelSessionRelays,
 } from "../../../src/services/agent/tool-relay";
 // The live payload type. `shared/agent-events` was the deus dialect and is
 // deleted; this test kept importing it because the backend tests were not in
@@ -230,5 +231,36 @@ describe("ToolRelay", () => {
       await expect(p2).rejects.toThrow("Tool relay cleared");
       expect(getPendingCount()).toBe(0);
     });
+  });
+});
+
+describe("cancelSessionRelays", () => {
+  beforeEach(() => {
+    mockBroadcast.mockClear();
+  });
+  afterEach(() => {
+    clearAll();
+  });
+
+  it("rejects the session's pending relays, broadcasts tool:cancel for each, leaves other sessions alone", async () => {
+    const mine = relay(makeToolRequestEvent({ requestId: "q-1", sessionId: "sess-1" }));
+    const other = relay(makeToolRequestEvent({ requestId: "q-2", sessionId: "sess-2" }));
+    mine.catch(() => {});
+    other.catch(() => {});
+    mockBroadcast.mockClear();
+
+    expect(cancelSessionRelays("sess-1", "turn ended")).toEqual(["q-1"]);
+
+    await expect(mine).rejects.toThrow(/cancelled: turn ended/);
+    expect(getPendingCount()).toBe(1);
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toEqual({
+      type: "q:event",
+      event: "tool:cancel",
+      data: { sessionId: "sess-1", requestId: "q-1" },
+    });
+    // The other session's relay is untouched and still resolvable.
+    expect(resolve("q-2", { ok: true })).toBe(true);
+    await expect(other).resolves.toEqual({ ok: true });
   });
 });

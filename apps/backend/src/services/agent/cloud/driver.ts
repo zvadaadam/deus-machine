@@ -26,7 +26,7 @@ import {
 import { getCloudConfig, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
-import { relay } from "../tool-relay";
+import { relay, cancelSessionRelays } from "../tool-relay";
 import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../persistence";
 import { invalidate } from "../../query-engine";
 import { broadcast } from "../../ws.service";
@@ -286,6 +286,14 @@ function failLiveTurn(session: CloudSession, status: string, detail?: string): v
 function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): void {
   const type = typeof frame.type === "string" ? frame.type : "";
   if (!type || !handler) return;
+
+  // A question relayed during this turn can no longer be answered once the
+  // turn is over (stopped, killed, timed out): settle its relay now — the
+  // renderer drops the overlay on the tool:cancel it broadcasts — instead of
+  // leaving a 24h wait whose eventual answer would reach a request the agent
+  // has abandoned. (The relay's catch answers the sidecar with a deny, which
+  // it ignores for a request it no longer holds.)
+  if (type === "turn.ended") cancelSessionRelays(session.deusSessionId, "turn ended");
 
   // Engine lifecycle events pass through verbatim under the deus session id.
   // agnt's published set omits the engine `error` member (it re-wraps errors
