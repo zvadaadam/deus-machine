@@ -3,8 +3,6 @@ import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types"
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { queryClient } from "@/shared/api/queryClient";
 import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
-import { queryClient } from "@/shared/api/queryClient";
-import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
 import {
   clearWebCloudSession,
   beginWebCloudLogin,
