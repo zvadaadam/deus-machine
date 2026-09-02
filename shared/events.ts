@@ -254,6 +254,8 @@ export const CloudEnvStateSchema = z
     errorMessage: z.string().optional(),
     /** running only: the sandbox came back with session state restored. */
     snapshotRestored: z.boolean().optional(),
+    /** running only: the sandbox's public host template (`{{port}}` placeholder). */
+    sandboxUrlTemplate: z.string().nullable().optional(),
   })
   .loose();
 export type CloudEnvState = z.infer<typeof CloudEnvStateSchema>;

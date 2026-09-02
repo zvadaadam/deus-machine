@@ -1,11 +1,10 @@
 import { Globe } from "lucide-react";
 
 /**
- * Honest placeholder for the Browser tab on a cloud computer. The in-app
- * browser previews a dev server at localhost:PORT — which only reaches a LOCAL
- * workspace. A cloud computer's ports live in the sandbox and need a tunnel
- * (port-forward) we haven't built yet, so mounting BrowserPanel here would just
- * load the wrong localhost. Say so plainly until the tunnel ships.
+ * The Browser tab on a cloud computer BEFORE the platform has reported the
+ * sandbox's public address (it arrives with the running workspace state and
+ * the session snapshot). Once known, ContentView mounts CloudPreviewPanel
+ * instead — this is the honest interim, not a "coming soon".
  */
 export function CloudBrowserUnavailable() {
   return (
@@ -13,13 +12,10 @@ export function CloudBrowserUnavailable() {
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
         <Globe className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
       </div>
-      <p className="text-text-secondary text-sm font-medium">
-        Preview is coming to cloud computers
-      </p>
+      <p className="text-text-secondary text-sm font-medium">Waiting for the computer's address</p>
       <p className="text-text-muted max-w-xs text-xs">
-        The in-app browser previews a dev server running on your computer. Reaching a cloud
-        computer's ports needs a secure tunnel we're still building — for now, use the browser on a
-        local workspace.
+        The preview opens the dev server running inside this cloud computer. Its address arrives
+        once the sandbox is running — send a message to wake it if it's asleep.
       </p>
     </div>
   );

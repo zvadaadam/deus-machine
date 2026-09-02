@@ -105,9 +105,21 @@ export function shutdownCloudDriver(): void {
 
 // ---- Workspace row effects ----
 
-function updateCloudWorkspace(workspaceId: string, data: { status?: string; step?: string }): void {
+function updateCloudWorkspace(
+  workspaceId: string,
+  data: { status?: string; step?: string; sandboxUrlTemplate?: string | null }
+): void {
   const db = getDatabase();
   const status = data.status ?? "";
+  // The sandbox's public host template rides the running state (and the
+  // snapshot). Keep it on the row: the Browser tab previews a dev server
+  // through it. A new sandbox (reprovision) brings a new template.
+  if (typeof data.sandboxUrlTemplate === "string" && data.sandboxUrlTemplate) {
+    db.prepare("UPDATE workspaces SET cloud_preview_template = ? WHERE id = ?").run(
+      data.sandboxUrlTemplate,
+      workspaceId
+    );
+  }
   if (status === "running") {
     db.prepare(
       "UPDATE workspaces SET state = 'ready', init_stage = NULL, error_message = NULL WHERE id = ? AND state != 'archived'"
@@ -263,6 +275,13 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // states hit the row AND the chat stack ("paused — wakes on your next
       // message"); awake ones just clear a stale asleep marker, silently.
       const sessionStatus = typeof state.status === "string" ? state.status : "";
+      // The snapshot carries the host template too — the only source after a
+      // backend restart, when no `running` transition will fire again.
+      if (typeof state.sandboxUrlTemplate === "string" && state.sandboxUrlTemplate) {
+        updateCloudWorkspace(session.deusWorkspaceId, {
+          sandboxUrlTemplate: state.sandboxUrlTemplate,
+        });
+      }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
         broadcastCloudEnv(session, { status: sessionStatus });
@@ -316,7 +335,12 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "workspace.state": {
-      const data = (frame.data ?? {}) as { status?: string; step?: string; reason?: string };
+      const data = (frame.data ?? {}) as {
+        status?: string;
+        step?: string;
+        reason?: string;
+        sandboxUrlTemplate?: string | null;
+      };
       updateCloudWorkspace(session.deusWorkspaceId, data);
       broadcastCloudEnv(session, data);
       // Real case: sidecar dies on a credential error → clean WS close →

@@ -248,6 +248,23 @@ describe("cloud driver frame → fold contract", () => {
     expect(mockInvalidate).toHaveBeenCalled();
   });
 
+  it("keeps the sandbox's public host template on the row (running state + snapshot)", () => {
+    mockRun.mockClear();
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: "https://{{port}}-sb123.e2b.app" },
+    });
+    expect(mockRun).toHaveBeenCalledWith("https://{{port}}-sb123.e2b.app", "deus-ws-1");
+
+    mockRun.mockClear();
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { status: "ready", sandboxUrlTemplate: "https://{{port}}-sb456.e2b.app", turns: [] },
+      messages: [],
+    });
+    expect(mockRun).toHaveBeenCalledWith("https://{{port}}-sb456.e2b.app", "deus-ws-1");
+  });
+
   it("broadcasts workspace.state as an ephemeral cloud:env q:event", () => {
     mockBroadcast.mockClear();
     capturedOnFrame!({
