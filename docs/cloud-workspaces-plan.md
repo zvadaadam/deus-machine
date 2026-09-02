@@ -818,8 +818,9 @@ BYO subscription/key only (no platform-billed path exists), sandbox idle TTL
 
 ### The post-launch web package (new — nothing here was in the plan)
 
-Found only by building and reviewing D3. Done as of 2026-09-02 (deus #326,
-#325; agnt #171):
+Found only by building and reviewing D3. **In flight as of 2026-09-02 — PRs
+deus #326, #325 and agnt #171, live-verified, not yet merged** (these stay
+production bugs until they land):
 
 - Reopened Codex sessions ran as Claude (composer seeded from the global default
   before the session row arrived) — fixed; the seed comes from the session's
