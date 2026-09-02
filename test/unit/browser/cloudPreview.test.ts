@@ -30,6 +30,10 @@ describe("normalizePreviewPort", () => {
     expect(normalizePreviewPort(" 5173 ")).toBe(5173);
     expect(normalizePreviewPort(8080)).toBe(8080);
     expect(normalizePreviewPort("abc")).toBeNull();
+    // Partial numbers must not navigate to a different port than typed.
+    expect(normalizePreviewPort("3000abc")).toBeNull();
+    expect(normalizePreviewPort("5173.5")).toBeNull();
+    expect(normalizePreviewPort("1e3")).toBeNull();
     expect(normalizePreviewPort("65536")).toBeNull();
     expect(normalizePreviewPort("-1")).toBeNull();
     expect(DEFAULT_CLOUD_PREVIEW_PORT).toBe(3000);

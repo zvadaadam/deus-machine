@@ -20,7 +20,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Workspace } from "@/shared/types";
 import { native } from "@/platform";
 import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
-import { BrowserTab } from "./BrowserTab";
+import { BrowserTab, disposeBrowserTab } from "./BrowserTab";
 import { createBrowserTab, type BrowserTabState } from "../types";
 import { webviewManager } from "../webview-manager";
 import {
@@ -60,7 +60,8 @@ export function CloudPreviewPanel({ workspace, visible }: CloudPreviewPanelProps
     }
     const next = previewTab(workspace.id, url);
     setTab(next);
-    return () => webviewManager.dispose(next.id);
+    // Both managed instances: BrowserTab also creates `${id}__devtools`.
+    return () => disposeBrowserTab(next.id);
   }, [workspace.id, url, generation]);
 
   // Popups from the previewed app (window.open, target="_blank"): the main

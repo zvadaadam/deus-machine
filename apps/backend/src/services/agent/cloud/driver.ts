@@ -73,6 +73,23 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
       s.socket.close();
     }
     sessions.clear();
+    // The preview template is a capability URL (the sandbox id is its only
+    // secret) persisted on the row: it must not outlive the account that
+    // owns the sandbox — the Browser tab would keep previewing account A's
+    // computer under account B. The next running frame / snapshot under the
+    // right account restores it.
+    try {
+      getDatabase()
+        .prepare(
+          "UPDATE workspaces SET cloud_preview_template = NULL WHERE kind = 'cloud' AND cloud_preview_template IS NOT NULL"
+        )
+        .run();
+      invalidate(["workspaces"], {});
+    } catch (err) {
+      console.warn(
+        `[CloudDriver] preview templates not cleared on identity change: ${String(err)}`
+      );
+    }
   });
 }
 

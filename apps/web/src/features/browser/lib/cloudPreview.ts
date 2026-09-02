@@ -13,9 +13,17 @@ export const DEFAULT_CLOUD_PREVIEW_PORT = 3000;
 /** The ports dev servers reach for first — one tap instead of a keyboard. */
 export const CLOUD_PREVIEW_QUICK_PORTS = [3000, 5173, 8080] as const;
 
-/** A valid TCP port, or null. Accepts "3000", 3000, " 5173 ". */
+/** A valid TCP port, or null. Accepts "3000", 3000, " 5173 " — and only
+ *  whole numbers: "3000abc" or "1e3" must not silently become another port. */
 export function normalizePreviewPort(value: string | number): number | null {
-  const n = typeof value === "number" ? value : Number.parseInt(String(value).trim(), 10);
+  let n: number;
+  if (typeof value === "number") {
+    n = value;
+  } else {
+    const trimmed = value.trim();
+    if (!/^\d{1,5}$/.test(trimmed)) return null;
+    n = Number(trimmed);
+  }
   if (!Number.isInteger(n) || n < 1 || n > 65535) return null;
   return n;
 }
