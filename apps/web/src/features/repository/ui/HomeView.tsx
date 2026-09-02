@@ -1012,8 +1012,9 @@ function CloudSessionsHome({
   const hasSessions = groups.length > 0;
   // Loading and a failed load are NOT the empty state: on a cold load the
   // groups are [] for a beat, and the empty screen would tell a user with
-  // sessions to go download the desktop app.
-  const state = loading ? "loading" : error ? "error" : hasSessions ? "sessions" : "empty";
+  // sessions to go download the desktop app. A failed BACKGROUND refresh
+  // keeps the cached list on screen: the error screen is for having nothing.
+  const state = loading ? "loading" : hasSessions ? "sessions" : error ? "error" : "empty";
   const [title, subtitle] = CLOUD_HOME_COPY[state];
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden">

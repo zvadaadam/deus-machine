@@ -675,12 +675,15 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
   if (existing?.socket.isOpen()) return existing;
   // Answers queued on the replaced (or given-up) socket belong to the session,
   // not the socket: the sidecar's request is still pending, so they ride the
-  // replacement instead of dying with the old channel.
-  const inheritedOutbox = [
-    ...(existing?.outbox.splice(0) ?? []),
-    ...(orphanedOutboxes.get(deusSessionId) ?? []),
-  ];
-  orphanedOutboxes.delete(deusSessionId);
+  // replacement instead of dying with the old channel. They wait in
+  // `orphanedOutboxes` until the replacement is REGISTERED — a failed mint or
+  // token exchange below must not be the moment they vanish.
+  if (existing && existing.outbox.length > 0) {
+    orphanedOutboxes.set(deusSessionId, [
+      ...(orphanedOutboxes.get(deusSessionId) ?? []),
+      ...existing.outbox.splice(0),
+    ]);
+  }
   if (existing) {
     clearTurnKill(existing);
     // The replaced channel's in-flight reads AND its terminals die here —
@@ -755,7 +758,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     seq: 0,
     pending: new Map(),
     pendingTurnKill: null,
-    outbox: inheritedOutbox,
+    outbox: [...(orphanedOutboxes.get(deusSessionId) ?? [])],
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -789,6 +792,8 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     throw new Error("Platform identity changed during connect — retry under the new account");
   }
   sessions.set(deusSessionId, session);
+  // Registered: the queue now lives on the session (drained by onOpen).
+  orphanedOutboxes.delete(deusSessionId);
   await session.socket.ready();
   return session;
 }

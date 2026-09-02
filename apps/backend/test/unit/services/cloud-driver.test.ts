@@ -51,8 +51,9 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
 }));
 
 const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
+const mockCreateSessionToken = vi.fn(async () => ({ token: "session-jwt" }));
 vi.mock("@deus-hq/sdk", () => ({
-  createSessionToken: vi.fn(async () => ({ token: "session-jwt" })),
+  createSessionToken: () => mockCreateSessionToken(),
   createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
 }));
 
@@ -423,8 +424,12 @@ describe("cloud driver frame → fold contract", () => {
 
     // That socket gives up (terminal onDown) — the queue must not die with it.
     capturedOnDown!("session socket down after 8 retries");
-    // A concurrent caller reconnects: the replacement inherits the queue and
-    // its onOpen delivers it.
+    // The first reconnect attempt fails at the token mint: the queue must
+    // survive that too (it is only handed over once a session is registered).
+    mockCreateSessionToken.mockRejectedValueOnce(new Error("mint failed"));
+    await expect(ensureCloudSession("deus-session-1")).rejects.toThrow("mint failed");
+    // The next caller reconnects: the replacement inherits the queue and its
+    // onOpen delivers it.
     socketOpen = true;
     await ensureCloudSession("deus-session-1");
     capturedOnOpen!();
