@@ -25,6 +25,8 @@
 // "phone / Mac-off clients" path), so only the harness + per-turn overrides ship.
 
 /** Per-turn overrides the composer offers — never a credential (agnt resolves that). */
+import type { ToolRequestEventData } from "@shared/types/query-protocol";
+
 export interface DirectTurnOptions {
   model?: string;
   agentHarness?: string;
@@ -103,8 +105,6 @@ export function buildMessageSendFrame(
 export function buildCancelFrame(turnId?: string): Record<string, unknown> {
   return { type: "agent.cancel", ...(turnId ? { turnId } : {}) };
 }
-
-import type { ToolRequestEventData } from "@shared/types/query-protocol";
 
 // ---- Question round-trip (pure; the agnt mcp.question ↔ mcp.answer wire) ----
 
