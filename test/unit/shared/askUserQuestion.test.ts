@@ -45,6 +45,14 @@ describe("answeredAskUserQuestionInput (the updatedInput that answers it)", () =
     expect(answered.questions).toBe(input.questions);
   });
 
+  it("keys the answer by the exact wire text — whitespace included", () => {
+    const answered = answeredAskUserQuestionInput(
+      { questions: [{ question: "  Which one? ", options: ["A"] }] },
+      ["A"]
+    );
+    expect(answered.answers).toEqual({ "  Which one? ": "A" });
+  });
+
   it("keeps a question worded __proto__ as an own answer key", () => {
     const answered = answeredAskUserQuestionInput(
       { questions: [{ question: "__proto__", options: ["yes"] }] },

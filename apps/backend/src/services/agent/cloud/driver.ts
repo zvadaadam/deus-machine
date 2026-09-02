@@ -62,6 +62,9 @@ interface CloudSession {
 
 let handler: AgentEventHandler | null = null;
 const sessions = new Map<string, CloudSession>();
+/** Queued commands of a session whose socket gave up (terminal onDown) —
+ *  handed to the next connect for that session. See sendOnLiveSocket. */
+const orphanedOutboxes = new Map<string, Record<string, unknown>[]>();
 
 /** Wire the driver to the process's one event handler. Called from service init. */
 export function initCloudDriver(eventHandler: AgentEventHandler): void {
@@ -74,6 +77,7 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     // after B signs in, and new callers must not adopt A's pending promise.
     identityGeneration += 1;
     connecting.clear();
+    orphanedOutboxes.clear();
     clearGithubTokenRefreshFlights();
     for (const s of sessions.values()) {
       rejectPendingDiffs(s, "platform identity changed");
@@ -669,6 +673,14 @@ export async function ensureCloudSession(deusSessionId: string): Promise<CloudSe
 async function connectCloudSession(deusSessionId: string): Promise<CloudSession> {
   const existing = sessions.get(deusSessionId);
   if (existing?.socket.isOpen()) return existing;
+  // Answers queued on the replaced (or given-up) socket belong to the session,
+  // not the socket: the sidecar's request is still pending, so they ride the
+  // replacement instead of dying with the old channel.
+  const inheritedOutbox = [
+    ...(existing?.outbox.splice(0) ?? []),
+    ...(orphanedOutboxes.get(deusSessionId) ?? []),
+  ];
+  orphanedOutboxes.delete(deusSessionId);
   if (existing) {
     clearTurnKill(existing);
     // The replaced channel's in-flight reads AND its terminals die here —
@@ -743,7 +755,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     seq: 0,
     pending: new Map(),
     pendingTurnKill: null,
-    outbox: [],
+    outbox: inheritedOutbox,
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };
@@ -755,10 +767,13 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     onOpen: () => flushOutbox(session),
     onDown: (reason) => {
       console.warn(`[CloudDriver] socket down session=${deusSessionId}: ${reason}`);
+      // Queued answers outlive the socket that gave up: the next connect for
+      // this session (the next send, or the next answer) inherits them.
       if (session.outbox.length > 0) {
-        console.warn(
-          `[CloudDriver] ${session.outbox.length} queued command(s) lost with the socket (${deusSessionId})`
-        );
+        orphanedOutboxes.set(deusSessionId, [
+          ...(orphanedOutboxes.get(deusSessionId) ?? []),
+          ...session.outbox.splice(0),
+        ]);
       }
       rejectPendingDiffs(session, reason);
       // The armed kill (if any) must not fire against a torn-down session —

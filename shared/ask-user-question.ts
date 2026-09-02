@@ -48,7 +48,10 @@ export function questionsFromAskUserQuestionInput(input: unknown): AskUserQuesti
       ? q.options.map(optionLabel).filter((o): o is string => o !== null)
       : [];
     entries.push({
-      question: q.question.trim(),
+      // The EXACT wire text, not a trimmed display label: the tool correlates
+      // answers by this string, so a stray space in the question would leave
+      // it unanswered in `updatedInput`.
+      question: q.question,
       options,
       ...(typeof q.multiSelect === "boolean" ? { multiSelect: q.multiSelect } : {}),
     });

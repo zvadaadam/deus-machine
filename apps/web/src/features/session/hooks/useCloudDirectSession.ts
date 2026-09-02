@@ -34,8 +34,10 @@ import {
   refetchMessages,
   type AgentStreamContext,
   type SessionFold,
+  patchWorkspaceSessionStatus,
 } from "../lib/agentEventFold";
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
+import { setDirectQuestionParked } from "../cloud/directQuestionState";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
 import { dropOptimisticMessage } from "../lib/optimisticMessage";
 import { match } from "ts-pattern";
@@ -99,8 +101,25 @@ function presentDirectQuestion(pending: PendingDirectQuestion): void {
 }
 
 function parkDirectQuestion(pending: PendingDirectQuestion): void {
+  setDirectQuestionParked(pending.sessionId, true);
   patchSessionDetail(pending.queryClient, pending.sessionId, { status: "needs_response" });
+  // The sidebar/home rows read the workspace projection, not the session
+  // detail — and discovery would keep saying "running" (see directQuestionState).
+  patchWorkspaceSessionStatus(pending.queryClient, pending.sessionId, "needs_response");
   presentDirectQuestion(pending);
+}
+
+/** After a question is answered or retracted, the session's attention state
+ *  follows what is left: another parked question, a live turn, or nothing. */
+function settleDirectQuestionState(sessionId: string, qc: QueryClient): void {
+  const stillParked = [...pendingDirectQuestions.values()].some((p) => p.sessionId === sessionId);
+  setDirectQuestionParked(sessionId, stillParked);
+  if (stillParked) return;
+  // Only a still-live turn goes back to "working": a stale overlay answered
+  // after the turn ended (or was stopped) must not revive a finished session.
+  const live = folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active") ?? false;
+  patchWorkspaceSessionStatus(qc, sessionId, live ? "working" : "idle");
+  if (live) patchSessionDetail(qc, sessionId, { status: "working" });
 }
 
 /** The fold's active turn — what a freshly arrived question belongs to. */
@@ -113,6 +132,7 @@ function activeTurnId(sessionId: string): string | undefined {
 function retractDirectQuestion(localId: string, pending: PendingDirectQuestion): void {
   pendingDirectQuestions.delete(localId);
   emitLocalEvent(TOOL_CANCEL_EVENT, { sessionId: pending.sessionId, requestId: localId });
+  settleDirectQuestionState(pending.sessionId, pending.queryClient);
 }
 
 /** Drop every parked question of a session (its turn ended — a late answer
@@ -161,11 +181,7 @@ setToolResponseInterceptor((requestId, result, error) => {
     presentDirectQuestion(pending);
     return true;
   }
-  // Only a still-live turn goes back to "working": a stale overlay answered
-  // after the turn ended (or was stopped) must not revive a finished session.
-  if (folds.get(pending.sessionId)?.state.turns.some((turn) => turn.status === "active")) {
-    patchSessionDetail(pending.queryClient, pending.sessionId, { status: "working" });
-  }
+  settleDirectQuestionState(pending.sessionId, pending.queryClient);
   return true;
 });
 

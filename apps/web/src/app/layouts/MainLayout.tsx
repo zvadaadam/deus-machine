@@ -534,6 +534,8 @@ export function MainLayout() {
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           repos={repos}
           repoGroups={repoGroups}
+          repoGroupsLoading={workspacesQuery.isLoading}
+          repoGroupsError={workspacesQuery.isError ? getErrorMessage(workspacesQuery.error) : null}
           onStartWorkspace={handleStartWorkspace}
           onWorkspaceClick={handleWorkspaceClick}
         />

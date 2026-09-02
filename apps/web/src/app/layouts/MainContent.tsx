@@ -70,6 +70,10 @@ interface MainContentProps {
   repos: Repository[];
   /** Sidebar workspace groups reused by the home screen recent list. */
   repoGroups: RepoGroup[];
+  /** Discovery state for the web-direct home: loading and a failed load are
+   *  not an empty account. */
+  repoGroupsLoading?: boolean;
+  repoGroupsError?: string | null;
   /** Handler for sending the first message from the home screen.
    *  Creates workspace + selects it + queues the first message. */
   onStartWorkspace: (
@@ -93,6 +97,8 @@ export function MainContent({
   onStartNewProject,
   repos,
   repoGroups,
+  repoGroupsLoading,
+  repoGroupsError,
   onStartWorkspace,
   onWorkspaceClick,
 }: MainContentProps) {
@@ -549,6 +555,8 @@ export function MainContent({
             <HomeView
               repos={repos}
               repoGroups={repoGroups}
+              repoGroupsLoading={repoGroupsLoading}
+              repoGroupsError={repoGroupsError}
               onSendMessage={onStartWorkspace}
               onWorkspaceClick={onWorkspaceClick}
               onOpenProject={onOpenProject}
