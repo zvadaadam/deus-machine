@@ -449,12 +449,12 @@ export function Chat({
                             ) : null
                           )
                           .with("context_limit", () =>
-                            onRetryInNewChat ? (
+                            retryInNewChat ? (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="h-7 text-xs"
-                                onClick={onRetryInNewChat}
+                                onClick={retryInNewChat}
                               >
                                 <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
                                 New session

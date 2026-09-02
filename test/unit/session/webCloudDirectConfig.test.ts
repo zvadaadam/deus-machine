@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   ensureWebCloudSession,
   handleWebCloudSessionExpired,
+  markWebCloudSignOut,
   readWebCloudSessionBearer,
   redirectToWebCloudLogin,
 } from "@/features/session/cloud/webCloudDirectConfig";
@@ -69,5 +70,17 @@ describe("login loop guard", () => {
     handleWebCloudSessionExpired();
     expect(await readWebCloudSessionBearer()).toBeNull();
     expect(win().location.href).toContain("/auth/login?client=deus-web");
+  });
+});
+
+// Last on purpose: the sign-out mark is page-lifetime module state.
+describe("deliberate sign-out", () => {
+  it("does not bounce to login when the cache reset's refetch meets the missing bearer", () => {
+    sessionStorage.setItem("deus_cloud_session", "live.bearer.jwt");
+    markWebCloudSignOut();
+    sessionStorage.removeItem("deus_cloud_session");
+    // What resetQueries' refetch does next: the adapter reports the bearer gone.
+    handleWebCloudSessionExpired();
+    expect(win().location.href).toBe(APP_URL);
   });
 });

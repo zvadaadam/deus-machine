@@ -6,6 +6,7 @@ import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
 import {
   clearWebCloudSession,
   beginWebCloudLogin,
+  markWebCloudSignOut,
   resolveDeusCloudUrl,
 } from "@/features/session/cloud/webCloudDirectConfig";
 
@@ -94,7 +95,10 @@ export async function signOut(): Promise<DeusCloudAuthResult> {
       // WorkOS's hosted session isn't ours to end from here.
       // Local state goes FIRST — a stalled auth origin must never keep the
       // bearer (and its live direct socket) alive; the cookie cleanup is
-      // best-effort and bounded.
+      // best-effort and bounded. Marked as deliberate before the reset below:
+      // its refetches meet the missing bearer, and the expiry handler must
+      // not read that as "re-authenticate".
+      markWebCloudSignOut();
       clearWebCloudSession();
       // The account boundary is NOW, not when the remote call settles: drop
       // every account-scoped cache and the direct token (which tears its

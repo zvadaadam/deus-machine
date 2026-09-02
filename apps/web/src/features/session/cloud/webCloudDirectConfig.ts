@@ -158,6 +158,19 @@ export function ensureWebCloudSession(): void {
   redirectToWebCloudLogin();
 }
 
+// A deliberate sign-out clears the bearer and resets every account-scoped
+// query; the ACTIVE ones refetch, meet the missing bearer and report
+// "expired" — which would redirect to login and, with WorkOS's hosted session
+// still alive, sign the user straight back in. The flag lives for the rest of
+// the page: signed out is where the user asked to be, and the next sign-in is
+// a full navigation anyway.
+let signedOutDeliberately = false;
+
+/** Mark the sign-out that is about to tear the caches down (see above). */
+export function markWebCloudSignOut(): void {
+  signedOutDeliberately = true;
+}
+
 /**
  * The bearer lapsed (agnt answered 401) — drop it and re-authenticate, under
  * the same cooldown as the boot gate. A 401 within seconds of a login means
@@ -166,6 +179,7 @@ export function ensureWebCloudSession(): void {
  * and Settings → Account still offers a manual sign-in.
  */
 export function handleWebCloudSessionExpired(): void {
+  if (signedOutDeliberately) return;
   clearWebCloudSession();
   if (redirectToWebCloudLogin()) return;
   // Staying put is still an account boundary: run the SAME teardown as
