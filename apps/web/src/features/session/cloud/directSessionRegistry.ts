@@ -26,6 +26,7 @@
 
 /** Per-turn overrides the composer offers — never a credential (agnt resolves that). */
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
+import { answeredAskUserQuestionInput, isCancelledAnswers } from "@shared/ask-user-question";
 
 export interface DirectTurnOptions {
   model?: string;
@@ -178,12 +179,31 @@ export function buildMcpAnswerFrame(
  * allowed as-is — parity with the Mac driver, since the sandbox VM is the
  * isolation boundary and deus has no interactive permission UI.
  */
+export type PermissionResponseResult =
+  | { behavior: "allow"; updatedInput?: Record<string, unknown> }
+  | { behavior: "deny"; message: string };
+
 export function buildPermissionResponseFrame(
   requestId: string,
   providerSessionId: string,
-  result:
-    | { behavior: "allow"; updatedInput?: Record<string, unknown> }
-    | { behavior: "deny"; message: string }
+  result: PermissionResponseResult
 ): Record<string, unknown> {
   return { type: "permission.response", data: { requestId, sessionId: providerSessionId, result } };
+}
+
+/**
+ * The result that answers a built-in AskUserQuestion: allow with the answers
+ * folded into the tool's input, or an honest deny when the overlay was
+ * dismissed — its USER_CANCELLED sentinel must not ride along as an answer.
+ */
+export function askUserQuestionPermissionResult(
+  input: unknown,
+  answers: unknown
+): PermissionResponseResult {
+  return isCancelledAnswers(answers)
+    ? { behavior: "deny", message: "The user dismissed the question" }
+    : {
+        behavior: "allow",
+        updatedInput: answeredAskUserQuestionInput(input, answers as unknown[]),
+      };
 }

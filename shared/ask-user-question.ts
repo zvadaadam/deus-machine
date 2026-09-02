@@ -65,7 +65,7 @@ export function questionsFromAskUserQuestionInput(input: unknown): AskUserQuesti
  */
 export function answeredAskUserQuestionInput(
   input: unknown,
-  answers: ReadonlyArray<string | string[]>
+  answers: ReadonlyArray<unknown>
 ): Record<string, unknown> {
   const base = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
   const questions = questionsFromAskUserQuestionInput(base);
@@ -73,7 +73,16 @@ export function answeredAskUserQuestionInput(
   questions.forEach((entry, index) => {
     const answer = answers[index];
     if (answer === undefined) return;
-    map[entry.question] = Array.isArray(answer) ? answer.join(", ") : answer;
+    map[entry.question] = Array.isArray(answer) ? answer.map(String).join(", ") : String(answer);
   });
   return { ...base, answers: map };
+}
+
+/** The overlay's dismissal sentinel — what `SessionPanel` resolves a closed
+ *  question with. Both cloud lanes translate it into an honest deny. */
+export const USER_CANCELLED_ANSWER = "USER_CANCELLED";
+
+/** True when an answer set means "declined": missing, empty, or the sentinel. */
+export function isCancelledAnswers(answers: unknown): boolean {
+  return !Array.isArray(answers) || answers.length === 0 || answers[0] === USER_CANCELLED_ANSWER;
 }

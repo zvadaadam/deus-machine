@@ -37,6 +37,7 @@ import {
   isCloudSession,
   hasLiveCloudSession,
   announceCloudEnv,
+  pushCloudSessionFacts,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
@@ -461,6 +462,13 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
           `Cannot switch agent from ${current.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
         );
       }
+    } else if (isCloud) {
+      // The driver's connect-time harness stamp already ran for this session
+      // under its DEFAULT harness: the workspace pipeline pre-opens the socket
+      // before any choice is made, and that open socket short-circuits every
+      // later `ensureCloudSession`. Restamp the choice now, or discovery keeps
+      // listing the session as Claude and the web seeds the wrong agent.
+      pushCloudSessionFacts(sessionId, { harness: agentHarness });
     }
   }
 

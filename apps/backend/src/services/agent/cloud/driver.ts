@@ -21,6 +21,7 @@ import { CloudEnvStateSchema, type CloudEnvEvent } from "@shared/events";
 import {
   answeredAskUserQuestionInput,
   questionsFromAskUserQuestionInput,
+  isCancelledAnswers,
 } from "@shared/ask-user-question";
 import { getCloudConfig, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
@@ -402,7 +403,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         void relayAskUserQuestionPermission(session, data.requestId, data.input, questions);
         return;
       }
-      sendPermissionResponse(session, data.requestId, { behavior: "allow" });
+      void sendPermissionResponse(session, data.requestId, { behavior: "allow" });
       return;
     }
 
@@ -428,29 +429,41 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   }
 }
 
-/** Relay an AskUserQuestion to the frontend and answer over the socket. */
-function sendPermissionResponse(
+/**
+ * The socket serving the session NOW. The one a question arrived on may be
+ * gone by the time the user answers — `onDown` drops it from the map and
+ * nothing reopens it until the next send — while the sidecar's request is
+ * still pending (24h). So an answer reconnects rather than being dropped: a
+ * dropped answer left the agent blocked behind an overlay the user had
+ * already closed.
+ */
+async function sendOnLiveSocket(
+  deusSessionId: string,
+  frame: Record<string, unknown>
+): Promise<void> {
+  const live = sessions.get(deusSessionId);
+  const target = live?.socket.isOpen() ? live : await ensureCloudSession(deusSessionId);
+  target.socket.send(frame);
+}
+
+/** Answer a permission request over the session's live socket. Never throws
+ *  out of the relay's settle path: a failed delivery is logged and the
+ *  sidecar's own timeout settles the request. */
+async function sendPermissionResponse(
   session: CloudSession,
   requestId: string,
   result:
     | { behavior: "allow"; updatedInput?: Record<string, unknown> }
     | { behavior: "deny"; message: string }
-): void {
-  // The socket may have closed while the overlay waited (reconnect, account
-  // switch). A closed socket can't carry the answer; the sidecar's own timeout
-  // settles the request — never throw out of the relay's settle path.
-  if (!session.socket.isOpen()) {
-    console.warn(`[CloudDriver] permission response dropped: socket closed (${requestId})`);
-    return;
-  }
+): Promise<void> {
   try {
-    session.socket.send({
+    await sendOnLiveSocket(session.deusSessionId, {
       type: "permission.response",
       // Nested under `data` like every ClientCommand payload (see mcp.answer).
       data: { requestId, sessionId: session.providerSessionId, result },
     });
   } catch (err) {
-    console.warn(`[CloudDriver] permission response send failed: ${String(err)}`);
+    console.warn(`[CloudDriver] permission response not delivered (${requestId}): ${String(err)}`);
   }
 }
 
@@ -476,8 +489,8 @@ async function relayAskUserQuestionPermission(
       timeoutMs: 24 * 60 * 60 * 1000,
     });
     const answers = extractAnswers(response);
-    const cancelled = answers.length === 0 || answers[0] === "USER_CANCELLED";
-    sendPermissionResponse(
+    const cancelled = isCancelledAnswers(answers);
+    await sendPermissionResponse(
       session,
       requestId,
       cancelled
@@ -486,7 +499,7 @@ async function relayAskUserQuestionPermission(
     );
   } catch (err) {
     console.warn(`[CloudDriver] askUserQuestion (permission) relay failed: ${String(err)}`);
-    sendPermissionResponse(session, requestId, {
+    await sendPermissionResponse(session, requestId, {
       behavior: "deny",
       message: "Question relay failed",
     });
@@ -517,7 +530,7 @@ async function relayQuestion(
     // The ClientCommand schema nests the payload under `data` (the DO spreads
     // `command.data` toward the sidecar); a flat frame fails its parse and the
     // agent waits out the sidecar's question timeout unanswered.
-    session.socket.send({
+    await sendOnLiveSocket(session.deusSessionId, {
       type: "mcp.answer",
       data: { questionId: data.questionId, sessionId: session.providerSessionId, answers },
     });
@@ -714,11 +727,15 @@ async function pushCloudSessionMetadata(
 }
 
 /**
- * Mirror a deus session's title onto its cloud twin so the Mac-closed web
- * lists it by name instead of an id prefix. No-op for local sessions and for
- * cloud sessions whose twin doesn't exist yet (the create path stamps then).
+ * Merge client-owned facts (`title`, `harness`) onto a deus session's cloud
+ * twin, so the Mac-closed web lists it by name and seeds the right agent.
+ * No-op for local sessions and for cloud sessions whose twin doesn't exist
+ * yet (the create path stamps then).
  */
-export function pushCloudSessionTitle(deusSessionId: string, title: string): void {
+export function pushCloudSessionFacts(
+  deusSessionId: string,
+  metadata: Record<string, string>
+): void {
   const config = getCloudConfig();
   if (!config) return;
   const row = getDatabase()
@@ -729,7 +746,12 @@ export function pushCloudSessionTitle(deusSessionId: string, title: string): voi
     )
     .get(deusSessionId) as { provider_session_id?: string | null; kind?: string } | undefined;
   if (row?.kind !== "cloud" || !row.provider_session_id) return;
-  void pushCloudSessionMetadata(row.provider_session_id, { title }, config);
+  void pushCloudSessionMetadata(row.provider_session_id, metadata, config);
+}
+
+/** Mirror a deus session's title onto its cloud twin. */
+export function pushCloudSessionTitle(deusSessionId: string, title: string): void {
+  pushCloudSessionFacts(deusSessionId, { title });
 }
 
 // ---- Turn API (mirrors the local agentService surface) ----

@@ -14,6 +14,8 @@ const mockClose = vi.fn();
 let capturedOnFrame: ((frame: Record<string, unknown>) => void) | null = null;
 let capturedOnDown: ((reason: string) => void) | null = null;
 let connectCount = 0;
+/** Toggled by the reconnect tests: a closed socket reads false. */
+let socketOpen = true;
 
 vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
   connectSessionSocket: (options: {
@@ -26,7 +28,7 @@ vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
     return {
       ready: () => Promise.resolve(),
       send: mockSend,
-      isOpen: () => true,
+      isOpen: () => socketOpen,
       close: mockClose,
     };
   },
@@ -106,6 +108,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   capturedOnFrame = null;
   capturedOnDown = null;
+  socketOpen = true;
   handler = makeHandler();
   initCloudDriver(handler);
   await ensureCloudSession("deus-session-1");
@@ -282,6 +285,69 @@ describe("cloud driver frame → fold contract", () => {
         },
       })
     );
+  });
+
+  it("denies a dismissed AskUserQuestion — the overlay's sentinel is not an answer", async () => {
+    mockRelay.mockResolvedValueOnce({ answers: ["USER_CANCELLED"] });
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-c",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "permission.response",
+          data: expect.objectContaining({
+            requestId: "req-c",
+            result: { behavior: "deny", message: "The user dismissed the question" },
+          }),
+        })
+      )
+    );
+  });
+
+  it("delivers an answer given after the socket dropped by reconnecting, not by dropping it", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    capturedOnFrame!({
+      type: "permission.request",
+      data: {
+        requestId: "req-r",
+        toolName: "AskUserQuestion",
+        input: { questions: [{ question: "Which?", options: ["A"] }] },
+      },
+    });
+    await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
+
+    // The socket goes down while the overlay waits: the driver forgets the
+    // session and nothing reopens it until the next send.
+    socketOpen = false;
+    capturedOnDown!("read ECONNRESET");
+    const connectsBefore = connectCount;
+    socketOpen = true; // the reconnect the answer triggers comes up fine
+
+    settle({ answers: ["A"] });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "permission.response",
+          data: expect.objectContaining({
+            requestId: "req-r",
+            result: expect.objectContaining({ behavior: "allow" }),
+          }),
+        })
+      )
+    );
+    expect(connectCount).toBe(connectsBefore + 1);
   });
 
   it("updates the workspace row from workspace.state frames", () => {

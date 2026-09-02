@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   toolRequestFromMcpQuestion,
   buildMcpAnswerFrame,
+  askUserQuestionPermissionResult,
 } from "@/features/session/cloud/directSessionRegistry";
 
 describe("toolRequestFromMcpQuestion (agnt mcp.question → renderer tool:request)", () => {
@@ -67,5 +68,27 @@ describe("buildMcpAnswerFrame (renderer answer → agnt mcp.answer)", () => {
     expect(buildMcpAnswerFrame("q", "p", { answers: [1, "two"] }).data).toMatchObject({
       answers: ["1", "two"],
     });
+  });
+});
+
+describe("askUserQuestionPermissionResult (renderer answer → permission.response result)", () => {
+  const input = {
+    questions: [{ question: "Which?", options: [{ label: "A" }, { label: "B" }] }],
+  };
+
+  it("allows the tool with the answers folded into its input", () => {
+    expect(askUserQuestionPermissionResult(input, ["A"])).toEqual({
+      behavior: "allow",
+      updatedInput: { ...input, answers: { "Which?": "A" } },
+    });
+  });
+
+  it("denies on dismissal — the overlay's sentinel must not ride along as an answer", () => {
+    for (const answers of [["USER_CANCELLED"], [], undefined]) {
+      expect(askUserQuestionPermissionResult(input, answers)).toEqual({
+        behavior: "deny",
+        message: "The user dismissed the question",
+      });
+    }
   });
 });

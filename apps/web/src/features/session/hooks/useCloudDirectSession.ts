@@ -47,12 +47,10 @@ import {
   buildCancelFrame,
   buildMcpAnswerFrame,
   buildPermissionResponseFrame,
+  askUserQuestionPermissionResult,
   toolRequestFromMcpQuestion,
 } from "../cloud/directSessionRegistry";
-import {
-  answeredAskUserQuestionInput,
-  questionsFromAskUserQuestionInput,
-} from "@shared/ask-user-question";
+import { questionsFromAskUserQuestionInput } from "@shared/ask-user-question";
 import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -118,15 +116,12 @@ setToolResponseInterceptor((requestId, result, error) => {
       : undefined;
   const frame = match(pending.ask)
     .with({ kind: "permission" }, ({ input }) =>
-      // Built-in AskUserQuestion: allow the tool with the answers folded into
-      // its input; a cancellation is an honest deny (the agent sees "declined",
-      // not a silent empty answer set).
+      // Built-in AskUserQuestion: the answers fold into the tool's input; a
+      // dismissal (empty, or the overlay's sentinel) is an honest deny.
       buildPermissionResponseFrame(
         pending.wireRequestId,
         pending.providerSessionId,
-        Array.isArray(answers) && answers.length > 0
-          ? { behavior: "allow", updatedInput: answeredAskUserQuestionInput(input, answers) }
-          : { behavior: "deny", message: "The user dismissed the question" }
+        askUserQuestionPermissionResult(input, answers)
       )
     )
     .with({ kind: "mcp" }, () =>

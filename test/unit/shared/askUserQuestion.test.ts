@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   questionsFromAskUserQuestionInput,
   answeredAskUserQuestionInput,
+  isCancelledAnswers,
+  USER_CANCELLED_ANSWER,
 } from "@shared/ask-user-question";
 
 const input = {
@@ -47,5 +49,15 @@ describe("answeredAskUserQuestionInput (the updatedInput that answers it)", () =
     expect(answeredAskUserQuestionInput(input, ["B"]).answers).toEqual({
       "Which letter do you prefer?": "B",
     });
+  });
+});
+
+describe("isCancelledAnswers (the overlay's dismissal)", () => {
+  it("treats nothing, an empty set and the USER_CANCELLED sentinel as declined", () => {
+    expect(isCancelledAnswers(undefined)).toBe(true);
+    expect(isCancelledAnswers([])).toBe(true);
+    expect(isCancelledAnswers([USER_CANCELLED_ANSWER])).toBe(true);
+    expect(isCancelledAnswers(["A"])).toBe(false);
+    expect(isCancelledAnswers([["yes", "no"]])).toBe(false);
   });
 });
