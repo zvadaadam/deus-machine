@@ -175,7 +175,10 @@ export function WorkspaceHeader({
                   </button>
                 ) : (
                   // No wake transport (web-direct): a status, not a control.
-                  <span className="text-text-disabled border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium">
+                  <span
+                    tabIndex={0}
+                    className="text-text-disabled border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
+                  >
                     <CloudOff className="h-3 w-3" />
                     Asleep
                   </span>

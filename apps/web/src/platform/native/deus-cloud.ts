@@ -3,6 +3,8 @@ import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types"
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { queryClient } from "@/shared/api/queryClient";
 import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
+import { queryClient } from "@/shared/api/queryClient";
+import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
 import {
   clearWebCloudSession,
   beginWebCloudLogin,
@@ -96,12 +98,18 @@ export async function signOut(): Promise<DeusCloudAuthResult> {
       // bearer (and its live direct socket) alive; the cookie cleanup is
       // best-effort and bounded.
       clearWebCloudSession();
+      // The account boundary is NOW, not when the remote call settles: drop
+      // every account-scoped cache and the direct token (which tears its
+      // socket down) before the bounded logout — the caller's own teardown on
+      // resolve is idempotent.
+      const signedOut = { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() };
+      applyDeusCloudAuthChange(queryClient, signedOut);
       await fetch(`${resolveDeusCloudUrl()}/auth/logout`, {
         method: "POST",
         credentials: "include",
         signal: AbortSignal.timeout(3000),
       }).catch(() => {});
-      return { success: true, session: { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() } };
+      return { success: true, session: signedOut };
     }
     return {
       success: false,
