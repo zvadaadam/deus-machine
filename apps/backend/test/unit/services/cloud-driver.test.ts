@@ -230,16 +230,58 @@ describe("cloud driver frame → fold contract", () => {
     expect(handler.handle).not.toHaveBeenCalled();
   });
 
-  it("auto-allows permission requests over the socket", () => {
-    capturedOnFrame!({ type: "permission.request", data: { requestId: "req-1" } });
+  it("auto-allows permission requests over the socket (ClientCommand shape: data-nested)", () => {
+    capturedOnFrame!({
+      type: "permission.request",
+      data: { requestId: "req-1", toolName: "Bash" },
+    });
 
     expect(mockSend).toHaveBeenCalledWith({
       type: "permission.response",
-      requestId: "req-1",
-      sessionId: "agnt-session-1",
-      result: { behavior: "allow" },
+      data: { requestId: "req-1", sessionId: "agnt-session-1", result: { behavior: "allow" } },
     });
     expect(handler.handle).not.toHaveBeenCalled();
+  });
+
+  it("relays the built-in AskUserQuestion (a permission request) through the overlay and answers in updatedInput", async () => {
+    mockRelay.mockResolvedValueOnce({ answers: ["A"] });
+    const input = {
+      questions: [
+        {
+          question: "Which letter?",
+          options: [{ label: "A" }, { label: "B" }],
+          multiSelect: false,
+        },
+      ],
+    };
+    capturedOnFrame!({
+      type: "permission.request",
+      data: { requestId: "req-q", toolName: "AskUserQuestion", input },
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "permission.response",
+          data: expect.objectContaining({
+            requestId: "req-q",
+            result: {
+              behavior: "allow",
+              updatedInput: { ...input, answers: { "Which letter?": "A" } },
+            },
+          }),
+        })
+      )
+    );
+    // The overlay saw the question in the RPC handler's shape.
+    expect(mockRelay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "askUserQuestion",
+        params: {
+          sessionId: "deus-session-1",
+          questions: [{ question: "Which letter?", options: ["A", "B"], multiSelect: false }],
+        },
+      })
+    );
   });
 
   it("updates the workspace row from workspace.state frames", () => {

@@ -38,8 +38,11 @@ import {
 import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
 import { dropOptimisticMessage } from "../lib/optimisticMessage";
+import { match } from "ts-pattern";
+import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import {
   registerDirectSession,
+  getDirectSession,
   buildMessageSendFrame,
   buildCancelFrame,
   buildMcpAnswerFrame,
@@ -54,24 +57,56 @@ import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
 import type { QueryClient } from "@tanstack/react-query";
 
 // ---- Question round-trip ----------------------------------------------------
-// The agent's AskUserQuestion arrives as an `mcp.question` frame on the direct
-// socket. The Mac lane relays it to the renderer as a `tool:request` q:event
-// and answers over its own socket; here the renderer IS the client, so the
-// frame is handed to the same handlers locally and the answer goes back on
-// this socket as `mcp.answer`. One registry per renderer: a question is keyed
-// by its wire id, and `sendToolResponse` consults it before the (dark) q: lane.
+// The agent's questions reach the browser as frames on the direct socket: the
+// sidecar's MCP question tool as `mcp.question`, Claude Code's built-in
+// AskUserQuestion as a `permission.request` (its answers ride back in
+// `updatedInput`). The Mac lane relays these to the renderer as a `tool:request`
+// q:event and answers over its own socket; here the renderer IS the client, so
+// each frame is handed to the same handlers locally and the answer goes back on
+// whichever socket serves the session WHEN the user answers — a remount, a
+// reconnect or a brief outage must not lose the correlation. One registry per
+// renderer, keyed by the LOCAL request id the overlay sees; `sendToolResponse`
+// consults it before the (dark) q: lane.
+type PendingQuestionKind =
+  | { kind: "mcp" }
+  | {
+      kind: "permission";
+      /** Echoed back with the answers folded in (the tool's own contract). */
+      input: unknown;
+    };
 interface PendingDirectQuestion {
+  /** The id agnt correlates on (questionId / permission requestId). */
+  wireRequestId: string;
   sessionId: string;
   providerSessionId: string;
-  send: (frame: Record<string, unknown>) => void;
   queryClient: QueryClient;
-  /** Which wire asked: the sidecar's MCP question tool, or Claude Code's
-   *  built-in AskUserQuestion (which collects answers through the permission
-   *  bridge — `input` is echoed back with the answers). */
-  kind: "mcp" | "permission";
-  input?: unknown;
+  ask: PendingQuestionKind;
+  /** What the overlay was shown — re-emitted verbatim after a remount. */
+  request: Omit<ToolRequestEventData, "requestId">;
 }
 const pendingDirectQuestions = new Map<string, PendingDirectQuestion>();
+let localRequestCounter = 0;
+
+/** Show (or re-show) a parked question: a fresh local id each time, because
+ *  the RPC handler dedupes ids it has already answered. */
+function presentDirectQuestion(pending: PendingDirectQuestion): void {
+  const localId = `${pending.wireRequestId}#${++localRequestCounter}`;
+  pendingDirectQuestions.set(localId, pending);
+  emitLocalEvent("tool:request", { ...pending.request, requestId: localId });
+}
+
+function parkDirectQuestion(pending: PendingDirectQuestion): void {
+  patchSessionDetail(pending.queryClient, pending.sessionId, { status: "needs_response" });
+  presentDirectQuestion(pending);
+}
+
+/** Drop every parked question of a session (its turn ended — a late answer
+ *  must not revive it) without answering. */
+function dropDirectQuestions(sessionId: string): void {
+  for (const [id, pending] of pendingDirectQuestions) {
+    if (pending.sessionId === sessionId) pendingDirectQuestions.delete(id);
+  }
+}
 
 setToolResponseInterceptor((requestId, result, error) => {
   const pending = pendingDirectQuestions.get(requestId);
@@ -81,33 +116,44 @@ setToolResponseInterceptor((requestId, result, error) => {
     error === undefined && result && typeof result === "object"
       ? (result as { answers?: unknown }).answers
       : undefined;
-  if (pending.kind === "permission") {
-    // Built-in AskUserQuestion: allow the tool with the answers folded into
-    // its input; a cancellation is an honest deny (the agent sees "declined",
-    // not a silent empty answer set).
-    pending.send(
+  const frame = match(pending.ask)
+    .with({ kind: "permission" }, ({ input }) =>
+      // Built-in AskUserQuestion: allow the tool with the answers folded into
+      // its input; a cancellation is an honest deny (the agent sees "declined",
+      // not a silent empty answer set).
       buildPermissionResponseFrame(
-        requestId,
+        pending.wireRequestId,
         pending.providerSessionId,
         Array.isArray(answers) && answers.length > 0
-          ? {
-              behavior: "allow",
-              updatedInput: answeredAskUserQuestionInput(pending.input, answers),
-            }
+          ? { behavior: "allow", updatedInput: answeredAskUserQuestionInput(input, answers) }
           : { behavior: "deny", message: "The user dismissed the question" }
       )
-    );
-  } else {
-    // An error response still UNBLOCKS the agent (schema-valid cancellation).
-    pending.send(
+    )
+    .with({ kind: "mcp" }, () =>
+      // An error response still UNBLOCKS the agent (schema-valid cancellation).
       buildMcpAnswerFrame(
-        requestId,
+        pending.wireRequestId,
         pending.providerSessionId,
         error === undefined ? result : undefined
       )
-    );
+    )
+    .exhaustive();
+  // Whichever socket serves the session NOW — the one the question arrived on
+  // may be gone. If none is open, keep the answer's question parked and put
+  // the overlay back so the user can answer once the lane is up again.
+  try {
+    const channel = getDirectSession(pending.sessionId);
+    if (!channel) throw new Error("no direct channel");
+    channel.sendRaw(frame);
+  } catch {
+    presentDirectQuestion(pending);
+    return true;
   }
-  patchSessionDetail(pending.queryClient, pending.sessionId, { status: "working" });
+  // Only a still-live turn goes back to "working": a stale overlay answered
+  // after the turn ended (or was stopped) must not revive a finished session.
+  if (folds.get(pending.sessionId)?.state.turns.some((turn) => turn.status === "active")) {
+    patchSessionDetail(pending.queryClient, pending.sessionId, { status: "working" });
+  }
   return true;
 });
 
@@ -214,15 +260,15 @@ export function useCloudDirectSession(
       if (frame.type === "mcp.question") {
         const request = toolRequestFromMcpQuestion(frame, sessionId);
         if (request) {
-          pendingDirectQuestions.set(request.requestId, {
+          const { requestId: wireRequestId, ...rest } = request;
+          parkDirectQuestion({
+            wireRequestId,
             sessionId,
             providerSessionId,
-            send: (answer) => socket.send(answer),
             queryClient,
-            kind: "mcp",
+            ask: { kind: "mcp" },
+            request: rest,
           });
-          patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
-          emitLocalEvent("tool:request", request);
         }
         return;
       }
@@ -247,21 +293,18 @@ export function useCloudDirectSession(
           );
           return;
         }
-        pendingDirectQuestions.set(data.requestId, {
+        parkDirectQuestion({
+          wireRequestId: data.requestId,
           sessionId,
           providerSessionId,
-          send: (answer) => socket.send(answer),
           queryClient,
-          kind: "permission",
-          input: data.input,
-        });
-        patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
-        emitLocalEvent("tool:request", {
-          requestId: data.requestId,
-          sessionId,
-          method: "askUserQuestion",
-          params: { sessionId, questions },
-          timeoutMs: 24 * 60 * 60 * 1000,
+          ask: { kind: "permission", input: data.input },
+          request: {
+            sessionId,
+            method: "askUserQuestion",
+            params: { sessionId, questions },
+            timeoutMs: 24 * 60 * 60 * 1000,
+          },
         });
         return;
       }
@@ -272,6 +315,10 @@ export function useCloudDirectSession(
         setError(null);
         pendingTurn = null;
       }
+      // The turn is over (finished or stopped): any question still parked for
+      // it can no longer be answered meaningfully — drop it so a stale overlay
+      // can't flip the finished session back to "working".
+      if (frame.type === "turn.ended") dropDirectQuestions(sessionId);
       // A rejected client command (agnt's `{type:"error"}` channel frame, e.g.
       // MESSAGE_SEND_FAILED) — the send was fire-and-forget, so this frame is
       // the only rollback signal: surface it AND drop the optimistic bubble of
@@ -320,6 +367,14 @@ export function useCloudDirectSession(
         // pending marker must not block the first post-reconnect send.
         pendingTurn = null;
         setStatus("open");
+        // Questions parked before a remount/reconnect: the frame that asked
+        // them is consumed (the snapshot won't replay it), so put the overlay
+        // back — the agent is still waiting on the sidecar's clock.
+        for (const [id, pending] of [...pendingDirectQuestions]) {
+          if (pending.sessionId !== sessionId) continue;
+          pendingDirectQuestions.delete(id);
+          presentDirectQuestion(pending);
+        }
       },
       onDown: (reason) => {
         pendingTurn = null;
@@ -350,17 +405,15 @@ export function useCloudDirectSession(
         pendingTurn = { turnId, at: Date.now() };
       },
       cancel: (turnId) => socket.send(buildCancelFrame(turnId)),
+      sendRaw: (raw) => socket.send(raw),
     });
 
     return () => {
       disposeChannel();
       socket.close();
-      // Questions parked on this socket can't be answered on it any more; the
-      // sidecar's timeout resolves them, and a reconnect's snapshot re-syncs
-      // the row status.
-      for (const [id, pending] of pendingDirectQuestions) {
-        if (pending.sessionId === sessionId) pendingDirectQuestions.delete(id);
-      }
+      // Parked questions deliberately SURVIVE this teardown: the next socket
+      // for the session re-presents them (onOpen), and the answer resolves the
+      // channel at send time. The sidecar's timeout is the only other exit.
       if (frame !== null) cancelAnimationFrame(frame);
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();

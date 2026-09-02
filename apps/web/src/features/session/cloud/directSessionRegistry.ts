@@ -40,6 +40,9 @@ export interface DirectSessionChannel {
   sendMessage(prompt: string, turnId: string, options: DirectTurnOptions): void;
   /** Cancel the session's active turn (omit `turnId` to cancel whatever is live). */
   cancel(turnId?: string): void;
+  /** Deliver a raw ClientCommand frame (question answers). Throws if the socket
+   *  is not open — the caller keeps the answer for the next socket. */
+  sendRaw(frame: Record<string, unknown>): void;
 }
 
 const channels = new Map<string, DirectSessionChannel>();
@@ -101,17 +104,13 @@ export function buildCancelFrame(turnId?: string): Record<string, unknown> {
   return { type: "agent.cancel", ...(turnId ? { turnId } : {}) };
 }
 
+import type { ToolRequestEventData } from "@shared/types/query-protocol";
+
 // ---- Question round-trip (pure; the agnt mcp.question ↔ mcp.answer wire) ----
 
-/** The `tool:request` payload the renderer's RPC handlers consume (mirrors
- *  `ToolRequestEventData` in shared/types/query-protocol). */
-export interface DirectToolRequest {
-  requestId: string;
-  sessionId: string;
-  method: "askUserQuestion";
-  params: { sessionId: string; questions: Array<Record<string, unknown>> };
-  timeoutMs: number;
-}
+/** The `tool:request` payload the renderer's RPC handlers consume — the SAME
+ *  contract the Mac lane's q:event carries, so the direct lane can't drift. */
+export type DirectToolRequest = ToolRequestEventData;
 
 /** Long: the sidecar owns the real deadline; this mirrors the Mac driver's relay. */
 const QUESTION_TIMEOUT_MS = 24 * 60 * 60 * 1000;

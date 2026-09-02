@@ -436,11 +436,22 @@ function sendPermissionResponse(
     | { behavior: "allow"; updatedInput?: Record<string, unknown> }
     | { behavior: "deny"; message: string }
 ): void {
-  session.socket.send({
-    type: "permission.response",
-    // Nested under `data` like every ClientCommand payload (see mcp.answer).
-    data: { requestId, sessionId: session.providerSessionId, result },
-  });
+  // The socket may have closed while the overlay waited (reconnect, account
+  // switch). A closed socket can't carry the answer; the sidecar's own timeout
+  // settles the request — never throw out of the relay's settle path.
+  if (!session.socket.isOpen()) {
+    console.warn(`[CloudDriver] permission response dropped: socket closed (${requestId})`);
+    return;
+  }
+  try {
+    session.socket.send({
+      type: "permission.response",
+      // Nested under `data` like every ClientCommand payload (see mcp.answer).
+      data: { requestId, sessionId: session.providerSessionId, result },
+    });
+  } catch (err) {
+    console.warn(`[CloudDriver] permission response send failed: ${String(err)}`);
+  }
 }
 
 /** The permission-bridge twin of `relayQuestion`: same overlay, answered as
@@ -609,12 +620,6 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       // send would run the turn under the wrong agent + credential.
       metadata: { harness: row.agent_harness },
     });
-    // `createSession` CONVERGES on a session the workspace pipeline already
-    // made (before any harness was known), and that path keeps the existing
-    // row's metadata — so the create-time stamp above never landed in
-    // production. Stamp after the fact, every time (idempotent, best-effort:
-    // discovery merely degrades to its claude default if this is lost).
-    void pushCloudSessionMetadata(created.id, { harness: row.agent_harness }, config);
     if (generationAtStart !== identityGeneration) {
       // The account changed while createSession was in flight. Persisting the
       // OLD identity's provider id would poison the row: every later connect
@@ -628,6 +633,13 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     row.provider_session_id = created.id;
   }
 
+  // Stamp the harness on EVERY connect, not just the lazy-create branch: the
+  // workspace pipeline pre-creates the provider session (before any harness is
+  // known) and stores its id, so that branch is skipped for a workspace's
+  // first session — and `createSession` converging on an existing row keeps
+  // its metadata anyway. Idempotent and best-effort; discovery merely degrades
+  // to its claude default if it's lost.
+  void pushCloudSessionMetadata(row.provider_session_id, { harness: row.agent_harness }, config);
   const { token } = await createSessionToken(row.provider_session_id, {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
