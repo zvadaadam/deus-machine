@@ -53,7 +53,8 @@ import {
   toolRequestFromMcpQuestion,
 } from "../cloud/directSessionRegistry";
 import { questionsFromAskUserQuestionInput } from "@shared/ask-user-question";
-import { emitLocalEvent, setToolResponseInterceptor, TOOL_CANCEL_EVENT } from "@/platform/ws";
+import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
+import { TOOL_CANCEL_EVENT } from "@shared/events";
 import type { QueryClient } from "@tanstack/react-query";
 
 // ---- Question round-trip ----------------------------------------------------
@@ -110,14 +111,22 @@ function parkDirectQuestion(pending: PendingDirectQuestion): void {
 }
 
 /** After a question is answered or retracted, the session's attention state
- *  follows what is left: another parked question, a live turn, or nothing. */
-function settleDirectQuestionState(sessionId: string, qc: QueryClient): void {
+ *  follows what is left: another parked question, a live turn, or nothing.
+ *  `liveOverride`: the caller knows better than the fold (see retract). */
+function settleDirectQuestionState(
+  sessionId: string,
+  qc: QueryClient,
+  liveOverride?: boolean
+): void {
   const stillParked = [...pendingDirectQuestions.values()].some((p) => p.sessionId === sessionId);
   setDirectQuestionParked(sessionId, stillParked);
   if (stillParked) return;
   // Only a still-live turn goes back to "working": a stale overlay answered
   // after the turn ended (or was stopped) must not revive a finished session.
-  const live = folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active") ?? false;
+  const live =
+    liveOverride ??
+    folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active") ??
+    false;
   patchWorkspaceSessionStatus(qc, sessionId, live ? "working" : "idle");
   if (live) patchSessionDetail(qc, sessionId, { status: "working" });
 }
@@ -128,18 +137,25 @@ function activeTurnId(sessionId: string): string | undefined {
 }
 
 /** Retract a presented question: the registry forgets it AND the overlay
- *  drops it (a card the agent no longer accepts must not stay answerable). */
-function retractDirectQuestion(localId: string, pending: PendingDirectQuestion): void {
+ *  drops it (a card the agent no longer accepts must not stay answerable).
+ *  `live` is the caller's truth about the turn — a retraction happens on a
+ *  turn.ended or a snapshot the fold has NOT folded yet, so the fold's view
+ *  is one frame stale here. */
+function retractDirectQuestion(
+  localId: string,
+  pending: PendingDirectQuestion,
+  live: boolean
+): void {
   pendingDirectQuestions.delete(localId);
   emitLocalEvent(TOOL_CANCEL_EVENT, { sessionId: pending.sessionId, requestId: localId });
-  settleDirectQuestionState(pending.sessionId, pending.queryClient);
+  settleDirectQuestionState(pending.sessionId, pending.queryClient, live);
 }
 
 /** Drop every parked question of a session (its turn ended — a late answer
  *  must not revive it) without answering. */
 function dropDirectQuestions(sessionId: string): void {
   for (const [id, pending] of [...pendingDirectQuestions]) {
-    if (pending.sessionId === sessionId) retractDirectQuestion(id, pending);
+    if (pending.sessionId === sessionId) retractDirectQuestion(id, pending, false);
   }
 }
 
@@ -359,7 +375,8 @@ export function useCloudDirectSession(
             pendingDirectQuestions.delete(id);
             presentDirectQuestion(pending);
           } else {
-            retractDirectQuestion(id, pending);
+            // The snapshot is the truth about the turn; the fold folds it next.
+            retractDirectQuestion(id, pending, live !== null);
           }
         }
       }

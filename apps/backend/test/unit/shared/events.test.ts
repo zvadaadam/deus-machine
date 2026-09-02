@@ -262,7 +262,7 @@ describe("shared/events", () => {
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
-      expect(PROTOCOL_EVENTS).toContain("tool:request");
+      expect(PROTOCOL_EVENTS).toContain("tool:request", "tool:cancel");
       // ONE agent event carries the whole lifecycle stream.
       expect(PROTOCOL_EVENTS).toContain("agent:event");
       expect(PROTOCOL_EVENTS).toContain("pty-data");
@@ -283,7 +283,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
       // Cloud sandbox environment progress (ephemeral chat stack)
       expect(PROTOCOL_EVENTS).toContain("cloud:env");
-      expect(PROTOCOL_EVENTS).toHaveLength(17);
+      expect(PROTOCOL_EVENTS).toHaveLength(18);
     });
 
     it("has no deus-dialect part/message event names left", () => {

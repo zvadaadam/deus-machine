@@ -12,7 +12,6 @@ export {
   setQueryRequestInterceptor,
   setToolResponseInterceptor,
   emitLocalEvent,
-  TOOL_CANCEL_EVENT,
   sendMutate,
   sendToolResponse,
   forceReconnect,

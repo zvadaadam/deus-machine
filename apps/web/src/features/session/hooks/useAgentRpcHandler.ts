@@ -21,7 +21,8 @@ import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react
 import { getErrorMessage } from "@shared/lib/errors";
 import { sendRequest } from "@/platform/ws";
 import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
-import { onEvent, sendToolResponse, TOOL_CANCEL_EVENT } from "@/platform/ws";
+import { onEvent, sendToolResponse } from "@/platform/ws";
+import { TOOL_CANCEL_EVENT } from "@shared/events";
 
 // ============================================================================
 // Types

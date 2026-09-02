@@ -14,6 +14,7 @@
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
 
 import type { ToolRequestEventData, QServerFrame } from "@shared/types/query-protocol";
+import { TOOL_CANCEL_EVENT } from "@shared/events";
 import { broadcast } from "../ws.service";
 
 // ---- Types ----
@@ -128,7 +129,7 @@ export function cancelSessionRelays(sessionId: string, reason: string): string[]
     entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
     const frame: QServerFrame = {
       type: "q:event",
-      event: "tool:cancel",
+      event: TOOL_CANCEL_EVENT,
       data: { sessionId, requestId },
     };
     broadcast(JSON.stringify(frame));
