@@ -189,6 +189,12 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   );
   const [tabs, setTabs] = useState<BrowserTabState[]>(initialTabs);
   const [activeTabId, setActiveTabId] = useState<string>(initialActiveId);
+  // The popup listener below outlives any one render; it reads the tab list
+  // through this ref rather than re-subscribing on every tab change.
+  const tabsRef = useRef(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   // Derived: active tab for nav bar state
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -409,6 +415,18 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   // opening in the system browser. This keeps OAuth flows in-app so callbacks work.
   useEffect(() => {
     const unlisten = native.events.on(BROWSER_NEW_TAB_REQUESTED, (data) => {
+      // The event is window-wide: every mounted panel hears every popup, and
+      // only the one whose tab spawned it may act — a cloud preview's links
+      // must not land in some frozen local workspace's tab list. A main that
+      // predates the source stamp sends none; accept those as before.
+      if (
+        data.sourceWebContentsId !== undefined &&
+        !tabsRef.current.some(
+          (t) => webviewManager.webContentsIdOf(t.id) === data.sourceWebContentsId
+        )
+      ) {
+        return;
+      }
       const newTab = createBrowserTab(workspaceId);
       newTab.url = data.url;
       newTab.currentUrl = data.url;

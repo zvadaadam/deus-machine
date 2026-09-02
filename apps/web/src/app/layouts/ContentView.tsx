@@ -140,7 +140,13 @@ export function ContentView({
               // Asleep / provisioning: nothing inside the sandbox can answer.
               <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
             ) : workspace.cloud_preview_template ? (
-              <CloudPreviewPanel workspace={workspace} visible={activeTab === "browser"} />
+              // Keyed: switching between two cloud computers must not carry
+              // the first one's port (and its draft) onto the second.
+              <CloudPreviewPanel
+                key={workspace.id}
+                workspace={workspace}
+                visible={activeTab === "browser"}
+              />
             ) : (
               <CloudBrowserUnavailable />
             )}

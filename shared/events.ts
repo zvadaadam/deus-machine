@@ -288,6 +288,9 @@ export type PtyExitEvent = z.infer<typeof PtyExitSchema>;
 const BrowserNewTabRequestedSchema = z.object({
   url: z.string(),
   disposition: z.string().optional(),
+  /** The guest webContents that asked — the event is window-wide, and only
+   *  the panel owning that webview may act on it. */
+  sourceWebContentsId: z.number().optional(),
 });
 type BrowserNewTabRequestedEvent = z.infer<typeof BrowserNewTabRequestedSchema>;
 

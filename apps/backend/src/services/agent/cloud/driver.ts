@@ -113,10 +113,12 @@ function updateCloudWorkspace(
   const status = data.status ?? "";
   // The sandbox's public host template rides the running state (and the
   // snapshot). Keep it on the row: the Browser tab previews a dev server
-  // through it. A new sandbox (reprovision) brings a new template.
-  if (typeof data.sandboxUrlTemplate === "string" && data.sandboxUrlTemplate) {
+  // through it. A new sandbox (reprovision) brings a new template, and a
+  // platform-reported `null` (no sandbox behind the session) clears it —
+  // otherwise the Browser tab would keep previewing a computer that is gone.
+  if (data.sandboxUrlTemplate !== undefined) {
     db.prepare("UPDATE workspaces SET cloud_preview_template = ? WHERE id = ?").run(
-      data.sandboxUrlTemplate,
+      data.sandboxUrlTemplate || null,
       workspaceId
     );
   }
@@ -277,7 +279,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       const sessionStatus = typeof state.status === "string" ? state.status : "";
       // The snapshot carries the host template too — the only source after a
       // backend restart, when no `running` transition will fire again.
-      if (typeof state.sandboxUrlTemplate === "string" && state.sandboxUrlTemplate) {
+      if (typeof state.sandboxUrlTemplate === "string" || state.sandboxUrlTemplate === null) {
         updateCloudWorkspace(session.deusWorkspaceId, {
           sandboxUrlTemplate: state.sandboxUrlTemplate,
         });

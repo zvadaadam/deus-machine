@@ -265,6 +265,20 @@ describe("cloud driver frame → fold contract", () => {
     expect(mockRun).toHaveBeenCalledWith("https://{{port}}-sb456.e2b.app", "deus-ws-1");
   });
 
+  it("clears the host template when the platform reports none (no sandbox behind the session)", () => {
+    mockRun.mockClear();
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: null },
+    });
+    expect(mockRun).toHaveBeenCalledWith(null, "deus-ws-1");
+
+    // Absent (an older platform, or a state that never carries it): untouched.
+    mockRun.mockClear();
+    capturedOnFrame!({ type: "workspace.state", data: { status: "provisioning" } });
+    expect(mockRun).not.toHaveBeenCalledWith(null, "deus-ws-1");
+  });
+
   it("broadcasts workspace.state as an ephemeral cloud:env q:event", () => {
     mockBroadcast.mockClear();
     capturedOnFrame!({

@@ -20,7 +20,7 @@ const PLATFORM_FRAMES: WorkspaceStateData[] = [
   {
     status: "running",
     sandboxId: "sbx-1",
-    sandboxUrlTemplate: "https://{port}-sbx-1.e2b.dev",
+    sandboxUrlTemplate: "https://{{port}}-sbx-1.e2b.dev",
     snapshotRestored: true,
   },
   { status: "running", sandboxId: "sbx-1", sandboxUrlTemplate: null },

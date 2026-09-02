@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import type { Workspace } from "@/shared/types";
+import { native } from "@/platform";
+import { BROWSER_NEW_TAB_REQUESTED } from "@shared/events";
 import { BrowserTab } from "./BrowserTab";
 import { createBrowserTab, type BrowserTabState } from "../types";
 import { webviewManager } from "../webview-manager";
@@ -60,6 +62,21 @@ export function CloudPreviewPanel({ workspace, visible }: CloudPreviewPanelProps
     setTab(next);
     return () => webviewManager.dispose(next.id);
   }, [workspace.id, url, generation]);
+
+  // Popups from the previewed app (window.open, target="_blank"): the main
+  // process denies the window and broadcasts the request to every panel.
+  // Ours go to the user's browser — a dev-server preview is not an OAuth flow
+  // that has to stay in-app, and the local Browser panels' tab lists are not
+  // where a cloud computer's links belong (they ignore foreign sources).
+  const tabId = tab?.id;
+  useEffect(() => {
+    if (!tabId) return;
+    return native.events.on(BROWSER_NEW_TAB_REQUESTED, (data) => {
+      if (data.sourceWebContentsId === undefined) return;
+      if (webviewManager.webContentsIdOf(tabId) !== data.sourceWebContentsId) return;
+      window.open(data.url, "_blank", "noopener");
+    });
+  }, [tabId]);
 
   const applyPort = useCallback(
     (value: string | number) => {
