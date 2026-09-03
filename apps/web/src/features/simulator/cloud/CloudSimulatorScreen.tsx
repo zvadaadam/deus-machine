@@ -23,7 +23,12 @@ interface CloudSimulatorScreenProps {
   visible: boolean;
 }
 
-export function CloudSimulatorScreen({ streamUrl }: CloudSimulatorScreenProps) {
+export function CloudSimulatorScreen({ streamUrl, visible }: CloudSimulatorScreenProps) {
+  // Hidden tab, no stream: ContentView keeps this panel mounted (not unmounted)
+  // when another tab is active, and a WebRTC viewer left loaded keeps
+  // decoding video nobody sees. Unmounting the iframe here is the documented
+  // reload-on-return trade, now actually taken.
+  if (!visible) return null;
   if (!isEmbeddableStreamUrl(streamUrl)) {
     return (
       <div className="text-text-secondary flex h-full w-full items-center justify-center text-sm">

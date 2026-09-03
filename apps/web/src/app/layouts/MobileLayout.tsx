@@ -14,6 +14,10 @@ import { sessionComposerActions } from "@/features/session/store/sessionComposer
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { useFileChanges } from "@/features/workspace";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
+import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
+import { CloudSimulatorPanel } from "@/features/simulator/cloud/CloudSimulatorPanel";
+import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
+import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
@@ -84,6 +88,15 @@ export function MobileLayout({
   // the Mac backend, which the direct lane doesn't have — so the tab bar and
   // Code panel don't mount and the diff query never fires.
   const chatOnly = isCloudDirectWebMode();
+
+  // A cloud computer hosts a device in the platform — billable, so a phone
+  // must be able to see and stop it. Web-direct has no Mac backend to relay
+  // the device commands through, so it stays chat-only.
+  const cloudSimulator = workspace.kind === "cloud" && !chatOnly;
+  const cloudStage = cloudGateStage(workspace);
+  const simulatorLive = useCloudSimulatorStore(
+    (s) => s.byWorkspace[workspace.id]?.status === "ready"
+  );
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
@@ -187,12 +200,35 @@ export function MobileLayout({
         </div>
       )}
 
+      {/* Hosted simulator — the same gate/panel pair the desktop Simulator tab
+          renders; hidden (not unmounted) like the other panels. */}
+      {cloudSimulator && (
+        <div
+          className={cn("min-h-0 flex-1 overflow-hidden", activeTab !== "simulator" && "hidden")}
+          id="mobile-panel-simulator"
+          role="tabpanel"
+          aria-labelledby="mobile-tab-simulator"
+        >
+          {cloudStage ? (
+            <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+          ) : (
+            <CloudSimulatorPanel
+              key={workspace.id}
+              workspace={workspace}
+              visible={activeTab === "simulator"}
+            />
+          )}
+        </div>
+      )}
+
       {/* Bottom tab bar — a one-tab bar is noise, so chat-only drops it */}
       {!chatOnly && (
         <MobileTabBar
           activeTab={activeTab}
           onTabChange={setActiveTab}
           fileChangesCount={fileChanges.length}
+          showSimulator={cloudSimulator}
+          simulatorLive={simulatorLive}
         />
       )}
     </div>

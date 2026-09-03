@@ -31,7 +31,8 @@ export interface CloudSimulatorSource {
   sessionId: string;
 }
 
-interface CloudSimulatorEntry {
+/** One hosted device, keyed under its workspace by platform. */
+interface CloudSimulatorDevice {
   /** The deus session that last spoke for the device (a synthesized park
    *  needs an envelope). */
   sessionId: string;
@@ -49,7 +50,26 @@ interface CloudSimulatorEntry {
    *  refused too; only a genuinely later frame (a restart) applies. */
   parked: boolean;
 }
-const cloudSimulators = new Map<string, CloudSimulatorEntry>();
+
+/** A device's slot: its platform, or "unknown" for the backend-synthesized
+ *  errors that name none (a sidecar that could not be reached). */
+type PlatformKey = CloudSimulatorPlatform | "unknown";
+type WorkspaceDevices = Map<PlatformKey, CloudSimulatorDevice>;
+
+/**
+ * workspaceId → platform → device. A workspace can run one device PER
+ * platform (the sidecar admits ios and android side by side), and the
+ * platform reports each on its own: an android `stopped` must not erase the
+ * ios `ready` that is still running — and billing. The tab shows ONE device,
+ * the workspace's primary (see `primaryOf`): the clients keep their
+ * single-device shape and every broadcast carries the primary's status.
+ */
+const cloudSimulators = new Map<string, WorkspaceDevices>();
+
+/** Recently relayed screenshot/action frames per workspace, so a capture the
+ *  platform fanned out to two session sockets reaches the clients once. */
+const recentRelays = new Map<string, string[]>();
+const RECENT_RELAYS_KEPT = 16;
 
 /** Bumped by forgetCloudSimulators (identity change, shutdown): a REST read
  *  that started under an earlier generation is account A's answer landing
@@ -73,6 +93,7 @@ function statusAt(status: CloudSimulatorStatus): number | null {
  *  phones) and driver shutdown. */
 export function forgetCloudSimulators(): void {
   cloudSimulators.clear();
+  recentRelays.clear();
   cacheGeneration += 1;
 }
 
@@ -100,9 +121,82 @@ function sameStatus(a: CloudSimulatorStatus, b: CloudSimulatorStatus): boolean {
   );
 }
 
+function platformKey(status: CloudSimulatorStatus): PlatformKey {
+  return status.platform ?? "unknown";
+}
+
+function devicesOf(workspaceId: string): WorkspaceDevices {
+  let devices = cloudSimulators.get(workspaceId);
+  if (!devices) {
+    devices = new Map();
+    cloudSimulators.set(workspaceId, devices);
+  }
+  return devices;
+}
+
+/** How much a device deserves the tab: a running one always, then a booting
+ *  one, then what is winding down, then the dead — so no other platform's
+ *  transition can hide a device that is still up and billing. */
+function statusRank(status: string): number {
+  switch (status) {
+    case "ready":
+      return 0;
+    case "starting":
+      return 1;
+    case "stopping":
+      return 2;
+    case "stopped":
+      return 4;
+    default:
+      return 3; // error, or a status this build has never seen
+  }
+}
+
+/** The workspace's primary device — the one the tab shows. Ties (two devices
+ *  in the same state) go to the newer frame, then to ios for determinism. */
+function primaryOf(devices: WorkspaceDevices | undefined): CloudSimulatorDevice | null {
+  if (!devices || devices.size === 0) return null;
+  let best: CloudSimulatorDevice | null = null;
+  let bestKey: PlatformKey = "unknown";
+  for (const [key, device] of devices) {
+    if (!best) {
+      best = device;
+      bestKey = key;
+      continue;
+    }
+    const rank = statusRank(device.status.status) - statusRank(best.status.status);
+    if (rank < 0) {
+      best = device;
+      bestKey = key;
+      continue;
+    }
+    if (rank > 0) continue;
+    const newer = (device.at ?? -1) - (best.at ?? -1);
+    if (newer > 0 || (newer === 0 && key === "ios" && bestKey !== "ios")) {
+      best = device;
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
 /** Push a device event to connected clients (q:event "cloud:simulator"). */
 function broadcastCloudSimulator(event: CloudSimulatorEvent): void {
   broadcast(JSON.stringify({ type: "q:event", event: "cloud:simulator", data: event }));
+}
+
+/** Tell the clients the workspace's primary device changed — and only then.
+ *  A transition on the OTHER platform (android stopping beside a running ios
+ *  device) leaves the tab exactly as it was, so it says nothing. */
+function announcePrimary(
+  workspaceId: string,
+  sessionId: string,
+  before: CloudSimulatorStatus | null
+): void {
+  const after = primaryOf(cloudSimulators.get(workspaceId));
+  if (!after) return;
+  if (before && sameStatus(before, after.status)) return;
+  broadcastCloudSimulator({ workspaceId, sessionId, kind: "status", data: after.status });
 }
 
 /** Validate one platform simulator frame at the seam (like announceCloudEnv)
@@ -136,14 +230,15 @@ function parseCloudSimulatorEvent(
  *  on that very timestamp: then it is the pre-park state coming back. And
  *  while parked, a status that names no time cannot prove it is newer (a
  *  real restart always carries the platform's time), so it is refused too. */
-function isNotNewerThanCached(at: number | null, cached: CloudSimulatorEntry): boolean {
+function isNotNewerThanCached(at: number | null, cached: CloudSimulatorDevice): boolean {
   if (at === null) return cached.parked;
   if (cached.at === null) return false;
   return at < cached.at || (at === cached.at && cached.parked);
 }
 
 /** simulator.status — from the live frame or the snapshot's mirror. The cache
- *  first (a `cloudSimulator` read must never lag a broadcast), then the event. */
+ *  first (a `cloudSimulator` read must never lag a broadcast), then the event
+ *  — which carries the workspace's PRIMARY device, not necessarily this frame. */
 export function applyCloudSimulatorStatus(
   source: CloudSimulatorSource,
   frame: Record<string, unknown>
@@ -152,61 +247,71 @@ export function applyCloudSimulatorStatus(
   if (!event || event.kind !== "status") return;
   const data = normalizeCloudSimulatorStatus(event.data);
   const at = statusAt(data);
-  const cached = cloudSimulators.get(source.workspaceId);
+  const devices = devicesOf(source.workspaceId);
+  const key = platformKey(data);
+  const cached = devices.get(key);
   if (cached && isNotNewerThanCached(at, cached)) return;
-  cloudSimulators.set(source.workspaceId, {
+  const before = primaryOf(devices)?.status ?? null;
+  devices.set(key, {
     sessionId: source.sessionId,
     status: data,
     at: at ?? cached?.at ?? null,
     parked: false,
   });
-  broadcastCloudSimulator({ ...event, data });
+  announcePrimary(source.workspaceId, source.sessionId, before);
 }
 
 /** simulator.screenshot / simulator.action_result — live-only by design (the
  *  platform persists neither): the tab holds the last screenshot and a short
- *  ring of action results in memory. */
+ *  ring of action results in memory. The platform fans each of them out to
+ *  every session socket of the workspace; the clients get each ONCE. */
 export function relayCloudSimulatorEvent(
   source: CloudSimulatorSource,
-  kind: Exclude<CloudSimulatorEvent["kind"], "status">,
+  kind: Exclude<CloudSimulatorEvent["kind"], "status" | "gone">,
   frame: Record<string, unknown>
 ): void {
   const event = parseCloudSimulatorEvent(source, kind, frame);
-  if (event) broadcastCloudSimulator(event);
+  if (!event) return;
+  const stamp = typeof frame.timestamp === "string" ? frame.timestamp : null;
+  if (stamp) {
+    const dedupeKey = `${kind}|${stamp}|${String(frame.platform ?? "")}|${String(frame.verb ?? "")}`;
+    const seen = recentRelays.get(source.workspaceId) ?? [];
+    if (seen.includes(dedupeKey)) return;
+    recentRelays.set(source.workspaceId, [...seen, dedupeKey].slice(-RECENT_RELAYS_KEPT));
+  }
+  broadcastCloudSimulator(event);
 }
 
-/** The device died with its sandbox. Keep the platform (the tab still labels
- *  the device and offers Start on it), drop the capability URL and any stale
- *  error, mark it stopped — and tell the clients, since the platform's own
- *  settle frame may never arrive on a socket that is down. A workspace no
- *  device was ever known for stays unknown: a "stopped" phone must not appear
- *  on a workspace that never had one. */
+/** The devices died with their sandbox. Keep each platform (the tab still
+ *  labels the device and offers Start on it), drop the capability URLs and
+ *  any stale error, mark them stopped — and tell the clients, since the
+ *  platform's own settle frames may never arrive on a socket that is down.
+ *  A workspace no device was ever known for stays unknown: a "stopped" phone
+ *  must not appear on a workspace that never had one. */
 export function parkCloudSimulator(workspaceId: string): void {
-  const entry = cloudSimulators.get(workspaceId);
-  if (!entry || entry.status.status === "stopped") return;
-  const stopped = normalizeCloudSimulatorStatus({
-    status: "stopped",
-    ...(entry.status.platform ? { platform: entry.status.platform } : {}),
-    ...(entry.status.easSessionIdentifier
-      ? { easSessionIdentifier: entry.status.easSessionIdentifier }
-      : {}),
-    timestamp: new Date().toISOString(),
-  });
-  // Keep the PLATFORM's ordering point: the park is timed by this Mac's clock
-  // and must never gate the platform's own frames (a resumed sandbox's
-  // `starting` carries the platform's time, whatever this clock says).
-  cloudSimulators.set(workspaceId, {
-    sessionId: entry.sessionId,
-    status: stopped,
-    at: entry.at,
-    parked: true,
-  });
-  broadcastCloudSimulator({
-    workspaceId,
-    sessionId: entry.sessionId,
-    kind: "status",
-    data: stopped,
-  });
+  const devices = cloudSimulators.get(workspaceId);
+  if (!devices || devices.size === 0) return;
+  const before = primaryOf(devices)?.status ?? null;
+  let sessionId: string | null = null;
+  for (const [key, device] of devices) {
+    if (device.status.status === "stopped") continue;
+    sessionId ??= device.sessionId;
+    const stopped = normalizeCloudSimulatorStatus({
+      status: "stopped",
+      ...(device.status.platform ? { platform: device.status.platform } : {}),
+      ...(device.status.easSessionIdentifier
+        ? { easSessionIdentifier: device.status.easSessionIdentifier }
+        : {}),
+      timestamp: new Date().toISOString(),
+    });
+    // Keep the PLATFORM's ordering point: the park is timed by this Mac's
+    // clock and must never gate the platform's own frames (a resumed
+    // sandbox's `starting` carries the platform's time, whatever this clock
+    // says).
+    devices.set(key, { sessionId: device.sessionId, status: stopped, at: device.at, parked: true });
+  }
+  if (sessionId === null) return; // everything was already stopped
+  announcePrimary(workspaceId, sessionId, before);
 }
 
 // ---- The on-demand read ----
@@ -223,22 +328,27 @@ export interface CloudSimulatorReadContext {
 }
 
 /**
- * The workspace's device status right now. With a live socket the cache is
- * authoritative. Without one — this backend just started, the workspace was
- * never opened, or its socket dropped — the platform's REST read is preferred
- * (and cached), because a device may have stopped and been billed off since
- * the last frame; the cache only answers when the platform can't be reached.
- * null = the platform knows of no device.
+ * The workspace's primary device status right now. With a live socket the
+ * cache is authoritative. Without one — this backend just started, the
+ * workspace was never opened, or its socket dropped — the platform's REST
+ * read is preferred (and cached), because a device may have stopped and been
+ * billed off since the last frame; the cache only answers when the platform
+ * can't be reached. null = the platform knows of no device.
  */
 export async function readCloudSimulatorStatus(
   workspaceId: string,
   context: CloudSimulatorReadContext
 ): Promise<CloudSimulatorStatus | null> {
-  const cached = cloudSimulators.get(workspaceId) ?? null;
-  if (cached && context.liveSocket) return cached.status;
+  const cachedPrimary = primaryOf(cloudSimulators.get(workspaceId));
+  if (cachedPrimary && context.liveSocket) return cachedPrimary.status;
   const config = getCloudConfig();
-  if (!config || !context.sessionId || !context.providerSessionId) return cached?.status ?? null;
+  if (!config || !context.sessionId || !context.providerSessionId) {
+    return cachedPrimary?.status ?? null;
+  }
   const generation = cacheGeneration;
+  // Entry identities before the await: every apply/park creates a new object,
+  // so a changed identity afterwards means a frame landed meanwhile.
+  const before = new Map(cloudSimulators.get(workspaceId) ?? []);
   let raw: unknown;
   try {
     const detail = (await sdkGetSession(context.providerSessionId, {
@@ -249,23 +359,25 @@ export async function readCloudSimulatorStatus(
     raw = detail.simulator;
   } catch (err) {
     console.warn(`[CloudSimulator] status read failed for ${workspaceId}: ${String(err)}`);
-    return cloudSimulators.get(workspaceId)?.status ?? null;
+    return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
   }
   // The identity changed while the read was in flight: this is account A's
   // device (its stream URL) answering under account B. Not cached, not shown.
-  if (generation !== cacheGeneration) return cloudSimulators.get(workspaceId)?.status ?? null;
-  // A frame may have landed on a (re)connected socket while the read was in
-  // flight — every apply/park creates a new entry, so identity tells. That
-  // frame is the platform's later word unless the REST answer names a later
-  // time still; it must not be erased by an answer computed before it.
-  const live = cloudSimulators.get(workspaceId) ?? null;
-  const landedMeanwhile = live !== cached;
+  if (generation !== cacheGeneration)
+    return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
+  const devices = cloudSimulators.get(workspaceId);
+  const landedMeanwhile = [...(devices ?? new Map<PlatformKey, CloudSimulatorDevice>())].some(
+    ([key, device]) => before.get(key) !== device
+  );
   const source: CloudSimulatorSource = { workspaceId, sessionId: context.sessionId };
   if (!raw || typeof raw !== "object") {
-    if (landedMeanwhile && live) return live.status;
+    // A frame that landed on a (re)connected socket meanwhile is the
+    // platform's later word; an answer computed before it must not erase it.
+    if (landedMeanwhile) return primaryOf(devices)?.status ?? null;
     // The platform knows of no device: whatever the cache held is history —
     // for every client, not just the one that asked.
-    if (cloudSimulators.delete(workspaceId)) {
+    if (devices && devices.size > 0) {
+      cloudSimulators.delete(workspaceId);
       broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
     }
     return null;
@@ -281,23 +393,26 @@ export async function readCloudSimulatorStatus(
     error: r.error,
     timestamp: r.timestamp,
   });
-  if (!parsed.success) return live?.status ?? null;
+  if (!parsed.success) return primaryOf(devices)?.status ?? null;
   const status = normalizeCloudSimulatorStatus(parsed.data);
   const at = statusAt(status);
-  if (live && landedMeanwhile && !(at !== null && live.at !== null && at > live.at)) {
-    return live.status;
+  const key = platformKey(status);
+  const live = devices?.get(key) ?? null;
+  const thisLanded = live !== null && before.get(key) !== live;
+  if (live && thisLanded && !(at !== null && live.at !== null && at > live.at)) {
+    return primaryOf(devices)?.status ?? null;
   }
   // The same gate the socket path applies: a REST mirror of the pre-park
   // frame (same timestamp) must not resurrect a dead stream URL, and an
   // older answer never wins.
-  if (live && isNotNewerThanCached(at, live)) return live.status;
-  cloudSimulators.set(workspaceId, { sessionId: context.sessionId, status, at, parked: false });
+  if (live && isNotNewerThanCached(at, live)) return primaryOf(devices)?.status ?? null;
+  const target = devicesOf(workspaceId);
+  const beforePrimary = primaryOf(target)?.status ?? null;
+  target.set(key, { sessionId: context.sessionId, status, at, parked: false });
   // The requester gets the answer; every other client learns it the same
   // way a socket frame would reach them — unless nothing changed.
-  if (!live || !sameStatus(live.status, status)) {
-    broadcastCloudSimulator({ ...source, kind: "status", data: status });
-  }
-  return status;
+  announcePrimary(workspaceId, context.sessionId, beforePrimary);
+  return primaryOf(target)?.status ?? null;
 }
 
 // ---- Control-request shaping (the driver sends; this validates) ----

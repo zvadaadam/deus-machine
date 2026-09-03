@@ -85,6 +85,10 @@ interface CloudSession {
   /** Client commands (permission/question answers) that arrived while the
    *  socket was between retries — drained by onOpen. */
   outbox: Record<string, unknown>[];
+  /** The platform identity this socket authenticated under. A message that
+   *  was already queued when an account switch closed the socket still fires
+   *  its callback; frames from a previous identity are dropped at dispatch. */
+  identityGeneration: number;
 }
 
 let handler: AgentEventHandler | null = null;
@@ -327,6 +331,13 @@ function failLiveTurn(session: CloudSession, status: string, detail?: string): v
 function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): void {
   const type = typeof frame.type === "string" ? frame.type : "";
   if (!type || !handler) return;
+  // A socket the identity change closed can still deliver a queued message:
+  // account A's status would repopulate the just-cleared caches and
+  // rebroadcast its stream URL under account B. Likewise a session object a
+  // reconnect has replaced no longer speaks for its id.
+  if (session.identityGeneration !== identityGeneration) return;
+  const current = sessions.get(session.deusSessionId);
+  if (current && current !== session) return;
 
   // A question relayed during this turn can no longer be answered once the
   // turn is over (stopped, killed, timed out): settle its relay now — the
@@ -839,6 +850,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     pending: new Map(),
     pendingTurnKill: null,
     outbox: [...(orphanedOutboxes.get(deusSessionId) ?? [])],
+    identityGeneration: generationAtStart,
     // Assigned below — the frame callback closes over the session object.
     socket: undefined as unknown as SessionSocket,
   };

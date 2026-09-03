@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { CloudPreviewEventSchema } from "@shared/events";
-import { onEvent, sendRequest } from "@/platform/ws";
+import { onConnectionChange, onEvent, sendRequest } from "@/platform/ws";
 
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
@@ -41,17 +41,36 @@ export const cloudPreviewActions = {
 // One process-wide listener regardless of how many panels read the store.
 let subscribed = false;
 
+function forgetAllCloudPreviews(): void {
+  useCloudPreviewStore.setState((state) => ({
+    byWorkspace: {},
+    generation: state.generation + 1,
+  }));
+}
+
 export function ensureCloudPreviewSubscription(): void {
   if (subscribed) return;
   subscribed = true;
+
+  // Same rule as the device store: a reconnect (or the backend restart
+  // behind it) may have missed a reprovision, and the template is a
+  // capability URL that dies with its sandbox. Start over; the hook re-reads,
+  // and a fresh backend reopens the session whose snapshot carries it.
+  let wasDisconnected = false;
+  onConnectionChange((connected) => {
+    if (!connected) {
+      wasDisconnected = true;
+      return;
+    }
+    if (!wasDisconnected) return;
+    wasDisconnected = false;
+    forgetAllCloudPreviews();
+  });
   onEvent((event, raw) => {
     if (event === "cloud:identity") {
       // The templates were the previous account's sandboxes: forget them all,
       // and disown every read still in flight.
-      useCloudPreviewStore.setState((state) => ({
-        byWorkspace: {},
-        generation: state.generation + 1,
-      }));
+      forgetAllCloudPreviews();
       return;
     }
     if (event !== "cloud:preview") return;

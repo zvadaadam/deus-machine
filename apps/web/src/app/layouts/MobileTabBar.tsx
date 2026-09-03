@@ -1,29 +1,43 @@
 /**
  * MobileTabBar -- bottom navigation for mobile web layout.
  *
- * Two tabs: Chat (default) and Code (all-files diff viewer).
- * Badge dot on Code tab when file changes exist.
+ * Chat (default) and Code (all-files diff viewer); a cloud computer adds
+ * Simulator — the hosted device is billable, and a phone must be able to see
+ * and stop it. Badge count on Code when file changes exist; a live dot on
+ * Simulator while the device is up.
  * Fixed at the bottom of the mobile flex column (not position:fixed).
  * Safe-area aware for notched iOS devices.
  */
 
-import { MessageSquare, GitBranch } from "lucide-react";
+import { MessageSquare, GitBranch, Smartphone } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
-export type MobileTab = "chat" | "code";
+export type MobileTab = "chat" | "code" | "simulator";
 
 interface MobileTabBarProps {
   activeTab: MobileTab;
   onTabChange: (tab: MobileTab) => void;
   fileChangesCount: number;
+  /** Cloud computers only: the hosted-device tab. */
+  showSimulator?: boolean;
+  /** The hosted device is running (and billing) — shown as a dot. */
+  simulatorLive?: boolean;
 }
 
-const tabs: Array<{ id: MobileTab; label: string; icon: typeof MessageSquare }> = [
+const BASE_TABS: Array<{ id: MobileTab; label: string; icon: typeof MessageSquare }> = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "code", label: "Code", icon: GitBranch },
 ];
+const SIMULATOR_TAB = { id: "simulator" as const, label: "Simulator", icon: Smartphone };
 
-export function MobileTabBar({ activeTab, onTabChange, fileChangesCount }: MobileTabBarProps) {
+export function MobileTabBar({
+  activeTab,
+  onTabChange,
+  fileChangesCount,
+  showSimulator = false,
+  simulatorLive = false,
+}: MobileTabBarProps) {
+  const tabs = showSimulator ? [...BASE_TABS, SIMULATOR_TAB] : BASE_TABS;
   return (
     <div
       data-slot="mobile-tab-bar"
@@ -57,6 +71,12 @@ export function MobileTabBar({ activeTab, onTabChange, fileChangesCount }: Mobil
                 <span className="bg-primary text-primary-foreground absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] leading-none font-bold">
                   {fileChangesCount > 99 ? "99+" : fileChangesCount}
                 </span>
+              )}
+              {tab.id === "simulator" && simulatorLive && (
+                <span
+                  aria-label="Device live"
+                  className="bg-success absolute -top-0.5 -right-1.5 h-2 w-2 rounded-full"
+                />
               )}
             </div>
             <span className="text-[10px] font-medium">{tab.label}</span>

@@ -3,12 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The store owns ONE process-wide `onEvent` listener; capture it so tests can
 // push `cloud:simulator` frames through the same validation path production
 // uses (the shared zod schema), not a private setter.
-const { listeners } = vi.hoisted(() => ({
+const { listeners, connectionListeners } = vi.hoisted(() => ({
   listeners: [] as Array<(event: string, data: unknown) => void>,
+  connectionListeners: [] as Array<(connected: boolean) => void>,
 }));
 vi.mock("@/platform/ws", () => ({
   onEvent: vi.fn((cb: (event: string, data: unknown) => void) => {
     listeners.push(cb);
+    return () => {};
+  }),
+  onConnectionChange: vi.fn((cb: (connected: boolean) => void) => {
+    connectionListeners.push(cb);
     return () => {};
   }),
 }));
@@ -316,5 +321,25 @@ describe("cloudSimulatorStore generation and gone", () => {
     emit("cloud:simulator", { workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
     expect(useCloudSimulatorStore.getState().byWorkspace[WS]).toBeUndefined();
     expect(device()).toBeUndefined();
+  });
+});
+
+describe("cloudSimulatorStore across a reconnect", () => {
+  const connection = (connected: boolean) => connectionListeners.forEach((l) => l(connected));
+
+  it("keeps its entries on the initial connect, forgets them after a drop and reconnect", () => {
+    emit(
+      "cloud:simulator",
+      statusEvent({ status: "ready", platform: "ios", streamUrl: "https://s/1" })
+    );
+    const before = useCloudSimulatorStore.getState().generation;
+    connection(true); // the first connect of the session: nothing was missed
+    expect(device().status).toBe("ready");
+    expect(useCloudSimulatorStore.getState().generation).toBe(before);
+    connection(false);
+    expect(device().status).toBe("ready"); // offline: keep showing what we knew
+    connection(true); // broadcasts may have been missed: start over, re-seed
+    expect(useCloudSimulatorStore.getState().byWorkspace).toEqual({});
+    expect(useCloudSimulatorStore.getState().generation).toBe(before + 1);
   });
 });

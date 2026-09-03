@@ -1047,6 +1047,109 @@ describe("cloud driver simulator channel", () => {
     });
   });
 
+  it("keeps a running ios device in front when the android one stops — the other platform's transition says nothing", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    });
+    mockBroadcast.mockClear();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "android",
+      timestamp: "2026-09-03T10:00:06.000Z",
+    });
+    // The tab still shows the running ios device: no broadcast, same read.
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios",
+    });
+  });
+
+  it("hands the tab to the other platform's device only once the primary is gone", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    });
+    mockBroadcast.mockClear();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "starting",
+      platform: "android",
+      timestamp: "2026-09-03T10:00:06.000Z",
+    });
+    // A booting android beside a running ios: ios stays in front.
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "ios",
+      timestamp: "2026-09-03T10:00:07.000Z",
+    });
+    // Now the android device is the workspace's device — the clients hear it.
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string).data.data).toMatchObject({
+      status: "starting",
+      platform: "android",
+    });
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "starting",
+      platform: "android",
+    });
+  });
+
+  it("relays a screenshot the platform fanned out to two sockets once", () => {
+    const shot = {
+      type: "simulator.screenshot",
+      sessionId: "agnt-session-1",
+      platform: "ios",
+      imageBase64: "AAAA",
+      format: "png",
+      timestamp: "2026-09-03T10:00:08.000Z",
+    };
+    mockBroadcast.mockClear();
+    capturedOnFrame!(shot);
+    capturedOnFrame!(shot); // the second session socket's copy
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    // A genuinely new capture still goes through.
+    capturedOnFrame!({ ...shot, timestamp: "2026-09-03T10:00:09.000Z" });
+    expect(mockBroadcast).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops a frame from a socket the identity change closed — account A's device never lands under B", async () => {
+    const deliver = capturedOnFrame!;
+    identityChanged!();
+    mockBroadcast.mockClear();
+    deliver({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/account-a",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    });
+    expect(mockBroadcast.mock.calls.map((c) => String(c[0]))).not.toContainEqual(
+      expect.stringContaining("account-a")
+    );
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+  });
+
   it("refuses the pre-park state coming back on another socket — same timestamp, dead stream", async () => {
     const ready = {
       type: "simulator.status",

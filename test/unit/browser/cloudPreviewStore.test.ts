@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const listeners: Array<(event: string, data: unknown) => void> = [];
 const sendRequest = vi.hoisted(() => vi.fn());
+const connectionListeners: Array<(connected: boolean) => void> = [];
 vi.mock("@/platform/ws", () => ({
   onEvent: (cb: (event: string, data: unknown) => void) => {
     listeners.push(cb);
+    return () => {};
+  },
+  onConnectionChange: (cb: (connected: boolean) => void) => {
+    connectionListeners.push(cb);
     return () => {};
   },
   sendRequest,
@@ -94,5 +99,20 @@ describe("cloudPreviewStore reads across an identity change", () => {
     expect(useCloudPreviewStore.getState().byWorkspace["ws-2"]).toBe(
       "https://{{port}}-live.e2b.app"
     );
+  });
+});
+
+describe("cloudPreviewStore across a reconnect", () => {
+  const connection = (connected: boolean) => connectionListeners.forEach((l) => l(connected));
+
+  it("forgets every template after a drop and reconnect, not on the initial connect", () => {
+    cloudPreviewActions.set("ws-1", "https://{{port}}-sb1.e2b.app");
+    const before = useCloudPreviewStore.getState().generation;
+    connection(true);
+    expect(template()).toBe("https://{{port}}-sb1.e2b.app");
+    connection(false);
+    connection(true);
+    expect(useCloudPreviewStore.getState().byWorkspace).toEqual({});
+    expect(useCloudPreviewStore.getState().generation).toBe(before + 1);
   });
 });

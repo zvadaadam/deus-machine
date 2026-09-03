@@ -12,7 +12,7 @@
 import { create } from "zustand";
 import { match } from "ts-pattern";
 import { CloudSimulatorEventSchema } from "@shared/events";
-import { onEvent } from "@/platform/ws";
+import { onConnectionChange, onEvent } from "@/platform/ws";
 
 export type CloudSimPlatform = "ios" | "android";
 
@@ -194,19 +194,42 @@ export const cloudSimulatorActions = {
 // store — per-component subscriptions would double-append the action ring.
 let subscribed = false;
 
+/** Drop every entry and disown in-flight reads: the caches are the previous
+ *  world's (another account, or a backend that no longer holds them). */
+function forgetAllCloudSimulators(): void {
+  useCloudSimulatorStore.setState((state) => ({
+    byWorkspace: {},
+    generation: state.generation + 1,
+  }));
+}
+
 export function ensureCloudSimulatorSubscription(): void {
   if (subscribed) return;
   subscribed = true;
+
+  // A socket that dropped and came back — or the backend that restarted
+  // behind it — may have broadcast transitions nobody heard: a device could
+  // now be running (and billing) behind a "stopped" entry, or stopped behind
+  // a "live" one. Start over on every reconnect; the mounted panels re-seed
+  // from the backend's authoritative read (a fresh backend answers from the
+  // platform).
+  let wasDisconnected = false;
+  onConnectionChange((connected) => {
+    if (!connected) {
+      wasDisconnected = true;
+      return;
+    }
+    if (!wasDisconnected) return;
+    wasDisconnected = false;
+    forgetAllCloudSimulators();
+  });
 
   onEvent((event, raw) => {
     if (event === "cloud:identity") {
       // Sign-out / account switch: every entry was the previous account's
       // device — stream URLs, screenshots, the agent's actions and their
       // arguments. Start over; a mounted panel re-seeds under the new identity.
-      useCloudSimulatorStore.setState((state) => ({
-        byWorkspace: {},
-        generation: state.generation + 1,
-      }));
+      forgetAllCloudSimulators();
       return;
     }
     if (event !== "cloud:simulator") return;
