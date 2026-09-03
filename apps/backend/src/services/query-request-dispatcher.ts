@@ -13,6 +13,8 @@ import {
   getCloudSimulatorStatus,
   parseCloudSimulatorPlatform,
 } from "./agent/cloud/driver";
+import { getCloudPreviewTemplate } from "./agent/cloud/preview";
+import { getCloudPreviewTemplate } from "./agent/cloud/preview";
 
 export type RequestResourceName = (typeof REQUEST_RESOURCES)[number];
 
@@ -112,6 +114,11 @@ export async function runRequest(
         );
       })
       .with("cloudRepoAccess", () => repoGet("/cloud-access"))
+      // The computer's host template — the backend's in-memory latest (nothing
+      // is persisted; the socket is its only source — see shared/events.ts).
+      .with("cloudPreview", () =>
+        getCloudPreviewTemplate(requireParam(params, "workspaceId", "cloudPreview"))
+      )
       // The device's current status — the backend's in-memory latest, else the
       // platform's REST read (nothing is persisted; see shared/events.ts).
       .with("cloudSimulator", () =>

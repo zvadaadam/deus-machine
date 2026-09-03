@@ -41,9 +41,6 @@ export interface Workspace {
   setup_status: SetupStatus;
   init_stage?: string | null;
   error_message: string | null;
-  /** Cloud: the sandbox's public host template (`{{port}}` placeholder), or
-   *  null until the platform reports the running sandbox. */
-  cloud_preview_template?: string | null;
   pr_url?: string | null;
   pr_number?: number | null;
   /** PR lifecycle snapshot — persisted by the backend from gh, pushed over WS. */

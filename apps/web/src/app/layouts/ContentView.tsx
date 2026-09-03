@@ -14,6 +14,7 @@ import { TerminalPanel } from "@/features/terminal";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
 import { CloudPreviewPanel } from "@/features/browser/ui/CloudPreviewPanel";
+import { useCloudPreviewTemplate } from "@/features/browser/cloud/cloudPreviewStore";
 import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUnavailable";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
@@ -109,6 +110,10 @@ export function ContentView({
     }
   }, [workspace.kind, workspace.id]);
   const browserTarget = workspace.kind !== "cloud" ? workspace.id : lastLocalBrowser;
+  // The computer's host template: in memory, seeded once, live on cloud:preview.
+  const cloudPreviewTemplate = useCloudPreviewTemplate(
+    workspace.kind === "cloud" ? workspace.id : null
+  );
 
   // The local simulator streams a Mac-hosted device — only a LOCAL workspace
   // has one. Same freeze as the Browser: a cloud visit must not unmount the
@@ -165,12 +170,13 @@ export function ContentView({
             {cloudStage ? (
               // Asleep / provisioning: nothing inside the sandbox can answer.
               <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
-            ) : workspace.cloud_preview_template ? (
+            ) : cloudPreviewTemplate ? (
               // Keyed: switching between two cloud computers must not carry
               // the first one's port (and its draft) onto the second.
               <CloudPreviewPanel
                 key={workspace.id}
                 workspace={workspace}
+                template={cloudPreviewTemplate}
                 visible={activeTab === "browser"}
               />
             ) : (

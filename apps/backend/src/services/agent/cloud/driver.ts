@@ -9,6 +9,7 @@
 // push all run unchanged. The platform half becomes deus effects here:
 // workspace.state → workspace row, session.error → engine error event,
 // simulator.* → ./simulator (an in-memory device cache + q:event cloud:simulator),
+// sandboxUrlTemplate → ./preview (an in-memory template cache + q:event cloud:preview),
 // mcp.question → the existing askUserQuestion relay, permission.request →
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
@@ -38,6 +39,11 @@ import {
   type CloudSimulatorReadContext,
   type CloudSimulatorSource,
 } from "./simulator";
+import {
+  applyCloudPreviewTemplate,
+  forgetCloudPreviewTemplates,
+  type CloudPreviewSource,
+} from "./preview";
 import {
   answeredAskUserQuestionInput,
   questionsFromAskUserQuestionInput,
@@ -109,23 +115,10 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     // are capability URLs): forget them; the next connect under the right
     // account replays whatever is really there.
     forgetCloudSimulators();
-    // The preview template is a capability URL (the sandbox id is its only
-    // secret) persisted on the row: it must not outlive the account that
-    // owns the sandbox — the Browser tab would keep previewing account A's
-    // computer under account B. The next running frame / snapshot under the
-    // right account restores it.
-    try {
-      getDatabase()
-        .prepare(
-          "UPDATE workspaces SET cloud_preview_template = NULL WHERE kind = 'cloud' AND cloud_preview_template IS NOT NULL"
-        )
-        .run();
-      invalidate(["workspaces"], {});
-    } catch (err) {
-      console.warn(
-        `[CloudDriver] preview templates not cleared on identity change: ${String(err)}`
-      );
-    }
+    // Same for the computers' host templates: capability URLs of account A's
+    // sandboxes. The next running frame / snapshot under the right account
+    // restores whatever is really there.
+    forgetCloudPreviewTemplates();
   });
 }
 
@@ -161,6 +154,7 @@ function settlePending(
 
 export function shutdownCloudDriver(): void {
   forgetCloudSimulators();
+  forgetCloudPreviewTemplates();
   for (const s of sessions.values()) {
     rejectPendingDiffs(s, "cloud driver shutting down");
     clearTurnKill(s);
@@ -172,23 +166,9 @@ export function shutdownCloudDriver(): void {
 
 // ---- Workspace row effects ----
 
-function updateCloudWorkspace(
-  workspaceId: string,
-  data: { status?: string; step?: string; sandboxUrlTemplate?: string | null }
-): void {
+function updateCloudWorkspace(workspaceId: string, data: { status?: string; step?: string }): void {
   const db = getDatabase();
   const status = data.status ?? "";
-  // The sandbox's public host template rides the running state (and the
-  // snapshot). Keep it on the row: the Browser tab previews a dev server
-  // through it. A new sandbox (reprovision) brings a new template, and a
-  // platform-reported `null` (no sandbox behind the session) clears it —
-  // otherwise the Browser tab would keep previewing a computer that is gone.
-  if (data.sandboxUrlTemplate !== undefined) {
-    db.prepare("UPDATE workspaces SET cloud_preview_template = ? WHERE id = ?").run(
-      data.sandboxUrlTemplate || null,
-      workspaceId
-    );
-  }
   if (status === "running") {
     db.prepare(
       "UPDATE workspaces SET state = 'ready', init_stage = NULL, error_message = NULL WHERE id = ? AND state != 'archived'"
@@ -239,8 +219,8 @@ function broadcastCloudEnv(session: CloudSession, data: unknown): void {
 
 // ---- Frame dispatch ----
 
-/** The ids a simulator frame is attributed to (see ./simulator). */
-function simulatorSource(session: CloudSession): CloudSimulatorSource {
+/** The ids a platform frame is attributed to (see ./simulator, ./preview). */
+function frameSource(session: CloudSession): CloudSimulatorSource & CloudPreviewSource {
   return { workspaceId: session.deusWorkspaceId, sessionId: session.deusSessionId };
 }
 
@@ -368,9 +348,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // The snapshot carries the host template too — the only source after a
       // backend restart, when no `running` transition will fire again.
       if (typeof state.sandboxUrlTemplate === "string" || state.sandboxUrlTemplate === null) {
-        updateCloudWorkspace(session.deusWorkspaceId, {
-          sandboxUrlTemplate: state.sandboxUrlTemplate,
-        });
+        applyCloudPreviewTemplate(frameSource(session), state.sandboxUrlTemplate);
       }
       // The device's last known status rides the snapshot too (the platform
       // mirrors its latest simulator.status there): after a backend restart
@@ -379,7 +357,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // parked sandbox overrides a mirror older than the park.
       if (state.latestSimulatorStatus && typeof state.latestSimulatorStatus === "object") {
         applyCloudSimulatorStatus(
-          simulatorSource(session),
+          frameSource(session),
           state.latestSimulatorStatus as Record<string, unknown>
         );
       }
@@ -443,6 +421,13 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         sandboxUrlTemplate?: string | null;
       };
       updateCloudWorkspace(session.deusWorkspaceId, data);
+      // The public host template rides the running state: a new sandbox
+      // (reprovision) brings a new one, a platform-reported `null` means no
+      // sandbox behind the session. Absent = an older platform / a state that
+      // never carries it: untouched.
+      if (data.sandboxUrlTemplate !== undefined) {
+        applyCloudPreviewTemplate(frameSource(session), data.sandboxUrlTemplate);
+      }
       broadcastCloudEnv(session, data);
       // Real case: sidecar dies on a credential error → clean WS close →
       // workspace 'stopped', and the only trace was an ephemeral env line.
@@ -479,13 +464,13 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "simulator.status":
-      applyCloudSimulatorStatus(simulatorSource(session), frame);
+      applyCloudSimulatorStatus(frameSource(session), frame);
       return;
 
     case "simulator.screenshot":
     case "simulator.action_result":
       relayCloudSimulatorEvent(
-        simulatorSource(session),
+        frameSource(session),
         type === "simulator.screenshot" ? "screenshot" : "action_result",
         frame
       );

@@ -379,6 +379,19 @@ export function useCloudDirectSession(
         });
         return;
       }
+      // The computer's host template rides workspace.state: one store for every
+      // lane (the Mac lane's driver announces cloud:preview; here the frame is
+      // re-emitted locally, keyed by the session like every web-direct row).
+      if (frame.type === "workspace.state") {
+        const data = (frame.data ?? {}) as { sandboxUrlTemplate?: string | null };
+        if (data.sandboxUrlTemplate !== undefined) {
+          emitLocalEvent("cloud:preview", {
+            workspaceId: sessionId,
+            sessionId,
+            template: data.sandboxUrlTemplate || null,
+          });
+        }
+      }
       // Device frames: one store for every lane (see emitSimulatorEvent); the
       // snapshot's latestSimulatorStatus is handled with the snapshot below.
       const simulatorKind =
@@ -398,8 +411,19 @@ export function useCloudDirectSession(
       // carry A's request id to an agent already past it.
       if (frame.type === "session.snapshot") {
         const state = frame.state as
-          | { currentTurnId?: unknown; latestSimulatorStatus?: unknown }
+          | {
+              currentTurnId?: unknown;
+              latestSimulatorStatus?: unknown;
+              sandboxUrlTemplate?: string | null;
+            }
           | undefined;
+        if (typeof state?.sandboxUrlTemplate === "string" || state?.sandboxUrlTemplate === null) {
+          emitLocalEvent("cloud:preview", {
+            workspaceId: sessionId,
+            sessionId,
+            template: state.sandboxUrlTemplate || null,
+          });
+        }
         // A late joiner learns the device's current status here — the platform
         // does not replay the status frame it sent before this socket existed.
         const latestDevice = state?.latestSimulatorStatus;

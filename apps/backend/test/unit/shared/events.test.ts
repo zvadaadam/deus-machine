@@ -263,7 +263,8 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("cloudRepoAccess");
       expect(REQUEST_RESOURCES).toContain("cloudSimExec");
       expect(REQUEST_RESOURCES).toContain("cloudSimulator");
-      expect(REQUEST_RESOURCES).toHaveLength(30);
+      expect(REQUEST_RESOURCES).toContain("cloudPreview");
+      expect(REQUEST_RESOURCES).toHaveLength(31);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
@@ -291,7 +292,8 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("cloud:env");
       // Hosted simulator passthrough (status also lands on the workspace row)
       expect(PROTOCOL_EVENTS).toContain("cloud:simulator");
-      expect(PROTOCOL_EVENTS).toHaveLength(19);
+      expect(PROTOCOL_EVENTS).toContain("cloud:preview");
+      expect(PROTOCOL_EVENTS).toHaveLength(20);
     });
 
     it("has no deus-dialect part/message event names left", () => {

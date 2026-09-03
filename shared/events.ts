@@ -115,6 +115,11 @@ export const REQUEST_RESOURCES = [
   // CloudSimulatorStatus | null. Nothing is persisted: the platform replays its
   // latest status on every connect and serves it here on demand.
   "cloudSimulator",
+  // Cloud preview: the computer's public host template right now (the
+  // backend's in-memory latest; the platform's REST carries none). Params
+  // { workspaceId } → string | null. Nothing is persisted: the platform
+  // replays it on every connect.
+  "cloudPreview",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 
@@ -249,6 +254,10 @@ export const PROTOCOL_EVENTS = [
   // through the `cloudSimulator` request); the platform is the truth and
   // replays it on every connect. Payload: CloudSimulatorEvent.
   "cloud:simulator",
+  // The cloud computer's public host template changed (a running frame or a
+  // snapshot carried it; null = no sandbox behind the session). Nothing is
+  // persisted — see `cloudPreview`. Payload: CloudPreviewEvent.
+  "cloud:preview",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
@@ -293,6 +302,16 @@ export const CloudEnvEventSchema = z.object({
   data: CloudEnvStateSchema,
 });
 export type CloudEnvEvent = z.infer<typeof CloudEnvEventSchema>;
+
+/** "cloud:preview": the computer's host template for a workspace — a
+ *  capability URL template (`https://{{port}}-<sandbox>.e2b.app`) that changes
+ *  with every reprovision; null = the platform reports no sandbox. */
+export const CloudPreviewEventSchema = z.object({
+  workspaceId: z.string(),
+  sessionId: z.string(),
+  template: z.string().nullable(),
+});
+export type CloudPreviewEvent = z.infer<typeof CloudPreviewEventSchema>;
 
 /**
  * Hosted simulator events ("cloud:simulator"): the platform's simulator.*
