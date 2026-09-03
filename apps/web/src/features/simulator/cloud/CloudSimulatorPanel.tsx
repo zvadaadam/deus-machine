@@ -20,7 +20,7 @@ import type { Workspace } from "@/shared/types";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { processImageFiles } from "@/features/session/lib/imageAttachments";
-import { DeviceFrame } from "../ui/DeviceFrame";
+import { openExternal } from "@/platform/native/window";
 import { cloudSimulatorService } from "./cloudSimulator.service";
 import {
   EMPTY_CLOUD_SIM_DEVICE,
@@ -60,6 +60,9 @@ interface ScreenshotRequest {
    *  whatever chat is active when the capture lands. */
   sessionId: string | null;
 }
+
+/** How long the copy-link button shows its acknowledgement. */
+const COPIED_MS = 1500;
 
 /** What the idle chip appends to the composer draft. */
 const BUILD_AND_RUN_PROMPT = "Build and run the app on the cloud simulator";
@@ -222,6 +225,28 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     });
   }, [lastScreenshot]);
 
+  // The platform's viewer already IS a full device UI (pointer, rotate, logs,
+  // settings); at native size it is the power-user surface, so offer it as a
+  // window rather than cramming it into the tab.
+  const handleOpenExternal = useCallback(() => {
+    if (!device.streamUrl) return;
+    openExternal(device.streamUrl).catch((e) => setSendError(getErrorMessage(e)));
+  }, [device.streamUrl]);
+
+  const [copied, setCopied] = useState(false);
+  const handleCopyLink = useCallback(() => {
+    if (!device.streamUrl) return;
+    navigator.clipboard
+      .writeText(device.streamUrl)
+      .then(() => setCopied(true))
+      .catch((e) => setSendError(getErrorMessage(e)));
+  }, [device.streamUrl]);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   const handleAskAgent = useCallback(() => {
     const sid = activeChatSessionId(workspaceId);
     if (sid) sessionComposerActions.appendDraft(sid, BUILD_AND_RUN_PROMPT);
@@ -235,19 +260,30 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
       onStop={handleStop}
       onHome={handleHome}
       onScreenshot={handleScreenshot}
+      onOpenExternal={handleOpenExternal}
+      onCopyLink={handleCopyLink}
+      copied={copied}
     />
   );
 
-  // Android has no dedicated frame geometry; a phone frame is the honest
-  // approximation for both platforms.
-  const deviceType = device.platform === "android" ? "Android" : "iPhone";
   const recentActions = device.actions.slice(-VISIBLE_ACTIONS);
 
   return (
     <TooltipProvider delayDuration={200}>
       <div className="bg-bg-base flex h-full w-full flex-col">
-        <div className="relative min-h-0 flex-1">
-          <DeviceFrame deviceType={deviceType} header={header}>
+        {/*
+          The stage. The platform's stream draws its own device — a realistic
+          iPhone skin around the screen, touch, hardware buttons, rotation —
+          so Deus must not draw a second phone around it (the local simulator
+          keeps its DeviceFrame: that stream is bare pixels). Give the viewer
+          the whole area and it centers and scales the device itself; our
+          controls float above it.
+        */}
+        <div className="bg-bg-muted/30 relative min-h-0 flex-1">
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
+            <div className="pointer-events-auto w-full max-w-[420px]">{header}</div>
+          </div>
+          <div className="absolute inset-0 pt-16">
             {phase === "live" && device.streamUrl ? (
               <CloudSimulatorScreen
                 key={device.streamUrl}
@@ -265,7 +301,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
                 onAskAgent={handleAskAgent}
               />
             )}
-          </DeviceFrame>
+          </div>
         </div>
 
         {sendError && (
@@ -296,7 +332,7 @@ function DeviceStateBody({
   onAskAgent: () => void;
 }) {
   return (
-    <div className="bg-bg-base flex h-full w-full items-center justify-center p-6 text-center">
+    <div className="flex h-full w-full items-center justify-center p-6 text-center">
       {match(phase)
         .with("idle", () => (
           <div className="flex flex-col items-center gap-3">

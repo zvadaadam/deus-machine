@@ -1,7 +1,8 @@
 /**
- * The device stream inside the frame — the EAS Simulator web preview, a
- * WebRTC viewer, embedded as an iframe. It sits inside the DeviceFrame's
- * rounded, overflow-hidden screen, so the corners clip it naturally.
+ * The device stream — the EAS Simulator web preview, a WebRTC viewer,
+ * embedded as an iframe that fills the panel's stage. The viewer draws the
+ * device itself (skin, touch, rotation) and centers it in whatever room it
+ * gets, so no frame of ours wraps it.
  *
  * Desktop used to host this in an Electron <webview> to survive tab switches
  * without reloading. A <webview> guest, though, will not autoplay the WebRTC
@@ -36,7 +37,7 @@ export function CloudSimulatorScreen({ streamUrl }: CloudSimulatorScreenProps) {
       // `?embed=1` strips the EAS viewer's own toolbar and pill — Deus frames
       // and controls the device itself.
       src={toEmbeddedStreamUrl(streamUrl)}
-      className="bg-bg-base h-full w-full border-0"
+      className="h-full w-full border-0 bg-transparent"
       // WebRTC video autoplays only if the permission is carried into the frame.
       allow="autoplay; clipboard-read; clipboard-write"
       // Scripts on the stream's own origin and nothing else: no top-level
