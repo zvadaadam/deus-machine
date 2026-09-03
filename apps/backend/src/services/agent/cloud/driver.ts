@@ -119,6 +119,15 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     // sandboxes. The next running frame / snapshot under the right account
     // restores whatever is really there.
     forgetCloudPreviewTemplates();
+    // The clients hold the same account-scoped caches (device stores, host
+    // templates, screenshots): tell them to start over.
+    broadcast(
+      JSON.stringify({
+        type: "q:event",
+        event: "cloud:identity",
+        data: { generation: identityGeneration },
+      })
+    );
   });
 }
 
@@ -1220,7 +1229,24 @@ function currentCloudSessionRow(workspaceId: string): {
   if (!row.session_id) {
     throw new Error("This cloud workspace has no session to reach its sandbox through");
   }
-  return { sessionId: row.session_id, providerSessionId: row.provider_session_id ?? null };
+  let providerSessionId = row.provider_session_id ?? null;
+  if (!providerSessionId) {
+    // A chat that never sent a cloud turn has no platform session yet — but
+    // the DEVICE belongs to the workspace's sandbox, not to a chat, so an
+    // older, provisioned chat of the same workspace reports it just as well.
+    // Without this, a fresh chat next to a running (billing) device would
+    // read "no device" and offer Start.
+    const sibling = getDatabase()
+      .prepare(
+        `SELECT provider_session_id FROM sessions
+          WHERE workspace_id = ? AND provider_session_id IS NOT NULL
+          ORDER BY COALESCE(last_user_message_at, updated_at) DESC
+          LIMIT 1`
+      )
+      .get(workspaceId) as { provider_session_id?: string | null } | undefined;
+    providerSessionId = sibling?.provider_session_id ?? null;
+  }
+  return { sessionId: row.session_id, providerSessionId };
 }
 
 async function cloudSessionForWorkspace(workspaceId: string): Promise<CloudSession> {

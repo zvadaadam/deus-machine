@@ -960,11 +960,89 @@ describe("cloud driver simulator channel", () => {
       streamUrl: "https://stream.expo.dev/a",
       timestamp: T,
     });
+    mockBroadcast.mockClear();
     identityChanged!();
+    // The clients hold the same account-scoped caches: one broadcast tells
+    // every store to start over.
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"event":"cloud:identity"'));
+    expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string).data.generation).toEqual(
+      expect.any(Number)
+    );
     // Nothing cached and (the default row mock names no provider session) no
     // REST read either: unknown.
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
     expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it("drops a stale status copy — agnt fans each transition to every session socket, and the copies can interleave", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/live",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    });
+    mockBroadcast.mockClear();
+    // A delayed copy of the earlier `starting` from another socket: older
+    // than what the cache holds — dropped, not broadcast; the stream URL and
+    // the ready state survive.
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "starting",
+      platform: "ios",
+      timestamp: "2026-09-03T10:00:01.000Z",
+    });
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "ready",
+      streamUrl: "https://stream.expo.dev/live",
+    });
+    // A genuinely newer transition still applies.
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "ios",
+      timestamp: "2026-09-03T10:00:09.000Z",
+    });
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "stopped",
+    });
+  });
+
+  it("reads the status through an older provisioned chat when the current one has no platform session yet", async () => {
+    // A fresh chat next to a running device: its own provider_session_id is
+    // null, but the device belongs to the workspace's sandbox, which the
+    // older chat's platform session reports just as well.
+    mockGet.mockReturnValueOnce({
+      kind: "cloud",
+      session_id: "deus-session-2",
+      provider_session_id: null,
+    } as never);
+    mockGet.mockReturnValueOnce({ provider_session_id: "agnt-session-old" } as never);
+    mockGetSession.mockResolvedValueOnce({
+      simulator: {
+        session_id: "agnt-session-old",
+        status: "ready",
+        platform: "android",
+        stream_url: "https://stream.expo.dev/old",
+        timestamp: T,
+      },
+    });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "ready",
+      platform: "android",
+      streamUrl: "https://stream.expo.dev/old",
+    });
+    expect(mockGetSession).toHaveBeenCalledWith("agnt-session-old", expect.anything());
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.stringContaining("provider_session_id IS NOT NULL")
+    );
   });
 
   it("answers the platform's REST status when nothing was seen on a socket yet, then serves the cache", async () => {
@@ -992,7 +1070,8 @@ describe("cloud driver simulator channel", () => {
     });
     expect(mockGetSession).toHaveBeenCalledWith(
       "agnt-session-1",
-      expect.objectContaining({ baseUrl: "http://agnt.test" })
+      // Bounded: a stalled platform connection must not pin the request.
+      expect.objectContaining({ baseUrl: "http://agnt.test", signal: expect.any(AbortSignal) })
     );
     await getCloudSimulatorStatus("deus-ws-1");
     expect(mockGetSession).toHaveBeenCalledTimes(1);

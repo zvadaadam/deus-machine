@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { capabilities } from "@/platform/capabilities";
 import { useWebview } from "@/features/browser/hooks/useWebview";
 import { webviewManager, type Bounds } from "@/features/browser/webview-manager";
+import { isEmbeddableStreamUrl, streamKey } from "./cloudSimulatorStream";
 
 interface CloudSimulatorScreenProps {
   workspaceId: string;
@@ -19,14 +20,27 @@ interface CloudSimulatorScreenProps {
 }
 
 export function CloudSimulatorScreen(props: CloudSimulatorScreenProps) {
-  return capabilities.nativeBrowser ? (
-    <NativeStream {...props} />
-  ) : (
+  if (capabilities.nativeBrowser) return <NativeStream {...props} />;
+  if (!isEmbeddableStreamUrl(props.streamUrl)) {
+    return (
+      <div className="text-text-secondary flex h-full w-full items-center justify-center text-sm">
+        This device stream can&apos;t be embedded here.
+      </div>
+    );
+  }
+  return (
     <iframe
       title="Cloud device"
       src={props.streamUrl}
       className="bg-bg-base h-full w-full border-0"
       allow="autoplay; clipboard-read; clipboard-write"
+      // Scripts on the stream's own origin and nothing else: no top-level
+      // navigation, downloads or popups out of a platform-supplied URL.
+      // `allow-same-origin` restores the STREAM's origin (its viewer needs its
+      // storage and sockets); the guard above keeps it distinct from ours, so
+      // no document in this frame can reach up and lift the sandbox.
+      sandbox="allow-scripts allow-same-origin"
+      referrerPolicy="no-referrer"
     />
   );
 }
@@ -36,7 +50,7 @@ export function CloudSimulatorScreen(props: CloudSimulatorScreenProps) {
 const SCREEN_ANCESTOR_DEPTH = 2;
 
 function NativeStream({ workspaceId, streamUrl, visible }: CloudSimulatorScreenProps) {
-  const id = `cloud-sim-${workspaceId}`;
+  const id = `cloud-sim-${workspaceId}-${streamKey(streamUrl)}`;
   const placeholderRef = useRef<HTMLDivElement | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
 

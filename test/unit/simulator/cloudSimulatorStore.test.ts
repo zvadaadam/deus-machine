@@ -281,3 +281,21 @@ describe("describeCloudSimulatorError", () => {
     expect(describeCloudSimulatorError(null)).toMatch(/failed to start/i);
   });
 });
+
+describe("cloudSimulatorStore on identity change", () => {
+  it("forgets every device on cloud:identity — the entries were the previous account's", () => {
+    emit(
+      "cloud:simulator",
+      statusEvent({ status: "ready", platform: "ios", streamUrl: "https://stream.example/a" })
+    );
+    emit("cloud:simulator", actionEvent("fill", true));
+    expect(device().status).toBe("ready");
+    expect(device().actions).toHaveLength(1);
+    emit("cloud:identity", { generation: 2 });
+    expect(useCloudSimulatorStore.getState().byWorkspace).toEqual({});
+    // And a device seen afterwards is the new account's, from scratch.
+    emit("cloud:simulator", statusEvent({ status: "starting", platform: "android" }));
+    expect(device().platform).toBe("android");
+    expect(device().actions).toEqual([]);
+  });
+});

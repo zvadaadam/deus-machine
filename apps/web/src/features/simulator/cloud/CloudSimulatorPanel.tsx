@@ -49,6 +49,18 @@ const KEEP_ALIVE_MS = 4 * 60 * 1000;
  *  a self-heal for a command that got neither an echo nor an error. */
 const BUSY_STALE_MS = 60 * 1000;
 
+/** A screenshot request outlives its click for at most the exec round-trip:
+ *  past this, a capture that lands is someone else's (the agent's) and must
+ *  not attach to a forgotten button press. */
+const SCREENSHOT_DEADLINE_MS = 65 * 1000;
+
+interface ScreenshotRequest {
+  askedAt: number;
+  /** The chat active when the button was pressed — the attachment's target,
+   *  whatever chat is active when the capture lands. */
+  sessionId: string | null;
+}
+
 /** What the idle chip appends to the composer draft. */
 const BUILD_AND_RUN_PROMPT = "Build and run the app on the cloud simulator";
 
@@ -151,36 +163,49 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
 
   // Screenshot is a round-trip through the platform: the exec asks, the PNG
   // arrives as a screenshot EVENT (fanned out to every viewer, the agent's
-  // captures included). Remember when we asked and attach the first capture
-  // that lands after it — whoever took it, it shows the device now.
-  const screenshotAskedAt = useRef<number | null>(null);
+  // captures included). Remember the request — when, and for which chat —
+  // and attach the first capture that lands after it, whoever took it: it
+  // shows the device now. A request nothing answers expires with the exec
+  // timeout, so a capture minutes later never attaches to a forgotten click.
+  const screenshotRequest = useRef<ScreenshotRequest | null>(null);
   const handleScreenshot = useCallback(() => {
     setSendError(null);
-    screenshotAskedAt.current = Date.now();
+    const request: ScreenshotRequest = {
+      askedAt: Date.now(),
+      sessionId: activeChatSessionId(workspaceId),
+    };
+    screenshotRequest.current = request;
+    // Forget THIS request only — a newer click must keep its own.
+    const forget = () => {
+      if (screenshotRequest.current === request) screenshotRequest.current = null;
+    };
+    const expiry = setTimeout(forget, SCREENSHOT_DEADLINE_MS);
     cloudSimulatorService
       .screenshot(workspaceId)
       .then((res) => {
         if (res.success) return;
-        screenshotAskedAt.current = null;
+        clearTimeout(expiry);
+        forget();
         setSendError(res.error || "Screenshot failed");
       })
       .catch((e) => {
-        screenshotAskedAt.current = null;
+        clearTimeout(expiry);
+        forget();
         setSendError(getErrorMessage(e));
       });
   }, [workspaceId]);
 
   const lastScreenshot = device.lastScreenshot;
   useEffect(() => {
-    const askedAt = screenshotAskedAt.current;
-    if (!lastScreenshot || askedAt === null || lastScreenshot.at < askedAt) return;
-    screenshotAskedAt.current = null;
-    const sid = activeChatSessionId(workspaceId);
-    if (!sid) return;
-    attachScreenshot(sid, lastScreenshot.base64).catch((e) => {
+    const request = screenshotRequest.current;
+    if (!lastScreenshot || !request || lastScreenshot.at < request.askedAt) return;
+    screenshotRequest.current = null;
+    if (lastScreenshot.at - request.askedAt > SCREENSHOT_DEADLINE_MS) return;
+    if (!request.sessionId) return;
+    attachScreenshot(request.sessionId, lastScreenshot.base64).catch((e) => {
       setSendError(`Could not attach the screenshot: ${getErrorMessage(e)}`);
     });
-  }, [lastScreenshot, workspaceId]);
+  }, [lastScreenshot]);
 
   const handleAskAgent = useCallback(() => {
     const sid = activeChatSessionId(workspaceId);

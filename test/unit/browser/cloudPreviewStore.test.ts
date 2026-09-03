@@ -51,3 +51,12 @@ describe("cloudPreviewStore", () => {
     expect(listeners).toHaveLength(1);
   });
 });
+
+describe("cloudPreviewStore on identity change", () => {
+  it("forgets every template on cloud:identity — they were the previous account's sandboxes", () => {
+    cloudPreviewActions.set("ws-1", "https://{{port}}-sb1.e2b.app");
+    cloudPreviewActions.set("ws-2", null);
+    emit("cloud:identity", { generation: 3 });
+    expect(useCloudPreviewStore.getState().byWorkspace).toEqual({});
+  });
+});

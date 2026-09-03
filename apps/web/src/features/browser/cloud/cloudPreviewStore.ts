@@ -41,6 +41,11 @@ export function ensureCloudPreviewSubscription(): void {
   if (subscribed) return;
   subscribed = true;
   onEvent((event, raw) => {
+    if (event === "cloud:identity") {
+      // The templates were the previous account's sandboxes: forget them all.
+      useCloudPreviewStore.setState({ byWorkspace: {} });
+      return;
+    }
     if (event !== "cloud:preview") return;
     const parsed = CloudPreviewEventSchema.safeParse(raw);
     if (!parsed.success) return;

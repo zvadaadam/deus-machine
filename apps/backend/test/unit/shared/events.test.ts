@@ -293,7 +293,8 @@ describe("shared/events", () => {
       // Hosted simulator passthrough (status also lands on the workspace row)
       expect(PROTOCOL_EVENTS).toContain("cloud:simulator");
       expect(PROTOCOL_EVENTS).toContain("cloud:preview");
-      expect(PROTOCOL_EVENTS).toHaveLength(20);
+      expect(PROTOCOL_EVENTS).toContain("cloud:identity");
+      expect(PROTOCOL_EVENTS).toHaveLength(21);
     });
 
     it("has no deus-dialect part/message event names left", () => {

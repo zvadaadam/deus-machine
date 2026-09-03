@@ -258,6 +258,11 @@ export const PROTOCOL_EVENTS = [
   // snapshot carried it; null = no sandbox behind the session). Nothing is
   // persisted — see `cloudPreview`. Payload: CloudPreviewEvent.
   "cloud:preview",
+  // The desktop's platform identity changed (sign-out, account or org switch):
+  // every device status, screenshot and host template a client cached was the
+  // previous account's. Clients drop their cloud caches; a mounted panel
+  // re-seeds under the new identity. Payload: CloudIdentityEvent.
+  "cloud:identity",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
@@ -312,6 +317,10 @@ export const CloudPreviewEventSchema = z.object({
   template: z.string().nullable(),
 });
 export type CloudPreviewEvent = z.infer<typeof CloudPreviewEventSchema>;
+
+/** q:event "cloud:identity" — the backend's identity generation after the change. */
+export const CloudIdentityEventSchema = z.object({ generation: z.number().int().nonnegative() });
+export type CloudIdentityEvent = z.infer<typeof CloudIdentityEventSchema>;
 
 /**
  * Hosted simulator events ("cloud:simulator"): the platform's simulator.*

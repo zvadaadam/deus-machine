@@ -184,6 +184,13 @@ export function ensureCloudSimulatorSubscription(): void {
   subscribed = true;
 
   onEvent((event, raw) => {
+    if (event === "cloud:identity") {
+      // Sign-out / account switch: every entry was the previous account's
+      // device — stream URLs, screenshots, the agent's actions and their
+      // arguments. Start over; a mounted panel re-seeds under the new identity.
+      useCloudSimulatorStore.setState({ byWorkspace: {} });
+      return;
+    }
     if (event !== "cloud:simulator") return;
     const parsed = CloudSimulatorEventSchema.safeParse(raw);
     if (!parsed.success) return;

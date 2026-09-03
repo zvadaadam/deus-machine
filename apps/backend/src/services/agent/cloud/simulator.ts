@@ -36,8 +36,28 @@ interface CloudSimulatorEntry {
    *  needs an envelope). */
   sessionId: string;
   status: CloudSimulatorStatus;
+  /** The platform's timestamp of the accepted status, epoch ms — the ordering
+   *  gate. agnt fans every device transition out to EVERY session socket of
+   *  the workspace, and two sockets' callbacks can interleave: a delayed
+   *  `starting` copy must not overwrite the `ready` that already arrived (it
+   *  would erase the live stream URL and leave the tab booting while the
+   *  device runs — and bills). null until a frame named a time. */
+  at: number | null;
 }
 const cloudSimulators = new Map<string, CloudSimulatorEntry>();
+
+/** How long the platform's REST read may take before the cache (or null)
+ *  answers instead — a stalled connection must not pin a `cloudSimulator`
+ *  request. */
+const REST_READ_TIMEOUT_MS = 10_000;
+
+/** The platform's ISO timestamp as epoch ms, or null when the frame named
+ *  none (or an unparseable one — then it takes part in no ordering). */
+function statusAt(status: CloudSimulatorStatus): number | null {
+  if (!status.timestamp) return null;
+  const at = Date.parse(status.timestamp);
+  return Number.isFinite(at) ? at : null;
+}
 
 /** Forget every device: identity change (the stream URLs were account A's
  *  phones) and driver shutdown. */
@@ -97,7 +117,17 @@ export function applyCloudSimulatorStatus(
   const event = parseCloudSimulatorEvent(source, "status", frame);
   if (!event || event.kind !== "status") return;
   const data = normalizeCloudSimulatorStatus(event.data);
-  cloudSimulators.set(source.workspaceId, { sessionId: source.sessionId, status: data });
+  const at = statusAt(data);
+  const cached = cloudSimulators.get(source.workspaceId);
+  // Older than what the cache already holds: a late copy of a transition
+  // another socket delivered first. Equal is a replay (the snapshot mirrors
+  // the latest frame) and applies — same content, harmless.
+  if (cached && cached.at !== null && at !== null && at < cached.at) return;
+  cloudSimulators.set(source.workspaceId, {
+    sessionId: source.sessionId,
+    status: data,
+    at: at ?? cached?.at ?? null,
+  });
   broadcastCloudSimulator({ ...event, data });
 }
 
@@ -130,7 +160,10 @@ export function parkCloudSimulator(workspaceId: string): void {
       : {}),
     timestamp: new Date().toISOString(),
   });
-  cloudSimulators.set(workspaceId, { sessionId: entry.sessionId, status: stopped });
+  // Keep the PLATFORM's ordering point: the park is timed by this Mac's clock
+  // and must never gate the platform's own frames (a resumed sandbox's
+  // `starting` carries the platform's time, whatever this clock says).
+  cloudSimulators.set(workspaceId, { sessionId: entry.sessionId, status: stopped, at: entry.at });
   broadcastCloudSimulator({
     workspaceId,
     sessionId: entry.sessionId,
@@ -173,6 +206,7 @@ export async function readCloudSimulatorStatus(
     const detail = (await sdkGetSession(context.providerSessionId, {
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
+      signal: AbortSignal.timeout(REST_READ_TIMEOUT_MS),
     })) as { simulator?: unknown };
     raw = detail.simulator;
   } catch (err) {
@@ -197,7 +231,7 @@ export async function readCloudSimulatorStatus(
   });
   if (!parsed.success) return cached?.status ?? null;
   const status = normalizeCloudSimulatorStatus(parsed.data);
-  cloudSimulators.set(workspaceId, { sessionId: context.sessionId, status });
+  cloudSimulators.set(workspaceId, { sessionId: context.sessionId, status, at: statusAt(status) });
   return status;
 }
 
