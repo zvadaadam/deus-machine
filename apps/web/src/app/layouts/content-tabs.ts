@@ -23,7 +23,10 @@ import { capabilities, type CapabilityName } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 export interface ContentTabVisibility {
+  /** This Mac can serve the local simulator (simctl capability + flag). */
   simulatorAvailable?: boolean;
+  /** The selected workspace is a cloud computer, which hosts its own device. */
+  cloudSimulator?: boolean;
 }
 
 export interface ContentTabItem {
@@ -34,7 +37,8 @@ export interface ContentTabItem {
   visibilityKey?: keyof Settings;
   /** Platform capability that must be true. Absent = always available. */
   capabilityGate?: CapabilityName;
-  /** Simulator tab needs backend-confirmed local simulator support. */
+  /** Simulator tab needs a device to show: this Mac's local simulator, or a
+   *  cloud computer's hosted one. */
   requiresSimulator?: boolean;
 }
 
@@ -75,8 +79,12 @@ export function isTabVisible(
   const item = CONTENT_TABS.find((i) => i.id === tab);
   if (!item) return false;
   if (item.capabilityGate && !capabilities[item.capabilityGate]) return false;
-  if (item.requiresSimulator && visibility.simulatorAvailable !== true) {
-    return false;
+  if (item.requiresSimulator) {
+    // A cloud computer hosts its own device in the platform: neither this
+    // Mac's simctl capability nor the experimental flag has a say. (Web-direct
+    // is already out above — the panel needs the Mac backend's cloud driver.)
+    if (visibility.cloudSimulator === true) return true;
+    if (visibility.simulatorAvailable !== true) return false;
   }
   if (item.visibilityKey) return settings?.[item.visibilityKey] === true;
   return true;

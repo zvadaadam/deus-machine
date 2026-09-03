@@ -21,6 +21,7 @@ import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
+import { CloudSimulatorPanel } from "@/features/simulator/cloud";
 import { AppsLauncher, useAppsLaunched, useAppsStopped } from "@/features/apps";
 import { cn } from "@/shared/lib/utils";
 import type { ContentTab } from "@/features/workspace/store";
@@ -34,6 +35,8 @@ interface ContentViewProps {
   /** Insert a code review prompt into the chat input */
   onReview?: () => void;
   simulatorAvailable: boolean;
+  /** The workspace is a cloud computer: its device lives in the platform. */
+  cloudSimulator: boolean;
 }
 
 export function ContentView({
@@ -42,6 +45,7 @@ export function ContentView({
   isWatched = false,
   onReview,
   simulatorAvailable,
+  cloudSimulator,
 }: ContentViewProps) {
   // AAP lifecycle → Browser tabs: open on launch, close on stop/crash.
   // Both hooks ignore events targeting other workspaces and always mount
@@ -105,6 +109,28 @@ export function ContentView({
     }
   }, [workspace.kind, workspace.id]);
   const browserTarget = workspace.kind !== "cloud" ? workspace.id : lastLocalBrowser;
+
+  // The local simulator streams a Mac-hosted device — only a LOCAL workspace
+  // has one. Same freeze as the Browser: a cloud visit must not unmount the
+  // panel (its device claim and stream live in component state) and a cloud
+  // id must never enter it. Cloud gets its own panel overlaid.
+  const [lastLocalSimulator, setLastLocalSimulator] = useState<{
+    id: string;
+    path: string;
+  } | null>(null);
+  useLayoutEffect(() => {
+    if (workspace.kind !== "cloud") {
+      setLastLocalSimulator((prev) =>
+        prev?.id === workspace.id && prev.path === workspace.workspace_path
+          ? prev
+          : { id: workspace.id, path: workspace.workspace_path }
+      );
+    }
+  }, [workspace.kind, workspace.id, workspace.workspace_path]);
+  const simulatorTarget =
+    workspace.kind !== "cloud"
+      ? { id: workspace.id, path: workspace.workspace_path }
+      : lastLocalSimulator;
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -204,14 +230,40 @@ export function ContentView({
         )}
       </div>
 
-      {simulatorAvailable && (
+      {(simulatorAvailable || cloudSimulator) && (
         <div
           className={cn(
-            "h-full w-full",
+            "relative h-full w-full",
             activeTab !== "simulator" && "pointer-events-none invisible absolute"
           )}
         >
-          <SimulatorPanel workspaceId={workspace.id} workspacePath={workspace.workspace_path} />
+          {simulatorAvailable && simulatorTarget && (
+            // Frozen on the last LOCAL workspace (see above); hidden, not
+            // unmounted, under a cloud selection.
+            <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+              <SimulatorPanel
+                workspaceId={simulatorTarget.id}
+                workspacePath={simulatorTarget.path}
+              />
+            </div>
+          )}
+          {workspace.kind === "cloud" && (
+            <div className="absolute inset-0 z-10">
+              {cloudStage ? (
+                // Asleep / provisioning: the platform's device is reached
+                // through the sidecar, which isn't up.
+                <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+              ) : (
+                // Keyed: two cloud computers must not share a panel instance
+                // (its webview and screenshot bookkeeping are per device).
+                <CloudSimulatorPanel
+                  key={workspace.id}
+                  workspace={workspace}
+                  visible={activeTab === "simulator"}
+                />
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

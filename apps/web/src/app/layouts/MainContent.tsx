@@ -126,14 +126,16 @@ export function MainContent({
   const simulatorAvailable =
     experimentalSettings?.experimental_simulator === true &&
     simulatorCapabilities.data.available === true;
-  const effectiveContentTab = isTabVisible(contentTab, experimentalSettings, {
-    simulatorAvailable,
-  })
+  // A cloud computer hosts its own device in the platform — the Simulator tab
+  // shows for it whether or not this Mac can run a local simulator.
+  const cloudSimulator = selectedWorkspace?.kind === "cloud";
+  const tabVisibility = { simulatorAvailable, cloudSimulator };
+  const effectiveContentTab = isTabVisible(contentTab, experimentalSettings, tabVisibility)
     ? contentTab
     : "changes";
   // No tab can serve (web-direct hides them all) → chat-only layout: the chat
   // pane renders full-width and the content pane + splitter don't mount.
-  const contentPaneAvailable = anyContentTabVisible(experimentalSettings, { simulatorAvailable });
+  const contentPaneAvailable = anyContentTabVisible(experimentalSettings, tabVisibility);
 
   const connectionState = useConnectionState().state;
   const isDisconnected = connectionState === "disconnected";
@@ -516,6 +518,7 @@ export function MainContent({
                               onTabChange={handleContentTabChange}
                               workspaceId={selectedWorkspaceId}
                               simulatorAvailable={simulatorAvailable}
+                              cloudSimulator={cloudSimulator}
                             />
                             <PRActions
                               prStatus={prStatus}
@@ -540,6 +543,7 @@ export function MainContent({
                               isWatched={isWatched}
                               onReview={handleInsertReviewPrompt}
                               simulatorAvailable={simulatorAvailable}
+                              cloudSimulator={cloudSimulator}
                             />
                           </div>
                         </div>

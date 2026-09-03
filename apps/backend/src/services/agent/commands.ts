@@ -38,6 +38,9 @@ import {
   hasLiveCloudSession,
   announceCloudEnv,
   pushCloudSessionFacts,
+  startCloudSimulator,
+  stopCloudSimulator,
+  parseCloudSimulatorPlatform,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
@@ -328,6 +331,20 @@ export async function runCommand(
         const session = simulator.getContextForWorkspace(workspaceId);
         if (!session) throw new Error("No active simulator session");
         await execFileAsync("xcrun", ["simctl", "uninstall", session.udid, bundleId]);
+        return {};
+      })
+      // ---- Cloud simulator (a hosted device on the workspace's sandbox) ----
+      // Awaited only as far as the send: an unreachable sandbox fails the ack
+      // (the tab can say so), while the device outcome itself rides q:event
+      // cloud:simulator + the workspace row — there is nothing to return here.
+      .with("cloudSim:start", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "cloudSim:start");
+        await startCloudSimulator(workspaceId, parseCloudSimulatorPlatform(params.platform));
+        return {};
+      })
+      .with("cloudSim:stop", async () => {
+        const workspaceId = requireParam(params, "workspaceId", "cloudSim:stop");
+        await stopCloudSimulator(workspaceId, parseCloudSimulatorPlatform(params.platform));
         return {};
       })
       // ---- AAP (agentic apps protocol) commands ----

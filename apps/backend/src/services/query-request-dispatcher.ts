@@ -8,6 +8,7 @@ import {
 } from "../lib/query-params";
 import { delegateToRoute } from "./route-delegate";
 import { getSimulatorCapabilities } from "./simulator-context";
+import { execCloudSimulator, parseCloudSimulatorPlatform } from "./agent/cloud/driver";
 
 export type RequestResourceName = (typeof REQUEST_RESOURCES)[number];
 
@@ -106,5 +107,24 @@ export async function runRequest(
       );
     })
     .with("cloudRepoAccess", () => repoGet("/cloud-access"))
+    .with("cloudSimExec", () => {
+      const workspaceId = requireParam(params, "workspaceId", "cloudSimExec");
+      const verb = requireParam(params, "verb", "cloudSimExec");
+      const args = params.args;
+      if (
+        args !== undefined &&
+        !(Array.isArray(args) && args.every((arg) => typeof arg === "string"))
+      ) {
+        throw new Error("cloudSimExec args must be an array of strings");
+      }
+      // Not a route delegate: the device lives behind the cloud session
+      // socket, not a Hono endpoint. The verdict comes back verbatim — a
+      // failed verb is a result the tab renders, not a q:error.
+      return execCloudSimulator(workspaceId, {
+        verb,
+        ...(args !== undefined ? { args: args as string[] } : {}),
+        platform: parseCloudSimulatorPlatform(params.platform),
+      });
+    })
     .exhaustive();
 }

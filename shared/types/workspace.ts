@@ -44,6 +44,15 @@ export interface Workspace {
   /** Cloud: the sandbox's public host template (`{{port}}` placeholder), or
    *  null until the platform reports the running sandbox. */
   cloud_preview_template?: string | null;
+  /** Cloud: the hosted simulator device, mirrored from the platform's last
+   *  simulator.status (starting | ready | stopping | stopped | error — open
+   *  set). null = no device was ever known to this workspace. */
+  cloud_sim_status?: string | null;
+  cloud_sim_platform?: "ios" | "android" | null;
+  /** Live stream URL — only while the device is starting/ready. */
+  cloud_sim_stream_url?: string | null;
+  /** The platform's error text — only while status is "error". */
+  cloud_sim_error?: string | null;
   pr_url?: string | null;
   pr_number?: number | null;
   /** PR lifecycle snapshot — persisted by the backend from gh, pushed over WS. */

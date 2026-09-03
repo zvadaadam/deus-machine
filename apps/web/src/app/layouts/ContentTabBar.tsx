@@ -21,6 +21,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { useSimulatorStatusStore } from "@/features/simulator/store";
+import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
 import { useWorkspaceIsMobileProject } from "@/features/workspace/hooks";
 import type { ContentTab } from "@/features/workspace/store";
 import { CONTENT_TABS, isTabVisible, type ContentTabItem } from "./content-tabs";
@@ -30,6 +31,8 @@ interface ContentTabBarProps {
   onTabChange: (tab: ContentTab) => void;
   workspaceId?: string | null;
   simulatorAvailable: boolean;
+  /** The selected workspace is a cloud computer — its device lives in the platform. */
+  cloudSimulator: boolean;
 }
 
 const ALWAYS_PRIMARY_TAB_IDS: ContentTab[] = ["changes", "files", "terminal", "browser"];
@@ -37,7 +40,7 @@ const ALWAYS_PRIMARY_TAB_IDS: ContentTab[] = ["changes", "files", "terminal", "b
 function splitTabs(
   visibleItems: ContentTabItem[],
   activeTab: ContentTab,
-  isMobileProject: boolean
+  promoteSimulator: boolean
 ): { primaryItems: ContentTabItem[]; overflowItems: ContentTabItem[] } {
   const visibleIds = new Set(visibleItems.map((item) => item.id));
   const primaryIds = new Set<ContentTab>();
@@ -46,7 +49,7 @@ function splitTabs(
     if (visibleIds.has(id)) primaryIds.add(id);
   }
 
-  if (isMobileProject && visibleIds.has("simulator")) primaryIds.add("simulator");
+  if (promoteSimulator && visibleIds.has("simulator")) primaryIds.add("simulator");
 
   // Never hide the tab the user is currently looking at behind overflow.
   if (visibleIds.has(activeTab)) primaryIds.add(activeTab);
@@ -106,24 +109,35 @@ export function ContentTabBar({
   onTabChange,
   workspaceId,
   simulatorAvailable,
+  cloudSimulator,
 }: ContentTabBarProps) {
   const settings = useSettings().data;
   const simPhase = useSimulatorStatusStore((s) =>
     workspaceId ? s.phases[workspaceId] : undefined
   );
+  // The cloud device's status; null = no device was ever known to this workspace.
+  const cloudSimStatus = useCloudSimulatorStore((s) =>
+    workspaceId ? (s.byWorkspace[workspaceId]?.status ?? null) : null
+  );
 
-  const simulatorActive = simPhase && simPhase !== "idle";
+  const simulatorActive = (simPhase && simPhase !== "idle") || cloudSimStatus === "ready";
 
   const visibleItems = useMemo(
-    () => CONTENT_TABS.filter((item) => isTabVisible(item.id, settings, { simulatorAvailable })),
-    [settings, simulatorAvailable]
+    () =>
+      CONTENT_TABS.filter((item) =>
+        isTabVisible(item.id, settings, { simulatorAvailable, cloudSimulator })
+      ),
+    [settings, simulatorAvailable, cloudSimulator]
   );
   const simulatorVisible = visibleItems.some((item) => item.id === "simulator");
   const isMobileProject = useWorkspaceIsMobileProject(workspaceId, { enabled: simulatorVisible });
+  // A cloud computer with a known device earns the primary slot the way a
+  // mobile project does — the tab is where that device is.
+  const promoteSimulator = isMobileProject || (cloudSimulator && cloudSimStatus !== null);
 
   const { primaryItems, overflowItems } = useMemo(
-    () => splitTabs(visibleItems, activeTab, isMobileProject),
-    [activeTab, isMobileProject, visibleItems]
+    () => splitTabs(visibleItems, activeTab, promoteSimulator),
+    [activeTab, promoteSimulator, visibleItems]
   );
 
   return (
