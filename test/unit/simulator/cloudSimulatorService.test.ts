@@ -102,3 +102,15 @@ describe("cloudSimulatorService — exec (request/response)", () => {
     );
   });
 });
+
+describe("cloudSimulatorService — status (the one-shot read the store seeds from)", () => {
+  it("asks the backend for the workspace's device status", async () => {
+    sendRequest.mockResolvedValueOnce({ status: "ready", platform: "ios", streamUrl: "u" });
+    await expect(cloudSimulatorService.status("ws-1")).resolves.toEqual({
+      status: "ready",
+      platform: "ios",
+      streamUrl: "u",
+    });
+    expect(sendRequest).toHaveBeenLastCalledWith("cloudSimulator", { workspaceId: "ws-1" });
+  });
+});

@@ -50,11 +50,6 @@ export interface WorkspaceRow {
   error_message: string | null;
   /** Cloud: `https://{{port}}-<sandboxId>.e2b.app`, learned from the running state. */
   cloud_preview_template?: string | null;
-  /** Cloud: the hosted simulator device's last platform status (null = never known). */
-  cloud_sim_status?: string | null;
-  cloud_sim_platform?: string | null;
-  cloud_sim_stream_url?: string | null;
-  cloud_sim_error?: string | null;
   updated_at: string;
 }
 
@@ -87,11 +82,6 @@ export interface WorkspaceWithDetailsRow {
   pr_ci_status: string | null;
   pr_checked_at: string | null;
   init_stage: string | null;
-  /** Cloud: the hosted simulator device (see WorkspaceRow). */
-  cloud_sim_status?: string | null;
-  cloud_sim_platform?: string | null;
-  cloud_sim_stream_url?: string | null;
-  cloud_sim_error?: string | null;
   updated_at: string;
 
   // Setup tracking (deus.json manifest)

@@ -52,9 +52,11 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
 
 const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
 const mockCreateSessionToken = vi.fn(async () => ({ token: "session-jwt" }));
+const mockGetSession = vi.fn(async (..._args: unknown[]) => ({ simulator: null }) as unknown);
 vi.mock("@deus-hq/sdk", () => ({
   createSessionToken: () => mockCreateSessionToken(),
   createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
+  getSession: (...args: unknown[]) => mockGetSession(...args),
 }));
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
@@ -105,6 +107,7 @@ import {
   stopCloudSimulator,
   execCloudSimulator,
   parseCloudSimulatorPlatform,
+  getCloudSimulatorStatus,
 } from "../../../src/services/agent/cloud/driver";
 
 function makeHandler() {
@@ -729,9 +732,8 @@ describe("cloud driver simulator channel", () => {
   const currentSession = () =>
     mockGet.mockReturnValueOnce({ kind: "cloud", current_session_id: "deus-session-1" } as never);
 
-  it("persists a simulator.status frame on the workspace row, invalidates, and broadcasts it", () => {
-    mockRun.mockClear();
-    mockInvalidate.mockClear();
+  it("remembers a simulator.status frame in memory and broadcasts it — nothing lands on the row", async () => {
+    mockPrepare.mockClear();
     mockBroadcast.mockClear();
     capturedOnFrame!({
       type: "simulator.status",
@@ -743,15 +745,16 @@ describe("cloud driver simulator channel", () => {
       timestamp: T,
     });
 
-    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("cloud_sim_status = ?"));
-    expect(mockRun).toHaveBeenCalledWith(
-      "ready",
-      "ios",
-      "https://stream.expo.dev/eas-1",
-      null,
-      "deus-ws-1"
-    );
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "stats"], {});
+    // The platform is the truth; the driver keeps a cache, not a column.
+    expect(mockPrepare).not.toHaveBeenCalledWith(expect.stringContaining("UPDATE workspaces"));
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toEqual({
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      easSessionIdentifier: "eas-1",
+      streamUrl: "https://stream.expo.dev/eas-1",
+      timestamp: T,
+    });
     expect(mockBroadcast).toHaveBeenCalledTimes(1);
     expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toEqual({
       type: "q:event",
@@ -773,8 +776,8 @@ describe("cloud driver simulator channel", () => {
     });
   });
 
-  it("never keeps a stream URL past a terminal status, whatever the frame says", () => {
-    mockRun.mockClear();
+  it("never keeps a stream URL past a terminal status, whatever the frame says", async () => {
+    mockBroadcast.mockClear();
     capturedOnFrame!({
       type: "simulator.status",
       sessionId: "agnt-session-1",
@@ -783,11 +786,15 @@ describe("cloud driver simulator channel", () => {
       streamUrl: "https://stream.expo.dev/stale",
       timestamp: T,
     });
-    expect(mockRun).toHaveBeenCalledWith("stopped", "ios", null, null, "deus-ws-1");
+    const status = await getCloudSimulatorStatus("deus-ws-1");
+    expect(status).toMatchObject({ status: "stopped", platform: "ios" });
+    expect(status).not.toHaveProperty("streamUrl");
+    // The broadcast carries the same normalized shape the cache holds.
+    const event = JSON.parse(mockBroadcast.mock.calls[0][0] as string);
+    expect(event.data.data).not.toHaveProperty("streamUrl");
   });
 
-  it("keeps the platform's error text on an error status — no platform means a sidecar failure, not a device", () => {
-    mockRun.mockClear();
+  it("keeps the platform's error text on an error status — no platform means a sidecar failure, not a device", async () => {
     const error =
       "This sandbox's sidecar predates simulator control — restart the workspace to upgrade it.";
     capturedOnFrame!({
@@ -797,13 +804,14 @@ describe("cloud driver simulator channel", () => {
       error,
       timestamp: T,
     });
-    expect(mockRun).toHaveBeenCalledWith("error", null, null, error, "deus-ws-1");
+    const status = await getCloudSimulatorStatus("deus-ws-1");
+    expect(status).toMatchObject({ status: "error", error });
+    expect(status).not.toHaveProperty("platform");
   });
 
-  it("learns the device from the connect snapshot's latestSimulatorStatus", () => {
+  it("learns the device from the connect snapshot's latestSimulatorStatus", async () => {
     // After a backend restart no simulator.status fires for a device that is
     // already running (and billing) — the snapshot mirror is the only truth.
-    mockRun.mockClear();
     mockBroadcast.mockClear();
     capturedOnFrame!({
       type: "session.snapshot",
@@ -821,13 +829,11 @@ describe("cloud driver simulator channel", () => {
       },
       messages: [],
     });
-    expect(mockRun).toHaveBeenCalledWith(
-      "ready",
-      "android",
-      "https://stream.expo.dev/eas-2",
-      null,
-      "deus-ws-1"
-    );
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "ready",
+      platform: "android",
+      streamUrl: "https://stream.expo.dev/eas-2",
+    });
     const events = mockBroadcast.mock.calls.map((c) => JSON.parse(c[0] as string));
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -840,26 +846,50 @@ describe("cloud driver simulator channel", () => {
     );
   });
 
-  it("marks the device stopped when the sandbox parks — the platform's settle frame may ride a socket that is down", () => {
+  it("marks the device stopped when the sandbox parks — the platform's settle frame may ride a socket that is down", async () => {
+    const ready = () =>
+      capturedOnFrame!({
+        type: "simulator.status",
+        sessionId: "agnt-session-1",
+        status: "ready",
+        platform: "ios",
+        streamUrl: "https://stream.expo.dev/live",
+        timestamp: T,
+      });
     for (const status of ["stopped", "paused", "error"]) {
-      mockPrepare.mockClear();
+      ready();
+      mockBroadcast.mockClear();
       capturedOnFrame!({ type: "workspace.state", data: { status } });
-      expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("cloud_sim_stream_url = NULL")
-      );
+      // The park is announced (clients drop the URL) and cached.
+      const events = mockBroadcast.mock.calls.map((c) => JSON.parse(c[0] as string));
+      const parked = events.find((e) => e.event === "cloud:simulator");
+      expect(parked?.data?.data).toMatchObject({ status: "stopped", platform: "ios" });
+      expect(parked?.data?.data).not.toHaveProperty("streamUrl");
+      const cached = await getCloudSimulatorStatus("deus-ws-1");
+      expect(cached).toMatchObject({ status: "stopped" });
+      expect(cached).not.toHaveProperty("streamUrl");
     }
     // A live sandbox leaves the device alone.
-    mockPrepare.mockClear();
+    ready();
+    mockBroadcast.mockClear();
     capturedOnFrame!({ type: "workspace.state", data: { status: "running" } });
-    expect(mockPrepare).not.toHaveBeenCalledWith(
-      expect.stringContaining("cloud_sim_stream_url = NULL")
+    expect(mockBroadcast.mock.calls.map((c) => JSON.parse(c[0] as string))).not.toContainEqual(
+      expect.objectContaining({ event: "cloud:simulator" })
+    );
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({ status: "ready" });
+  });
+
+  it("stays silent about a workspace no device was ever known for when its sandbox parks", () => {
+    mockBroadcast.mockClear();
+    capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
+    expect(mockBroadcast.mock.calls.map((c) => JSON.parse(c[0] as string))).not.toContainEqual(
+      expect.objectContaining({ event: "cloud:simulator" })
     );
   });
 
-  it("lets a parked sandbox override a stale device status in the same snapshot", () => {
+  it("lets a parked sandbox override a stale device status in the same snapshot", async () => {
     // The snapshot mirror can be older than the sandbox's own state (an older
     // platform that never settled it): the device cannot outlive its sandbox.
-    mockPrepare.mockClear();
     capturedOnFrame!({
       type: "session.snapshot",
       state: {
@@ -876,23 +906,64 @@ describe("cloud driver simulator channel", () => {
       },
       messages: [],
     });
-    const sqls = mockPrepare.mock.calls.map((c) => c[0] as string);
-    const applied = sqls.findIndex((s) => s.includes("cloud_sim_status = ?"));
-    const cleared = sqls.findIndex((s) => s.includes("cloud_sim_stream_url = NULL"));
-    expect(applied).toBeGreaterThanOrEqual(0);
-    expect(cleared).toBeGreaterThan(applied);
+    const status = await getCloudSimulatorStatus("deus-ws-1");
+    expect(status).toMatchObject({ status: "stopped" });
+    expect(status).not.toHaveProperty("streamUrl");
   });
 
-  it("nulls every simulator column on identity change — the stream URL is account-scoped", () => {
-    mockPrepare.mockClear();
+  it("forgets every device on identity change — a stream URL is account-scoped", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/a",
+      timestamp: T,
+    });
     identityChanged!();
-    const sql = mockPrepare.mock.calls
-      .map((c) => c[0] as string)
-      .find((s) => s.includes("cloud_sim_status = NULL"));
-    expect(sql).toBeDefined();
-    expect(sql).toContain("cloud_sim_platform = NULL");
-    expect(sql).toContain("cloud_sim_stream_url = NULL");
-    expect(sql).toContain("cloud_sim_error = NULL");
+    // Nothing cached and (the default row mock names no provider session) no
+    // REST read either: unknown.
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+    expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it("answers the platform's REST status when nothing was seen on a socket yet, then serves the cache", async () => {
+    mockGet.mockReturnValueOnce({
+      session_id: "deus-session-1",
+      provider_session_id: "agnt-session-1",
+    } as never);
+    mockGetSession.mockResolvedValueOnce({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "ready",
+        platform: "ios",
+        eas_session_identifier: "eas-9",
+        stream_url: "https://stream.expo.dev/rest",
+        timestamp: T,
+      },
+    });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toEqual({
+      status: "ready",
+      platform: "ios",
+      easSessionIdentifier: "eas-9",
+      streamUrl: "https://stream.expo.dev/rest",
+      timestamp: T,
+    });
+    expect(mockGetSession).toHaveBeenCalledWith(
+      "agnt-session-1",
+      expect.objectContaining({ baseUrl: "http://agnt.test" })
+    );
+    await getCloudSimulatorStatus("deus-ws-1");
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers null when the platform knows of no device", async () => {
+    mockGet.mockReturnValueOnce({
+      session_id: "deus-session-1",
+      provider_session_id: "agnt-session-1",
+    } as never);
+    mockGetSession.mockResolvedValueOnce({ simulator: null });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
   });
 
   it("broadcasts screenshots and action results without touching the row (live-only by design)", () => {

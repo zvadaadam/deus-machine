@@ -13,7 +13,7 @@
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
 
-import { createSession, createSessionToken } from "@deus-hq/sdk";
+import { createSession, createSessionToken, getSession as sdkGetSession } from "@deus-hq/sdk";
 import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
@@ -22,6 +22,7 @@ import {
   CloudEnvStateSchema,
   CloudSimulatorEventSchema,
   CloudSimulatorPlatformSchema,
+  CloudSimulatorStatusSchema,
   type CloudEnvEvent,
   type CloudSimulatorEvent,
   type CloudSimulatorPlatform,
@@ -94,23 +95,25 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
       s.socket.close();
     }
     sessions.clear();
-    // The preview template and the device stream URL are capability URLs
-    // (the sandbox id / the EAS session are their only secret) persisted on
-    // the row: they must not outlive the account that owns the sandbox — the
-    // Browser tab would keep previewing account A's computer under account B,
-    // the Simulator tab A's phone. The device status goes with them (it was
-    // A's device). The next running frame / snapshot under the right account
-    // restores whatever is really there.
+    // The cached device statuses were account A's phones (their stream URLs
+    // are capability URLs): forget them; the next connect under the right
+    // account replays whatever is really there.
+    cloudSimulators.clear();
+    // The preview template is a capability URL (the sandbox id is its only
+    // secret) persisted on the row: it must not outlive the account that
+    // owns the sandbox — the Browser tab would keep previewing account A's
+    // computer under account B. The next running frame / snapshot under the
+    // right account restores it.
     try {
       getDatabase()
         .prepare(
-          "UPDATE workspaces SET cloud_preview_template = NULL, cloud_sim_status = NULL, cloud_sim_platform = NULL, cloud_sim_stream_url = NULL, cloud_sim_error = NULL WHERE kind = 'cloud' AND (cloud_preview_template IS NOT NULL OR cloud_sim_status IS NOT NULL)"
+          "UPDATE workspaces SET cloud_preview_template = NULL WHERE kind = 'cloud' AND cloud_preview_template IS NOT NULL"
         )
         .run();
       invalidate(["workspaces"], {});
     } catch (err) {
       console.warn(
-        `[CloudDriver] preview templates / device state not cleared on identity change: ${String(err)}`
+        `[CloudDriver] preview templates not cleared on identity change: ${String(err)}`
       );
     }
   });
@@ -147,6 +150,7 @@ function settlePending(
 }
 
 export function shutdownCloudDriver(): void {
+  cloudSimulators.clear();
   for (const s of sessions.values()) {
     rejectPendingDiffs(s, "cloud driver shutting down");
     clearTurnKill(s);
@@ -197,10 +201,10 @@ function updateCloudWorkspace(
   // The hosted device attaches to the SANDBOX: agnt parks every device when
   // the sandbox parks (stopped/paused/error) and settles a `stopped` status —
   // but that settle rides the session socket, which is often exactly what is
-  // down when the sandbox dies. Park the row's device here too, so it never
-  // advertises a stream URL for a device the platform already billed off.
+  // down when the sandbox dies. Park the cached device here too, so no client
+  // keeps a stream URL for a device the platform already billed off.
   if (status === "stopped" || status === "paused" || status === "error") {
-    parkCloudSimulator(db, workspaceId);
+    parkCloudSimulator(workspaceId);
   }
   invalidate(["workspaces", "stats"], {});
 }
@@ -225,34 +229,61 @@ function broadcastCloudEnv(session: CloudSession, data: unknown): void {
 
 // ---- Hosted simulator effects (agnt EAS device on the workspace's sandbox) ----
 
-/** A simulator.status frame REPLACES the row's device columns: the platform
- *  fans its full device state out on every change, there is no partial
- *  update. The stream URL is a capability URL that dies with the device —
- *  never kept past a terminal status, whatever the frame carries. */
-function updateCloudSimulator(workspaceId: string, status: CloudSimulatorStatus): void {
+/**
+ * The latest device status per workspace — in MEMORY only, on purpose. The
+ * platform is the truth: it replays its latest simulator.status on every
+ * connect (the snapshot) and serves it over REST, so a copy on the workspace
+ * row would only ever be a stale second truth — a device stopped and billed
+ * off while this Mac was closed would still read "ready" — and the browser
+ * lane, which has no local database at all, could never share it. What the
+ * tab needs between frames is a cache, keyed by the workspace the device
+ * belongs to, remembering which deus session last spoke for it (the envelope
+ * of a synthesized park needs one).
+ */
+interface CloudSimulatorEntry {
+  sessionId: string;
+  status: CloudSimulatorStatus;
+}
+const cloudSimulators = new Map<string, CloudSimulatorEntry>();
+
+/** A status frame REPLACES the device state: the platform fans its full state
+ *  out on every change, there is no partial update. The stream URL is a
+ *  capability URL that dies with the device — never kept past a terminal
+ *  status, whatever the frame carries; an error text only rides an error. */
+function normalizeCloudSimulatorStatus(status: CloudSimulatorStatus): CloudSimulatorStatus {
   const terminal = status.status === "stopped" || status.status === "error";
-  getDatabase()
-    .prepare(
-      "UPDATE workspaces SET cloud_sim_status = ?, cloud_sim_platform = ?, cloud_sim_stream_url = ?, cloud_sim_error = ? WHERE id = ?"
-    )
-    .run(
-      status.status,
-      status.platform ?? null,
-      terminal ? null : (status.streamUrl ?? null),
-      status.status === "error" ? (status.error ?? null) : null,
-      workspaceId
-    );
-  invalidate(["workspaces", "stats"], {});
+  const { streamUrl, error, ...rest } = status;
+  return {
+    ...rest,
+    ...(!terminal && streamUrl ? { streamUrl } : {}),
+    ...(status.status === "error" && error ? { error } : {}),
+  };
 }
 
 /** The device died with its sandbox. Keep the platform (the tab still labels
  *  the device and offers Start on it), drop the capability URL and any stale
- *  error, mark it stopped — unless no device was ever known: NULL stays NULL,
- *  or the tab would show a "stopped" device on a workspace that never had one. */
-function parkCloudSimulator(db: ReturnType<typeof getDatabase>, workspaceId: string): void {
-  db.prepare(
-    "UPDATE workspaces SET cloud_sim_status = 'stopped', cloud_sim_stream_url = NULL, cloud_sim_error = NULL WHERE id = ? AND cloud_sim_status IS NOT NULL AND cloud_sim_status != 'stopped'"
-  ).run(workspaceId);
+ *  error, mark it stopped — and tell the clients, since the platform's own
+ *  settle frame may never arrive on a socket that is down. A workspace no
+ *  device was ever known for stays unknown: a "stopped" phone must not appear
+ *  on a workspace that never had one. */
+function parkCloudSimulator(workspaceId: string): void {
+  const entry = cloudSimulators.get(workspaceId);
+  if (!entry || entry.status.status === "stopped") return;
+  const stopped = normalizeCloudSimulatorStatus({
+    status: "stopped",
+    ...(entry.status.platform ? { platform: entry.status.platform } : {}),
+    ...(entry.status.easSessionIdentifier
+      ? { easSessionIdentifier: entry.status.easSessionIdentifier }
+      : {}),
+    timestamp: new Date().toISOString(),
+  });
+  cloudSimulators.set(workspaceId, { sessionId: entry.sessionId, status: stopped });
+  broadcastCloudSimulator({
+    workspaceId,
+    sessionId: entry.sessionId,
+    kind: "status",
+    data: stopped,
+  });
 }
 
 /** Validate one platform simulator frame at the seam (like announceCloudEnv)
@@ -284,13 +315,14 @@ function broadcastCloudSimulator(event: CloudSimulatorEvent): void {
   broadcast(JSON.stringify({ type: "q:event", event: "cloud:simulator", data: event }));
 }
 
-/** simulator.status — from the live frame or the snapshot's mirror. The row
- *  (the durable truth the tab renders from) first, then the live event. */
+/** simulator.status — from the live frame or the snapshot's mirror. The cache
+ *  first (a `cloudSimulator` read must never lag a broadcast), then the event. */
 function applyCloudSimulatorStatus(session: CloudSession, frame: Record<string, unknown>): void {
   const event = parseCloudSimulatorEvent(session, "status", frame);
   if (!event || event.kind !== "status") return;
-  updateCloudSimulator(session.deusWorkspaceId, event.data);
-  broadcastCloudSimulator(event);
+  const data = normalizeCloudSimulatorStatus(event.data);
+  cloudSimulators.set(session.deusWorkspaceId, { sessionId: session.deusSessionId, status: data });
+  broadcastCloudSimulator({ ...event, data });
 }
 
 // ---- Frame dispatch ----
@@ -1305,6 +1337,58 @@ async function cloudSessionForWorkspace(workspaceId: string): Promise<CloudSessi
     throw new Error("This cloud workspace has no session to reach its sandbox through");
   }
   return ensureCloudSession(row.current_session_id);
+}
+
+/**
+ * The workspace's device status right now: what the socket last told us, or —
+ * for a workspace nothing was seen for yet (this backend just started, the
+ * workspace was never opened) — what the platform's REST read says, cached
+ * from then on. null = the platform knows of no device either.
+ */
+export async function getCloudSimulatorStatus(
+  workspaceId: string
+): Promise<CloudSimulatorStatus | null> {
+  const cached = cloudSimulators.get(workspaceId);
+  if (cached) return cached.status;
+  const config = getCloudConfig();
+  if (!config) return null;
+  const row = getDatabase()
+    .prepare(
+      `SELECT w.current_session_id AS session_id, s.provider_session_id AS provider_session_id
+         FROM workspaces w JOIN sessions s ON s.id = w.current_session_id
+        WHERE w.id = ? AND w.kind = 'cloud'`
+    )
+    .get(workspaceId) as
+    | { session_id?: string | null; provider_session_id?: string | null }
+    | undefined;
+  if (!row?.session_id || !row.provider_session_id) return null;
+  let raw: unknown;
+  try {
+    const detail = (await sdkGetSession(row.provider_session_id, {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    })) as { simulator?: unknown };
+    raw = detail.simulator;
+  } catch (err) {
+    console.warn(`[CloudDriver] simulator status read failed for ${workspaceId}: ${String(err)}`);
+    return null;
+  }
+  if (!raw || typeof raw !== "object") return null;
+  // REST is snake_case (the route re-cases the whole body); the socket is
+  // camelCase. One shape past this point.
+  const r = raw as Record<string, unknown>;
+  const parsed = CloudSimulatorStatusSchema.safeParse({
+    status: r.status,
+    platform: r.platform,
+    easSessionIdentifier: r.eas_session_identifier ?? r.easSessionIdentifier,
+    streamUrl: r.stream_url ?? r.streamUrl,
+    error: r.error,
+    timestamp: r.timestamp,
+  });
+  if (!parsed.success) return null;
+  const status = normalizeCloudSimulatorStatus(parsed.data);
+  cloudSimulators.set(workspaceId, { sessionId: row.session_id, status });
+  return status;
 }
 
 /** Boot a hosted device. The outcome rides simulator.status (starting → ready,

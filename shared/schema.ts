@@ -97,16 +97,6 @@ export const ADDITIVE_COLUMNS = {
     // workspace state). The Browser tab substitutes a port to preview a dev
     // server running inside the sandbox.
     cloud_preview_template: "TEXT",
-    // Cloud workspaces: the hosted simulator device (agnt's EAS Simulator),
-    // mirrored from the platform's simulator.status events — the Simulator
-    // tab renders from these. A status frame replaces all four; a NULL status
-    // means no device was ever known. The stream URL is a capability URL like
-    // cloud_preview_template: it must not outlive the sandbox (cleared when
-    // the sandbox parks) or the account (cleared on identity change).
-    cloud_sim_status: "TEXT",
-    cloud_sim_platform: "TEXT",
-    cloud_sim_stream_url: "TEXT",
-    cloud_sim_error: "TEXT",
   },
   sessions: {
     // agnt session id for cloud-workspace sessions (null for local).
@@ -154,10 +144,6 @@ export const SCHEMA_SQL = `
     provider_workspace_id TEXT,
     last_inline_mint_at INTEGER,
     cloud_preview_template TEXT,
-    cloud_sim_status TEXT,
-    cloud_sim_platform TEXT,
-    cloud_sim_stream_url TEXT,
-    cloud_sim_error TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 

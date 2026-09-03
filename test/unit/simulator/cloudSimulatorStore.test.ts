@@ -55,12 +55,12 @@ function actionEvent(verb: string, success: boolean, error?: string) {
   };
 }
 
-const row = (over: Partial<Record<string, unknown>> = {}) => ({
-  id: WS,
-  cloud_sim_status: "ready",
-  cloud_sim_platform: "ios" as const,
-  cloud_sim_stream_url: "https://stream.example/one",
-  cloud_sim_error: null,
+/** The backend's one-shot `cloudSimulator` answer. */
+const seed = (over: Partial<Record<string, unknown>> = {}) => ({
+  status: "ready",
+  platform: "ios" as const,
+  streamUrl: "https://stream.example/one",
+  error: null,
   ...over,
 });
 
@@ -71,9 +71,9 @@ beforeEach(() => {
   ensureCloudSimulatorSubscription();
 });
 
-describe("cloudSimulatorStore — seeding from the workspace row", () => {
-  it("copies the four row columns and leaves the ephemeral fields untouched", () => {
-    cloudSimulatorActions.seedFromWorkspace(row());
+describe("cloudSimulatorStore — seeding from the one-shot status read", () => {
+  it("copies the four status fields and leaves the ephemeral fields untouched", () => {
+    cloudSimulatorActions.seedIfUnknown(WS, seed());
     expect(device()).toMatchObject({
       status: "ready",
       platform: "ios",
@@ -86,24 +86,29 @@ describe("cloudSimulatorStore — seeding from the workspace row", () => {
   });
 
   it("keeps an unknown status (the platform deploys continuously); the panel reads it as in-flight", () => {
-    cloudSimulatorActions.seedFromWorkspace(row({ cloud_sim_status: "hibernating" }));
+    cloudSimulatorActions.seedIfUnknown(WS, seed({ status: "hibernating" }));
     expect(device().status).toBe("hibernating");
     // The URL is a capability URL: only starting/ready may carry it.
     expect(device().streamUrl).toBeNull();
     expect(cloudSimPhase(device())).toBe("booting");
   });
 
-  it("is referentially stable for an identical row (no re-render churn)", () => {
-    cloudSimulatorActions.seedFromWorkspace(row());
+  it("is a fallback: a second read never overwrites what is already known (same reference)", () => {
+    cloudSimulatorActions.seedIfUnknown(WS, seed());
     const first = device();
-    cloudSimulatorActions.seedFromWorkspace(row());
+    cloudSimulatorActions.seedIfUnknown(WS, seed({ status: "stopped" }));
     expect(device()).toBe(first);
   });
 
-  it("row wins: a later row overwrites what a live event set", () => {
+  it("the live event wins: a read that lands after an event changes nothing", () => {
     emit("cloud:simulator", statusEvent({ status: "starting", platform: "android" }));
-    cloudSimulatorActions.seedFromWorkspace(row());
-    expect(device()).toMatchObject({ status: "ready", platform: "ios" });
+    cloudSimulatorActions.seedIfUnknown(WS, seed());
+    expect(device()).toMatchObject({ status: "starting", platform: "android" });
+  });
+
+  it("a null read (the platform knows of no device) leaves the entry unknown", () => {
+    cloudSimulatorActions.seedIfUnknown(WS, null);
+    expect(device()).toBeUndefined();
   });
 
   it("registers exactly one process-wide listener no matter how often it is ensured", () => {
@@ -114,8 +119,8 @@ describe("cloudSimulatorStore — seeding from the workspace row", () => {
 });
 
 describe("cloudSimulatorStore — live status events", () => {
-  it("overwrites the seeded row and clears the URL on 'stopped'", () => {
-    cloudSimulatorActions.seedFromWorkspace(row());
+  it("overwrites the seeded status and clears the URL on 'stopped'", () => {
+    cloudSimulatorActions.seedIfUnknown(WS, seed());
     emit("cloud:simulator", statusEvent({ status: "stopped", platform: "ios" }));
     expect(device()).toMatchObject({ status: "stopped", streamUrl: null, error: null });
   });
@@ -153,34 +158,23 @@ describe("cloudSimulatorStore — live status events", () => {
 });
 
 describe("cloudSimulatorStore — the panel's optimistic busy marker", () => {
-  it("is cleared by any status event (the platform answered) but kept by an identical row echo", () => {
-    cloudSimulatorActions.seedFromWorkspace(
-      row({ cloud_sim_status: "stopped", cloud_sim_stream_url: null })
-    );
+  it("is cleared by any status event (the platform answered), never by the one-shot read", () => {
     cloudSimulatorActions.setBusy(WS, "starting");
-    cloudSimulatorActions.seedFromWorkspace(
-      row({ cloud_sim_status: "stopped", cloud_sim_stream_url: null })
-    );
-    expect(device().busy).toBe("starting");
+    cloudSimulatorActions.seedIfUnknown(WS, seed({ status: "stopped", streamUrl: null }));
+    expect(device()).toMatchObject({ status: "stopped", busy: "starting" });
 
     emit("cloud:simulator", statusEvent({ status: "stopped", platform: "ios" }));
     expect(device().busy).toBeNull();
   });
 
-  it("is cleared by a row that moved the status", () => {
-    cloudSimulatorActions.seedFromWorkspace(
-      row({ cloud_sim_status: "stopped", cloud_sim_stream_url: null })
-    );
+  it("is cleared by the status event that moved the device", () => {
+    cloudSimulatorActions.seedIfUnknown(WS, seed({ status: "stopped", streamUrl: null }));
     cloudSimulatorActions.setBusy(WS, "starting");
-    cloudSimulatorActions.seedFromWorkspace(
-      row({ cloud_sim_status: "starting", cloud_sim_stream_url: null })
+    emit(
+      "cloud:simulator",
+      statusEvent({ status: "starting", platform: "ios", streamUrl: "https://s/1" })
     );
     expect(device()).toMatchObject({ status: "starting", busy: null });
-  });
-
-  it("can be set before any device is known (first Start on a fresh computer)", () => {
-    cloudSimulatorActions.setBusy(WS, "starting");
-    expect(device()).toMatchObject({ ...EMPTY_CLOUD_SIM_DEVICE, busy: "starting" });
   });
 });
 

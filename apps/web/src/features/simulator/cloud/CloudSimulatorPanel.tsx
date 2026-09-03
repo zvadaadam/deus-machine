@@ -3,10 +3,10 @@
  *
  * A local workspace streams a Mac-hosted simulator over MJPEG; a cloud
  * computer's device lives in the platform, which hands us a stream URL to
- * embed. The row's `cloud_sim_*` columns are the durable truth (seeded into
- * the store here; the `workspaces` query re-delivers the row on every write);
- * the `cloud:simulator` events keep it live and carry what the row never
- * holds — screenshots and the agent's device actions.
+ * embed. Nothing about it is persisted here: the store is seeded once from the
+ * backend's `cloudSimulator` read (its in-memory latest, else the platform's
+ * REST answer) and the `cloud:simulator` events keep it live — status,
+ * screenshots and the agent's device actions.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -80,26 +80,28 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   // platform-owned `error`. Cleared by the next action.
   const [sendError, setSendError] = useState<string | null>(null);
 
-  // Layout effects: the store must hold the row's truth before the first
-  // paint, or a ready device would flash the "Start device" state.
+  // Subscribe before the first paint so no event that lands during mount is
+  // missed; then seed ONCE for a workspace nothing was seen for yet (a live
+  // event that arrives first wins — the seed is a fallback).
   useLayoutEffect(() => {
     ensureCloudSimulatorSubscription();
   }, []);
-  const {
-    cloud_sim_status: rowStatus,
-    cloud_sim_platform: rowPlatform,
-    cloud_sim_stream_url: rowStreamUrl,
-    cloud_sim_error: rowError,
-  } = workspace;
-  useLayoutEffect(() => {
-    cloudSimulatorActions.seedFromWorkspace({
-      id: workspaceId,
-      cloud_sim_status: rowStatus,
-      cloud_sim_platform: rowPlatform,
-      cloud_sim_stream_url: rowStreamUrl,
-      cloud_sim_error: rowError,
-    });
-  }, [workspaceId, rowStatus, rowPlatform, rowStreamUrl, rowError]);
+  const unknown = device.status === null;
+  useEffect(() => {
+    if (!unknown) return;
+    let cancelled = false;
+    cloudSimulatorService
+      .status(workspaceId)
+      .then((seed) => {
+        if (!cancelled) cloudSimulatorActions.seedIfUnknown(workspaceId, seed);
+      })
+      .catch(() => {
+        // Unreachable backend: the empty "Start device" state is honest enough.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, unknown]);
 
   useEffect(() => {
     if (!device.busy) return;

@@ -262,7 +262,8 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("cloudDirectToken");
       expect(REQUEST_RESOURCES).toContain("cloudRepoAccess");
       expect(REQUEST_RESOURCES).toContain("cloudSimExec");
-      expect(REQUEST_RESOURCES).toHaveLength(29);
+      expect(REQUEST_RESOURCES).toContain("cloudSimulator");
+      expect(REQUEST_RESOURCES).toHaveLength(30);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

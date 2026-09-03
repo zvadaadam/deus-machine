@@ -12,7 +12,7 @@ import { sendCommand, sendRequest } from "@/platform/ws";
 
 /** Backend cloudSimExec deadline (60 s) plus a margin for the wire. */
 const EXEC_TIMEOUT_MS = 65_000;
-import type { CloudSimPlatform } from "./cloudSimulatorStore";
+import type { CloudSimPlatform, CloudSimSeed } from "./cloudSimulatorStore";
 
 export interface CloudSimExecResult {
   success: boolean;
@@ -53,6 +53,12 @@ export const cloudSimulatorService = {
       withPlatform({ workspaceId }, platform),
       "The device could not be stopped"
     ),
+
+  /** The device's status right now — the backend's in-memory latest, else the
+   *  platform's REST read; null when the platform knows of no device. The
+   *  store seeds from this once per workspace, then lives on the events. */
+  status: (workspaceId: string): Promise<CloudSimSeed | null> =>
+    sendRequest<CloudSimSeed | null>("cloudSimulator", { workspaceId }),
 
   /** One device operation in the agent-device verb grammar
    *  (`press`, `fill`, `home`, `screenshot`, …). */

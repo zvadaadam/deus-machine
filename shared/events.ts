@@ -110,6 +110,11 @@ export const REQUEST_RESOURCES = [
   // answered by the platform's simulator.exec.response (60 s). Params
   // { workspaceId, verb, args?, platform? } → { success, exitCode, output, error? }.
   "cloudSimExec",
+  // Cloud simulator: the workspace's device status right now — the backend's
+  // in-memory latest, else the platform's REST read. Params { workspaceId } →
+  // CloudSimulatorStatus | null. Nothing is persisted: the platform replays its
+  // latest status on every connect and serves it here on demand.
+  "cloudSimulator",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 
@@ -187,7 +192,7 @@ export const COMMAND_NAMES = [
   // Cloud simulator (a hosted EAS device attached to the workspace's sandbox).
   // Params { workspaceId, platform? }. Fire-and-forget: the ack only says the
   // sandbox was reachable; the device outcome rides q:event "cloud:simulator"
-  // (kind status) and the workspace row's cloud_sim_* columns.
+  // (kind status) and the `cloudSimulator` read.
   "cloudSim:start",
   "cloudSim:stop",
 ] as const;
@@ -239,9 +244,10 @@ export const PROTOCOL_EVENTS = [
   // is agnt's WorkspaceStateData ({ status, step?, reason?, ... }).
   "cloud:env",
   // Hosted simulator traffic (simulator.status / .screenshot / .action_result
-  // passthrough from the agnt session socket). Status ALSO lands on the
-  // workspace row (cloud_sim_*) — the durable truth the tab renders from;
-  // screenshots and action results exist only here. Payload: CloudSimulatorEvent.
+  // passthrough from the agnt session socket). Nothing is persisted: the
+  // backend keeps the latest status per workspace in memory (read on demand
+  // through the `cloudSimulator` request); the platform is the truth and
+  // replays it on every connect. Payload: CloudSimulatorEvent.
   "cloud:simulator",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
@@ -294,8 +300,9 @@ export type CloudEnvEvent = z.infer<typeof CloudEnvEventSchema>;
  * CloudEnvStateSchema — `status` is an open string and unknown fields pass
  * through, because the platform deploys continuously while desktop builds
  * don't; the UI treats an unknown status as in-flight. `platform` stays a
- * closed enum: the row column and the device frame both key off it, and a new
- * platform is a pin bump on both sides, not a silent addition.
+ * closed enum: the device frame keys off it, and a new
+ * platform is a pin bump on both sides, not a silent addition. (The row
+ * holds none of this — see the `cloud:simulator` note above.)
  *
  * `data` is the platform payload verbatim: its `sessionId` (when present) is
  * the agnt session id; the top-level `sessionId` is the deus session the

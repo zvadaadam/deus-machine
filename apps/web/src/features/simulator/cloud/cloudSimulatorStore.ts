@@ -1,19 +1,18 @@
 /**
  * Cloud simulator device state — the q:event "cloud:simulator" stream.
  *
- * One entry per cloud workspace. The durable truth is the workspace row (the
- * backend writes `cloud_sim_*` from the platform's simulator.status frames and
- * the `workspaces` query delivers it); the panel seeds this store from the row
- * and live events overwrite it. Screenshots and the agent's device actions
- * exist ONLY here — the platform never persists them and neither do we (no
- * DB, no localStorage): a refresh clears them by design.
+ * One entry per cloud workspace. Nothing is persisted anywhere — the platform
+ * is the truth (it replays the latest status on every connect and serves it
+ * over REST): live `cloud:simulator` events feed this store, and a panel that
+ * mounts on a workspace nothing was seen for yet seeds it once from the
+ * backend's `cloudSimulator` read. Screenshots and the agent's device actions
+ * exist ONLY here — a refresh clears them by design.
  */
 
 import { create } from "zustand";
 import { match } from "ts-pattern";
 import { CloudSimulatorEventSchema } from "@shared/events";
 import { onEvent } from "@/platform/ws";
-import type { Workspace } from "@shared/types/workspace";
 
 export type CloudSimPlatform = "ios" | "android";
 
@@ -89,8 +88,9 @@ function parsePlatform(value: unknown): CloudSimPlatform | null {
 
 type StatusFields = Pick<CloudSimDevice, "status" | "platform" | "streamUrl" | "error">;
 
-/** A status frame (and the row that mirrors it) REPLACES all four fields: a
- *  `stopped` never carries a URL and a non-error never carries an error. */
+/** A status frame (live, or the platform's one-shot read) REPLACES all four
+ *  fields: a `stopped` never carries a URL and a non-error never carries an
+ *  error. */
 function statusFields(raw: {
   status: unknown;
   platform: unknown;
@@ -115,24 +115,28 @@ function sameStatus(prev: CloudSimDevice, next: StatusFields): boolean {
   );
 }
 
-export type CloudSimWorkspaceRow = Pick<
-  Workspace,
-  "id" | "cloud_sim_status" | "cloud_sim_platform" | "cloud_sim_stream_url" | "cloud_sim_error"
->;
+/** The platform's status as the backend's one-shot `cloudSimulator` read
+ *  returns it (camelCase; null = the platform knows of no device). */
+export interface CloudSimSeed {
+  status: unknown;
+  platform?: unknown;
+  streamUrl?: unknown;
+  error?: unknown;
+}
 
 export const cloudSimulatorActions = {
-  /** The row is the durable truth: it always wins for the four status fields.
-   *  The optimistic `busy` marker survives an IDENTICAL row (the `workspaces`
-   *  query re-delivers on unrelated column changes) and clears when the row
-   *  actually moved. */
-  seedFromWorkspace(row: CloudSimWorkspaceRow): void {
+  /** The one-shot read is a FALLBACK for a workspace nothing was seen for yet:
+   *  anything a live event already put here is newer by construction and wins.
+   *  A null answer (no device was ever started) leaves the entry empty. */
+  seedIfUnknown(workspaceId: string, seed: CloudSimSeed | null): void {
+    if (!seed) return;
     const next = statusFields({
-      status: row.cloud_sim_status,
-      platform: row.cloud_sim_platform,
-      streamUrl: row.cloud_sim_stream_url,
-      error: row.cloud_sim_error,
+      status: seed.status,
+      platform: seed.platform,
+      streamUrl: seed.streamUrl,
+      error: seed.error,
     });
-    update(row.id, (prev) => (sameStatus(prev, next) ? prev : { ...prev, ...next, busy: null }));
+    update(workspaceId, (prev) => (prev.status !== null ? prev : { ...prev, ...next }));
   },
 
   /** A status EVENT means the platform answered — clear `busy` even when the
