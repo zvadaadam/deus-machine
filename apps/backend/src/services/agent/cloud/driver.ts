@@ -1281,11 +1281,21 @@ export async function getCloudSimulatorStatus(
   let context: CloudSimulatorReadContext;
   try {
     const row = currentCloudSessionRow(workspaceId);
-    context = {
-      sessionId: row.sessionId,
-      providerSessionId: row.providerSessionId,
-      liveSocket: sessions.get(row.sessionId)?.socket.isOpen() === true,
-    };
+    const liveSocket = sessions.get(row.sessionId)?.socket.isOpen() === true;
+    if (!liveSocket) {
+      // No socket to carry the NEXT transition (this backend restarted, or an
+      // identity change closed every socket while the workspace stayed
+      // selected — and on mobile nothing else reopens it): a REST answer of
+      // `starting` would otherwise never become `ready`. Open the session;
+      // its frames resume as cloud:simulator broadcasts. The read itself does
+      // not wait for it — the platform's REST answers now.
+      void ensureCloudSession(row.sessionId).catch((err) => {
+        console.warn(
+          `[CloudDriver] simulator reseed connect failed for ${workspaceId}: ${String(err)}`
+        );
+      });
+    }
+    context = { sessionId: row.sessionId, providerSessionId: row.providerSessionId, liveSocket };
   } catch {
     // Not a cloud workspace / no session: nothing to ask the platform with.
     context = { sessionId: null, providerSessionId: null, liveSocket: false };

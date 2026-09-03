@@ -1736,6 +1736,23 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     socketOpen = true;
   });
 
+  it("reopens the workspace's session when a status read finds no live socket, and leaves a live one alone", async () => {
+    // Live socket (the beforeEach connected it): a read is just a read.
+    connectCount = 0;
+    row();
+    await getCloudSimulatorStatus("deus-ws-1");
+    expect(connectCount).toBe(0);
+    // No socket (this backend restarted): the REST answer is what it is, but
+    // the next transition must have a channel to arrive on — nothing else
+    // reopens it on mobile, where the Simulator tab may be the only reader.
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    connectCount = 0;
+    row();
+    await getCloudSimulatorStatus("deus-ws-1");
+    await vi.waitFor(() => expect(connectCount).toBe(1));
+  });
+
   it("drops a frame from a replaced channel that arrives while nothing is registered for the session", async () => {
     const oldOnFrame = capturedOnFrame!;
     socketOpen = false; // the old socket is not open: the next ensure replaces it
