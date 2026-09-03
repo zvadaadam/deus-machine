@@ -336,8 +336,11 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   // rebroadcast its stream URL under account B. Likewise a session object a
   // reconnect has replaced no longer speaks for its id.
   if (session.identityGeneration !== identityGeneration) return;
-  const current = sessions.get(session.deusSessionId);
-  if (current && current !== session) return;
+  // Strictly the REGISTERED object. A replaced session leaves the map before
+  // its successor is minted, and its socket can still deliver a queued frame
+  // into that gap: with nothing registered, "another object holds the id"
+  // alone would let the discarded channel's status through.
+  if (sessions.get(session.deusSessionId) !== session) return;
 
   // A question relayed during this turn can no longer be answered once the
   // turn is over (stopped, killed, timed out): settle its relay now — the
@@ -371,16 +374,20 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       if (typeof state.sandboxUrlTemplate === "string" || state.sandboxUrlTemplate === null) {
         applyCloudPreviewTemplate(frameSource(session), state.sandboxUrlTemplate);
       }
-      // The device's last known status rides the snapshot too (the platform
-      // mirrors its latest simulator.status there): after a backend restart
-      // it is the only way to learn of a device that is still running — and
-      // billing. Applied BEFORE the sandbox-status branches below, so a
-      // parked sandbox overrides a mirror older than the park.
-      if (state.latestSimulatorStatus && typeof state.latestSimulatorStatus === "object") {
-        applyCloudSimulatorStatus(
-          frameSource(session),
-          state.latestSimulatorStatus as Record<string, unknown>
-        );
+      // The devices' last known statuses ride the snapshot too: after a
+      // backend restart they are the only way to learn of a device that is
+      // still running — and billing. A platform that mirrors every device
+      // sends `latestSimulatorStatuses` (one per platform); an older one only
+      // the single latest status, which then stands in for the workspace.
+      // Applied BEFORE the sandbox-status branches below, so a parked sandbox
+      // overrides a mirror older than the park.
+      const mirrors = Array.isArray(state.latestSimulatorStatuses)
+        ? state.latestSimulatorStatuses
+        : [state.latestSimulatorStatus];
+      for (const mirror of mirrors) {
+        if (mirror && typeof mirror === "object") {
+          applyCloudSimulatorStatus(frameSource(session), mirror as Record<string, unknown>);
+        }
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });

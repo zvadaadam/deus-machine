@@ -3,15 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The store owns ONE process-wide `onEvent` listener; capture it so tests can
 // push `cloud:simulator` frames through the same validation path production
 // uses (the shared zod schema), not a private setter.
-const { listeners, connectionListeners } = vi.hoisted(() => ({
+const { listeners, connectionListeners, connectedNow } = vi.hoisted(() => ({
   listeners: [] as Array<(event: string, data: unknown) => void>,
   connectionListeners: [] as Array<(connected: boolean) => void>,
+  /** What `isConnected()` answers when a subscription registers. */
+  connectedNow: { value: true },
 }));
 vi.mock("@/platform/ws", () => ({
   onEvent: vi.fn((cb: (event: string, data: unknown) => void) => {
     listeners.push(cb);
     return () => {};
   }),
+  isConnected: vi.fn(() => connectedNow.value),
   onConnectionChange: vi.fn((cb: (connected: boolean) => void) => {
     connectionListeners.push(cb);
     return () => {};
@@ -341,5 +344,45 @@ describe("cloudSimulatorStore across a reconnect", () => {
     connection(true); // broadcasts may have been missed: start over, re-seed
     expect(useCloudSimulatorStore.getState().byWorkspace).toEqual({});
     expect(useCloudSimulatorStore.getState().generation).toBe(before + 1);
+  });
+});
+
+describe("cloudSimulatorStore — screenshots remember their platform", () => {
+  it("keeps the platform a capture came from, so a request for the other device can ignore it", () => {
+    emit("cloud:simulator", {
+      workspaceId: WS,
+      sessionId: "sess-1",
+      kind: "screenshot",
+      data: { sessionId: "sess-1", platform: "android", imageBase64: "CCCC", format: "png" },
+    });
+    expect(device().lastScreenshot).toMatchObject({ base64: "CCCC", platform: "android" });
+    emit("cloud:simulator", {
+      workspaceId: WS,
+      sessionId: "sess-1",
+      kind: "screenshot",
+      data: { sessionId: "sess-1", imageBase64: "DDDD", format: "png" },
+    });
+    expect(device().lastScreenshot).toMatchObject({ base64: "DDDD", platform: null });
+  });
+});
+
+describe("cloudSimulatorStore registered while the socket is down", () => {
+  // Last in the file: it re-evaluates the store module, which registers a
+  // second process-wide listener — earlier tests count exactly one.
+  it("treats the connect that follows as a reconnect and starts over", async () => {
+    connectedNow.value = false;
+    vi.resetModules();
+    try {
+      const fresh = await import("@/features/simulator/cloud/cloudSimulatorStore");
+      fresh.ensureCloudSimulatorSubscription();
+      const before = fresh.useCloudSimulatorStore.getState().generation;
+      // The seed that ran meanwhile failed (no socket); this connect is the
+      // first chance to learn the truth — not "the initial connect".
+      connectionListeners.forEach((l) => l(true));
+      expect(fresh.useCloudSimulatorStore.getState().generation).toBe(before + 1);
+    } finally {
+      connectedNow.value = true;
+      vi.resetModules();
+    }
   });
 });

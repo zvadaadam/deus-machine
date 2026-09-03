@@ -28,6 +28,7 @@ import {
   ensureCloudSimulatorSubscription,
   useCloudSimulatorStore,
   type CloudSimActionResult,
+  type CloudSimPlatform,
 } from "./cloudSimulatorStore";
 import { describeCloudSimulatorError } from "./cloudSimulatorError";
 import { CloudSimulatorHeader } from "./CloudSimulatorHeader";
@@ -56,6 +57,10 @@ const SCREENSHOT_DEADLINE_MS = 65 * 1000;
 
 interface ScreenshotRequest {
   askedAt: number;
+  /** The displayed device's platform when the button was pressed. With both
+   *  platforms running, the agent's capture of the OTHER device can land
+   *  first — it shows a different phone and must not answer this request. */
+  platform: CloudSimPlatform | null;
   /** The chat active when the button was pressed — the attachment's target,
    *  whatever chat is active when the capture lands. */
   sessionId: string | null;
@@ -190,6 +195,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     setSendError(null);
     const request: ScreenshotRequest = {
       askedAt: Date.now(),
+      platform: platform ?? null,
       sessionId: activeChatSessionId(workspaceId),
     };
     screenshotRequest.current = request;
@@ -217,6 +223,14 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   useEffect(() => {
     const request = screenshotRequest.current;
     if (!lastScreenshot || !request || lastScreenshot.at < request.askedAt) return;
+    // Another platform's capture: not ours — keep waiting for the right one.
+    if (
+      request.platform &&
+      lastScreenshot.platform &&
+      lastScreenshot.platform !== request.platform
+    ) {
+      return;
+    }
     screenshotRequest.current = null;
     if (lastScreenshot.at - request.askedAt > SCREENSHOT_DEADLINE_MS) return;
     if (!request.sessionId) return;

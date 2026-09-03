@@ -12,7 +12,7 @@
 import { create } from "zustand";
 import { match } from "ts-pattern";
 import { CloudSimulatorEventSchema } from "@shared/events";
-import { onConnectionChange, onEvent } from "@/platform/ws";
+import { isConnected, onConnectionChange, onEvent } from "@/platform/ws";
 
 export type CloudSimPlatform = "ios" | "android";
 
@@ -39,7 +39,7 @@ export interface CloudSimDevice {
   error: string | null;
   /** A Start/Stop the panel sent whose status echo hasn't arrived yet. */
   busy: "starting" | "stopping" | null;
-  lastScreenshot: { base64: string; at: number } | null;
+  lastScreenshot: { base64: string; at: number; platform: CloudSimPlatform | null } | null;
   /** Ring of the most recent action results, oldest first. */
   actions: CloudSimActionResult[];
 }
@@ -176,8 +176,11 @@ export const cloudSimulatorActions = {
     update(workspaceId, (prev) => (prev.busy === busy ? prev : { ...prev, busy }));
   },
 
-  recordScreenshot(workspaceId: string, base64: string): void {
-    update(workspaceId, (prev) => ({ ...prev, lastScreenshot: { base64, at: Date.now() } }));
+  recordScreenshot(workspaceId: string, base64: string, platform: CloudSimPlatform | null): void {
+    update(workspaceId, (prev) => ({
+      ...prev,
+      lastScreenshot: { base64, at: Date.now(), platform },
+    }));
   },
 
   recordAction(workspaceId: string, result: Omit<CloudSimActionResult, "id" | "at">): void {
@@ -213,7 +216,10 @@ export function ensureCloudSimulatorSubscription(): void {
   // a "live" one. Start over on every reconnect; the mounted panels re-seed
   // from the backend's authoritative read (a fresh backend answers from the
   // platform).
-  let wasDisconnected = false;
+  // Registered while the socket is down (a cloud workspace opened offline):
+  // the seed that follows fails, so the connect that comes next must count
+  // as a reconnect — a mounted panel then re-seeds instead of staying blank.
+  let wasDisconnected = !isConnected();
   onConnectionChange((connected) => {
     if (!connected) {
       wasDisconnected = true;
@@ -244,7 +250,9 @@ export function ensureCloudSimulatorSubscription(): void {
       )
       .with({ kind: "screenshot" }, ({ workspaceId, data }) => {
         const base64 = parseString(data.imageBase64);
-        if (base64) cloudSimulatorActions.recordScreenshot(workspaceId, base64);
+        if (base64) {
+          cloudSimulatorActions.recordScreenshot(workspaceId, base64, parsePlatform(data.platform));
+        }
       })
       .with({ kind: "action_result" }, ({ workspaceId, data }) =>
         cloudSimulatorActions.recordAction(workspaceId, {

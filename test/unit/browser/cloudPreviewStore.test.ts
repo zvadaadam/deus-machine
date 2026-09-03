@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const listeners: Array<(event: string, data: unknown) => void> = [];
 const sendRequest = vi.hoisted(() => vi.fn());
+/** What `isConnected()` answers when a subscription registers. */
+const connectedNow = vi.hoisted(() => ({ value: true }));
 const connectionListeners: Array<(connected: boolean) => void> = [];
 vi.mock("@/platform/ws", () => ({
   onEvent: (cb: (event: string, data: unknown) => void) => {
     listeners.push(cb);
     return () => {};
   },
+  isConnected: () => connectedNow.value,
   onConnectionChange: (cb: (connected: boolean) => void) => {
     connectionListeners.push(cb);
     return () => {};
@@ -114,5 +117,24 @@ describe("cloudPreviewStore across a reconnect", () => {
     connection(true);
     expect(useCloudPreviewStore.getState().byWorkspace).toEqual({});
     expect(useCloudPreviewStore.getState().generation).toBe(before + 1);
+  });
+});
+
+describe("cloudPreviewStore registered while the socket is down", () => {
+  // Last in the file: it re-evaluates the store module, which registers a
+  // second process-wide listener — earlier tests count exactly one.
+  it("treats the connect that follows as a reconnect and starts over", async () => {
+    connectedNow.value = false;
+    vi.resetModules();
+    try {
+      const fresh = await import("@/features/browser/cloud/cloudPreviewStore");
+      fresh.ensureCloudPreviewSubscription();
+      const before = fresh.useCloudPreviewStore.getState().generation;
+      connectionListeners.forEach((l) => l(true));
+      expect(fresh.useCloudPreviewStore.getState().generation).toBe(before + 1);
+    } finally {
+      connectedNow.value = true;
+      vi.resetModules();
+    }
   });
 });

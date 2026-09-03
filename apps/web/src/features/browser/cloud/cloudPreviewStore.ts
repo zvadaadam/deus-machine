@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { CloudPreviewEventSchema } from "@shared/events";
-import { onConnectionChange, onEvent, sendRequest } from "@/platform/ws";
+import { isConnected, onConnectionChange, onEvent, sendRequest } from "@/platform/ws";
 
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
@@ -56,7 +56,9 @@ export function ensureCloudPreviewSubscription(): void {
   // behind it) may have missed a reprovision, and the template is a
   // capability URL that dies with its sandbox. Start over; the hook re-reads,
   // and a fresh backend reopens the session whose snapshot carries it.
-  let wasDisconnected = false;
+  // Registered while the socket is down: the connect that follows is a
+  // reconnect for our purposes (the seed that ran meanwhile failed).
+  let wasDisconnected = !isConnected();
   onConnectionChange((connected) => {
     if (!connected) {
       wasDisconnected = true;

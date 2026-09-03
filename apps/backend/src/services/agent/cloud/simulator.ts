@@ -75,6 +75,20 @@ const RECENT_RELAYS_KEPT = 16;
  *  that started under an earlier generation is account A's answer landing
  *  under account B, and is discarded. */
 let cacheGeneration = 0;
+/** Per-workspace mutation counter: every apply, park, REST write and REST
+ *  delete bumps it. A REST read compares it across its await — entry
+ *  identities alone cannot see a deletion (an empty map looks like "nothing
+ *  landed"), so an older answer could repopulate a device a later answer
+ *  had just declared gone. */
+const cacheRevisions = new Map<string, number>();
+
+function revisionOf(workspaceId: string): number {
+  return cacheRevisions.get(workspaceId) ?? 0;
+}
+
+function bumpRevision(workspaceId: string): void {
+  cacheRevisions.set(workspaceId, revisionOf(workspaceId) + 1);
+}
 
 /** How long the platform's REST read may take before the cache (or null)
  *  answers instead — a stalled connection must not pin a `cloudSimulator`
@@ -94,6 +108,7 @@ function statusAt(status: CloudSimulatorStatus): number | null {
 export function forgetCloudSimulators(): void {
   cloudSimulators.clear();
   recentRelays.clear();
+  cacheRevisions.clear();
   cacheGeneration += 1;
 }
 
@@ -258,6 +273,7 @@ export function applyCloudSimulatorStatus(
     at: at ?? cached?.at ?? null,
     parked: false,
   });
+  bumpRevision(source.workspaceId);
   announcePrimary(source.workspaceId, source.sessionId, before);
 }
 
@@ -311,6 +327,7 @@ export function parkCloudSimulator(workspaceId: string): void {
     devices.set(key, { sessionId: device.sessionId, status: stopped, at: device.at, parked: true });
   }
   if (sessionId === null) return; // everything was already stopped
+  bumpRevision(workspaceId);
   announcePrimary(workspaceId, sessionId, before);
 }
 
@@ -346,17 +363,17 @@ export async function readCloudSimulatorStatus(
     return cachedPrimary?.status ?? null;
   }
   const generation = cacheGeneration;
+  const revisionBefore = revisionOf(workspaceId);
   // Entry identities before the await: every apply/park creates a new object,
-  // so a changed identity afterwards means a frame landed meanwhile.
+  // so a changed identity afterwards means a frame landed for that platform.
   const before = new Map(cloudSimulators.get(workspaceId) ?? []);
-  let raw: unknown;
+  let detail: { simulator?: unknown; simulators?: unknown };
   try {
-    const detail = (await sdkGetSession(context.providerSessionId, {
+    detail = (await sdkGetSession(context.providerSessionId, {
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
       signal: AbortSignal.timeout(REST_READ_TIMEOUT_MS),
-    })) as { simulator?: unknown };
-    raw = detail.simulator;
+    })) as { simulator?: unknown; simulators?: unknown };
   } catch (err) {
     console.warn(`[CloudSimulator] status read failed for ${workspaceId}: ${String(err)}`);
     return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
@@ -365,25 +382,65 @@ export async function readCloudSimulatorStatus(
   // device (its stream URL) answering under account B. Not cached, not shown.
   if (generation !== cacheGeneration)
     return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
+  // A platform that mirrors every device answers `simulators` (one per
+  // platform, possibly empty); an older one mirrors only the latest status.
+  const answers = Array.isArray(detail.simulators)
+    ? detail.simulators
+    : detail.simulator
+      ? [detail.simulator]
+      : [];
+  const statuses = answers.map(parseRestStatus).filter((s) => s !== null);
   const devices = cloudSimulators.get(workspaceId);
-  const landedMeanwhile = [...(devices ?? new Map<PlatformKey, CloudSimulatorDevice>())].some(
-    ([key, device]) => before.get(key) !== device
-  );
+  const changedMeanwhile = revisionOf(workspaceId) !== revisionBefore;
   const source: CloudSimulatorSource = { workspaceId, sessionId: context.sessionId };
-  if (!raw || typeof raw !== "object") {
-    // A frame that landed on a (re)connected socket meanwhile is the
-    // platform's later word; an answer computed before it must not erase it.
-    if (landedMeanwhile) return primaryOf(devices)?.status ?? null;
+  if (statuses.length === 0) {
+    // Anything that landed meanwhile — a frame on a (re)connected socket, a
+    // later REST answer — is the platform's later word; an answer computed
+    // before it must not erase it.
+    if (changedMeanwhile) return primaryOf(devices)?.status ?? null;
     // The platform knows of no device: whatever the cache held is history —
     // for every client, not just the one that asked.
     if (devices && devices.size > 0) {
       cloudSimulators.delete(workspaceId);
+      bumpRevision(workspaceId);
       broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
     }
     return null;
   }
-  // REST is snake_case (the route re-cases the whole body); the socket is
-  // camelCase. One shape past this point.
+  const beforePrimary = primaryOf(devices)?.status ?? null;
+  let applied = false;
+  for (const status of statuses) {
+    const at = statusAt(status);
+    const key = platformKey(status);
+    const live = devices?.get(key) ?? null;
+    // No entry for this platform but the workspace moved while we waited:
+    // a later read may have declared the device gone (the map is emptied,
+    // not marked) — this older answer must not bring it back.
+    if (!live && changedMeanwhile) continue;
+    // A frame for THIS platform landed meanwhile: only a strictly newer
+    // answer may replace it.
+    const thisLanded = live !== null && before.get(key) !== live;
+    if (live && thisLanded && !(at !== null && live.at !== null && at > live.at)) continue;
+    // The same gate the socket path applies: a REST mirror of the pre-park
+    // frame (same timestamp) must not resurrect a dead stream URL, and an
+    // older answer never wins.
+    if (live && isNotNewerThanCached(at, live)) continue;
+    devicesOf(workspaceId).set(key, { sessionId: context.sessionId, status, at, parked: false });
+    applied = true;
+  }
+  if (!applied) return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
+  bumpRevision(workspaceId);
+  // The requester gets the answer; every other client learns it the same
+  // way a socket frame would reach them — unless nothing changed.
+  announcePrimary(workspaceId, context.sessionId, beforePrimary);
+  return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
+}
+
+/** One REST device status → the socket shape. REST is snake_case (the route
+ *  re-cases the whole body); the socket is camelCase. One shape past here;
+ *  null for anything that is not a status. */
+function parseRestStatus(raw: unknown): CloudSimulatorStatus | null {
+  if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const parsed = CloudSimulatorStatusSchema.safeParse({
     status: r.status,
@@ -393,26 +450,7 @@ export async function readCloudSimulatorStatus(
     error: r.error,
     timestamp: r.timestamp,
   });
-  if (!parsed.success) return primaryOf(devices)?.status ?? null;
-  const status = normalizeCloudSimulatorStatus(parsed.data);
-  const at = statusAt(status);
-  const key = platformKey(status);
-  const live = devices?.get(key) ?? null;
-  const thisLanded = live !== null && before.get(key) !== live;
-  if (live && thisLanded && !(at !== null && live.at !== null && at > live.at)) {
-    return primaryOf(devices)?.status ?? null;
-  }
-  // The same gate the socket path applies: a REST mirror of the pre-park
-  // frame (same timestamp) must not resurrect a dead stream URL, and an
-  // older answer never wins.
-  if (live && isNotNewerThanCached(at, live)) return primaryOf(devices)?.status ?? null;
-  const target = devicesOf(workspaceId);
-  const beforePrimary = primaryOf(target)?.status ?? null;
-  target.set(key, { sessionId: context.sessionId, status, at, parked: false });
-  // The requester gets the answer; every other client learns it the same
-  // way a socket frame would reach them — unless nothing changed.
-  announcePrimary(workspaceId, context.sessionId, beforePrimary);
-  return primaryOf(target)?.status ?? null;
+  return parsed.success ? normalizeCloudSimulatorStatus(parsed.data) : null;
 }
 
 // ---- Control-request shaping (the driver sends; this validates) ----
