@@ -69,6 +69,12 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
  */
 export const PRELAUNCH_RETIRED_COLUMNS = {
   messages: ["content"],
+  // `workspaces.cloud_preview_template` mirrored the cloud computer's public
+  // host template — a capability URL the platform replays on every connect.
+  // It moved to the driver's memory (services/agent/cloud/preview.ts); a
+  // database that still carries the column also carries a stale capability
+  // URL on disk, so it takes the reset rather than a silent leftover.
+  workspaces: ["cloud_preview_template"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
