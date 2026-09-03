@@ -89,6 +89,15 @@ describe("cloudSimulatorService — exec (request/response)", () => {
     );
   });
 
+  it("screenshot names the displayed device's platform when given one", async () => {
+    await cloudSimulatorService.screenshot("ws-1", "ios");
+    expect(sendRequest).toHaveBeenLastCalledWith(
+      "cloudSimExec",
+      { workspaceId: "ws-1", verb: "screenshot", platform: "ios" },
+      { timeoutMs: 65_000 }
+    );
+  });
+
   it("keepAlive is the `appstate` verb — cheap device activity that resets the idle stop", async () => {
     await cloudSimulatorService.keepAlive("ws-1", "android");
     expect(sendRequest).toHaveBeenLastCalledWith(

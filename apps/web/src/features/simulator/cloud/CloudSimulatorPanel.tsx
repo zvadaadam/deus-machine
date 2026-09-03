@@ -99,10 +99,13 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     ensureCloudSimulatorSubscription();
   }, []);
   const unknown = device.status === null;
+  // The identity generation is a dependency on purpose: an identity change
+  // while this workspace was still unknown leaves the (frozen, empty) entry
+  // untouched, so nothing else would re-run the seed under the new account.
+  const generation = useCloudSimulatorStore((s) => s.generation);
   useEffect(() => {
     if (!unknown) return;
     let cancelled = false;
-    const generation = useCloudSimulatorStore.getState().generation;
     cloudSimulatorService
       .status(workspaceId)
       .then((seed) => {
@@ -118,7 +121,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, unknown]);
+  }, [workspaceId, unknown, generation]);
 
   useEffect(() => {
     if (!device.busy) return;
@@ -128,16 +131,20 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
 
   // Keep-alive only while someone is actually looking at a live device; a
   // hidden tab or a booting device must not hold the platform's clock.
+  // Every device operation names the DISPLAYED device's platform: with both
+  // an iOS and an Android device running, an unnamed exec is ambiguous and
+  // the sidecar refuses it — silently, for a keep-alive.
+  const platform = device.platform ?? undefined;
   useEffect(() => {
     if (!visible || device.status !== "ready") return;
     // Looking starts NOW: a device that has already idled through most of the
     // platform's window must hear it before the first interval tick.
-    cloudSimulatorService.keepAlive(workspaceId).catch(() => {});
+    cloudSimulatorService.keepAlive(workspaceId, platform).catch(() => {});
     const timer = setInterval(() => {
-      cloudSimulatorService.keepAlive(workspaceId).catch(() => {});
+      cloudSimulatorService.keepAlive(workspaceId, platform).catch(() => {});
     }, KEEP_ALIVE_MS);
     return () => clearInterval(timer);
-  }, [visible, device.status, workspaceId]);
+  }, [visible, device.status, workspaceId, platform]);
 
   const handleStart = useCallback(() => {
     setSendError(null);
@@ -162,12 +169,12 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   const handleHome = useCallback(() => {
     setSendError(null);
     cloudSimulatorService
-      .exec(workspaceId, "home")
+      .exec(workspaceId, "home", undefined, platform)
       .then((res) => {
         if (!res.success) setSendError(res.error || "Home failed");
       })
       .catch((e) => setSendError(getErrorMessage(e)));
-  }, [workspaceId]);
+  }, [workspaceId, platform]);
 
   // Screenshot is a round-trip through the platform: the exec asks, the PNG
   // arrives as a screenshot EVENT (fanned out to every viewer, the agent's
@@ -189,7 +196,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     };
     const expiry = setTimeout(forget, SCREENSHOT_DEADLINE_MS);
     cloudSimulatorService
-      .screenshot(workspaceId)
+      .screenshot(workspaceId, platform)
       .then((res) => {
         if (res.success) return;
         clearTimeout(expiry);
@@ -201,7 +208,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
         forget();
         setSendError(getErrorMessage(e));
       });
-  }, [workspaceId]);
+  }, [workspaceId, platform]);
 
   const lastScreenshot = device.lastScreenshot;
   useEffect(() => {

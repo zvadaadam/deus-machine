@@ -69,16 +69,21 @@ export function ensureCloudPreviewSubscription(): void {
  */
 export function useCloudPreviewTemplate(workspaceId: string | null): string | null | undefined {
   const known = useCloudPreviewStore((s) => (workspaceId ? s.byWorkspace[workspaceId] : undefined));
+  // A dependency on purpose: an identity change while this workspace was
+  // still unknown changes nothing the selector above sees, so only the
+  // generation re-runs the seed under the new account.
+  const generation = useCloudPreviewStore((s) => s.generation);
   const unknown = workspaceId !== null && known === undefined;
   useEffect(() => {
     ensureCloudPreviewSubscription();
   }, []);
-  // Seed once per unknown workspace; a live event that lands first is newer
-  // and wins (the read's answer is dropped once the store knows the value).
+  // Seed once per unknown workspace and identity; a live event that lands
+  // first is newer and wins (the read's answer is dropped once the store
+  // knows the value).
   useEffect(() => {
     if (!unknown || !workspaceId) return;
     return seedCloudPreviewTemplate(workspaceId);
-  }, [unknown, workspaceId]);
+  }, [unknown, workspaceId, generation]);
   return workspaceId ? known : undefined;
 }
 
