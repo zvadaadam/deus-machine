@@ -1,17 +1,20 @@
 /**
- * The device stream inside the frame. On the desktop it is a bare <webview>
- * (webview-manager keeps the element in document.body, positioned over this
- * placeholder, so tab and workspace switches don't reload the guest); the
- * web build embeds the same URL in an iframe. The parent keys this by URL: a
- * new stream URL is a new device — dispose and start clean rather than
- * navigate a guest that belongs to a device that no longer exists.
+ * The device stream inside the frame — the EAS Simulator web preview, a
+ * WebRTC viewer, embedded as an iframe. It sits inside the DeviceFrame's
+ * rounded, overflow-hidden screen, so the corners clip it naturally.
+ *
+ * Desktop used to host this in an Electron <webview> to survive tab switches
+ * without reloading. A <webview> guest, though, will not autoplay the WebRTC
+ * video — it renders blank — while an iframe in the app renderer plays it
+ * fine (verified against a live EAS device). So both builds use the iframe;
+ * a tab switch reloads the stream, an acceptable trade for a view that only
+ * exists while the ephemeral device is up.
+ *
+ * The parent keys this by URL: a new stream URL is a new device, so React
+ * remounts the iframe rather than pointing it at a device that is gone.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { capabilities } from "@/platform/capabilities";
-import { useWebview } from "@/features/browser/hooks/useWebview";
-import { webviewManager, type Bounds } from "@/features/browser/webview-manager";
-import { isEmbeddableStreamUrl, streamKey } from "./cloudSimulatorStream";
+import { isEmbeddableStreamUrl } from "./cloudSimulatorStream";
 
 interface CloudSimulatorScreenProps {
   workspaceId: string;
@@ -19,9 +22,8 @@ interface CloudSimulatorScreenProps {
   visible: boolean;
 }
 
-export function CloudSimulatorScreen(props: CloudSimulatorScreenProps) {
-  if (capabilities.nativeBrowser) return <NativeStream {...props} />;
-  if (!isEmbeddableStreamUrl(props.streamUrl)) {
+export function CloudSimulatorScreen({ streamUrl }: CloudSimulatorScreenProps) {
+  if (!isEmbeddableStreamUrl(streamUrl)) {
     return (
       <div className="text-text-secondary flex h-full w-full items-center justify-center text-sm">
         This device stream can&apos;t be embedded here.
@@ -31,73 +33,18 @@ export function CloudSimulatorScreen(props: CloudSimulatorScreenProps) {
   return (
     <iframe
       title="Cloud device"
-      src={props.streamUrl}
+      src={streamUrl}
       className="bg-bg-base h-full w-full border-0"
+      // WebRTC video autoplays only if the permission is carried into the frame.
       allow="autoplay; clipboard-read; clipboard-write"
       // Scripts on the stream's own origin and nothing else: no top-level
       // navigation, downloads or popups out of a platform-supplied URL.
       // `allow-same-origin` restores the STREAM's origin (its viewer needs its
-      // storage and sockets); the guard above keeps it distinct from ours, so
-      // no document in this frame can reach up and lift the sandbox.
+      // storage and WebRTC signalling socket); isEmbeddableStreamUrl keeps it a
+      // foreign https origin, so no document in this frame can reach up and
+      // lift the sandbox.
       sandbox="allow-scripts allow-same-origin"
       referrerPolicy="no-referrer"
     />
   );
-}
-
-/** How far up the frame's rounded screen sits: DeviceFrame wraps children in
- *  one relative div inside the rounded, overflow-hidden screen div. */
-const SCREEN_ANCESTOR_DEPTH = 2;
-
-function NativeStream({ workspaceId, streamUrl, visible }: CloudSimulatorScreenProps) {
-  const id = `cloud-sim-${workspaceId}-${streamKey(streamUrl)}`;
-  const placeholderRef = useRef<HTMLDivElement | null>(null);
-  const [bounds, setBounds] = useState<Bounds | null>(null);
-
-  // Same measurement the Browser tab does: the webview is position:fixed in
-  // document.body, so anything that moves this placeholder (panel resize,
-  // window resize, a scrolling ancestor) must re-derive its screen rect.
-  useLayoutEffect(() => {
-    const el = placeholderRef.current;
-    if (!el) return;
-    const update = () => {
-      const r = el.getBoundingClientRect();
-      setBounds({ x: r.x, y: r.y, width: r.width, height: r.height });
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, []);
-
-  const { getInstance } = useWebview({ id, initialUrl: streamUrl, bounds, isVisible: visible });
-
-  // The frame's rounded corners are an overflow clip on a React-tree ancestor,
-  // which never reaches an element living in document.body — so mirror the
-  // screen's radius (and corner shape) onto the webview's container. The
-  // container's box IS the screen rect, so the percentage radii resolve to the
-  // same pixels. Style is set once; sync() never resets these properties.
-  useLayoutEffect(() => {
-    const container = getInstance()?.container;
-    let screen: HTMLElement | null = placeholderRef.current;
-    for (let i = 0; i < SCREEN_ANCESTOR_DEPTH && screen; i++) screen = screen.parentElement;
-    if (!container || !screen) return;
-    const source = screen.style as CSSStyleDeclaration & { cornerShape?: string };
-    const target = container.style as CSSStyleDeclaration & { cornerShape?: string };
-    target.borderRadius = source.borderRadius;
-    if (source.cornerShape !== undefined) target.cornerShape = source.cornerShape;
-    target.overflow = "hidden";
-  }, [getInstance]);
-
-  // Unlike a Browser tab, a device stream has no life outside this panel:
-  // when it unmounts (URL change, Stop, workspace switch) the guest goes too.
-  useEffect(() => () => webviewManager.dispose(id), [id]);
-
-  return <div ref={placeholderRef} className="h-full w-full" />;
 }

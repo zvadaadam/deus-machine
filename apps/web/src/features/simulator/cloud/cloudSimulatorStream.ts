@@ -15,13 +15,3 @@ export function isEmbeddableStreamUrl(url: string): boolean {
     return false;
   }
 }
-
-/** A short stable key for the URL: the manager id must change with the
- *  stream. `useWebview` adopts its instance during render, so a keyed remount
- *  on a new URL would otherwise adopt the OLD guest — and the old component's
- *  cleanup would then dispose the very instance the new one holds. */
-export function streamKey(url: string): string {
-  let hash = 5381;
-  for (let i = 0; i < url.length; i++) hash = ((hash << 5) + hash + url.charCodeAt(i)) | 0;
-  return (hash >>> 0).toString(36);
-}

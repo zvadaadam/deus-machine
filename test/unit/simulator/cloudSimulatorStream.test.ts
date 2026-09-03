@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { isEmbeddableStreamUrl, streamKey } from "@/features/simulator/cloud/cloudSimulatorStream";
+import { isEmbeddableStreamUrl } from "@/features/simulator/cloud/cloudSimulatorStream";
 
 // The rule compares against the renderer's origin; give it one that is itself
 // https, so the same-origin case is isolated from the https rule.
@@ -17,13 +17,5 @@ describe("isEmbeddableStreamUrl", () => {
   it("refuses our own origin — a same-origin document could lift the frame's sandbox", () => {
     expect(isEmbeddableStreamUrl("https://app.deusmachine.test/stream")).toBe(false);
     expect(isEmbeddableStreamUrl("https://app.deusmachine.test:444/stream")).toBe(true);
-  });
-});
-
-describe("streamKey", () => {
-  it("is stable per URL and differs between streams", () => {
-    expect(streamKey("https://s/1")).toBe(streamKey("https://s/1"));
-    expect(streamKey("https://s/1")).not.toBe(streamKey("https://s/2"));
-    expect(streamKey("https://s/1")).toMatch(/^[0-9a-z]+$/);
   });
 });
