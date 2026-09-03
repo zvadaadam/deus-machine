@@ -51,6 +51,11 @@ interface CloudSimulatorEntry {
 }
 const cloudSimulators = new Map<string, CloudSimulatorEntry>();
 
+/** Bumped by forgetCloudSimulators (identity change, shutdown): a REST read
+ *  that started under an earlier generation is account A's answer landing
+ *  under account B, and is discarded. */
+let cacheGeneration = 0;
+
 /** How long the platform's REST read may take before the cache (or null)
  *  answers instead — a stalled connection must not pin a `cloudSimulator`
  *  request. */
@@ -68,6 +73,7 @@ function statusAt(status: CloudSimulatorStatus): number | null {
  *  phones) and driver shutdown. */
 export function forgetCloudSimulators(): void {
   cloudSimulators.clear();
+  cacheGeneration += 1;
 }
 
 /** A status frame REPLACES the device state: the platform fans its full state
@@ -82,6 +88,16 @@ function normalizeCloudSimulatorStatus(status: CloudSimulatorStatus): CloudSimul
     ...(!terminal && streamUrl ? { streamUrl } : {}),
     ...(status.status === "error" && error ? { error } : {}),
   };
+}
+
+function sameStatus(a: CloudSimulatorStatus, b: CloudSimulatorStatus): boolean {
+  return (
+    a.status === b.status &&
+    a.platform === b.platform &&
+    a.streamUrl === b.streamUrl &&
+    a.error === b.error &&
+    a.easSessionIdentifier === b.easSessionIdentifier
+  );
 }
 
 /** Push a device event to connected clients (q:event "cloud:simulator"). */
@@ -113,6 +129,19 @@ function parseCloudSimulatorEvent(
   return null;
 }
 
+/** The ordering gate, shared by the socket and the REST paths. Older than
+ *  what the cache holds: a late copy of a transition another source
+ *  delivered first. Equal is a replay (the snapshot and the REST mirror the
+ *  latest frame) and applies — same content, harmless — unless a park sits
+ *  on that very timestamp: then it is the pre-park state coming back. And
+ *  while parked, a status that names no time cannot prove it is newer (a
+ *  real restart always carries the platform's time), so it is refused too. */
+function isNotNewerThanCached(at: number | null, cached: CloudSimulatorEntry): boolean {
+  if (at === null) return cached.parked;
+  if (cached.at === null) return false;
+  return at < cached.at || (at === cached.at && cached.parked);
+}
+
 /** simulator.status — from the live frame or the snapshot's mirror. The cache
  *  first (a `cloudSimulator` read must never lag a broadcast), then the event. */
 export function applyCloudSimulatorStatus(
@@ -124,18 +153,7 @@ export function applyCloudSimulatorStatus(
   const data = normalizeCloudSimulatorStatus(event.data);
   const at = statusAt(data);
   const cached = cloudSimulators.get(source.workspaceId);
-  // Older than what the cache already holds: a late copy of a transition
-  // another socket delivered first. Equal is a replay (the snapshot mirrors
-  // the latest frame) and applies — same content, harmless — unless a park
-  // sits on that very timestamp: then it is the pre-park state coming back.
-  if (
-    cached &&
-    cached.at !== null &&
-    at !== null &&
-    (at < cached.at || (at === cached.at && cached.parked))
-  ) {
-    return;
-  }
+  if (cached && isNotNewerThanCached(at, cached)) return;
   cloudSimulators.set(source.workspaceId, {
     sessionId: source.sessionId,
     status: data,
@@ -220,6 +238,7 @@ export async function readCloudSimulatorStatus(
   if (cached && context.liveSocket) return cached.status;
   const config = getCloudConfig();
   if (!config || !context.sessionId || !context.providerSessionId) return cached?.status ?? null;
+  const generation = cacheGeneration;
   let raw: unknown;
   try {
     const detail = (await sdkGetSession(context.providerSessionId, {
@@ -232,16 +251,23 @@ export async function readCloudSimulatorStatus(
     console.warn(`[CloudSimulator] status read failed for ${workspaceId}: ${String(err)}`);
     return cloudSimulators.get(workspaceId)?.status ?? null;
   }
+  // The identity changed while the read was in flight: this is account A's
+  // device (its stream URL) answering under account B. Not cached, not shown.
+  if (generation !== cacheGeneration) return cloudSimulators.get(workspaceId)?.status ?? null;
   // A frame may have landed on a (re)connected socket while the read was in
   // flight — every apply/park creates a new entry, so identity tells. That
   // frame is the platform's later word unless the REST answer names a later
   // time still; it must not be erased by an answer computed before it.
   const live = cloudSimulators.get(workspaceId) ?? null;
   const landedMeanwhile = live !== cached;
+  const source: CloudSimulatorSource = { workspaceId, sessionId: context.sessionId };
   if (!raw || typeof raw !== "object") {
     if (landedMeanwhile && live) return live.status;
-    // The platform knows of no device: whatever the cache held is history.
-    cloudSimulators.delete(workspaceId);
+    // The platform knows of no device: whatever the cache held is history —
+    // for every client, not just the one that asked.
+    if (cloudSimulators.delete(workspaceId)) {
+      broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+    }
     return null;
   }
   // REST is snake_case (the route re-cases the whole body); the socket is
@@ -258,10 +284,19 @@ export async function readCloudSimulatorStatus(
   if (!parsed.success) return live?.status ?? null;
   const status = normalizeCloudSimulatorStatus(parsed.data);
   const at = statusAt(status);
-  if (landedMeanwhile && live && !(at !== null && live.at !== null && at > live.at)) {
+  if (live && landedMeanwhile && !(at !== null && live.at !== null && at > live.at)) {
     return live.status;
   }
+  // The same gate the socket path applies: a REST mirror of the pre-park
+  // frame (same timestamp) must not resurrect a dead stream URL, and an
+  // older answer never wins.
+  if (live && isNotNewerThanCached(at, live)) return live.status;
   cloudSimulators.set(workspaceId, { sessionId: context.sessionId, status, at, parked: false });
+  // The requester gets the answer; every other client learns it the same
+  // way a socket frame would reach them — unless nothing changed.
+  if (!live || !sameStatus(live.status, status)) {
+    broadcastCloudSimulator({ ...source, kind: "status", data: status });
+  }
   return status;
 }
 

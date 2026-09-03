@@ -60,3 +60,39 @@ describe("cloudPreviewStore on identity change", () => {
     expect(useCloudPreviewStore.getState().byWorkspace).toEqual({});
   });
 });
+
+describe("cloudPreviewStore reads across an identity change", () => {
+  it("drops a one-shot answer that started before cloud:identity — it was the previous account's", async () => {
+    const { seedCloudPreviewTemplate } = await import("@/features/browser/cloud/cloudPreviewStore");
+    let answer!: (value: unknown) => void;
+    sendRequest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const cancel = seedCloudPreviewTemplate("ws-1");
+    emit("cloud:identity", { generation: 9 });
+    answer("https://{{port}}-accountA.e2b.app");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useCloudPreviewStore.getState().byWorkspace["ws-1"]).toBeUndefined();
+    cancel();
+  });
+
+  it("applies a one-shot answer under an unchanged identity, unless the store learned meanwhile", async () => {
+    const { seedCloudPreviewTemplate } = await import("@/features/browser/cloud/cloudPreviewStore");
+    sendRequest.mockResolvedValueOnce("https://{{port}}-sb1.e2b.app");
+    seedCloudPreviewTemplate("ws-1");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useCloudPreviewStore.getState().byWorkspace["ws-1"]).toBe(
+      "https://{{port}}-sb1.e2b.app"
+    );
+    let answer!: (value: unknown) => void;
+    sendRequest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    seedCloudPreviewTemplate("ws-2");
+    cloudPreviewActions.set("ws-2", "https://{{port}}-live.e2b.app");
+    answer("https://{{port}}-stale.e2b.app");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useCloudPreviewStore.getState().byWorkspace["ws-2"]).toBe(
+      "https://{{port}}-live.e2b.app"
+    );
+  });
+});

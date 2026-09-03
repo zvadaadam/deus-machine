@@ -17,10 +17,14 @@ import { onEvent, sendRequest } from "@/platform/ws";
 
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
+  /** Bumped on every cloud:identity. A one-shot read that started under an
+   *  earlier generation answers for the previous account and is dropped. */
+  generation: number;
 }
 
 export const useCloudPreviewStore = create<CloudPreviewStore>()(() => ({
   byWorkspace: {},
+  generation: 0,
 }));
 
 export const cloudPreviewActions = {
@@ -42,8 +46,12 @@ export function ensureCloudPreviewSubscription(): void {
   subscribed = true;
   onEvent((event, raw) => {
     if (event === "cloud:identity") {
-      // The templates were the previous account's sandboxes: forget them all.
-      useCloudPreviewStore.setState({ byWorkspace: {} });
+      // The templates were the previous account's sandboxes: forget them all,
+      // and disown every read still in flight.
+      useCloudPreviewStore.setState((state) => ({
+        byWorkspace: {},
+        generation: state.generation + 1,
+      }));
       return;
     }
     if (event !== "cloud:preview") return;
@@ -69,22 +77,35 @@ export function useCloudPreviewTemplate(workspaceId: string | null): string | nu
   // and wins (the read's answer is dropped once the store knows the value).
   useEffect(() => {
     if (!unknown || !workspaceId) return;
-    let cancelled = false;
-    // `undefined` = the backend has not been told either and is opening the
-    // session whose snapshot will announce it: keep waiting for the event.
-    sendRequest<string | null | undefined>("cloudPreview", { workspaceId })
-      .then((template) => {
-        if (cancelled || template === undefined) return;
-        if (useCloudPreviewStore.getState().byWorkspace[workspaceId] === undefined) {
-          cloudPreviewActions.set(workspaceId, template);
-        }
-      })
-      .catch(() => {
-        // Unreachable backend: stay unknown; the socket's own frame will tell.
-      });
-    return () => {
-      cancelled = true;
-    };
+    return seedCloudPreviewTemplate(workspaceId);
   }, [unknown, workspaceId]);
   return workspaceId ? known : undefined;
+}
+
+/**
+ * The one-shot read for a workspace the store knows nothing about. Returns
+ * the cancel for the effect that started it. `undefined` from the backend =
+ * it has not been told either and is opening the session whose snapshot will
+ * announce the template: keep waiting for the event. An answer that started
+ * under an earlier identity generation is the previous account's capability
+ * URL and is dropped.
+ */
+export function seedCloudPreviewTemplate(workspaceId: string): () => void {
+  let cancelled = false;
+  const generation = useCloudPreviewStore.getState().generation;
+  sendRequest<string | null | undefined>("cloudPreview", { workspaceId })
+    .then((template) => {
+      if (cancelled || template === undefined) return;
+      const state = useCloudPreviewStore.getState();
+      if (state.generation !== generation) return;
+      if (state.byWorkspace[workspaceId] === undefined) {
+        cloudPreviewActions.set(workspaceId, template);
+      }
+    })
+    .catch(() => {
+      // Unreachable backend: stay unknown; the socket's own frame will tell.
+    });
+  return () => {
+    cancelled = true;
+  };
 }

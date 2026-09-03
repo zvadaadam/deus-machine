@@ -299,3 +299,22 @@ describe("cloudSimulatorStore on identity change", () => {
     expect(device().actions).toEqual([]);
   });
 });
+
+describe("cloudSimulatorStore generation and gone", () => {
+  it("bumps the generation on cloud:identity so in-flight seeds can be disowned", () => {
+    const before = useCloudSimulatorStore.getState().generation;
+    emit("cloud:identity", { generation: 1 });
+    expect(useCloudSimulatorStore.getState().generation).toBe(before + 1);
+  });
+
+  it("drops the entry on a gone event — the platform knows of no device any more", () => {
+    emit(
+      "cloud:simulator",
+      statusEvent({ status: "ready", platform: "ios", streamUrl: "https://s/1" })
+    );
+    emit("cloud:simulator", actionEvent("tap", true));
+    emit("cloud:simulator", { workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
+    expect(useCloudSimulatorStore.getState().byWorkspace[WS]).toBeUndefined();
+    expect(device()).toBeUndefined();
+  });
+});

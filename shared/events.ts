@@ -399,6 +399,15 @@ export const CloudSimulatorEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("action_result"),
     data: CloudSimulatorActionResultSchema,
   }),
+  // Backend-synthesized: the platform's REST read reported no device for the
+  // workspace, so every client drops what it held (a device that no longer
+  // exists). No platform frame says this — a socket only ever carries a
+  // status — hence a kind of its own.
+  z.object({
+    ...cloudSimulatorEnvelope,
+    kind: z.literal("gone"),
+    data: z.object({}),
+  }),
 ]);
 export type CloudSimulatorEvent = z.infer<typeof CloudSimulatorEventSchema>;
 export type CloudSimulatorEventKind = CloudSimulatorEvent["kind"];

@@ -1135,6 +1135,170 @@ describe("cloud driver simulator channel", () => {
     });
   });
 
+  it("discards a REST answer that started under the previous identity — account A's device must not land under B", async () => {
+    mockGet.mockReturnValueOnce({
+      kind: "cloud",
+      session_id: "deus-session-1",
+      provider_session_id: "agnt-session-1",
+    } as never);
+    let answer!: (value: unknown) => void;
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const read = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    mockBroadcast.mockClear();
+    identityChanged!();
+    answer({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "ready",
+        platform: "ios",
+        stream_url: "https://stream.expo.dev/account-a",
+        timestamp: T,
+      },
+    });
+    await expect(read).resolves.toBeNull();
+    expect(mockBroadcast.mock.calls.map((c) => String(c[0]))).not.toContainEqual(
+      expect.stringContaining("account-a")
+    );
+    // Nothing cached: the next read asks the platform again.
+    mockGet.mockReturnValueOnce({
+      kind: "cloud",
+      session_id: "deus-session-1",
+      provider_session_id: "agnt-session-1",
+    } as never);
+    mockGetSession.mockResolvedValueOnce({ simulator: null });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a timestamp-less replay after a park — only a frame that proves it is newer restarts the device", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/live",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    });
+    capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+    mockBroadcast.mockClear();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/live",
+    });
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    currentSession();
+    const status = await getCloudSimulatorStatus("deus-ws-1");
+    expect(status).toMatchObject({ status: "stopped" });
+    expect(status).not.toHaveProperty("streamUrl");
+  });
+
+  it("keeps a park against the REST mirror of the pre-park frame, and takes a later boot from it", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/live",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    });
+    capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+    socketOpen = false;
+    try {
+      const row = () =>
+        mockGet.mockReturnValueOnce({
+          kind: "cloud",
+          session_id: "deus-session-1",
+          provider_session_id: "agnt-session-1",
+        } as never);
+      row();
+      mockGetSession.mockResolvedValueOnce({
+        simulator: {
+          session_id: "agnt-session-1",
+          status: "ready",
+          platform: "ios",
+          stream_url: "https://stream.expo.dev/live",
+          timestamp: "2026-09-03T10:00:05.000Z",
+        },
+      });
+      mockBroadcast.mockClear();
+      const parked = await getCloudSimulatorStatus("deus-ws-1");
+      expect(parked).toMatchObject({ status: "stopped" });
+      expect(parked).not.toHaveProperty("streamUrl");
+      expect(mockBroadcast).not.toHaveBeenCalled();
+      row();
+      mockGetSession.mockResolvedValueOnce({
+        simulator: {
+          session_id: "agnt-session-1",
+          status: "starting",
+          platform: "ios",
+          timestamp: "2026-09-03T10:00:09.000Z",
+        },
+      });
+      await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+        status: "starting",
+      });
+      // The replacement reached every client, not just the requester.
+      expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"status":"starting"'));
+    } finally {
+      socketOpen = true;
+    }
+  });
+
+  it("broadcasts what a REST read changed, and a gone when the platform knows of no device any more", async () => {
+    socketOpen = false;
+    try {
+      const row = () =>
+        mockGet.mockReturnValueOnce({
+          kind: "cloud",
+          session_id: "deus-session-1",
+          provider_session_id: "agnt-session-1",
+        } as never);
+      row();
+      mockGetSession.mockResolvedValueOnce({
+        simulator: {
+          session_id: "agnt-session-1",
+          status: "starting",
+          platform: "ios",
+          timestamp: T,
+        },
+      });
+      mockBroadcast.mockClear();
+      await getCloudSimulatorStatus("deus-ws-1");
+      expect(mockBroadcast).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toMatchObject({
+        event: "cloud:simulator",
+        data: { workspaceId: "deus-ws-1", kind: "status", data: { status: "starting" } },
+      });
+      // Same answer again: nothing to tell.
+      row();
+      mockGetSession.mockResolvedValueOnce({
+        simulator: {
+          session_id: "agnt-session-1",
+          status: "starting",
+          platform: "ios",
+          timestamp: T,
+        },
+      });
+      mockBroadcast.mockClear();
+      await getCloudSimulatorStatus("deus-ws-1");
+      expect(mockBroadcast).not.toHaveBeenCalled();
+      // The device is gone from the platform: every client drops it.
+      row();
+      mockGetSession.mockResolvedValueOnce({ simulator: null });
+      await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+      expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toMatchObject({
+        event: "cloud:simulator",
+        data: { workspaceId: "deus-ws-1", kind: "gone" },
+      });
+    } finally {
+      socketOpen = true;
+    }
+  });
+
   it("reads the status through an older provisioned chat when the current one has no platform session yet", async () => {
     // A fresh chat next to a running device: its own provider_session_id is
     // null, but the device belongs to the workspace's sandbox, which the

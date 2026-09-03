@@ -102,10 +102,15 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   useEffect(() => {
     if (!unknown) return;
     let cancelled = false;
+    const generation = useCloudSimulatorStore.getState().generation;
     cloudSimulatorService
       .status(workspaceId)
       .then((seed) => {
-        if (!cancelled) cloudSimulatorActions.seedIfUnknown(workspaceId, seed);
+        if (cancelled) return;
+        // An identity change while the read was in flight: the answer is the
+        // previous account's device (its stream URL) — drop it.
+        if (useCloudSimulatorStore.getState().generation !== generation) return;
+        cloudSimulatorActions.seedIfUnknown(workspaceId, seed);
       })
       .catch(() => {
         // Unreachable backend: the empty "Start device" state is honest enough.

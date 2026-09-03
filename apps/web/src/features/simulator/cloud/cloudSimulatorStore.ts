@@ -58,6 +58,10 @@ export const EMPTY_CLOUD_SIM_DEVICE: CloudSimDevice = Object.freeze({
 
 interface CloudSimulatorStore {
   byWorkspace: Record<string, CloudSimDevice>;
+  /** Bumped on every cloud:identity. A one-shot status read that started
+   *  under an earlier generation answers for the previous account and is
+   *  dropped (see CloudSimulatorPanel's seed). */
+  generation: number;
 }
 
 const MAX_ACTIONS = 20;
@@ -65,6 +69,7 @@ let nextActionId = 1;
 
 export const useCloudSimulatorStore = create<CloudSimulatorStore>()(() => ({
   byWorkspace: {},
+  generation: 0,
 }));
 
 /** Apply a recipe to one workspace's entry; an unchanged result leaves the
@@ -157,6 +162,16 @@ export const cloudSimulatorActions = {
     );
   },
 
+  /** The platform reports no device for the workspace: drop the entry
+   *  (screenshots and actions included — they were that device's). */
+  forget(workspaceId: string): void {
+    useCloudSimulatorStore.setState((state) => {
+      if (!(workspaceId in state.byWorkspace)) return state;
+      const { [workspaceId]: _gone, ...rest } = state.byWorkspace;
+      return { byWorkspace: rest };
+    });
+  },
+
   setBusy(workspaceId: string, busy: CloudSimDevice["busy"]): void {
     update(workspaceId, (prev) => (prev.busy === busy ? prev : { ...prev, busy }));
   },
@@ -188,7 +203,10 @@ export function ensureCloudSimulatorSubscription(): void {
       // Sign-out / account switch: every entry was the previous account's
       // device — stream URLs, screenshots, the agent's actions and their
       // arguments. Start over; a mounted panel re-seeds under the new identity.
-      useCloudSimulatorStore.setState({ byWorkspace: {} });
+      useCloudSimulatorStore.setState((state) => ({
+        byWorkspace: {},
+        generation: state.generation + 1,
+      }));
       return;
     }
     if (event !== "cloud:simulator") return;
@@ -213,6 +231,9 @@ export function ensureCloudSimulatorSubscription(): void {
           error: parseString(data.error),
         })
       )
+      // The platform knows of no device any more (a REST read said so):
+      // back to the empty state — Start on a never-known device.
+      .with({ kind: "gone" }, ({ workspaceId }) => cloudSimulatorActions.forget(workspaceId))
       .exhaustive();
   });
 }
