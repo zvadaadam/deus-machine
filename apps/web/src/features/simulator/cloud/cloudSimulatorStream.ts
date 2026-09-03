@@ -15,3 +15,21 @@ export function isEmbeddableStreamUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * The EAS preview reads `?embed=1` (the value must be exactly "1") as
+ * presentation mode with its own chrome LOCKED off: no viewer toolbar, no
+ * "live" pill, no expand/split/sidebar buttons — just the device. Deus draws
+ * its own frame and Start/Home/Screenshot header around it, so embedding the
+ * whole viewer UI would double every control. A malformed URL is returned
+ * untouched (isEmbeddableStreamUrl already rejected it upstream).
+ */
+export function toEmbeddedStreamUrl(streamUrl: string): string {
+  try {
+    const url = new URL(streamUrl);
+    url.searchParams.set("embed", "1");
+    return url.toString();
+  } catch {
+    return streamUrl;
+  }
+}

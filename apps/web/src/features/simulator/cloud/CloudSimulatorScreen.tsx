@@ -14,7 +14,7 @@
  * remounts the iframe rather than pointing it at a device that is gone.
  */
 
-import { isEmbeddableStreamUrl } from "./cloudSimulatorStream";
+import { isEmbeddableStreamUrl, toEmbeddedStreamUrl } from "./cloudSimulatorStream";
 
 interface CloudSimulatorScreenProps {
   workspaceId: string;
@@ -33,7 +33,9 @@ export function CloudSimulatorScreen({ streamUrl }: CloudSimulatorScreenProps) {
   return (
     <iframe
       title="Cloud device"
-      src={streamUrl}
+      // `?embed=1` strips the EAS viewer's own toolbar and pill — Deus frames
+      // and controls the device itself.
+      src={toEmbeddedStreamUrl(streamUrl)}
       className="bg-bg-base h-full w-full border-0"
       // WebRTC video autoplays only if the permission is carried into the frame.
       allow="autoplay; clipboard-read; clipboard-write"
