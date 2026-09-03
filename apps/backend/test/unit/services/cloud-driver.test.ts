@@ -730,7 +730,7 @@ describe("cloud driver simulator channel", () => {
   const T = "2026-09-03T10:00:00.000Z";
   /** The workspace → current-session lookup behind every device command. */
   const currentSession = () =>
-    mockGet.mockReturnValueOnce({ kind: "cloud", current_session_id: "deus-session-1" } as never);
+    mockGet.mockReturnValueOnce({ kind: "cloud", session_id: "deus-session-1" } as never);
 
   it("remembers a simulator.status frame in memory and broadcasts it — nothing lands on the row", async () => {
     mockPrepare.mockClear();
@@ -929,6 +929,7 @@ describe("cloud driver simulator channel", () => {
 
   it("answers the platform's REST status when nothing was seen on a socket yet, then serves the cache", async () => {
     mockGet.mockReturnValueOnce({
+      kind: "cloud",
       session_id: "deus-session-1",
       provider_session_id: "agnt-session-1",
     } as never);
@@ -959,6 +960,7 @@ describe("cloud driver simulator channel", () => {
 
   it("answers null when the platform knows of no device", async () => {
     mockGet.mockReturnValueOnce({
+      kind: "cloud",
       session_id: "deus-session-1",
       provider_session_id: "agnt-session-1",
     } as never);
