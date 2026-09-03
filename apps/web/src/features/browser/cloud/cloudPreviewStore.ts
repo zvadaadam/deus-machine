@@ -70,9 +70,11 @@ export function useCloudPreviewTemplate(workspaceId: string | null): string | nu
   useEffect(() => {
     if (!unknown || !workspaceId) return;
     let cancelled = false;
-    sendRequest<string | null>("cloudPreview", { workspaceId })
+    // `undefined` = the backend has not been told either and is opening the
+    // session whose snapshot will announce it: keep waiting for the event.
+    sendRequest<string | null | undefined>("cloudPreview", { workspaceId })
       .then((template) => {
-        if (cancelled) return;
+        if (cancelled || template === undefined) return;
         if (useCloudPreviewStore.getState().byWorkspace[workspaceId] === undefined) {
           cloudPreviewActions.set(workspaceId, template);
         }

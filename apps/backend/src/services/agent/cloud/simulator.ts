@@ -43,6 +43,11 @@ interface CloudSimulatorEntry {
    *  would erase the live stream URL and leave the tab booting while the
    *  device runs — and bills). null until a frame named a time. */
   at: number | null;
+  /** Set by a backend-synthesized park (the sandbox died under the device).
+   *  While it holds, a frame with the SAME timestamp as `at` is the other
+   *  socket's late copy of the pre-park state — a dead stream URL — and is
+   *  refused too; only a genuinely later frame (a restart) applies. */
+  parked: boolean;
 }
 const cloudSimulators = new Map<string, CloudSimulatorEntry>();
 
@@ -121,12 +126,21 @@ export function applyCloudSimulatorStatus(
   const cached = cloudSimulators.get(source.workspaceId);
   // Older than what the cache already holds: a late copy of a transition
   // another socket delivered first. Equal is a replay (the snapshot mirrors
-  // the latest frame) and applies — same content, harmless.
-  if (cached && cached.at !== null && at !== null && at < cached.at) return;
+  // the latest frame) and applies — same content, harmless — unless a park
+  // sits on that very timestamp: then it is the pre-park state coming back.
+  if (
+    cached &&
+    cached.at !== null &&
+    at !== null &&
+    (at < cached.at || (at === cached.at && cached.parked))
+  ) {
+    return;
+  }
   cloudSimulators.set(source.workspaceId, {
     sessionId: source.sessionId,
     status: data,
     at: at ?? cached?.at ?? null,
+    parked: false,
   });
   broadcastCloudSimulator({ ...event, data });
 }
@@ -163,7 +177,12 @@ export function parkCloudSimulator(workspaceId: string): void {
   // Keep the PLATFORM's ordering point: the park is timed by this Mac's clock
   // and must never gate the platform's own frames (a resumed sandbox's
   // `starting` carries the platform's time, whatever this clock says).
-  cloudSimulators.set(workspaceId, { sessionId: entry.sessionId, status: stopped, at: entry.at });
+  cloudSimulators.set(workspaceId, {
+    sessionId: entry.sessionId,
+    status: stopped,
+    at: entry.at,
+    parked: true,
+  });
   broadcastCloudSimulator({
     workspaceId,
     sessionId: entry.sessionId,
@@ -211,9 +230,16 @@ export async function readCloudSimulatorStatus(
     raw = detail.simulator;
   } catch (err) {
     console.warn(`[CloudSimulator] status read failed for ${workspaceId}: ${String(err)}`);
-    return cached?.status ?? null;
+    return cloudSimulators.get(workspaceId)?.status ?? null;
   }
+  // A frame may have landed on a (re)connected socket while the read was in
+  // flight — every apply/park creates a new entry, so identity tells. That
+  // frame is the platform's later word unless the REST answer names a later
+  // time still; it must not be erased by an answer computed before it.
+  const live = cloudSimulators.get(workspaceId) ?? null;
+  const landedMeanwhile = live !== cached;
   if (!raw || typeof raw !== "object") {
+    if (landedMeanwhile && live) return live.status;
     // The platform knows of no device: whatever the cache held is history.
     cloudSimulators.delete(workspaceId);
     return null;
@@ -229,9 +255,13 @@ export async function readCloudSimulatorStatus(
     error: r.error,
     timestamp: r.timestamp,
   });
-  if (!parsed.success) return cached?.status ?? null;
+  if (!parsed.success) return live?.status ?? null;
   const status = normalizeCloudSimulatorStatus(parsed.data);
-  cloudSimulators.set(workspaceId, { sessionId: context.sessionId, status, at: statusAt(status) });
+  const at = statusAt(status);
+  if (landedMeanwhile && live && !(at !== null && live.at !== null && at > live.at)) {
+    return live.status;
+  }
+  cloudSimulators.set(workspaceId, { sessionId: context.sessionId, status, at, parked: false });
   return status;
 }
 

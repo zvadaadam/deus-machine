@@ -108,6 +108,7 @@ import {
   execCloudSimulator,
   parseCloudSimulatorPlatform,
   getCloudSimulatorStatus,
+  readCloudPreviewTemplate,
 } from "../../../src/services/agent/cloud/driver";
 import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
 
@@ -623,7 +624,8 @@ describe("cloud driver frame → fold contract", () => {
     });
     mockPrepare.mockClear();
     identityChanged!();
-    expect(getCloudPreviewTemplate("deus-ws-1")).toBeNull();
+    // Never told again — not "no sandbox" (null): the read must re-seed.
+    expect(getCloudPreviewTemplate("deus-ws-1")).toBeUndefined();
     // No cloud capability URL lives on a row any more: nothing to clear there.
     expect(mockPrepare).not.toHaveBeenCalledWith(expect.stringContaining("UPDATE workspaces"));
   });
@@ -713,6 +715,33 @@ describe("cloud driver session lifecycle", () => {
     expect(connectCount).toBe(1);
   });
 });
+
+describe("cloud driver preview template read", () => {
+  it("answers undefined and opens the workspace's session when the template was never told", async () => {
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    connectCount = 0;
+    currentSessionRow();
+    expect(readCloudPreviewTemplate("deus-ws-1")).toBeUndefined();
+    await vi.waitFor(() => expect(connectCount).toBe(1));
+  });
+
+  it("answers null for a platform-reported 'no sandbox' without touching the socket", async () => {
+    await ensureCloudSession("deus-session-1");
+    connectCount = 0;
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: null },
+    });
+    expect(readCloudPreviewTemplate("deus-ws-1")).toBeNull();
+    expect(connectCount).toBe(0);
+  });
+});
+
+/** The workspace → current-session lookup behind the preview read. */
+function currentSessionRow() {
+  mockGet.mockReturnValueOnce({ kind: "cloud", session_id: "deus-session-1" } as never);
+}
 
 describe("cloud driver turn API", () => {
   it("sends message.send with the deus turnId as both turn id and idempotency key", async () => {
@@ -887,6 +916,9 @@ describe("cloud driver simulator channel", () => {
   });
 
   it("marks the device stopped when the sandbox parks — the platform's settle frame may ride a socket that is down", async () => {
+    // Each boot after a park is a later platform frame (a replay of the
+    // pre-park frame would rightly be refused — see the park-replay test).
+    let tick = 0;
     const ready = () =>
       capturedOnFrame!({
         type: "simulator.status",
@@ -894,7 +926,7 @@ describe("cloud driver simulator channel", () => {
         status: "ready",
         platform: "ios",
         streamUrl: "https://stream.expo.dev/live",
-        timestamp: T,
+        timestamp: new Date(Date.parse(T) + ++tick * 1000).toISOString(),
       });
     for (const status of ["stopped", "paused", "error"]) {
       ready();
@@ -1012,6 +1044,94 @@ describe("cloud driver simulator channel", () => {
     currentSession();
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
       status: "stopped",
+    });
+  });
+
+  it("refuses the pre-park state coming back on another socket — same timestamp, dead stream", async () => {
+    const ready = {
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/live",
+      timestamp: "2026-09-03T10:00:05.000Z",
+    };
+    capturedOnFrame!(ready);
+    mockBroadcast.mockClear();
+    capturedOnFrame!({ type: "workspace.state", data: { status: "paused" } });
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"status":"stopped"'));
+    mockBroadcast.mockClear();
+    // The other session socket's late copy of the very last platform frame.
+    capturedOnFrame!(ready);
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "stopped",
+    });
+    // A genuinely later boot applies.
+    capturedOnFrame!({ ...ready, status: "starting", timestamp: "2026-09-03T10:00:09.000Z" });
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "starting",
+      streamUrl: "https://stream.expo.dev/live",
+    });
+  });
+
+  it("keeps a status that landed on the socket while the REST read was in flight", async () => {
+    mockGet.mockReturnValueOnce({
+      kind: "cloud",
+      session_id: "deus-session-1",
+      provider_session_id: "agnt-session-1",
+    } as never);
+    let answer!: (value: unknown) => void;
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const read = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/live",
+      timestamp: "2026-09-03T10:00:09.000Z",
+    });
+    // Computed before the frame: older, must not win.
+    answer({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "starting",
+        platform: "ios",
+        timestamp: "2026-09-03T10:00:01.000Z",
+      },
+    });
+    await expect(read).resolves.toMatchObject({
+      status: "ready",
+      streamUrl: "https://stream.expo.dev/live",
+    });
+  });
+
+  it("does not let a stale 'no device' REST answer erase a status that landed meanwhile", async () => {
+    mockGet.mockReturnValueOnce({
+      kind: "cloud",
+      session_id: "deus-session-1",
+      provider_session_id: "agnt-session-1",
+    } as never);
+    let answer!: (value: unknown) => void;
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const read = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "starting",
+      platform: "android",
+      timestamp: "2026-09-03T10:00:09.000Z",
+    });
+    answer({ simulator: null });
+    await expect(read).resolves.toMatchObject({ status: "starting", platform: "android" });
+    currentSession();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "starting",
     });
   });
 

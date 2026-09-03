@@ -46,9 +46,10 @@ export function applyCloudPreviewTemplate(
   broadcast(JSON.stringify({ type: "q:event", event: "cloud:preview", data: event }));
 }
 
-/** The one-shot read behind the `cloudPreview` request: null = known none OR
- *  never told (the platform's REST reads carry no template — only the socket
- *  does, and the Browser tab only exists once that socket is open). */
-export function getCloudPreviewTemplate(workspaceId: string): string | null {
-  return previewTemplates.get(workspaceId) ?? null;
+/** What the cache knows: the template, `null` for a platform-reported "no
+ *  sandbox", `undefined` when never told. The driver's readCloudPreviewTemplate
+ *  answers the `cloudPreview` request with this and, for `undefined`, opens
+ *  the session whose snapshot is the template's only source. */
+export function getCloudPreviewTemplate(workspaceId: string): string | null | undefined {
+  return previewTemplates.get(workspaceId);
 }

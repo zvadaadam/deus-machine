@@ -125,6 +125,9 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   // hidden tab or a booting device must not hold the platform's clock.
   useEffect(() => {
     if (!visible || device.status !== "ready") return;
+    // Looking starts NOW: a device that has already idled through most of the
+    // platform's window must hear it before the first interval tick.
+    cloudSimulatorService.keepAlive(workspaceId).catch(() => {});
     const timer = setInterval(() => {
       cloudSimulatorService.keepAlive(workspaceId).catch(() => {});
     }, KEEP_ALIVE_MS);

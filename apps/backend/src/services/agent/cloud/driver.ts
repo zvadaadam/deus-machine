@@ -42,6 +42,7 @@ import {
 import {
   applyCloudPreviewTemplate,
   forgetCloudPreviewTemplates,
+  getCloudPreviewTemplate,
   type CloudPreviewSource,
 } from "./preview";
 import {
@@ -1271,6 +1272,28 @@ export async function getCloudSimulatorStatus(
     context = { sessionId: null, providerSessionId: null, liveSocket: false };
   }
   return readCloudSimulatorStatus(workspaceId, context);
+}
+
+/** The one-shot read behind `cloudPreview`. The platform's REST carries no
+ *  template — only a session socket does (the running frame, the snapshot) —
+ *  so an unknown template with no socket to bring it (this backend restarted,
+ *  or an identity change closed every socket while the workspace stayed
+ *  selected) is an unanswerable read: open the workspace's session and let its
+ *  snapshot announce the template as cloud:preview. `undefined` tells the
+ *  client to keep waiting rather than render "no sandbox". */
+export function readCloudPreviewTemplate(workspaceId: string): string | null | undefined {
+  const known = getCloudPreviewTemplate(workspaceId);
+  if (known !== undefined) return known;
+  try {
+    void cloudSessionForWorkspace(workspaceId).catch((err) => {
+      console.warn(
+        `[CloudDriver] preview reseed connect failed for ${workspaceId}: ${String(err)}`
+      );
+    });
+  } catch {
+    // Not a cloud workspace, or no session yet: nothing could carry a template.
+  }
+  return undefined;
 }
 
 /** Boot a hosted device. The outcome rides simulator.status (starting → ready,
