@@ -14,7 +14,6 @@ import {
   parseCloudSimulatorPlatform,
 } from "./agent/cloud/driver";
 import { getCloudPreviewTemplate } from "./agent/cloud/preview";
-import { getCloudPreviewTemplate } from "./agent/cloud/preview";
 
 export type RequestResourceName = (typeof REQUEST_RESOURCES)[number];
 
