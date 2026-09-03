@@ -97,6 +97,9 @@ export function MobileLayout({
   const simulatorLive = useCloudSimulatorStore(
     (s) => s.byWorkspace[workspace.id]?.status === "ready"
   );
+  // The layout outlives a workspace switch: a Simulator tab left selected on
+  // a cloud computer must not leave a local workspace with no panel showing.
+  const tab: MobileTab = !cloudSimulator && activeTab === "simulator" ? "chat" : activeTab;
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
@@ -166,10 +169,7 @@ export function MobileLayout({
 
       {/* Content area -- both views always mounted, inactive hidden via display:none */}
       <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-hidden",
-          activeTab !== "chat" && "hidden"
-        )}
+        className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", tab !== "chat" && "hidden")}
         id="mobile-panel-chat"
         role="tabpanel"
         aria-labelledby="mobile-tab-chat"
@@ -186,7 +186,7 @@ export function MobileLayout({
       {/* Code panel — reuses ChangesView in compact mode (no file tree, keeps header) */}
       {!chatOnly && (
         <div
-          className={cn("min-h-0 flex-1 overflow-hidden", activeTab !== "code" && "hidden")}
+          className={cn("min-h-0 flex-1 overflow-hidden", tab !== "code" && "hidden")}
           id="mobile-panel-code"
           role="tabpanel"
           aria-labelledby="mobile-tab-code"
@@ -204,7 +204,7 @@ export function MobileLayout({
           renders; hidden (not unmounted) like the other panels. */}
       {cloudSimulator && (
         <div
-          className={cn("min-h-0 flex-1 overflow-hidden", activeTab !== "simulator" && "hidden")}
+          className={cn("min-h-0 flex-1 overflow-hidden", tab !== "simulator" && "hidden")}
           id="mobile-panel-simulator"
           role="tabpanel"
           aria-labelledby="mobile-tab-simulator"
@@ -215,7 +215,7 @@ export function MobileLayout({
             <CloudSimulatorPanel
               key={workspace.id}
               workspace={workspace}
-              visible={activeTab === "simulator"}
+              visible={tab === "simulator"}
             />
           )}
         </div>
@@ -224,7 +224,7 @@ export function MobileLayout({
       {/* Bottom tab bar — a one-tab bar is noise, so chat-only drops it */}
       {!chatOnly && (
         <MobileTabBar
-          activeTab={activeTab}
+          activeTab={tab}
           onTabChange={setActiveTab}
           fileChangesCount={fileChanges.length}
           showSimulator={cloudSimulator}
