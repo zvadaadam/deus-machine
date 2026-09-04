@@ -1,0 +1,457 @@
+/**
+ * CloudSimulatorPanel — the Simulator tab on a cloud computer.
+ *
+ * A local workspace streams a Mac-hosted simulator over MJPEG; a cloud
+ * computer's device lives in the platform, which hands us a stream URL to
+ * embed. Nothing about it is persisted here: the store is seeded once from the
+ * backend's `cloudSimulator` read (its in-memory latest, else the platform's
+ * REST answer) and the `cloud:simulator` events keep it live — status,
+ * screenshots and the agent's device actions.
+ */
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AlertCircle, Check, Loader2, Play, RotateCcw, Sparkles, X } from "lucide-react";
+import { match } from "ts-pattern";
+import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { cn } from "@/shared/lib/utils";
+import { getErrorMessage } from "@shared/lib/errors";
+import type { Workspace } from "@/shared/types";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import { processImageFiles } from "@/features/session/lib/imageAttachments";
+import { openExternal } from "@/platform/native/window";
+import {
+  COMMAND_TIMEOUT_MS,
+  EXEC_TIMEOUT_MS,
+  cloudSimulatorService,
+} from "./cloudSimulator.service";
+import { useDocumentVisible } from "./useDocumentVisible";
+import {
+  EMPTY_CLOUD_SIM_DEVICE,
+  cloudSimulatorActions,
+  ensureCloudSimulatorSubscription,
+  useCloudSimulatorStore,
+  type CloudSimActionResult,
+  type CloudSimPlatform,
+} from "./cloudSimulatorStore";
+import { describeCloudSimulatorError } from "./cloudSimulatorError";
+import { CloudSimulatorHeader } from "./CloudSimulatorHeader";
+import { cloudSimPhase, type CloudSimPhase } from "./cloudSimulatorPhase";
+import { CloudSimulatorScreen } from "./CloudSimulatorScreen";
+
+interface CloudSimulatorPanelProps {
+  workspace: Workspace;
+  visible: boolean;
+}
+
+/** The platform stops an idle device after 20 minutes; a viewer looking at
+ *  it counts as activity only if it says so. Four minutes is comfortably
+ *  inside that window and far too slow to be polling. */
+const KEEP_ALIVE_MS = 4 * 60 * 1000;
+
+/** How long an unanswered Start/Stop keeps its spinner: as long as the
+ *  command itself may take (its ack can wait on a token mint and the socket
+ *  handshake), plus a moment for the status that follows — shorter, and the
+ *  controls would come back while the first command is still in flight, and
+ *  a duplicate could go out. The backend synthesizes an error status when
+ *  the sidecar can't be reached, so this is only a self-heal for a command
+ *  that got neither an echo nor an error. */
+const BUSY_STALE_MS = COMMAND_TIMEOUT_MS + 5_000;
+
+/** A screenshot request outlives its click for at most the exec round-trip
+ *  (connection setup included): past this, a capture that lands is someone
+ *  else's (the agent's) and must not attach to a forgotten button press. */
+const SCREENSHOT_DEADLINE_MS = EXEC_TIMEOUT_MS;
+
+interface ScreenshotRequest {
+  /** When the button was pressed: only a capture that arrived after it can
+   *  be the answer. */
+  askedAt: number;
+  /** The displayed device's platform when asked — the agent's capture of the
+   *  OTHER platform must not answer this request. */
+  platform: CloudSimPlatform | null;
+  /** The chat active when the button was pressed — the attachment's target,
+   *  whatever chat is active when the capture lands. */
+  sessionId: string | null;
+  /** Set once the platform has answered the exec: its capture precedes the
+   *  answer, so nothing that arrived before the answer is proven wrong, and
+   *  nothing is attached before it. */
+  answered: boolean;
+}
+
+/** How long the copy-link button shows its acknowledgement. */
+const COPIED_MS = 1500;
+
+/** What the idle chip appends to the composer draft. */
+const BUILD_AND_RUN_PROMPT = "Build and run the app on the cloud simulator";
+
+/** The strip shows the tail of the store's ring. */
+const VISIBLE_ACTIONS = 5;
+
+function activeChatSessionId(workspaceId: string): string | null {
+  return workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
+}
+
+/** A platform screenshot (base64 PNG) → a composer image attachment, the
+ *  same path the local panel's screenshot button takes. */
+async function attachScreenshot(sessionId: string, base64: string): Promise<void> {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const file = new File([bytes], `cloud-simulator-${Date.now()}.png`, { type: "image/png" });
+  const processed = await processImageFiles([file]);
+  if (processed.length) sessionComposerActions.addImageAttachments(sessionId, processed);
+}
+
+export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelProps) {
+  const workspaceId = workspace.id;
+  const device = useCloudSimulatorStore(
+    (s) => s.byWorkspace[workspaceId] ?? EMPTY_CLOUD_SIM_DEVICE
+  );
+  const phase = cloudSimPhase(device);
+
+  // A command the wire refused (socket down, no cloud session): the platform
+  // never answers those, so they live here rather than in the store's
+  // platform-owned `error`. Cleared by the next action.
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  // Subscribe before the first paint so no event that lands during mount is
+  // missed; then seed ONCE for a workspace nothing was seen for yet (a live
+  // event that arrives first wins — the seed is a fallback).
+  useLayoutEffect(() => {
+    ensureCloudSimulatorSubscription();
+  }, []);
+  const unknown = device.status === null;
+  // The identity generation is a dependency on purpose: an identity change
+  // while this workspace was still unknown leaves the (frozen, empty) entry
+  // untouched, so nothing else would re-run the seed under the new account.
+  const generation = useCloudSimulatorStore((s) => s.generation);
+  // The workspace's seed epoch too: the platform's `gone` bumps it, which
+  // cancels a read still in flight (its answer may be the device that is
+  // gone) and issues a fresh one.
+  const epoch = useCloudSimulatorStore((s) => s.epochs[workspaceId] ?? 0);
+  useEffect(() => {
+    if (!unknown) return;
+    let cancelled = false;
+    cloudSimulatorService
+      .status(workspaceId)
+      .then((seed) => {
+        if (cancelled) return;
+        // An identity change while the read was in flight: the answer is the
+        // previous account's device (its stream URL) — drop it.
+        if (useCloudSimulatorStore.getState().generation !== generation) return;
+        cloudSimulatorActions.seedIfUnknown(workspaceId, seed, epoch);
+      })
+      .catch(() => {
+        // Unreachable backend: the empty "Start device" state is honest enough.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, unknown, generation, epoch]);
+
+  useEffect(() => {
+    if (!device.busy) return;
+    const timer = setTimeout(() => cloudSimulatorActions.setBusy(workspaceId, null), BUSY_STALE_MS);
+    return () => clearTimeout(timer);
+  }, [device.busy, workspaceId]);
+
+  // Keep-alive only while someone is actually looking at a live device; a
+  // hidden tab or a booting device must not hold the platform's clock.
+  // Every device operation names the DISPLAYED device's platform: with both
+  // an iOS and an Android device running, an unnamed exec is ambiguous and
+  // the sidecar refuses it — silently, for a keep-alive.
+  const platform = device.platform ?? undefined;
+  // "Looking" also needs the document on screen: a minimized window or a
+  // backgrounded page keeps `visible` true, and a keep-alive from there would
+  // hold a device nobody sees — billing — past the platform's idle stop.
+  const documentVisible = useDocumentVisible();
+  useEffect(() => {
+    if (!visible || !documentVisible || device.status !== "ready") return;
+    // Looking starts NOW: a device that has already idled through most of the
+    // platform's window must hear it before the first interval tick.
+    cloudSimulatorService.keepAlive(workspaceId, platform).catch(() => {});
+    const timer = setInterval(() => {
+      cloudSimulatorService.keepAlive(workspaceId, platform).catch(() => {});
+    }, KEEP_ALIVE_MS);
+    return () => clearInterval(timer);
+  }, [visible, documentVisible, device.status, workspaceId, platform]);
+
+  const handleStart = useCallback(() => {
+    setSendError(null);
+    cloudSimulatorActions.setBusy(workspaceId, "starting");
+    // Restart what was running before; a never-known platform lets the
+    // environment's default decide.
+    cloudSimulatorService.start(workspaceId, device.platform ?? undefined).catch((e) => {
+      cloudSimulatorActions.setBusy(workspaceId, null);
+      setSendError(getErrorMessage(e));
+    });
+  }, [workspaceId, device.platform]);
+
+  const handleStop = useCallback(() => {
+    setSendError(null);
+    cloudSimulatorActions.setBusy(workspaceId, "stopping");
+    cloudSimulatorService.stop(workspaceId).catch((e) => {
+      cloudSimulatorActions.setBusy(workspaceId, null);
+      setSendError(getErrorMessage(e));
+    });
+  }, [workspaceId]);
+
+  const handleHome = useCallback(() => {
+    setSendError(null);
+    cloudSimulatorService
+      .exec(workspaceId, "home", undefined, platform)
+      .then((res) => {
+        if (!res.success) setSendError(res.error || "Home failed");
+      })
+      .catch((e) => setSendError(getErrorMessage(e)));
+  }, [workspaceId, platform]);
+
+  // Screenshot is a round-trip through the platform: the exec asks, the PNG
+  // arrives as a screenshot EVENT (fanned out to every viewer, the agent's
+  // captures included) just before the exec's answer. Remember the request —
+  // for which chat, which platform — and once the exec has answered, attach
+  // the latest capture of that platform that arrived after the click. A
+  // request nothing answers expires with the exec timeout.
+  const screenshotRequest = useRef<ScreenshotRequest | null>(null);
+  const attachIfAnswered = useCallback(() => {
+    const request = screenshotRequest.current;
+    if (!request || !request.answered) return;
+    // The store, not the rendered value: the answer's `.then` runs before
+    // React re-renders with the capture that preceded it. The requested
+    // platform's own slot: the agent's capture of the other device, landing
+    // meanwhile, must not stand in for ours.
+    const entry = useCloudSimulatorStore.getState().byWorkspace[workspaceId];
+    const capture = request.platform
+      ? entry?.lastScreenshots[request.platform]
+      : entry?.lastScreenshot;
+    if (!capture || capture.at < request.askedAt) return;
+    screenshotRequest.current = null;
+    if (!request.sessionId) return;
+    attachScreenshot(request.sessionId, capture.base64).catch((e) => {
+      setSendError(`Could not attach the screenshot: ${getErrorMessage(e)}`);
+    });
+  }, [workspaceId]);
+  const handleScreenshot = useCallback(() => {
+    setSendError(null);
+    const request: ScreenshotRequest = {
+      askedAt: Date.now(),
+      platform: platform ?? null,
+      sessionId: activeChatSessionId(workspaceId),
+      answered: false,
+    };
+    screenshotRequest.current = request;
+    // Forget THIS request only — a newer click must keep its own.
+    const forget = () => {
+      if (screenshotRequest.current === request) screenshotRequest.current = null;
+    };
+    const expiry = setTimeout(forget, SCREENSHOT_DEADLINE_MS);
+    cloudSimulatorService
+      .screenshot(workspaceId, platform)
+      .then((res) => {
+        if (!res.success) {
+          clearTimeout(expiry);
+          forget();
+          setSendError(res.error || "Screenshot failed");
+          return;
+        }
+        request.answered = true;
+        attachIfAnswered();
+      })
+      .catch((e) => {
+        clearTimeout(expiry);
+        forget();
+        setSendError(getErrorMessage(e));
+      });
+  }, [workspaceId, platform, attachIfAnswered]);
+
+  const lastScreenshot = device.lastScreenshot;
+  useEffect(() => {
+    attachIfAnswered();
+  }, [lastScreenshot, attachIfAnswered]);
+
+  // The platform's viewer already IS a full device UI (pointer, rotate, logs,
+  // settings); at native size it is the power-user surface, so offer it as a
+  // window rather than cramming it into the tab.
+  const handleOpenExternal = useCallback(() => {
+    if (!device.streamUrl) return;
+    openExternal(device.streamUrl).catch((e) => setSendError(getErrorMessage(e)));
+  }, [device.streamUrl]);
+
+  const [copied, setCopied] = useState(false);
+  const handleCopyLink = useCallback(() => {
+    if (!device.streamUrl) return;
+    navigator.clipboard
+      .writeText(device.streamUrl)
+      .then(() => setCopied(true))
+      .catch((e) => setSendError(getErrorMessage(e)));
+  }, [device.streamUrl]);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const handleAskAgent = useCallback(() => {
+    const sid = activeChatSessionId(workspaceId);
+    if (sid) sessionComposerActions.appendDraft(sid, BUILD_AND_RUN_PROMPT);
+  }, [workspaceId]);
+
+  const header = (
+    <CloudSimulatorHeader
+      device={device}
+      phase={phase}
+      onStart={handleStart}
+      onStop={handleStop}
+      onHome={handleHome}
+      onScreenshot={handleScreenshot}
+      onOpenExternal={handleOpenExternal}
+      onCopyLink={handleCopyLink}
+      copied={copied}
+    />
+  );
+
+  const recentActions = device.actions.slice(-VISIBLE_ACTIONS);
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div className="bg-bg-base flex h-full w-full flex-col">
+        {/*
+          The stage. The platform's stream draws its own device — a realistic
+          iPhone skin around the screen, touch, hardware buttons, rotation —
+          so Deus must not draw a second phone around it (the local simulator
+          keeps its DeviceFrame: that stream is bare pixels). Give the viewer
+          the whole area and it centers and scales the device itself; our
+          controls float above it.
+        */}
+        <div className="bg-bg-muted/30 relative min-h-0 flex-1">
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
+            <div className="pointer-events-auto w-full max-w-[420px]">{header}</div>
+          </div>
+          <div className="absolute inset-0 pt-16">
+            {phase === "live" && device.streamUrl ? (
+              <CloudSimulatorScreen
+                key={device.streamUrl}
+                workspaceId={workspaceId}
+                streamUrl={device.streamUrl}
+                visible={visible}
+              />
+            ) : (
+              <DeviceStateBody
+                // "live" without a URL cannot happen (cloudSimPhase requires the
+                // URL); TS can't see through the helper, so read it as booting.
+                phase={phase === "live" ? "booting" : phase}
+                error={device.error}
+                onStart={handleStart}
+                onAskAgent={handleAskAgent}
+              />
+            )}
+          </div>
+        </div>
+
+        {sendError && (
+          <p
+            role="alert"
+            className="border-border-subtle text-destructive shrink-0 border-t px-3 py-1.5 text-[11px]"
+          >
+            {sendError}
+          </p>
+        )}
+
+        {recentActions.length > 0 && <ActionStrip actions={recentActions} />}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+/** Everything the frame shows when there is no stream to embed. */
+function DeviceStateBody({
+  phase,
+  error,
+  onStart,
+  onAskAgent,
+}: {
+  phase: Exclude<CloudSimPhase, "live">;
+  error: string | null;
+  onStart: () => void;
+  onAskAgent: () => void;
+}) {
+  return (
+    <div className="flex h-full w-full items-center justify-center p-6 text-center">
+      {match(phase)
+        .with("idle", () => (
+          <div className="flex flex-col items-center gap-3">
+            <Button
+              onClick={onStart}
+              className="min-h-11 min-w-[180px] gap-2 rounded-xl transition-[background-color,border-color,color,box-shadow] duration-150"
+            >
+              <Play className="h-4 w-4" />
+              Start device
+            </Button>
+            <button
+              type="button"
+              onClick={onAskAgent}
+              className="bg-bg-muted/55 text-text-muted hover:text-text-secondary hover:bg-bg-muted flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors duration-150"
+            >
+              <Sparkles className="h-3 w-3" />
+              Ask the agent to build and run the app
+            </button>
+          </div>
+        ))
+        .with("booting", () => (
+          <div className="flex flex-col items-center gap-3" aria-live="polite">
+            <Loader2 className="text-primary h-6 w-6 animate-spin" />
+            <p className="text-text-secondary text-sm font-medium">Booting the device</p>
+            <p className="text-text-muted text-xs">About a minute</p>
+          </div>
+        ))
+        .with("stopping", () => (
+          <div className="flex flex-col items-center gap-3" aria-live="polite">
+            <Loader2 className="text-text-muted h-6 w-6 animate-spin" />
+            <p className="text-text-secondary text-sm font-medium">Stopping the device</p>
+          </div>
+        ))
+        .with("error", () => (
+          <div className="flex max-w-[240px] flex-col items-center gap-3" aria-live="polite">
+            <AlertCircle className="text-destructive h-5 w-5" />
+            <p className="text-destructive text-sm leading-5">
+              {describeCloudSimulatorError(error)}
+            </p>
+            <Button
+              variant="outline"
+              onClick={onStart}
+              className="min-h-10 min-w-[136px] gap-2 rounded-xl"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        ))
+        .exhaustive()}
+    </div>
+  );
+}
+
+/** The agent's recent device actions (oldest first) — a thin strip so its
+ *  activity on the device is visible without opening the chat. */
+function ActionStrip({ actions }: { actions: CloudSimActionResult[] }) {
+  return (
+    <div className="border-border-subtle flex h-7 shrink-0 items-center gap-1.5 overflow-hidden border-t px-3">
+      <span className="text-text-muted shrink-0 text-[11px]">Agent</span>
+      {actions.map((action) => (
+        <span
+          key={action.id}
+          title={action.error ?? [action.verb, ...action.args].join(" ")}
+          className={cn(
+            "flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[11px]",
+            action.success
+              ? "bg-bg-muted/50 text-text-secondary"
+              : "bg-destructive-tint text-destructive"
+          )}
+        >
+          {action.success ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+          {action.verb}
+        </span>
+      ))}
+    </div>
+  );
+}

@@ -69,6 +69,12 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
  */
 export const PRELAUNCH_RETIRED_COLUMNS = {
   messages: ["content"],
+  // `workspaces.cloud_preview_template` mirrored the cloud computer's public
+  // host template — a capability URL the platform replays on every connect.
+  // It moved to the driver's memory (services/agent/cloud/preview.ts); a
+  // database that still carries the column also carries a stale capability
+  // URL on disk, so it takes the reset rather than a silent leftover.
+  workspaces: ["cloud_preview_template"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -92,11 +98,6 @@ export const ADDITIVE_COLUMNS = {
     // outcome: a stored inline token past its 1-hour life only shadows the
     // org PAT, so it may be stripped even when the remint result is unknown.
     last_inline_mint_at: "INTEGER",
-    // Cloud workspaces: the sandbox's public host template, e.g.
-    // `https://{{port}}-<sandboxId>.e2b.app` (agnt streams it with the running
-    // workspace state). The Browser tab substitutes a port to preview a dev
-    // server running inside the sandbox.
-    cloud_preview_template: "TEXT",
   },
   sessions: {
     // agnt session id for cloud-workspace sessions (null for local).
@@ -143,7 +144,6 @@ export const SCHEMA_SQL = `
     kind TEXT NOT NULL DEFAULT 'worktree',
     provider_workspace_id TEXT,
     last_inline_mint_at INTEGER,
-    cloud_preview_template TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 

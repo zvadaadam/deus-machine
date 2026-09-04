@@ -298,13 +298,18 @@ export function setQueryRequestInterceptor(fn: QueryRequestInterceptor | null): 
 
 export function sendRequest<T = unknown>(
   resource: string,
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
+  options?: {
+    /** Per-call deadline: a request that legitimately waits on something slow
+     *  (a device verb, a sandbox round-trip) can outlive the default. */
+    timeoutMs?: number;
+  }
 ): Promise<T> {
   const intercepted = requestInterceptor?.(resource, params);
   if (intercepted) return intercepted as Promise<T>;
 
   const id = `req_${++requestCounter}`;
-  const REQUEST_TIMEOUT_MS = 30_000;
+  const REQUEST_TIMEOUT_MS = options?.timeoutMs ?? 30_000;
 
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {

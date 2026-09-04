@@ -33,6 +33,9 @@ import {
 
 interface CloudPreviewPanelProps {
   workspace: Workspace;
+  /** The computer's host template (`{{port}}` placeholder) — from the cloud
+   *  preview store, never from the row. */
+  template: string;
   visible: boolean;
 }
 
@@ -41,15 +44,12 @@ function previewTab(workspaceId: string, url: string): BrowserTabState {
   return { ...tab, title: "Preview", url, currentUrl: url, history: [url], historyIndex: 0 };
 }
 
-export function CloudPreviewPanel({ workspace, visible }: CloudPreviewPanelProps) {
+export function CloudPreviewPanel({ workspace, template, visible }: CloudPreviewPanelProps) {
   const [port, setPort] = useState(() => readStoredPreviewPort(workspace.id));
   const [draft, setDraft] = useState(String(port));
   const [generation, setGeneration] = useState(0);
 
-  const url = useMemo(
-    () => resolveCloudPreviewUrl(workspace.cloud_preview_template, port),
-    [workspace.cloud_preview_template, port]
-  );
+  const url = useMemo(() => resolveCloudPreviewUrl(template, port), [template, port]);
 
   // A tab per (url, generation): the port field and Reload both remount.
   const [tab, setTab] = useState<BrowserTabState | null>(null);

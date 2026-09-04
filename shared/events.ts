@@ -106,6 +106,20 @@ export const REQUEST_RESOURCES = [
   "agentAuth",
   "cloudDirectToken",
   "cloudRepoAccess",
+  // Cloud simulator: one device verb against the workspace's hosted device,
+  // answered by the platform's simulator.exec.response (60 s). Params
+  // { workspaceId, verb, args?, platform? } → { success, exitCode, output, error? }.
+  "cloudSimExec",
+  // Cloud simulator: the workspace's device status right now — the backend's
+  // in-memory latest, else the platform's REST read. Params { workspaceId } →
+  // CloudSimulatorStatus | null. Nothing is persisted: the platform replays its
+  // latest status on every connect and serves it here on demand.
+  "cloudSimulator",
+  // Cloud preview: the computer's public host template right now (the
+  // backend's in-memory latest; the platform's REST carries none). Params
+  // { workspaceId } → string | null. Nothing is persisted: the platform
+  // replays it on every connect.
+  "cloudPreview",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 
@@ -180,6 +194,12 @@ export const COMMAND_NAMES = [
   "runAutomationNow",
   "refreshAutomations",
   "openAutomationRun",
+  // Cloud simulator (a hosted EAS device attached to the workspace's sandbox).
+  // Params { workspaceId, platform? }. Fire-and-forget: the ack only says the
+  // sandbox was reachable; the device outcome rides q:event "cloud:simulator"
+  // (kind status) and the `cloudSimulator` read.
+  "cloudSim:start",
+  "cloudSim:stop",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
@@ -228,6 +248,21 @@ export const PROTOCOL_EVENTS = [
   // refresh clears them. Payload: { workspaceId, sessionId, data } where data
   // is agnt's WorkspaceStateData ({ status, step?, reason?, ... }).
   "cloud:env",
+  // Hosted simulator traffic (simulator.status / .screenshot / .action_result
+  // passthrough from the agnt session socket). Nothing is persisted: the
+  // backend keeps the latest status per workspace in memory (read on demand
+  // through the `cloudSimulator` request); the platform is the truth and
+  // replays it on every connect. Payload: CloudSimulatorEvent.
+  "cloud:simulator",
+  // The cloud computer's public host template changed (a running frame or a
+  // snapshot carried it; null = no sandbox behind the session). Nothing is
+  // persisted — see `cloudPreview`. Payload: CloudPreviewEvent.
+  "cloud:preview",
+  // The desktop's platform identity changed (sign-out, account or org switch):
+  // every device status, screenshot and host template a client cached was the
+  // previous account's. Clients drop their cloud caches; a mounted panel
+  // re-seeds under the new identity. Payload: CloudIdentityEvent.
+  "cloud:identity",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
@@ -272,6 +307,110 @@ export const CloudEnvEventSchema = z.object({
   data: CloudEnvStateSchema,
 });
 export type CloudEnvEvent = z.infer<typeof CloudEnvEventSchema>;
+
+/** "cloud:preview": the computer's host template for a workspace — a
+ *  capability URL template (`https://{{port}}-<sandbox>.e2b.app`) that changes
+ *  with every reprovision; null = the platform reports no sandbox. */
+export const CloudPreviewEventSchema = z.object({
+  workspaceId: z.string(),
+  sessionId: z.string(),
+  template: z.string().nullable(),
+});
+export type CloudPreviewEvent = z.infer<typeof CloudPreviewEventSchema>;
+
+/** q:event "cloud:identity" — the backend's identity generation after the change. */
+export const CloudIdentityEventSchema = z.object({ generation: z.number().int().nonnegative() });
+export type CloudIdentityEvent = z.infer<typeof CloudIdentityEventSchema>;
+
+/**
+ * Hosted simulator events ("cloud:simulator"): the platform's simulator.*
+ * frames passed through minus their `type`. Same tolerance policy as
+ * CloudEnvStateSchema — `status` is an open string and unknown fields pass
+ * through, because the platform deploys continuously while desktop builds
+ * don't; the UI treats an unknown status as in-flight. `platform` stays a
+ * closed enum: the device frame keys off it, and a new
+ * platform is a pin bump on both sides, not a silent addition. (The row
+ * holds none of this — see the `cloud:simulator` note above.)
+ *
+ * `data` is the platform payload verbatim: its `sessionId` (when present) is
+ * the agnt session id; the top-level `sessionId` is the deus session the
+ * frame arrived on. The device belongs to the WORKSPACE — agnt fans its status
+ * out to every session — so consumers key on `workspaceId`.
+ */
+export const CloudSimulatorPlatformSchema = z.enum(["ios", "android"]);
+export type CloudSimulatorPlatform = z.infer<typeof CloudSimulatorPlatformSchema>;
+
+export const CloudSimulatorStatusSchema = z
+  .object({
+    /** starting | ready | stopping | stopped | error (open set) */
+    status: z.string(),
+    /** Absent only on a backend-synthesized error (no sidecar to name a device). */
+    platform: CloudSimulatorPlatformSchema.optional(),
+    easSessionIdentifier: z.string().optional(),
+    /** Live stream URL — a capability URL; never rides a stopped status. */
+    streamUrl: z.string().optional(),
+    /** Platform error text (status "error" only). */
+    error: z.string().optional(),
+    timestamp: z.string().optional(),
+  })
+  .loose();
+export type CloudSimulatorStatus = z.infer<typeof CloudSimulatorStatusSchema>;
+
+export const CloudSimulatorScreenshotSchema = z
+  .object({
+    platform: CloudSimulatorPlatformSchema.optional(),
+    imageBase64: z.string(),
+    /** "png" today. */
+    format: z.string().optional(),
+    timestamp: z.string().optional(),
+  })
+  .loose();
+export type CloudSimulatorScreenshot = z.infer<typeof CloudSimulatorScreenshotSchema>;
+
+export const CloudSimulatorActionResultSchema = z
+  .object({
+    platform: CloudSimulatorPlatformSchema.optional(),
+    /** Device verb (press, fill, scroll, screenshot, …). */
+    verb: z.string(),
+    args: z.array(z.string()).optional(),
+    success: z.boolean(),
+    /** Output excerpt (the platform caps it at 2000 chars). */
+    output: z.string().optional(),
+    error: z.string().optional(),
+    timestamp: z.string().optional(),
+  })
+  .loose();
+export type CloudSimulatorActionResult = z.infer<typeof CloudSimulatorActionResultSchema>;
+
+const cloudSimulatorEnvelope = { workspaceId: z.string(), sessionId: z.string() };
+export const CloudSimulatorEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    ...cloudSimulatorEnvelope,
+    kind: z.literal("status"),
+    data: CloudSimulatorStatusSchema,
+  }),
+  z.object({
+    ...cloudSimulatorEnvelope,
+    kind: z.literal("screenshot"),
+    data: CloudSimulatorScreenshotSchema,
+  }),
+  z.object({
+    ...cloudSimulatorEnvelope,
+    kind: z.literal("action_result"),
+    data: CloudSimulatorActionResultSchema,
+  }),
+  // Backend-synthesized: the platform's REST read reported no device for the
+  // workspace, so every client drops what it held (a device that no longer
+  // exists). No platform frame says this — a socket only ever carries a
+  // status — hence a kind of its own.
+  z.object({
+    ...cloudSimulatorEnvelope,
+    kind: z.literal("gone"),
+    data: z.object({}),
+  }),
+]);
+export type CloudSimulatorEvent = z.infer<typeof CloudSimulatorEventSchema>;
+export type CloudSimulatorEventKind = CloudSimulatorEvent["kind"];
 
 export const FileChangeSchema = z.object({
   workspace_path: z.string(),

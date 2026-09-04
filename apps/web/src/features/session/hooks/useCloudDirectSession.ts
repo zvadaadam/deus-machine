@@ -54,7 +54,7 @@ import {
 } from "../cloud/directSessionRegistry";
 import { questionsFromAskUserQuestionInput } from "@shared/ask-user-question";
 import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
-import { TOOL_CANCEL_EVENT } from "@shared/events";
+import { TOOL_CANCEL_EVENT, type CloudSimulatorEventKind } from "@shared/events";
 import type { QueryClient } from "@tanstack/react-query";
 
 // ---- Question round-trip ----------------------------------------------------
@@ -203,6 +203,27 @@ setToolResponseInterceptor((requestId, result, error) => {
 
 /** A burst of gaps must not become a burst of full-page refetches. */
 const REFETCH_DEBOUNCE_MS = 250;
+
+// ---- Device frames ----------------------------------------------------------
+// The platform's simulator.* frames have no fold surface; the Simulator tab
+// reads them from the `cloud:simulator` store, which the Mac lane feeds through
+// the driver's q:event broadcast. Re-emit them locally so the SAME store serves
+// this lane. Web-direct rows are keyed by the session (the adapter's workspace
+// IS the session), hence workspaceId = sessionId.
+const SIMULATOR_FRAME_KINDS = new Map<string, CloudSimulatorEventKind>([
+  ["simulator.status", "status"],
+  ["simulator.screenshot", "screenshot"],
+  ["simulator.action_result", "action_result"],
+]);
+
+function emitSimulatorEvent(
+  sessionId: string,
+  kind: CloudSimulatorEventKind,
+  frame: Record<string, unknown>
+): void {
+  const { type: _type, ...data } = frame;
+  emitLocalEvent("cloud:simulator", { workspaceId: sessionId, sessionId, kind, data });
+}
 
 /**
  * The direct-agnt lane's own fold set — module state, separate from the Mac
@@ -358,6 +379,27 @@ export function useCloudDirectSession(
         });
         return;
       }
+      // The computer's host template rides workspace.state: one store for every
+      // lane (the Mac lane's driver announces cloud:preview; here the frame is
+      // re-emitted locally, keyed by the session like every web-direct row).
+      if (frame.type === "workspace.state") {
+        const data = (frame.data ?? {}) as { sandboxUrlTemplate?: string | null };
+        if (data.sandboxUrlTemplate !== undefined) {
+          emitLocalEvent("cloud:preview", {
+            workspaceId: sessionId,
+            sessionId,
+            template: data.sandboxUrlTemplate || null,
+          });
+        }
+      }
+      // Device frames: one store for every lane (see emitSimulatorEvent); the
+      // snapshot's latestSimulatorStatus is handled with the snapshot below.
+      const simulatorKind =
+        typeof frame.type === "string" ? SIMULATOR_FRAME_KINDS.get(frame.type) : undefined;
+      if (simulatorKind) {
+        emitSimulatorEvent(sessionId, simulatorKind, frame);
+        return;
+      }
       // The (re)connect snapshot is the truth about a parked question's turn.
       // Live turn: put the overlay back — the frame that asked is consumed
       // (the snapshot won't replay it) and the agent is still waiting on the
@@ -368,7 +410,26 @@ export function useCloudDirectSession(
       // turn B started while disconnected) is stale too: its answer would
       // carry A's request id to an agent already past it.
       if (frame.type === "session.snapshot") {
-        const state = frame.state as { currentTurnId?: unknown } | undefined;
+        const state = frame.state as
+          | {
+              currentTurnId?: unknown;
+              latestSimulatorStatus?: unknown;
+              sandboxUrlTemplate?: string | null;
+            }
+          | undefined;
+        if (typeof state?.sandboxUrlTemplate === "string" || state?.sandboxUrlTemplate === null) {
+          emitLocalEvent("cloud:preview", {
+            workspaceId: sessionId,
+            sessionId,
+            template: state.sandboxUrlTemplate || null,
+          });
+        }
+        // A late joiner learns the device's current status here — the platform
+        // does not replay the status frame it sent before this socket existed.
+        const latestDevice = state?.latestSimulatorStatus;
+        if (latestDevice && typeof latestDevice === "object") {
+          emitSimulatorEvent(sessionId, "status", latestDevice as Record<string, unknown>);
+        }
         const live =
           typeof state?.currentTurnId === "string" && state.currentTurnId
             ? state.currentTurnId

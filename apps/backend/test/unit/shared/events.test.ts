@@ -226,7 +226,10 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("runAutomationNow");
       expect(COMMAND_NAMES).toContain("refreshAutomations");
       expect(COMMAND_NAMES).toContain("openAutomationRun");
-      expect(COMMAND_NAMES).toHaveLength(33);
+      // Cloud simulator (hosted device)
+      expect(COMMAND_NAMES).toContain("cloudSim:start");
+      expect(COMMAND_NAMES).toContain("cloudSim:stop");
+      expect(COMMAND_NAMES).toHaveLength(35);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -258,7 +261,10 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("agentAuth");
       expect(REQUEST_RESOURCES).toContain("cloudDirectToken");
       expect(REQUEST_RESOURCES).toContain("cloudRepoAccess");
-      expect(REQUEST_RESOURCES).toHaveLength(28);
+      expect(REQUEST_RESOURCES).toContain("cloudSimExec");
+      expect(REQUEST_RESOURCES).toContain("cloudSimulator");
+      expect(REQUEST_RESOURCES).toContain("cloudPreview");
+      expect(REQUEST_RESOURCES).toHaveLength(31);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {
@@ -284,7 +290,11 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("apps:stopped");
       // Cloud sandbox environment progress (ephemeral chat stack)
       expect(PROTOCOL_EVENTS).toContain("cloud:env");
-      expect(PROTOCOL_EVENTS).toHaveLength(18);
+      // Hosted simulator passthrough (status also lands on the workspace row)
+      expect(PROTOCOL_EVENTS).toContain("cloud:simulator");
+      expect(PROTOCOL_EVENTS).toContain("cloud:preview");
+      expect(PROTOCOL_EVENTS).toContain("cloud:identity");
+      expect(PROTOCOL_EVENTS).toHaveLength(21);
     });
 
     it("has no deus-dialect part/message event names left", () => {

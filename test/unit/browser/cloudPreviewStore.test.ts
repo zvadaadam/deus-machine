@@ -1,0 +1,140 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const listeners: Array<(event: string, data: unknown) => void> = [];
+const sendRequest = vi.hoisted(() => vi.fn());
+/** What `isConnected()` answers when a subscription registers. */
+const connectedNow = vi.hoisted(() => ({ value: true }));
+const connectionListeners: Array<(connected: boolean) => void> = [];
+vi.mock("@/platform/ws", () => ({
+  onEvent: (cb: (event: string, data: unknown) => void) => {
+    listeners.push(cb);
+    return () => {};
+  },
+  isConnected: () => connectedNow.value,
+  onConnectionChange: (cb: (connected: boolean) => void) => {
+    connectionListeners.push(cb);
+    return () => {};
+  },
+  sendRequest,
+}));
+
+import {
+  cloudPreviewActions,
+  ensureCloudPreviewSubscription,
+  useCloudPreviewStore,
+} from "@/features/browser/cloud/cloudPreviewStore";
+
+const emit = (event: string, data: unknown) => listeners.forEach((l) => l(event, data));
+const template = () => useCloudPreviewStore.getState().byWorkspace["ws-1"];
+
+beforeEach(() => {
+  useCloudPreviewStore.setState({ byWorkspace: {} });
+  ensureCloudPreviewSubscription();
+});
+
+describe("cloudPreviewStore", () => {
+  it("follows cloud:preview announcements, null included (no sandbox behind the session)", () => {
+    emit("cloud:preview", {
+      workspaceId: "ws-1",
+      sessionId: "s-1",
+      template: "https://{{port}}-sb1.e2b.app",
+    });
+    expect(template()).toBe("https://{{port}}-sb1.e2b.app");
+    emit("cloud:preview", { workspaceId: "ws-1", sessionId: "s-1", template: null });
+    expect(template()).toBeNull();
+  });
+
+  it("is referentially stable for a repeated value and ignores malformed frames", () => {
+    cloudPreviewActions.set("ws-1", "u");
+    const first = useCloudPreviewStore.getState();
+    cloudPreviewActions.set("ws-1", "u");
+    expect(useCloudPreviewStore.getState()).toBe(first);
+    emit("cloud:preview", { workspaceId: "ws-1" }); // no sessionId / template
+    expect(template()).toBe("u");
+  });
+
+  it("registers exactly one process-wide listener", () => {
+    ensureCloudPreviewSubscription();
+    ensureCloudPreviewSubscription();
+    expect(listeners).toHaveLength(1);
+  });
+});
+
+describe("cloudPreviewStore on identity change", () => {
+  it("forgets every template on cloud:identity — they were the previous account's sandboxes", () => {
+    cloudPreviewActions.set("ws-1", "https://{{port}}-sb1.e2b.app");
+    cloudPreviewActions.set("ws-2", null);
+    emit("cloud:identity", { generation: 3 });
+    expect(useCloudPreviewStore.getState().byWorkspace).toEqual({});
+  });
+});
+
+describe("cloudPreviewStore reads across an identity change", () => {
+  it("drops a one-shot answer that started before cloud:identity — it was the previous account's", async () => {
+    const { seedCloudPreviewTemplate } = await import("@/features/browser/cloud/cloudPreviewStore");
+    let answer!: (value: unknown) => void;
+    sendRequest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const cancel = seedCloudPreviewTemplate("ws-1");
+    emit("cloud:identity", { generation: 9 });
+    answer("https://{{port}}-accountA.e2b.app");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useCloudPreviewStore.getState().byWorkspace["ws-1"]).toBeUndefined();
+    cancel();
+  });
+
+  it("applies a one-shot answer under an unchanged identity, unless the store learned meanwhile", async () => {
+    const { seedCloudPreviewTemplate } = await import("@/features/browser/cloud/cloudPreviewStore");
+    sendRequest.mockResolvedValueOnce("https://{{port}}-sb1.e2b.app");
+    seedCloudPreviewTemplate("ws-1");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useCloudPreviewStore.getState().byWorkspace["ws-1"]).toBe(
+      "https://{{port}}-sb1.e2b.app"
+    );
+    let answer!: (value: unknown) => void;
+    sendRequest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    seedCloudPreviewTemplate("ws-2");
+    cloudPreviewActions.set("ws-2", "https://{{port}}-live.e2b.app");
+    answer("https://{{port}}-stale.e2b.app");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useCloudPreviewStore.getState().byWorkspace["ws-2"]).toBe(
+      "https://{{port}}-live.e2b.app"
+    );
+  });
+});
+
+describe("cloudPreviewStore across a reconnect", () => {
+  const connection = (connected: boolean) => connectionListeners.forEach((l) => l(connected));
+
+  it("forgets every template after a drop and reconnect, not on the initial connect", () => {
+    cloudPreviewActions.set("ws-1", "https://{{port}}-sb1.e2b.app");
+    const before = useCloudPreviewStore.getState().generation;
+    connection(true);
+    expect(template()).toBe("https://{{port}}-sb1.e2b.app");
+    connection(false);
+    connection(true);
+    expect(useCloudPreviewStore.getState().byWorkspace).toEqual({});
+    expect(useCloudPreviewStore.getState().generation).toBe(before + 1);
+  });
+});
+
+describe("cloudPreviewStore registered while the socket is down", () => {
+  // Last in the file: it re-evaluates the store module, which registers a
+  // second process-wide listener — earlier tests count exactly one.
+  it("treats the connect that follows as a reconnect and starts over", async () => {
+    connectedNow.value = false;
+    vi.resetModules();
+    try {
+      const fresh = await import("@/features/browser/cloud/cloudPreviewStore");
+      fresh.ensureCloudPreviewSubscription();
+      const before = fresh.useCloudPreviewStore.getState().generation;
+      connectionListeners.forEach((l) => l(true));
+      expect(fresh.useCloudPreviewStore.getState().generation).toBe(before + 1);
+    } finally {
+      connectedNow.value = true;
+      vi.resetModules();
+    }
+  });
+});

@@ -34,7 +34,10 @@ import {
   announceCloudEnv,
   getCloudIdentityGeneration,
 } from "./agent/cloud/driver";
-import { getCloudEnvironmentInfo } from "./cloud-environment.service";
+import {
+  getCloudEnvironmentInfo,
+  enableCloudEnvironmentSimulator,
+} from "./cloud-environment.service";
 
 const execFileAsync = promisify(execFile);
 
@@ -273,9 +276,13 @@ export async function refreshWorkspaceGithubToken(workspace: {
   }
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
+    // `.simulator()` on BOTH inline recipes (this re-create and the create in
+    // createCloudWorkspace): agnt converges the DO's environment config on
+    // re-create, so a token refresh without it would silently drop the
+    // hosted-device support the workspace was born with.
     environment: mint.token
-      ? Environment.from("agnt-base").secrets({ github_token: mint.token })
-      : Environment.from("agnt-base"),
+      ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
+      : Environment.from("agnt-base").simulator(),
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
   });
@@ -824,6 +831,19 @@ export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoA
  * once is routine) — and a FAILED refresh's delete branch must never race a
  * successful one's fresh write.
  */
+/** Best-effort: the workspace still provisions without device support, and
+ *  Start then says so. Enabling twice is harmless. */
+async function enableEnvironmentSimulator(environmentId: string): Promise<void> {
+  try {
+    await enableCloudEnvironmentSimulator(environmentId);
+    console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
+  } catch (err) {
+    console.warn(
+      `[CloudInit] could not enable hosted devices on environment ${environmentId}: ${err}`
+    );
+  }
+}
+
 function refreshEnvironmentGithubTokenOnce(
   originUrl: string,
   environmentId: string,
@@ -951,10 +971,22 @@ async function provisionInBackground(
           baseUrl,
           apiKey
         );
+        // Every cloud workspace shows a Simulator tab; an environment saved
+        // before devices existed cannot honour it, and the recipe is captured
+        // at create — so upgrade the environment FIRST (enabling is free:
+        // billing starts with a device). Best-effort: the workspace still
+        // provisions without it, and Start then says so.
+        if (envInfo.simulator === false) {
+          await enableEnvironmentSimulator(envInfo.environmentId);
+        }
       }
       environment = envInfo.name;
     } else {
-      let recipe = Environment.from("agnt-base").repo(originUrl, branch.source);
+      // Every inline cloud workspace can host a device (the Simulator tab):
+      // `.simulator()` only ENABLES it — billing starts when a device starts,
+      // so the flag is free until the tab is used. Named environments (above)
+      // are the agent's own config and are left alone.
+      let recipe = Environment.from("agnt-base").repo(originUrl, branch.source).simulator();
       // Per-repo App token (short-lived, this repo only) rides as a request
       // secret: it drives agnt's git-auth step and NEVER lands in pg — the
       // DO refreshes secrets on every ensure, so each provision gets a

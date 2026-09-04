@@ -11,6 +11,7 @@
 import {
   getEnvironment as agntGetEnvironment,
   listEnvironments as agntListEnvironments,
+  updateEnvironment as agntUpdateEnvironment,
 } from "@deus-hq/sdk";
 import { getCloudConfig } from "./agent/cloud/config";
 import { httpsOrigin } from "@shared/git-origin";
@@ -50,6 +51,9 @@ export interface CloudEnvironmentInfo {
   environmentId?: string;
   /** Env var NAMES the environment declares it needs (values = secrets). */
   requiredEnv?: string[];
+  /** Whether the saved environment enables hosted devices (the Simulator
+   *  tab). Only known for a configured environment. */
+  simulator?: boolean;
   /** Lookup ERRORED (non-404): configured:false here means UNKNOWN, not
    *  absent — state-rewriting callers must not act on it. */
   lookupFailed?: true;
@@ -100,12 +104,14 @@ export async function getCloudEnvironmentInfo(
   if (!config) return { configured: false, name };
   try {
     const env = await agntGetEnvironment(name, { baseUrl: config.baseUrl, apiKey: config.apiKey });
-    const envConfig = (env?.config ?? {}) as { requiredEnv?: string[] };
+    const envConfig = (env?.config ?? {}) as { requiredEnv?: string[]; simulator?: unknown };
     return {
       configured: true,
       name,
       environmentId: env.id,
       ...(Array.isArray(envConfig.requiredEnv) ? { requiredEnv: envConfig.requiredEnv } : {}),
+      // `true` or a config object enables it; absent/false/null does not.
+      simulator: Boolean(envConfig.simulator),
     };
   } catch (err) {
     // Not-found is the normal "no specialized environment" answer. Anything
@@ -126,4 +132,21 @@ export async function getCloudEnvironmentInfo(
     }
     return { configured: false, name };
   }
+}
+
+/**
+ * Enable hosted devices on a saved environment (a partial config merge on
+ * the platform). Every cloud workspace shows a Simulator tab, and enabling
+ * costs nothing until a device starts — but an environment saved before
+ * devices existed cannot honour the tab, and a workspace's recipe is
+ * captured when it is created: the upgrade has to precede the create.
+ */
+export async function enableCloudEnvironmentSimulator(environmentId: string): Promise<void> {
+  const config = getCloudConfig();
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  await agntUpdateEnvironment(environmentId, {
+    config: { simulator: true },
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+  });
 }
