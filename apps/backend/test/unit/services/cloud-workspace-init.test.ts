@@ -105,3 +105,12 @@ describe("isMintFresh — when a connect may skip the token refresh", () => {
     expect(isMintFresh(0, now - minutes(55), now)).toBe(false);
   });
 });
+
+describe("isMintFresh — a caller's own window", () => {
+  it("lets the direct-token route demand a younger mint than the default", () => {
+    const now = Date.parse("2026-09-04T10:00:00.000Z");
+    const twentyMinutesAgo = now - 20 * 60_000;
+    expect(isMintFresh(twentyMinutesAgo, undefined, now)).toBe(true);
+    expect(isMintFresh(twentyMinutesAgo, undefined, now, 10 * 60_000)).toBe(false);
+  });
+});

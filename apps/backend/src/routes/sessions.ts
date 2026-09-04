@@ -110,6 +110,10 @@ app.post("/sessions/:id/stop", (c) => {
  * mints from the browser's own `deus_cloud_session` via agnt's `/dashboard`
  * exchange — same engine, different token source.
  */
+/** The browser renews the direct token at 80% of its hour (48 min); a GitHub
+ *  mint older than this at renewal time would expire before the next one. */
+const DIRECT_TOKEN_FRESH_MS = 10 * 60_000;
+
 app.get("/sessions/:id/cloud-direct-token", async (c) => {
   const db = getDatabase();
   const session = getSessionRaw(db, c.req.param("id"));
@@ -129,7 +133,10 @@ app.get("/sessions/:id/cloud-direct-token", async (c) => {
   // costs the token).
   if (session.workspace_id) {
     try {
-      await refreshWorkspaceGithubTokenIfStale(session.workspace_id);
+      // The browser renews this token at 48 minutes and reconnects its socket
+      // on its own in between: a mint that would not survive until the next
+      // renewal is refreshed now, not then.
+      await refreshWorkspaceGithubTokenIfStale(session.workspace_id, DIRECT_TOKEN_FRESH_MS);
     } catch (err) {
       console.warn(`[Sessions] pre-connect token refresh failed: ${String(err)}`);
     }

@@ -301,10 +301,11 @@ function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
 export function isMintFresh(
   mintedAt: number | null,
   refreshedAt: number | undefined,
-  now: number
+  now: number,
+  freshMs: number = MINT_FRESH_MS
 ): boolean {
   const last = Math.max(refreshedAt ?? 0, mintedAt ?? 0);
-  return last > 0 && now - last < MINT_FRESH_MS;
+  return last > 0 && now - last < freshMs;
 }
 
 /**
@@ -320,7 +321,13 @@ export function isMintFresh(
  * sandbox. A refresh that did not re-create (a lookup blip, an identity
  * change, an indeterminate mint) leaves no mark: the next connect retries.
  */
-export async function refreshWorkspaceGithubTokenIfStale(workspaceId: string): Promise<void> {
+export async function refreshWorkspaceGithubTokenIfStale(
+  workspaceId: string,
+  /** A caller that comes back on its own schedule (the direct-token route's
+   *  48-minute renewal) passes the window it can guarantee, so a mint that
+   *  would expire before its next visit is refreshed now. */
+  freshMs: number = MINT_FRESH_MS
+): Promise<void> {
   const row = getDatabase()
     .prepare(
       "SELECT kind, repository_id, provider_workspace_id, last_inline_mint_at FROM workspaces WHERE id = ?"
@@ -335,7 +342,11 @@ export async function refreshWorkspaceGithubTokenIfStale(workspaceId: string): P
     | undefined;
   if (!row || row.kind !== "cloud" || !row.provider_workspace_id) return;
   const id = row.provider_workspace_id;
-  if (isMintFresh(row.last_inline_mint_at ?? null, tokenRefreshMarks.get(id), Date.now())) return;
+  if (
+    isMintFresh(row.last_inline_mint_at ?? null, tokenRefreshMarks.get(id), Date.now(), freshMs)
+  ) {
+    return;
+  }
   const inFlight = tokenRefreshFlights.get(id);
   if (inFlight) {
     await inFlight;
@@ -885,7 +896,8 @@ async function refreshEnvironmentGithubToken(
         // as expired forever off it.
         const ageMs = Date.now() - Date.parse(secret.updatedAt ?? secret.createdAt ?? "");
         const stillPlausiblyValid = Number.isFinite(ageMs) && ageMs < 55 * 60_000;
-        if (stillPlausiblyValid) break;
+        // Kept, not minted: nothing here may count as fresh.
+        if (stillPlausiblyValid) return false;
       }
       await agntDeleteSecret(secret.id, { baseUrl, apiKey });
       break;
