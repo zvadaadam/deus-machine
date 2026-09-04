@@ -28,7 +28,7 @@ import { getDatabase } from "../lib/database";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
-import { getCloudConfig } from "./agent/cloud/config";
+import { getCloudConfig, setCloudConnectHook } from "./agent/cloud/config";
 import {
   ensureCloudSession,
   announceCloudEnv,
@@ -274,6 +274,67 @@ export async function refreshWorkspaceGithubToken(workspace: {
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
   return true;
 }
+
+/** An App installation token lives an hour; past this age it is treated as
+ *  stale and re-minted before a connect that may wake the sandbox. */
+const MINT_FRESH_MS = 50 * 60_000;
+
+/** When this process last refreshed a workspace's token from a connect — a
+ *  named-environment workspace has no row stamp, and a workspace with a known
+ *  tokenless map (stamp 0) is re-checked no more than once per window. */
+const connectRefreshes = new Map<string, number>();
+
+/** Whether a token minted at `mintedAt` (null = never stamped) or last
+ *  refreshed at `refreshedAt` is still young enough to skip a re-mint. */
+export function isMintFresh(
+  mintedAt: number | null,
+  refreshedAt: number | undefined,
+  now: number
+): boolean {
+  const last = Math.max(refreshedAt ?? 0, mintedAt ?? 0);
+  return last > 0 && now - last < MINT_FRESH_MS;
+}
+
+/**
+ * The driver's pre-connect refresh: re-mint the workspace's GitHub token when
+ * the last mint is older than the token's useful life. A plain connect wakes
+ * a paused sandbox on the platform (session registration resumes it), and a
+ * sandbox the provider discarded meanwhile is reprovisioned from the DO's
+ * stored map — with the token that map holds. The refresh is the same
+ * idempotent re-create the wake and send paths use: a no-op for a running
+ * sandbox, a fresh clone with a fresh token for a gone one. Off the hot path
+ * by the age check; concurrent connects share one attempt.
+ */
+export async function refreshWorkspaceGithubTokenIfStale(workspaceId: string): Promise<void> {
+  const row = getDatabase()
+    .prepare(
+      "SELECT kind, repository_id, provider_workspace_id, last_inline_mint_at FROM workspaces WHERE id = ?"
+    )
+    .get(workspaceId) as
+    | {
+        kind?: string;
+        repository_id?: string | null;
+        provider_workspace_id?: string | null;
+        last_inline_mint_at?: number | null;
+      }
+    | undefined;
+  if (!row || row.kind !== "cloud" || !row.provider_workspace_id) return;
+  const now = Date.now();
+  if (isMintFresh(row.last_inline_mint_at ?? null, connectRefreshes.get(workspaceId), now)) return;
+  connectRefreshes.set(workspaceId, now);
+  try {
+    await refreshWorkspaceGithubToken({
+      repository_id: row.repository_id ?? null,
+      provider_workspace_id: row.provider_workspace_id,
+    });
+  } catch (err) {
+    // Not this attempt's to keep: the next connect retries.
+    if (connectRefreshes.get(workspaceId) === now) connectRefreshes.delete(workspaceId);
+    throw err;
+  }
+}
+
+setCloudConnectHook(refreshWorkspaceGithubTokenIfStale);
 
 /** last_inline_mint_at accessors — see the schema comment for semantics. */
 function getInlineMintStamp(workspace: { provider_workspace_id?: string | null }): number | null {
