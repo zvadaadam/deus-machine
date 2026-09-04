@@ -231,6 +231,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
       });
+      markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
       return true;
     }
     return false;
@@ -272,6 +273,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
     apiKey: config.apiKey,
   });
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
+  markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
   return true;
 }
 
@@ -279,10 +281,17 @@ export async function refreshWorkspaceGithubToken(workspace: {
  *  stale and re-minted before a connect that may wake the sandbox. */
 const MINT_FRESH_MS = 50 * 60_000;
 
-/** When this process last refreshed a workspace's token from a connect — a
- *  named-environment workspace has no row stamp, and a workspace with a known
- *  tokenless map (stamp 0) is re-checked no more than once per window. */
-const connectRefreshes = new Map<string, number>();
+/** Per provider workspace: when this process last refreshed the token
+ *  successfully (any lane — the send and wake paths mark it too, so the
+ *  connect that follows them does not repeat the work), and the refresh in
+ *  flight, which concurrent connects await rather than proceed past. */
+const tokenRefreshMarks = new Map<string, number>();
+const tokenRefreshFlights = new Map<string, Promise<boolean>>();
+
+/** A successful re-create (either lane) counts as a mint for the connect hook. */
+function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
+  tokenRefreshMarks.set(providerWorkspaceId, Date.now());
+}
 
 /** Whether a token minted at `mintedAt` (null = never stamped) or last
  *  refreshed at `refreshedAt` is still young enough to skip a re-mint. */
@@ -296,14 +305,17 @@ export function isMintFresh(
 }
 
 /**
- * The driver's pre-connect refresh: re-mint the workspace's GitHub token when
- * the last mint is older than the token's useful life. A plain connect wakes
- * a paused sandbox on the platform (session registration resumes it), and a
- * sandbox the provider discarded meanwhile is reprovisioned from the DO's
- * stored map — with the token that map holds. The refresh is the same
- * idempotent re-create the wake and send paths use: a no-op for a running
- * sandbox, a fresh clone with a fresh token for a gone one. Off the hot path
- * by the age check; concurrent connects share one attempt.
+ * The pre-connect refresh: re-mint the workspace's GitHub token when the last
+ * mint is older than the token's useful life. A plain connect wakes a paused
+ * sandbox on the platform (session registration resumes it), and a sandbox
+ * the provider discarded meanwhile is reprovisioned from the DO's stored map
+ * — with the token that map holds. The refresh is the same idempotent
+ * re-create the wake and send paths use: a no-op for a running sandbox, a
+ * fresh clone with a fresh token for a gone one. Off the hot path by the age
+ * check. A connect that finds a refresh in flight WAITS for it — proceeding
+ * would register the session, and the registration is what wakes the
+ * sandbox. A refresh that did not re-create (a lookup blip, an identity
+ * change, an indeterminate mint) leaves no mark: the next connect retries.
  */
 export async function refreshWorkspaceGithubTokenIfStale(workspaceId: string): Promise<void> {
   const row = getDatabase()
@@ -319,19 +331,21 @@ export async function refreshWorkspaceGithubTokenIfStale(workspaceId: string): P
       }
     | undefined;
   if (!row || row.kind !== "cloud" || !row.provider_workspace_id) return;
-  const now = Date.now();
-  if (isMintFresh(row.last_inline_mint_at ?? null, connectRefreshes.get(workspaceId), now)) return;
-  connectRefreshes.set(workspaceId, now);
-  try {
-    await refreshWorkspaceGithubToken({
-      repository_id: row.repository_id ?? null,
-      provider_workspace_id: row.provider_workspace_id,
-    });
-  } catch (err) {
-    // Not this attempt's to keep: the next connect retries.
-    if (connectRefreshes.get(workspaceId) === now) connectRefreshes.delete(workspaceId);
-    throw err;
+  const id = row.provider_workspace_id;
+  if (isMintFresh(row.last_inline_mint_at ?? null, tokenRefreshMarks.get(id), Date.now())) return;
+  const inFlight = tokenRefreshFlights.get(id);
+  if (inFlight) {
+    await inFlight;
+    return;
   }
+  const flight = refreshWorkspaceGithubToken({
+    repository_id: row.repository_id ?? null,
+    provider_workspace_id: id,
+  }).finally(() => {
+    if (tokenRefreshFlights.get(id) === flight) tokenRefreshFlights.delete(id);
+  });
+  tokenRefreshFlights.set(id, flight);
+  await flight;
 }
 
 setCloudConnectHook(refreshWorkspaceGithubTokenIfStale);
@@ -825,6 +839,8 @@ function refreshEnvironmentGithubTokenOnce(
  * not adopt (or be blocked by) them.
  */
 export function clearGithubTokenRefreshFlights(): void {
+  tokenRefreshMarks.clear();
+  tokenRefreshFlights.clear();
   githubTokenRefreshes.clear();
 }
 

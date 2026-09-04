@@ -14,6 +14,7 @@ import {
 } from "../db";
 import { invalidate } from "../services/query-engine";
 import { getCloudConfig } from "../services/agent/cloud/config";
+import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
 
 /**
  * Session Routes
@@ -120,6 +121,18 @@ app.get("/sessions/:id/cloud-direct-token", async (c) => {
   const config = getCloudConfig();
   if (!config) {
     throw new ValidationError("Cloud is not configured on this device");
+  }
+
+  // The browser's socket registers the session with the workspace just like
+  // the backend's would — and that registration wakes a paused sandbox. Same
+  // pre-connect refresh, same best-effort contract (a failed refresh never
+  // costs the token).
+  if (session.workspace_id) {
+    try {
+      await refreshWorkspaceGithubTokenIfStale(session.workspace_id);
+    } catch (err) {
+      console.warn(`[Sessions] pre-connect token refresh failed: ${String(err)}`);
+    }
   }
 
   const expiresIn = 60 * 60;
