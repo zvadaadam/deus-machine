@@ -1753,6 +1753,58 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     await vi.waitFor(() => expect(connectCount).toBe(1));
   });
 
+  it("lets a REST read issued later clear a device an earlier-issued read reported meanwhile", async () => {
+    socketOpen = false;
+    let answerA!: (value: unknown) => void;
+    let answerB!: (value: unknown) => void;
+    row();
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerA = resolve)));
+    const a = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    row();
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerB = resolve)));
+    const b = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    // The earlier read answers first: a live device.
+    answerA({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "ready",
+        platform: "ios",
+        stream_url: "https://stream.expo.dev/live",
+        timestamp: T1,
+      },
+    });
+    await expect(a).resolves.toMatchObject({ status: "ready" });
+    mockBroadcast.mockClear();
+    // The later read asked later and saw the device gone: it wins.
+    answerB({ simulator: null });
+    await expect(b).resolves.toBeNull();
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
+    socketOpen = true;
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+  });
+
+  it("forwards a newer identical status — the platform answering a retry the same way", async () => {
+    const error = {
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "error",
+      platform: "ios",
+      error: "EAS GraphQL error: device quota exhausted",
+    };
+    capturedOnFrame!({ ...error, timestamp: T1 });
+    mockBroadcast.mockClear();
+    // A replay of the same frame (the snapshot mirror): silent.
+    capturedOnFrame!({ ...error, timestamp: T1 });
+    expect(mockBroadcast).not.toHaveBeenCalled();
+    // The retry failed the same way, later: the clients must hear it (the
+    // renderer clears "Booting the device" on any status event).
+    capturedOnFrame!({ ...error, timestamp: T2 });
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
+  });
+
   it("drops a frame from a replaced channel that arrives while nothing is registered for the session", async () => {
     const oldOnFrame = capturedOnFrame!;
     socketOpen = false; // the old socket is not open: the next ensure replaces it
