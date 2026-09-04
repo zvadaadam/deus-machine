@@ -19,7 +19,11 @@ vi.mock("../../../src/db", () => ({
   attachParts: vi.fn(),
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({ getCloudConfig: mockGetCloudConfig }));
+vi.mock("../../../src/services/agent/cloud/config", () => ({
+  // The workspace-init service registers its pre-connect refresh at import.
+  setCloudConnectHook: () => {},
+  getCloudConfig: mockGetCloudConfig,
+}));
 vi.mock("@deus-hq/sdk", () => ({ createSessionToken: mockCreateSessionToken }));
 
 import app from "../../../src/routes/sessions";

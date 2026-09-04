@@ -28,7 +28,7 @@ import { getDatabase } from "../lib/database";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
-import { getCloudConfig } from "./agent/cloud/config";
+import { getCloudConfig, setCloudConnectHook } from "./agent/cloud/config";
 import {
   ensureCloudSession,
   announceCloudEnv,
@@ -212,7 +212,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
   }
 
   if (envInfo.configured && envInfo.environmentId) {
-    await refreshEnvironmentGithubTokenOnce(
+    const tokenWritten = await refreshEnvironmentGithubTokenOnce(
       originUrl,
       envInfo.environmentId,
       config.baseUrl,
@@ -231,6 +231,14 @@ export async function refreshWorkspaceGithubToken(workspace: {
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
       });
+      // A secret write that failed leaves the platform resolving the OLD
+      // token: the re-create still restarts a stopped sandbox, but it is no
+      // mint — the next connect must try again.
+      // A mark describes THIS identity's token: an account switch while the
+      // re-create was in flight must not leave the next identity trusting it.
+      if (tokenWritten && generationAtStart === getCloudIdentityGeneration()) {
+        markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+      }
       return true;
     }
     return false;
@@ -272,8 +280,95 @@ export async function refreshWorkspaceGithubToken(workspace: {
     apiKey: config.apiKey,
   });
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
+  if (generationAtStart === getCloudIdentityGeneration()) {
+    markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+  }
   return true;
 }
+
+/** An App installation token lives an hour; past this age it is treated as
+ *  stale and re-minted before a connect that may wake the sandbox. */
+const MINT_FRESH_MS = 50 * 60_000;
+
+/** Per provider workspace: when this process last refreshed the token
+ *  successfully (any lane — the send and wake paths mark it too, so the
+ *  connect that follows them does not repeat the work), and the refresh in
+ *  flight, which concurrent connects await rather than proceed past. */
+const tokenRefreshMarks = new Map<string, number>();
+const tokenRefreshFlights = new Map<string, Promise<boolean>>();
+
+/** A successful re-create (either lane) counts as a mint for the connect hook. */
+function markWorkspaceTokenRefreshed(providerWorkspaceId: string): void {
+  tokenRefreshMarks.set(providerWorkspaceId, Date.now());
+}
+
+/** Whether a token minted at `mintedAt` (null = never stamped) or last
+ *  refreshed at `refreshedAt` is still young enough to skip a re-mint. */
+export function isMintFresh(
+  mintedAt: number | null,
+  refreshedAt: number | undefined,
+  now: number,
+  freshMs: number = MINT_FRESH_MS
+): boolean {
+  const last = Math.max(refreshedAt ?? 0, mintedAt ?? 0);
+  return last > 0 && now - last < freshMs;
+}
+
+/**
+ * The pre-connect refresh: re-mint the workspace's GitHub token when the last
+ * mint is older than the token's useful life. A plain connect wakes a paused
+ * sandbox on the platform (session registration resumes it), and a sandbox
+ * the provider discarded meanwhile is reprovisioned from the DO's stored map
+ * — with the token that map holds. The refresh is the same idempotent
+ * re-create the wake and send paths use: a no-op for a running sandbox, a
+ * fresh clone with a fresh token for a gone one. Off the hot path by the age
+ * check. A connect that finds a refresh in flight WAITS for it — proceeding
+ * would register the session, and the registration is what wakes the
+ * sandbox. A refresh that did not re-create (a lookup blip, an identity
+ * change, an indeterminate mint) leaves no mark: the next connect retries.
+ */
+export async function refreshWorkspaceGithubTokenIfStale(
+  workspaceId: string,
+  /** A caller that comes back on its own schedule (the direct-token route's
+   *  48-minute renewal) passes the window it can guarantee, so a mint that
+   *  would expire before its next visit is refreshed now. */
+  freshMs: number = MINT_FRESH_MS
+): Promise<void> {
+  const row = getDatabase()
+    .prepare(
+      "SELECT kind, repository_id, provider_workspace_id, last_inline_mint_at FROM workspaces WHERE id = ?"
+    )
+    .get(workspaceId) as
+    | {
+        kind?: string;
+        repository_id?: string | null;
+        provider_workspace_id?: string | null;
+        last_inline_mint_at?: number | null;
+      }
+    | undefined;
+  if (!row || row.kind !== "cloud" || !row.provider_workspace_id) return;
+  const id = row.provider_workspace_id;
+  if (
+    isMintFresh(row.last_inline_mint_at ?? null, tokenRefreshMarks.get(id), Date.now(), freshMs)
+  ) {
+    return;
+  }
+  const inFlight = tokenRefreshFlights.get(id);
+  if (inFlight) {
+    await inFlight;
+    return;
+  }
+  const flight = refreshWorkspaceGithubToken({
+    repository_id: row.repository_id ?? null,
+    provider_workspace_id: id,
+  }).finally(() => {
+    if (tokenRefreshFlights.get(id) === flight) tokenRefreshFlights.delete(id);
+  });
+  tokenRefreshFlights.set(id, flight);
+  await flight;
+}
+
+setCloudConnectHook(refreshWorkspaceGithubTokenIfStale);
 
 /** last_inline_mint_at accessors — see the schema comment for semantics. */
 function getInlineMintStamp(workspace: { provider_workspace_id?: string | null }): number | null {
@@ -294,7 +389,7 @@ function setInlineMintStamp(
     .run(stamp, workspace.provider_workspace_id);
 }
 
-const githubTokenRefreshes = new Map<string, Promise<void>>();
+const githubTokenRefreshes = new Map<string, Promise<boolean>>();
 
 /**
  * The explicit wake (chip click). Every outcome must be VISIBLE — a wake that
@@ -734,7 +829,7 @@ function refreshEnvironmentGithubTokenOnce(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<void> {
+): Promise<boolean> {
   // Normalized key: provisioning passes the https form, wake/send pass the
   // raw stored origin — an ssh-form remote would otherwise key two separate
   // flights for the same environment and re-open the delete-vs-write race
@@ -742,7 +837,7 @@ function refreshEnvironmentGithubTokenOnce(
   const key = httpsOrigin(originUrl);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
-  const run: Promise<void> = refreshEnvironmentGithubToken(
+  const run: Promise<boolean> = refreshEnvironmentGithubToken(
     originUrl,
     environmentId,
     baseUrl,
@@ -764,6 +859,8 @@ function refreshEnvironmentGithubTokenOnce(
  * not adopt (or be blocked by) them.
  */
 export function clearGithubTokenRefreshFlights(): void {
+  tokenRefreshMarks.clear();
+  tokenRefreshFlights.clear();
   githubTokenRefreshes.clear();
 }
 
@@ -772,7 +869,7 @@ async function refreshEnvironmentGithubToken(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<void> {
+): Promise<boolean> {
   const mint = await mintRepoInstallationToken(originUrl);
   try {
     if (mint.token) {
@@ -782,7 +879,7 @@ async function refreshEnvironmentGithubToken(
         environmentIds: [environmentId],
         appliesToAll: false,
       });
-      return;
+      return true;
     }
     // Delete the stored env token when deus-cloud POSITIVELY said this
     // identity may not mint — or when the stored token is provably PAST its
@@ -805,15 +902,19 @@ async function refreshEnvironmentGithubToken(
         // as expired forever off it.
         const ageMs = Date.now() - Date.parse(secret.updatedAt ?? secret.createdAt ?? "");
         const stillPlausiblyValid = Number.isFinite(ageMs) && ageMs < 55 * 60_000;
-        if (stillPlausiblyValid) break;
+        // Kept, not minted: nothing here may count as fresh.
+        if (stillPlausiblyValid) return false;
       }
       await agntDeleteSecret(secret.id, { baseUrl, apiKey });
       break;
     }
+    return true;
   } catch (err) {
     // Best-effort, exactly like the inline path: a PAT (or a public repo)
     // still works, and the failure must not block provisioning or a wake.
+    // Reported as not written, so nothing counts it as a fresh mint.
     console.warn(`[CloudInit] environment-scoped GitHub token refresh failed: ${err}`);
+    return false;
   }
 }
 
@@ -832,6 +933,9 @@ async function provisionInBackground(
     const envInfo = await getCloudEnvironmentInfo(originUrl);
     let environment: string | ReturnType<typeof Environment.from>;
     let inlineMintStampAtCreate: number | null = null;
+    // Named lane: whether the environment-scoped token landed before create —
+    // then the connect that follows provisioning has nothing to re-mint.
+    let envTokenWritten = false;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -841,7 +945,12 @@ async function provisionInBackground(
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
       if (envInfo.environmentId) {
-        await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, baseUrl, apiKey);
+        envTokenWritten = await refreshEnvironmentGithubTokenOnce(
+          originUrl,
+          envInfo.environmentId,
+          baseUrl,
+          apiKey
+        );
       }
       environment = envInfo.name;
     } else {
@@ -890,6 +999,7 @@ async function provisionInBackground(
     db.prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
     ).run(provider.id, inlineMintStampAtCreate, workspaceId);
+    if (envTokenWritten) markWorkspaceTokenRefreshed(provider.id);
     invalidate([...WORKSPACE_RESOURCES], {});
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });

@@ -107,6 +107,24 @@ export function setCloudIdentityChangedHandler(handler: () => void): void {
   onIdentityChanged = handler;
 }
 
+/**
+ * Registered by the workspace-init service: runs before the driver opens a
+ * session socket. A connect is one of the things that WAKES a paused sandbox
+ * (the platform resumes on session registration), and a sandbox E2B has since
+ * discarded is then reprovisioned from the DO's stored secret map — whose
+ * GitHub App token expires an hour after it was minted. The hook re-mints
+ * when that is stale; the driver never blocks a connect on it.
+ */
+let beforeConnect: ((workspaceId: string) => Promise<void>) | null = null;
+
+export function setCloudConnectHook(hook: (workspaceId: string) => Promise<void>): void {
+  beforeConnect = hook;
+}
+
+export async function runCloudConnectHook(workspaceId: string): Promise<void> {
+  if (beforeConnect) await beforeConnect(workspaceId);
+}
+
 export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): void {
   const identityBefore = `${runtime.apiKey}|${runtime.baseUrl}|${runtime.orgId}`;
   for (const key of [
