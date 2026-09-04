@@ -212,7 +212,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
   }
 
   if (envInfo.configured && envInfo.environmentId) {
-    await refreshEnvironmentGithubTokenOnce(
+    const tokenWritten = await refreshEnvironmentGithubTokenOnce(
       originUrl,
       envInfo.environmentId,
       config.baseUrl,
@@ -231,7 +231,10 @@ export async function refreshWorkspaceGithubToken(workspace: {
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
       });
-      markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+      // A secret write that failed leaves the platform resolving the OLD
+      // token: the re-create still restarts a stopped sandbox, but it is no
+      // mint — the next connect must try again.
+      if (tokenWritten) markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
       return true;
     }
     return false;
@@ -369,7 +372,7 @@ function setInlineMintStamp(
     .run(stamp, workspace.provider_workspace_id);
 }
 
-const githubTokenRefreshes = new Map<string, Promise<void>>();
+const githubTokenRefreshes = new Map<string, Promise<boolean>>();
 
 /**
  * The explicit wake (chip click). Every outcome must be VISIBLE — a wake that
@@ -809,7 +812,7 @@ function refreshEnvironmentGithubTokenOnce(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<void> {
+): Promise<boolean> {
   // Normalized key: provisioning passes the https form, wake/send pass the
   // raw stored origin — an ssh-form remote would otherwise key two separate
   // flights for the same environment and re-open the delete-vs-write race
@@ -817,7 +820,7 @@ function refreshEnvironmentGithubTokenOnce(
   const key = httpsOrigin(originUrl);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
-  const run: Promise<void> = refreshEnvironmentGithubToken(
+  const run: Promise<boolean> = refreshEnvironmentGithubToken(
     originUrl,
     environmentId,
     baseUrl,
@@ -849,7 +852,7 @@ async function refreshEnvironmentGithubToken(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<void> {
+): Promise<boolean> {
   const mint = await mintRepoInstallationToken(originUrl);
   try {
     if (mint.token) {
@@ -859,7 +862,7 @@ async function refreshEnvironmentGithubToken(
         environmentIds: [environmentId],
         appliesToAll: false,
       });
-      return;
+      return true;
     }
     // Delete the stored env token when deus-cloud POSITIVELY said this
     // identity may not mint — or when the stored token is provably PAST its
@@ -887,10 +890,13 @@ async function refreshEnvironmentGithubToken(
       await agntDeleteSecret(secret.id, { baseUrl, apiKey });
       break;
     }
+    return true;
   } catch (err) {
     // Best-effort, exactly like the inline path: a PAT (or a public repo)
     // still works, and the failure must not block provisioning or a wake.
+    // Reported as not written, so nothing counts it as a fresh mint.
     console.warn(`[CloudInit] environment-scoped GitHub token refresh failed: ${err}`);
+    return false;
   }
 }
 
@@ -909,6 +915,9 @@ async function provisionInBackground(
     const envInfo = await getCloudEnvironmentInfo(originUrl);
     let environment: string | ReturnType<typeof Environment.from>;
     let inlineMintStampAtCreate: number | null = null;
+    // Named lane: whether the environment-scoped token landed before create —
+    // then the connect that follows provisioning has nothing to re-mint.
+    let envTokenWritten = false;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -918,7 +927,12 @@ async function provisionInBackground(
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
       if (envInfo.environmentId) {
-        await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, baseUrl, apiKey);
+        envTokenWritten = await refreshEnvironmentGithubTokenOnce(
+          originUrl,
+          envInfo.environmentId,
+          baseUrl,
+          apiKey
+        );
       }
       environment = envInfo.name;
     } else {
@@ -967,6 +981,7 @@ async function provisionInBackground(
     db.prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
     ).run(provider.id, inlineMintStampAtCreate, workspaceId);
+    if (envTokenWritten) markWorkspaceTokenRefreshed(provider.id);
     invalidate([...WORKSPACE_RESOURCES], {});
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });
