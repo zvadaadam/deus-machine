@@ -34,7 +34,10 @@ import {
   announceCloudEnv,
   getCloudIdentityGeneration,
 } from "./agent/cloud/driver";
-import { getCloudEnvironmentInfo } from "./cloud-environment.service";
+import {
+  getCloudEnvironmentInfo,
+  enableCloudEnvironmentSimulator,
+} from "./cloud-environment.service";
 
 const execFileAsync = promisify(execFile);
 
@@ -733,6 +736,23 @@ export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoA
  * once is routine) — and a FAILED refresh's delete branch must never race a
  * successful one's fresh write.
  */
+/** Environments already upgraded with device support this process — the
+ *  platform's answer is durable, so one PUT per environment is enough. */
+const simulatorEnabledEnvironments = new Set<string>();
+
+async function enableEnvironmentSimulatorOnce(environmentId: string): Promise<void> {
+  if (simulatorEnabledEnvironments.has(environmentId)) return;
+  try {
+    await enableCloudEnvironmentSimulator(environmentId);
+    simulatorEnabledEnvironments.add(environmentId);
+    console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
+  } catch (err) {
+    console.warn(
+      `[CloudInit] could not enable hosted devices on environment ${environmentId}: ${err}`
+    );
+  }
+}
+
 function refreshEnvironmentGithubTokenOnce(
   originUrl: string,
   environmentId: string,
@@ -846,6 +866,14 @@ async function provisionInBackground(
       // secret just before create; agnt resolves it by environment id.
       if (envInfo.environmentId) {
         await refreshEnvironmentGithubTokenOnce(originUrl, envInfo.environmentId, baseUrl, apiKey);
+        // Every cloud workspace shows a Simulator tab; an environment saved
+        // before devices existed cannot honour it, and the recipe is captured
+        // at create — so upgrade the environment FIRST (enabling is free:
+        // billing starts with a device). Best-effort: the workspace still
+        // provisions without it, and Start then says so.
+        if (envInfo.simulator === false) {
+          await enableEnvironmentSimulatorOnce(envInfo.environmentId);
+        }
       }
       environment = envInfo.name;
     } else {

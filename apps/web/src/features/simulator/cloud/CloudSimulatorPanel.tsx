@@ -21,7 +21,7 @@ import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayo
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { processImageFiles } from "@/features/session/lib/imageAttachments";
 import { openExternal } from "@/platform/native/window";
-import { cloudSimulatorService } from "./cloudSimulator.service";
+import { EXEC_TIMEOUT_MS, cloudSimulatorService } from "./cloudSimulator.service";
 import {
   captureAnswersAsk,
   parsePlatformTime,
@@ -54,10 +54,10 @@ const KEEP_ALIVE_MS = 4 * 60 * 1000;
  *  a self-heal for a command that got neither an echo nor an error. */
 const BUSY_STALE_MS = 60 * 1000;
 
-/** A screenshot request outlives its click for at most the exec round-trip:
- *  past this, a capture that lands is someone else's (the agent's) and must
- *  not attach to a forgotten button press. */
-const SCREENSHOT_DEADLINE_MS = 65 * 1000;
+/** A screenshot request outlives its click for at most the exec round-trip
+ *  (connection setup included): past this, a capture that lands is someone
+ *  else's (the agent's) and must not attach to a forgotten button press. */
+const SCREENSHOT_DEADLINE_MS = EXEC_TIMEOUT_MS;
 
 interface ScreenshotRequest extends ScreenshotAsk {
   /** The chat active when the button was pressed — the attachment's target,

@@ -10,8 +10,13 @@
 
 import { sendCommand, sendRequest } from "@/platform/ws";
 
-/** Backend cloudSimExec deadline (60 s) plus a margin for the wire. */
-const EXEC_TIMEOUT_MS = 65_000;
+/** How long a device operation may take end to end: without a session
+ *  socket the backend first mints a token and waits up to READY_DEADLINE_MS
+ *  (30 s) for the handshake, THEN starts its own 60 s exec deadline — the
+ *  client must outlast both, or a slow but valid operation rejects here
+ *  while the backend goes on to succeed (and a screenshot's capture, landing
+ *  after the request was forgotten, attaches to nothing). */
+export const EXEC_TIMEOUT_MS = 100_000;
 /** Start/Stop are acked once the driver has a session socket to send on.
  *  Without one it mints a token and waits up to READY_DEADLINE_MS (30 s) for
  *  the handshake first — the ack must outlast that, or the panel reports a
