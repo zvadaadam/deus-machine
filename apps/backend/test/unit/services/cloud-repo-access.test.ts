@@ -14,7 +14,11 @@ const { mockGetCloudConfig, mockGetRepositoryById } = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn(() => ({})) }));
 vi.mock("../../../src/db", () => ({ getRepositoryById: mockGetRepositoryById }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({ getCloudConfig: mockGetCloudConfig }));
+vi.mock("../../../src/services/agent/cloud/config", () => ({
+  // The workspace-init service registers its pre-connect refresh at import.
+  setCloudConnectHook: () => {},
+  getCloudConfig: mockGetCloudConfig,
+}));
 vi.mock("../../../src/services/workspace.service", () => ({ generateUniqueName: vi.fn() }));
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   ensureCloudSession: vi.fn(),

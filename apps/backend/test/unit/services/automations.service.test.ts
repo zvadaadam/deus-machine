@@ -50,6 +50,8 @@ const {
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
+  // The workspace-init service registers its pre-connect refresh at import.
+  setCloudConnectHook: () => {},
   getCloudConfig: mockGetCloudConfig,
 }));
 vi.mock("../../../src/services/cloud-environment.service", async (importOriginal) => ({

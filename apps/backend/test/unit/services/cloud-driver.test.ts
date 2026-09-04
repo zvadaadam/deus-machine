@@ -38,10 +38,18 @@ vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
 }));
 
 let identityChanged: (() => void) | null = null;
+// Hoisted: the config mock's factory runs during the driver import, before
+// module-level consts initialise.
+const { mockRunCloudConnectHook } = vi.hoisted(() => ({
+  mockRunCloudConnectHook: vi.fn(async (_workspaceId: string) => {}),
+}));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
+  // The workspace-init service registers its pre-connect refresh at import.
+  setCloudConnectHook: () => {},
   setCloudIdentityChangedHandler: (fn: () => void) => {
     identityChanged = fn;
   },
+  runCloudConnectHook: (workspaceId: string) => mockRunCloudConnectHook(workspaceId),
   getCloudConfig: () => ({
     baseUrl: "http://agnt.test",
     apiKey: "agnt_sk_test_x",
@@ -1895,5 +1903,32 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     await next;
     // Nothing from the discarded channel reached the cache.
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+  });
+});
+
+describe("cloud driver pre-connect hook", () => {
+  it("runs the workspace-init hook for the session's workspace before minting the session token", async () => {
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    mockRunCloudConnectHook.mockClear();
+    mockCreateSessionToken.mockClear();
+    const order: string[] = [];
+    mockRunCloudConnectHook.mockImplementationOnce(async () => {
+      order.push("hook");
+    });
+    mockCreateSessionToken.mockImplementationOnce(async () => {
+      order.push("token");
+      return { token: "session-jwt" };
+    });
+    await ensureCloudSession("deus-session-1");
+    expect(mockRunCloudConnectHook).toHaveBeenCalledWith("deus-ws-1");
+    expect(order).toEqual(["hook", "token"]);
+  });
+
+  it("never lets a failed refresh cost the connect", async () => {
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    mockRunCloudConnectHook.mockRejectedValueOnce(new Error("deus-cloud unreachable"));
+    await expect(ensureCloudSession("deus-session-1")).resolves.toBeTruthy();
   });
 });

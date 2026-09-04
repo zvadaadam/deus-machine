@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
+import { isMintFresh } from "../../../src/services/cloud-workspace-init.service";
 
 describe("httpsOrigin", () => {
   it("converts scp-style ssh origins", () => {
@@ -83,5 +84,33 @@ describe("githubRepoSlug", () => {
     expect(githubRepoSlug("https://github.com.evil.example/a/b")).toBeNull();
     expect(githubRepoSlug("https://gitlab.com/a/b")).toBeNull();
     expect(githubRepoSlug("not a url")).toBeNull();
+  });
+});
+
+describe("isMintFresh — when a connect may skip the token refresh", () => {
+  const now = Date.parse("2026-09-04T10:00:00.000Z");
+  const minutes = (n: number) => n * 60_000;
+
+  it("treats a mint younger than fifty minutes as fresh, an older one as stale", () => {
+    expect(isMintFresh(now - minutes(10), undefined, now)).toBe(true);
+    expect(isMintFresh(now - minutes(49), undefined, now)).toBe(true);
+    expect(isMintFresh(now - minutes(51), undefined, now)).toBe(false);
+    expect(isMintFresh(now - minutes(13 * 60), undefined, now)).toBe(false);
+  });
+
+  it("counts this process's own refresh when the row carries no stamp (named environment, legacy row, known tokenless)", () => {
+    expect(isMintFresh(null, undefined, now)).toBe(false);
+    expect(isMintFresh(0, undefined, now)).toBe(false);
+    expect(isMintFresh(null, now - minutes(5), now)).toBe(true);
+    expect(isMintFresh(0, now - minutes(55), now)).toBe(false);
+  });
+});
+
+describe("isMintFresh — a caller's own window", () => {
+  it("lets the direct-token route demand a younger mint than the default", () => {
+    const now = Date.parse("2026-09-04T10:00:00.000Z");
+    const twentyMinutesAgo = now - 20 * 60_000;
+    expect(isMintFresh(twentyMinutesAgo, undefined, now)).toBe(true);
+    expect(isMintFresh(twentyMinutesAgo, undefined, now, 10 * 60_000)).toBe(false);
   });
 });

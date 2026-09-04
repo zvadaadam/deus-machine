@@ -51,7 +51,7 @@ import {
   questionsFromAskUserQuestionInput,
   isCancelledAnswers,
 } from "@shared/ask-user-question";
-import { getCloudConfig, setCloudIdentityChangedHandler } from "./config";
+import { getCloudConfig, runCloudConnectHook, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import type { AgentEventHandler } from "../event-handler";
 import { relay, cancelSessionRelays } from "../tool-relay";
@@ -852,6 +852,18 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
   // its metadata anyway. Idempotent and best-effort; discovery merely degrades
   // to its claude default if it's lost.
   void pushCloudSessionMetadata(row.provider_session_id, { harness: row.agent_harness }, config);
+  // Opening this socket can be what wakes a paused sandbox — and a sandbox
+  // the provider has discarded meanwhile comes back through a fresh clone,
+  // with whatever GitHub token the platform still holds for it. Give the
+  // workspace-init service the chance to re-mint a stale one first; a failed
+  // refresh must not cost the connect (the send and wake paths refresh too).
+  try {
+    await runCloudConnectHook(row.workspace_id);
+  } catch (err) {
+    console.warn(
+      `[CloudDriver] pre-connect token refresh failed for ${row.workspace_id}: ${String(err)}`
+    );
+  }
   const { token } = await createSessionToken(row.provider_session_id, {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
