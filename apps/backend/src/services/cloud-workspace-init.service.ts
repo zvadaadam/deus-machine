@@ -234,7 +234,11 @@ export async function refreshWorkspaceGithubToken(workspace: {
       // A secret write that failed leaves the platform resolving the OLD
       // token: the re-create still restarts a stopped sandbox, but it is no
       // mint — the next connect must try again.
-      if (tokenWritten) markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+      // A mark describes THIS identity's token: an account switch while the
+      // re-create was in flight must not leave the next identity trusting it.
+      if (tokenWritten && generationAtStart === getCloudIdentityGeneration()) {
+        markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+      }
       return true;
     }
     return false;
@@ -276,7 +280,9 @@ export async function refreshWorkspaceGithubToken(workspace: {
     apiKey: config.apiKey,
   });
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
-  markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+  if (generationAtStart === getCloudIdentityGeneration()) {
+    markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
+  }
   return true;
 }
 
