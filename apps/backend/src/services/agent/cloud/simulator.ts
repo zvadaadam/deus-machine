@@ -44,6 +44,13 @@ interface CloudSimulatorDevice {
    *  would erase the live stream URL and leave the tab booting while the
    *  device runs — and bills). null until a frame named a time. */
   at: number | null;
+  /** Where the entry came from: a socket frame (the platform's push) or a
+   *  REST answer — and which read wrote it. A REST read that finds an entry
+   *  rewritten meanwhile must know whether a frame overtook it (keep) or an
+   *  EARLIER-issued read merely answered late (this later read still wins,
+   *  pruning included). */
+  origin: "socket" | "rest";
+  restIssue: number | null;
   /** Set by a backend-synthesized park (the sandbox died under the device).
    *  While it holds, a frame with the SAME timestamp as `at` is the other
    *  socket's late copy of the pre-park state — a dead stream URL — and is
@@ -302,8 +309,15 @@ export function applyCloudSimulatorStatus(
     sessionId: source.sessionId,
     status: data,
     at: at ?? cached?.at ?? null,
+    origin: "socket",
+    restIssue: null,
     parked: false,
   });
+  // A platformless error is the platform's word about a COMMAND (a start it
+  // could not attribute to a device), kept under "unknown" until a device
+  // speaks: any platform-bearing status supersedes it — left behind, it
+  // would outrank the device's later `stopped` and show as an error again.
+  if (key !== "unknown") devices.delete("unknown");
   bumpSocketRevision(source.workspaceId);
   announcePrimary(source.workspaceId, source.sessionId, before);
 }
@@ -355,7 +369,14 @@ export function parkCloudSimulator(workspaceId: string): void {
     // clock and must never gate the platform's own frames (a resumed
     // sandbox's `starting` carries the platform's time, whatever this clock
     // says).
-    devices.set(key, { sessionId: device.sessionId, status: stopped, at: device.at, parked: true });
+    devices.set(key, {
+      sessionId: device.sessionId,
+      status: stopped,
+      at: device.at,
+      origin: "socket",
+      restIssue: null,
+      parked: true,
+    });
   }
   if (sessionId === null) return; // everything was already stopped
   bumpSocketRevision(workspaceId);
@@ -431,6 +452,11 @@ export async function readCloudSimulatorStatus(
   const superseded =
     socketRevisionOf(workspaceId) !== socketRevisionBefore || restAnsweredAfter(workspaceId, issue);
   const source: CloudSimulatorSource = { workspaceId, sessionId: context.sessionId };
+  // An entry rewritten while this read was in flight was overtaken only if a
+  // socket frame wrote it, or a read issued AFTER this one did; an
+  // earlier-issued read answering late does not outrank this later read.
+  const overtaken = (key: PlatformKey, entry: CloudSimulatorDevice): boolean =>
+    before.get(key) !== entry && (entry.origin === "socket" || (entry.restIssue ?? 0) > issue);
   if (statuses.length === 0) {
     if (superseded) return primaryOf(devices)?.status ?? null;
     markRestAnswered(workspaceId, issue);
@@ -453,15 +479,24 @@ export async function readCloudSimulatorStatus(
     // may have declared the device gone (the map is emptied, not marked) —
     // this older answer must not bring it back.
     if (!live && superseded) continue;
-    // A frame for THIS platform landed meanwhile: only a strictly newer
-    // answer may replace it.
-    const thisLanded = live !== null && before.get(key) !== live;
+    // A frame for THIS platform landed meanwhile (or a later read wrote it):
+    // only a strictly newer answer may replace it.
+    const thisLanded = live !== null && overtaken(key, live);
     if (live && thisLanded && !(at !== null && live.at !== null && at > live.at)) continue;
     // The same gate the socket path applies: a REST mirror of the pre-park
     // frame (same timestamp) must not resurrect a dead stream URL, and an
     // older answer never wins.
     if (live && isNotNewerThanCached(at, live)) continue;
-    devicesOf(workspaceId).set(key, { sessionId: context.sessionId, status, at, parked: false });
+    const target = devicesOf(workspaceId);
+    target.set(key, {
+      sessionId: context.sessionId,
+      status,
+      at,
+      origin: "rest",
+      restIssue: issue,
+      parked: false,
+    });
+    if (key !== "unknown") target.delete("unknown");
     applied = true;
   }
   // A per-platform mirror is the platform's COMPLETE list: a cached device it
@@ -473,7 +508,7 @@ export async function readCloudSimulatorStatus(
   if (Array.isArray(detail.simulators) && !superseded && held) {
     const named = new Set(statuses.map(platformKey));
     for (const [key, entry] of [...held]) {
-      if (named.has(key) || before.get(key) !== entry) continue;
+      if (named.has(key) || overtaken(key, entry)) continue;
       held.delete(key);
       pruned = true;
     }

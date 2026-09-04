@@ -70,6 +70,12 @@ interface CloudSimulatorStore {
    *  under an earlier generation answers for the previous account and is
    *  dropped (see CloudSimulatorPanel's seed). */
   generation: number;
+  /** Per-workspace seed epochs: `forget` (the platform's `gone`) bumps one, so
+   *  a one-shot read that was in flight — and may still answer with the
+   *  device that is gone — no longer counts for that workspace. Bumped even
+   *  when nothing was cached: the read that would restore the dead stream is
+   *  exactly the one nothing else cancels. */
+  epochs: Record<string, number>;
 }
 
 const MAX_ACTIONS = 20;
@@ -78,6 +84,7 @@ let nextActionId = 1;
 export const useCloudSimulatorStore = create<CloudSimulatorStore>()(() => ({
   byWorkspace: {},
   generation: 0,
+  epochs: {},
 }));
 
 /** Apply a recipe to one workspace's entry; an unchanged result leaves the
@@ -141,8 +148,15 @@ export const cloudSimulatorActions = {
   /** The one-shot read is a FALLBACK for a workspace nothing was seen for yet:
    *  anything a live event already put here is newer by construction and wins.
    *  A null answer (no device was ever started) leaves the entry empty. */
-  seedIfUnknown(workspaceId: string, seed: CloudSimSeed | null): void {
+  seedIfUnknown(workspaceId: string, seed: CloudSimSeed | null, epoch?: number): void {
     if (!seed) return;
+    // The read was issued under an earlier epoch: a `gone` has landed since,
+    // and the answer is about the device it removed.
+    if (
+      epoch !== undefined &&
+      epoch !== (useCloudSimulatorStore.getState().epochs[workspaceId] ?? 0)
+    )
+      return;
     const next = statusFields({
       status: seed.status,
       platform: seed.platform,
@@ -174,9 +188,11 @@ export const cloudSimulatorActions = {
    *  (screenshots and actions included — they were that device's). */
   forget(workspaceId: string): void {
     useCloudSimulatorStore.setState((state) => {
-      if (!(workspaceId in state.byWorkspace)) return state;
       const { [workspaceId]: _gone, ...rest } = state.byWorkspace;
-      return { byWorkspace: rest };
+      return {
+        byWorkspace: rest,
+        epochs: { ...state.epochs, [workspaceId]: (state.epochs[workspaceId] ?? 0) + 1 },
+      };
     });
   },
 

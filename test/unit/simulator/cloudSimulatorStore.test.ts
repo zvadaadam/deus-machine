@@ -347,6 +347,27 @@ describe("cloudSimulatorStore across a reconnect", () => {
   });
 });
 
+describe("cloudSimulatorStore — a gone invalidates the seed in flight", () => {
+  it("bumps the workspace's seed epoch on gone, even with nothing cached, and ignores a stale seed", () => {
+    // Epochs are never reset (they only ever move forward): count from here.
+    const epochAtAsk = useCloudSimulatorStore.getState().epochs[WS] ?? 0;
+    expect(device()).toBeUndefined();
+    // The platform says: no device (a later read saw it gone).
+    emit("cloud:simulator", { workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
+    expect(useCloudSimulatorStore.getState().epochs[WS]).toBe(epochAtAsk + 1);
+    // The earlier read's answer lands afterwards: the dead stream must not come back.
+    cloudSimulatorActions.seedIfUnknown(WS, seed(), epochAtAsk);
+    expect(device()).toBeUndefined();
+    // A read issued after the gone answers for the current epoch.
+    cloudSimulatorActions.seedIfUnknown(
+      WS,
+      seed({ status: "starting", streamUrl: null }),
+      epochAtAsk + 1
+    );
+    expect(device().status).toBe("starting");
+  });
+});
+
 describe("cloudSimulatorStore — screenshots remember their platform", () => {
   it("keeps the platform a capture came from, so a request for the other device can ignore it", () => {
     emit("cloud:simulator", {

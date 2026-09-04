@@ -1849,6 +1849,92 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     socketOpen = true;
   });
 
+  it("lets a later complete REST list prune what an earlier-issued read rewrote meanwhile", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios",
+      timestamp: T1,
+    });
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "android",
+      timestamp: T1,
+    });
+    socketOpen = false;
+    let answerA!: (value: unknown) => void;
+    let answerB!: (value: unknown) => void;
+    row();
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerA = resolve)));
+    const a = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    row();
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerB = resolve)));
+    const b = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    // The earlier read answers first and rewrites both entries (newer stamps).
+    answerA({
+      simulators: [
+        {
+          session_id: "agnt-session-1",
+          status: "ready",
+          platform: "ios",
+          stream_url: "https://stream.expo.dev/ios",
+          timestamp: T2,
+        },
+        { session_id: "agnt-session-1", status: "stopped", platform: "android", timestamp: T2 },
+      ],
+    });
+    await expect(a).resolves.toMatchObject({ status: "ready", platform: "ios" });
+    mockBroadcast.mockClear();
+    // The later read's complete list no longer names ios: it is gone, and the
+    // earlier read's rewrite must not shield it the way a socket frame would.
+    answerB({
+      simulators: [
+        { session_id: "agnt-session-1", status: "stopped", platform: "android", timestamp: T2 },
+      ],
+    });
+    await expect(b).resolves.toMatchObject({ status: "stopped", platform: "android" });
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
+    socketOpen = true;
+  });
+
+  it("drops a platformless error once a device speaks — it must not outrank the device's later stopped", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "error",
+      error: "SIDECAR_NOT_CONNECTED: sandbox is not connected — retry when running",
+      timestamp: T1,
+    });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({ status: "error" });
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "starting",
+      platform: "ios",
+      timestamp: T2,
+    });
+    mockBroadcast.mockClear();
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "ios",
+      timestamp: "2026-09-03T10:10:00.000Z",
+    });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "stopped",
+      platform: "ios",
+    });
+    const last = JSON.parse(mockBroadcast.mock.calls.at(-1)![0] as string);
+    expect(last.data.data).toMatchObject({ status: "stopped", platform: "ios" });
+  });
+
   it("forwards a newer identical status — the platform answering a retry the same way", async () => {
     const error = {
       type: "simulator.status",

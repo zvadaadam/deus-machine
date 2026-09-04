@@ -110,6 +110,10 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   // while this workspace was still unknown leaves the (frozen, empty) entry
   // untouched, so nothing else would re-run the seed under the new account.
   const generation = useCloudSimulatorStore((s) => s.generation);
+  // The workspace's seed epoch too: the platform's `gone` bumps it, which
+  // cancels a read still in flight (its answer may be the device that is
+  // gone) and issues a fresh one.
+  const epoch = useCloudSimulatorStore((s) => s.epochs[workspaceId] ?? 0);
   useEffect(() => {
     if (!unknown) return;
     let cancelled = false;
@@ -120,7 +124,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
         // An identity change while the read was in flight: the answer is the
         // previous account's device (its stream URL) — drop it.
         if (useCloudSimulatorStore.getState().generation !== generation) return;
-        cloudSimulatorActions.seedIfUnknown(workspaceId, seed);
+        cloudSimulatorActions.seedIfUnknown(workspaceId, seed, epoch);
       })
       .catch(() => {
         // Unreachable backend: the empty "Start device" state is honest enough.
@@ -128,7 +132,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, unknown, generation]);
+  }, [workspaceId, unknown, generation, epoch]);
 
   useEffect(() => {
     if (!device.busy) return;
