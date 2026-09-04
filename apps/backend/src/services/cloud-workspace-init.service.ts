@@ -736,21 +736,29 @@ export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoA
  * once is routine) — and a FAILED refresh's delete branch must never race a
  * successful one's fresh write.
  */
-/** Environments already upgraded with device support this process — the
- *  platform's answer is durable, so one PUT per environment is enough. */
-const simulatorEnabledEnvironments = new Set<string>();
+/** Upgrades in flight, per environment — concurrent provisions share one
+ *  PUT. Nothing is remembered past that: the platform's fresh lookup decides
+ *  each time (an environment edited back to no simulator gets enabled again
+ *  on its next workspace), and enabling twice is harmless. */
+const simulatorUpgrades = new Map<string, Promise<void>>();
 
-async function enableEnvironmentSimulatorOnce(environmentId: string): Promise<void> {
-  if (simulatorEnabledEnvironments.has(environmentId)) return;
-  try {
-    await enableCloudEnvironmentSimulator(environmentId);
-    simulatorEnabledEnvironments.add(environmentId);
-    console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
-  } catch (err) {
-    console.warn(
-      `[CloudInit] could not enable hosted devices on environment ${environmentId}: ${err}`
-    );
-  }
+function enableEnvironmentSimulatorOnce(environmentId: string): Promise<void> {
+  const inFlight = simulatorUpgrades.get(environmentId);
+  if (inFlight) return inFlight;
+  const run = enableCloudEnvironmentSimulator(environmentId)
+    .then(() => {
+      console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
+    })
+    .catch((err) => {
+      console.warn(
+        `[CloudInit] could not enable hosted devices on environment ${environmentId}: ${err}`
+      );
+    })
+    .finally(() => {
+      if (simulatorUpgrades.get(environmentId) === run) simulatorUpgrades.delete(environmentId);
+    });
+  simulatorUpgrades.set(environmentId, run);
+  return run;
 }
 
 function refreshEnvironmentGithubTokenOnce(

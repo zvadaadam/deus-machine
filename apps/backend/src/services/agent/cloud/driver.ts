@@ -38,6 +38,7 @@ import {
   type CloudSimulatorExecResult,
   type CloudSimulatorReadContext,
   type CloudSimulatorSource,
+  reconcileCloudSimulatorMirror,
 } from "./simulator";
 import {
   applyCloudPreviewTemplate,
@@ -381,13 +382,21 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // the single latest status, which then stands in for the workspace.
       // Applied BEFORE the sandbox-status branches below, so a parked sandbox
       // overrides a mirror older than the park.
-      const mirrors = Array.isArray(state.latestSimulatorStatuses)
-        ? state.latestSimulatorStatuses
-        : [state.latestSimulatorStatus];
-      for (const mirror of mirrors) {
-        if (mirror && typeof mirror === "object") {
-          applyCloudSimulatorStatus(frameSource(session), mirror as Record<string, unknown>);
-        }
+      if (Array.isArray(state.latestSimulatorStatuses)) {
+        // The complete per-platform list: what it omits, this session no
+        // longer has — reconciled, not merely upserted.
+        reconcileCloudSimulatorMirror(
+          frameSource(session),
+          state.latestSimulatorStatuses.filter(
+            (mirror): mirror is Record<string, unknown> =>
+              mirror !== null && typeof mirror === "object"
+          )
+        );
+      } else if (state.latestSimulatorStatus && typeof state.latestSimulatorStatus === "object") {
+        applyCloudSimulatorStatus(
+          frameSource(session),
+          state.latestSimulatorStatus as Record<string, unknown>
+        );
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });

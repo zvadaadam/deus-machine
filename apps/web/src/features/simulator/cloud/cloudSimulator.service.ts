@@ -21,7 +21,7 @@ export const EXEC_TIMEOUT_MS = 100_000;
  *  Without one it mints a token and waits up to READY_DEADLINE_MS (30 s) for
  *  the handshake first — the ack must outlast that, or the panel reports a
  *  failure (and drops its busy state) for a command the backend then sends. */
-const COMMAND_TIMEOUT_MS = 75_000;
+export const COMMAND_TIMEOUT_MS = 75_000;
 import type { CloudSimPlatform, CloudSimSeed } from "./cloudSimulatorStore";
 
 export interface CloudSimExecResult {

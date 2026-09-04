@@ -17,6 +17,15 @@ import { parsePlatformTime } from "./cloudSimulatorScreenshot";
 
 export type CloudSimPlatform = "ios" | "android";
 
+/** A device capture: when it arrived (this clock), when the platform took it
+ *  (its clock, null when unstamped), and which device it shows. */
+export interface CloudSimCapture {
+  base64: string;
+  at: number;
+  capturedAt: number | null;
+  platform: CloudSimPlatform | null;
+}
+
 export interface CloudSimActionResult {
   id: number;
   verb: string;
@@ -42,12 +51,11 @@ export interface CloudSimDevice {
   busy: "starting" | "stopping" | null;
   /** The latest capture: when it arrived (this clock), when the platform took
    *  it (its clock, null when unstamped), and which device it shows. */
-  lastScreenshot: {
-    base64: string;
-    at: number;
-    capturedAt: number | null;
-    platform: CloudSimPlatform | null;
-  } | null;
+  lastScreenshot: CloudSimCapture | null;
+  /** The latest capture PER platform: with two devices live, the agent's
+   *  capture of the other device must not evict the one a click is waiting
+   *  to correlate once its exec answers. */
+  lastScreenshots: Partial<Record<CloudSimPlatform | "unknown", CloudSimCapture>>;
   /** Ring of the most recent action results, oldest first. */
   actions: CloudSimActionResult[];
 }
@@ -61,6 +69,7 @@ export const EMPTY_CLOUD_SIM_DEVICE: CloudSimDevice = Object.freeze({
   error: null,
   busy: null,
   lastScreenshot: null,
+  lastScreenshots: {},
   actions: [] as CloudSimActionResult[],
 }) as CloudSimDevice;
 
@@ -206,9 +215,11 @@ export const cloudSimulatorActions = {
     platform: CloudSimPlatform | null,
     capturedAt: number | null
   ): void {
+    const capture: CloudSimCapture = { base64, at: Date.now(), capturedAt, platform };
     update(workspaceId, (prev) => ({
       ...prev,
-      lastScreenshot: { base64, at: Date.now(), capturedAt, platform },
+      lastScreenshot: capture,
+      lastScreenshots: { ...prev.lastScreenshots, [platform ?? "unknown"]: capture },
     }));
   },
 

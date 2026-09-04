@@ -21,7 +21,12 @@ import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayo
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { processImageFiles } from "@/features/session/lib/imageAttachments";
 import { openExternal } from "@/platform/native/window";
-import { EXEC_TIMEOUT_MS, cloudSimulatorService } from "./cloudSimulator.service";
+import {
+  COMMAND_TIMEOUT_MS,
+  EXEC_TIMEOUT_MS,
+  cloudSimulatorService,
+} from "./cloudSimulator.service";
+import { useDocumentVisible } from "./useDocumentVisible";
 import {
   captureAnswersAsk,
   parsePlatformTime,
@@ -49,10 +54,14 @@ interface CloudSimulatorPanelProps {
  *  inside that window and far too slow to be polling. */
 const KEEP_ALIVE_MS = 4 * 60 * 1000;
 
-/** How long an unanswered Start/Stop keeps its spinner. The backend
- *  synthesizes an error status when the sidecar can't be reached, so this is
- *  a self-heal for a command that got neither an echo nor an error. */
-const BUSY_STALE_MS = 60 * 1000;
+/** How long an unanswered Start/Stop keeps its spinner: as long as the
+ *  command itself may take (its ack can wait on a token mint and the socket
+ *  handshake), plus a moment for the status that follows — shorter, and the
+ *  controls would come back while the first command is still in flight, and
+ *  a duplicate could go out. The backend synthesizes an error status when
+ *  the sidecar can't be reached, so this is only a self-heal for a command
+ *  that got neither an echo nor an error. */
+const BUSY_STALE_MS = COMMAND_TIMEOUT_MS + 5_000;
 
 /** A screenshot request outlives its click for at most the exec round-trip
  *  (connection setup included): past this, a capture that lands is someone
@@ -146,8 +155,12 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   // an iOS and an Android device running, an unnamed exec is ambiguous and
   // the sidecar refuses it — silently, for a keep-alive.
   const platform = device.platform ?? undefined;
+  // "Looking" also needs the document on screen: a minimized window or a
+  // backgrounded page keeps `visible` true, and a keep-alive from there would
+  // hold a device nobody sees — billing — past the platform's idle stop.
+  const documentVisible = useDocumentVisible();
   useEffect(() => {
-    if (!visible || device.status !== "ready") return;
+    if (!visible || !documentVisible || device.status !== "ready") return;
     // Looking starts NOW: a device that has already idled through most of the
     // platform's window must hear it before the first interval tick.
     cloudSimulatorService.keepAlive(workspaceId, platform).catch(() => {});
@@ -155,7 +168,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
       cloudSimulatorService.keepAlive(workspaceId, platform).catch(() => {});
     }, KEEP_ALIVE_MS);
     return () => clearInterval(timer);
-  }, [visible, device.status, workspaceId, platform]);
+  }, [visible, documentVisible, device.status, workspaceId, platform]);
 
   const handleStart = useCallback(() => {
     setSendError(null);
@@ -197,10 +210,16 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   const screenshotRequest = useRef<ScreenshotRequest | null>(null);
   const attachIfAnswered = useCallback(() => {
     const request = screenshotRequest.current;
+    if (!request) return;
     // The store, not the rendered value: the answer's `.then` runs before
-    // React re-renders with the capture that preceded it.
-    const capture = useCloudSimulatorStore.getState().byWorkspace[workspaceId]?.lastScreenshot;
-    if (!request || !capture || !captureAnswersAsk(request, capture)) return;
+    // React re-renders with the capture that preceded it. The requested
+    // platform's own slot: the agent's capture of the other device, landing
+    // meanwhile, must not have evicted ours.
+    const entry = useCloudSimulatorStore.getState().byWorkspace[workspaceId];
+    const capture = request.platform
+      ? entry?.lastScreenshots[request.platform]
+      : entry?.lastScreenshot;
+    if (!capture || !captureAnswersAsk(request, capture)) return;
     screenshotRequest.current = null;
     if (!request.sessionId) return;
     attachScreenshot(request.sessionId, capture.base64).catch((e) => {

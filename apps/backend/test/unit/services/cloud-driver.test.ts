@@ -1935,6 +1935,56 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     expect(last.data.data).toMatchObject({ status: "stopped", platform: "ios" });
   });
 
+  it("reconciles the cache against a reconnect snapshot's complete list — this session's omitted platform is gone", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios",
+      timestamp: T1,
+    });
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "android",
+      timestamp: T1,
+    });
+    mockBroadcast.mockClear();
+    // The socket reconnects; the ios device was removed meanwhile.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: {
+        status: "ready",
+        turns: [],
+        latestSimulatorStatuses: [
+          {
+            type: "simulator.status",
+            sessionId: "agnt-session-1",
+            status: "stopped",
+            platform: "android",
+            timestamp: T1,
+          },
+        ],
+      },
+      messages: [],
+    });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "stopped",
+      platform: "android",
+    });
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
+    // An empty list: everything this session spoke for is gone.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { status: "ready", turns: [], latestSimulatorStatuses: [] },
+      messages: [],
+    });
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+  });
+
   it("forwards a newer identical status — the platform answering a retry the same way", async () => {
     const error = {
       type: "simulator.status",

@@ -322,6 +322,44 @@ export function applyCloudSimulatorStatus(
   announcePrimary(source.workspaceId, source.sessionId, before);
 }
 
+/**
+ * A (re)connect snapshot's per-platform mirror is this session's COMPLETE
+ * list: a cached platform it no longer names was removed while the socket
+ * was down — and with the socket live again, no REST read would ever notice.
+ * Only entries THIS session spoke for are pruned: the platform mirrors per
+ * session, and a session created after another session's device started
+ * never saw that device's frames — its silence about it is not evidence.
+ */
+export function reconcileCloudSimulatorMirror(
+  source: CloudSimulatorSource,
+  mirrors: Record<string, unknown>[]
+): void {
+  const before = primaryOf(cloudSimulators.get(source.workspaceId))?.status ?? null;
+  for (const mirror of mirrors) applyCloudSimulatorStatus(source, mirror);
+  const devices = cloudSimulators.get(source.workspaceId);
+  if (!devices) return;
+  const named = new Set(
+    mirrors.map((mirror) => {
+      const parsed = CloudSimulatorStatusSchema.safeParse(mirror);
+      return parsed.success ? platformKey(parsed.data) : null;
+    })
+  );
+  let pruned = false;
+  for (const [key, entry] of [...devices]) {
+    if (named.has(key) || entry.sessionId !== source.sessionId) continue;
+    devices.delete(key);
+    pruned = true;
+  }
+  if (!pruned) return;
+  bumpSocketRevision(source.workspaceId);
+  if (devices.size === 0) {
+    cloudSimulators.delete(source.workspaceId);
+    broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+    return;
+  }
+  announcePrimary(source.workspaceId, source.sessionId, before);
+}
+
 /** simulator.screenshot / simulator.action_result — live-only by design (the
  *  platform persists neither): the tab holds the last screenshot and a short
  *  ring of action results in memory. The platform fans each of them out to
@@ -460,13 +498,20 @@ export async function readCloudSimulatorStatus(
   if (statuses.length === 0) {
     if (superseded) return primaryOf(devices)?.status ?? null;
     markRestAnswered(workspaceId, issue);
-    // The platform knows of no device: whatever the cache held is history —
-    // for every client, not just the one that asked.
+    // The session knows of no device: whatever it spoke for is history — for
+    // every client, not just the one that asked. Another session's entries
+    // stay: the platform mirrors per session, and this one may simply have
+    // been created after that device started.
     if (devices && devices.size > 0) {
-      cloudSimulators.delete(workspaceId);
-      broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+      for (const [key, entry] of [...devices]) {
+        if (entry.sessionId === context.sessionId) devices.delete(key);
+      }
+      if (devices.size === 0) {
+        cloudSimulators.delete(workspaceId);
+        broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+      }
     }
-    return null;
+    return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
   }
   if (!superseded) markRestAnswered(workspaceId, issue);
   const beforePrimary = primaryOf(devices)?.status ?? null;
