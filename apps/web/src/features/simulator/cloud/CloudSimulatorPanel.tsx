@@ -23,12 +23,16 @@ import { processImageFiles } from "@/features/session/lib/imageAttachments";
 import { openExternal } from "@/platform/native/window";
 import { cloudSimulatorService } from "./cloudSimulator.service";
 import {
+  captureAnswersAsk,
+  parsePlatformTime,
+  type ScreenshotAsk,
+} from "./cloudSimulatorScreenshot";
+import {
   EMPTY_CLOUD_SIM_DEVICE,
   cloudSimulatorActions,
   ensureCloudSimulatorSubscription,
   useCloudSimulatorStore,
   type CloudSimActionResult,
-  type CloudSimPlatform,
 } from "./cloudSimulatorStore";
 import { describeCloudSimulatorError } from "./cloudSimulatorError";
 import { CloudSimulatorHeader } from "./CloudSimulatorHeader";
@@ -55,12 +59,7 @@ const BUSY_STALE_MS = 60 * 1000;
  *  not attach to a forgotten button press. */
 const SCREENSHOT_DEADLINE_MS = 65 * 1000;
 
-interface ScreenshotRequest {
-  askedAt: number;
-  /** The displayed device's platform when the button was pressed. With both
-   *  platforms running, the agent's capture of the OTHER device can land
-   *  first — it shows a different phone and must not answer this request. */
-  platform: CloudSimPlatform | null;
+interface ScreenshotRequest extends ScreenshotAsk {
   /** The chat active when the button was pressed — the attachment's target,
    *  whatever chat is active when the capture lands. */
   sessionId: string | null;
@@ -186,17 +185,32 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
 
   // Screenshot is a round-trip through the platform: the exec asks, the PNG
   // arrives as a screenshot EVENT (fanned out to every viewer, the agent's
-  // captures included). Remember the request — when, and for which chat —
-  // and attach the first capture that lands after it, whoever took it: it
-  // shows the device now. A request nothing answers expires with the exec
-  // timeout, so a capture minutes later never attaches to a forgotten click.
+  // captures included) just before the exec's answer. Remember the request —
+  // for which chat, which platform — and attach the capture the platform
+  // stamped right before its answer (see captureAnswersAsk): the agent's
+  // older capture delivered late does not qualify, whatever order the two
+  // arrive in. A request nothing answers expires with the exec timeout.
   const screenshotRequest = useRef<ScreenshotRequest | null>(null);
+  const attachIfAnswered = useCallback(() => {
+    const request = screenshotRequest.current;
+    // The store, not the rendered value: the answer's `.then` runs before
+    // React re-renders with the capture that preceded it.
+    const capture = useCloudSimulatorStore.getState().byWorkspace[workspaceId]?.lastScreenshot;
+    if (!request || !capture || !captureAnswersAsk(request, capture)) return;
+    screenshotRequest.current = null;
+    if (!request.sessionId) return;
+    attachScreenshot(request.sessionId, capture.base64).catch((e) => {
+      setSendError(`Could not attach the screenshot: ${getErrorMessage(e)}`);
+    });
+  }, [workspaceId]);
   const handleScreenshot = useCallback(() => {
     setSendError(null);
     const request: ScreenshotRequest = {
       askedAt: Date.now(),
       platform: platform ?? null,
       sessionId: activeChatSessionId(workspaceId),
+      answered: false,
+      respondedAt: null,
     };
     screenshotRequest.current = request;
     // Forget THIS request only — a newer click must keep its own.
@@ -207,37 +221,27 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
     cloudSimulatorService
       .screenshot(workspaceId, platform)
       .then((res) => {
-        if (res.success) return;
-        clearTimeout(expiry);
-        forget();
-        setSendError(res.error || "Screenshot failed");
+        if (!res.success) {
+          clearTimeout(expiry);
+          forget();
+          setSendError(res.error || "Screenshot failed");
+          return;
+        }
+        request.answered = true;
+        request.respondedAt = parsePlatformTime(res.timestamp);
+        attachIfAnswered();
       })
       .catch((e) => {
         clearTimeout(expiry);
         forget();
         setSendError(getErrorMessage(e));
       });
-  }, [workspaceId, platform]);
+  }, [workspaceId, platform, attachIfAnswered]);
 
   const lastScreenshot = device.lastScreenshot;
   useEffect(() => {
-    const request = screenshotRequest.current;
-    if (!lastScreenshot || !request || lastScreenshot.at < request.askedAt) return;
-    // Another platform's capture: not ours — keep waiting for the right one.
-    if (
-      request.platform &&
-      lastScreenshot.platform &&
-      lastScreenshot.platform !== request.platform
-    ) {
-      return;
-    }
-    screenshotRequest.current = null;
-    if (lastScreenshot.at - request.askedAt > SCREENSHOT_DEADLINE_MS) return;
-    if (!request.sessionId) return;
-    attachScreenshot(request.sessionId, lastScreenshot.base64).catch((e) => {
-      setSendError(`Could not attach the screenshot: ${getErrorMessage(e)}`);
-    });
-  }, [lastScreenshot]);
+    attachIfAnswered();
+  }, [lastScreenshot, attachIfAnswered]);
 
   // The platform's viewer already IS a full device UI (pointer, rotate, logs,
   // settings); at native size it is the power-user surface, so offer it as a

@@ -18,24 +18,27 @@ beforeEach(() => {
 describe("cloudSimulatorService — start / stop (fire-and-forget commands)", () => {
   it("sends cloudSim:start with the platform only when one is named", async () => {
     await cloudSimulatorService.start("ws-1", "android");
-    expect(sendCommand).toHaveBeenLastCalledWith("cloudSim:start", {
-      workspaceId: "ws-1",
-      platform: "android",
-    });
+    expect(sendCommand).toHaveBeenLastCalledWith(
+      "cloudSim:start",
+      { workspaceId: "ws-1", platform: "android" },
+      // Outlasts the backend's connect deadline (token mint + 30 s handshake).
+      75_000
+    );
 
     await cloudSimulatorService.start("ws-1");
-    expect(sendCommand).toHaveBeenLastCalledWith("cloudSim:start", { workspaceId: "ws-1" });
+    expect(sendCommand).toHaveBeenLastCalledWith("cloudSim:start", { workspaceId: "ws-1" }, 75_000);
   });
 
   it("sends cloudSim:stop; no platform means every running device", async () => {
     await cloudSimulatorService.stop("ws-1");
-    expect(sendCommand).toHaveBeenLastCalledWith("cloudSim:stop", { workspaceId: "ws-1" });
+    expect(sendCommand).toHaveBeenLastCalledWith("cloudSim:stop", { workspaceId: "ws-1" }, 75_000);
 
     await cloudSimulatorService.stop("ws-1", "ios");
-    expect(sendCommand).toHaveBeenLastCalledWith("cloudSim:stop", {
-      workspaceId: "ws-1",
-      platform: "ios",
-    });
+    expect(sendCommand).toHaveBeenLastCalledWith(
+      "cloudSim:stop",
+      { workspaceId: "ws-1", platform: "ios" },
+      75_000
+    );
   });
 
   it("surfaces a refused ack as an error (the outcome otherwise only rides the status event)", async () => {

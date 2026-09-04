@@ -464,7 +464,26 @@ export async function readCloudSimulatorStatus(
     devicesOf(workspaceId).set(key, { sessionId: context.sessionId, status, at, parked: false });
     applied = true;
   }
-  if (!applied) return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
+  // A per-platform mirror is the platform's COMPLETE list: a cached device it
+  // no longer names was removed — unless a frame for that platform landed
+  // meanwhile (the platform's later word about it). The single-status shape
+  // of an older platform says nothing about other platforms and prunes none.
+  let pruned = false;
+  const held = cloudSimulators.get(workspaceId);
+  if (Array.isArray(detail.simulators) && !superseded && held) {
+    const named = new Set(statuses.map(platformKey));
+    for (const [key, entry] of [...held]) {
+      if (named.has(key) || before.get(key) !== entry) continue;
+      held.delete(key);
+      pruned = true;
+    }
+    if (held.size === 0) {
+      cloudSimulators.delete(workspaceId);
+      broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+      return null;
+    }
+  }
+  if (!applied && !pruned) return primaryOf(cloudSimulators.get(workspaceId))?.status ?? null;
   // The requester gets the answer; every other client learns it the same
   // way a socket frame would reach them — unless nothing changed.
   announcePrimary(workspaceId, context.sessionId, beforePrimary);
@@ -513,6 +532,8 @@ export interface CloudSimulatorExecResult {
   exitCode: number;
   output: string;
   error?: string;
+  /** The platform's clock when it answered (ISO). */
+  timestamp?: string;
 }
 
 /** Narrow a command/request `platform` param. Absent means the workspace's
@@ -557,5 +578,8 @@ export function readCloudSimulatorExecResult(
     exitCode: typeof data.exitCode === "number" ? data.exitCode : success ? 0 : -1,
     output: typeof data.output === "string" ? data.output : "",
     ...(typeof data.error === "string" ? { error: data.error } : {}),
+    // The platform's clock on the answer: a screenshot request tells the
+    // capture it asked for from an older one by this stamp.
+    ...(typeof data.timestamp === "string" ? { timestamp: data.timestamp } : {}),
   };
 }

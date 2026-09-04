@@ -13,6 +13,7 @@ import { create } from "zustand";
 import { match } from "ts-pattern";
 import { CloudSimulatorEventSchema } from "@shared/events";
 import { isConnected, onConnectionChange, onEvent } from "@/platform/ws";
+import { parsePlatformTime } from "./cloudSimulatorScreenshot";
 
 export type CloudSimPlatform = "ios" | "android";
 
@@ -39,7 +40,14 @@ export interface CloudSimDevice {
   error: string | null;
   /** A Start/Stop the panel sent whose status echo hasn't arrived yet. */
   busy: "starting" | "stopping" | null;
-  lastScreenshot: { base64: string; at: number; platform: CloudSimPlatform | null } | null;
+  /** The latest capture: when it arrived (this clock), when the platform took
+   *  it (its clock, null when unstamped), and which device it shows. */
+  lastScreenshot: {
+    base64: string;
+    at: number;
+    capturedAt: number | null;
+    platform: CloudSimPlatform | null;
+  } | null;
   /** Ring of the most recent action results, oldest first. */
   actions: CloudSimActionResult[];
 }
@@ -176,10 +184,15 @@ export const cloudSimulatorActions = {
     update(workspaceId, (prev) => (prev.busy === busy ? prev : { ...prev, busy }));
   },
 
-  recordScreenshot(workspaceId: string, base64: string, platform: CloudSimPlatform | null): void {
+  recordScreenshot(
+    workspaceId: string,
+    base64: string,
+    platform: CloudSimPlatform | null,
+    capturedAt: number | null
+  ): void {
     update(workspaceId, (prev) => ({
       ...prev,
-      lastScreenshot: { base64, at: Date.now(), platform },
+      lastScreenshot: { base64, at: Date.now(), capturedAt, platform },
     }));
   },
 
@@ -251,7 +264,12 @@ export function ensureCloudSimulatorSubscription(): void {
       .with({ kind: "screenshot" }, ({ workspaceId, data }) => {
         const base64 = parseString(data.imageBase64);
         if (base64) {
-          cloudSimulatorActions.recordScreenshot(workspaceId, base64, parsePlatform(data.platform));
+          cloudSimulatorActions.recordScreenshot(
+            workspaceId,
+            base64,
+            parsePlatform(data.platform),
+            parsePlatformTime(data.timestamp)
+          );
         }
       })
       .with({ kind: "action_result" }, ({ workspaceId, data }) =>

@@ -12,6 +12,11 @@ import { sendCommand, sendRequest } from "@/platform/ws";
 
 /** Backend cloudSimExec deadline (60 s) plus a margin for the wire. */
 const EXEC_TIMEOUT_MS = 65_000;
+/** Start/Stop are acked once the driver has a session socket to send on.
+ *  Without one it mints a token and waits up to READY_DEADLINE_MS (30 s) for
+ *  the handshake first — the ack must outlast that, or the panel reports a
+ *  failure (and drops its busy state) for a command the backend then sends. */
+const COMMAND_TIMEOUT_MS = 75_000;
 import type { CloudSimPlatform, CloudSimSeed } from "./cloudSimulatorStore";
 
 export interface CloudSimExecResult {
@@ -19,6 +24,9 @@ export interface CloudSimExecResult {
   exitCode: number;
   output: string;
   error?: string;
+  /** The platform's clock when it answered (ISO) — what a screenshot
+   *  request correlates its capture against. */
+  timestamp?: string;
 }
 
 function withPlatform(
@@ -33,7 +41,7 @@ async function command(
   params: Record<string, unknown>,
   failure: string
 ): Promise<void> {
-  const ack = await sendCommand(name, params);
+  const ack = await sendCommand(name, params, COMMAND_TIMEOUT_MS);
   if (!ack.accepted) throw new Error(ack.error || failure);
 }
 

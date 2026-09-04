@@ -1580,6 +1580,8 @@ describe("cloud driver simulator channel", () => {
       exitCode: 1,
       output: "",
       error: "no element ref-9",
+      // The platform's stamp rides along: a screenshot request correlates on it.
+      timestamp: T,
     });
   });
 
@@ -1783,6 +1785,68 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
     socketOpen = true;
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
+  });
+
+  it("prunes a cached platform the per-platform REST list no longer names", async () => {
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios",
+      timestamp: T1,
+    });
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "stopped",
+      platform: "android",
+      timestamp: T2,
+    });
+    socketOpen = false;
+    row();
+    // The platform's complete list: android only — the ios device is gone.
+    mockGetSession.mockResolvedValueOnce({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "stopped",
+        platform: "android",
+        timestamp: T2,
+      },
+      simulators: [
+        { session_id: "agnt-session-1", status: "stopped", platform: "android", timestamp: T2 },
+      ],
+    });
+    mockBroadcast.mockClear();
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "stopped",
+      platform: "android",
+    });
+    // The primary changed (ready ios → stopped android): every client hears it.
+    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
+    // The single-status shape of an older platform prunes nothing.
+    capturedOnFrame!({
+      type: "simulator.status",
+      sessionId: "agnt-session-1",
+      status: "ready",
+      platform: "ios",
+      streamUrl: "https://stream.expo.dev/ios-2",
+      timestamp: T2,
+    });
+    row();
+    mockGetSession.mockResolvedValueOnce({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "stopped",
+        platform: "android",
+        timestamp: T2,
+      },
+    });
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+      status: "ready",
+      platform: "ios",
+    });
+    socketOpen = true;
   });
 
   it("forwards a newer identical status — the platform answering a retry the same way", async () => {
