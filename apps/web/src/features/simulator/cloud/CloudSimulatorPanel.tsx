@@ -28,16 +28,12 @@ import {
 } from "./cloudSimulator.service";
 import { useDocumentVisible } from "./useDocumentVisible";
 import {
-  captureAnswersAsk,
-  parsePlatformTime,
-  type ScreenshotAsk,
-} from "./cloudSimulatorScreenshot";
-import {
   EMPTY_CLOUD_SIM_DEVICE,
   cloudSimulatorActions,
   ensureCloudSimulatorSubscription,
   useCloudSimulatorStore,
   type CloudSimActionResult,
+  type CloudSimPlatform,
 } from "./cloudSimulatorStore";
 import { describeCloudSimulatorError } from "./cloudSimulatorError";
 import { CloudSimulatorHeader } from "./CloudSimulatorHeader";
@@ -68,10 +64,20 @@ const BUSY_STALE_MS = COMMAND_TIMEOUT_MS + 5_000;
  *  else's (the agent's) and must not attach to a forgotten button press. */
 const SCREENSHOT_DEADLINE_MS = EXEC_TIMEOUT_MS;
 
-interface ScreenshotRequest extends ScreenshotAsk {
+interface ScreenshotRequest {
+  /** When the button was pressed: only a capture that arrived after it can
+   *  be the answer. */
+  askedAt: number;
+  /** The displayed device's platform when asked — the agent's capture of the
+   *  OTHER platform must not answer this request. */
+  platform: CloudSimPlatform | null;
   /** The chat active when the button was pressed — the attachment's target,
    *  whatever chat is active when the capture lands. */
   sessionId: string | null;
+  /** Set once the platform has answered the exec: its capture precedes the
+   *  answer, so nothing that arrived before the answer is proven wrong, and
+   *  nothing is attached before it. */
+  answered: boolean;
 }
 
 /** How long the copy-link button shows its acknowledgement. */
@@ -203,23 +209,22 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   // Screenshot is a round-trip through the platform: the exec asks, the PNG
   // arrives as a screenshot EVENT (fanned out to every viewer, the agent's
   // captures included) just before the exec's answer. Remember the request —
-  // for which chat, which platform — and attach the capture the platform
-  // stamped right before its answer (see captureAnswersAsk): the agent's
-  // older capture delivered late does not qualify, whatever order the two
-  // arrive in. A request nothing answers expires with the exec timeout.
+  // for which chat, which platform — and once the exec has answered, attach
+  // the latest capture of that platform that arrived after the click. A
+  // request nothing answers expires with the exec timeout.
   const screenshotRequest = useRef<ScreenshotRequest | null>(null);
   const attachIfAnswered = useCallback(() => {
     const request = screenshotRequest.current;
-    if (!request) return;
+    if (!request || !request.answered) return;
     // The store, not the rendered value: the answer's `.then` runs before
     // React re-renders with the capture that preceded it. The requested
     // platform's own slot: the agent's capture of the other device, landing
-    // meanwhile, must not have evicted ours.
+    // meanwhile, must not stand in for ours.
     const entry = useCloudSimulatorStore.getState().byWorkspace[workspaceId];
     const capture = request.platform
       ? entry?.lastScreenshots[request.platform]
       : entry?.lastScreenshot;
-    if (!capture || !captureAnswersAsk(request, capture)) return;
+    if (!capture || capture.at < request.askedAt) return;
     screenshotRequest.current = null;
     if (!request.sessionId) return;
     attachScreenshot(request.sessionId, capture.base64).catch((e) => {
@@ -233,7 +238,6 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
       platform: platform ?? null,
       sessionId: activeChatSessionId(workspaceId),
       answered: false,
-      respondedAt: null,
     };
     screenshotRequest.current = request;
     // Forget THIS request only — a newer click must keep its own.
@@ -251,7 +255,6 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
           return;
         }
         request.answered = true;
-        request.respondedAt = parsePlatformTime(res.timestamp);
         attachIfAnswered();
       })
       .catch((e) => {

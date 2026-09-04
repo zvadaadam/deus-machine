@@ -29,9 +29,6 @@ export interface CloudSimExecResult {
   exitCode: number;
   output: string;
   error?: string;
-  /** The platform's clock when it answered (ISO) — what a screenshot
-   *  request correlates its capture against. */
-  timestamp?: string;
 }
 
 function withPlatform(

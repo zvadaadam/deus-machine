@@ -376,11 +376,7 @@ describe("cloudSimulatorStore — screenshots remember their platform", () => {
       kind: "screenshot",
       data: { sessionId: "sess-1", platform: "android", imageBase64: "CCCC", format: "png" },
     });
-    expect(device().lastScreenshot).toMatchObject({
-      base64: "CCCC",
-      platform: "android",
-      capturedAt: null,
-    });
+    expect(device().lastScreenshot).toMatchObject({ base64: "CCCC", platform: "android" });
     emit("cloud:simulator", {
       workspaceId: WS,
       sessionId: "sess-1",
@@ -393,11 +389,7 @@ describe("cloudSimulatorStore — screenshots remember their platform", () => {
         timestamp: "2026-09-04T10:00:00.000Z",
       },
     });
-    // The platform's own stamp survives: the panel correlates on it.
-    expect(device().lastScreenshot).toMatchObject({
-      base64: "EEEE",
-      capturedAt: Date.parse("2026-09-04T10:00:00.000Z"),
-    });
+    expect(device().lastScreenshot).toMatchObject({ base64: "EEEE", platform: "ios" });
     emit("cloud:simulator", {
       workspaceId: WS,
       sessionId: "sess-1",

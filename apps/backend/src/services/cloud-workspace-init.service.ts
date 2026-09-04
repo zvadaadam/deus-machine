@@ -736,29 +736,17 @@ export async function resolveCloudRepoAccess(repoId: string): Promise<CloudRepoA
  * once is routine) — and a FAILED refresh's delete branch must never race a
  * successful one's fresh write.
  */
-/** Upgrades in flight, per environment — concurrent provisions share one
- *  PUT. Nothing is remembered past that: the platform's fresh lookup decides
- *  each time (an environment edited back to no simulator gets enabled again
- *  on its next workspace), and enabling twice is harmless. */
-const simulatorUpgrades = new Map<string, Promise<void>>();
-
-function enableEnvironmentSimulatorOnce(environmentId: string): Promise<void> {
-  const inFlight = simulatorUpgrades.get(environmentId);
-  if (inFlight) return inFlight;
-  const run = enableCloudEnvironmentSimulator(environmentId)
-    .then(() => {
-      console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
-    })
-    .catch((err) => {
-      console.warn(
-        `[CloudInit] could not enable hosted devices on environment ${environmentId}: ${err}`
-      );
-    })
-    .finally(() => {
-      if (simulatorUpgrades.get(environmentId) === run) simulatorUpgrades.delete(environmentId);
-    });
-  simulatorUpgrades.set(environmentId, run);
-  return run;
+/** Best-effort: the workspace still provisions without device support, and
+ *  Start then says so. Enabling twice is harmless. */
+async function enableEnvironmentSimulator(environmentId: string): Promise<void> {
+  try {
+    await enableCloudEnvironmentSimulator(environmentId);
+    console.log(`[CloudInit] enabled hosted devices on environment ${environmentId}`);
+  } catch (err) {
+    console.warn(
+      `[CloudInit] could not enable hosted devices on environment ${environmentId}: ${err}`
+    );
+  }
 }
 
 function refreshEnvironmentGithubTokenOnce(
@@ -880,7 +868,7 @@ async function provisionInBackground(
         // billing starts with a device). Best-effort: the workspace still
         // provisions without it, and Start then says so.
         if (envInfo.simulator === false) {
-          await enableEnvironmentSimulatorOnce(envInfo.environmentId);
+          await enableEnvironmentSimulator(envInfo.environmentId);
         }
       }
       environment = envInfo.name;

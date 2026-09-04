@@ -863,21 +863,6 @@ describe("cloud driver simulator channel", () => {
     expect(event.data.data).not.toHaveProperty("streamUrl");
   });
 
-  it("keeps the platform's error text on an error status — no platform means a sidecar failure, not a device", async () => {
-    const error =
-      "This sandbox's sidecar predates simulator control — restart the workspace to upgrade it.";
-    capturedOnFrame!({
-      type: "simulator.status",
-      sessionId: "agnt-session-1",
-      status: "error",
-      error,
-      timestamp: T,
-    });
-    const status = await getCloudSimulatorStatus("deus-ws-1");
-    expect(status).toMatchObject({ status: "error", error });
-    expect(status).not.toHaveProperty("platform");
-  });
-
   it("learns the device from the connect snapshot's latestSimulatorStatus", async () => {
     // After a backend restart no simulator.status fires for a device that is
     // already running (and billing) — the snapshot mirror is the only truth.
@@ -1580,8 +1565,6 @@ describe("cloud driver simulator channel", () => {
       exitCode: 1,
       output: "",
       error: "no element ref-9",
-      // The platform's stamp rides along: a screenshot request correlates on it.
-      timestamp: T,
     });
   });
 
@@ -1698,46 +1681,6 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     });
   });
 
-  it("does not let an older REST answer repopulate a device a later REST answer declared gone", async () => {
-    capturedOnFrame!({
-      type: "simulator.status",
-      sessionId: "agnt-session-1",
-      status: "ready",
-      platform: "ios",
-      streamUrl: "https://stream.expo.dev/live",
-      timestamp: T1,
-    });
-    socketOpen = false; // no live socket: the cache is only a hint, REST is consulted
-    let answerA!: (value: unknown) => void;
-    let answerB!: (value: unknown) => void;
-    row();
-    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerA = resolve)));
-    const a = getCloudSimulatorStatus("deus-ws-1");
-    await Promise.resolve();
-    row();
-    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerB = resolve)));
-    const b = getCloudSimulatorStatus("deus-ws-1");
-    await Promise.resolve();
-    // The later read answers first: the platform knows of no device.
-    answerB({ simulator: null });
-    await expect(b).resolves.toBeNull();
-    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
-    mockBroadcast.mockClear();
-    // The earlier read's stale `ready` lands afterwards — it must not win.
-    answerA({
-      simulator: {
-        session_id: "agnt-session-1",
-        status: "ready",
-        platform: "ios",
-        stream_url: "https://stream.expo.dev/live",
-        timestamp: T1,
-      },
-    });
-    await expect(a).resolves.toBeNull();
-    expect(mockBroadcast).not.toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
-    socketOpen = true;
-  });
-
   it("reopens the workspace's session when a status read finds no live socket, and leaves a live one alone", async () => {
     // Live socket (the beforeEach connected it): a read is just a read.
     connectCount = 0;
@@ -1753,38 +1696,6 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     row();
     await getCloudSimulatorStatus("deus-ws-1");
     await vi.waitFor(() => expect(connectCount).toBe(1));
-  });
-
-  it("lets a REST read issued later clear a device an earlier-issued read reported meanwhile", async () => {
-    socketOpen = false;
-    let answerA!: (value: unknown) => void;
-    let answerB!: (value: unknown) => void;
-    row();
-    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerA = resolve)));
-    const a = getCloudSimulatorStatus("deus-ws-1");
-    await Promise.resolve();
-    row();
-    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerB = resolve)));
-    const b = getCloudSimulatorStatus("deus-ws-1");
-    await Promise.resolve();
-    // The earlier read answers first: a live device.
-    answerA({
-      simulator: {
-        session_id: "agnt-session-1",
-        status: "ready",
-        platform: "ios",
-        stream_url: "https://stream.expo.dev/live",
-        timestamp: T1,
-      },
-    });
-    await expect(a).resolves.toMatchObject({ status: "ready" });
-    mockBroadcast.mockClear();
-    // The later read asked later and saw the device gone: it wins.
-    answerB({ simulator: null });
-    await expect(b).resolves.toBeNull();
-    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
-    socketOpen = true;
-    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
   });
 
   it("prunes a cached platform the per-platform REST list no longer names", async () => {
@@ -1849,61 +1760,8 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     socketOpen = true;
   });
 
-  it("lets a later complete REST list prune what an earlier-issued read rewrote meanwhile", async () => {
-    capturedOnFrame!({
-      type: "simulator.status",
-      sessionId: "agnt-session-1",
-      status: "ready",
-      platform: "ios",
-      streamUrl: "https://stream.expo.dev/ios",
-      timestamp: T1,
-    });
-    capturedOnFrame!({
-      type: "simulator.status",
-      sessionId: "agnt-session-1",
-      status: "stopped",
-      platform: "android",
-      timestamp: T1,
-    });
-    socketOpen = false;
-    let answerA!: (value: unknown) => void;
-    let answerB!: (value: unknown) => void;
-    row();
-    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerA = resolve)));
-    const a = getCloudSimulatorStatus("deus-ws-1");
-    await Promise.resolve();
-    row();
-    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answerB = resolve)));
-    const b = getCloudSimulatorStatus("deus-ws-1");
-    await Promise.resolve();
-    // The earlier read answers first and rewrites both entries (newer stamps).
-    answerA({
-      simulators: [
-        {
-          session_id: "agnt-session-1",
-          status: "ready",
-          platform: "ios",
-          stream_url: "https://stream.expo.dev/ios",
-          timestamp: T2,
-        },
-        { session_id: "agnt-session-1", status: "stopped", platform: "android", timestamp: T2 },
-      ],
-    });
-    await expect(a).resolves.toMatchObject({ status: "ready", platform: "ios" });
+  it("broadcasts a platformless error to the clients without caching it — it names a command, not a device", async () => {
     mockBroadcast.mockClear();
-    // The later read's complete list no longer names ios: it is gone, and the
-    // earlier read's rewrite must not shield it the way a socket frame would.
-    answerB({
-      simulators: [
-        { session_id: "agnt-session-1", status: "stopped", platform: "android", timestamp: T2 },
-      ],
-    });
-    await expect(b).resolves.toMatchObject({ status: "stopped", platform: "android" });
-    expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
-    socketOpen = true;
-  });
-
-  it("drops a platformless error once a device speaks — it must not outrank the device's later stopped", async () => {
     capturedOnFrame!({
       type: "simulator.status",
       sessionId: "agnt-session-1",
@@ -1911,30 +1769,38 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
       error: "SIDECAR_NOT_CONNECTED: sandbox is not connected — retry when running",
       timestamp: T1,
     });
-    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({ status: "error" });
-    capturedOnFrame!({
-      type: "simulator.status",
-      sessionId: "agnt-session-1",
-      status: "starting",
-      platform: "ios",
-      timestamp: T2,
+    const sent = JSON.parse(mockBroadcast.mock.calls.at(-1)![0] as string);
+    expect(sent.data.data).toMatchObject({
+      status: "error",
+      error: expect.stringMatching(/SIDECAR/),
     });
-    mockBroadcast.mockClear();
-    capturedOnFrame!({
-      type: "simulator.status",
-      sessionId: "agnt-session-1",
-      status: "stopped",
-      platform: "ios",
-      timestamp: "2026-09-03T10:10:00.000Z",
-    });
-    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
-      status: "stopped",
-      platform: "ios",
-    });
-    const last = JSON.parse(mockBroadcast.mock.calls.at(-1)![0] as string);
-    expect(last.data.data).toMatchObject({ status: "stopped", platform: "ios" });
+    // Nothing to read back: the cache holds devices, and this was none.
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
   });
 
+  it("shares one platform read between callers that ask while it is in flight", async () => {
+    socketOpen = false;
+    let answer!: (value: unknown) => void;
+    row();
+    mockGetSession.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const a = getCloudSimulatorStatus("deus-ws-1");
+    await Promise.resolve();
+    row();
+    const b = getCloudSimulatorStatus("deus-ws-1");
+    answer({
+      simulator: {
+        session_id: "agnt-session-1",
+        status: "ready",
+        platform: "ios",
+        stream_url: "https://stream.expo.dev/live",
+        timestamp: T1,
+      },
+    });
+    await expect(a).resolves.toMatchObject({ status: "ready" });
+    await expect(b).resolves.toMatchObject({ status: "ready" });
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    socketOpen = true;
+  });
   it("reconciles the cache against a reconnect snapshot's complete list — this session's omitted platform is gone", async () => {
     capturedOnFrame!({
       type: "simulator.status",

@@ -13,16 +13,13 @@ import { create } from "zustand";
 import { match } from "ts-pattern";
 import { CloudSimulatorEventSchema } from "@shared/events";
 import { isConnected, onConnectionChange, onEvent } from "@/platform/ws";
-import { parsePlatformTime } from "./cloudSimulatorScreenshot";
 
 export type CloudSimPlatform = "ios" | "android";
 
-/** A device capture: when it arrived (this clock), when the platform took it
- *  (its clock, null when unstamped), and which device it shows. */
+/** A device capture: when it arrived and which device it shows. */
 export interface CloudSimCapture {
   base64: string;
   at: number;
-  capturedAt: number | null;
   platform: CloudSimPlatform | null;
 }
 
@@ -209,13 +206,8 @@ export const cloudSimulatorActions = {
     update(workspaceId, (prev) => (prev.busy === busy ? prev : { ...prev, busy }));
   },
 
-  recordScreenshot(
-    workspaceId: string,
-    base64: string,
-    platform: CloudSimPlatform | null,
-    capturedAt: number | null
-  ): void {
-    const capture: CloudSimCapture = { base64, at: Date.now(), capturedAt, platform };
+  recordScreenshot(workspaceId: string, base64: string, platform: CloudSimPlatform | null): void {
+    const capture: CloudSimCapture = { base64, at: Date.now(), platform };
     update(workspaceId, (prev) => ({
       ...prev,
       lastScreenshot: capture,
@@ -291,12 +283,7 @@ export function ensureCloudSimulatorSubscription(): void {
       .with({ kind: "screenshot" }, ({ workspaceId, data }) => {
         const base64 = parseString(data.imageBase64);
         if (base64) {
-          cloudSimulatorActions.recordScreenshot(
-            workspaceId,
-            base64,
-            parsePlatform(data.platform),
-            parsePlatformTime(data.timestamp)
-          );
+          cloudSimulatorActions.recordScreenshot(workspaceId, base64, parsePlatform(data.platform));
         }
       })
       .with({ kind: "action_result" }, ({ workspaceId, data }) =>
