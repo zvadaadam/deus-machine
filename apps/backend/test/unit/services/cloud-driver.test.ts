@@ -6,7 +6,9 @@
 // the captured onFrame callback directly — no sockets, no network — and assert
 // what reaches the (mocked) event handler and the (mocked) socket.
 
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SCHEMA_SQL } from "@shared/schema";
 
 // ---- Hoisted mocks ----
 const mockSend = vi.fn();
@@ -61,11 +63,17 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
 const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
 const mockCreateSessionToken = vi.fn(async () => ({ token: "session-jwt" }));
 const mockGetSession = vi.fn(async (..._args: unknown[]) => ({ simulator: null }) as unknown);
+const mockGetWorkspace = vi.fn(async () => ({ status: "paused" }));
+const mockResumeWorkspace = vi.fn(async () => {});
 vi.mock("@deus-hq/sdk", () => ({
   createSessionToken: () => mockCreateSessionToken(),
   createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
   getSession: (...args: unknown[]) => mockGetSession(...args),
+  getWorkspace: () => mockGetWorkspace(),
+  resumeWorkspace: () => mockResumeWorkspace(),
 }));
+vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: vi.fn() }));
+vi.mock("../../../src/services/workspace-status.service", () => ({ autoProgressStatus: vi.fn() }));
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
 const mockCancelSessionRelays = vi.fn((..._args: unknown[]) => [] as string[]);
@@ -91,12 +99,19 @@ vi.mock("../../../src/services/ws.service", () => ({
 
 const mockRun = vi.fn();
 const mockGet = vi.fn(() => ({ kind: "cloud", provider_workspace_id: "agnt-ws-1" }));
-const mockPrepare = vi.fn((_sql: string) => ({ run: mockRun, get: mockGet }));
+const mockPrepare = vi.fn<(sql: string) => Pick<Database.Statement, "run" | "get">>(() => ({
+  run: mockRun,
+  get: mockGet,
+}));
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({ prepare: mockPrepare }),
 }));
 
 vi.mock("../../../src/db", () => ({
+  getWorkspaceRaw: (db: Database.Database, id: string) =>
+    db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id),
+  getRepositoryById: (db: Database.Database, id: string) =>
+    db.prepare("SELECT * FROM repositories WHERE id = ?").get(id),
   getSessionRaw: vi.fn(() => ({
     id: "deus-session-1",
     workspace_id: "deus-ws-1",
@@ -119,6 +134,7 @@ import {
   readCloudPreviewTemplate,
 } from "../../../src/services/agent/cloud/driver";
 import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
+import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
 
 function makeHandler() {
   return {
@@ -556,6 +572,63 @@ describe("cloud driver frame → fold contract", () => {
     expect(mockRun).toHaveBeenCalledWith("deus-ws-1");
     expect(mockInvalidate).toHaveBeenCalled();
   });
+
+  it.each([
+    { status: "running", expectedState: "ready", expectedStage: null },
+    { status: "provisioning", expectedState: "initializing", expectedStage: "restoring" },
+    { status: "error", expectedState: "error", expectedStage: "resuming" },
+    { status: "already-running", expectedState: "ready", expectedStage: null },
+    { status: "resume-failed", expectedState: "archived", expectedStage: "paused" },
+  ])(
+    "unarchive preserves the $status projection across the resume response",
+    async ({ status, expectedState, expectedStage }) => {
+      const db = new Database(":memory:");
+      db.exec(SCHEMA_SQL);
+      db.prepare(
+        "INSERT INTO repositories (id, name, root_path) VALUES ('repo', 'repo', '/tmp')"
+      ).run();
+      db.prepare(
+        `INSERT INTO workspaces (id, repository_id, slug, kind, provider_workspace_id,
+          state, init_stage, current_session_id)
+         VALUES ('deus-ws-1', 'repo', 'cloud', 'cloud', 'agnt-ws-1',
+          'archived', 'paused', 'deus-session-1')`
+      ).run();
+      mockGetWorkspace.mockResolvedValueOnce({
+        status: status === "already-running" ? "running" : "paused",
+      });
+      const connectionsBefore = connectCount;
+      try {
+        await mockPrepare.withImplementation(
+          (sql) => db.prepare(sql),
+          async () => {
+            await mockResumeWorkspace.withImplementation(
+              async () => {
+                if (status === "resume-failed") throw new Error("resume unavailable");
+                if (status === "already-running") return;
+                // Real driver event, received while the HTTP resume is pending.
+                capturedOnFrame!({
+                  type: "workspace.state",
+                  data: { status, step: "restoring" },
+                });
+              },
+              async () => {
+                const opening = unarchiveWorkspace("deus-ws-1");
+                if (status === "resume-failed")
+                  await expect(opening).rejects.toThrow("Could not wake");
+                else await opening;
+              }
+            );
+          }
+        );
+        expect(
+          db.prepare("SELECT state, init_stage FROM workspaces WHERE id = 'deus-ws-1'").get()
+        ).toEqual({ state: expectedState, init_stage: expectedStage });
+        expect(connectCount).toBe(connectionsBefore);
+      } finally {
+        db.close();
+      }
+    }
+  );
 
   it("remembers the sandbox's public host template in memory (running state + snapshot) and announces it", () => {
     mockPrepare.mockClear();

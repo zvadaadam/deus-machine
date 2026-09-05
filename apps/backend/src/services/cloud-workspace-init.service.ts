@@ -422,7 +422,11 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   };
 
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
-  if (status !== "running") {
+  if (status === "running") {
+    // An earlier wake may have succeeded despite a lost response. An online
+    // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
+    setStage(null);
+  } else {
     setStage("resuming");
     announce({ status: "resuming" });
   }

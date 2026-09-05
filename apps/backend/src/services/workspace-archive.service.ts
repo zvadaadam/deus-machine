@@ -1,7 +1,11 @@
 import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { stopAppsForWorkspace } from "./aap";
-import { pauseCloudWorkspace, resumeCloudWorkspace } from "./cloud-workspace-init.service";
+import {
+  pauseCloudWorkspace,
+  wakeCloudWorkspaceWithFeedback,
+} from "./cloud-workspace-init.service";
+import { invalidate } from "./query-engine";
 import { autoProgressStatus } from "./workspace-status.service";
 
 /** Both HTTP and WS archive the same way. Cloud archive preserves its recovery data. */
@@ -60,8 +64,24 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
       workspace.state === "archived" &&
       workspace.kind === "cloud" &&
       workspace.provider_workspace_id
-    )
-      await resumeCloudWorkspace(workspace.provider_workspace_id);
+    ) {
+      // Open the projection before waking: a running/provisioning event may
+      // arrive before Resume returns, and the driver ignores archived rows.
+      db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = ?").run(workspaceId);
+      try {
+        const result = await wakeCloudWorkspaceWithFeedback({
+          ...workspace,
+          provider_workspace_id: workspace.provider_workspace_id,
+        });
+        if (!result.ok) throw new Error("Could not wake the cloud machine. Try again.");
+      } catch (err) {
+        db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
+        invalidate(["workspaces", "stats"], {});
+        throw err;
+      }
+      // Wake and its session channel own the current runtime projection.
+      return;
+    }
     db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = ?").run(workspaceId);
   });
 }

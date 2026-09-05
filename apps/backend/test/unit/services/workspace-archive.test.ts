@@ -7,7 +7,7 @@ import {
 const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),
   pause: vi.fn(),
-  resume: vi.fn(),
+  wake: vi.fn(),
   stopApps: vi.fn(),
   run: vi.fn(),
   status: vi.fn(),
@@ -19,8 +19,9 @@ vi.mock("../../../src/lib/database", () => ({
 vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: mocks.stopApps }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   pauseCloudWorkspace: mocks.pause,
-  resumeCloudWorkspace: mocks.resume,
+  wakeCloudWorkspaceWithFeedback: mocks.wake,
 }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
 vi.mock("../../../src/services/workspace-status.service", () => ({
   autoProgressStatus: mocks.status,
 }));
@@ -33,6 +34,7 @@ beforeEach(() => {
     provider_workspace_id: "cloud-vm",
   });
   mocks.pause.mockResolvedValue(undefined);
+  mocks.wake.mockResolvedValue({ ok: true, status: "resuming" });
   mocks.stopApps.mockResolvedValue(undefined);
 });
 
@@ -80,7 +82,7 @@ describe("workspace unarchive", () => {
     const archiving = archiveWorkspace("workspace");
     const opening = unarchiveWorkspace("workspace");
     await vi.waitFor(() => expect(mocks.pause).toHaveBeenCalledOnce());
-    expect(mocks.resume).not.toHaveBeenCalled();
+    expect(mocks.wake).not.toHaveBeenCalled();
     mocks.workspace.mockReturnValue({
       id: "workspace",
       state: "archived",
@@ -89,21 +91,23 @@ describe("workspace unarchive", () => {
     });
     release();
     await Promise.all([archiving, opening]);
-    expect(mocks.resume).toHaveBeenCalledWith("cloud-vm");
+    expect(mocks.wake).toHaveBeenCalledWith(
+      expect.objectContaining({ provider_workspace_id: "cloud-vm" })
+    );
     expect(mocks.run).toHaveBeenCalledTimes(2);
   });
 
-  it("does not mark the workspace ready when resume fails; a retry can succeed", async () => {
+  it("restores archived membership when wake fails; a retry can succeed", async () => {
     mocks.workspace.mockReturnValue({
       id: "workspace",
       state: "archived",
       kind: "cloud",
       provider_workspace_id: "cloud-vm",
     });
-    mocks.resume.mockRejectedValueOnce(new Error("resume unavailable"));
-    await expect(unarchiveWorkspace("workspace")).rejects.toThrow("resume unavailable");
-    expect(mocks.run).not.toHaveBeenCalled();
+    mocks.wake.mockResolvedValueOnce({ ok: false, status: "paused" });
+    await expect(unarchiveWorkspace("workspace")).rejects.toThrow("Could not wake");
+    expect(mocks.run).toHaveBeenCalledTimes(2);
     await unarchiveWorkspace("workspace");
-    expect(mocks.run).toHaveBeenCalledOnce();
+    expect(mocks.run).toHaveBeenCalledTimes(3);
   });
 });

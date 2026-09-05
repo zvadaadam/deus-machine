@@ -14,7 +14,7 @@ The [original review](cloud-environment-review-2026-09-05.md) and [roadmap](clou
 
 **Stop waits for work to be saved.** The sidecar owns cancellation from receipt through preparation and execution. Successor preparation waits for its predecessor's cleanup. Authenticated `/drain` waits for execution wrappers, recordings and Git operations. Workspace then captures traces and queues termination. Failed saves retain the VM. Concurrent Stops share one operation, and a restarted DO can repeat the barrier.
 
-**Archive and Unarchive use one serialized service in Deus.** Both WebSocket Archive and HTTP PATCH await manual cloud pause before marking the workspace archived. AGNT persists an admission hold, drains active work, settles queued turns, and suspends the VM. New work and background probes cannot release the hold; explicit Resume does. Errors preserve the VM and reach the caller. Unarchive waits for Resume before marking the workspace ready, and a failed archive can recover through the ordinary Wake action. An online refresh leaves active session sockets intact.
+**Archive and Unarchive use one serialized service in Deus.** Both WebSocket Archive and HTTP PATCH await manual cloud pause before marking the workspace archived. AGNT persists an admission hold, drains active work, settles queued turns, and suspends the VM. New work and background probes cannot release the hold; explicit Resume does. Errors preserve the VM and reach the caller. Unarchive opens the row before invoking the existing Wake operation, allowing early runtime events to update its status; a failed wake restores archived membership. Resume responses never overwrite a newer runtime projection. An online refresh clears stale sleep status and leaves active session sockets intact.
 
 **New VMs stay paused under preview traffic.** E2B creation disables automatic HTTP wake. Existing VMs keep their original provider setting and full memory/filesystem; a legacy preview may still wake compute, although platform agent admission remains held. No destructive retrofit or repause polling was added.
 
@@ -26,7 +26,7 @@ The [original review](cloud-environment-review-2026-09-05.md) and [roadmap](clou
 
 | Check                                                                     | Result                            |
 | ------------------------------------------------------------------------- | --------------------------------- |
-| Deus backend, including integration tests                                 | 909 passed                        |
+| Deus backend, including integration tests                                 | 914 passed                        |
 | AGNT backend unit suite                                                   | 622 passed                        |
 | AGNT Workers DO suite                                                     | 182 passed                        |
 | AGNT sidecar unit suite                                                   | 342 passed                        |

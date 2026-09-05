@@ -72,7 +72,7 @@ describe("explicit cloud wake", () => {
       });
       expect(mocks.connect).toHaveBeenCalledWith("session");
       expect(result).toEqual({ ok: true, status: status === "running" ? "running" : "resuming" });
-      if (status === "running") expect(mocks.run).not.toHaveBeenCalled();
+      if (status === "running") expect(mocks.run).toHaveBeenCalledWith(null, "ws");
     }
   );
 
