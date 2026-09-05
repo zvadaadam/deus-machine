@@ -10,7 +10,7 @@ The [original review](cloud-environment-review-2026-09-05.md) and [roadmap](clou
 
 **Replacement uses the backups already present.** The provisioning recipe carries the acknowledged Git save and R2 object key. Clone restores the WIP ref before agent admission, preserves user commit history, and leaves synthetic WIP changes dirty. A missing expected backup blocks readiness. Conditional Git pushes prevent an old checkout from overwriting newer saved work.
 
-**Trace backups cover Claude and Codex.** Versioned tar archives preserve native state paths, exclude canonical login credentials and per-turn Codex configuration, and restore legacy Claude archives. Captures share one owner; a final Stop capture is fresh, and deletion waits for pending uploads. Unused VMs can save and restore a valid empty checkpoint.
+**Trace backups cover Claude and Codex.** Versioned tar archives preserve native state paths, exclude canonical login credentials, per-turn Codex configuration, and regenerated shell caches containing environment exports. Restore applies the exclusions to older archives too, while preserving native rollout bytes. Captures share one owner; a final Stop capture is fresh, and deletion waits for pending uploads. Unused VMs can save and restore a valid empty checkpoint.
 
 **Stop waits for work to be saved.** The sidecar owns cancellation from receipt through preparation and execution. Successor preparation waits for its predecessor's cleanup. Authenticated `/drain` waits for execution wrappers, recordings and Git operations. Workspace then captures traces and queues termination. Failed saves retain the VM. Concurrent Stops share one operation, and a restarted DO can repeat the barrier.
 
@@ -27,14 +27,18 @@ The [original review](cloud-environment-review-2026-09-05.md) and [roadmap](clou
 | Check                                                                     | Result                            |
 | ------------------------------------------------------------------------- | --------------------------------- |
 | Deus backend, including integration tests                                 | 914 passed                        |
-| AGNT backend unit suite                                                   | 622 passed                        |
-| AGNT Workers DO suite                                                     | 182 passed                        |
-| AGNT sidecar unit suite                                                   | 342 passed                        |
+| AGNT backend unit suite                                                   | 623 passed                        |
+| AGNT Workers DO suite                                                     | 188 passed                        |
+| AGNT sidecar unit suite                                                   | 344 passed                        |
 | deus-cloud unit suite, including broker scope and HTTP routes             | 49 passed                         |
 | AGNT SDK unit suite                                                       | 214 passed                        |
 | Deus app/backend and AGNT backend/sidecar typechecks                      | Passed                            |
 | AGNT backend deployment dry run and candidate sidecar build/isolated boot | Passed                            |
 | Disposable live E2B recovery smoke                                        | Passed; recorded test VMs removed |
+
+The merge review added regressions for healthy heartbeats postponing token renewal, credentials in Codex shell caches, an older Stop overwriting a newer Resume, and simulator cleanup skipped by failed reconciliation. Repeated failed Pause/Stop attempts also re-pause retained VMs and refresh the provider URL before retrying. Simulator Stop attempts known cleanup and still reports an unavailable ledger. These cases failed before their fixes and pass now; the heartbeat case exercises the actual Workers alarm schedule.
+
+The ordered release workflows passed actionlint. Local probes exercised the real template build/promotion CLIs with provider calls intercepted and network disabled: candidates publish only their commit tag, shared aliases move together, and conflicting candidate/promotion arguments fail. The backend dry run accepts the candidate pin. These checks do not deploy the workflow.
 
 The live smoke ran the candidate sidecar's drain endpoint and production clone/archive code. It verified an empty checkpoint, dirty/untracked project files, drained admission rejection, preview traffic leaving a new VM paused, same-VM resume, deliberate loss of the owned test VM, and recovery into a replacement. The extended run also created a real Claude conversation and resumed the same session on the replacement; Claude recalled the test phrase from its earlier context. The Git remote was a preserved test repository and R2 was a byte-preserving stand-in. Codex traces were synthetic. All recorded test VMs were removed.
 
@@ -51,11 +55,11 @@ The initial broad Deus run exposed an Electron/Node SQLite ABI mismatch; running
 - **Spread:** Deus has one archive service; AGNT owns pause admission, replacement and cleanup. The shared WIP constants keep save and restore aligned. Tests cross the existing boundaries rather than introducing a second implementation.
 - **Duplicates:** Final backups share the capture owner; cancelled boots share a stop result; provisioning no longer duplicates orphan termination after the DO accepts responsibility. Git/gh rotation shares one existing writer.
 
-The Workspace class remains large. Moving it into generic lifecycle abstractions would add indirection to this patch; extract another module only when it can own a complete responsibility without exposing a bag of state callbacks.
+Workspace now constructs three private owners for GitHub credentials, snapshots, and cleanup. Each owns complete operations and shares Workspace's cached SQLite access; Workspace retains lifecycle transitions, admission, and the single alarm. The follow-up fixes stay within these boundaries and add no state machine or retry framework.
 
 ## Rollout and next priorities
 
-1. Deploy deus-cloud's named `GitHubTokens` entrypoint, then AGNT backend/candidate sidecar, then Deus. Older paused VMs may retain an older sidecar; `/drain` 404 preserves them and reports failure. The additive API/SDK contract has a minor changeset. Deus uses the installed SDK's supported raw client API to carry the field, so a package publish is not required for this consumer patch.
+1. AGNT's single `Deploy Cloud Runtime` workflow builds the candidate without moving shared aliases, deploys deus-cloud's named `GitHubTokens` entrypoint, deploys the backend pinned to that candidate, and then promotes `production/default/latest` together. Release Deus afterward. Older paused VMs may retain an older sidecar; `/drain` 404 preserves them, attempts to restore their pause, and reports failure. The additive API/SDK contract has a minor changeset. Deus uses the installed SDK's supported raw client API to carry the field, so a package publish is not required for this consumer patch.
 2. Prove private-repository resume/push and continuous execution across real token expiry with the Mac closed, against the deployed broker and R2 binding. The local tests cover lease timing, organization/repository scope, source changes and failures; they do not establish production configuration.
 3. Repair browser-to-desktop transcript reconciliation. Complete Codex's internal tool bridge upstream and the managed Android debug build lane, then run the real EAS build/device cleanup journey. These remain tracked in the eight Hivenet threads recorded in the roadmap.
 
