@@ -354,6 +354,12 @@ export async function refreshWorkspaceGithubTokenIfStale(
       }
     | undefined;
   if (!row || row.kind !== "cloud" || !row.provider_workspace_id) return;
+  // Stamp 0 = the map is KNOWN tokenless (created or last refreshed without
+  // a mint: no App access, a public repo). A connect has nothing to keep
+  // fresh there — and refreshing anyway would mint-and-fail once per window
+  // for every such workspace each time the backend reconnects its sessions.
+  // The send and wake paths still retry the mint, in case access was granted.
+  if (row.last_inline_mint_at === 0) return;
   const id = row.provider_workspace_id;
   if (
     isMintFresh(row.last_inline_mint_at ?? null, tokenRefreshMarks.get(id), Date.now(), freshMs)
