@@ -425,7 +425,10 @@ describe("PATCH /workspaces/:id", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(mockStmt.run).toHaveBeenCalledWith("ready", "ws-test-uuid");
+    expect(mockDb.prepare).toHaveBeenCalledWith(
+      "UPDATE workspaces SET state = 'ready' WHERE id = ?"
+    );
+    expect(mockStmt.run).toHaveBeenCalledWith("ws-test-uuid");
     expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "stats"]);
   });
 });
