@@ -14,7 +14,7 @@ import { v7 as uuidv7 } from "uuid";
 import {
   createWorkspace as agntCreateWorkspace,
   createSession as agntCreateSession,
-  stopWorkspace as agntStopWorkspace,
+  pauseWorkspace as agntPauseWorkspace,
   resumeWorkspace as agntResumeWorkspace,
   getWorkspace as agntGetWorkspace,
   createSecret as agntCreateSecret,
@@ -104,44 +104,13 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   return { workspaceId, slug };
 }
 
-/**
- * Delete the hidden durability ref (refs/agnt/wip/<providerWorkspaceId>) from
- * the repo's origin. Archive-time hygiene: the sandbox is being stopped, the
- * workspace is closed — nothing should linger in the user's repository. Runs
- * through the LOCAL gh auth (works when the sandbox is already dead) and is
- * strictly best-effort: a missing ref or missing gh is not an error.
- */
-export async function deleteCloudWipRef(
-  originUrl: string,
-  providerWorkspaceId: string
-): Promise<void> {
-  const slug = githubRepoSlug(originUrl);
-  if (!slug) return;
-  const [owner, repoName] = slug.split("/");
-  try {
-    await execFileAsync(
-      "gh",
-      [
-        "api",
-        "-X",
-        "DELETE",
-        `repos/${owner}/${repoName}/git/refs/agnt/wip/${providerWorkspaceId}`,
-      ],
-      { timeout: 15_000 }
-    );
-  } catch {
-    // Ref never existed (no turns ran), token lacks scope, or gh is absent.
-  }
-}
-
-/** Stop the agnt sandbox behind an archived cloud workspace (best-effort). */
-export async function stopCloudWorkspace(providerWorkspaceId: string): Promise<void> {
+/** Archive suspends the VM and keeps both its filesystem and remote backups. */
+export async function pauseCloudWorkspace(providerWorkspaceId: string): Promise<void> {
   const config = getCloudConfig();
-  if (!config) return;
-  await agntStopWorkspace(providerWorkspaceId, {
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-  });
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  // Let the lifecycle owner decide: a disconnected VM may report stopped
+  // while its processes are still running.
+  await agntPauseWorkspace(providerWorkspaceId, { baseUrl: config.baseUrl, apiKey: config.apiKey });
 }
 
 /** Platform-truth status of the sandbox ("paused" | "stopped" | "running" | ...), null if unreachable. */
