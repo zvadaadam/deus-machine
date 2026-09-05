@@ -22,11 +22,12 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
-import { archiveWorkspace, unarchiveWorkspace } from "../services/workspace-archive.service";
 import {
-  createCloudWorkspace,
-  wakeCloudWorkspaceWithFeedback,
-} from "../services/cloud-workspace-init.service";
+  archiveWorkspace,
+  unarchiveWorkspace,
+  wakeWorkspace,
+} from "../services/workspace-archive.service";
+import { createCloudWorkspace } from "../services/cloud-workspace-init.service";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
@@ -74,23 +75,7 @@ app.get("/workspaces/:id", (c) => {
 // auto-resume; this is the explicit "click the cloud icon" path, and the
 // reconnected socket's workspace.state events refresh the row's truth.
 app.post("/workspaces/:id/cloud-wake", async (c) => {
-  const db = getDatabase();
-  const workspace = getWorkspaceById(db, c.req.param("id"));
-  if (!workspace) throw new NotFoundError("Workspace not found");
-  if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
-    throw new ValidationError("Not a cloud workspace");
-  }
-  if (workspace.state === "archived") {
-    // Archive already stopped the sandbox; waking it would silently restart
-    // the meter on a workspace the UI presents as closed.
-    throw new ValidationError("Workspace is archived — unarchive it first");
-  }
-  const result = await wakeCloudWorkspaceWithFeedback({
-    id: workspace.id,
-    provider_workspace_id: workspace.provider_workspace_id,
-    current_session_id: workspace.current_session_id,
-    repository_id: workspace.repository_id,
-  });
+  const result = await wakeWorkspace(c.req.param("id"));
   return c.json(result);
 });
 

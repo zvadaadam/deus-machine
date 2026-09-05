@@ -24,12 +24,12 @@ The recovery reference is a separate Git backup of project work that has not nec
 
 The immediate danger is in our fallback logic:
 
-- [pauseSandbox](/Users/zvada/conductor/workspaces/agnt/tbilisi/apps/backend/src/workspace/do/workspace.ts:1306) turns a provider pause error into shutdown/termination.
-- [resumeSandbox](/Users/zvada/conductor/workspaces/agnt/tbilisi/apps/backend/src/workspace/do/workspace.ts:1340), heartbeat timeout and resume-wait timeout can turn connectivity failure into reprovisioning.
-- The [provisioning consumer](/Users/zvada/conductor/workspaces/agnt/tbilisi/apps/backend/src/workspace/provisioning.ts:100) then terminates the previous sandbox. An unreachable sidecar does not establish that its disk is lost.
-- [repo-clone](/Users/zvada/conductor/workspaces/agnt/tbilisi/apps/backend/src/workspace/steps/repo-clone.ts) ignores the saved WIP ref. The next autosave can replace the recovery pointer with the fresh checkout; this was reproduced with the real Git functions.
+- [pauseSandbox](https://github.com/zvadaadam/AGNT/blob/eefc1fa229f6962cb1ef531a860aaf1456b2b290/apps/backend/src/workspace/do/workspace.ts#L1306) turns a provider pause error into shutdown/termination.
+- [resumeSandbox](https://github.com/zvadaadam/AGNT/blob/eefc1fa229f6962cb1ef531a860aaf1456b2b290/apps/backend/src/workspace/do/workspace.ts#L1340), heartbeat timeout and resume-wait timeout can turn connectivity failure into reprovisioning.
+- The [provisioning consumer](https://github.com/zvadaadam/AGNT/blob/eefc1fa229f6962cb1ef531a860aaf1456b2b290/apps/backend/src/workspace/provisioning.ts#L100) then terminates the previous sandbox. An unreachable sidecar does not establish that its disk is lost.
+- [repo-clone](https://github.com/zvadaadam/AGNT/blob/eefc1fa229f6962cb1ef531a860aaf1456b2b290/apps/backend/src/workspace/steps/repo-clone.ts) ignores the saved WIP ref. The next autosave can replace the recovery pointer with the fresh checkout; this was reproduced with the real Git functions.
 
-**Original prefactor proposal (superseded by the implementation assessment):** Extend the existing [sandbox-recovery.ts](/Users/zvada/conductor/workspaces/agnt/tbilisi/apps/backend/src/workspace/do/sandbox-recovery.ts) decision seam to cover the scattered recovery triggers. Move decisions, keep provider effects in Workspace, and preserve behavior in this preparatory commit. Characterize the affected decisions and provisioning-epoch guards. Do not introduce a lifecycle framework or split the whole Workspace class.
+**Original prefactor proposal (superseded by the implementation assessment):** Extend the existing [sandbox-recovery.ts](https://github.com/zvadaadam/AGNT/blob/eefc1fa229f6962cb1ef531a860aaf1456b2b290/apps/backend/src/workspace/do/sandbox-recovery.ts) decision seam to cover the scattered recovery triggers. Move decisions, keep provider effects in Workspace, and preserve behavior in this preparatory commit. Characterize the affected decisions and provisioning-epoch guards. Do not introduce a lifecycle framework or split the whole Workspace class.
 
 **Then change behavior in small commits:**
 
@@ -43,7 +43,7 @@ The immediate danger is in our fallback logic:
 
 **2. Truthful Archive/Stop and durable device cleanup — Deus + AGNT**
 
-First fix the small [sidecar cancellation gap](/Users/zvada/conductor/workspaces/agnt/tbilisi/apps/sidecar/src/agents/controller.ts): install a turn-owned record before the first preparation await, mark that exact turn cancelled, check ownership/cancellation after each await, and never call `runtime.run` after cancellation. Cleanup must not remove a successor turn's credentials. Preserve the engine's existing confirmed/unconfirmed cancellation semantics once it owns the turn.
+First fix the small [sidecar cancellation gap](https://github.com/zvadaadam/AGNT/blob/eefc1fa229f6962cb1ef531a860aaf1456b2b290/apps/sidecar/src/agents/controller.ts): install a turn-owned record before the first preparation await, mark that exact turn cancelled, check ownership/cancellation after each await, and never call `runtime.run` after cancellation. Cleanup must not remove a successor turn's credentials. Preserve the engine's existing confirmed/unconfirmed cancellation semantics once it owns the turn.
 
 Then introduce one Deus archive service used by both `q:archiveWorkspace` and PATCH/update. Consolidating those different behaviors is part of the feature change, not a behavior-preserving refactor. Keep transport validation at the edges. The service must request cloud suspension and local cleanup, preserve recovery data, and publish pending/failure/completed state honestly. Do not copy the PATCH route's kill-and-delete-ref behavior into the actual UI path.
 
@@ -117,6 +117,6 @@ All eight reports returned `delivered: true` for `--to deus`. Auto-collected env
 | GitHub renewal                   | `18570e50457e86db65eab46a1b19830b` |
 | Desktop history                  | `0363235823427febca1b11c96b61408a` |
 
-Exact payloads and receipts: [.context/cloud-review/hivenet-reports.json](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/hivenet-reports.json), [hivenet-results.ndjson](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/hivenet-results.ndjson). Detailed landing-zone plans: [GitHub renewal](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/github-renewal-plan.md), [devices](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/device-lifecycle-plan.md), [continuity and Codex](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/agent-continuity-plan.md).
+Exact payloads and receipts: `.context/cloud-review/hivenet-reports.json` (local, gitignored), `.context/cloud-review/hivenet-results.ndjson` (local, gitignored). Detailed landing-zone plans: `.context/cloud-review/github-renewal-plan.md` (local, gitignored), `.context/cloud-review/device-lifecycle-plan.md` (local, gitignored), `.context/cloud-review/agent-continuity-plan.md` (local, gitignored).
 
 The initial review validated 287 selected Deus tests and five local bug reproductions. Implementation and later validation supersede that baseline; use the [results document](cloud-reliability-results-2026-09-05.md) for current evidence. Deployed GitHub/R2 and EAS acceptance cases remain staging work.

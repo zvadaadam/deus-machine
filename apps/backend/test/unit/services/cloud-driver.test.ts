@@ -63,14 +63,14 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
 const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
 const mockCreateSessionToken = vi.fn(async () => ({ token: "session-jwt" }));
 const mockGetSession = vi.fn(async (..._args: unknown[]) => ({ simulator: null }) as unknown);
-const mockGetWorkspace = vi.fn(async () => ({ status: "paused" }));
-const mockResumeWorkspace = vi.fn(async () => {});
+const mockGetWorkspace = vi.fn(async (..._args: unknown[]) => ({ status: "paused" }));
+const mockResumeWorkspace = vi.fn(async (..._args: unknown[]) => {});
 vi.mock("@deus-hq/sdk", () => ({
   createSessionToken: () => mockCreateSessionToken(),
   createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
   getSession: (...args: unknown[]) => mockGetSession(...args),
-  getWorkspace: () => mockGetWorkspace(),
-  resumeWorkspace: () => mockResumeWorkspace(),
+  getWorkspace: (...args: unknown[]) => mockGetWorkspace(...args),
+  resumeWorkspace: (...args: unknown[]) => mockResumeWorkspace(...args),
 }));
 vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: vi.fn() }));
 vi.mock("../../../src/services/workspace-status.service", () => ({ autoProgressStatus: vi.fn() }));
@@ -620,6 +620,9 @@ describe("cloud driver frame → fold contract", () => {
             );
           }
         );
+        const cloudOptions = { baseUrl: "http://agnt.test", apiKey: "agnt_sk_test_x" };
+        expect(mockGetWorkspace).toHaveBeenCalledWith("agnt-ws-1", cloudOptions);
+        expect(mockResumeWorkspace).toHaveBeenCalledWith("agnt-ws-1", cloudOptions);
         expect(
           db.prepare("SELECT state, init_stage FROM workspaces WHERE id = 'deus-ws-1'").get()
         ).toEqual({ state: expectedState, init_stage: expectedStage });

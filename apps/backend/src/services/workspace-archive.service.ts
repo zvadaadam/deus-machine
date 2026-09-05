@@ -1,5 +1,6 @@
 import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
+import { NotFoundError, ValidationError } from "../lib/errors";
 import { stopAppsForWorkspace } from "./aap";
 import {
   pauseCloudWorkspace,
@@ -35,11 +36,11 @@ async function performArchive(workspaceId: string): Promise<void> {
   autoProgressStatus(workspaceId, "done", { force: true });
 }
 
-// Serialize archive/unarchive for one workspace so a slow pause cannot overwrite
-// an unarchive that the user requested while it was in flight.
-const changes = new Map<string, Promise<void>>();
+// Archive, unarchive and explicit wake share one queue: a delayed Resume
+// must finish before a later Pause can advertise the workspace as archived.
+const changes = new Map<string, Promise<unknown>>();
 
-function changeArchive(workspaceId: string, change: () => Promise<void>): Promise<void> {
+function changeWorkspaceState<T>(workspaceId: string, change: () => Promise<T>): Promise<T> {
   const previous = changes.get(workspaceId) ?? Promise.resolve();
   const next = previous.catch(() => {}).then(change);
   changes.set(workspaceId, next);
@@ -52,11 +53,28 @@ function changeArchive(workspaceId: string, change: () => Promise<void>): Promis
 }
 
 export function archiveWorkspace(workspaceId: string): Promise<void> {
-  return changeArchive(workspaceId, () => performArchive(workspaceId));
+  return changeWorkspaceState(workspaceId, () => performArchive(workspaceId));
+}
+
+export function wakeWorkspace(workspaceId: string) {
+  return changeWorkspaceState(workspaceId, async () => {
+    const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
+    if (!workspace) throw new NotFoundError("Workspace not found");
+    if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
+      throw new ValidationError("Not a cloud workspace");
+    }
+    if (workspace.state === "archived") {
+      throw new ValidationError("Workspace is archived — unarchive it first");
+    }
+    return wakeCloudWorkspaceWithFeedback({
+      ...workspace,
+      provider_workspace_id: workspace.provider_workspace_id,
+    });
+  });
 }
 
 export function unarchiveWorkspace(workspaceId: string): Promise<void> {
-  return changeArchive(workspaceId, async () => {
+  return changeWorkspaceState(workspaceId, async () => {
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
     if (!workspace) throw new Error("Workspace not found");
