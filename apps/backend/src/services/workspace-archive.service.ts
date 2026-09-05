@@ -1,11 +1,11 @@
 import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { stopAppsForWorkspace } from "./aap";
-import { pauseCloudWorkspace } from "./cloud-workspace-init.service";
+import { pauseCloudWorkspace, resumeCloudWorkspace } from "./cloud-workspace-init.service";
 import { autoProgressStatus } from "./workspace-status.service";
 
 /** Both HTTP and WS archive the same way. Cloud archive preserves its recovery data. */
-export async function archiveWorkspace(workspaceId: string): Promise<void> {
+async function performArchive(workspaceId: string): Promise<void> {
   const db = getDatabase();
   const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new Error("Workspace not found");
@@ -29,4 +29,39 @@ export async function archiveWorkspace(workspaceId: string): Promise<void> {
   }
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
   autoProgressStatus(workspaceId, "done", { force: true });
+}
+
+// Serialize archive/unarchive for one workspace so a slow pause cannot overwrite
+// an unarchive that the user requested while it was in flight.
+const changes = new Map<string, Promise<void>>();
+
+function changeArchive(workspaceId: string, change: () => Promise<void>): Promise<void> {
+  const previous = changes.get(workspaceId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(change);
+  changes.set(workspaceId, next);
+  void next
+    .finally(() => {
+      if (changes.get(workspaceId) === next) changes.delete(workspaceId);
+    })
+    .catch(() => {});
+  return next;
+}
+
+export function archiveWorkspace(workspaceId: string): Promise<void> {
+  return changeArchive(workspaceId, () => performArchive(workspaceId));
+}
+
+export function unarchiveWorkspace(workspaceId: string): Promise<void> {
+  return changeArchive(workspaceId, async () => {
+    const db = getDatabase();
+    const workspace = getWorkspaceRaw(db, workspaceId);
+    if (!workspace) throw new Error("Workspace not found");
+    if (
+      workspace.state === "archived" &&
+      workspace.kind === "cloud" &&
+      workspace.provider_workspace_id
+    )
+      await resumeCloudWorkspace(workspace.provider_workspace_id);
+    db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = ?").run(workspaceId);
+  });
 }

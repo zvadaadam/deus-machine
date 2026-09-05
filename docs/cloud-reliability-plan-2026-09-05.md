@@ -98,6 +98,10 @@ Keep one tested capability description per deployment/workspace/harness. Use it 
 
 Only three preparatory extractions are recommended across the staged work: recovery decisions, device boot bookkeeping, and shared Git mint policy. Perform each immediately before its feature, not as a cleanup week. Snapshot projection can be extracted within the independent continuity patch. Keep the three repositories, canonical engine protocol, existing provider brokers, and current DO ownership. Defer a broad Workspace/SimulatorManager rewrite, new generic orchestration frameworks, and a full direct-web expansion.
 
+**Implementation update — second pass**
+
+VM preservation, Git/trace recovery, consolidated cleanup, manual Pause/Resume admission, and autonomous GitHub App leases are implemented in the companion draft PRs. The final API spelling is `repositoryAuth: { type: "github_app" | "secret" }`. Current source has one authority in Workspace SQLite; PG retains only the captured initial recipe. Existing paused VMs retain their provider auto-resume setting. See the [implementation results](cloud-reliability-results-2026-09-05.md) for current tests, real Claude replacement-resume evidence, rollout order, and the remaining staging acceptance checks. The proposals above document the earlier plan and are not a substitute for those results.
+
 **Hivenet delivery record**
 
 All eight reports returned `delivered: true` for `--to deus`. Auto-collected environment telemetry was disabled. Reports distinguish local reproductions, source inspection and staging work still required.
@@ -115,4 +119,4 @@ All eight reports returned `delivered: true` for `--to deus`. Auto-collected env
 
 Exact payloads and receipts: [.context/cloud-review/hivenet-reports.json](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/hivenet-reports.json), [hivenet-results.ndjson](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/hivenet-results.ndjson). Detailed landing-zone plans: [GitHub renewal](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/github-renewal-plan.md), [devices](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/device-lifecycle-plan.md), [continuity and Codex](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-review/agent-continuity-plan.md).
 
-Prior validation remains **287 selected Deus tests passing, both typechecks passing, and five local bug reproductions**. This follow-up added source/provider-contract research, proposals and feedback, not implementation. No new app tests or live EAS/E2B/GitHub smoke were run. Acceptance cases above are required future evidence, not claimed results.
+The initial review validated 287 selected Deus tests and five local bug reproductions. Implementation and later validation supersede that baseline; use the [results document](cloud-reliability-results-2026-09-05.md) for current evidence. Deployed GitHub/R2 and EAS acceptance cases remain staging work.

@@ -22,7 +22,7 @@ import {
   isManifestCommandSafe,
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
-import { archiveWorkspace } from "../services/workspace-archive.service";
+import { archiveWorkspace, unarchiveWorkspace } from "../services/workspace-archive.service";
 import {
   createCloudWorkspace,
   wakeCloudWorkspaceWithFeedback,
@@ -127,6 +127,7 @@ app.patch("/workspaces/:id", async (c) => {
 
   if (state) {
     if (state === "archived") await archiveWorkspace(id);
+    else if (state === "ready") await unarchiveWorkspace(id);
     else db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, id);
 
     if (state === "archived") {

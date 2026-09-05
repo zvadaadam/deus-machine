@@ -1,6 +1,6 @@
 # Cloud reliability implementation — 2026-09-05
 
-The first implementation focuses on preserving work and making cleanup dependable. It changes Deus and AGNT; the generic agent-server remains at 0.3.2 because these failures belong to the product/platform lifecycle around it.
+The implementation focuses on preserving work and making cleanup dependable. It changes Deus and AGNT; the generic agent-server remains at 0.3.2 because these failures belong to the product/platform lifecycle around it.
 
 The [original review](cloud-environment-review-2026-09-05.md) and [roadmap](cloud-reliability-plan-2026-09-05.md) describe the baseline. This document records what was actually implemented and tested.
 
@@ -14,34 +14,40 @@ The [original review](cloud-environment-review-2026-09-05.md) and [roadmap](clou
 
 **Stop waits for work to be saved.** The sidecar owns cancellation from receipt through preparation and execution. Successor preparation waits for its predecessor's cleanup. Authenticated `/drain` waits for execution wrappers, recordings and Git operations. Workspace then captures traces and queues termination. Failed saves retain the VM. Concurrent Stops share one operation, and a restarted DO can repeat the barrier.
 
-**Archive uses one service in Deus.** Both WebSocket Archive and HTTP PATCH await cloud pause before marking the workspace archived. They retain recovery data. Cloud pause errors reach the caller. Pause admission lives in AGNT rather than relying on a potentially stale desktop/status observation.
+**Archive and Unarchive use one serialized service in Deus.** Both WebSocket Archive and HTTP PATCH await manual cloud pause before marking the workspace archived. AGNT persists an admission hold, drains active work, settles queued turns, and suspends the VM. New work and background probes cannot release the hold; explicit Resume does. Errors preserve the VM and reach the caller. Unarchive waits for Resume before marking the workspace ready, and a failed archive can recover through the ordinary Wake action. An online refresh leaves active session sockets intact.
+
+**New VMs stay paused under preview traffic.** E2B creation disables automatic HTTP wake. Existing VMs keep their original provider setting and full memory/filesystem; a legacy preview may still wake compute, although platform agent admission remains held. No destructive retrofit or repause polling was added.
 
 **Cleanup has one durable owner.** Workspace persists captured VM/device IDs and retry deadlines. Cleanup survives parked or deleted state, never retargets a replacement VM, and reports pending cleanup. Simulator Start/Stop reconcile the billing ledger; cancellation shares one teardown result. Rejected late provisioning attachments enter the same cleanup ledger.
 
-**Supplied GitHub rotations reach the running VM.** Both Git and gh files receive the latest supplied credential, including overlapping refreshes. This fixes application of refreshed credentials; it does not add autonomous minting while the Mac is closed.
+**GitHub App renewal belongs to the cloud.** The API accepts an explicit credential source separately from environment configuration. Workspace SQLite owns the current source and expiring lease; PG retains the immutable initial recipe. A private service binding asks deus-cloud to mint a token scoped to the workspace's organization and repository. Workspace renews before provisioning/resume/save barriers and near expiry on its existing heartbeat, applying the result to both Git and gh. A failed file write is retried even after minting succeeded; a mint outage cannot prevent idle suspension. Caller-managed PATs remain separate. Missing desktop authentication cannot disable an existing cloud lease.
 
 ## Verification
 
 | Check                                                                     | Result                            |
 | ------------------------------------------------------------------------- | --------------------------------- |
-| Deus backend, including integration tests                                 | 899 passed                        |
-| AGNT backend unit suite                                                   | 617 passed                        |
-| AGNT Workers DO suite                                                     | 160 passed                        |
+| Deus backend, including integration tests                                 | 909 passed                        |
+| AGNT backend unit suite                                                   | 622 passed                        |
+| AGNT Workers DO suite                                                     | 182 passed                        |
 | AGNT sidecar unit suite                                                   | 342 passed                        |
+| deus-cloud unit suite, including broker scope and HTTP routes             | 49 passed                         |
+| AGNT SDK unit suite                                                       | 214 passed                        |
 | Deus app/backend and AGNT backend/sidecar typechecks                      | Passed                            |
 | AGNT backend deployment dry run and candidate sidecar build/isolated boot | Passed                            |
 | Disposable live E2B recovery smoke                                        | Passed; recorded test VMs removed |
 
-The live smoke ran the candidate sidecar's drain endpoint and production clone/archive code. It verified an empty checkpoint, dirty and untracked project files, same-VM pause/resume, deliberate loss of the owned test VM, and recovery of work plus synthetic Claude/Codex traces into a replacement. The Git remote was a preserved test repository and R2 was a byte-preserving stand-in. Local Workers tests also exercised R2 deletion ordering.
+The live smoke ran the candidate sidecar's drain endpoint and production clone/archive code. It verified an empty checkpoint, dirty/untracked project files, drained admission rejection, preview traffic leaving a new VM paused, same-VM resume, deliberate loss of the owned test VM, and recovery into a replacement. The extended run also created a real Claude conversation and resumed the same session on the replacement; Claude recalled the test phrase from its earlier context. The Git remote was a preserved test repository and R2 was a byte-preserving stand-in. Codex traces were synthetic. All recorded test VMs were removed.
 
-**Not verified live:** the deployed R2 binding, native Claude/Codex conversation resume, expired GitHub App token minting, and real EAS build/device execution. No production backend, template, or desktop release was deployed. Do not treat the provider smoke as proof of the complete deployed user journey.
+The latest extended receipt is [result.json](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt/.context/cloud-smoke-b53af27c-872a-4b15-8ff2-7cd8158c4909/result.json), with an empty [ownership ledger](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt/.context/cloud-smoke-b53af27c-872a-4b15-8ff2-7cd8158c4909/owned-vms.json). This proves the native Claude archive path, not the complete deployed Deus/AGNT conversation journey.
+
+**Not verified live:** the deployed R2 binding, native Codex conversation resume, expired GitHub App token minting through the deployed broker, and real EAS build/device execution. No production backend, template, or desktop release was deployed. Do not treat the provider smoke as proof of the complete deployed user journey.
 
 The initial broad Deus run exposed an Electron/Node SQLite ABI mismatch; running the repository's `test:backend` script under Node 22 rebuilt the native module and passed the entire suite. AGNT's Workers tests required local Vitest 3 internals to avoid resolving the SDK's Vitest 4 dependencies. Both are reflected in the reproducible commands/tooling, not hidden by skipped assertions.
 
 ## Maintenance assessment
 
-- **Additions:** Domain-specific in-flight operations and one durable cleanup record stay inside Workspace. No generic retry scheduler, new service tier, or harness protocol translation was added.
-- **Premises:** Removed “unreachable means lost,” “archive discards recovery,” and “a later state transition will retry cleanup.” Verified and removed the unused snapshot-key helper and obsolete recovery decision module.
+- **Additions:** Domain-specific in-flight operations and one durable cleanup record stay inside Workspace. No generic retry scheduler, new service tier, or harness protocol translation was added. The private broker lives in the existing product worker; its HTTP app stays separately testable.
+- **Premises:** Removed “unreachable means lost,” “archive discards recovery,” and “a later state transition will retry cleanup.” Verified and removed the unused snapshot-key helper and obsolete recovery decision module. Also removed client-side wake/recreate status inference and duplicate PG ownership of mutable credential source.
 - **Spread:** Deus has one archive service; AGNT owns pause admission, replacement and cleanup. The shared WIP constants keep save and restore aligned. Tests cross the existing boundaries rather than introducing a second implementation.
 - **Duplicates:** Final backups share the capture owner; cancelled boots share a stop result; provisioning no longer duplicates orphan termination after the DO accepts responsibility. Git/gh rotation shares one existing writer.
 
@@ -49,11 +55,10 @@ The Workspace class remains large. Moving it into generic lifecycle abstractions
 
 ## Rollout and next priorities
 
-1. Ship the AGNT backend and candidate sidecar before depending on confirmed Stop and idempotent pause. Older paused VMs can retain an older sidecar; `/drain` 404 preserves them rather than silently terminating without confirmation.
-2. Add a durable product archive/wake policy. This patch confirms pause; it does not cancel frozen turns or prevent preview traffic from waking existing `autoResume: true` machines. Strict “archived stays stopped until unarchive” is not finished.
-3. Implement cloud-owned GitHub token leases, then test private repository resume/push with the Mac closed and the previous token expired.
-4. Repair browser-to-desktop transcript reconciliation. Finish Codex's internal tool bridge upstream and the managed Android debug build lane. These remain tracked in the eight Hivenet feedback threads recorded in the roadmap.
+1. Deploy deus-cloud's named `GitHubTokens` entrypoint, then AGNT backend/candidate sidecar, then Deus. Older paused VMs may retain an older sidecar; `/drain` 404 preserves them and reports failure. The additive API/SDK contract has a minor changeset. Deus uses the installed SDK's supported raw client API to carry the field, so a package publish is not required for this consumer patch.
+2. Prove private-repository resume/push and continuous execution across real token expiry with the Mac closed, against the deployed broker and R2 binding. The local tests cover lease timing, organization/repository scope, source changes and failures; they do not establish production configuration.
+3. Repair browser-to-desktop transcript reconciliation. Complete Codex's internal tool bridge upstream and the managed Android debug build lane, then run the real EAS build/device cleanup journey. These remain tracked in the eight Hivenet threads recorded in the roadmap.
 
 Git/R2 recovery is not a full disk backup. Ignored files, local databases and memory still depend on retaining the original VM or a future broader backup policy.
 
-The upstream implementation is [AGNT draft PR #187](https://github.com/zvadaadam/AGNT/pull/187), commit `c34a7f57`. AGNT work is isolated in [.context/cloud-implementation/agnt](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt) on `zvadaadam/cloud-reliability`. Its [maintenance guide](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt/docs/cloud-reliability.md) and [repeatable provider smoke](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt/scripts/cloud-recovery-smoke.ts) live with the implementation. The linked AGNT and agent-server worktrees were not edited.
+The upstream implementation is [AGNT draft PR #187](https://github.com/zvadaadam/AGNT/pull/187). AGNT work is isolated in [.context/cloud-implementation/agnt](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt) on `zvadaadam/cloud-reliability`. Its [maintenance guide](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt/docs/cloud-reliability.md) and [repeatable provider smoke](/Users/zvada/conductor/workspaces/deus-machine/sao-tome/.context/cloud-implementation/agnt/scripts/cloud-recovery-smoke.ts) live with the implementation. The linked AGNT and agent-server worktrees were not edited.
