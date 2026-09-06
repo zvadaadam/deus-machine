@@ -15,11 +15,7 @@
 // tool-use question in-process — deus has no interactive permission UI).
 
 import { createSession, createSessionToken } from "@deus-hq/sdk";
-import {
-  LIFECYCLE_EVENT_TYPES,
-  SessionErrorEventSchema,
-  type SessionErrorEvent,
-} from "@deus-hq/api";
+import { LIFECYCLE_EVENT_TYPES, SessionErrorEventSchema } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
@@ -254,22 +250,15 @@ function pushToFold(session: CloudSession, event: Record<string, unknown>): void
   handler.handle(envelope);
 }
 
-/** agnt error envelopes (code/message) → the engine's error event, so the
- *  existing error plumbing (facts, dedupe, status flip) runs unchanged. */
-function pushCloudError(
-  session: CloudSession,
-  code: unknown,
-  message: unknown,
-  details: Pick<SessionErrorEvent, "turnId" | "recoverable"> = { recoverable: false }
-): void {
+/** Channel command rejection → the engine's error plumbing. */
+function pushCloudError(session: CloudSession, code: unknown, message: unknown): void {
   pushToFold(session, {
     type: "error",
     category: "internal",
     message: `${typeof code === "string" ? code : "cloud_error"}: ${
       typeof message === "string" ? message : "Cloud session error"
     }`,
-    recoverable: details.recoverable,
-    ...(details.turnId !== undefined ? { turnId: details.turnId } : {}),
+    recoverable: false,
     timestamp: Date.now(),
   });
 }
@@ -389,7 +378,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // backend restart they are the only way to learn of a device that is
       // still running — and billing. A platform that mirrors every device
       // sends `latestSimulatorStatuses` (one per platform); an older one only
-      // the single latest status, which then stands in for the workspace.
+      // the single newest status, which says nothing about other platforms.
       // Applied BEFORE the sandbox-status branches below, so a parked sandbox
       // overrides a mirror older than the park.
       if (Array.isArray(frame.latestSimulatorStatuses)) {
@@ -534,7 +523,17 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // released. Only a different live turn proves this error is stale.
       const live = handler.liveTurnId(session.deusSessionId);
       if (turnId !== undefined && live !== undefined && turnId !== live) return;
-      pushCloudError(session, error.code, error.message, { turnId, recoverable });
+      // Engine errors carry their canonical category in code. The platform's
+      // generic failure wrapper is the only one the fold should deduplicate.
+      pushToFold(session, {
+        type: "error",
+        category: error.code === "AGENT_EXECUTION_FAILED" ? "internal" : error.code,
+        message: error.message,
+        turnId,
+        recoverable,
+        _meta: { cloudErrorCode: error.code },
+        timestamp: Date.now(),
+      });
       return;
     }
 

@@ -182,7 +182,7 @@ describe("direct cloud session published frames", () => {
     expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"].busy).toBeNull();
   });
 
-  it("replaces remembered platforms when a legacy reconnect has only a singular mirror", () => {
+  it("preserves other devices when a legacy reconnect reports only the newest platform status", () => {
     onFrame(snapshot("ready"));
     onFrame({
       ...snapshot("stopped"),
@@ -192,7 +192,7 @@ describe("direct cloud session published frames", () => {
       "cloud:simulator",
       expect.objectContaining({
         kind: "status",
-        data: expect.objectContaining({ platform: "android", status: "stopped" }),
+        data: expect.objectContaining({ platform: "ios", status: "ready" }),
       })
     );
   });

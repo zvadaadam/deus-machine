@@ -130,12 +130,17 @@ export function applySessionFacts(
       // agent is still working AND suppress the real terminal error through
       // the dedupe flag. This swallow is load-bearing.
       if (e.recoverable) return [];
-      // Cloud session.error follows turn.ended. Keep that turn's canonical
-      // error when it already supplied one; a cancelled or generic terminal
-      // still needs the later actionable details. Use the fold's identity,
-      // since errorReported alone could belong to an earlier turn.
+      // Cloud session.error follows turn.ended. Only suppress the platform's
+      // generic wrapper; deferred engine errors can carry better details than
+      // a watchdog or workspace failure's terminal ErrorInfo.
       const turn = conversation.turns.find((turn) => turn.turnId === e.turnId);
-      if (turn?.status === "ended" && turn.stopReason === "error" && turn.error) return [];
+      if (
+        e._meta?.cloudErrorCode === "AGENT_EXECUTION_FAILED" &&
+        turn?.status === "ended" &&
+        turn.stopReason === "error" &&
+        turn.error
+      )
+        return [];
       facts.errorReported = true;
       return [
         { fact: "session-error", result: persistSessionError(sessionId, e.message, e.category) },

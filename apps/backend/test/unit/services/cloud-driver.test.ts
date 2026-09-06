@@ -227,8 +227,8 @@ describe("cloud driver frame → fold contract", () => {
     expect(handler.handle).toHaveBeenCalledTimes(1);
     expect(handler.handle.mock.calls[0][0].event).toMatchObject({
       type: "error",
-      category: "internal",
-      message: "sidecar_unreachable: boom",
+      category: "sidecar_unreachable",
+      message: "boom",
       recoverable: false,
     });
   });
@@ -245,7 +245,7 @@ describe("cloud driver frame → fold contract", () => {
     );
     expect(handler.handle.mock.calls[0][0].event).toMatchObject({
       type: "error",
-      message: "TEMPORARY_FAILURE: Retrying the connection",
+      message: "Retrying the connection",
       turnId: "turn-current",
       recoverable: true,
     });
@@ -286,7 +286,8 @@ describe("cloud driver frame → fold contract", () => {
         expect.objectContaining({
           event: expect.objectContaining({
             type: "error",
-            message: "provider_auth: Reconnect your provider account",
+            category: "provider_auth",
+            message: "Reconnect your provider account",
             turnId: "turn-current",
             recoverable: false,
           }),
@@ -294,6 +295,22 @@ describe("cloud driver frame → fold contract", () => {
       );
     }
   );
+
+  it("identifies the platform failure wrapper without losing its turn", () => {
+    capturedOnFrame!({
+      type: "session.error",
+      error: { code: "AGENT_EXECUTION_FAILED", message: "Agent turn failed" },
+      recoverable: false,
+      turnId: "turn-current",
+    });
+    expect(handler.handle.mock.calls[0][0].event).toMatchObject({
+      type: "error",
+      category: "internal",
+      message: "Agent turn failed",
+      turnId: "turn-current",
+      _meta: { cloudErrorCode: "AGENT_EXECUTION_FAILED" },
+    });
+  });
 
   it("synthesizes the missed turn.ended from a snapshot's turns[] outcome", () => {
     handler.liveTurnId.mockReturnValue("turn-x");

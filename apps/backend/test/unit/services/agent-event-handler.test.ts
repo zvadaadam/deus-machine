@@ -520,8 +520,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
           sessionId: SESSION,
           turnId: TURN,
           category: "internal",
-          message: "AGENT_EXECUTION_FAILED: 429 slow down",
+          message: "429 slow down",
           recoverable: false,
+          _meta: { cloudErrorCode: "AGENT_EXECUTION_FAILED" },
           timestamp: T,
         })
       );
@@ -529,6 +530,44 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       // persistence path may replace the error columns it already wrote.
       expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
       expect(mockPersistSessionError).not.toHaveBeenCalled();
+    });
+
+    it("keeps actionable details released after a generic terminal and before its platform wrapper", () => {
+      handler.handle(
+        envelope(
+          turnEnded({
+            stopReason: "error",
+            error: { category: "internal", message: "Agent turn failed" },
+          })
+        )
+      );
+      handler.handle(
+        envelope({
+          type: "error",
+          sessionId: SESSION,
+          turnId: TURN,
+          category: "provider_auth",
+          message: "Reconnect your provider account",
+          recoverable: false,
+          timestamp: T,
+        })
+      );
+      handler.handle(
+        envelope({
+          type: "error",
+          sessionId: SESSION,
+          turnId: TURN,
+          category: "internal",
+          message: "Agent turn failed",
+          recoverable: false,
+          _meta: { cloudErrorCode: "AGENT_EXECUTION_FAILED" },
+          timestamp: T,
+        })
+      );
+      expect(mockPersistSessionError.mock.calls).toEqual([
+        [SESSION, "Reconnect your provider account", "provider_auth"],
+      ]);
+      expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
     });
 
     it.each(["error", "cancelled"])(

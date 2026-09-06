@@ -337,7 +337,7 @@ export function useCloudDirectSession(
       if (before && primary && sameCloudSimulatorStatus(before, primary)) return;
       emitSimulatorEvent(sessionId, primary ? "status" : "gone", primary ?? {});
     };
-    const applySimulatorStatus = (frame: Record<string, unknown>, replace = false) => {
+    const applySimulatorStatus = (frame: Record<string, unknown>, hydrate = false) => {
       const parsed = CloudSimulatorStatusSchema.safeParse(frame);
       if (!parsed.success) {
         console.warn(`[CloudDirect] malformed simulator status session=${sessionId}`);
@@ -350,8 +350,7 @@ export function useCloudDirectSession(
       }
       // Snapshots rehydrate the store even when unchanged. A live update on
       // another platform must not falsely acknowledge the primary's command.
-      const before = replace ? null : primarySimulatorStatus();
-      if (replace) simulatorStatuses.clear();
+      const before = hydrate ? null : primarySimulatorStatus();
       simulatorStatuses.set(parsed.data.platform, parsed.data);
       emitPrimarySimulator(before);
     };
@@ -483,8 +482,7 @@ export function useCloudDirectSession(
             console.warn(`[CloudDirect] malformed simulator mirror session=${sessionId}`);
           }
         } else if (frame.latestSimulatorStatus && typeof frame.latestSimulatorStatus === "object") {
-          // A legacy snapshot supplies only one device; replace the previous
-          // connection's slots after validating it, just like a complete list.
+          // Legacy mirrors contain only the newest event, not every device.
           applySimulatorStatus(frame.latestSimulatorStatus as Record<string, unknown>, true);
         }
         const live =
