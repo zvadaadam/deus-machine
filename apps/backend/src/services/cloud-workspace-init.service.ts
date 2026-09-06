@@ -14,7 +14,7 @@ import { v7 as uuidv7 } from "uuid";
 import {
   createWorkspace as agntCreateWorkspace,
   createSession as agntCreateSession,
-  stopWorkspace as agntStopWorkspace,
+  pauseWorkspace as agntPauseWorkspace,
   resumeWorkspace as agntResumeWorkspace,
   getWorkspace as agntGetWorkspace,
   createSecret as agntCreateSecret,
@@ -22,6 +22,7 @@ import {
   deleteSecret as agntDeleteSecret,
   Environment,
 } from "@deus-hq/sdk";
+import { apiCreateWorkspace } from "@deus-hq/sdk/client";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
@@ -104,44 +105,43 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   return { workspaceId, slug };
 }
 
-/**
- * Delete the hidden durability ref (refs/agnt/wip/<providerWorkspaceId>) from
- * the repo's origin. Archive-time hygiene: the sandbox is being stopped, the
- * workspace is closed — nothing should linger in the user's repository. Runs
- * through the LOCAL gh auth (works when the sandbox is already dead) and is
- * strictly best-effort: a missing ref or missing gh is not an error.
- */
-export async function deleteCloudWipRef(
-  originUrl: string,
-  providerWorkspaceId: string
-): Promise<void> {
-  const slug = githubRepoSlug(originUrl);
-  if (!slug) return;
-  const [owner, repoName] = slug.split("/");
-  try {
-    await execFileAsync(
-      "gh",
-      [
-        "api",
-        "-X",
-        "DELETE",
-        `repos/${owner}/${repoName}/git/refs/agnt/wip/${providerWorkspaceId}`,
-      ],
-      { timeout: 15_000 }
-    );
-  } catch {
-    // Ref never existed (no turns ran), token lacks scope, or gh is absent.
-  }
+type CloudRepositoryAuth = { type: "github_app" | "secret" };
+
+/** The installed SDK's public HTTP client supports additive workspace fields. */
+async function createRuntimeWorkspace(
+  options: {
+    baseUrl: string;
+    apiKey: string;
+    workspaceId?: string;
+    environment: string | ReturnType<typeof Environment.from>;
+    checkout?: { branch: string; from: string };
+  },
+  repositoryAuth?: CloudRepositoryAuth
+): Promise<{ id: string; organizationId: string }> {
+  if (!repositoryAuth) return agntCreateWorkspace(options);
+  const { environment, baseUrl, apiKey, ...body } = options;
+  const payload = typeof environment === "string" ? null : environment.toPayload();
+  const { secrets, metadata, ...config } = payload ?? {};
+  const result = await apiCreateWorkspace(
+    { baseUrl, apiKey },
+    {
+      ...body,
+      repositoryAuth,
+      ...(typeof environment === "string"
+        ? { environmentId: environment }
+        : { config, secrets, metadata }),
+    }
+  );
+  return { id: result.workspaceId, organizationId: result.organizationId };
 }
 
-/** Stop the agnt sandbox behind an archived cloud workspace (best-effort). */
-export async function stopCloudWorkspace(providerWorkspaceId: string): Promise<void> {
+/** Archive suspends the VM and keeps both its filesystem and remote backups. */
+export async function pauseCloudWorkspace(providerWorkspaceId: string): Promise<void> {
   const config = getCloudConfig();
-  if (!config) return;
-  await agntStopWorkspace(providerWorkspaceId, {
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-  });
+  if (!config) throw new Error("Cloud workspaces are not configured");
+  // Let the lifecycle owner decide: a disconnected VM may report stopped
+  // while its processes are still running.
+  await agntPauseWorkspace(providerWorkspaceId, { baseUrl: config.baseUrl, apiKey: config.apiKey });
 }
 
 /** Platform-truth status of the sandbox ("paused" | "stopped" | "running" | ...), null if unreachable. */
@@ -215,7 +215,7 @@ export async function refreshWorkspaceGithubToken(workspace: {
   }
 
   if (envInfo.configured && envInfo.environmentId) {
-    const tokenWritten = await refreshEnvironmentGithubTokenOnce(
+    const repositoryAuth = await refreshEnvironmentGithubTokenOnce(
       originUrl,
       envInfo.environmentId,
       config.baseUrl,
@@ -228,18 +228,21 @@ export async function refreshWorkspaceGithubToken(workspace: {
       // restarts a stopped sandbox (chip + send paths) — swallowing its
       // failure reported successful wakes over a sandbox that never moved,
       // and resumes rewriting auth files from a stale map.
-      await agntCreateWorkspace({
-        workspaceId: workspace.provider_workspace_id,
-        environment: envInfo.name,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
-      });
+      await createRuntimeWorkspace(
+        {
+          workspaceId: workspace.provider_workspace_id,
+          environment: envInfo.name,
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+        },
+        repositoryAuth ?? undefined
+      );
       // A secret write that failed leaves the platform resolving the OLD
       // token: the re-create still restarts a stopped sandbox, but it is no
       // mint — the next connect must try again.
       // A mark describes THIS identity's token: an account switch while the
       // re-create was in flight must not leave the next identity trusting it.
-      if (tokenWritten && generationAtStart === getCloudIdentityGeneration()) {
+      if (repositoryAuth && generationAtStart === getCloudIdentityGeneration()) {
         markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
       }
       return true;
@@ -274,18 +277,21 @@ export async function refreshWorkspaceGithubToken(workspace: {
       stampedAt === 0 || (stampedAt !== null && Date.now() - stampedAt > 55 * 60_000);
     if (!mapProvablyStrippable) return false;
   }
-  await agntCreateWorkspace({
-    workspaceId: workspace.provider_workspace_id,
-    // `.simulator()` on BOTH inline recipes (this re-create and the create in
-    // createCloudWorkspace): agnt converges the DO's environment config on
-    // re-create, so a token refresh without it would silently drop the
-    // hosted-device support the workspace was born with.
-    environment: mint.token
-      ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
-      : Environment.from("agnt-base").simulator(),
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-  });
+  await createRuntimeWorkspace(
+    {
+      workspaceId: workspace.provider_workspace_id,
+      // `.simulator()` on BOTH inline recipes (this re-create and the create in
+      // createCloudWorkspace): agnt converges the DO's environment config on
+      // re-create, so a token refresh without it would silently drop the
+      // hosted-device support the workspace was born with.
+      environment: mint.token
+        ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
+        : Environment.from("agnt-base").simulator(),
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    },
+    mint.token ? { type: "github_app" } : mint.definitive ? { type: "secret" } : undefined
+  );
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
   if (generationAtStart === getCloudIdentityGeneration()) {
     markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
@@ -396,19 +402,9 @@ function setInlineMintStamp(
     .run(stamp, workspace.provider_workspace_id);
 }
 
-const githubTokenRefreshes = new Map<string, Promise<boolean>>();
+const githubTokenRefreshes = new Map<string, Promise<CloudRepositoryAuth | null>>();
 
-/**
- * The explicit wake (chip click). Every outcome must be VISIBLE — a wake that
- * does nothing reads as broken — so each path announces itself on the chat's
- * ephemeral cloud:env pipe and moves the row's init_stage (the header chip):
- *
- *   paused  → "resuming" line + resume; failure reverts honestly to paused
- *   stopped → no doomed resume (agnt only resumes PAUSED); the line says a
- *             message-send restarts it (requestConnection re-provisions)
- *   running/provisioning/unknown → nothing to resume; reconnect refreshes truth
- */
-
+/** Explicit wake releases the platform hold; the runtime owns resume and recovery. */
 export async function wakeCloudWorkspaceWithFeedback(workspace: {
   id: string;
   provider_workspace_id: string;
@@ -426,75 +422,32 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   };
 
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
-  let finalStatus = status ?? "unknown";
-
-  if (status === "stopped") {
-    // Restart, don't shrug: ensureWorkspace's ensureProvisioning reprovisions
-    // a stopped sandbox, and refreshWorkspaceGithubToken routes through that
-    // exact re-create seam (with a FRESH mint — the stored one is long dead).
-    // The chip flips to Waking now; agnt's provisioning state frames take
-    // over the story on the session channel the shared tail below attaches
-    // (do NOT return early — after a backend restart no socket exists yet,
-    // and without one the frames have nowhere to land and the chip would
-    // stick on Waking forever).
-    setStage("resuming");
-    announce({ status: "resuming", step: "Restarting sandbox" });
-    try {
-      const restarted = await refreshWorkspaceGithubToken({
-        repository_id: workspace.repository_id ?? null,
-        provider_workspace_id: workspace.provider_workspace_id,
-      });
-      if (!restarted) {
-        // Every early-out (unconfigured cloud, missing origin, identity
-        // change) means the re-create never ran and NOTHING will move —
-        // leaving "resuming" up would be a permanent lie.
-        setStage("stopped");
-        announce({ status: "stopped", reason: "restart unavailable — try sending a message" });
-        return { ok: false, status: "stopped" };
-      }
-    } catch (err) {
-      console.warn(`[WORKSPACE] cloud restart failed: ${err}`);
-      setStage("stopped");
-      announce({ status: "stopped", reason: "restart failed — try again or send a message" });
-      return { ok: false, status: "stopped" };
-    }
-    finalStatus = "restarting";
-  }
-
-  if (status === "paused" || status === null) {
+  if (status === "running") {
+    // An earlier wake may have succeeded despite a lost response. An online
+    // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
+    setStage(null);
+  } else {
     setStage("resuming");
     announce({ status: "resuming" });
-    try {
-      // A sandbox asleep longer than an hour holds an expired App mint;
-      // re-mint BEFORE the resume. This ALSO runs ensureProvisioning — the same
-      // re-create seam the stopped path uses — so a gone/EXPIRED sandbox is
-      // already coming back by the time the resume below runs. Inside the try:
-      // a throw here must take the same honest revert to "paused" as a failed
-      // resume, not strand the row on a permanent "resuming" spinner.
-      const reprovisioned = await refreshWorkspaceGithubToken({
-        repository_id: workspace.repository_id ?? null,
-        provider_workspace_id: workspace.provider_workspace_id,
-      });
-      try {
-        await wakeCloudWorkspace(workspace.provider_workspace_id);
-      } catch (resumeErr) {
-        // A gone/expired sandbox can't be resumed ("Workspace not found or not
-        // paused"). But if the refresh above reprovisioned it, the computer is
-        // already restarting as a fresh sandbox — that's a restart, not a
-        // failure, so let agnt's provisioning frames take over (like stopped).
-        const msg = resumeErr instanceof Error ? resumeErr.message : String(resumeErr);
-        if (reprovisioned && /not\s+found|not\s+paused/i.test(msg)) {
-          finalStatus = "restarting";
-        } else {
-          throw resumeErr;
-        }
-      }
-    } catch (err) {
-      console.warn(`[WORKSPACE] cloud wake resume failed: ${err}`);
-      setStage("paused");
-      announce({ status: "paused", reason: "resume failed — try again or send a message" });
-      return { ok: false, status: "paused" };
-    }
+  }
+  // Legacy workspaces may still carry a desktop-minted token. Refresh it when
+  // possible, but cloud-owned renewal must also work without a desktop session.
+  try {
+    await refreshWorkspaceGithubToken({
+      repository_id: workspace.repository_id ?? null,
+      provider_workspace_id: workspace.provider_workspace_id,
+    });
+  } catch (err) {
+    console.warn(`[WORKSPACE] legacy GitHub refresh unavailable: ${err}`);
+  }
+  try {
+    await resumeCloudWorkspace(workspace.provider_workspace_id);
+  } catch (err) {
+    console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
+    const failedStatus = status === "paused" || status === "stopped" ? status : "error";
+    setStage(failedStatus);
+    announce({ status: failedStatus, reason: "Could not wake the cloud machine. Try again." });
+    return { ok: false, status: failedStatus };
   }
 
   if (sessionId) {
@@ -507,11 +460,11 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     }
   }
   invalidate(["workspaces", "stats"], {});
-  return { ok: true, status: finalStatus };
+  return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 
-/** Wake a paused sandbox (explicit resume; sends also auto-resume). */
-async function wakeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
+/** Release an explicit pause and resume the retained VM. */
+export async function resumeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
   const config = getCloudConfig();
   if (!config) throw new Error("Cloud workspaces are not configured");
   await agntResumeWorkspace(providerWorkspaceId, {
@@ -674,13 +627,10 @@ async function mintRepoInstallationToken(
   originUrl: string
 ): Promise<{ token: string | null; definitive: boolean }> {
   const config = getCloudConfig();
-  // Missing mint context is DEFINITIVE: a deployment without a deus-cloud
-  // session (env-key-only configs, or after an explicit sign-out) cannot
-  // have minted the stored tokens it would be protecting — and treating it
-  // as unknown permanently blocked the tokenless re-create that restarts
-  // stopped sandboxes in exactly those deployments.
+  // A missing desktop session says nothing about the cloud's installation.
+  // Preserve existing provenance and let the runtime renew its own lease.
   if (!config?.deusCloudUrl || !config.deusCloudSessionToken || !config.orgId)
-    return { token: null, definitive: true };
+    return { token: null, definitive: false };
   const slug = githubRepoSlug(originUrl);
   if (!slug) return { token: null, definitive: true };
   try {
@@ -849,7 +799,7 @@ function refreshEnvironmentGithubTokenOnce(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<boolean> {
+): Promise<CloudRepositoryAuth | null> {
   // Normalized key: provisioning passes the https form, wake/send pass the
   // raw stored origin — an ssh-form remote would otherwise key two separate
   // flights for the same environment and re-open the delete-vs-write race
@@ -857,7 +807,7 @@ function refreshEnvironmentGithubTokenOnce(
   const key = httpsOrigin(originUrl);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
-  const run: Promise<boolean> = refreshEnvironmentGithubToken(
+  const run: Promise<CloudRepositoryAuth | null> = refreshEnvironmentGithubToken(
     originUrl,
     environmentId,
     baseUrl,
@@ -889,7 +839,7 @@ async function refreshEnvironmentGithubToken(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<boolean> {
+): Promise<CloudRepositoryAuth | null> {
   const mint = await mintRepoInstallationToken(originUrl);
   try {
     if (mint.token) {
@@ -899,7 +849,7 @@ async function refreshEnvironmentGithubToken(
         environmentIds: [environmentId],
         appliesToAll: false,
       });
-      return true;
+      return { type: "github_app" };
     }
     // Delete the stored env token when deus-cloud POSITIVELY said this
     // identity may not mint — or when the stored token is provably PAST its
@@ -923,18 +873,18 @@ async function refreshEnvironmentGithubToken(
         const ageMs = Date.now() - Date.parse(secret.updatedAt ?? secret.createdAt ?? "");
         const stillPlausiblyValid = Number.isFinite(ageMs) && ageMs < 55 * 60_000;
         // Kept, not minted: nothing here may count as fresh.
-        if (stillPlausiblyValid) return false;
+        if (stillPlausiblyValid) return null;
       }
       await agntDeleteSecret(secret.id, { baseUrl, apiKey });
       break;
     }
-    return true;
+    return mint.definitive ? { type: "secret" } : null;
   } catch (err) {
     // Best-effort, exactly like the inline path: a PAT (or a public repo)
     // still works, and the failure must not block provisioning or a wake.
     // Reported as not written, so nothing counts it as a fresh mint.
     console.warn(`[CloudInit] environment-scoped GitHub token refresh failed: ${err}`);
-    return false;
+    return null;
   }
 }
 
@@ -955,7 +905,7 @@ async function provisionInBackground(
     let inlineMintStampAtCreate: number | null = null;
     // Named lane: whether the environment-scoped token landed before create —
     // then the connect that follows provisioning has nothing to re-mint.
-    let envTokenWritten = false;
+    let repositoryAuth: CloudRepositoryAuth | undefined;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -965,12 +915,13 @@ async function provisionInBackground(
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
       if (envInfo.environmentId) {
-        envTokenWritten = await refreshEnvironmentGithubTokenOnce(
-          originUrl,
-          envInfo.environmentId,
-          baseUrl,
-          apiKey
-        );
+        repositoryAuth =
+          (await refreshEnvironmentGithubTokenOnce(
+            originUrl,
+            envInfo.environmentId,
+            baseUrl,
+            apiKey
+          )) ?? undefined;
         // Every cloud workspace shows a Simulator tab; an environment saved
         // before devices existed cannot honour it, and the recipe is captured
         // at create — so upgrade the environment FIRST (enabling is free:
@@ -992,6 +943,11 @@ async function provisionInBackground(
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
       const mint = await mintRepoInstallationToken(originUrl);
+      repositoryAuth = mint.token
+        ? { type: "github_app" }
+        : mint.definitive
+          ? { type: "secret" }
+          : undefined;
       if (mint.token) {
         recipe = recipe.secrets({ github_token: mint.token });
         inlineMintStampAtCreate = Date.now();
@@ -1021,17 +977,20 @@ async function provisionInBackground(
       }
       environment = recipe;
     }
-    const provider = await agntCreateWorkspace({
-      baseUrl,
-      apiKey,
-      environment,
-      // New branch off the source — the sandbox's whole life happens here.
-      checkout: { branch: branch.work, from: branch.source },
-    });
+    const provider = await createRuntimeWorkspace(
+      {
+        baseUrl,
+        apiKey,
+        environment,
+        // New branch off the source — the sandbox's whole life happens here.
+        checkout: { branch: branch.work, from: branch.source },
+      },
+      repositoryAuth
+    );
     db.prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
     ).run(provider.id, inlineMintStampAtCreate, workspaceId);
-    if (envTokenWritten) markWorkspaceTokenRefreshed(provider.id);
+    if (repositoryAuth) markWorkspaceTokenRefreshed(provider.id);
     invalidate([...WORKSPACE_RESOURCES], {});
 
     const providerSession = await agntCreateSession({ baseUrl, apiKey, workspaceId: provider.id });

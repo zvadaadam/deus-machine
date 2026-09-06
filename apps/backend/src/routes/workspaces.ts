@@ -23,11 +23,11 @@ import {
 } from "../services/manifest.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
 import {
-  createCloudWorkspace,
-  stopCloudWorkspace,
-  wakeCloudWorkspaceWithFeedback,
-  deleteCloudWipRef,
-} from "../services/cloud-workspace-init.service";
+  archiveWorkspace,
+  unarchiveWorkspace,
+  wakeWorkspace,
+} from "../services/workspace-archive.service";
+import { createCloudWorkspace } from "../services/cloud-workspace-init.service";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import {
@@ -75,23 +75,7 @@ app.get("/workspaces/:id", (c) => {
 // auto-resume; this is the explicit "click the cloud icon" path, and the
 // reconnected socket's workspace.state events refresh the row's truth.
 app.post("/workspaces/:id/cloud-wake", async (c) => {
-  const db = getDatabase();
-  const workspace = getWorkspaceById(db, c.req.param("id"));
-  if (!workspace) throw new NotFoundError("Workspace not found");
-  if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
-    throw new ValidationError("Not a cloud workspace");
-  }
-  if (workspace.state === "archived") {
-    // Archive already stopped the sandbox; waking it would silently restart
-    // the meter on a workspace the UI presents as closed.
-    throw new ValidationError("Workspace is archived — unarchive it first");
-  }
-  const result = await wakeCloudWorkspaceWithFeedback({
-    id: workspace.id,
-    provider_workspace_id: workspace.provider_workspace_id,
-    current_session_id: workspace.current_session_id,
-    repository_id: workspace.repository_id,
-  });
+  const result = await wakeWorkspace(c.req.param("id"));
   return c.json(result);
 });
 
@@ -127,27 +111,11 @@ app.patch("/workspaces/:id", async (c) => {
   }
 
   if (state) {
-    db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, id);
+    if (state === "archived") await archiveWorkspace(id);
+    else if (state === "ready") await unarchiveWorkspace(id);
+    else db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, id);
 
     if (state === "archived") {
-      autoProgressStatus(id, "done", { force: true });
-
-      // Cloud workspace: stop the sandbox (best-effort) so archiving ends the
-      // meter instead of waiting out the idle TTL. The mirror/checkpoint story
-      // (Sprint 2) is what makes this safe to do eagerly.
-      const archived = getWorkspaceById(db, id);
-      if (archived?.kind === "cloud" && archived.provider_workspace_id) {
-        void stopCloudWorkspace(archived.provider_workspace_id).catch((err) => {
-          console.warn(`[WORKSPACE] cloud stop failed for ${id} (continuing):`, err);
-        });
-        // The hidden durability ref has served its purpose — archive means
-        // the user is done with this workspace's work-in-progress.
-        const archivedRepo = getRepositoryById(db, archived.repository_id);
-        if (archivedRepo?.git_origin_url) {
-          void deleteCloudWipRef(archivedRepo.git_origin_url, archived.provider_workspace_id);
-        }
-      }
-
       // Run archive lifecycle hook (best-effort)
       try {
         const ws = getWorkspaceById(db, id);

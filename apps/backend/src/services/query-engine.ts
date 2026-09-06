@@ -30,8 +30,9 @@ import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
 import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import { delegateToRoute } from "./route-delegate";
-import { autoProgressStatus, setWorkspaceStatus } from "./workspace-status.service";
-import { getRunningApps, listApps, stopAppsForWorkspace } from "./aap";
+import { setWorkspaceStatus } from "./workspace-status.service";
+import { archiveWorkspace } from "./workspace-archive.service";
+import { getRunningApps, listApps } from "./aap";
 import { getDiscoveredServers } from "./local-servers.service";
 import {
   createAutomation,
@@ -491,33 +492,8 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
   return (
     match(typedAction)
       .with("archiveWorkspace", async () => {
-        const db = getDatabase();
         const workspaceId = requireParam(params, "workspaceId", "archiveWorkspace");
-
-        const workspace = getWorkspaceRaw(db, workspaceId);
-        if (!workspace) throw new Error("Workspace not found");
-
-        // Stop AAP apps running in this workspace before we flip the archive
-        // flag — orphan sweep on next boot would catch them otherwise, but
-        // an explicit stop gives clients a clean status transition in the UI
-        // and frees the port immediately. Capped at 2s so a slow-to-exit
-        // child can't make the Archive button hang; any survivor is caught
-        // by the next boot's orphan sweep. Errors are swallowed for the
-        // same reason — the archive must succeed even if a child crash
-        // races with our SIGTERM.
-        const ARCHIVE_STOP_CEILING_MS = 2_000;
-        await Promise.race([
-          stopAppsForWorkspace(workspaceId).catch((err) => {
-            console.warn(
-              `[QueryEngine] stopAppsForWorkspace failed during archive workspaceId=${workspaceId}`,
-              err
-            );
-          }),
-          new Promise<void>((resolve) => setTimeout(resolve, ARCHIVE_STOP_CEILING_MS)),
-        ]);
-
-        db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
-        autoProgressStatus(workspaceId, "done", { force: true });
+        await archiveWorkspace(workspaceId);
         invalidate(["workspaces", "stats"]);
         return { success: true };
       })

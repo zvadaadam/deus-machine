@@ -46,6 +46,14 @@ vi.mock("../../../src/services/query-engine", () => ({
   invalidate: (...args: unknown[]) => mockInvalidate(...args),
 }));
 
+const cloud = vi.hoisted(() => ({ pause: vi.fn(), wake: vi.fn() }));
+vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
+  createCloudWorkspace: vi.fn(),
+  pauseCloudWorkspace: cloud.pause,
+  wakeCloudWorkspaceWithFeedback: cloud.wake,
+}));
+vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: vi.fn(async () => {}) }));
+
 vi.mock("../../../src/services/git.service", () => ({
   detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),
   getDiffStats: vi.fn<(...args: any[]) => any>(() => ({ additions: 0, deletions: 0 })),
@@ -425,7 +433,93 @@ describe("PATCH /workspaces/:id", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(mockStmt.run).toHaveBeenCalledWith("ready", "ws-test-uuid");
+    expect(mockDb.prepare).toHaveBeenCalledWith(
+      "UPDATE workspaces SET state = 'ready' WHERE id = ?"
+    );
+    expect(mockStmt.run).toHaveBeenCalledWith("ws-test-uuid");
     expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "stats"]);
+  });
+});
+
+describe("cloud wake and archive ordering", () => {
+  function cloudRow() {
+    let state = "ready";
+    mockStmt.get.mockImplementation(() => ({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      provider_workspace_id: "agnt-workspace",
+      root_path: null,
+      state,
+    }));
+    mockDb.prepare.mockImplementation((sql: string) => {
+      if (sql === "UPDATE workspaces SET state = 'archived' WHERE id = ?") {
+        return {
+          run: () => {
+            state = "archived";
+          },
+        };
+      }
+      return mockStmt;
+    });
+    return () => state;
+  }
+
+  const archive = () =>
+    app.request("/workspaces/ws-test-uuid", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: "archived" }),
+    });
+  const wake = () => app.request("/workspaces/ws-test-uuid/cloud-wake", { method: "POST" });
+
+  it("rechecks archived membership when a wake was queued behind Pause", async () => {
+    const state = cloudRow();
+    let release!: () => void;
+    cloud.pause.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    cloud.wake.mockResolvedValue({ ok: true, status: "resuming" });
+    const archiving = archive();
+    await vi.waitFor(() => expect(cloud.pause).toHaveBeenCalledOnce());
+    const waking = wake();
+    release();
+    const [archived, woken] = await Promise.all([archiving, waking]);
+    expect(archived.status).toBe(200);
+    expect(woken.status).toBe(400);
+    expect(await woken.json()).toMatchObject({
+      error: "Workspace is archived — unarchive it first",
+    });
+    expect(cloud.wake).not.toHaveBeenCalled();
+    expect(state()).toBe("archived");
+  });
+
+  it("finishes a prior wake before Pause so an archived workspace stays suspended", async () => {
+    const state = cloudRow();
+    let running = false;
+    let release!: () => void;
+    cloud.wake.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      running = true;
+      return { ok: true, status: "resuming" };
+    });
+    cloud.pause.mockImplementation(async () => {
+      running = false;
+    });
+    const waking = wake();
+    await vi.waitFor(() => expect(cloud.wake).toHaveBeenCalledOnce());
+    const archiving = archive();
+    // Let the archive request reach its first await before releasing Resume.
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+    const [woken, archived] = await Promise.all([waking, archiving]);
+    expect(woken.status).toBe(200);
+    expect(archived.status).toBe(200);
+    expect(state()).toBe("archived");
+    expect(running).toBe(false);
   });
 });
