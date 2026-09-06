@@ -357,7 +357,7 @@ async function main() {
       : persistChanges(sessionId, folded.state, folded.changes, (turn) =>
           turnOutcomeFor(facts, turn)
         );
-    const factWrites = applySessionFacts(facts, sessionId, event);
+    const factWrites = applySessionFacts(facts, sessionId, event, conversation);
 
     // The harness stops when the turn is over, or when an error ended it.
     // `isUnknownEvent` first: `UnknownEvent.type` is an open string, so

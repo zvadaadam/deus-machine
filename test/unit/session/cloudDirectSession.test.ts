@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { SessionErrorEventSchema, SessionSnapshotEventSchema } from "@deus-hq/api";
 import { useCloudDirectSession } from "@/features/session/hooks/useCloudDirectSession";
 import { emitLocalEvent } from "@/platform/ws";
+import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
 
 // Exercise the hook's actual frame routing; only React mounting and the socket
 // are replaced. The transcript fold and query cache remain real.
@@ -106,6 +107,106 @@ describe("direct cloud session published frames", () => {
     });
   });
 
+  it.each([false, true])(
+    "selects the running device regardless of mirror order (reverse=%s)",
+    (reverse) => {
+      const ios = snapshot("ready").latestSimulatorStatus!;
+      const android = {
+        ...snapshot("stopped").latestSimulatorStatus!,
+        platform: "android",
+        timestamp: "2026-09-06T18:05:00.000Z",
+      };
+      onFrame({
+        ...snapshot("stopped"),
+        latestSimulatorStatus: android,
+        latestSimulatorStatuses: reverse ? [android, ios] : [ios, android],
+      });
+      expect(emitLocalEvent).toHaveBeenLastCalledWith("cloud:simulator", {
+        workspaceId: "deus-direct-1",
+        sessionId: "deus-direct-1",
+        kind: "status",
+        data: expect.objectContaining({ platform: "ios", status: "ready" }),
+      });
+    }
+  );
+
+  it("reads a list-only mirror and lets an empty list clear even a stale singular mirror", () => {
+    const frame = snapshot("ready");
+    onFrame({
+      ...frame,
+      latestSimulatorStatus: undefined,
+      latestSimulatorStatuses: [frame.latestSimulatorStatus],
+    });
+    expect(emitLocalEvent).toHaveBeenLastCalledWith(
+      "cloud:simulator",
+      expect.objectContaining({
+        kind: "status",
+        data: expect.objectContaining({ status: "ready" }),
+      })
+    );
+    onFrame({ ...frame, latestSimulatorStatuses: [] });
+    expect(emitLocalEvent).toHaveBeenLastCalledWith("cloud:simulator", {
+      workspaceId: "deus-direct-1",
+      sessionId: "deus-direct-1",
+      kind: "gone",
+      data: {},
+    });
+  });
+
+  it("keeps the running device visible when the other platform sends a live stopped frame", () => {
+    onFrame(snapshot("ready"));
+    onFrame({ ...snapshot("stopped").latestSimulatorStatus, platform: "android" });
+    expect(emitLocalEvent).toHaveBeenLastCalledWith(
+      "cloud:simulator",
+      expect.objectContaining({
+        kind: "status",
+        data: expect.objectContaining({ platform: "ios", status: "ready" }),
+      })
+    );
+  });
+
+  it("replaces remembered platforms when a legacy reconnect has only a singular mirror", () => {
+    onFrame(snapshot("ready"));
+    onFrame({
+      ...snapshot("stopped"),
+      latestSimulatorStatus: { ...snapshot("stopped").latestSimulatorStatus, platform: "android" },
+    });
+    expect(emitLocalEvent).toHaveBeenLastCalledWith(
+      "cloud:simulator",
+      expect.objectContaining({
+        kind: "status",
+        data: expect.objectContaining({ platform: "android", status: "stopped" }),
+      })
+    );
+  });
+
+  it("ignores a malformed complete mirror without clearing or changing the device", () => {
+    const frame = snapshot("ready");
+    onFrame(frame);
+    vi.mocked(emitLocalEvent).mockClear();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      onFrame({
+        ...frame,
+        latestSimulatorStatuses: [{ ...frame.latestSimulatorStatus, status: "stopped" }, null],
+      });
+      expect(
+        vi.mocked(emitLocalEvent).mock.calls.filter(([kind]) => kind === "cloud:simulator")
+      ).toEqual([]);
+      onFrame({ ...snapshot("stopped").latestSimulatorStatus, platform: "android" });
+      expect(emitLocalEvent).toHaveBeenLastCalledWith(
+        "cloud:simulator",
+        expect.objectContaining({
+          kind: "status",
+          data: expect.objectContaining({ platform: "ios", status: "ready" }),
+        })
+      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("simulator"));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it.each([undefined, "turn-current"])("shows the real failure message for turn %s", (turnId) => {
     onFrame(snapshot("ready"));
     setState.mockClear();
@@ -134,6 +235,43 @@ describe("direct cloud session published frames", () => {
         ...details,
       })
     );
+    expect(setState).not.toHaveBeenCalled();
+  });
+
+  it("shows the fatal message after AGNT has already ended the turn", () => {
+    onFrame({ type: "turn.started", turnId: "turn-current", timestamp: 1 });
+    onFrame({
+      type: "turn.ended",
+      turnId: "turn-current",
+      stopReason: "error",
+      timestamp: 2,
+      error: { category: "auth", message: "Reconnect your provider account" },
+    });
+    setState.mockClear();
+    onFrame({
+      type: "session.error",
+      turnId: "turn-current",
+      recoverable: false,
+      error: { code: "provider_auth", message: "Reconnect your provider account" },
+    });
+    expect(setState).toHaveBeenCalledWith("Reconnect your provider account");
+    setState.mockClear();
+    onFrame({ type: "turn.started", turnId: "turn-next", timestamp: 3 });
+    expect(setState).toHaveBeenCalledWith(null);
+    expect(setState).toHaveBeenCalledWith("open");
+  });
+
+  it("does not let a previous turn's error interrupt a new send awaiting admission", () => {
+    onFrame({ type: "turn.started", turnId: "turn-previous", timestamp: 1 });
+    onFrame({ type: "turn.ended", turnId: "turn-previous", stopReason: "end_turn", timestamp: 2 });
+    getDirectSession("deus-direct-1")!.sendMessage("Next request", "turn-next", {});
+    setState.mockClear();
+    onFrame({
+      type: "session.error",
+      turnId: "turn-previous",
+      recoverable: false,
+      error: { code: "EXECUTION_FAILED", message: "Previous failure" },
+    });
     expect(setState).not.toHaveBeenCalled();
   });
 });

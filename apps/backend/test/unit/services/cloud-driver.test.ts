@@ -264,6 +264,37 @@ describe("cloud driver frame → fold contract", () => {
     expect(handler.handle).not.toHaveBeenCalled();
   });
 
+  it.each(["error", "cancelled"])(
+    "preserves a fatal session.error delivered after a %s terminal",
+    (stopReason) => {
+      handler.liveTurnId.mockReturnValue("turn-current");
+      capturedOnFrame!({ type: "turn.started", turnId: "turn-current" });
+      capturedOnFrame!({ type: "turn.ended", turnId: "turn-current", stopReason });
+      // The real handler releases ownership at turn.ended. AGNT sends the
+      // session.error afterward, including deferred auth errors on cancel.
+      handler.liveTurnId.mockReturnValue(undefined);
+      handler.handle.mockClear();
+      capturedOnFrame!(
+        SessionErrorEventSchema.parse({
+          type: "session.error",
+          error: { code: "provider_auth", message: "Reconnect your provider account" },
+          recoverable: false,
+          turnId: "turn-current",
+        })
+      );
+      expect(handler.handle).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            type: "error",
+            message: "provider_auth: Reconnect your provider account",
+            turnId: "turn-current",
+            recoverable: false,
+          }),
+        })
+      );
+    }
+  );
+
   it("synthesizes the missed turn.ended from a snapshot's turns[] outcome", () => {
     handler.liveTurnId.mockReturnValue("turn-x");
     capturedOnFrame!({
@@ -1987,6 +2018,51 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
   });
+
+  it.each([null, { platform: "android", status: 42 }, { status: "error" }])(
+    "preserves every cached device when a complete mirror contains %j",
+    async (malformed) => {
+      const ios: SimulatorStatusEvent = {
+        type: "simulator.status",
+        sessionId: "agnt-session-1",
+        status: "ready",
+        platform: "ios",
+        streamUrl: "https://stream.expo.dev/ios",
+        timestamp: T2,
+      };
+      const android: SimulatorStatusEvent = {
+        ...ios,
+        platform: "android",
+        streamUrl: "https://stream.expo.dev/android",
+        timestamp: T1,
+      };
+      capturedOnFrame!(simulatorSnapshot({ latestSimulatorStatuses: [ios, android] }));
+      mockBroadcast.mockClear();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        capturedOnFrame!({
+          ...simulatorSnapshot({}),
+          latestSimulatorStatuses: [{ ...ios, status: "stopped" }, malformed],
+        });
+        expect(mockBroadcast).not.toHaveBeenCalled();
+        await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+          status: "ready",
+          platform: "ios",
+          streamUrl: ios.streamUrl,
+        });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("simulator"));
+        // The other platform also survived, not just the displayed primary.
+        capturedOnFrame!({ ...ios, status: "stopped" });
+        await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
+          status: "ready",
+          platform: "android",
+          streamUrl: android.streamUrl,
+        });
+      } finally {
+        warn.mockRestore();
+      }
+    }
+  );
 
   it("forwards a newer identical status — the platform answering a retry the same way", async () => {
     const error = {

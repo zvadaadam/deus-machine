@@ -55,7 +55,18 @@ import {
 } from "../cloud/directSessionRegistry";
 import { questionsFromAskUserQuestionInput } from "@shared/ask-user-question";
 import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
-import { TOOL_CANCEL_EVENT, type CloudSimulatorEventKind } from "@shared/events";
+import {
+  TOOL_CANCEL_EVENT,
+  CloudSimulatorStatusSchema,
+  type CloudSimulatorEventKind,
+  type CloudSimulatorPlatform,
+  type CloudSimulatorStatus,
+} from "@shared/events";
+import {
+  CloudSimulatorMirrorSchema,
+  cloudSimulatorStatusAt,
+  selectPrimaryCloudSimulator,
+} from "@shared/cloud-simulator";
 import type { QueryClient } from "@tanstack/react-query";
 
 // ---- Question round-trip ----------------------------------------------------
@@ -310,6 +321,34 @@ export function useCloudDirectSession(
 
     const foldFrame = makeCloudFrameHandler(ctx, sessionId);
 
+    // The tab shows one device, but either platform may report a transition.
+    // Keep both until a complete reconnect mirror replaces them.
+    const simulatorStatuses = new Map<CloudSimulatorPlatform, CloudSimulatorStatus>();
+    const emitPrimarySimulator = () => {
+      const primary = selectPrimaryCloudSimulator(
+        Array.from(simulatorStatuses.values(), (status) => ({
+          status,
+          at: cloudSimulatorStatusAt(status),
+        }))
+      );
+      emitSimulatorEvent(sessionId, primary ? "status" : "gone", primary?.status ?? {});
+    };
+    const applySimulatorStatus = (frame: Record<string, unknown>, replace = false) => {
+      const parsed = CloudSimulatorStatusSchema.safeParse(frame);
+      if (!parsed.success) {
+        console.warn(`[CloudDirect] malformed simulator status session=${sessionId}`);
+        return;
+      }
+      if (replace) simulatorStatuses.clear();
+      if (parsed.data.platform === undefined) {
+        // A command failure has no device slot; still surface its message.
+        emitSimulatorEvent(sessionId, "status", parsed.data);
+        return;
+      }
+      simulatorStatuses.set(parsed.data.platform, parsed.data);
+      emitPrimarySimulator();
+    };
+
     // The turn SENT on this socket that agnt hasn't ADMITTED yet (no
     // `turn.started` echo). The fold only learns a turn exists when the echo
     // returns, so a double-Enter inside that round-trip would pass the fold's
@@ -394,11 +433,12 @@ export function useCloudDirectSession(
         }
       }
       // Device frames: one store for every lane (see emitSimulatorEvent); the
-      // snapshot's latestSimulatorStatus is handled with the snapshot below.
+      // snapshot's device mirror is handled with the snapshot below.
       const simulatorKind =
         typeof frame.type === "string" ? SIMULATOR_FRAME_KINDS.get(frame.type) : undefined;
       if (simulatorKind) {
-        emitSimulatorEvent(sessionId, simulatorKind, frame);
+        if (simulatorKind === "status") applySimulatorStatus(frame);
+        else emitSimulatorEvent(sessionId, simulatorKind, frame);
         return;
       }
       // The (re)connect snapshot is the truth about a parked question's turn.
@@ -426,9 +466,19 @@ export function useCloudDirectSession(
         }
         // A late joiner learns the device's current status here — the platform
         // does not replay the status frame it sent before this socket existed.
-        const latestDevice = frame.latestSimulatorStatus;
-        if (latestDevice && typeof latestDevice === "object") {
-          emitSimulatorEvent(sessionId, "status", latestDevice as Record<string, unknown>);
+        if (Array.isArray(frame.latestSimulatorStatuses)) {
+          const parsed = CloudSimulatorMirrorSchema.safeParse(frame.latestSimulatorStatuses);
+          if (parsed.success) {
+            simulatorStatuses.clear();
+            for (const status of parsed.data) simulatorStatuses.set(status.platform, status);
+            emitPrimarySimulator();
+          } else {
+            console.warn(`[CloudDirect] malformed simulator mirror session=${sessionId}`);
+          }
+        } else if (frame.latestSimulatorStatus && typeof frame.latestSimulatorStatus === "object") {
+          // A legacy snapshot supplies only one device; replace the previous
+          // connection's slots after validating it, just like a complete list.
+          applySimulatorStatus(frame.latestSimulatorStatus as Record<string, unknown>, true);
         }
         const live =
           typeof state?.currentTurnId === "string" && state.currentTurnId
@@ -449,6 +499,7 @@ export function useCloudDirectSession(
       // (SessionPanel derives an "error" status from it, which must not outlive
       // the failure it reported) and the pending-admission marker.
       if (frame.type === "turn.started") {
+        setStatus("open");
         setError(null);
         pendingTurn = null;
       }
@@ -482,7 +533,11 @@ export function useCloudDirectSession(
           return;
         }
         const { error, turnId, recoverable } = parsed.data;
-        if (recoverable || (turnId !== undefined && turnId !== activeTurnId(sessionId))) return;
+        // The failed turn may already be ended. Protect a different admitted
+        // or pending turn, without dropping the post-terminal error message.
+        const live =
+          activeTurnId(sessionId) ?? (pendingTurnActive() ? pendingTurn?.turnId : undefined);
+        if (recoverable || (turnId !== undefined && live !== undefined && turnId !== live)) return;
         setStatus("error");
         setError(error.message);
         return;

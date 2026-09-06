@@ -255,7 +255,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       // The session columns and the per-turn flags are `applySessionFacts`'s,
       // shared verbatim with the verification CLI. What is left below is the
       // product plumbing only this process has.
-      for (const write of applySessionFacts(state, sessionId, envelope.event)) {
+      for (const write of applySessionFacts(state, sessionId, envelope.event, conversation)) {
         persistAndInvalidate(write.result, SESSION_RESOURCES, sessionId);
       }
 

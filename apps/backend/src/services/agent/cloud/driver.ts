@@ -395,13 +395,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       if (Array.isArray(frame.latestSimulatorStatuses)) {
         // The complete per-platform list: what it omits, this session no
         // longer has — reconciled, not merely upserted.
-        reconcileCloudSimulatorMirror(
-          frameSource(session),
-          frame.latestSimulatorStatuses.filter(
-            (mirror): mirror is Record<string, unknown> =>
-              mirror !== null && typeof mirror === "object"
-          )
-        );
+        reconcileCloudSimulatorMirror(frameSource(session), frame.latestSimulatorStatuses);
       } else if (frame.latestSimulatorStatus && typeof frame.latestSimulatorStatus === "object") {
         applyCloudSimulatorStatus(
           frameSource(session),
@@ -536,9 +530,10 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         return;
       }
       const { error, turnId, recoverable } = parsed.data;
-      // A terminal may arrive after the next turn starts. Its error belongs
-      // to the old turn; an unstamped error still applies to the session.
-      if (turnId !== undefined && turnId !== handler.liveTurnId(session.deusSessionId)) return;
+      // AGNT sends session.error after turn.ended, when ownership is already
+      // released. Only a different live turn proves this error is stale.
+      const live = handler.liveTurnId(session.deusSessionId);
+      if (turnId !== undefined && live !== undefined && turnId !== live) return;
       pushCloudError(session, error.code, error.message, { turnId, recoverable });
       return;
     }

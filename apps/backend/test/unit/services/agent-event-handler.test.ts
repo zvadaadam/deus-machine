@@ -502,6 +502,58 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
     });
 
+    it("keeps structured terminal details when the cloud's later session error is folded", () => {
+      handler.handle(
+        envelope(
+          turnEnded({
+            stopReason: "error",
+            error: { category: "rate_limit", message: "429 slow down" },
+          })
+        )
+      );
+      expect(lastOutcome()).toMatchObject({
+        error: { category: "rate_limit", message: "429 slow down" },
+      });
+      handler.handle(
+        envelope({
+          type: "error",
+          sessionId: SESSION,
+          turnId: TURN,
+          category: "internal",
+          message: "AGENT_EXECUTION_FAILED: 429 slow down",
+          recoverable: false,
+          timestamp: T,
+        })
+      );
+      // Re-folding the wrapper may update turn accounting, but neither
+      // persistence path may replace the error columns it already wrote.
+      expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
+      expect(mockPersistSessionError).not.toHaveBeenCalled();
+    });
+
+    it.each(["error", "cancelled"])(
+      "accepts actionable error details after a %s terminal without ErrorInfo",
+      (stopReason) => {
+        handler.handle(envelope(turnEnded({ stopReason })));
+        handler.handle(
+          envelope({
+            type: "error",
+            sessionId: SESSION,
+            turnId: TURN,
+            category: "auth",
+            message: "Reconnect your provider account",
+            recoverable: false,
+            timestamp: T,
+          })
+        );
+        expect(mockPersistSessionError).toHaveBeenCalledWith(
+          SESSION,
+          "Reconnect your provider account",
+          "auth"
+        );
+      }
+    );
+
     it("a replayed turn.ended folds to nothing, so nothing is written twice", () => {
       const event = turnEnded({ stopReason: "cancelled" });
       handler.handle(envelope(event));
