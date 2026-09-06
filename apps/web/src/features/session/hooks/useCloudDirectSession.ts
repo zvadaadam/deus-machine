@@ -26,6 +26,7 @@
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { SessionErrorEventSchema } from "@deus-hq/api";
 import {
   createStreamCursor,
   flushDeltas,
@@ -413,7 +414,6 @@ export function useCloudDirectSession(
         const state = frame.state as
           | {
               currentTurnId?: unknown;
-              latestSimulatorStatus?: unknown;
               sandboxUrlTemplate?: string | null;
             }
           | undefined;
@@ -426,7 +426,7 @@ export function useCloudDirectSession(
         }
         // A late joiner learns the device's current status here — the platform
         // does not replay the status frame it sent before this socket existed.
-        const latestDevice = state?.latestSimulatorStatus;
+        const latestDevice = frame.latestSimulatorStatus;
         if (latestDevice && typeof latestDevice === "object") {
           emitSimulatorEvent(sessionId, "status", latestDevice as Record<string, unknown>);
         }
@@ -475,20 +475,16 @@ export function useCloudDirectSession(
       }
       // A fatal agent error is its OWN ws event (`session.error`), not a fold
       // lifecycle event — surface it so a failed session doesn't look idle.
-      // agnt's shape is `{error: {code, message}, recoverable?}`; older/other
-      // producers may send a plain string, so read both.
       if (frame.type === "session.error") {
-        const nested = frame.error as { code?: unknown; message?: unknown } | string | undefined;
-        const message =
-          typeof nested === "string"
-            ? nested
-            : typeof nested?.message === "string"
-              ? nested.message
-              : typeof frame.message === "string"
-                ? frame.message
-                : "Session error";
+        const parsed = SessionErrorEventSchema.safeParse(frame);
+        if (!parsed.success) {
+          console.warn(`[CloudDirect] malformed session.error session=${sessionId}`);
+          return;
+        }
+        const { error, turnId, recoverable } = parsed.data;
+        if (recoverable || (turnId !== undefined && turnId !== activeTurnId(sessionId))) return;
         setStatus("error");
-        setError(message);
+        setError(error.message);
         return;
       }
       foldFrame(frame);

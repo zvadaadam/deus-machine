@@ -15,7 +15,11 @@
 // tool-use question in-process — deus has no interactive permission UI).
 
 import { createSession, createSessionToken } from "@deus-hq/sdk";
-import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
+import {
+  LIFECYCLE_EVENT_TYPES,
+  SessionErrorEventSchema,
+  type SessionErrorEvent,
+} from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
@@ -252,14 +256,20 @@ function pushToFold(session: CloudSession, event: Record<string, unknown>): void
 
 /** agnt error envelopes (code/message) → the engine's error event, so the
  *  existing error plumbing (facts, dedupe, status flip) runs unchanged. */
-function pushCloudError(session: CloudSession, code: unknown, message: unknown): void {
+function pushCloudError(
+  session: CloudSession,
+  code: unknown,
+  message: unknown,
+  details: Pick<SessionErrorEvent, "turnId" | "recoverable"> = { recoverable: false }
+): void {
   pushToFold(session, {
     type: "error",
     category: "internal",
     message: `${typeof code === "string" ? code : "cloud_error"}: ${
       typeof message === "string" ? message : "Cloud session error"
     }`,
-    recoverable: false,
+    recoverable: details.recoverable,
+    ...(details.turnId !== undefined ? { turnId: details.turnId } : {}),
     timestamp: Date.now(),
   });
 }
@@ -382,20 +392,20 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // the single latest status, which then stands in for the workspace.
       // Applied BEFORE the sandbox-status branches below, so a parked sandbox
       // overrides a mirror older than the park.
-      if (Array.isArray(state.latestSimulatorStatuses)) {
+      if (Array.isArray(frame.latestSimulatorStatuses)) {
         // The complete per-platform list: what it omits, this session no
         // longer has — reconciled, not merely upserted.
         reconcileCloudSimulatorMirror(
           frameSource(session),
-          state.latestSimulatorStatuses.filter(
+          frame.latestSimulatorStatuses.filter(
             (mirror): mirror is Record<string, unknown> =>
               mirror !== null && typeof mirror === "object"
           )
         );
-      } else if (state.latestSimulatorStatus && typeof state.latestSimulatorStatus === "object") {
+      } else if (frame.latestSimulatorStatus && typeof frame.latestSimulatorStatus === "object") {
         applyCloudSimulatorStatus(
           frameSource(session),
-          state.latestSimulatorStatus as Record<string, unknown>
+          frame.latestSimulatorStatus as Record<string, unknown>
         );
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
@@ -519,9 +529,19 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // here — Sprint 2 turns it into an invalidation signal.
       return;
 
-    case "session.error":
-      pushCloudError(session, frame.code, frame.message);
+    case "session.error": {
+      const parsed = SessionErrorEventSchema.safeParse(frame);
+      if (!parsed.success) {
+        console.warn(`[CloudDriver] malformed session.error session=${session.deusSessionId}`);
+        return;
+      }
+      const { error, turnId, recoverable } = parsed.data;
+      // A terminal may arrive after the next turn starts. Its error belongs
+      // to the old turn; an unstamped error still applies to the session.
+      if (turnId !== undefined && turnId !== handler.liveTurnId(session.deusSessionId)) return;
+      pushCloudError(session, error.code, error.message, { turnId, recoverable });
       return;
+    }
 
     case "error":
       // Channel-level command rejection (e.g. MESSAGE_SEND_FAILED). Engine-

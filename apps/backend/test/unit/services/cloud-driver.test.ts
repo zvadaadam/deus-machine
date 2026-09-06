@@ -9,6 +9,13 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
+import {
+  SessionErrorEventSchema,
+  SessionSnapshotEventSchema,
+  SimulatorStatusEventSchema,
+  type SessionSnapshotEvent,
+  type SimulatorStatusEvent,
+} from "@deus-hq/api";
 
 // ---- Hoisted mocks ----
 const mockSend = vi.fn();
@@ -148,6 +155,32 @@ function makeHandler() {
 
 let handler: ReturnType<typeof makeHandler>;
 
+function simulatorSnapshot(
+  mirrors: {
+    latestSimulatorStatus?: SimulatorStatusEvent;
+    latestSimulatorStatuses?: SimulatorStatusEvent[];
+  },
+  status: SessionSnapshotEvent["state"]["status"] = "ready"
+) {
+  const snapshot = {
+    type: "session.snapshot",
+    state: {
+      sessionId: "agnt-session-1",
+      organizationId: "org-1",
+      workspaceId: "agnt-ws-1",
+      status,
+      turns: [],
+    },
+    messages: [],
+    ...mirrors,
+  };
+  SessionSnapshotEventSchema.parse(snapshot);
+  // AGNT #180 added this list after the pinned API 1.4.0 release. Validate
+  // each mirror with the published schema and keep the raw additive field.
+  mirrors.latestSimulatorStatuses?.forEach((mirror) => SimulatorStatusEventSchema.parse(mirror));
+  return snapshot;
+}
+
 beforeEach(async () => {
   vi.clearAllMocks();
   capturedOnFrame = null;
@@ -183,7 +216,13 @@ describe("cloud driver frame → fold contract", () => {
   });
 
   it("maps agnt session.error to the engine error event", () => {
-    capturedOnFrame!({ type: "session.error", code: "sidecar_unreachable", message: "boom" });
+    capturedOnFrame!(
+      SessionErrorEventSchema.parse({
+        type: "session.error",
+        error: { code: "sidecar_unreachable", message: "boom" },
+        recoverable: false,
+      })
+    );
 
     expect(handler.handle).toHaveBeenCalledTimes(1);
     expect(handler.handle.mock.calls[0][0].event).toMatchObject({
@@ -192,6 +231,37 @@ describe("cloud driver frame → fold contract", () => {
       message: "sidecar_unreachable: boom",
       recoverable: false,
     });
+  });
+
+  it("preserves the failed turn and recoverability from session.error", () => {
+    handler.liveTurnId.mockReturnValue("turn-current");
+    capturedOnFrame!(
+      SessionErrorEventSchema.parse({
+        type: "session.error",
+        error: { code: "TEMPORARY_FAILURE", message: "Retrying the connection" },
+        recoverable: true,
+        turnId: "turn-current",
+      })
+    );
+    expect(handler.handle.mock.calls[0][0].event).toMatchObject({
+      type: "error",
+      message: "TEMPORARY_FAILURE: Retrying the connection",
+      turnId: "turn-current",
+      recoverable: true,
+    });
+  });
+
+  it("does not apply an old turn's session.error to the current turn", () => {
+    handler.liveTurnId.mockReturnValue("turn-current");
+    capturedOnFrame!(
+      SessionErrorEventSchema.parse({
+        type: "session.error",
+        error: { code: "AGENT_EXECUTION_FAILED", message: "The earlier turn failed" },
+        recoverable: false,
+        turnId: "turn-previous",
+      })
+    );
+    expect(handler.handle).not.toHaveBeenCalled();
   });
 
   it("synthesizes the missed turn.ended from a snapshot's turns[] outcome", () => {
@@ -951,11 +1021,8 @@ describe("cloud driver simulator channel", () => {
     // After a backend restart no simulator.status fires for a device that is
     // already running (and billing) — the snapshot mirror is the only truth.
     mockBroadcast.mockClear();
-    capturedOnFrame!({
-      type: "session.snapshot",
-      state: {
-        status: "ready",
-        turns: [],
+    capturedOnFrame!(
+      simulatorSnapshot({
         latestSimulatorStatus: {
           type: "simulator.status",
           sessionId: "agnt-session-1",
@@ -964,9 +1031,8 @@ describe("cloud driver simulator channel", () => {
           streamUrl: "https://stream.expo.dev/eas-2",
           timestamp: T,
         },
-      },
-      messages: [],
-    });
+      })
+    );
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
       status: "ready",
       platform: "android",
@@ -1031,22 +1097,21 @@ describe("cloud driver simulator channel", () => {
   it("lets a parked sandbox override a stale device status in the same snapshot", async () => {
     // The snapshot mirror can be older than the sandbox's own state (an older
     // platform that never settled it): the device cannot outlive its sandbox.
-    capturedOnFrame!({
-      type: "session.snapshot",
-      state: {
-        status: "stopped",
-        turns: [],
-        latestSimulatorStatus: {
-          type: "simulator.status",
-          sessionId: "agnt-session-1",
-          status: "ready",
-          platform: "ios",
-          streamUrl: "https://stream.expo.dev/stale",
-          timestamp: T,
+    capturedOnFrame!(
+      simulatorSnapshot(
+        {
+          latestSimulatorStatus: {
+            type: "simulator.status",
+            sessionId: "agnt-session-1",
+            status: "ready",
+            platform: "ios",
+            streamUrl: "https://stream.expo.dev/stale",
+            timestamp: T,
+          },
         },
-      },
-      messages: [],
-    });
+        "stopped"
+      )
+    );
     const status = await getCloudSimulatorStatus("deus-ws-1");
     expect(status).toMatchObject({ status: "stopped" });
     expect(status).not.toHaveProperty("streamUrl");
@@ -1697,11 +1762,8 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     } as never);
 
   it("rehydrates every mirrored platform from the snapshot — a later android stopped must not hide a live ios device", async () => {
-    capturedOnFrame!({
-      type: "session.snapshot",
-      state: {
-        status: "ready",
-        turns: [],
+    capturedOnFrame!(
+      simulatorSnapshot({
         // The newest frame alone (what a pre-mirror platform sends) …
         latestSimulatorStatus: {
           type: "simulator.status",
@@ -1728,9 +1790,8 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
             timestamp: T2,
           },
         ],
-      },
-      messages: [],
-    });
+      })
+    );
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
       status: "ready",
       platform: "ios",
@@ -1903,11 +1964,8 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     });
     mockBroadcast.mockClear();
     // The socket reconnects; the ios device was removed meanwhile.
-    capturedOnFrame!({
-      type: "session.snapshot",
-      state: {
-        status: "ready",
-        turns: [],
+    capturedOnFrame!(
+      simulatorSnapshot({
         latestSimulatorStatuses: [
           {
             type: "simulator.status",
@@ -1917,20 +1975,15 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
             timestamp: T1,
           },
         ],
-      },
-      messages: [],
-    });
+      })
+    );
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({
       status: "stopped",
       platform: "android",
     });
     expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
     // An empty list: everything this session spoke for is gone.
-    capturedOnFrame!({
-      type: "session.snapshot",
-      state: { status: "ready", turns: [], latestSimulatorStatuses: [] },
-      messages: [],
-    });
+    capturedOnFrame!(simulatorSnapshot({ latestSimulatorStatuses: [] }));
     expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"gone"'));
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toBeNull();
   });
