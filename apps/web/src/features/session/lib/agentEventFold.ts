@@ -24,7 +24,7 @@
  *
  * Two grades of delivery:
  *
- *   live       — the session whose panel is mounted. Everything, deltas
+ *   live       — a session whose messages are observed. Everything, deltas
  *                included, and the page may be seeded before the first fetch
  *                resolves.
  *   background — any other session that already has a cached page. Only the
@@ -97,8 +97,8 @@ export function createStreamCursor(): SeqCursor {
 
 export interface AgentStreamContext {
   queryClient: QueryClient;
-  /** The session whose panel is mounted — the only one that streams deltas. */
-  activeSessionId: string;
+  /** The observed session being routed; only live consumers stream deltas. */
+  activeSessionId: string | null;
   /** Folded conversation per session; the source of every cache write. */
   folds: Map<string, SessionFold>;
   /** Per-session wire cursor, for gap and reset detection. */
@@ -160,6 +160,10 @@ export function hydrateConversation(
   ctx.folds.set(sessionId, { state: conversation, dirtyMessages: new Set() });
   // An older HTTP page cannot overwrite a snapshot delivered on this stream.
   void ctx.queryClient.cancelQueries({ queryKey: messagesKey(sessionId), exact: true });
+  ctx.queryClient.setQueryData<PaginatedMessages>(
+    messagesKey(sessionId),
+    (old) => old ?? { messages: [], compactions: [], has_older: false, has_newer: false }
+  );
   const markers = supersededCancellationMarkers(conversation);
   if (markers.size) {
     ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>

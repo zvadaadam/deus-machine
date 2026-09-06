@@ -425,6 +425,61 @@ describe("message.started{role:user} — the predicted echo", () => {
 // ===========================================================================
 
 describe("restored cloud conversations", () => {
+  it("completes an empty initial page and ignores the cancelled fetch", async () => {
+    const h = harness();
+    let finishPage!: (page: PaginatedMessages) => void;
+    const observer = new QueryObserver(h.qc, {
+      queryKey: messagesKey(SESSION),
+      queryFn: () =>
+        new Promise<PaginatedMessages>((resolve) => {
+          finishPage = resolve;
+        }),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    expect(observer.getCurrentResult().isLoading).toBe(true);
+
+    hydrateConversation(h.ctx, {
+      sessionId: SESSION,
+      seq: 1,
+      conversation: createSessionFold().state,
+      messageIds: [],
+    });
+    expect(observer.getCurrentResult()).toMatchObject({
+      status: "success",
+      fetchStatus: "idle",
+      data: { messages: [], compactions: [], has_older: false, has_newer: false },
+    });
+    finishPage({ messages: [], compactions: [], has_older: true, has_newer: true });
+    await Promise.resolve();
+    expect(h.page()).toEqual({
+      messages: [],
+      compactions: [],
+      has_older: false,
+      has_newer: false,
+    });
+    unsubscribe();
+    h.qc.clear();
+  });
+
+  it("restores a cancelled turn without message output into an uncached page", () => {
+    const h = harness();
+    const restored = harness();
+    restored.feed(turnEnded({ stopReason: "cancelled" }));
+    hydrateConversation(h.ctx, {
+      sessionId: SESSION,
+      seq: 1,
+      conversation: restored.fold().state,
+      messageIds: [`cancelled-${TURN}`],
+    });
+    expect(h.page()?.messages).toEqual([
+      expect.objectContaining({
+        id: `cancelled-${TURN}`,
+        seq: 1,
+        turn_stop_reason: "cancelled",
+      }),
+    ]);
+  });
+
   it("keeps an optimistic prompt and rejects an older HTTP page still in flight", async () => {
     const h = harness();
     let finishPage!: (page: PaginatedMessages) => void;

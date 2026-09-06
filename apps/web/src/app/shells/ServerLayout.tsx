@@ -15,6 +15,7 @@ import { Outlet, useParams } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
+import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
@@ -78,6 +79,7 @@ function ServerContent({ serverId }: { serverId: string }) {
 
   // Global listeners -- same as DesktopShell
   useGlobalSessionNotifications();
+  useAgentEvents();
   useWorkspaceInitEvents();
 
   // Pass serverId so the WS URL resolves to the correct relay endpoint
