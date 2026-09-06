@@ -13,6 +13,22 @@ export function cloudSimulatorStatusAt(status: CloudSimulatorStatus): number | n
   return Number.isFinite(at) ? at : null;
 }
 
+/** Replays stay silent, but a fresh timestamp is a new command answer even
+ * when the visible fields are unchanged: the UI must then release busy. */
+export function sameCloudSimulatorStatus(
+  a: CloudSimulatorStatus,
+  b: CloudSimulatorStatus
+): boolean {
+  return (
+    a.status === b.status &&
+    a.platform === b.platform &&
+    a.streamUrl === b.streamUrl &&
+    a.error === b.error &&
+    a.easSessionIdentifier === b.easSessionIdentifier &&
+    a.timestamp === b.timestamp
+  );
+}
+
 function statusRank(status: string): number {
   switch (status) {
     case "ready":

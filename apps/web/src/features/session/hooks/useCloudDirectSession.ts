@@ -65,6 +65,7 @@ import {
 import {
   CloudSimulatorMirrorSchema,
   cloudSimulatorStatusAt,
+  sameCloudSimulatorStatus,
   selectPrimaryCloudSimulator,
 } from "@shared/cloud-simulator";
 import type { QueryClient } from "@tanstack/react-query";
@@ -324,14 +325,17 @@ export function useCloudDirectSession(
     // The tab shows one device, but either platform may report a transition.
     // Keep both until a complete reconnect mirror replaces them.
     const simulatorStatuses = new Map<CloudSimulatorPlatform, CloudSimulatorStatus>();
-    const emitPrimarySimulator = () => {
-      const primary = selectPrimaryCloudSimulator(
+    const primarySimulatorStatus = () =>
+      selectPrimaryCloudSimulator(
         Array.from(simulatorStatuses.values(), (status) => ({
           status,
           at: cloudSimulatorStatusAt(status),
         }))
-      );
-      emitSimulatorEvent(sessionId, primary ? "status" : "gone", primary?.status ?? {});
+      )?.status ?? null;
+    const emitPrimarySimulator = (before: CloudSimulatorStatus | null = null) => {
+      const primary = primarySimulatorStatus();
+      if (before && primary && sameCloudSimulatorStatus(before, primary)) return;
+      emitSimulatorEvent(sessionId, primary ? "status" : "gone", primary ?? {});
     };
     const applySimulatorStatus = (frame: Record<string, unknown>, replace = false) => {
       const parsed = CloudSimulatorStatusSchema.safeParse(frame);
@@ -339,14 +343,17 @@ export function useCloudDirectSession(
         console.warn(`[CloudDirect] malformed simulator status session=${sessionId}`);
         return;
       }
-      if (replace) simulatorStatuses.clear();
       if (parsed.data.platform === undefined) {
         // A command failure has no device slot; still surface its message.
         emitSimulatorEvent(sessionId, "status", parsed.data);
         return;
       }
+      // Snapshots rehydrate the store even when unchanged. A live update on
+      // another platform must not falsely acknowledge the primary's command.
+      const before = replace ? null : primarySimulatorStatus();
+      if (replace) simulatorStatuses.clear();
       simulatorStatuses.set(parsed.data.platform, parsed.data);
-      emitPrimarySimulator();
+      emitPrimarySimulator(before);
     };
 
     // The turn SENT on this socket that agnt hasn't ADMITTED yet (no

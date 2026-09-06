@@ -17,6 +17,7 @@ import { getSession as sdkGetSession } from "@deus-hq/sdk";
 import {
   CloudSimulatorMirrorSchema,
   cloudSimulatorStatusAt,
+  sameCloudSimulatorStatus,
   selectPrimaryCloudSimulator,
 } from "@shared/cloud-simulator";
 import {
@@ -131,23 +132,6 @@ function normalizeCloudSimulatorStatus(status: CloudSimulatorStatus): CloudSimul
   };
 }
 
-/** The same status, from the same moment. A frame identical in content but
- *  newer in time is the platform answering AGAIN (a retried start failing the
- *  same way) and must reach the clients: the renderer clears its pending
- *  action on any status event, so swallowing it would leave "Booting the
- *  device" over a real error. Equal timestamps are replays (the snapshot and
- *  the REST mirror repeat the latest frame) and stay silent. */
-function sameStatus(a: CloudSimulatorStatus, b: CloudSimulatorStatus): boolean {
-  return (
-    a.status === b.status &&
-    a.platform === b.platform &&
-    a.streamUrl === b.streamUrl &&
-    a.error === b.error &&
-    a.easSessionIdentifier === b.easSessionIdentifier &&
-    a.timestamp === b.timestamp
-  );
-}
-
 function platformKey(status: CloudSimulatorStatus): PlatformKey | null {
   return status.platform ?? null;
 }
@@ -180,7 +164,7 @@ function announcePrimary(
 ): void {
   const after = primaryOf(cloudSimulators.get(workspaceId));
   if (!after) return;
-  if (before && sameStatus(before, after.status)) return;
+  if (before && sameCloudSimulatorStatus(before, after.status)) return;
   broadcastCloudSimulator({ workspaceId, sessionId, kind: "status", data: after.status });
 }
 

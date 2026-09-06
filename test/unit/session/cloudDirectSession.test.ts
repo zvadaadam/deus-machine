@@ -4,9 +4,14 @@ import { SessionErrorEventSchema, SessionSnapshotEventSchema } from "@deus-hq/ap
 import { useCloudDirectSession } from "@/features/session/hooks/useCloudDirectSession";
 import { emitLocalEvent } from "@/platform/ws";
 import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
+import { CloudSimulatorEventSchema } from "@shared/events";
+import {
+  cloudSimulatorActions,
+  useCloudSimulatorStore,
+} from "@/features/simulator/cloud/cloudSimulatorStore";
 
 // Exercise the hook's actual frame routing; only React mounting and the socket
-// are replaced. The transcript fold and query cache remain real.
+// are replaced. The transcript fold, query cache and simulator store remain real.
 const { effects, setState } = vi.hoisted(() => ({
   effects: [] as Array<() => void | (() => void)>,
   setState: vi.fn(),
@@ -38,6 +43,14 @@ vi.mock("@/features/session/cloud/cloudSessionSocket", () => ({
 let cleanup: void | (() => void);
 beforeEach(() => {
   vi.clearAllMocks();
+  useCloudSimulatorStore.setState({ byWorkspace: {}, epochs: {} });
+  vi.mocked(emitLocalEvent).mockImplementation((event, raw) => {
+    if (event !== "cloud:simulator") return;
+    const frame = CloudSimulatorEventSchema.parse(raw);
+    if (frame.kind === "status")
+      cloudSimulatorActions.applyStatusEvent(frame.workspaceId, frame.data);
+    else if (frame.kind === "gone") cloudSimulatorActions.forget(frame.workspaceId);
+  });
   effects.length = 0;
   queryClient = new QueryClient();
   vi.stubGlobal("requestAnimationFrame", () => 1);
@@ -153,16 +166,20 @@ describe("direct cloud session published frames", () => {
     });
   });
 
-  it("keeps the running device visible when the other platform sends a live stopped frame", () => {
+  it("keeps the primary command busy across unrelated transitions and replays until a fresh answer", () => {
     onFrame(snapshot("ready"));
+    cloudSimulatorActions.setBusy("deus-direct-1", "stopping");
+    vi.mocked(emitLocalEvent).mockClear();
     onFrame({ ...snapshot("stopped").latestSimulatorStatus, platform: "android" });
-    expect(emitLocalEvent).toHaveBeenLastCalledWith(
-      "cloud:simulator",
-      expect.objectContaining({
-        kind: "status",
-        data: expect.objectContaining({ platform: "ios", status: "ready" }),
-      })
-    );
+    onFrame(snapshot("ready").latestSimulatorStatus!);
+    expect(emitLocalEvent).not.toHaveBeenCalled();
+    expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"]).toMatchObject({
+      platform: "ios",
+      status: "ready",
+      busy: "stopping",
+    });
+    onFrame({ ...snapshot("ready").latestSimulatorStatus, timestamp: "2026-09-06T18:05:00.000Z" });
+    expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"].busy).toBeNull();
   });
 
   it("replaces remembered platforms when a legacy reconnect has only a singular mirror", () => {
@@ -180,6 +197,34 @@ describe("direct cloud session published frames", () => {
     );
   });
 
+  it("keeps devices behind a platformless legacy command error", () => {
+    onFrame(snapshot("ready"));
+    onFrame({
+      ...snapshot("ready"),
+      latestSimulatorStatus: {
+        type: "simulator.status",
+        status: "error",
+        error: "SIDECAR_NOT_CONNECTED",
+      },
+    });
+    expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"].error).toBe(
+      "SIDECAR_NOT_CONNECTED"
+    );
+    const android = {
+      ...snapshot("ready").latestSimulatorStatus,
+      platform: "android",
+      timestamp: "2026-09-06T18:05:00.000Z",
+    };
+    onFrame(android);
+    expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"].platform).toBe("android");
+    onFrame({ ...android, status: "stopped", timestamp: "2026-09-06T18:06:00.000Z" });
+    expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"]).toMatchObject({
+      platform: "ios",
+      status: "ready",
+      streamUrl: "https://stream.expo.dev/device",
+    });
+  });
+
   it("ignores a malformed complete mirror without clearing or changing the device", () => {
     const frame = snapshot("ready");
     onFrame(frame);
@@ -194,13 +239,10 @@ describe("direct cloud session published frames", () => {
         vi.mocked(emitLocalEvent).mock.calls.filter(([kind]) => kind === "cloud:simulator")
       ).toEqual([]);
       onFrame({ ...snapshot("stopped").latestSimulatorStatus, platform: "android" });
-      expect(emitLocalEvent).toHaveBeenLastCalledWith(
-        "cloud:simulator",
-        expect.objectContaining({
-          kind: "status",
-          data: expect.objectContaining({ platform: "ios", status: "ready" }),
-        })
-      );
+      expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"]).toMatchObject({
+        platform: "ios",
+        status: "ready",
+      });
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("simulator"));
     } finally {
       warn.mockRestore();
