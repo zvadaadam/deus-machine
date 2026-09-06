@@ -2,7 +2,8 @@
  * useAgentEvents — subscribe to the canonical agent stream and fold it.
  *
  * The backend forwards every @zvada/agent-server lifecycle envelope verbatim
- * as ONE q:event (`agent:event`). This hook owns only the browser-shaped parts
+ * as `agent:event`; `agent:snapshot` replaces the fold after cloud recovery.
+ * This hook owns only the browser-shaped parts
  * of consuming it — the socket subscription, the animation-frame delta flush
  * and the debounced page reload. The fold itself lives in `lib/agentEventFold`,
  * so it can be tested without React, a DOM or a socket.
@@ -18,9 +19,11 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { onEvent } from "@/platform/ws";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
+import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 import {
   createStreamCursor,
   flushDeltas,
+  hydrateConversation,
   pruneFolds,
   refetchMessages,
   routeEnvelope,
@@ -94,6 +97,13 @@ export function useAgentEvents(sessionId: string | null): void {
     };
 
     const unsub = onEvent((name: string, raw: unknown) => {
+      if (name === "agent:snapshot") {
+        const snapshot = raw as AgentConversationSnapshot;
+        clearTimeout(refetchTimers.get(snapshot.sessionId));
+        refetchTimers.delete(snapshot.sessionId);
+        hydrateConversation(ctx, snapshot);
+        return;
+      }
       if (name !== "agent:event") return;
       routeEnvelope(ctx, raw as DecodedWireEventEnvelope);
     });

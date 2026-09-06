@@ -128,6 +128,17 @@ export function cancelledTurnRow(sessionId: string, turn: ConversationTurn): Mes
   };
 }
 
+/** A recovered assistant answer replaces the marker minted before it was known. */
+export function supersededCancellationMarkers(state: ConversationState): Set<string> {
+  const ids = new Set<string>();
+  for (const entry of state.timeline) {
+    if (entry.kind === "message" && entry.role === "assistant" && !entry.parentToolCallId) {
+      ids.add(cancelledTurnMessageId(entry.turnId));
+    }
+  }
+  return ids;
+}
+
 /**
  * The folded compaction entity → the `compactions` row shape both stores hold.
  *

@@ -272,6 +272,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("tool:cancel");
       // ONE agent event carries the whole lifecycle stream.
       expect(PROTOCOL_EVENTS).toContain("agent:event");
+      expect(PROTOCOL_EVENTS).toContain("agent:snapshot");
       expect(PROTOCOL_EVENTS).toContain("pty-data");
       expect(PROTOCOL_EVENTS).toContain("pty-exit");
       expect(PROTOCOL_EVENTS).toContain("fs:changed");
@@ -294,7 +295,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("cloud:simulator");
       expect(PROTOCOL_EVENTS).toContain("cloud:preview");
       expect(PROTOCOL_EVENTS).toContain("cloud:identity");
-      expect(PROTOCOL_EVENTS).toHaveLength(21);
+      expect(PROTOCOL_EVENTS).toHaveLength(22);
     });
 
     it("has no deus-dialect part/message event names left", () => {

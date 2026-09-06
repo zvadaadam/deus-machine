@@ -146,6 +146,7 @@ import { unarchiveWorkspace } from "../../../src/services/workspace-archive.serv
 function makeHandler() {
   return {
     handle: vi.fn(),
+    hydrateCloudSnapshot: vi.fn(),
     beginTurn: vi.fn(() => true),
     abortTurn: vi.fn(),
     liveTurnId: vi.fn(() => undefined as string | undefined),

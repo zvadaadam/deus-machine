@@ -172,6 +172,8 @@ export function removeSubs(connectionId: string): void {
 /** Optional context for targeted invalidation (e.g., which sessions changed). */
 interface InvalidateContext {
   sessionIds?: string[];
+  /** A full transcript snapshot follows; resume insert deltas from its new order. */
+  resetMessageCursors?: boolean;
 }
 
 /**
@@ -197,6 +199,16 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
       if (!resources.includes(sub.resource)) continue;
 
       if (sub.resource === "messages") {
+        if (ctx?.resetMessageCursors) {
+          const sessionId = readStringParam(sub.params, "sessionId");
+          if (sessionId && ctx.sessionIds?.includes(sessionId)) {
+            messageCursors.set(
+              `${connectionId}:${subId}`,
+              getMaxMessageSeq(getDatabase(), sessionId)
+            );
+          }
+          continue;
+        }
         pushMessageDelta(connectionId, subId, sub.params);
         continue;
       }

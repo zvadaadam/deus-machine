@@ -52,6 +52,7 @@ import { createApp } from "../../src/app";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
 import { resetStatsCache } from "../../src/db";
 import { invalidate } from "../../src/services/query-engine";
+import { restoreCloudSnapshot } from "../../src/services/agent/cloud/snapshot";
 
 // ---- Constants ----
 
@@ -549,6 +550,63 @@ describe("q:subscribe → live q:snapshot push", () => {
 });
 
 describe("q:subscribe → q:delta for messages", () => {
+  it("continues delivering inserts after restored history resets the sequence order", async () => {
+    testDb.exec("UPDATE messages SET seq = seq + 100");
+    const { ws } = await connectAndAuth();
+    try {
+      await sendAndReceive(
+        ws,
+        {
+          type: "q:subscribe",
+          id: "sub_restored",
+          resource: "messages",
+          params: { sessionId: SESS_ID },
+        },
+        "q:snapshot"
+      );
+      const restored = restoreCloudSnapshot(
+        SESS_ID,
+        {
+          type: "session.snapshot",
+          state: {
+            sessionId: "cloud-session",
+            organizationId: "org",
+            workspaceId: "workspace",
+            status: "ready",
+            turns: [],
+          },
+          messages: ["msg-q-001", "msg-q-002", "msg-q-003"].map((id, messageIndex) => ({
+            id,
+            sessionId: "cloud-session",
+            turnId: "turn",
+            role: "assistant",
+            messageIndex,
+            outputIndex: messageIndex + 1,
+            createdAt: Date.now(),
+            parts: [],
+          })),
+        },
+        false
+      );
+      expect(restored.ok).toBe(true);
+      invalidate(["messages"], { sessionIds: [SESS_ID], resetMessageCursors: true });
+      testDb
+        .prepare(
+          "INSERT INTO messages (id, session_id, role) VALUES ('msg-after-restore', ?, 'user')"
+        )
+        .run(SESS_ID);
+      const delivery = waitForMessage(ws, "q:delta");
+      invalidate(["messages"]);
+      const delta = await delivery;
+      expect(delta.upserted.map((message: { id: string }) => message.id)).toEqual([
+        "msg-after-restore",
+      ]);
+      expect(delta.cursor).toBe(4);
+    } finally {
+      ws.close();
+    }
+  });
+
   it("pushes delta with new messages after invalidation", async () => {
     const { ws } = await connectAndAuth();
     try {

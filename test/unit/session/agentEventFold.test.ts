@@ -20,6 +20,7 @@ import {
   createSessionFold,
   createStreamCursor,
   flushDeltas,
+  hydrateConversation,
   messagesKey,
   pruneFolds,
   refetchMessages,
@@ -422,6 +423,93 @@ describe("message.started{role:user} — the predicted echo", () => {
 // ===========================================================================
 // I3: routing a stream the browser cannot replay
 // ===========================================================================
+
+describe("restored cloud conversations", () => {
+  it("keeps an optimistic prompt and rejects an older HTTP page still in flight", async () => {
+    const h = harness();
+    let finishPage!: (page: PaginatedMessages) => void;
+    const loading = h.qc
+      .fetchQuery({
+        queryKey: messagesKey(SESSION),
+        queryFn: () =>
+          new Promise<PaginatedMessages>((resolve) => {
+            finishPage = resolve;
+          }),
+      })
+      .catch(() => undefined);
+    const prompt = createOptimisticUserMessage({
+      sessionId: SESSION,
+      turnId: "pending",
+      content: "New prompt",
+    });
+    seed(h.qc, SESSION, [prompt]);
+    const restored = harness();
+    restored.feed(started());
+    restored.feed(partEvent(textPart("p1", "Recovered history")));
+    hydrateConversation(h.ctx, {
+      sessionId: SESSION,
+      seq: 3,
+      conversation: restored.fold().state,
+      messageIds: ["a1"],
+    });
+    finishPage({ messages: [], has_older: false, has_newer: false });
+    await loading;
+    expect(h.page()?.messages.map((row) => row.id)).toEqual(["a1", prompt.id]);
+    expect(h.page()?.messages[0].parts[0]).toMatchObject({ text: "Recovered history" });
+    expect(h.qc.getQueryState(messagesKey(SESSION))?.fetchStatus).toBe("idle");
+  });
+
+  it("replaces a stale fold and cursor so streaming continues from recovered text", () => {
+    const h = harness();
+    h.feed(started(), { seq: 40 });
+    h.feed(partEvent(textPart("p1", "old")), { seq: 41 });
+    h.feed(delta("p1", " stale pending flush"), { seq: 42 });
+    const restored = harness();
+    restored.feed(started());
+    restored.feed(partEvent(textPart("p1", "Recovered while disconnected")));
+
+    hydrateConversation(h.ctx, {
+      sessionId: SESSION,
+      seq: 1,
+      conversation: restored.fold().state,
+      messageIds: ["a1"],
+    });
+    expect(h.fold().dirtyMessages.size).toBe(0);
+    h.feed(delta("p1", " and continued"), { seq: 2 });
+    h.flush();
+    expect(h.page()!.messages[0].parts[0]).toMatchObject({
+      text: "Recovered while disconnected and continued",
+    });
+    expect(h.requestRefetch).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a cached background session without requiring its panel to be active", () => {
+    const h = harness();
+    seed(h.qc, OTHER, []);
+    const restored = harness(OTHER);
+    restored.feed(started({ sessionId: OTHER }));
+    hydrateConversation(h.ctx, {
+      sessionId: OTHER,
+      seq: 5,
+      conversation: restored.fold(OTHER).state,
+      messageIds: ["a1"],
+    });
+    expect(h.page(OTHER)?.messages.map((message) => message.id)).toEqual(["a1"]);
+    expect(h.fold(OTHER).state.timeline).toHaveLength(1);
+  });
+
+  it("does not retain whole transcripts for sessions nobody has opened", () => {
+    const h = harness();
+    hydrateConversation(h.ctx, {
+      sessionId: OTHER,
+      seq: 5,
+      conversation: createSessionFold().state,
+      messageIds: [],
+    });
+    expect(h.ctx.folds.has(OTHER)).toBe(false);
+    expect(h.requestRefetch).not.toHaveBeenCalled();
+  });
+});
 
 describe("routeEnvelope — cursor policy", () => {
   it("joins mid-stream without calling the first envelope a gap", () => {

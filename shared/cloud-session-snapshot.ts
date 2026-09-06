@@ -3,7 +3,21 @@
 // callers own status, ordering and live side effects.
 
 import type { SessionSnapshotEvent } from "@deus-hq/api";
-import type { AnyLifecycleEvent } from "./protocol-types";
+import type { AnyLifecycleEvent, ConversationState } from "./protocol-types";
+
+/** Backend fold restored from cloud history, at its new stream position. */
+export interface AgentConversationSnapshot {
+  sessionId: string;
+  seq: number;
+  conversation: ConversationState;
+  /** SQLite's complete order, including cancellation markers. */
+  messageIds: string[];
+}
+
+export type RestoredCloudConversation = Pick<
+  AgentConversationSnapshot,
+  "conversation" | "messageIds"
+>;
 
 type SnapshotMessage = NonNullable<SessionSnapshotEvent["messages"]>[number];
 type SnapshotPart = SnapshotMessage["parts"][number];
@@ -34,7 +48,7 @@ export function projectCloudSnapshot(snapshot: SessionSnapshotEvent): {
       type: "turn.started",
       sessionId: null,
       turnId: currentTurnId,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
     } as unknown as AnyLifecycleEvent);
   }
 
@@ -60,6 +74,18 @@ export function projectCloudSnapshot(snapshot: SessionSnapshotEvent): {
   // compacted" marker on reconnect.
   for (const compaction of snapshot.state.compactions ?? []) {
     route(compactionEvent(compaction));
+  }
+
+  const usageTurnId = currentTurnId ?? snapshot.state.turns?.at(-1)?.turnId;
+  if (snapshot.state.contextUsed != null && usageTurnId) {
+    route({
+      type: "session.usage",
+      sessionId: "",
+      turnId: usageTurnId,
+      used: snapshot.state.contextUsed,
+      ...(snapshot.state.contextSize != null ? { size: snapshot.state.contextSize } : {}),
+      timestamp: Date.now(),
+    });
   }
 
   return { events, messageIds: ordered.map((message) => message.id) };

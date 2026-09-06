@@ -80,6 +80,15 @@ function iso(epochMs: number): string {
  * upsert. COALESCE guards the fields a thinner replay omits.
  */
 export function persistMessage(sessionId: string, message: ConversationMessage): WriteResult {
+  const result = persistMessages(sessionId, [message]);
+  return result.ok ? { ok: true, value: message.messageId } : result;
+}
+
+/** One session check and prepared upsert for a snapshot's message batch. */
+export function persistMessages(
+  sessionId: string,
+  messages: readonly ConversationMessage[]
+): WriteResult<void> {
   const db = getDatabase();
   try {
     // A message for a session we don't know about has no FK target; the parts
@@ -90,7 +99,7 @@ export function persistMessage(sessionId: string, message: ConversationMessage):
       return { ok: false, error: "session not found" };
     }
 
-    db.prepare(
+    const upsert = db.prepare(
       `INSERT INTO messages (id, session_id, role, turn_id, model, sent_at, parent_tool_call_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
@@ -99,16 +108,19 @@ export function persistMessage(sessionId: string, message: ConversationMessage):
          model = COALESCE(excluded.model, messages.model),
          sent_at = COALESCE(excluded.sent_at, messages.sent_at),
          parent_tool_call_id = COALESCE(excluded.parent_tool_call_id, messages.parent_tool_call_id)`
-    ).run(
-      message.messageId,
-      sessionId,
-      message.role,
-      message.turnId,
-      message.model ?? null,
-      iso(message.startedAt),
-      message.parentToolCallId ?? null
     );
-    return { ok: true, value: message.messageId };
+    for (const message of messages) {
+      upsert.run(
+        message.messageId,
+        sessionId,
+        message.role,
+        message.turnId,
+        message.model ?? null,
+        iso(message.startedAt),
+        message.parentToolCallId ?? null
+      );
+    }
+    return { ok: true, value: undefined };
   } catch (error) {
     return failed("message", error);
   }
@@ -231,7 +243,7 @@ export interface TurnOutcomeWrite {
 export function persistTurnEnded(
   sessionId: string,
   turn: ConversationTurn,
-  outcome: TurnOutcomeWrite
+  outcome?: TurnOutcomeWrite
 ): WriteResult<void> {
   const db = getDatabase();
   try {
@@ -246,6 +258,24 @@ export function persistTurnEnded(
 
       if (target) {
         const accounting = turnAccountingRow(turn);
+        // Recovery can reveal a later assistant message. Move restated
+        // accounting off the former target; retain metrics the replay omits.
+        db.prepare(
+          `UPDATE messages SET
+             tokens = CASE WHEN ? IS NOT NULL THEN NULL ELSE tokens END,
+             cost = CASE WHEN ? IS NOT NULL THEN NULL ELSE cost END,
+             cancelled_at = CASE WHEN ? IS NOT NULL THEN NULL ELSE cancelled_at END,
+             turn_stop_reason = NULL
+           WHERE session_id = ? AND turn_id = ? AND role = 'assistant'
+             AND parent_tool_call_id IS NULL AND id != ?`
+        ).run(
+          accounting.tokens,
+          accounting.cost,
+          accounting.cancelled_at,
+          sessionId,
+          turn.turnId,
+          target.id
+        );
         db.prepare(
           `UPDATE messages
              SET tokens = COALESCE(?, tokens),
@@ -260,7 +290,7 @@ export function persistTurnEnded(
           accounting.cancelled_at,
           target.id
         );
-      } else if (outcome.cancelled) {
+      } else if (turn.stopReason === "cancelled") {
         const marker = cancelledTurnRow(sessionId, turn);
         db.prepare(
           `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost)
@@ -283,6 +313,9 @@ export function persistTurnEnded(
         );
       }
 
+      // Snapshot hydration restores accounting without changing a live turn's
+      // status. Only live dispatch supplies a session outcome.
+      if (!outcome) return;
       if (outcome.status === "error") {
         // No ErrorInfo means a standalone `error` event already wrote the
         // specific message — COALESCE keeps it instead of replacing it with

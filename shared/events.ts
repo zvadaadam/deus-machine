@@ -218,6 +218,8 @@ export const PROTOCOL_EVENTS = [
   // reduceConversationWithChanges and projects the reported changes onto the
   // paginated SQLite-row cache (features/session/lib/agentEventFold).
   "agent:event",
+  // A cloud reconnect restored the backend fold and its durable transcript.
+  "agent:snapshot",
   // PTY events (high-throughput)
   "pty-data",
   "pty-exit",

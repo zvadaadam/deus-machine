@@ -15,7 +15,11 @@
 // tool-use question in-process — deus has no interactive permission UI).
 
 import { createSession, createSessionToken } from "@deus-hq/sdk";
-import { LIFECYCLE_EVENT_TYPES, SessionErrorEventSchema } from "@deus-hq/api";
+import {
+  LIFECYCLE_EVENT_TYPES,
+  SessionErrorEventSchema,
+  SessionSnapshotEventSchema,
+} from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
@@ -64,6 +68,11 @@ import { getSessionRaw } from "../../../db";
 import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
+const TRANSCRIPT_SNAPSHOT_SCHEMA = SessionSnapshotEventSchema.pick({
+  type: true,
+  state: true,
+  messages: true,
+});
 
 interface PendingDiff {
   resolve: (data: Record<string, unknown>) => void;
@@ -363,6 +372,30 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     case "session.snapshot": {
       const state = (frame.state ?? {}) as Record<string, unknown>;
 
+      if (frame.messages !== undefined) {
+        const parsed = TRANSCRIPT_SNAPSHOT_SCHEMA.safeParse(frame);
+        if (!parsed.success || parsed.data.state.sessionId !== session.providerSessionId) {
+          console.warn(
+            `[CloudDriver] malformed transcript snapshot session=${session.deusSessionId}`
+          );
+        } else {
+          const restored = handler.hydrateCloudSnapshot(session.deusSessionId, parsed.data);
+          if (restored) {
+            broadcast(
+              JSON.stringify({
+                type: "q:event",
+                event: "agent:snapshot",
+                data: {
+                  sessionId: session.deusSessionId,
+                  seq: ++session.seq,
+                  ...restored,
+                },
+              })
+            );
+          }
+        }
+      }
+
       // Truth refresh on (re)connect: the snapshot's session status is the
       // only way to learn the sandbox is asleep after a backend restart —
       // no workspace.state event fires for an already-paused VM. Asleep
@@ -420,10 +453,10 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         clearTurnKill(session);
       }
 
-      // Reconnect gap-heal: if the turn deus believes is live already settled
-      // server-side, the snapshot's turns[] carries its outcome — synthesize
-      // the turn.ended the socket gap swallowed. (Snapshot history backfill is
-      // the phone-phase reconciliation work; live sessions only need this.)
+      // Full transcripts use atomic hydration above, including their outcomes.
+      // A failed restore must not fall through into live completion effects.
+      if (frame.messages !== undefined) return;
+      // Metadata-only snapshots can still settle a known live turn.
       const live = handler.liveTurnId(session.deusSessionId);
       if (!live) return;
       if (state.currentTurnId === live) return;
