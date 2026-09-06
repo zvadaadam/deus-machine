@@ -175,7 +175,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         !state.conversation.turns.some((turn) => turn.turnId === state.turnId) &&
         snapshot.state.currentTurnId !== state.turnId &&
         !snapshot.state.turns?.some((turn) => turn.turnId === state.turnId);
-      const result = restoreCloudSnapshot(sessionId, snapshot, pending);
+      const result = restoreCloudSnapshot(sessionId, snapshot, pending, state.conversation);
       if (!result.ok) {
         console.warn(
           `[AgentEvent] Cloud history restore failed: session=${sessionId}`,

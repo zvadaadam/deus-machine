@@ -373,30 +373,33 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(refreshPr).not.toHaveBeenCalled();
   });
 
-  it("keeps an actionable error already delivered after the snapshot's terminal", () => {
-    const failure = snapshot([message("answer", 0)], {
-      status: "error",
-      turns: [
-        ended("turn-1", {
-          stopReason: "error",
-          error: { category: "internal", message: "Agent turn failed" },
-        }),
-      ],
-    });
-    onFrame(failure);
-    onFrame({
-      type: "session.error",
-      turnId: "turn-1",
-      recoverable: false,
-      error: { code: "provider_auth", message: "Reconnect your provider account" },
-    });
-    onFrame(failure);
-    expect(sessionRow()).toMatchObject({
-      status: "error",
-      error_category: "provider_auth",
-      error_message: "Reconnect your provider account",
-    });
-  });
+  it.each([true, false])(
+    "keeps a deferred actionable error (assistant output: %s)",
+    (hasAnswer) => {
+      const failure = snapshot(hasAnswer ? [message("answer", 0)] : [], {
+        status: "error",
+        turns: [
+          ended("turn-1", {
+            stopReason: "error",
+            error: { category: "internal", message: "Agent turn failed" },
+          }),
+        ],
+      });
+      onFrame(failure);
+      onFrame({
+        type: "session.error",
+        turnId: "turn-1",
+        recoverable: false,
+        error: { code: "provider_auth", message: "Reconnect your provider account" },
+      });
+      onFrame(failure);
+      expect(sessionRow()).toMatchObject({
+        status: "error",
+        error_category: "provider_auth",
+        error_message: "Reconnect your provider account",
+      });
+    }
+  );
 
   it("rejects malformed or mismatched transcripts without erasing existing rows", () => {
     onFrame(snapshot([message("original", 0)]));
@@ -406,6 +409,28 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     onFrame(snapshot([], { sessionId: "another-provider-session" }));
     expect(rows()).toEqual(before);
     expect(hydrated()).toHaveLength(0);
+  });
+
+  it("replaces an earlier error when a different cloud turn failed while disconnected", () => {
+    onFrame(snapshot([], { status: "error", turns: [ended("old", { stopReason: "error" })] }));
+    onFrame({
+      type: "session.error",
+      turnId: "old",
+      recoverable: false,
+      error: { code: "provider_auth", message: "Reconnect your provider account" },
+    });
+    onFrame(
+      snapshot([], {
+        status: "error",
+        turns: [
+          ended("new", {
+            stopReason: "error",
+            error: { category: "tool", message: "Build failed" },
+          }),
+        ],
+      })
+    );
+    expect(sessionRow()).toMatchObject({ error_category: "tool", error_message: "Build failed" });
   });
 
   it("restores more than 100 messages", () => {

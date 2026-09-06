@@ -1,5 +1,9 @@
 import type { SessionSnapshotEvent } from "@deus-hq/api";
-import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import {
+  emptyConversation,
+  reduceConversationWithChanges,
+  type ConversationState,
+} from "@zvada/agent-server/protocol";
 import {
   projectCloudSnapshot,
   type RestoredCloudConversation,
@@ -20,7 +24,8 @@ import {
 export function restoreCloudSnapshot(
   sessionId: string,
   snapshot: SessionSnapshotEvent,
-  preserveStatus: boolean
+  preserveStatus: boolean,
+  previousConversation?: ConversationState
 ): WriteResult<RestoredCloudConversation> {
   const { events, messageIds } = projectCloudSnapshot(snapshot);
   let conversation = emptyConversation();
@@ -37,12 +42,19 @@ export function restoreCloudSnapshot(
       // A session.error can have supplied better details after this terminal.
       // Keep them when reconnecting to a failure already persisted locally.
       const knownFailure =
-        lastTurn &&
-        db
-          .prepare(
-            "SELECT 1 FROM messages WHERE session_id = ? AND turn_id = ? AND turn_stop_reason = 'error' LIMIT 1"
-          )
-          .get(sessionId, lastTurn.turnId);
+        // A failed turn without assistant output has no durable message row.
+        previousConversation?.turns.some(
+          (turn) =>
+            turn.turnId === lastTurn?.turnId &&
+            turn.status === "ended" &&
+            turn.stopReason === "error"
+        ) ||
+        (lastTurn &&
+          db
+            .prepare(
+              "SELECT 1 FROM messages WHERE session_id = ? AND turn_id = ? AND turn_stop_reason = 'error' LIMIT 1"
+            )
+            .get(sessionId, lastTurn.turnId));
       requireWrite(
         persistMessages(
           sessionId,

@@ -452,10 +452,10 @@ describe("restored cloud conversations", () => {
       conversation: restored.fold().state,
       messageIds: ["a1"],
     });
-    finishPage({ messages: [], has_older: false, has_newer: false });
+    finishPage({ messages: [], compactions: [], has_older: false, has_newer: false });
     await loading;
     expect(h.page()?.messages.map((row) => row.id)).toEqual(["a1", prompt.id]);
-    expect(h.page()?.messages[0].parts[0]).toMatchObject({ text: "Recovered history" });
+    expect(h.page()?.messages[0].parts?.[0]).toMatchObject({ text: "Recovered history" });
     expect(h.qc.getQueryState(messagesKey(SESSION))?.fetchStatus).toBe("idle");
   });
 
@@ -477,7 +477,7 @@ describe("restored cloud conversations", () => {
     expect(h.fold().dirtyMessages.size).toBe(0);
     h.feed(delta("p1", " and continued"), { seq: 2 });
     h.flush();
-    expect(h.page()!.messages[0].parts[0]).toMatchObject({
+    expect(h.page()!.messages[0].parts?.[0]).toMatchObject({
       text: "Recovered while disconnected and continued",
     });
     expect(h.requestRefetch).not.toHaveBeenCalled();
