@@ -15,6 +15,12 @@
 
 import { getSession as sdkGetSession } from "@deus-hq/sdk";
 import {
+  CloudSimulatorMirrorSchema,
+  cloudSimulatorStatusAt,
+  sameCloudSimulatorStatus,
+  selectPrimaryCloudSimulator,
+} from "@shared/cloud-simulator";
+import {
   CloudSimulatorEventSchema,
   CloudSimulatorPlatformSchema,
   CloudSimulatorStatusSchema,
@@ -100,14 +106,6 @@ const restReadsInFlight = new Map<string, Promise<CloudSimulatorStatus | null>>(
  *  request. */
 const REST_READ_TIMEOUT_MS = 10_000;
 
-/** The platform's ISO timestamp as epoch ms, or null when the frame named
- *  none (or an unparseable one — then it takes part in no ordering). */
-function statusAt(status: CloudSimulatorStatus): number | null {
-  if (!status.timestamp) return null;
-  const at = Date.parse(status.timestamp);
-  return Number.isFinite(at) ? at : null;
-}
-
 /** Forget every device: identity change (the stream URLs were account A's
  *  phones) and driver shutdown. */
 export function forgetCloudSimulators(): void {
@@ -134,23 +132,6 @@ function normalizeCloudSimulatorStatus(status: CloudSimulatorStatus): CloudSimul
   };
 }
 
-/** The same status, from the same moment. A frame identical in content but
- *  newer in time is the platform answering AGAIN (a retried start failing the
- *  same way) and must reach the clients: the renderer clears its pending
- *  action on any status event, so swallowing it would leave "Booting the
- *  device" over a real error. Equal timestamps are replays (the snapshot and
- *  the REST mirror repeat the latest frame) and stay silent. */
-function sameStatus(a: CloudSimulatorStatus, b: CloudSimulatorStatus): boolean {
-  return (
-    a.status === b.status &&
-    a.platform === b.platform &&
-    a.streamUrl === b.streamUrl &&
-    a.error === b.error &&
-    a.easSessionIdentifier === b.easSessionIdentifier &&
-    a.timestamp === b.timestamp
-  );
-}
-
 function platformKey(status: CloudSimulatorStatus): PlatformKey | null {
   return status.platform ?? null;
 }
@@ -164,50 +145,8 @@ function devicesOf(workspaceId: string): WorkspaceDevices {
   return devices;
 }
 
-/** How much a device deserves the tab: a running one always, then a booting
- *  one, then what is winding down, then the dead — so no other platform's
- *  transition can hide a device that is still up and billing. */
-function statusRank(status: string): number {
-  switch (status) {
-    case "ready":
-      return 0;
-    case "starting":
-      return 1;
-    case "stopping":
-      return 2;
-    case "stopped":
-      return 4;
-    default:
-      return 3; // error, or a status this build has never seen
-  }
-}
-
-/** The workspace's primary device — the one the tab shows. Ties (two devices
- *  in the same state) go to the newer frame, then to ios for determinism. */
 function primaryOf(devices: WorkspaceDevices | undefined): CloudSimulatorDevice | null {
-  if (!devices || devices.size === 0) return null;
-  let best: CloudSimulatorDevice | null = null;
-  let bestKey: PlatformKey | null = null;
-  for (const [key, device] of devices) {
-    if (!best) {
-      best = device;
-      bestKey = key;
-      continue;
-    }
-    const rank = statusRank(device.status.status) - statusRank(best.status.status);
-    if (rank < 0) {
-      best = device;
-      bestKey = key;
-      continue;
-    }
-    if (rank > 0) continue;
-    const newer = (device.at ?? -1) - (best.at ?? -1);
-    if (newer > 0 || (newer === 0 && key === "ios" && bestKey !== "ios")) {
-      best = device;
-      bestKey = key;
-    }
-  }
-  return best;
+  return selectPrimaryCloudSimulator(devices?.values());
 }
 
 /** Push a device event to connected clients (q:event "cloud:simulator"). */
@@ -225,7 +164,7 @@ function announcePrimary(
 ): void {
   const after = primaryOf(cloudSimulators.get(workspaceId));
   if (!after) return;
-  if (before && sameStatus(before, after.status)) return;
+  if (before && sameCloudSimulatorStatus(before, after.status)) return;
   broadcastCloudSimulator({ workspaceId, sessionId, kind: "status", data: after.status });
 }
 
@@ -283,7 +222,7 @@ export function applyCloudSimulatorStatus(
     broadcastCloudSimulator({ ...source, kind: "status", data });
     return;
   }
-  const at = statusAt(data);
+  const at = cloudSimulatorStatusAt(data);
   const devices = devicesOf(source.workspaceId);
   const cached = devices.get(key);
   if (cached && isNotNewerThanCached(at, cached)) return;
@@ -308,18 +247,20 @@ export function applyCloudSimulatorStatus(
  */
 export function reconcileCloudSimulatorMirror(
   source: CloudSimulatorSource,
-  mirrors: Record<string, unknown>[]
+  mirrors: unknown[]
 ): void {
+  const parsed = CloudSimulatorMirrorSchema.safeParse(mirrors);
+  if (!parsed.success) {
+    console.warn(
+      `[CloudSimulator] dropped malformed simulator mirror for workspace ${source.workspaceId}`
+    );
+    return;
+  }
   const before = primaryOf(cloudSimulators.get(source.workspaceId))?.status ?? null;
-  for (const mirror of mirrors) applyCloudSimulatorStatus(source, mirror);
+  for (const mirror of parsed.data) applyCloudSimulatorStatus(source, mirror);
   const devices = cloudSimulators.get(source.workspaceId);
   if (!devices) return;
-  const named = new Set(
-    mirrors.map((mirror) => {
-      const parsed = CloudSimulatorStatusSchema.safeParse(mirror);
-      return parsed.success ? platformKey(parsed.data) : null;
-    })
-  );
+  const named = new Set(parsed.data.map((mirror) => mirror.platform));
   let pruned = false;
   for (const [key, entry] of [...devices]) {
     if (named.has(key) || entry.sessionId !== source.sessionId) continue;
@@ -495,7 +436,7 @@ async function restRead(
   const beforePrimary = primaryOf(devices)?.status ?? null;
   let changed = false;
   for (const status of statuses) {
-    const at = statusAt(status);
+    const at = cloudSimulatorStatusAt(status);
     const key = platformKey(status)!;
     const live = devices?.get(key) ?? null;
     // The same gate the socket path applies: an older answer never wins, and

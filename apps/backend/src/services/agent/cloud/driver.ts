@@ -15,7 +15,7 @@
 // tool-use question in-process — deus has no interactive permission UI).
 
 import { createSession, createSessionToken } from "@deus-hq/sdk";
-import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
+import { LIFECYCLE_EVENT_TYPES, SessionErrorEventSchema } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
@@ -250,8 +250,7 @@ function pushToFold(session: CloudSession, event: Record<string, unknown>): void
   handler.handle(envelope);
 }
 
-/** agnt error envelopes (code/message) → the engine's error event, so the
- *  existing error plumbing (facts, dedupe, status flip) runs unchanged. */
+/** Channel command rejection → the engine's error plumbing. */
 function pushCloudError(session: CloudSession, code: unknown, message: unknown): void {
   pushToFold(session, {
     type: "error",
@@ -379,23 +378,17 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // backend restart they are the only way to learn of a device that is
       // still running — and billing. A platform that mirrors every device
       // sends `latestSimulatorStatuses` (one per platform); an older one only
-      // the single latest status, which then stands in for the workspace.
+      // the single newest status, which says nothing about other platforms.
       // Applied BEFORE the sandbox-status branches below, so a parked sandbox
       // overrides a mirror older than the park.
-      if (Array.isArray(state.latestSimulatorStatuses)) {
+      if (Array.isArray(frame.latestSimulatorStatuses)) {
         // The complete per-platform list: what it omits, this session no
         // longer has — reconciled, not merely upserted.
-        reconcileCloudSimulatorMirror(
-          frameSource(session),
-          state.latestSimulatorStatuses.filter(
-            (mirror): mirror is Record<string, unknown> =>
-              mirror !== null && typeof mirror === "object"
-          )
-        );
-      } else if (state.latestSimulatorStatus && typeof state.latestSimulatorStatus === "object") {
+        reconcileCloudSimulatorMirror(frameSource(session), frame.latestSimulatorStatuses);
+      } else if (frame.latestSimulatorStatus && typeof frame.latestSimulatorStatus === "object") {
         applyCloudSimulatorStatus(
           frameSource(session),
-          state.latestSimulatorStatus as Record<string, unknown>
+          frame.latestSimulatorStatus as Record<string, unknown>
         );
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
@@ -519,9 +512,30 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // here — Sprint 2 turns it into an invalidation signal.
       return;
 
-    case "session.error":
-      pushCloudError(session, frame.code, frame.message);
+    case "session.error": {
+      const parsed = SessionErrorEventSchema.safeParse(frame);
+      if (!parsed.success) {
+        console.warn(`[CloudDriver] malformed session.error session=${session.deusSessionId}`);
+        return;
+      }
+      const { error, turnId, recoverable } = parsed.data;
+      // AGNT sends session.error after turn.ended, when ownership is already
+      // released. Only a different live turn proves this error is stale.
+      const live = handler.liveTurnId(session.deusSessionId);
+      if (turnId !== undefined && live !== undefined && turnId !== live) return;
+      // Engine errors carry their canonical category in code. The platform's
+      // generic failure wrapper is the only one the fold should deduplicate.
+      pushToFold(session, {
+        type: "error",
+        category: error.code === "AGENT_EXECUTION_FAILED" ? "internal" : error.code,
+        message: error.message,
+        turnId,
+        recoverable,
+        _meta: { cloudErrorCode: error.code },
+        timestamp: Date.now(),
+      });
       return;
+    }
 
     case "error":
       // Channel-level command rejection (e.g. MESSAGE_SEND_FAILED). Engine-

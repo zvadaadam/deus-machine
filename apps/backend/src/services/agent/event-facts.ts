@@ -18,7 +18,7 @@
 
 import { match } from "ts-pattern";
 import { classifyError } from "@zvada/agent-server/protocol";
-import type { ConversationTurn } from "@zvada/agent-server/protocol";
+import type { ConversationState, ConversationTurn } from "@zvada/agent-server/protocol";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
   persistAgentSessionId,
@@ -94,7 +94,8 @@ export function turnOutcomeFor(facts: SessionFacts, turn: ConversationTurn): Tur
 export function applySessionFacts(
   facts: SessionFacts,
   sessionId: string,
-  event: AnyLifecycleEvent
+  event: AnyLifecycleEvent,
+  conversation: ConversationState
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
 
@@ -129,6 +130,17 @@ export function applySessionFacts(
       // agent is still working AND suppress the real terminal error through
       // the dedupe flag. This swallow is load-bearing.
       if (e.recoverable) return [];
+      // Cloud session.error follows turn.ended. Only suppress the platform's
+      // generic wrapper; deferred engine errors can carry better details than
+      // a watchdog or workspace failure's terminal ErrorInfo.
+      const turn = conversation.turns.find((turn) => turn.turnId === e.turnId);
+      if (
+        e._meta?.cloudErrorCode === "AGENT_EXECUTION_FAILED" &&
+        turn?.status === "ended" &&
+        turn.stopReason === "error" &&
+        turn.error
+      )
+        return [];
       facts.errorReported = true;
       return [
         { fact: "session-error", result: persistSessionError(sessionId, e.message, e.category) },
