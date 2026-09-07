@@ -102,8 +102,6 @@ export const ADDITIVE_COLUMNS = {
   sessions: {
     // agnt session id for cloud-workspace sessions (null for local).
     provider_session_id: "TEXT",
-    cloud_git_sync_at: "INTEGER",
-    cloud_git_error: "TEXT",
   },
 } as const satisfies Record<string, Record<string, string>>;
 
@@ -157,8 +155,6 @@ export const SCHEMA_SQL = `
     agent_harness TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_id TEXT,
     provider_session_id TEXT,
-    cloud_git_sync_at INTEGER,
-    cloud_git_error TEXT,
     title TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
     message_count INTEGER NOT NULL DEFAULT 0,

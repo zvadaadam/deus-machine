@@ -14845,6 +14845,120 @@
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "AKyJo",
+          "x": 32,
+          "y": 510,
+          "name": "Cloud autosave warning · Sonner",
+          "width": 356,
+          "height": 92,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "o600t",
+              "x": 0,
+              "y": 0,
+              "name": "Warning toast",
+              "width": 356,
+              "height": 92,
+              "fill": "$bg-overlay",
+              "cornerRadius": "$radius-md",
+              "stroke": "$border-default",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": 16,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "zRP1O",
+                  "name": "Warning icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "triangle-alert",
+                  "library": "lucide",
+                  "fill": "$text-primary"
+                },
+                {
+                  "type": "frame",
+                  "id": "GAVID",
+                  "name": "Toast content",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "J2k1A",
+                      "name": "Cloud autosave failed",
+                      "fill": "$text-primary",
+                      "content": "Cloud autosave failed",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GbPxk",
+                      "name": "Provider diagnostic",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Git push failed: GitHub rejected repository write access.",
+                      "lineHeight": 1.4,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "MZLef",
+              "x": -8,
+              "y": -8,
+              "name": "Dismiss warning",
+              "width": 20,
+              "height": 20,
+              "fill": "$bg-overlay",
+              "cornerRadius": 10,
+              "stroke": "$border-default",
+              "strokeWidth": 1,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "MeYyT",
+                  "name": "Close icon",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$text-primary"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "K0RTU",
+          "x": 410,
+          "y": 510,
+          "name": "Cloud warning behavior",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": 630,
+          "content": "Cloud autosave · notifyCloudAutosaveFailure.ts → existing Sonner warning. Live failed turn save only; provider diagnostic; dismissible or fades after 10 seconds. No persistent chat banner, recovery action, or snapshot replay.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
         }
       ]
     },
@@ -52694,14 +52808,6 @@
               ]
             },
             {
-              "id": "xxrmP",
-              "type": "ref",
-              "ref": "ncVl3",
-              "name": "CloudGitSaveNotice · failed receipt only",
-              "width": 474,
-              "enabled": false
-            },
-            {
               "type": "frame",
               "id": "zaU2z",
               "name": "ComposerWrap",
@@ -81146,200 +81252,6 @@
               }
             }
           ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
-      "id": "HxbXh",
-      "x": 2400,
-      "y": 8009,
-      "name": "16a · DS — Cloud Git backup",
-      "theme": {
-        "mode": "dark"
-      },
-      "width": 1080,
-      "height": 390,
-      "fill": "$bg-base",
-      "cornerRadius": "$radius-2xl",
-      "layout": "none",
-      "children": [
-        {
-          "type": "text",
-          "id": "cd53A",
-          "x": 32,
-          "y": 28,
-          "name": "Title",
-          "fill": "$text-primary",
-          "content": "Cloud Git backup",
-          "lineHeight": 1.45,
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-lg",
-          "fontWeight": "600"
-        },
-        {
-          "type": "text",
-          "id": "f52Egn",
-          "x": 32,
-          "y": 58,
-          "name": "Code mapping",
-          "fill": "$text-muted",
-          "content": "features/session/ui/CloudGitSaveNotice.tsx · above the composer · independent of agent turn success",
-          "lineHeight": 1.45,
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-xs",
-          "fontWeight": "normal"
-        },
-        {
-          "type": "frame",
-          "id": "ncVl3",
-          "x": 32,
-          "y": 108,
-          "name": "DS/CloudGitSaveNotice",
-          "reusable": true,
-          "width": 480,
-          "fill": "$bg-raised",
-          "cornerRadius": "$radius-lg",
-          "stroke": "$border-subtle",
-          "strokeWidth": 1,
-          "gap": 8,
-          "padding": 12,
-          "children": [
-            {
-              "type": "icon",
-              "id": "T6a1r",
-              "name": "Cloud alert",
-              "width": 16,
-              "height": 16,
-              "icon": "cloud-alert",
-              "library": "lucide",
-              "fill": "$warning"
-            },
-            {
-              "type": "frame",
-              "id": "V538U",
-              "name": "Backup warning content",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 6,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "i9DaTc",
-                  "name": "Warning title",
-                  "fill": "$text-primary",
-                  "content": "Git backup needs attention",
-                  "lineHeight": 1.45,
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
-                  "fontWeight": "500"
-                },
-                {
-                  "type": "text",
-                  "id": "PI7Oe",
-                  "name": "Recovery explanation",
-                  "fill": "$text-secondary",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "The last backup in this chat reported a problem. Recent file changes may be missing if this cloud computer is recreated. Backups retry after each agent reply.",
-                  "lineHeight": 1.45,
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "text",
-                  "id": "EU4Iy",
-                  "name": "Error disclosure",
-                  "fill": "$text-secondary",
-                  "content": "▸ View backup error",
-                  "lineHeight": 1.45,
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "text",
-                  "id": "PNMPN",
-                  "name": "Draft recovery action",
-                  "fill": "$text-primary",
-                  "content": "Draft a recovery request",
-                  "lineHeight": 1.45,
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
-                  "fontWeight": "normal"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "l9PZp",
-          "x": 560,
-          "y": 108,
-          "name": "DS/CloudGitSaveNotice-Unknown",
-          "reusable": true,
-          "width": 480,
-          "gap": 8,
-          "padding": [
-            0,
-            12
-          ],
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "icon",
-              "id": "A8GcO",
-              "name": "Cloud upload",
-              "width": 14,
-              "height": 14,
-              "icon": "cloud-upload",
-              "library": "lucide",
-              "fill": "$text-muted"
-            },
-            {
-              "type": "text",
-              "id": "t6M5F",
-              "name": "Unknown backup status",
-              "fill": "$text-muted",
-              "content": "Git backup status is unavailable for this chat.",
-              "lineHeight": 1.45,
-              "fontFamily": "$font-sans",
-              "fontSize": "$text-xs",
-              "fontWeight": "normal"
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "id": "qt6gx",
-          "x": 560,
-          "y": 164,
-          "name": "State rules",
-          "fill": "$text-muted",
-          "textGrowth": "fixed-width",
-          "width": 460,
-          "content": "Known failures stay visible during later turns and reconnects. Only a newer remote acknowledgment clears them. Unknown status is shown for an idle chat with messages and no receipt; fresh or working chats omit it. Confirmed saves render no notice.",
-          "lineHeight": 1.45,
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-xs",
-          "fontWeight": "normal"
-        },
-        {
-          "type": "text",
-          "id": "w6xLW",
-          "x": 32,
-          "y": 302,
-          "name": "Recovery action behavior",
-          "fill": "$text-muted",
-          "textGrowth": "fixed-width",
-          "width": 1016,
-          "content": "The recovery action appends an editable request to the current draft. It neither sends a message nor changes files. The disclosure expands the diagnostic with wrapping and a bounded scroll area.",
-          "lineHeight": 1.45,
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-xs",
-          "fontWeight": "normal"
         }
       ]
     }

@@ -148,31 +148,35 @@ line heights and tracking are the real values; only the outlines differ.
 
 ## Components → code
 
-| Pencil component                                                     | Renders in                                                            |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `DS/Button-Primary` … `-Destructive`                                 | `components/ui/button.tsx` (`buttonVariants`)                         |
-| `DS/IconButton`                                                      | the 28px icon buttons in `SidebarHeader` / `SessionTabBar`            |
-| `DS/Badge` `DS/Kbd` `DS/Input` `DS/Switch` `DS/Avatar` `DS/MenuItem` | the matching `components/ui/*.tsx`                                    |
-| `DS/Chip`                                                            | `QUICK_PROMPTS` chips in `features/repository/ui/HomeView.tsx`        |
-| `DS/SidebarRow-Repo`                                                 | `features/sidebar/ui/RepositoryItem.tsx`                              |
-| `DS/SidebarRow-Workspace` / `-Active`                                | `features/sidebar/ui/WorkspaceItem.tsx` + `SidebarRow.tsx`            |
-| `DS/StatusIcon-*`                                                    | `features/sidebar/ui/WorkflowStatusIcon.tsx`                          |
-| `DS/PixelGrid-Working`                                               | `features/session/ui/CircularPixelGrid.tsx` (`variant="working"`)     |
-| `DS/SessionTab-Active` / `-Idle`                                     | `components/ui/tab-pill.tsx` via `session/ui/tabs/SessionTab.tsx`     |
-| `DS/ContentTab-Active` / `-Idle`                                     | `app/layouts/ContentTabBar.tsx`                                       |
-| `DS/ToolRow`                                                         | `session/ui/tools/components/BaseToolRenderer.tsx` (header row)       |
-| `DS/TurnStatsHeader`                                                 | `session/ui/TurnStatsHeader.tsx`                                      |
-| `DS/UserBubble`                                                      | `session/ui/MessageItem.tsx` (`UserMessage`)                          |
-| `DS/Composer`                                                        | `session/ui/MessageInput.tsx` — the glass pill + toolbar              |
-| `DS/CloudGitSaveNotice` / `-Unknown`                                 | `session/ui/CloudGitSaveNotice.tsx` — board `16a`, above the composer |
-| `DS/DiffFileHeader`                                                  | `features/workspace/ui/ChangesDiffSection.tsx`                        |
-| `DS/DiffLine-Add` / `-Del` / `-Ctx`                                  | the `diffs-theme` block in `global.css`                               |
-| `DS/FileTreeRow`                                                     | `features/workspace/ui/ChangesFilesPanel.tsx`                         |
+| Pencil component                                                     | Renders in                                                        |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `DS/Button-Primary` … `-Destructive`                                 | `components/ui/button.tsx` (`buttonVariants`)                     |
+| `DS/IconButton`                                                      | the 28px icon buttons in `SidebarHeader` / `SessionTabBar`        |
+| `DS/Badge` `DS/Kbd` `DS/Input` `DS/Switch` `DS/Avatar` `DS/MenuItem` | the matching `components/ui/*.tsx`                                |
+| `DS/Chip`                                                            | `QUICK_PROMPTS` chips in `features/repository/ui/HomeView.tsx`    |
+| `DS/SidebarRow-Repo`                                                 | `features/sidebar/ui/RepositoryItem.tsx`                          |
+| `DS/SidebarRow-Workspace` / `-Active`                                | `features/sidebar/ui/WorkspaceItem.tsx` + `SidebarRow.tsx`        |
+| `DS/StatusIcon-*`                                                    | `features/sidebar/ui/WorkflowStatusIcon.tsx`                      |
+| `DS/PixelGrid-Working`                                               | `features/session/ui/CircularPixelGrid.tsx` (`variant="working"`) |
+| `DS/SessionTab-Active` / `-Idle`                                     | `components/ui/tab-pill.tsx` via `session/ui/tabs/SessionTab.tsx` |
+| `DS/ContentTab-Active` / `-Idle`                                     | `app/layouts/ContentTabBar.tsx`                                   |
+| `DS/ToolRow`                                                         | `session/ui/tools/components/BaseToolRenderer.tsx` (header row)   |
+| `DS/TurnStatsHeader`                                                 | `session/ui/TurnStatsHeader.tsx`                                  |
+| `DS/UserBubble`                                                      | `session/ui/MessageItem.tsx` (`UserMessage`)                      |
+| `DS/Composer`                                                        | `session/ui/MessageInput.tsx` — the glass pill + toolbar          |
+| `DS/DiffFileHeader`                                                  | `features/workspace/ui/ChangesDiffSection.tsx`                    |
+| `DS/DiffLine-Add` / `-Del` / `-Ctx`                                  | the `diffs-theme` block in `global.css`                           |
+| `DS/FileTreeRow`                                                     | `features/workspace/ui/ChangesFilesPanel.tsx`                     |
 
 Specimens that are drawn from primitives rather than instanced (because they appear once)
 live on the `12`–`19` boards and are captioned with the file they come from — dropdown /
 popover / tooltip / dialog / sheet, the sidebar hover card and status menu, the composer's
 staged-content cards and mention popovers, every tool renderer, and the changes filter.
+
+Board `13` includes the cloud autosave warning from
+`features/session/cloud/notifyCloudAutosaveFailure.ts`, rendered by the existing
+`components/ui/sonner.tsx` toaster. It shows a live failed-save diagnostic for ten
+seconds or until dismissed; it is not a persistent chat component.
 
 ### The scales are bound, not typed
 

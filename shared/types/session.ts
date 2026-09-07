@@ -73,10 +73,6 @@ export interface Session {
   agent_session_id?: string | null;
   /** agnt cloud session id — the direct lane connects to this (cloud only). */
   provider_session_id?: string | null;
-  /** Latest observed Git backup receipt for this chat; absent means unknown. */
-  cloud_git_sync_at?: number | null;
-  /** Independent of turn status. Only a newer confirmed Git save clears it. */
-  cloud_git_error?: string | null;
   title?: string | null;
   status: SessionStatus;
   message_count: number;

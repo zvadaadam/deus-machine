@@ -11,25 +11,19 @@ the original findings and source links remain as historical evidence.
 | F2 — Large session snapshots       | [AGNT #189](https://github.com/zvadaadam/AGNT/pull/189) merged and [deployed](https://github.com/zvadaadam/AGNT/actions/runs/34056478156); regression exercised in workerd.                                                                                                                                                                                                                                       |
 | F3 — Desktop history recovery      | [Deus #335](https://github.com/zvadaadam/deus-machine/pull/335) merged, [post-merge tests](https://github.com/zvadaadam/deus-machine/actions/runs/34110130644) and [web deployment](https://github.com/zvadaadam/deus-machine/actions/runs/34110130649) passed. Real SQLite and local renderer/provider-socket journeys passed. No desktop installer release or deployed cross-device qualification in this step. |
 | F4 — Error/device consumers        | [Deus #334](https://github.com/zvadaadam/deus-machine/pull/334) merged with published-wire regression tests.                                                                                                                                                                                                                                                                                                      |
-| F5 — Git backup visibility         | Implemented on the follow-up branch: desktop persists the latest observed receipt; browser restores available receipts; both display failures independently of turn success. A recovery action prepares an editable chat request. Validation and limits below.                                                                                                                                                    |
+| F5 — Cloud autosave warnings       | [Deus #344](https://github.com/zvadaadam/deus-machine/pull/344) shows a live warning from AGNT’s existing failed-save event in desktop and browser. Agent success is unchanged. Persistent backup status is explicitly deferred.                                                                                                                                                                                  |
 | F6 / F7                            | Still open. Org-wide compute admission is the next unattended-beta control; required-secret setup is a self-service onboarding gate. Neither requires a broad workspace refactor.                                                                                                                                                                                                                                 |
 
-F5 validation: 930 backend tests, 588 app/shared tests, frontend/backend typechecks,
-and a local UI journey with a substitute provider. A failed save stays visible
-through restart and sparse reconnect snapshots; an older receipt cannot replace
-it; a newer acknowledgment clears it. The existing-database test preserves the
-transcript while adding the nullable receipt columns. Desktop and mobile UI checks
-verified the warning, error disclosure, draft preservation, and clearing after
-confirmation. No provider resources were created.
+F5 scope decision — September 7: consume `turn.ended.gitSync` and show the
+standard dismissible warning toast with the provider diagnostic. No session
+columns, database writes, backup-status cache, recovery action, or retry mechanism.
+Reconnect snapshots do not replay old warnings. A warning can be missed while the
+app is closed and is not restored after reload; durable workspace status remains a
+separate AGNT feature if needed later.
 
-F5 is deliberately a **per-chat Git receipt**, not a whole-workspace or R2 backup
-indicator. AGNT retains these receipts on its latest ten turn outcomes. A fresh
-browser outside that window displays unavailable status; a desktop keeps a failure
-it already observed until a newer acknowledgment arrives. A save from another chat
-or a pause barrier does not clear this chat's warning. A workspace-wide durable
-receipt and a dedicated backup-only retry command belong to AGNT if that stronger
-product guarantee is needed. The existing `git.finalize` command makes real commits
-and pushes the working branch, so it is not used as a backup retry.
+F5 validation: 585 app/shared tests and frontend/backend typechecks passed. Tests
+exercise both existing event paths, background desktop delivery, duplicate/lane
+filtering, provider errors and conflicts, and suppression of snapshot replay.
 
 **Verdict:** the reliability work was worth shipping. The architecture has sensible owners and the recovery path is substantially safer. I would continue internal use, but would not yet describe the whole cloud product as ready for unrelated customers. A focused desktop-first, Claude-first invited beta is a realistic next step after the blockers below. Open signup needs additional onboarding and resource controls.
 
@@ -112,6 +106,8 @@ Likewise, [the session error schema](https://github.com/zvadaadam/AGNT/blob/47d9
 Correct the field reads and test the real producer payload. Current cloud-driver fixtures reproduce the wrong nesting/flattening, which explains why green tests miss these defects. Preserve per-platform device reconciliation and error turn attribution.
 
 ### F5 — Show whether completed work was saved
+
+**Current scope:** the live warning described above is in #344. The original durable-status proposal below is deferred by the September 7 scope decision.
 
 AGNT [turn-lifecycle.ts:672](https://github.com/zvadaadam/AGNT/blob/47d98fdfea8c40ba9c1365f2f37d0873f0835864/apps/backend/src/agent-session/turn-lifecycle.ts#L672) emits `gitSync` independently of agent success. A targeted search found no consumer in Deus frontend/backend/shared source.
 

@@ -40,29 +40,6 @@ describe("database pre-launch schema bootstrap", () => {
     closeDatabase();
   });
 
-  it("adds Git receipt columns without resetting an existing transcript", async () => {
-    process.env.DATABASE_PATH = path.join(tempDir, "before-git-receipts.db");
-    const existing = new Database(process.env.DATABASE_PATH);
-    existing.exec(SCHEMA_SQL);
-    existing.exec(`
-      ALTER TABLE sessions DROP COLUMN cloud_git_sync_at;
-      ALTER TABLE sessions DROP COLUMN cloud_git_error;
-      INSERT INTO repositories (id, name, root_path) VALUES ('r', 'repo', '/tmp/repo');
-      INSERT INTO workspaces (id, repository_id, slug) VALUES ('w', 'r', 'work');
-      INSERT INTO sessions (id, workspace_id) VALUES ('s', 'w');
-      INSERT INTO messages (id, session_id, role) VALUES ('m', 's', 'user');
-    `);
-    existing.close();
-    const { initDatabase, closeDatabase } = await import("../../../src/lib/database");
-    const db = initDatabase();
-    expect(db.prepare("SELECT cloud_git_sync_at, cloud_git_error FROM sessions").get()).toEqual({
-      cloud_git_sync_at: null,
-      cloud_git_error: null,
-    });
-    expect(db.prepare("SELECT id FROM messages").all()).toEqual([{ id: "m" }]);
-    closeDatabase();
-  });
-
   it("throws a reset hint for stale pre-launch databases and does not cache the failed handle", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});

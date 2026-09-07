@@ -13,7 +13,6 @@ import { conversationView } from "../lib/conversationView";
 import type { Message } from "../types";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { CloudEnvSetupChip } from "./CloudEnvSetupChip";
-import { CloudGitSaveNotice } from "./CloudGitSaveNotice";
 import { useCloudDirect } from "../hooks/useCloudDirect";
 import { useIsDirectSession } from "../cloud/useIsDirectSession";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
@@ -417,7 +416,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               </>
             )}
 
-            {workspaceKind === "cloud" && session && <CloudGitSaveNotice session={session} />}
             {workspaceKind === "cloud" && (
               <CloudEnvSetupChip
                 repositoryId={workspaceRepositoryId}
@@ -527,7 +525,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     </>
                   )}
 
-                  {workspaceKind === "cloud" && session && <CloudGitSaveNotice session={session} />}
                   {workspaceKind === "cloud" && (
                     <CloudEnvSetupChip
                       repositoryId={workspaceRepositoryId}

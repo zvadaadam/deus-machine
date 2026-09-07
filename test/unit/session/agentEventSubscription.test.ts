@@ -1,5 +1,5 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { SessionSnapshotEventSchema } from "@deus-hq/api";
+import { SessionSnapshotEventSchema, TurnEndedEventSchema } from "@deus-hq/api";
 import { emptyConversation, reduceConversation } from "@zvada/agent-server/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { subscribeToAgentEvents } from "@/features/session/hooks/useAgentEvents";
@@ -16,9 +16,11 @@ import type { Message, Session } from "@shared/types/session";
 
 // Replace only the transport and browser scheduling. The subscription, lane
 // detection, snapshot projection, engine fold and query observers stay real.
-const { listeners } = vi.hoisted(() => ({
+const { listeners, warning } = vi.hoisted(() => ({
   listeners: new Set<(name: string, data: unknown) => void>(),
+  warning: vi.fn(),
 }));
+vi.mock("sonner", () => ({ toast: { warning, error: vi.fn() } }));
 vi.mock("@/platform/ws", () => ({
   onEvent: (listener: (name: string, data: unknown) => void) => {
     listeners.add(listener);
@@ -40,6 +42,7 @@ let sessionId: string;
 let testNumber = 0;
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(T);
   vi.stubEnv("VITE_CLOUD_DIRECT", "0");
@@ -187,6 +190,27 @@ function delta(seq: number, text: string): void {
 }
 
 describe("shell agent stream subscription", () => {
+  it("warns once for a live cloud save failure even when its chat is not open", () => {
+    const event = TurnEndedEventSchema.parse({
+      type: "turn.ended",
+      sessionId,
+      turnId: TURN,
+      stopReason: "end_turn",
+      timestamp: T,
+      gitSync: { committed: true, pushed: false, error: "GitHub rejected the push" },
+    });
+    envelope(1, event);
+    envelope(1, event);
+
+    expect(warning).toHaveBeenCalledExactlyOnceWith("Cloud autosave failed", {
+      description: "GitHub rejected the push",
+      id: `cloud-autosave-${sessionId}-${TURN}`,
+      duration: 10_000,
+      closeButton: true,
+    });
+    expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toBeUndefined();
+  });
+
   it("restores an unobserved cached page and streams on reopening without a refetch", async () => {
     const older = message("older", "Already loaded history");
     const pending = createOptimisticUserMessage({
@@ -234,12 +258,24 @@ describe("shell agent stream subscription", () => {
 
     emit("agent:snapshot", snapshot("Backend history"));
     delta(41, " backend delta");
+    envelope(
+      42,
+      TurnEndedEventSchema.parse({
+        type: "turn.ended",
+        sessionId,
+        turnId: TURN,
+        stopReason: "end_turn",
+        timestamp: T,
+        gitSync: { committed: true, pushed: false, error: "Ignored backend save" },
+      })
+    );
     flushFrame();
     await vi.advanceTimersByTimeAsync(250);
 
     expect(cached()).toBe(before);
     expect(frames.size).toBe(0);
     expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it("ignores queued deltas and gap refetches after the session switches to direct", async () => {
