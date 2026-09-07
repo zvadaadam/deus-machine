@@ -9,6 +9,7 @@ import {
   type SessionFold,
 } from "@/features/session/lib/agentEventFold";
 import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { Session } from "@shared/types/session";
 
 const T = 1_700_000_000_000;
 
@@ -48,6 +49,27 @@ const textPart = (id: string, sessionId: string, messageId: string, text: string
   text,
   state: "done",
 });
+
+/** A minimal `Session` row for the by-workspace list cache. Defaults model the
+ *  discovery heuristic: untitled ⇒ `message_count: 0` (would label "New chat"). */
+function baseSession(id: string, workspaceId: string, overrides: Partial<Session> = {}): Session {
+  return {
+    id,
+    workspace_id: workspaceId,
+    agent_harness: "claude-code",
+    provider_session_id: id,
+    workspace_kind: "cloud",
+    title: null,
+    status: "idle",
+    message_count: 0,
+    context_token_count: 0,
+    context_used_percent: 0,
+    is_hidden: false,
+    last_user_message_at: null,
+    updated_at: new Date(T).toISOString(),
+    ...overrides,
+  };
+}
 
 describe("makeCloudFrameHandler", () => {
   it("folds a live streamed turn into queryKeys.sessions.messages(sessionId)", () => {
@@ -573,13 +595,23 @@ describe("makeCloudFrameHandler", () => {
 
   it("snapshot restates session facts: live turn → working, real message_count", () => {
     const SESSION = "sess-snap-facts";
+    const WORKSPACE = "ws-snap-facts";
     const qc = new QueryClient();
     seedEmptyPage(qc, SESSION);
+    // Discovery wrote both caches — detail, and the chat-tab bar's by-workspace
+    // list — with the title-based heuristic (`message_count: 0` for an
+    // untitled but started session). The snapshot must fix BOTH, not just the
+    // detail: the chat-tab list reads only `sessions.by-workspace`, and a
+    // snapshot that leaves it on 0 mislabels a started conversation "New chat".
     qc.setQueryData(["sessions", "detail", SESSION], {
       id: SESSION,
       status: "idle",
       message_count: 0,
     });
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", WORKSPACE],
+      [{ ...baseSession(SESSION, WORKSPACE), message_count: 0, status: "idle", title: null }]
+    );
     const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
 
     onFrame({
@@ -618,6 +650,14 @@ describe("makeCloudFrameHandler", () => {
     // A live turn in the snapshot means working NOW; count fixes discovery's zero.
     expect(detail.status).toBe("working");
     expect(detail.message_count).toBe(2);
+
+    // The chat-tab list cache MUST be patched too — the bug was that only the
+    // detail cache was, leaving the chat-tab label "New chat" while the
+    // transcript rendered.
+    const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE])!;
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe(SESSION);
+    expect(list[0].message_count).toBe(2);
   });
 
   it("seeds the live turn as ACTIVE from a snapshot (the one-live-turn send guard reads it)", () => {
@@ -701,5 +741,234 @@ describe("makeCloudFrameHandler", () => {
 
     const page = qc.getQueryData<PaginatedMessages>(messagesKey(SESSION));
     expect(page!.messages).toHaveLength(0);
+  });
+
+  describe("snapshot restates message_count onto sessions.by-workspace (chat-tab list)", () => {
+    /** A two-message snapshot used by the tests below. Carries the
+     *  already-folded transcript as `messages`, exactly as agnt does. */
+    function twoMessageSnapshot(sessionId: string) {
+      return {
+        type: "session.snapshot",
+        state: { sessionId, status: "ready", currentTurnId: null, turns: [] },
+        messages: [
+          {
+            id: "m1",
+            messageIndex: 0,
+            sessionId,
+            turnId: "t1",
+            outputIndex: 1,
+            role: "user",
+            createdAt: T,
+            parts: [textPart("p1", sessionId, "m1", "the question")],
+          },
+          {
+            id: "m2",
+            messageIndex: 1,
+            sessionId,
+            turnId: "t1",
+            outputIndex: 2,
+            role: "assistant",
+            createdAt: T,
+            parts: [textPart("p2", sessionId, "m2", "the answer")],
+          },
+        ],
+        events: [],
+      } as Record<string, unknown>;
+    }
+
+    it("a started-but-untitled session's chat-tab list row is corrected to the real count", () => {
+      // The regression scenario: discovery mapped the row through `toSession`
+      // with `title: null` ⇒ `message_count: 0` (the heuristic). Without this
+      // patch, the chat-tab bar hydrates ONCE from the heuristic and labels a
+      // started session "New chat" while the transcript renders below it.
+      const SESSION = "sess-tab-facts";
+      const WORKSPACE = "ws-tab-facts";
+      const qc = new QueryClient();
+      seedEmptyPage(qc, SESSION);
+      qc.setQueryData<Session[]>(
+        ["sessions", "by-workspace", WORKSPACE],
+        [
+          baseSession(SESSION, WORKSPACE), // message_count: 0 (the heuristic)
+        ]
+      );
+      const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+      onFrame(twoMessageSnapshot(SESSION));
+
+      const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE])!;
+      expect(list).toHaveLength(1);
+      expect(list[0].message_count).toBe(2); // the snapshot's real count replaces the heuristic
+    });
+
+    it("only the matching session's row moves; sibling sessions keep their counts", () => {
+      // A by-workspace list typically holds multiple sessions (one per
+      // sandbox under the workspace). The patch must scope to the snapshot's
+      // own session id and leave siblings exactly where they were — both the
+      // started (so their "Claude #N" numbering does not drift) and the not
+      // started (so a different session's "New chat" label is not stolen by
+      // this snapshot's count).
+      const TARGET = "sess-tab-target";
+      const SIBLING_STARTED = "sess-tab-sibling-started";
+      const SIBLING_NEW = "sess-tab-sibling-new";
+      const WORKSPACE = "ws-tab-mixed";
+      const qc = new QueryClient();
+      seedEmptyPage(qc, TARGET);
+      qc.setQueryData<Session[]>(
+        ["sessions", "by-workspace", WORKSPACE],
+        [
+          baseSession(TARGET, WORKSPACE, { message_count: 0 }), // heuristic 0 (untitled)
+          baseSession(SIBLING_STARTED, WORKSPACE, { message_count: 1, title: "fix the bug" }),
+          baseSession(SIBLING_NEW, WORKSPACE, { message_count: 0 }),
+        ]
+      );
+      const onFrame = makeCloudFrameHandler(makeCtx(qc, TARGET), TARGET);
+
+      onFrame(twoMessageSnapshot(TARGET));
+
+      const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE])!;
+      const counts = Object.fromEntries(list.map((s) => [s.id, s.message_count]));
+      expect(counts).toEqual({
+        [TARGET]: 2, // patched — the snapshot's real count
+        [SIBLING_STARTED]: 1, // untouched
+        [SIBLING_NEW]: 0, // untouched
+      });
+    });
+
+    it("walks every `sessions.by-workspace` key, not just the session's own workspace", () => {
+      // `patchWorkspaceSessionStatus` walks every `["workspaces","by-repo"]`
+      // key so a row moves under whichever filter the sidebar has active; the
+      // chat-tab list patch must do the same for `["sessions","by-workspace"]`,
+      // because the same session's row can be cached under different cache
+      // keys (e.g. an admin/all-workspaces projection), and only one of them
+      // is the live hydration source.
+      const SESSION = "sess-tab-multi";
+      const WORKSPACE_A = "ws-tab-multi-a";
+      const WORKSPACE_B = "ws-tab-multi-b";
+      const qc = new QueryClient();
+      seedEmptyPage(qc, SESSION);
+      qc.setQueryData<Session[]>(
+        ["sessions", "by-workspace", WORKSPACE_A],
+        [baseSession(SESSION, WORKSPACE_A, { message_count: 0 })]
+      );
+      qc.setQueryData<Session[]>(
+        ["sessions", "by-workspace", WORKSPACE_B],
+        [baseSession(SESSION, WORKSPACE_B, { message_count: 0 })]
+      );
+      const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+      onFrame(twoMessageSnapshot(SESSION));
+
+      const listA = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE_A])!;
+      const listB = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE_B])!;
+      expect(listA[0].message_count).toBe(2);
+      expect(listB[0].message_count).toBe(2);
+    });
+
+    it("leaves an absent by-workspace list absent (discovery owns creation)", () => {
+      // The patch is a merge-patch mirror of `patchSessionDetail`'s "leave an
+      // uncached row absent" — it must NOT mint a single-element list from
+      // nothing, because that would bypass discovery's mapping (missing
+      // workspace_id, agent_harness, etc.) and would race a later discovery
+      // fetch that then nulls the count back to the heuristic.
+      const SESSION = "sess-tab-absent";
+      const WORKSPACE = "ws-tab-absent";
+      const qc = new QueryClient();
+      seedEmptyPage(qc, SESSION);
+      const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+      onFrame(twoMessageSnapshot(SESSION));
+
+      // No list was seeded; the patch must leave the cache empty (not invent
+      // a one-row list from the snapshot alone).
+      const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE]);
+      expect(list).toBeUndefined();
+    });
+
+    it("a second snapshot re-patches the by-workspace list with the new count (reconnect)", () => {
+      // agnt sends a fresh snapshot on every (re)connect; the count grows as
+      // the conversation does, so the patch must move with it — not pin the
+      // count from the first snapshot. Idempotent: re-applying the same count
+      // is a no-op, applying a larger count updates the cache.
+      const SESSION = "sess-tab-repatch";
+      const WORKSPACE = "ws-tab-repatch";
+      const qc = new QueryClient();
+      seedEmptyPage(qc, SESSION);
+      qc.setQueryData<Session[]>(
+        ["sessions", "by-workspace", WORKSPACE],
+        [baseSession(SESSION, WORKSPACE, { message_count: 0 })]
+      );
+      const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+      onFrame(twoMessageSnapshot(SESSION));
+      expect(
+        qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE])![0].message_count
+      ).toBe(2);
+
+      // Reconnect sends a snapshot with one MORE message in the transcript.
+      onFrame({
+        type: "session.snapshot",
+        state: { sessionId: SESSION, status: "ready", currentTurnId: null, turns: [] },
+        messages: [
+          {
+            id: "m1",
+            messageIndex: 0,
+            sessionId: SESSION,
+            turnId: "t1",
+            outputIndex: 1,
+            role: "user",
+            createdAt: T,
+            parts: [textPart("p1", SESSION, "m1", "the question")],
+          },
+          {
+            id: "m2",
+            messageIndex: 1,
+            sessionId: SESSION,
+            turnId: "t1",
+            outputIndex: 2,
+            role: "assistant",
+            createdAt: T,
+            parts: [textPart("p2", SESSION, "m2", "the answer")],
+          },
+          {
+            id: "m3",
+            messageIndex: 2,
+            sessionId: SESSION,
+            turnId: "t2",
+            outputIndex: 1,
+            role: "user",
+            createdAt: T,
+            parts: [textPart("p3", SESSION, "m3", "a follow-up question")],
+          },
+        ],
+        events: [],
+      } as Record<string, unknown>);
+
+      expect(
+        qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE])![0].message_count
+      ).toBe(3);
+    });
+
+    it("titled sessions keep their `message_count: 1` heuristic replaced by the real count", () => {
+      // A titled session's heuristic is `1`, but the real count from the
+      // snapshot is the truth; the patch must replace even the heuristic-1
+      // with the snapshot's authoritative count so the chat-tab `#N` number
+      // and the header agree, and so `computeSequences` (which counts only
+      // `message_count > 0` rows) doesn't double-number siblings when the
+      // heuristic underran the real count.
+      const SESSION = "sess-tab-titled";
+      const WORKSPACE = "ws-tab-titled";
+      const qc = new QueryClient();
+      seedEmptyPage(qc, SESSION);
+      qc.setQueryData<Session[]>(
+        ["sessions", "by-workspace", WORKSPACE],
+        [baseSession(SESSION, WORKSPACE, { message_count: 1, title: "Fix the bug" })]
+      );
+      const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+
+      onFrame(twoMessageSnapshot(SESSION));
+
+      const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", WORKSPACE])!;
+      expect(list[0].message_count).toBe(2); // replaced the heuristic-1, not kept
+    });
   });
 });

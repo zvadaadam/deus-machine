@@ -21,6 +21,9 @@ import {
   createStreamCursor,
   flushDeltas,
   messagesKey,
+  patchSessionDetail,
+  patchWorkspaceSessionMessageCount,
+  patchWorkspaceSessionStatus,
   pruneFolds,
   refetchMessages,
   routeEnvelope,
@@ -29,7 +32,8 @@ import {
 } from "../../../apps/web/src/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import type { PaginatedMessages } from "../../../apps/web/src/features/session/api/session.service";
-import type { Message } from "../../../shared/types/session";
+import type { Message, Session } from "../../../shared/types/session";
+import type { RepoGroup, Workspace } from "../../../shared/types/workspace";
 import type { LifecycleEvent, Part, WireEventEnvelope } from "../../../shared/protocol-types";
 
 const SESSION = "sess-1";
@@ -885,5 +889,285 @@ describe("pruneFolds", () => {
     // `routeEnvelope` already refuses to fold a session with no cached page, so
     // that fold could only ever have grown stale in place.
     expect([...h.ctx.folds.keys()]).toEqual([SESSION]);
+  });
+});
+
+// ===========================================================================
+// patchWorkspaceSessionMessageCount / patchWorkspaceSessionStatus / patchSessionDetail
+//
+// The snapshot's projection onto `sessions.detail` reaches two sibling caches
+// the chat surfaces read from:
+//   - `sessions.by-workspace` (chat-tab bar) — `message_count` is the
+//     `hasStarted` proxy the tab label derives from; discovery's heuristic
+//     (`title ? 1 : 0`) mislabels a started-but-untitled session "New chat"
+//     when agnt's best-effort title push has failed, so the snapshot mirrors
+//     the REAL count in here.
+//   - `workspaces.by-repo` (sidebar/home) — `session_status` is what those
+//     rows derive attention from, and discovery keeps a parked-on-question
+//     session flagged as running.
+//
+// These patch helpers are pure cache writes — testable against a bare
+// QueryClient, no socket or React needed.
+// ===========================================================================
+
+function baseSession(id: string, workspaceId: string, overrides: Partial<Session> = {}): Session {
+  return {
+    id,
+    workspace_id: workspaceId,
+    agent_harness: "claude-code",
+    provider_session_id: id,
+    workspace_kind: "cloud",
+    title: null,
+    status: "idle",
+    message_count: 0,
+    context_token_count: 0,
+    context_used_percent: 0,
+    is_hidden: false,
+    last_user_message_at: null,
+    updated_at: new Date(T).toISOString(),
+    ...overrides,
+  };
+}
+
+describe("patchWorkspaceSessionMessageCount", () => {
+  it("writes the real count onto the matching session in the by-workspace list", () => {
+    const qc = new QueryClient();
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws"],
+      [baseSession("s1", "ws", { message_count: 0 })]
+    );
+
+    patchWorkspaceSessionMessageCount(qc, "s1", 7);
+
+    const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])!;
+    expect(list[0].message_count).toBe(7);
+  });
+
+  it("preserves every other field of the patched session", () => {
+    // The patch must be a merge, not a wholesale replace: discovery wrote the
+    // full `Session` (workspace_id, agent_harness, title, etc.) and the
+    // snapshot only knows the count — dropping the rest would leave the
+    // chat-tab `agentHarness`/harness-seeded composer model back at the default.
+    const qc = new QueryClient();
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws"],
+      [
+        baseSession("s1", "ws", {
+          message_count: 0,
+          agent_harness: "codex-sdk",
+          workspace_kind: "cloud",
+          title: "An old title",
+        }),
+      ]
+    );
+
+    patchWorkspaceSessionMessageCount(qc, "s1", 4);
+
+    const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])!;
+    expect(list[0]).toMatchObject({
+      id: "s1",
+      message_count: 4,
+      agent_harness: "codex-sdk",
+      workspace_kind: "cloud",
+      title: "An old title",
+    });
+  });
+
+  it("only the matching session's count moves; siblings are untouched", () => {
+    const qc = new QueryClient();
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws"],
+      [
+        baseSession("s-target", "ws", { message_count: 0 }),
+        baseSession("s-started", "ws", { message_count: 3, title: "started earlier" }),
+        baseSession("s-new", "ws", { message_count: 0 }),
+      ]
+    );
+
+    patchWorkspaceSessionMessageCount(qc, "s-target", 2);
+
+    const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])!;
+    expect(list.map((s) => [s.id, s.message_count])).toEqual([
+      ["s-target", 2],
+      ["s-started", 3],
+      ["s-new", 0],
+    ]);
+  });
+
+  it("walks every cached by-workspace key, patching the row wherever it lives", () => {
+    // The same session's row can appear under more than one by-workspace key
+    // (mirrors `patchWorkspaceSessionStatus` walking every by-repo key) — the
+    // patch must reach all of them, not just the one for the session's own
+    // workspace_id, or the label would depend on which cache the chat-tab bar
+    // happened to read from.
+    const qc = new QueryClient();
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws"],
+      [baseSession("s1", "ws", { message_count: 0 })]
+    );
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws-admin"],
+      [baseSession("s1", "ws", { message_count: 0 })]
+    );
+
+    patchWorkspaceSessionMessageCount(qc, "s1", 5);
+
+    expect(qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])![0].message_count).toBe(
+      5
+    );
+    expect(
+      qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws-admin"])![0].message_count
+    ).toBe(5);
+  });
+
+  it("does not mint a list when none is cached (discovery owns creation)", () => {
+    // The merge patch's contract for an uncached key is "leave it absent": a
+    // one-row list minted from the snapshot alone would be missing every
+    // discovery-only field (title, agent_harness, provider_session_id) AND
+    // would race a later discovery fetch that overwrites the count back to the
+    // heuristic — so the patch must not create a cache entry out of nothing.
+    const qc = new QueryClient();
+
+    patchWorkspaceSessionMessageCount(qc, "s1", 9);
+
+    expect(qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])).toBeUndefined();
+    expect(qc.getQueryData<Session[]>(["sessions", "by-workspace", "s1"])).toBeUndefined();
+  });
+
+  it("does not touch unrelated cache scopes (sessions.detail, workspaces.by-repo)", () => {
+    // Belt-and-braces: the patch must scope to ONE query-key prefix. Detail
+    // has its own merger (`patchSessionDetail`); by-repo holds workspaces, not
+    // sessions; an unfiltered `["sessions"]` would clobber detail caches.
+    const qc = new QueryClient();
+    qc.setQueryData<Session>(["sessions", "detail", "s1"], {
+      ...baseSession("s1", "ws", { message_count: 0 }),
+    });
+
+    patchWorkspaceSessionMessageCount(qc, "s1", 5);
+
+    expect(qc.getQueryData<Session>(["sessions", "detail", "s1"])!.message_count).toBe(0); // detail is NOT updated by THIS helper (its own merger is)
+    expect(qc.getQueryData<unknown>(["workspaces", "by-repo", "any"])).toBeUndefined();
+  });
+
+  it("is a no-op for a session not present in the cached list (no spurious insert)", () => {
+    // The matching id guard's other half: a snapshot for a session the list
+    // hasn't discovered yet must not invent a row — the discovery fetch owns
+    // adding it (with its title/agent_harness/workspace_id), not the patcher.
+    const qc = new QueryClient();
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws"],
+      [baseSession("s-other", "ws", { message_count: 0 })]
+    );
+
+    patchWorkspaceSessionMessageCount(qc, "s-not-in-list", 4);
+
+    const list = qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])!;
+    expect(list.map((s) => s.id)).toEqual(["s-other"]); // no spurious insertion
+  });
+
+  it("accepts 0 as a real count (clears a heuristic-1 too, e.g. an empty reconnect)", () => {
+    // `ordered.length` is `>= 0`; a snapshot with no messages is a valid
+    // shape (a fresh session that just connected, or a compaction-rewound log).
+    // The patch must write 0 honestly — replacing a heuristic-1 — instead of
+    // treating 0 as "no signal" and skipping, or the chat-tab label would stay
+    // "Claude #N" for a session that has since wound back to empty.
+    const qc = new QueryClient();
+    qc.setQueryData<Session[]>(
+      ["sessions", "by-workspace", "ws"],
+      [baseSession("s1", "ws", { message_count: 1, title: "had a question" })]
+    );
+
+    patchWorkspaceSessionMessageCount(qc, "s1", 0);
+
+    expect(qc.getQueryData<Session[]>(["sessions", "by-workspace", "ws"])![0].message_count).toBe(
+      0
+    );
+  });
+});
+
+describe("patchWorkspaceSessionStatus", () => {
+  it("patches session_status for only the matching session across every by-repo key", () => {
+    // Sibling to the chat-tab list patch: discovery keeps a parked-on-question
+    // session as "running", so the snapshot/turn-lifecycle mirrors the real
+    // status here. Walks every `["workspaces","by-repo"]` key (every sidebar
+    // filter) so the row's working dot moves under whichever view is mounted.
+    const qc = new QueryClient();
+    // Minimal `Workspace` rows — the patch only reads/mutates
+    // `current_session_id` and `session_status`, so a partial fixture is
+    // enough; cast to satisfy the `RepoGroup[]` setQueryData type.
+    const workspaceOf = (id: string, sessionId: string): Workspace =>
+      ({
+        id,
+        repository_id: "acme/app",
+        slug: "main",
+        title: null,
+        git_branch: "main",
+        git_target_branch: null,
+        kind: "cloud",
+        provider_workspace_id: null,
+        state: "ready",
+        status: "in-progress",
+        current_session_id: sessionId,
+        session_status: "idle",
+        session_error_category: null,
+        session_error_message: null,
+        latest_message_sent_at: null,
+        updated_at: new Date(T).toISOString(),
+        repo_name: "acme/app",
+        root_path: "",
+        workspace_path: "",
+        setup_status: "completed",
+        error_message: null,
+      }) as Workspace;
+    const makeGroups = (): RepoGroup[] => [
+      {
+        repo_id: "acme/app",
+        repo_name: "acme/app",
+        sort_order: 0,
+        workspaces: [workspaceOf("ws-1", "s1"), workspaceOf("ws-2", "s2")],
+      },
+    ];
+    qc.setQueryData<RepoGroup[]>(["workspaces", "by-repo", "ready"], makeGroups());
+    qc.setQueryData<RepoGroup[]>(["workspaces", "by-repo", "initializing"], makeGroups());
+
+    patchWorkspaceSessionStatus(qc, "s1", "needs_response");
+
+    for (const filter of ["ready", "initializing"]) {
+      const groups = qc.getQueryData<RepoGroup[]>(["workspaces", "by-repo", filter])!;
+      const statuses = groups[0].workspaces.map((w) => [w.id, w.session_status]);
+      expect(statuses).toEqual([
+        ["ws-1", "needs_response"],
+        ["ws-2", "idle"],
+      ]);
+    }
+  });
+
+  it("does not mint a by-repo group when none is cached", () => {
+    const qc = new QueryClient();
+    patchWorkspaceSessionStatus(qc, "s1", "working");
+    expect(qc.getQueryData<RepoGroup[]>(["workspaces", "by-repo", "ready"])).toBeUndefined();
+  });
+});
+
+describe("patchSessionDetail", () => {
+  it("merge-patches the cached detail row; uncached is left absent", () => {
+    // Documented contract: only the fields the caller knows move, and an
+    // uncached row is left absent because discovery (or a Mac q:snapshot) owns
+    // creation — seeding a stub here would race the real row.
+    const qc = new QueryClient();
+    qc.setQueryData<Session>(["sessions", "detail", "s1"], {
+      ...baseSession("s1", "ws", { message_count: 0, status: "idle" }),
+    });
+
+    patchSessionDetail(qc, "s1", { status: "working", message_count: 2 });
+
+    const detail = qc.getQueryData<Session>(["sessions", "detail", "s1"])!;
+    expect(detail.status).toBe("working");
+    expect(detail.message_count).toBe(2);
+    expect(detail.agent_harness).toBe("claude-code"); // prior field preserved
+
+    // An absent row stays absent — no stub is created.
+    patchSessionDetail(qc, "s-missing", { status: "working" });
+    expect(qc.getQueryData<Session>(["sessions", "detail", "s-missing"])).toBeUndefined();
   });
 });

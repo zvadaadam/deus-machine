@@ -264,10 +264,16 @@ export function toSession(s: AgntSession): Session {
     workspace_kind: "cloud",
     title: s.title,
     status: hasParkedDirectQuestion(s.id) ? "needs_response" : mapSessionStatus(s.status),
-    // Discovery carries no count, but the chat tabs hydrate ONCE from this row
-    // and label `message_count === 0` "New chat" — a title is only ever minted
-    // after the first turn, so it's an honest has-started proxy. The real count
-    // lands on `sessions.detail` when the socket snapshot arrives.
+    // Discovery carries no count, so this is a BEST-EFFORT has-started proxy:
+    // a title is minted by the agent's auto-summary after the first turn, so a
+    // titled row has certainly started. The reverse is NOT true — the title
+    // push to agnt is best-effort (warn-only, no retry) and there is a
+    // first-turn window before any title is minted, so a started session can
+    // persist with `title: null` and this heuristic yields 0. The snapshot in
+    // `cloudFrameHandler.backfillSnapshot` restates the REAL count onto BOTH
+    // `sessions.detail` AND `sessions.by-workspace` (so the chat-tab list, which
+    // hydrates from this row and labels `message_count === 0` "New chat", sees
+    // the corrected count too) — see `patchWorkspaceSessionMessageCount`.
     message_count: s.title ? 1 : 0,
     context_token_count: 0,
     context_used_percent: 0,

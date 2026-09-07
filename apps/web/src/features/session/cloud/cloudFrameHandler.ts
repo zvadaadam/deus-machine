@@ -32,6 +32,7 @@ import {
   foldEvent,
   commitTranscriptOrder,
   patchSessionDetail,
+  patchWorkspaceSessionMessageCount,
   type AgentStreamContext,
 } from "../lib/agentEventFold";
 import { bustCloudSessionsListCache } from "./cloudDataAdapter";
@@ -193,9 +194,10 @@ function backfillSnapshot(
   // and the context gauge resumes from where the session left off.
   const contextUsed = snapshot.state.contextUsed;
   const contextSize = snapshot.state.contextSize;
+  const messageCount = ordered.length;
   patchSessionDetail(ctx.queryClient, sessionId, {
     status: currentTurnId ? "working" : snapshot.state.status === "error" ? "error" : "idle",
-    message_count: ordered.length,
+    message_count: messageCount,
     ...(typeof contextUsed === "number"
       ? {
           context_token_count: contextUsed,
@@ -205,6 +207,13 @@ function backfillSnapshot(
         }
       : {}),
   });
+  // The chat-tab bar hydrates from the `sessions.by-workspace` list, NOT from
+  // `sessions.detail` — so a snapshot that only corrects the detail row leaves
+  // the tabs reading discovery's title-based heuristic (`message_count: 0` for
+  // any started-but-untitled session, which the best-effort title push can
+  // leave behind). Mirror the real count into the list cache too, so the tabs
+  // see it the same way the header does. See `patchWorkspaceSessionMessageCount`.
+  patchWorkspaceSessionMessageCount(ctx.queryClient, sessionId, messageCount);
 }
 
 function messageStartedEvent(message: SnapshotMessage): AnyLifecycleEvent {
