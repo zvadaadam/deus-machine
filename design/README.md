@@ -173,6 +173,11 @@ live on the `12`â€“`19` boards and are captioned with the file they come from â€
 popover / tooltip / dialog / sheet, the sidebar hover card and status menu, the composer's
 staged-content cards and mention popovers, every tool renderer, and the changes filter.
 
+Board `13` includes the cloud autosave warning from
+`features/session/cloud/notifyCloudAutosaveFailure.ts`, rendered by the existing
+`components/ui/sonner.tsx` toaster. It shows a live failed-save diagnostic for ten
+seconds or until dismissed; it is not a persistent chat component.
+
 ### The scales are bound, not typed
 
 Every `fontSize` and every `cornerRadius` in the file is a **variable reference**

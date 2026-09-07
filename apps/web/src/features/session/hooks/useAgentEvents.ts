@@ -23,6 +23,7 @@ import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 import { isCloudDirectEnabled } from "../cloud/cloudDirectFlag";
 import { isDirectSessionCached } from "../cloud/useIsDirectSession";
+import { notifyCloudAutosaveFailure } from "../cloud/notifyCloudAutosaveFailure";
 import {
   createStreamCursor,
   flushDeltas,
@@ -99,7 +100,11 @@ export function subscribeToAgentEvents(queryClient: QueryClient): () => void {
       hydrateConversation(ctx, snapshot);
       return;
     }
-    routeEnvelope(ctx, raw as DecodedWireEventEnvelope);
+    const envelope = raw as DecodedWireEventEnvelope;
+    if (envelope.event.type === "turn.ended" && envelope.seq !== cursor.last(sessionId)) {
+      notifyCloudAutosaveFailure(envelope.event);
+    }
+    routeEnvelope(ctx, envelope);
   });
 
   const unsubCache = queryClient.getQueryCache().subscribe((event) => {

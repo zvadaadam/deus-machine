@@ -14845,6 +14845,120 @@
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "AKyJo",
+          "x": 32,
+          "y": 510,
+          "name": "Cloud autosave warning · Sonner",
+          "width": 356,
+          "height": 92,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "o600t",
+              "x": 0,
+              "y": 0,
+              "name": "Warning toast",
+              "width": 356,
+              "height": 92,
+              "fill": "$bg-overlay",
+              "cornerRadius": "$radius-md",
+              "stroke": "$border-default",
+              "strokeWidth": 1,
+              "gap": 6,
+              "padding": 16,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "zRP1O",
+                  "name": "Warning icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "triangle-alert",
+                  "library": "lucide",
+                  "fill": "$text-primary"
+                },
+                {
+                  "type": "frame",
+                  "id": "GAVID",
+                  "name": "Toast content",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "J2k1A",
+                      "name": "Cloud autosave failed",
+                      "fill": "$text-primary",
+                      "content": "Cloud autosave failed",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GbPxk",
+                      "name": "Provider diagnostic",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Git push failed: GitHub rejected repository write access.",
+                      "lineHeight": 1.4,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "MZLef",
+              "x": -8,
+              "y": -8,
+              "name": "Dismiss warning",
+              "width": 20,
+              "height": 20,
+              "fill": "$bg-overlay",
+              "cornerRadius": 10,
+              "stroke": "$border-default",
+              "strokeWidth": 1,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "MeYyT",
+                  "name": "Close icon",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "x",
+                  "library": "lucide",
+                  "fill": "$text-primary"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "K0RTU",
+          "x": 410,
+          "y": 510,
+          "name": "Cloud warning behavior",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": 630,
+          "content": "Cloud autosave · notifyCloudAutosaveFailure.ts → existing Sonner warning. Live failed turn save only; provider diagnostic; dismissible or fades after 10 seconds. No persistent chat banner, recovery action, or snapshot replay.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
         }
       ]
     },
