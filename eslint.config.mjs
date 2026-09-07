@@ -13,7 +13,7 @@ const tsFiles = [
   "packages/**/*.{ts,tsx}",
   "shared/**/*.ts",
   "scripts/**/*.ts",
-  "test/**/*.ts",
+  "test/**/*.{ts,tsx}",
 ];
 const jsFiles = [
   "*.config.{js,cjs,mjs}",
