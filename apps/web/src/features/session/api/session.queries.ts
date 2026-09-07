@@ -447,6 +447,10 @@ export function useStopSession() {
         direct.cancel();
         return Promise.resolve();
       }
+      // A pending direct connection must not fall back to the desktop command.
+      if (isDirectSessionCached(queryClient, sessionId)) {
+        throw new Error("The cloud connection isn't ready yet — try again in a moment");
+      }
       return SessionService.stop(sessionId);
     },
     onSuccess: (_, sessionId) => {

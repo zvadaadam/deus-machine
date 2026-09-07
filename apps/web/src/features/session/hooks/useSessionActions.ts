@@ -117,6 +117,7 @@ export function useSessionActions({
       await stopSessionMutation.mutateAsync(sessionId);
     } catch (error) {
       console.error("Failed to stop session:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to stop session");
     }
   }, [stopSessionMutation, sessionId]);
 
