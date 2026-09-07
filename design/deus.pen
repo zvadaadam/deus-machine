@@ -11377,7 +11377,7 @@
                       "id": "Ha0ZV",
                       "name": "Meta",
                       "fill": "$accent-red-muted",
-                      "content": "Sandbox failed",
+                      "content": "Computer failed",
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-xs",
                       "fontWeight": "normal"

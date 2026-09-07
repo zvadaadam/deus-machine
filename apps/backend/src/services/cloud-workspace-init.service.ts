@@ -1031,9 +1031,7 @@ async function provisionInBackground(
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);
     db.prepare(
-      // init_stage is deliberately KEPT: it names the stage that failed, and
-      // the sidebar uses it to say "Cloud setup failed" instead of blaming a
-      // sandbox that never existed.
+      // Keep the failed stage as diagnostic context alongside the specific error.
       "UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?"
     ).run(`Cloud provisioning failed: ${message}`, workspaceId);
     invalidate([...WORKSPACE_RESOURCES], {});

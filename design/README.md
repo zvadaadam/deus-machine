@@ -331,8 +331,9 @@ in step with it:
   above them as the headless fallback.
 - **A failed workspace stays in the sidebar.** `SIDEBAR_WORKSPACE_STATE` includes `error`
   precisely so the failure is visible, so the row needs a reason in the meta cell, not a
-  red dot: `Cloud setup failed` while provisioning, `Sandbox failed` once it was up,
-  plain `Failed` for a local worktree — all `text-accent-red-muted`, all on board `30`.
+  red dot: `Computer failed` for a cloud workspace, `Failed` for a local worktree —
+  both `text-accent-red-muted`, both on board `30`. The row's hover retains the specific
+  stored error, including provisioning failures.
 
 Motion values (curves, durations, press scales) are plotted on board `02`; overlay opacities
 and focus-ring rules on board `05`. Both are read straight out of `global.css` and the
