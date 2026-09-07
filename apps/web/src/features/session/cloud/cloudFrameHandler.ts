@@ -104,12 +104,19 @@ export function makeCloudFrameHandler(
         void ctx.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       } else if (type === "session.usage") {
         // The composer's context gauge — mirror the Mac backend's projection
-        // (persistUsage): count always, percent only when a size is known.
+        // (persistUsage): count always; percent follows the sticky `state.usage.size`
+        // the reducer just merged on this lane (Claude reports `size` only on the
+        // final result, codex-sdk never — a size-less event must not freeze the
+        // gauge mid-turn while `used` keeps advancing; the fold's size is the last
+        // one it saw, which is exactly what `persistSessionUsage` reads).
         const { used, size } = frame as { used?: number; size?: number };
         if (typeof used === "number") {
+          const stickySize = size ?? ctx.folds.get(sessionId)?.state.usage?.size;
           patchSessionDetail(ctx.queryClient, sessionId, {
             context_token_count: used,
-            ...(size ? { context_used_percent: Math.min((used / size) * 100, 100) } : {}),
+            ...(stickySize
+              ? { context_used_percent: Math.min((used / stickySize) * 100, 100) }
+              : {}),
           });
         }
       }
