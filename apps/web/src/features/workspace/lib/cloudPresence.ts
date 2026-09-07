@@ -5,7 +5,10 @@
  * about what "asleep" means.
  *
  *   awake  — sandbox running (or no stage recorded)
- *   asleep — paused/stopped; wakes on send or via the wake affordances
+ *   asleep — paused/stopped, or a wake that failed (init_stage "error"/
+ *            "unhandled") on a still-"ready" row: the sidecar can't serve, so
+ *            the panels gate to a retry affordance rather than firing at a
+ *            down machine. Wakes on send or via the wake affordances.
  *   waking — an explicit resume is in flight
  */
 export type CloudPresence = "awake" | "asleep" | "waking";
@@ -13,6 +16,13 @@ export type CloudPresence = "awake" | "asleep" | "waking";
 export function cloudPresence(initStage: string | null | undefined): CloudPresence {
   if (initStage === "resuming") return "waking";
   if (initStage === "paused" || initStage === "stopped") return "asleep";
+  // A failed wake persists init_stage "error" (provider unreachable / resume
+  // rejected) on a state="ready" row WITHOUT a state flip, and "unhandled" is
+  // parked alongside state="error" elsewhere. Neither is awake: without this
+  // branch both fall through to "awake", cloudGateStage returns null, and the
+  // panels mount against a sidecar that can't serve. Treat them as asleep so
+  // the CloudSandboxGate mounts its "Wake computer" retry.
+  if (initStage === "error" || initStage === "unhandled") return "asleep";
   return "awake";
 }
 
@@ -32,8 +42,11 @@ export function cloudGateStage(workspace: {
 }): CloudGateStage | null {
   if (workspace.kind !== "cloud") return null;
   // A failed provision keeps its (non-sleep) init_stage but flips state to
-  // "error" — cloudPresence would read that as "awake", so the panels would
-  // fire against a sidecar that never started. Gate it to an honest failure.
+  // "error" — for a setup stage cloudPresence reads that as "awake", so the
+  // panels would fire against a sidecar that never started. The state check
+  // below fires before cloudPresence, so an honestly-errored row gates to a
+  // failure even when init_stage is "error"/"unhandled" (which cloudPresence
+  // otherwise classifies as asleep). Gate it to an honest failure.
   if (workspace.state === "error") return "error";
   if (workspace.state === "initializing") return "provisioning";
   const presence = cloudPresence(workspace.init_stage);

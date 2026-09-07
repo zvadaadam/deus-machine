@@ -34,6 +34,28 @@ describe("cloudGateStage", () => {
     expect(cloudGateStage(ws({ state: "error", init_stage: null }))).toBe("error");
   });
 
+  it("gates a wake-failed ready row (init_stage 'error'/'unhandled') as asleep", () => {
+    // The bug: a failed wake persists init_stage "error" on a state="ready" row
+    // without a state flip (provider unreachable / resume rejected). The panels
+    // must mount the CloudSandboxGate "Wake computer" retry instead of firing
+    // at a down sidecar. Covers BOTH Cell A (status null → "error") and Cell B
+    // (status "error" → "error"); the backend catch at
+    // cloud-workspace-init.service.ts:447 writes "error" for both on a ready
+    // row. "unhandled" is the sibling stage parked alongside state="error" —
+    // same asleep-equivalent treatment if it ever rides on a ready row.
+    expect(cloudGateStage(ws({ state: "ready", init_stage: "error" }))).toBe("asleep");
+    expect(cloudGateStage(ws({ state: "ready", init_stage: "unhandled" }))).toBe("asleep");
+  });
+
+  it("still gates a state=error row as 'error' even when init_stage is asleep-equivalent", () => {
+    // Guard: cloudGateStage's state="error" branch fires BEFORE cloudPresence,
+    // so an honestly-errored row (agnt pushed an "error" frame; driver.ts flips
+    // state to "error") must show the honest error gate — not the asleep retry
+    // — even when init_stage happens to be "error" / "unhandled".
+    expect(cloudGateStage(ws({ state: "error", init_stage: "error" }))).toBe("error");
+    expect(cloudGateStage(ws({ state: "error", init_stage: "unhandled" }))).toBe("error");
+  });
+
   it("does not gate a ready, awake computer", () => {
     expect(cloudGateStage(ws({ state: "ready", init_stage: null }))).toBeNull();
     expect(cloudGateStage(ws({ state: "ready", init_stage: "running" }))).toBeNull();
