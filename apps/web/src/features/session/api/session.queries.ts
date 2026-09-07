@@ -447,6 +447,15 @@ export function useStopSession() {
         direct.cancel();
         return Promise.resolve();
       }
+      // A direct session whose channel isn't registered yet (socket mid-connect,
+      // or a mint that is still pending after a refresh): do NOT fall through to
+      // the Mac path below. That relay is closed, and sending mac-only
+      // `stopSession` there rejects with "not available without a Mac backend"
+      // — a silent no-op for the user. Reject so `useSessionActions.stopSession`
+      // can surface it via a toast, mirroring `useSendMessage`'s guard.
+      if (isDirectSessionCached(queryClient, sessionId)) {
+        throw new SendRejectedError("The cloud connection isn't ready yet — try again in a moment");
+      }
       return SessionService.stop(sessionId);
     },
     onSuccess: (_, sessionId) => {
