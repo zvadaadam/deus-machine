@@ -44,7 +44,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import { createSeqCursor, type SeqCursor } from "@zvada/agent-server/protocol/seq-cursor";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Message } from "@shared/types/session";
+import type { Message, Session } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 import type { SessionStatus } from "@shared/enums";
 import {
@@ -563,6 +563,41 @@ export function patchWorkspaceSessionStatus(
               : workspace
           ),
         }))
+      : old
+  );
+}
+
+/**
+ * Mirror the snapshot's REAL `message_count` onto the session's row in every
+ * `sessions.by-workspace` list key.
+ *
+ * The chat-tab bar hydrates ONCE from this list and seeds its `hasStarted`
+ * flag (label "Claude #N" vs "New chat") from `message_count > 0`. Discovery
+ * (`toSession`) computes `message_count: s.title ? 1 : 0` as a has-started
+ * proxy, but the title push to agnt is BEST-EFFORT (warn-only, no retry) and
+ * there is also an unavoidable first-turn window before an auto-summary title
+ * is minted — so a started session can persist with `title: null` and the
+ * proxy yields 0, mislabelling a started conversation "New chat" while the
+ * full transcript renders from the snapshot.
+ *
+ * The snapshot already corrects `sessions.detail` (the header / direct lane)
+ * — mirroring the same count here lets the chat-tab list see it too. Patches
+ * every by-workspace key the same way `patchWorkspaceSessionStatus` walks
+ * every by-repo key: a session belongs to exactly one workspace, but the
+ * matching key may be cached under any of its state filters, and a key the
+ * session is not in is left untouched by the `id` guard. An uncached list is
+ * left absent (discovery owns creation).
+ */
+export function patchWorkspaceSessionMessageCount(
+  qc: QueryClient,
+  sessionId: string,
+  messageCount: number
+): void {
+  qc.setQueriesData<Session[]>({ queryKey: ["sessions", "by-workspace"] }, (old) =>
+    Array.isArray(old)
+      ? old.map((session) =>
+          session.id === sessionId ? { ...session, message_count: messageCount } : session
+        )
       : old
   );
 }
