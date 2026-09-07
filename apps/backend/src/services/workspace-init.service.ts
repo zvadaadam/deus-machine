@@ -202,13 +202,22 @@ const STAGES: InitStage[] = [
       //
       // Skip if the agent is already working — user may have sent a message
       // while deps were installing, and git checkout would wipe agent changes.
+      //
+      // Scope the check across EVERY session of this workspace, not just the
+      // one `current_session_id` points at: multi-tab chat (POST /workspaces/:id/sessions,
+      // Cmd+T, the "+" tab button) repoints `current_session_id` to a fresh idle
+      // session, which would hide a still-running turn in another session and
+      // let `git checkout -- .` revert its unstaged tracked-file edits. Use the
+      // codebase's ACTIVE_TURN_STATUSES set (agent/commands.ts:382) so the guard
+      // matches its own stated intent ("skip if the agent is already working")
+      // and rejects stale idles that `last_user_message_at` would false-positive on.
       const db = getDatabase();
-      const session = db
+      const anyActive = db
         .prepare(
-          "SELECT s.last_user_message_at FROM sessions s JOIN workspaces w ON w.current_session_id = s.id WHERE w.id = ? LIMIT 1"
+          "SELECT 1 FROM sessions WHERE workspace_id = ? AND status IN ('working','needs_plan_response','needs_response') LIMIT 1"
         )
-        .get(ctx.workspaceId) as { last_user_message_at: string | null } | undefined;
-      if (session?.last_user_message_at) {
+        .get(ctx.workspaceId);
+      if (anyActive) {
         console.log("[WORKSPACE] Skipping git-clean: agent already working");
         return;
       }

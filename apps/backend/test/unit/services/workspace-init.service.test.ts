@@ -380,9 +380,10 @@ describe("initializeWorkspace", () => {
 
   // ─── Git-clean skip ──────────────────────────────────────────
 
-  it("skips git-clean when agent already has user messages", async () => {
-    // Make the session query return a last_user_message_at (agent is working)
-    mockStmt.get.mockReturnValue({ last_user_message_at: "2026-01-01T00:00:00Z" });
+  it("skips git-clean when an agent session is actively working", async () => {
+    // The status-keyed guard returns a row when any session of the workspace is
+    // in an active-turn status — git checkout must NOT run.
+    mockStmt.get.mockReturnValue({ 1: 1 });
     mockFs.existsSync.mockReturnValue(false);
 
     await initializeWorkspace(createInitContext());
@@ -394,9 +395,9 @@ describe("initializeWorkspace", () => {
     expect(gitCheckoutCalls).toHaveLength(0);
   });
 
-  it("runs git-clean when no user messages exist yet", async () => {
-    // Session query returns null last_user_message_at
-    mockStmt.get.mockReturnValue({ last_user_message_at: null });
+  it("runs git-clean when no agent session is actively working", async () => {
+    // No session is mid-turn → the status-keyed guard returns no row.
+    mockStmt.get.mockReturnValue(undefined);
     mockFs.existsSync.mockReturnValue(false);
 
     await initializeWorkspace(createInitContext());
