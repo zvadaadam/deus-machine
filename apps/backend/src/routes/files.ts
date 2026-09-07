@@ -4,7 +4,7 @@ import fs from "fs";
 import { tmpdir } from "os";
 import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
-import { ValidationError } from "../lib/errors";
+import { ValidationError, NotFoundError } from "../lib/errors";
 import { resolveNode } from "../services/node/driver";
 import * as gitService from "../services/git.service";
 import type { WorkspaceWithDetailsRow } from "../db";
@@ -95,6 +95,15 @@ const ALLOWED_WORKSPACE_PREVIEW_EXT: Record<string, string> = {
  * Query param: ?path=relative/file/path
  */
 app.get("/workspaces/:id/file-preview", withWorkspace, (c) => {
+  // Local-only: cloud workspaces have no on-disk workspace root — withWorkspace
+  // stores workspacePath="" for them, which path.resolve/realpathSync silently
+  // anchor to process.cwd(). Reject before any path resolution so the route
+  // can never stream a file that lives under the backend's working directory.
+  const workspace = c.get("workspace");
+  if (workspace.kind === "cloud") {
+    throw new NotFoundError("File preview is not available for cloud workspaces");
+  }
+
   const filePath = c.req.query("path");
   if (!filePath) throw new ValidationError("path parameter is required");
 
