@@ -184,11 +184,13 @@ export async function input(opts: {
         return;
       }
 
-      // Ignore other control characters
-      if (key.charCodeAt(0) < 32) return;
+      // Strip control characters (including ones embedded mid-chunk in a paste)
+      // eslint-disable-next-line no-control-regex
+      const cleaned = key.replace(/[\x00-\x1f\x7f]/g, "");
+      if (cleaned.length === 0) return;
 
       // Paste support — handle multiple chars at once
-      value += key;
+      value += cleaned;
       stream.write(`\r${ESC}2K  ${renderValue()}`);
     }
 
