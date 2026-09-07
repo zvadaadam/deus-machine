@@ -97,6 +97,68 @@ describe("chatResources", () => {
     expect(extractSingleLocalUrl("http://localhost:3000 and http://localhost:5173")).toBeNull();
   });
 
+  it("does not promote localhost URLs inside fenced code blocks", () => {
+    const markdown = [
+      "I've updated your Vite config to proxy API requests:",
+      "```ts",
+      "export default defineConfig({",
+      "  server: { proxy: { '/api': 'http://localhost:3000' } }",
+      "})",
+      "```",
+    ].join("\n");
+
+    expect(extractSingleLocalUrl(markdown)).toBeNull();
+    expect(extractChatResources({ parts: [textPart(markdown)], isComplete: true })).toEqual([]);
+  });
+
+  it("does not promote localhost URLs inside inline code spans", () => {
+    const text = "Set `API_URL=http://localhost:5173` in your `.env` file.";
+
+    expect(extractSingleLocalUrl(text)).toBeNull();
+    expect(extractChatResources({ parts: [textPart(text)], isComplete: true })).toEqual([]);
+  });
+
+  it("does not promote localhost URLs inside tilde-fenced YAML code blocks", () => {
+    const markdown = [
+      "Here is the docker-compose config:",
+      "~~~yaml",
+      "services:",
+      "  api:",
+      "    environment:",
+      "      - API_URL=http://localhost:3000",
+      "~~~",
+    ].join("\n");
+
+    expect(extractSingleLocalUrl(markdown)).toBeNull();
+    expect(extractChatResources({ parts: [textPart(markdown)], isComplete: true })).toEqual([]);
+  });
+
+  it("promotes a prose localhost URL when another URL appears in a fenced code block", () => {
+    const markdown = [
+      "I've started your frontend dev server at http://localhost:5173 — it's running now!",
+      "",
+      "I also updated your backend config:",
+      "",
+      "```ts",
+      "const config = { apiUrl: 'http://localhost:3000' };",
+      "```",
+    ].join("\n");
+
+    expect(extractSingleLocalUrl(markdown)).toBe("http://localhost:5173/");
+
+    const resources = extractChatResources({
+      parts: [textPart(markdown)],
+      isComplete: true,
+    });
+
+    expect(resources).toHaveLength(1);
+    expect(resources[0]).toMatchObject({
+      type: "website",
+      url: "http://localhost:5173/",
+      primaryAction: { kind: "deus-browser", url: "http://localhost:5173/" },
+    });
+  });
+
   it("keeps local website resources alongside file resources", () => {
     const resources = extractChatResources({
       parts: [textPart("[README](README.md)\n\nhttp://localhost:5173/")],

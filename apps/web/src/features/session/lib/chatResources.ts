@@ -65,6 +65,7 @@ const SLIDE_EXTENSIONS = new Set(["ppt", "pptx"]);
 /** Tool kinds that mean "this call changed a file" (display grouping). */
 const WRITE_TOOL_KINDS: ReadonlySet<string> = new Set(["edit", "delete", "move"]);
 
+const FENCE_RE = /^\s{0,3}(```+|~~~+)/;
 const URL_RE = /\bhttps?:\/\/[^\s<>)"'`]+/gi;
 const TRAILING_URL_PUNCTUATION_RE = /[.,;!?]+$/u;
 const URL_BRACKET_RE = /[()[\]]/u;
@@ -130,12 +131,56 @@ export function extractSingleLocalUrl(text: string | null | undefined): string |
   if (!text) return null;
 
   const urls = new Set<string>();
-  for (const match of text.matchAll(URL_RE)) {
+  for (const match of stripCodeRegions(text).matchAll(URL_RE)) {
     const url = normalizeLocalUrl(match[0]);
     if (url) urls.add(url);
   }
 
   return urls.size === 1 ? (urls.values().next().value ?? null) : null;
+}
+
+function stripCodeRegions(text: string): string {
+  const proseLines: string[] = [];
+  let inFence = false;
+  let fenceMarker: "`" | "~" | null = null;
+
+  for (const line of text.split(/\r?\n/u)) {
+    const fence = line.match(FENCE_RE);
+    if (fence) {
+      const marker = fence[1][0] as "`" | "~";
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = marker;
+      } else if (fenceMarker === marker) {
+        inFence = false;
+        fenceMarker = null;
+      }
+      continue;
+    }
+
+    if (inFence) continue;
+
+    proseLines.push(stripInlineCode(line));
+  }
+
+  return proseLines.join("\n");
+}
+
+function stripInlineCode(line: string): string {
+  let result = "";
+  let index = 0;
+  while (index < line.length) {
+    if (line[index] === "`") {
+      const next = line.indexOf("`", index + 1);
+      if (next === -1) return result;
+      result += " ";
+      index = next + 1;
+      continue;
+    }
+    result += line[index];
+    index += 1;
+  }
+  return result;
 }
 
 export function extractMarkdownLinkDestinations(markdown: string | null | undefined): string[] {
@@ -146,7 +191,7 @@ export function extractMarkdownLinkDestinations(markdown: string | null | undefi
   let fenceMarker: "`" | "~" | null = null;
 
   for (const line of markdown.split(/\r?\n/u)) {
-    const fence = line.match(/^\s{0,3}(```+|~~~+)/);
+    const fence = line.match(FENCE_RE);
     if (fence) {
       const marker = fence[1][0] as "`" | "~";
       if (!inFence) {
