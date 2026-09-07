@@ -82,16 +82,21 @@ vi.mock("@shared/lib/uuid", () => ({
   uuidv7: vi.fn<(...args: any[]) => any>(() => "ws-test-uuid"),
 }));
 
+const fsMocks = vi.hoisted(() => ({
+  existsSync: vi.fn<(...args: any[]) => any>(() => false),
+  readFileSync: vi.fn<(...args: any[]) => any>(() => ""),
+}));
+
 vi.mock("fs", () => ({
   default: {
-    existsSync: vi.fn<(...args: any[]) => any>(() => false),
+    existsSync: fsMocks.existsSync,
     createWriteStream: vi.fn<(...args: any[]) => any>(() => ({
       on: vi.fn<(...args: any[]) => any>(),
       end: vi.fn<(...args: any[]) => any>(),
     })),
     mkdirSync: vi.fn<(...args: any[]) => any>(),
     realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
-    readFileSync: vi.fn<(...args: any[]) => any>(() => ""),
+    readFileSync: fsMocks.readFileSync,
     writeFileSync: vi.fn<(...args: any[]) => any>(),
     statSync: vi.fn<(...args: any[]) => any>(() => ({
       isDirectory: () => true,
@@ -99,14 +104,14 @@ vi.mock("fs", () => ({
     })),
     constants: { R_OK: 4, X_OK: 1 },
   },
-  existsSync: vi.fn<(...args: any[]) => any>(() => false),
+  existsSync: fsMocks.existsSync,
   createWriteStream: vi.fn<(...args: any[]) => any>(() => ({
     on: vi.fn<(...args: any[]) => any>(),
     end: vi.fn<(...args: any[]) => any>(),
   })),
   mkdirSync: vi.fn<(...args: any[]) => any>(),
   realpathSync: vi.fn<(...args: any[]) => any>((p: string) => p),
-  readFileSync: vi.fn<(...args: any[]) => any>(() => ""),
+  readFileSync: fsMocks.readFileSync,
   writeFileSync: vi.fn<(...args: any[]) => any>(),
   statSync: vi.fn<(...args: any[]) => any>(() => ({
     isDirectory: () => true,
@@ -159,6 +164,8 @@ beforeEach(() => {
   mockDb.transaction.mockImplementation((fn: Function) => fn);
   mockInitializeWorkspace.mockResolvedValue(undefined);
   mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+  fsMocks.existsSync.mockReturnValue(false);
+  fsMocks.readFileSync.mockReturnValue("");
 });
 
 // ─── POST /workspaces ─────────────────────────────────────────────
@@ -521,5 +528,255 @@ describe("cloud wake and archive ordering", () => {
     expect(archived.status).toBe(200);
     expect(state()).toBe("archived");
     expect(running).toBe(false);
+  });
+});
+
+// ─── GET /workspaces/:id/manifest — cloud-kind guard ─────────────────
+//
+// Regression coverage for the withWorkspace contract: cloud rows pass through
+// the middleware with workspacePath="" and a non-null root_path (the backend's
+// on-disk clone). Local-FS routes must guard on workspace.kind and return
+// manifest: null for cloud rows instead of serving the on-disk clone's deus.json.
+
+describe("GET /workspaces/:id/manifest", () => {
+  it("returns null manifest for a cloud workspace whose on-disk clone has a deus.json", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      provider_workspace_id: "agnt-workspace",
+      root_path: "/repos/my-project", // NOT NULL in production (schema.ts:113) — the on-disk clone
+      state: "ready",
+    });
+    // Simulate the on-disk clone carrying a deus.json — the route must NOT serve it.
+    fsMocks.existsSync.mockImplementation((p: unknown) => String(p).endsWith("deus.json"));
+    fsMocks.readFileSync.mockReturnValue(
+      JSON.stringify({ version: 1, name: "my-project", tasks: { lint: "eslint ." } })
+    );
+
+    const res = await app.request("/workspaces/ws-test-uuid/manifest");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ manifest: null, tasks: [] });
+    // Guard fired: the route never reached readManifestWithFallback → readManifest.
+    expect(fsMocks.existsSync).not.toHaveBeenCalled();
+    expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("returns null manifest for a cloud workspace with root_path null", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      provider_workspace_id: "agnt-workspace",
+      root_path: null,
+      state: "ready",
+    });
+
+    const res = await app.request("/workspaces/ws-test-uuid/manifest");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ manifest: null, tasks: [] });
+    expect(fsMocks.existsSync).not.toHaveBeenCalled();
+  });
+
+  it("returns null manifest for a local workspace whose deus.json is absent", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "worktree",
+      root_path: "/repos/my-project",
+      slug: "europa",
+      state: "ready",
+    });
+
+    const res = await app.request("/workspaces/ws-test-uuid/manifest");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ manifest: null, tasks: [] });
+    // Local rows DO reach readManifestWithFallback; existsSync cancels the read.
+    expect(fsMocks.existsSync).toHaveBeenCalled();
+  });
+
+  it("returns the parsed manifest + normalized tasks for a local workspace", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "worktree",
+      root_path: "/repos/my-project",
+      slug: "europa",
+      state: "ready",
+    });
+    fsMocks.existsSync.mockImplementation((p: unknown) => String(p).endsWith("deus.json"));
+    fsMocks.readFileSync.mockReturnValue(
+      JSON.stringify({
+        version: 1,
+        name: "my-project",
+        tasks: { lint: "eslint ." },
+      })
+    );
+
+    const res = await app.request("/workspaces/ws-test-uuid/manifest");
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.manifest).toMatchObject({ version: 1, name: "my-project" });
+    expect(body.tasks).toEqual([
+      expect.objectContaining({
+        name: "lint",
+        command: "eslint .",
+        persistent: false,
+        mode: "concurrent",
+      }),
+    ]);
+  });
+});
+
+// ─── POST /workspaces/:id/tasks/:name/run — cloud-kind guard ─────────
+
+describe("POST /workspaces/:id/tasks/:name/run", () => {
+  it("rejects a cloud workspace whose on-disk clone has a deus.json (the production bug)", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      provider_workspace_id: "agnt-workspace",
+      root_path: "/repos/my-project",
+      state: "ready",
+    });
+    fsMocks.existsSync.mockImplementation((p: unknown) => String(p).endsWith("deus.json"));
+    fsMocks.readFileSync.mockReturnValue(
+      JSON.stringify({ version: 1, name: "my-project", tasks: { lint: "eslint ." } })
+    );
+
+    const res = await app.request("/workspaces/ws-test-uuid/tasks/lint/run", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Repository path not found");
+    // Guard fired: the on-disk clone's manifest was never read.
+    expect(fsMocks.existsSync).not.toHaveBeenCalled();
+    expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cloud workspace with root_path null", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      provider_workspace_id: "agnt-workspace",
+      root_path: null,
+      state: "ready",
+    });
+
+    const res = await app.request("/workspaces/ws-test-uuid/tasks/lint/run", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Repository path not found");
+  });
+
+  it("returns 404 for a local workspace with no manifest", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "worktree",
+      root_path: "/repos/my-project",
+      slug: "europa",
+      state: "ready",
+    });
+
+    const res = await app.request("/workspaces/ws-test-uuid/tasks/lint/run", { method: "POST" });
+
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("No deus.json manifest found");
+  });
+
+  it("returns 404 when the task name is not in the manifest", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "worktree",
+      root_path: "/repos/my-project",
+      slug: "europa",
+      state: "ready",
+    });
+    fsMocks.existsSync.mockImplementation((p: unknown) => String(p).endsWith("deus.json"));
+    fsMocks.readFileSync.mockReturnValue(
+      JSON.stringify({ version: 1, name: "my-project", tasks: { lint: "eslint ." } })
+    );
+
+    const res = await app.request("/workspaces/ws-test-uuid/tasks/ghost/run", { method: "POST" });
+
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe('Task "ghost" not found in manifest');
+  });
+
+  it("returns the task command, cwd, and env for a local workspace", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      id: "ws-test-uuid",
+      kind: "worktree",
+      root_path: "/repos/my-project",
+      slug: "europa",
+      state: "ready",
+    });
+    fsMocks.existsSync.mockImplementation((p: unknown) => String(p).endsWith("deus.json"));
+    fsMocks.readFileSync.mockReturnValue(
+      JSON.stringify({
+        version: 1,
+        name: "my-project",
+        env: { NODE_ENV: "development" },
+        tasks: { lint: { command: "eslint .", description: "Lint", persistent: true } },
+      })
+    );
+
+    const res = await app.request("/workspaces/ws-test-uuid/tasks/lint/run", { method: "POST" });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.command).toBe("eslint .");
+    expect(body.persistent).toBe(true);
+    expect(body.mode).toBe("concurrent");
+    expect(body.cwd).toBe("/repos/my-project/.deus/europa");
+    expect(body.ptyId).toMatch(/^task-ws-test-uuid-lint-\d+$/);
+    expect(body.env).toMatchObject({
+      NODE_ENV: "development",
+      DEUS_ROOT_PATH: "/repos/my-project",
+      DEUS_WORKSPACE_PATH: "/repos/my-project/.deus/europa",
+      DEUS_WORKSPACE_ID: "ws-test-uuid",
+    });
+  });
+});
+
+// ─── POST /workspaces/:id/retry-setup — cloud-kind defense-in-depth ──
+
+describe("POST /workspaces/:id/retry-setup", () => {
+  it("rejects a cloud workspace even when setup_status is failed (defense-in-depth)", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      provider_workspace_id: "agnt-workspace",
+      root_path: "/repos/my-project",
+      state: "ready",
+      setup_status: "failed",
+    });
+    fsMocks.existsSync.mockImplementation((p: unknown) => String(p).endsWith("deus.json"));
+    fsMocks.readFileSync.mockReturnValue(
+      JSON.stringify({ version: 1, name: "my-project", lifecycle: { setup: "bun install" } })
+    );
+
+    const res = await app.request("/workspaces/ws-test-uuid/retry-setup", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Repository path not found");
+    // The cloud-kind guard fires before readManifestWithFallback.
+    expect(fsMocks.existsSync).not.toHaveBeenCalled();
+    expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("rejects when setup_status is not failed", async () => {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "worktree",
+      root_path: "/repos/my-project",
+      slug: "europa",
+      setup_status: "completed",
+    });
+
+    const res = await app.request("/workspaces/ws-test-uuid/retry-setup", { method: "POST" });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Can only retry when setup_status is failed");
   });
 });
