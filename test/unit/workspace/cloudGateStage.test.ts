@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
+import { cloudGateStage, cloudPresence } from "@/features/workspace/lib/cloudPresence";
 
 const ws = (o: { kind?: string; state?: string; init_stage?: string | null }) => ({
   kind: o.kind ?? "cloud",
@@ -13,8 +13,6 @@ describe("cloudGateStage", () => {
   });
 
   it("gates initial provisioning (the sidecar isn't up yet) — the WebSocket-error case", () => {
-    // state "initializing" with any in-flight setup stage → provisioning, even
-    // though cloudPresence(init_stage) alone would read "awake".
     expect(cloudGateStage(ws({ state: "initializing", init_stage: "cloning_repository" }))).toBe(
       "provisioning"
     );
@@ -28,10 +26,34 @@ describe("cloudGateStage", () => {
   });
 
   it("gates a failed provision (state error) rather than firing at a dead sidecar", () => {
-    // A failed provision keeps its non-sleep init_stage but flips state to
-    // "error" — which cloudPresence would misread as awake.
     expect(cloudGateStage(ws({ state: "error", init_stage: "cloning_repository" }))).toBe("error");
     expect(cloudGateStage(ws({ state: "error", init_stage: null }))).toBe("error");
+  });
+
+  it.each([
+    ["ready", "error", "unavailable"],
+    ["error", "error", "error"],
+    ["error", "unhandled", "error"],
+    ["error", "resuming", "error"],
+    ["initializing", "cloning_repository", "provisioning"],
+    ["ready", "resuming", "waking"],
+    ["ready", "paused", "asleep"],
+    ["ready", "stopped", "asleep"],
+  ])(
+    "keeps header/sidebar presence and the panel gate consistent for %s/%s",
+    (state, stage, expected) => {
+      const workspace = ws({ state, init_stage: stage });
+      expect(cloudPresence(workspace)).toBe(expected);
+      expect(cloudGateStage(workspace)).toBe(expected);
+    }
+  );
+
+  it("recovers a failed wake when the running snapshot clears its stage", () => {
+    const workspace = ws({ state: "ready", init_stage: "error" });
+    expect(cloudGateStage(workspace)).toBe("unavailable");
+    workspace.init_stage = null;
+    expect(cloudPresence(workspace)).toBe("awake");
+    expect(cloudGateStage(workspace)).toBeNull();
   });
 
   it("does not gate a ready, awake computer", () => {

@@ -1,20 +1,10 @@
 import { useEffect, useState } from "react";
 import { Cloud, CloudOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiClient } from "@/shared/api/client";
+import { wakeCloudWorkspace } from "../api/wakeCloudWorkspace";
 import type { CloudGateStage } from "../lib/cloudPresence";
 
-/**
- * The honest "your computer isn't ready" state for the Files, Changes and
- * Terminal panels — a paused/stopped/resuming or still-provisioning cloud
- * computer has no sidecar, so the panels would otherwise show a raw "WebSocket
- * not connected" / "Failed to start terminal". Three stages:
- *   - provisioning — first-time setup in flight; just wait (no action).
- *   - waking       — an explicit resume is in flight.
- *   - asleep       — paused/stopped; offer the one action that fixes it: wake.
- * Waking rides the same POST /cloud-wake as the sidebar/header chip. "computer"
- * is the product word for the sandbox — the user's own machine in the cloud.
- */
+/** Keeps sidecar panels behind setup, sleep or recovery until the computer is available. */
 export function CloudSandboxGate({
   workspaceId,
   stage,
@@ -60,25 +50,20 @@ export function CloudSandboxGate({
     setStalled(false);
     setAttempt((n) => n + 1);
     setWaking(true);
-    // cloud-wake answers 200 {ok:false} on a failed restart/resume (it restores
-    // the workspace to asleep), so a rejected promise isn't the only failure —
-    // reset the spinner and bring the button back unless the wake actually took.
-    void apiClient
-      .post<{ ok?: boolean }>(`/workspaces/${workspaceId}/cloud-wake`)
-      .then((res) => {
-        if (!res?.ok) setWaking(false);
-      })
-      .catch(() => setWaking(false));
+    void wakeCloudWorkspace(workspaceId).then((ok) => {
+      if (!ok) setWaking(false);
+    });
   };
 
   const isError = stage === "error";
+  const unavailable = stage === "unavailable";
 
   return (
     <div className="bg-bg-base/95 flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center backdrop-blur-sm">
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
         {showSpinner ? (
           <Loader2 className="text-text-muted h-5 w-5 animate-spin" aria-hidden="true" />
-        ) : isError ? (
+        ) : isError || unavailable ? (
           <CloudOff className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
         ) : (
           <Cloud className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
@@ -93,7 +78,9 @@ export function CloudSandboxGate({
               ? "Waking your computer…"
               : showStalled
                 ? "Still waking your computer"
-                : "This computer is asleep"}
+                : unavailable
+                  ? "Couldn't wake your computer"
+                  : "This computer is asleep"}
       </p>
       <p className="text-text-muted max-w-xs text-xs">
         {isError
@@ -104,11 +91,13 @@ export function CloudSandboxGate({
               ? "It'll be ready in a moment."
               : showStalled
                 ? "This is taking longer than usual — try again, or just send a message."
-                : "Wake it to browse files and use the terminal — or just send a message."}
+                : unavailable
+                  ? "Try again, or send a message to reconnect."
+                  : "Wake it to browse files and use the terminal — or just send a message."}
       </p>
       {!showSpinner && !isError && (
         <Button size="sm" onClick={wake}>
-          {showStalled ? "Try again" : "Wake computer"}
+          {showStalled || unavailable ? "Try again" : "Wake computer"}
         </Button>
       )}
     </div>

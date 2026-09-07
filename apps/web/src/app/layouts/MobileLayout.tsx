@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback, useMemo } from "react";
+import type { CloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { Dispatch, SetStateAction } from "react";
 import type { SessionPanelRef } from "@/features/session";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
@@ -46,8 +47,7 @@ interface MobileLayoutProps {
   onRunTask?: (taskName: string) => void;
   onStatusChange?: (status: WorkspaceStatus) => void;
   /** Cloud presence, derived once by MainContent (same values as the desktop header). */
-  cloudAsleep?: boolean;
-  cloudWaking?: boolean;
+  cloudPresence?: CloudPresence;
   onCloudWake?: () => void;
   // PR actions
   prStatus: PRStatus | null;
@@ -72,8 +72,7 @@ export function MobileLayout({
   hasManifest,
   onRunTask,
   onStatusChange,
-  cloudAsleep,
-  cloudWaking,
+  cloudPresence,
   onCloudWake,
   prStatus,
   ghStatus,
@@ -144,8 +143,7 @@ export function MobileLayout({
           branch={workspace.git_branch ?? undefined}
           workspacePath={workspace.workspace_path}
           kind={workspace.kind}
-          cloudAsleep={cloudAsleep}
-          cloudWaking={cloudWaking}
+          cloudPresence={cloudPresence}
           onCloudWake={onCloudWake}
           setupStatus={workspace.setup_status}
           setupError={workspace.error_message}

@@ -8,8 +8,6 @@
 // wait-for-ready here — the sandbox may still be provisioning when the user
 // sends the first prompt; agnt queues it and runs it when the sidecar is up.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 import {
   createWorkspace as agntCreateWorkspace,
@@ -34,13 +32,12 @@ import {
   ensureCloudSession,
   announceCloudEnv,
   getCloudIdentityGeneration,
+  hasLiveCloudSession,
 } from "./agent/cloud/driver";
 import {
   getCloudEnvironmentInfo,
   enableCloudEnvironmentSimulator,
 } from "./cloud-environment.service";
-
-const execFileAsync = promisify(execFile);
 
 const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as const;
 
@@ -421,12 +418,23 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     invalidate(["workspaces", "stats"], {});
   };
 
+  const isServing = () => {
+    if (!sessionId || !hasLiveCloudSession(sessionId)) return false;
+    const row = db
+      .prepare("SELECT state, init_stage FROM workspaces WHERE id = ?")
+      .get(workspace.id) as { state: string; init_stage: string | null } | undefined;
+    return row?.state === "ready" && (row.init_stage === null || row.init_stage === "running");
+  };
+
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
+  // HTTP status can fail while the existing session still serves the computer.
+  // A channel alone is insufficient: it also stays open while the VM sleeps.
+  const refreshing = status === "running" || (status === null && isServing());
   if (status === "running") {
     // An earlier wake may have succeeded despite a lost response. An online
     // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
     setStage(null);
-  } else {
+  } else if (!refreshing) {
     setStage("resuming");
     announce({ status: "resuming" });
   }
@@ -444,6 +452,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     await resumeCloudWorkspace(workspace.provider_workspace_id);
   } catch (err) {
     console.warn(`[WORKSPACE] cloud wake failed: ${err}`);
+    if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
     setStage(failedStatus);
     announce({ status: failedStatus, reason: "Could not wake the cloud machine. Try again." });
@@ -1022,9 +1031,7 @@ async function provisionInBackground(
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[CloudInit] provisioning failed for ${workspaceId}: ${message}`);
     db.prepare(
-      // init_stage is deliberately KEPT: it names the stage that failed, and
-      // the sidebar uses it to say "Cloud setup failed" instead of blaming a
-      // sandbox that never existed.
+      // Keep the failed stage as diagnostic context alongside the specific error.
       "UPDATE workspaces SET state = 'error', error_message = ? WHERE id = ?"
     ).run(`Cloud provisioning failed: ${message}`, workspaceId);
     invalidate([...WORKSPACE_RESOURCES], {});

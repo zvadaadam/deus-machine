@@ -331,8 +331,9 @@ in step with it:
   above them as the headless fallback.
 - **A failed workspace stays in the sidebar.** `SIDEBAR_WORKSPACE_STATE` includes `error`
   precisely so the failure is visible, so the row needs a reason in the meta cell, not a
-  red dot: `Cloud setup failed` while provisioning, `Sandbox failed` once it was up,
-  plain `Failed` for a local worktree — all `text-accent-red-muted`, all on board `30`.
+  red dot: `Computer failed` for a cloud workspace, `Failed` for a local worktree —
+  both `text-accent-red-muted`, both on board `30`. The row's hover retains the specific
+  stored error, including provisioning failures.
 
 Motion values (curves, durations, press scales) are plotted on board `02`; overlay opacities
 and focus-ring rules on board `05`. Both are read straight out of `global.css` and the
@@ -351,3 +352,12 @@ components — if you change an easing or a duration in code, change it there to
    built from primitives rather than `DS/*` instances.
 6. Keep the numbering and the bands. New screens get the next number in their band; new
    components go on the board they belong to, not loose at the document root.
+
+### Cloud wake recovery
+
+`30a · States — Cloud availability` records `CloudSandboxGate` after a failed wake,
+normal sleep, and a workspace error. `13` includes the corresponding header chips;
+`14` includes sidebar availability examples. All three surfaces derive from
+`features/workspace/lib/cloudPresence.ts`: a ready row with a wake error is
+**Unavailable** with retry; a workspace error remains **Failed**. Successful running
+events lift the gate. A failed HTTP refresh preserves an existing serving connection.
