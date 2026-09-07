@@ -23,6 +23,8 @@ import {
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { ThinkingLevel } from "@shared/protocol";
+import { readCloudGitSave } from "@shared/cloud-git-save";
+import { persistCloudGitSave } from "./git-save";
 import {
   CloudEnvStateSchema,
   type CloudEnvEvent,
@@ -357,7 +359,19 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   // leaving a 24h wait whose eventual answer would reach a request the agent
   // has abandoned. (The relay's catch answers the sidecar with a deny, which
   // it ignores for a request it no longer holds.)
-  if (type === "turn.ended") cancelSessionRelays(session.deusSessionId, "turn ended");
+  if (type === "turn.ended") {
+    cancelSessionRelays(session.deusSessionId, "turn ended");
+    const save = readCloudGitSave(frame.gitSync, frame.timestamp);
+    if (save) {
+      try {
+        if (persistCloudGitSave(session.deusSessionId, save)) {
+          invalidate(["sessions", "session"], { sessionIds: [session.deusSessionId] });
+        }
+      } catch (error) {
+        console.warn(`[CloudDriver] could not persist Git backup receipt: ${String(error)}`);
+      }
+    }
+  }
 
   // Engine lifecycle events pass through verbatim under the deus session id.
   // agnt's published set omits the engine `error` member (it re-wraps errors

@@ -30,6 +30,13 @@ import type { SessionSnapshotEvent } from "@deus-hq/api";
 import type { AnyLifecycleEvent } from "@shared/protocol-types";
 import { projectCloudSnapshot } from "@shared/cloud-session-snapshot";
 import {
+  readCloudGitSave,
+  cloudGitSaveFromSnapshot,
+  type CloudGitSave,
+} from "@shared/cloud-git-save";
+import type { Session } from "@shared/types/session";
+import { queryKeys } from "@/shared/api/queryKeys";
+import {
   foldEvent,
   commitTranscriptOrder,
   patchSessionDetail,
@@ -75,6 +82,9 @@ export function makeCloudFrameHandler(
       type === "error" && typeof (frame as { category?: unknown }).category === "string";
     if (LIFECYCLE_TYPES.has(type) || isEngineError) {
       route(frame as unknown as AnyLifecycleEvent);
+      if (type === "turn.ended") {
+        patchGitSave(ctx, sessionId, readCloudGitSave(frame.gitSync, frame.timestamp));
+      }
       // The direct lane has no q: push keeping `sessions.detail` fresh, so the
       // working indicator / Stop button would never move — project the turn
       // lifecycle onto the row here (the Mac lane gets this from the backend).
@@ -127,6 +137,7 @@ function backfillSnapshot(
   sessionId: string,
   route: (event: AnyLifecycleEvent) => void
 ): void {
+  patchGitSave(ctx, sessionId, cloudGitSaveFromSnapshot(snapshot));
   const { events, messageIds } = projectCloudSnapshot(snapshot);
   for (const event of events) route(event);
   const currentTurnId = snapshot.state.currentTurnId ?? null;
@@ -156,5 +167,18 @@ function backfillSnapshot(
             : {}),
         }
       : {}),
+  });
+}
+
+function patchGitSave(
+  ctx: AgentStreamContext,
+  sessionId: string,
+  save: CloudGitSave | undefined
+): void {
+  if (!save) return;
+  ctx.queryClient.setQueryData<Session>(queryKeys.sessions.detail(sessionId), (old) => {
+    if (!old || (old.cloud_git_sync_at != null && old.cloud_git_sync_at >= save.cloud_git_sync_at))
+      return old;
+    return { ...old, ...save };
   });
 }

@@ -18,6 +18,7 @@ import type { SessionStatus, WorkspaceState } from "@shared/enums";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
 import { queryClient } from "@/shared/api/queryClient";
+import { queryKeys } from "@/shared/api/queryKeys";
 import { hasParkedDirectQuestion } from "./directQuestionState";
 import {
   resolveAgntBaseUrl,
@@ -299,7 +300,14 @@ export function cloudDataRequestInterceptor(
         getCloudSessions().then((list) => {
           const found = list.find((s) => s.id === sessionId);
           if (!found) throw new Error("Session not found");
-          return toSession(found);
+          // Discovery carries no Git receipt. Refetching it must not erase a
+          // failure learned from the session socket.
+          const cached = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
+          return {
+            ...toSession(found),
+            cloud_git_sync_at: cached?.cloud_git_sync_at,
+            cloud_git_error: cached?.cloud_git_error,
+          };
         })
       );
     }

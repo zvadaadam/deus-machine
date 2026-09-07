@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { toast } from "sonner";
+import { queryClient } from "@/shared/api/queryClient";
+import { queryKeys } from "@/shared/api/queryKeys";
 import {
   mapToRepoGroups,
   toSession,
@@ -60,6 +62,7 @@ function stubBearer() {
 beforeEach(() => {
   // The 3s in-flight cache would otherwise hand one test's list to the next.
   bustCloudSessionsListCache();
+  queryClient.clear();
 });
 
 describe("mapToRepoGroups", () => {
@@ -129,6 +132,24 @@ describe("cloudDataRequestInterceptor", () => {
   it("returns null for resources it does not own (falls through to the socket)", () => {
     expect(cloudDataRequestInterceptor("messages", { sessionId: "s" })).toBeNull();
     expect(cloudDataRequestInterceptor("unknown")).toBeNull();
+  });
+
+  it("does not erase a socket's Git backup failure when discovery refreshes the session", async () => {
+    routeFetch({
+      "/dashboard/orgs": () => ok({ items: [{ id: "org_1" }] }),
+      "/dashboard/orgs/org_1/sessions": () => ok({ items: [agntSession()] }),
+    });
+    queryClient.setQueryData(queryKeys.sessions.detail("sess_1"), {
+      cloud_git_sync_at: 123,
+      cloud_git_error: "GitHub rejected the backup",
+    });
+    await expect(
+      cloudDataRequestInterceptor("session", { sessionId: "sess_1" })
+    ).resolves.toMatchObject({
+      id: "sess_1",
+      cloud_git_sync_at: 123,
+      cloud_git_error: "GitHub rejected the backup",
+    });
   });
 
   it("stubs 'settings' so the shell boot-gate mounts (onboarding already done)", async () => {

@@ -112,6 +112,8 @@ export interface SessionRow {
   agent_session_id: string | null;
   /** agnt session id for cloud-workspace sessions (null for local). */
   provider_session_id: string | null;
+  cloud_git_sync_at: number | null;
+  cloud_git_error: string | null;
   title: string | null;
   status: string;
   message_count: number;

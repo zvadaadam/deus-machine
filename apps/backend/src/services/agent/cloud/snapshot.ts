@@ -11,6 +11,8 @@ import {
 import { cancelledTurnMessageId } from "@shared/types/session";
 import { supersededCancellationMarkers } from "@shared/conversation-rows";
 import { getErrorMessage } from "@shared/lib/errors";
+import { cloudGitSaveFromSnapshot } from "@shared/cloud-git-save";
+import { persistCloudGitSave } from "./git-save";
 import { getDatabase } from "../../../lib/database";
 import {
   persistCompaction,
@@ -38,6 +40,8 @@ export function restoreCloudSnapshot(
   };
   try {
     const orderedIds = db.transaction(() => {
+      const gitSave = cloudGitSaveFromSnapshot(snapshot);
+      if (gitSave) persistCloudGitSave(sessionId, gitSave);
       const lastTurn = conversation.turns.at(-1);
       // A session.error can have supplied better details after this terminal.
       // Keep them when reconnecting to a failure already persisted locally.

@@ -1,6 +1,35 @@
 # Cloud launch readiness — 2026-09-06
 
-This is a review of the current system, not another review of the reliability PR diff.
+This records the September 6 audit. The status below tracks subsequent delivery;
+the original findings and source links remain as historical evidence.
+
+## Delivery status — September 7
+
+| Finding                            | Current status                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1 — GitHub installation ownership | [AGNT #188](https://github.com/zvadaadam/AGNT/pull/188) merged; production deployment [passed](https://github.com/zvadaadam/AGNT/actions/runs/34049578307). Credentials are configured. Real authenticated OAuth and the existing-link audit remain qualification tasks.                                                                                                                                          |
+| F2 — Large session snapshots       | [AGNT #189](https://github.com/zvadaadam/AGNT/pull/189) merged and [deployed](https://github.com/zvadaadam/AGNT/actions/runs/34056478156); regression exercised in workerd.                                                                                                                                                                                                                                       |
+| F3 — Desktop history recovery      | [Deus #335](https://github.com/zvadaadam/deus-machine/pull/335) merged, [post-merge tests](https://github.com/zvadaadam/deus-machine/actions/runs/34110130644) and [web deployment](https://github.com/zvadaadam/deus-machine/actions/runs/34110130649) passed. Real SQLite and local renderer/provider-socket journeys passed. No desktop installer release or deployed cross-device qualification in this step. |
+| F4 — Error/device consumers        | [Deus #334](https://github.com/zvadaadam/deus-machine/pull/334) merged with published-wire regression tests.                                                                                                                                                                                                                                                                                                      |
+| F5 — Git backup visibility         | Implemented on the follow-up branch: desktop persists the latest observed receipt; browser restores available receipts; both display failures independently of turn success. A recovery action prepares an editable chat request. Validation and limits below.                                                                                                                                                    |
+| F6 / F7                            | Still open. Org-wide compute admission is the next unattended-beta control; required-secret setup is a self-service onboarding gate. Neither requires a broad workspace refactor.                                                                                                                                                                                                                                 |
+
+F5 validation: 930 backend tests, 588 app/shared tests, frontend/backend typechecks,
+and a local UI journey with a substitute provider. A failed save stays visible
+through restart and sparse reconnect snapshots; an older receipt cannot replace
+it; a newer acknowledgment clears it. The existing-database test preserves the
+transcript while adding the nullable receipt columns. Desktop and mobile UI checks
+verified the warning, error disclosure, draft preservation, and clearing after
+confirmation. No provider resources were created.
+
+F5 is deliberately a **per-chat Git receipt**, not a whole-workspace or R2 backup
+indicator. AGNT retains these receipts on its latest ten turn outcomes. A fresh
+browser outside that window displays unavailable status; a desktop keeps a failure
+it already observed until a newer acknowledgment arrives. A save from another chat
+or a pause barrier does not clear this chat's warning. A workspace-wide durable
+receipt and a dedicated backup-only retry command belong to AGNT if that stronger
+product guarantee is needed. The existing `git.finalize` command makes real commits
+and pushes the working branch, so it is not used as a backup retry.
 
 **Verdict:** the reliability work was worth shipping. The architecture has sensible owners and the recovery path is substantially safer. I would continue internal use, but would not yet describe the whole cloud product as ready for unrelated customers. A focused desktop-first, Claude-first invited beta is a realistic next step after the blockers below. Open signup needs additional onboarding and resource controls.
 
@@ -42,13 +71,13 @@ Effort: S = hours, M = roughly a day or two, L = several days or a separate proj
 ### F1 — Close the GitHub installation ownership boundary
 
 Implementation follow-up: [AGNT #188](https://github.com/zvadaadam/AGNT/pull/188)
-is a draft fix with GitHub owner authorization, explicit destination consent,
+merged with GitHub owner authorization, explicit destination consent,
 and transactional Deus membership checks. The original bug was reproduced before
 the fix. Validation includes 76 product-backend tests, real PostgreSQL concurrency
 checks and browser confirmation against that database, with GitHub responses
-provided by fixtures. Production still needs the App OAuth callback and Worker
-client credentials configured, live GitHub qualification, and review of existing
-links before this launch blocker can be marked closed.
+provided by fixtures. Production callback and Worker client credentials are
+configured. Live GitHub qualification and review of existing
+links remain before this launch blocker can be marked closed.
 
 [AGNT github.ts:164](https://github.com/zvadaadam/AGNT/blob/47d98fdfea8c40ba9c1365f2f37d0873f0835864/apps/deus-cloud/src/routes/github.ts#L164) verifies signed state for a Deus org and performs an App-authenticated installation existence lookup. It then links the installation to that org. It never verifies that the signed-in human is associated with that GitHub installation.
 
