@@ -121,6 +121,19 @@ describe("cloud files routes", () => {
     expect(await res.text()).toMatch(/waking|shortly/i);
   });
 
+  it("tree returns an empty listing (not a dead panel) when the sandbox is unreachable", async () => {
+    cloudWorkspace.current_session_id = "sess-tree-timeout";
+    mockRequestCloudFs.mockRejectedValue(new Error("cloud fs request timed out"));
+
+    const res = await app.request("/workspaces/ws-cloud-1/files");
+    const body = (await res.json()) as { files: unknown[]; provisioning?: boolean };
+
+    expect(res.status).toBe(200);
+    expect(body.files).toEqual([]);
+    expect(body.provisioning).toBe(true);
+    expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
+  });
+
   it("search caches the flattened tree across keystrokes", async () => {
     cloudWorkspace.current_session_id = "sess-search-cache";
     mockRequestCloudFs.mockResolvedValue({
