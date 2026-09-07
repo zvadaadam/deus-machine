@@ -40,7 +40,12 @@ vi.mock("../../../src/db", () => ({ getRepositoryById: mocks.repository }));
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({
     prepare: (sql: string) => ({
-      run: mocks.run,
+      run: (...args: unknown[]) => {
+        if (sql.startsWith("UPDATE workspaces SET init_stage =")) {
+          mocks.workspace.init_stage = args[0] as string | null;
+        }
+        return mocks.run(...args);
+      },
       get: () => (sql.includes("init_stage") ? mocks.workspace : { last_inline_mint_at: 0 }),
     }),
   }),
@@ -112,6 +117,26 @@ describe("explicit cloud wake", () => {
     expect(mocks.announce).not.toHaveBeenCalled();
   });
 
+  it.each(["error", "paused", "stopped", "resuming"])(
+    "keeps a confirmed running computer available after clearing a stale %s stage",
+    async (stage) => {
+      mocks.workspace.init_stage = stage;
+      mocks.get.mockResolvedValue({ status: "running" });
+      mocks.live.mockReturnValue(true);
+      mocks.resume.mockRejectedValue(new Error("resume unavailable"));
+      expect(
+        await wakeCloudWorkspaceWithFeedback({
+          id: "ws",
+          provider_workspace_id: "vm",
+          current_session_id: "session",
+        })
+      ).toEqual({ ok: false, status: "running" });
+      expect(mocks.workspace.init_stage).toBeNull();
+      expect(mocks.run).toHaveBeenCalledExactlyOnceWith(null, "ws");
+      expect(mocks.announce).not.toHaveBeenCalled();
+    }
+  );
+
   it.each(["paused", "stopped", "error", null])(
     "does not treat an open channel as proof that a %s computer is serving",
     async (status) => {
@@ -131,22 +156,25 @@ describe("explicit cloud wake", () => {
     }
   );
 
-  it("gates recovery if the previously-serving channel closes during refresh", async () => {
-    mocks.get.mockRejectedValue(new Error("control plane unavailable"));
-    mocks.live.mockReturnValue(true);
-    mocks.resume.mockImplementation(async () => {
-      mocks.live.mockReturnValue(false);
-      throw new Error("resume failed");
-    });
-    expect(
-      await wakeCloudWorkspaceWithFeedback({
-        id: "ws",
-        provider_workspace_id: "vm",
-        current_session_id: "session",
-      })
-    ).toEqual({ ok: false, status: "error" });
-    expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
-  });
+  it.each(["running", null])(
+    "gates recovery if the channel closes during refresh after a %s status",
+    async (status) => {
+      mocks.get.mockResolvedValue({ status });
+      mocks.live.mockReturnValue(true);
+      mocks.resume.mockImplementation(async () => {
+        mocks.live.mockReturnValue(false);
+        throw new Error("resume failed");
+      });
+      expect(
+        await wakeCloudWorkspaceWithFeedback({
+          id: "ws",
+          provider_workspace_id: "vm",
+          current_session_id: "session",
+        })
+      ).toEqual({ ok: false, status: "error" });
+      expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
+    }
+  );
 });
 
 describe("cloud credential provenance", () => {

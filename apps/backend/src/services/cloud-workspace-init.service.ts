@@ -429,7 +429,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   const status = await getCloudWorkspaceStatus(workspace.provider_workspace_id);
   // HTTP status can fail while the existing session still serves the computer.
   // A channel alone is insufficient: it also stays open while the VM sleeps.
-  const refreshing = (status === null || status === "running") && isServing();
+  const refreshing = status === "running" || (status === null && isServing());
   if (status === "running") {
     // An earlier wake may have succeeded despite a lost response. An online
     // resume is a no-op, so no later frame is guaranteed to clear stale sleep.
