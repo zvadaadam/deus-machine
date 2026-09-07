@@ -48,7 +48,11 @@ const connectServerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connect/$serverId",
   beforeLoad: ({ params }) => {
-    throw redirect({ to: "/s/$serverId", params: { serverId: params.serverId } });
+    throw redirect({
+      to: "/s/$serverId",
+      params: { serverId: params.serverId },
+      search: true,
+    });
   },
 });
 
