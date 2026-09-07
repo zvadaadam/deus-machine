@@ -6,7 +6,7 @@
  * auto-detect from project files, and save.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Loader2, FileJson, ChevronDown, ChevronRight, Wand2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import {
   draftToManifest,
   type ManifestDraft,
 } from "./manifest-draft";
+import { resolveManifestResync } from "./manifest-resync";
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
@@ -83,11 +84,46 @@ export function EnvironmentSection() {
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
   const [detecting, setDetecting] = useState(false);
 
-  // Sync draft from fetched manifest
+  // The manifest we most recently dispatched to the backend. Set on
+  // `mutate()` so the resync effect below can recognize the post-save cache
+  // reflection (`useSaveRepoManifest.onSuccess` writes the same value
+  // synchronously, so the cached `manifestData.manifest` matches it) and
+  // suppress the full draft clobber — preserving keystrokes the user typed
+  // during the save round-trip, which the saved snapshot does NOT include.
+  // Null when no save is pending. Consumed by the resync effect when the
+  // cache reflects the saved manifest; cleared in `onError` so a later
+  // external `manifestData` change still resyncs normally.
+  const savedManifestRef = useRef<Record<string, unknown> | null>(null);
+
+  // Mirror the latest draft into a ref so the resync effect can read it
+  // without depending on `draft` (which would make the effect fire on every
+  // keystroke and reset the field the user is actively editing).
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  // Sync draft from fetched manifest, EXCEPT right after a save (preserves
+  // in-flight keystrokes typed during the save+refetch round-trip).
   useEffect(() => {
-    if (manifestData) {
-      setDraft(manifestToDraft(manifestData.manifest));
-      setIsDirty(false);
+    const action = resolveManifestResync({
+      manifestData,
+      savedManifest: savedManifestRef.current,
+      draft: draftRef.current,
+    });
+    switch (action.kind) {
+      case "noop":
+        return;
+      case "resync":
+        setDraft(action.draft);
+        setIsDirty(false);
+        return;
+      case "preserve-after-save":
+        // The cache now reflects what we just persisted. Don't overwrite the
+        // draft — that would drop keystrokes typed between the snapshot and
+        // the cache settling. Recompute isDirty against the saved manifest
+        // so the user can immediately re-save those in-flight edits.
+        savedManifestRef.current = null;
+        setIsDirty(action.isDirty);
+        return;
     }
   }, [manifestData]);
 
@@ -102,14 +138,29 @@ export function EnvironmentSection() {
   const handleSave = useCallback(() => {
     if (!selectedRepoId) return;
     const manifest = draftToManifest(draft);
+    // Mark a save in flight BEFORE dispatching so the post-save cache
+    // reflection can be detected by the resync effect above.
+    savedManifestRef.current = manifest;
     saveMutation.mutate(
       { repoId: selectedRepoId, manifest },
       {
         onSuccess: () => {
           toast.success("deus.json saved");
-          setIsDirty(false);
+          // Recompute isDirty against the saved manifest using the LATEST
+          // draft, which may have grown with keystrokes typed during the
+          // save round-trip. The resync effect will compute the same value
+          // when the cache entry changes (overriding this), but if the
+          // saved manifest was structurally identical to the cached one the
+          // effect won't fire — so do it here too to keep the indicator
+          // correct in both cases.
+          const unflushed = draftToManifest(draftRef.current);
+          setIsDirty(JSON.stringify(unflushed) !== JSON.stringify(manifest));
         },
         onError: (err) => {
+          // Save failed: the cache didn't change and the resync effect won't
+          // fire. Clear the marker so a later (externally-triggered)
+          // manifestData change can still resync normally.
+          savedManifestRef.current = null;
           toast.error(`Failed to save: ${err instanceof Error ? err.message : "Unknown error"}`);
         },
       }
