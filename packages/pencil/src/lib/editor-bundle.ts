@@ -12,6 +12,7 @@
 // other Pencil software required.
 
 import * as fs from "node:fs";
+import * as http from "node:http";
 import * as https from "node:https";
 import * as os from "node:os";
 import { join } from "node:path";
@@ -126,25 +127,45 @@ function fetchJson<T>(url: string): Promise<T> {
   });
 }
 
-function downloadStream(url: string, destPath: string, redirectsLeft = 3): Promise<void> {
+export function downloadStream(url: string, destPath: string, redirectsLeft = 3): Promise<void> {
   return new Promise((resolve, reject) => {
     const attempt = (currentUrl: string): void => {
-      const req = https.get(currentUrl, { timeout: 60_000 }, (res) => {
-        if ([301, 302, 303, 307, 308].includes(res.statusCode ?? 0)) {
-          res.resume();
-          if (redirectsLeft <= 0) return reject(new Error(`too many redirects fetching ${url}`));
-          redirectsLeft--;
-          return attempt(res.headers.location ?? "");
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`HTTP ${res.statusCode} fetching ${url}`));
-        }
-        const file = fs.createWriteStream(destPath);
-        res.pipe(file);
-        file.on("finish", () => file.close(() => resolve()));
-        file.on("error", (err) => fs.unlink(destPath, () => reject(err)));
-      });
+      // `https.get` throws synchronously (TypeError: Invalid URL) inside the
+      // response callback on a non-absolute URL (missing or relative Location,
+      // RFC 7231 §7.1.2). The callback runs on a later tick, so the throw would
+      // escape the Promise and surface as uncaughtException. Wrap + resolve
+      // the Location so a bad redirect becomes a clean rejection instead.
+      let req: http.ClientRequest;
+      try {
+        req = https.get(currentUrl, { timeout: 60_000 }, (res) => {
+          if ([301, 302, 303, 307, 308].includes(res.statusCode ?? 0)) {
+            res.resume();
+            if (redirectsLeft <= 0) return reject(new Error(`too many redirects fetching ${url}`));
+            const loc = res.headers.location;
+            if (!loc) return reject(new Error(`redirect from ${currentUrl} has no Location`));
+            let nextUrl: string;
+            try {
+              nextUrl = new URL(loc, currentUrl).href;
+            } catch (err) {
+              return reject(
+                new Error(`invalid Location "${loc}" from ${currentUrl}: ${(err as Error).message}`)
+              );
+            }
+            redirectsLeft--;
+            return attempt(nextUrl);
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            return reject(new Error(`HTTP ${res.statusCode} fetching ${url}`));
+          }
+          const file = fs.createWriteStream(destPath);
+          res.pipe(file);
+          file.on("finish", () => file.close(() => resolve()));
+          file.on("error", (err) => fs.unlink(destPath, () => reject(err)));
+        });
+      } catch (err) {
+        return reject(err as Error);
+      }
       req.on("timeout", () => req.destroy(new Error(`timeout fetching ${url}`)));
       req.on("error", reject);
     };
