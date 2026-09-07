@@ -122,6 +122,20 @@ export interface QMutateResultFrame {
   success: boolean;
   data?: unknown;
   error?: string;
+  /**
+   * HTTP status from the delegated route, carried on failure (e.g., 409 for a
+   * ConflictError). Absent on success and on frames from clients/relays that
+   * predate this field — readers MUST treat absence as "no status known."
+   */
+  status?: number;
+  /**
+   * Structured payload from the delegated route's error body, carried on
+   * failure. For `ConflictError("Repository already exists", existing)` this
+   * is the existing `Repository` row, allowing clients to recover from a 409
+   * by reusing the already-registered entity instead of surfacing the conflict.
+   * Absent on success.
+   */
+  details?: unknown;
 }
 
 /** Server tells clients to refetch stale resources. */

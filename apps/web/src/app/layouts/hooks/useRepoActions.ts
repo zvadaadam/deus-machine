@@ -46,13 +46,21 @@ export function useRepoActions({
 
   // ── Shared utilities ─────────────────────────────────────────
 
-  /** Add a repo, falling back to the existing one on 409 conflict. */
+  /** Add a repo, falling back to the existing one on 409 conflict.
+   *
+   *  The backend delegates `addRepo` through the WS q:mutate transport, which
+   *  attaches `status` (HTTP status) and `details` (the conflicting entity) to
+   *  the thrown Error on failure (see repository.service.ts). For a 409
+   *  `ConflictError("Repository already exists", existing)`, `details` IS the
+   *  existing `Repository` row from the DB — reuse it instead of surfacing the
+   *  conflict, so Open Project / Clone / Start New Project can proceed to
+   *  create a fresh workspace for an already-registered folder. */
   async function addRepoOrUseExisting(path: string): Promise<Repository> {
     try {
       return await addRepoMutation.mutateAsync(path);
     } catch (err) {
-      const addError = err as { status?: number; details?: { details?: Repository } };
-      const existingRepo = addError?.details?.details;
+      const addError = err as { status?: number; details?: Repository };
+      const existingRepo = addError?.details;
       if (addError?.status === 409 && existingRepo?.id) {
         return existingRepo;
       }

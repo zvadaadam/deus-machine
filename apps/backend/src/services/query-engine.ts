@@ -371,11 +371,24 @@ async function handleMutate(connectionId: string, msg: MutateFrameInput): Promis
       data: result,
     });
   } catch (err) {
+    // Forward the structured `status` and `details` carried on the thrown
+    // error (set by `delegateToRoute` on non-2xx) onto the failure frame, so
+    // clients can recover from conflict-class errors (e.g., 409 "Repository
+    // already exists" with the existing entity as `details`) instead of
+    // surfacing them. Both fields are optional and JSON-omitted when absent,
+    // so older clients that only read `success`/`error`/`data` are unaffected.
+    const status =
+      typeof (err as { status?: unknown }).status === "number"
+        ? (err as { status: number }).status
+        : undefined;
+    const details = (err as { details?: unknown }).details;
     sendFrame(connectionId, {
       type: "q:mutate_result",
       id,
       success: false,
       error: err instanceof Error ? err.message : "Mutation failed",
+      status,
+      details,
     });
   }
 }
