@@ -697,6 +697,7 @@ describe("cloud driver frame → fold contract", () => {
     { status: "provisioning", expectedState: "initializing", expectedStage: "restoring" },
     { status: "error", expectedState: "error", expectedStage: "resuming" },
     { status: "already-running", expectedState: "ready", expectedStage: null },
+    { status: "refresh-failed", expectedState: "ready", expectedStage: null },
     { status: "resume-failed", expectedState: "archived", expectedStage: "paused" },
   ])(
     "unarchive preserves the $status projection across the resume response",
@@ -713,7 +714,7 @@ describe("cloud driver frame → fold contract", () => {
           'archived', 'paused', 'deus-session-1')`
       ).run();
       mockGetWorkspace.mockResolvedValueOnce({
-        status: status === "already-running" ? "running" : "paused",
+        status: status === "already-running" || status === "refresh-failed" ? "running" : "paused",
       });
       const connectionsBefore = connectCount;
       try {
@@ -722,7 +723,8 @@ describe("cloud driver frame → fold contract", () => {
           async () => {
             await mockResumeWorkspace.withImplementation(
               async () => {
-                if (status === "resume-failed") throw new Error("resume unavailable");
+                if (status === "resume-failed" || status === "refresh-failed")
+                  throw new Error("resume unavailable");
                 if (status === "already-running") return;
                 // Real driver event, received while the HTTP resume is pending.
                 capturedOnFrame!({

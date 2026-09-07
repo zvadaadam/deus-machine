@@ -91,7 +91,10 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
           ...workspace,
           provider_workspace_id: workspace.provider_workspace_id,
         });
-        if (!result.ok) throw new Error("Could not wake the cloud machine. Try again.");
+        // A failed status refresh can still leave the computer serving.
+        if (!result.ok && result.status !== "running") {
+          throw new Error("Could not wake the cloud machine. Try again.");
+        }
       } catch (err) {
         db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
         invalidate(["workspaces", "stats"], {});
