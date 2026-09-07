@@ -530,7 +530,7 @@ describe("makeCloudFrameHandler", () => {
     );
   });
 
-  it("projects session.usage onto the context gauge (count always, percent needs a size)", () => {
+  it("projects session.usage onto the context gauge (count always; percent tracks the sticky fold size)", () => {
     const SESSION = "sess-usage";
     const qc = new QueryClient();
     seedEmptyPage(qc, SESSION);
@@ -540,7 +540,8 @@ describe("makeCloudFrameHandler", () => {
       context_token_count: 0,
       context_used_percent: 12,
     });
-    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
 
     // Size known → both fields move.
     onFrame({
@@ -559,16 +560,131 @@ describe("makeCloudFrameHandler", () => {
     expect(d.context_token_count).toBe(50_000);
     expect(d.context_used_percent).toBe(25);
 
-    // Size unknown → count moves, percent KEEPS its prior value (the Mac
-    // backend's COALESCE semantics, mirrored).
+    // Size omitted (Claude mid-turn, codex-sdk always) → count moves and the
+    // percent ADVANCES against the sticky `state.usage.size` the reducer just
+    // kept — mirroring `persistSessionUsage`'s `usage.size` read, instead of
+    // freezing at the prior final-turn percent (the cloud-direct/backend
+    // divergence the integration test in event-persistence-integration pins).
     onFrame({ type: "session.usage", sessionId: SESSION, turnId: "t", used: 60_000, timestamp: T });
     d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
       "sessions",
       "detail",
       SESSION,
     ])!;
+    expect(ctx.folds.get(SESSION)?.state.usage?.size).toBe(200_000); // sticky across the second event
     expect(d.context_token_count).toBe(60_000);
-    expect(d.context_used_percent).toBe(25);
+    expect(d.context_used_percent).toBe(30); // 60k / 200k — advances, does not freeze at 25
+  });
+
+  it("session.usage with NO size ever (codex-sdk) keeps the snapshot-derived percent, matching the backend's COALESCE", () => {
+    // codex-sdk never reports `size` at all, so the fold's `state.usage.size`
+    // stays undefined and the gauge cannot recompute. The backend's
+    // `persistSessionUsage` then writes `percent = null`, which the SQL's
+    // COALESCE leaves at whatever the snapshot/DB seeded — so the cloud
+    // twin must NOT overwrite the snapshot percent either. This pins the
+    // second impact tier (full-session freeze for codex-sdk) as intended
+    // parity rather than a regression: both twins stay on the snapshot value.
+    const SESSION = "sess-usage-codex";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    // The snapshot seeded this gauge (contextUsed/contextSize at snapshot time).
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      context_token_count: 10_000,
+      context_used_percent: 18,
+    });
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    // A size-less usage event arrives mid-turn. The fold records `used` but
+    // `state.usage.size` remains undefined — no sticky size to compute against.
+    onFrame({
+      type: "session.usage",
+      sessionId: SESSION,
+      turnId: "t1",
+      used: 40_000,
+      timestamp: T,
+    });
+
+    expect(ctx.folds.get(SESSION)?.state.usage?.used).toBe(40_000);
+    expect(ctx.folds.get(SESSION)?.state.usage?.size).toBeUndefined();
+
+    const d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(40_000); // count advances
+    expect(d.context_used_percent).toBe(18); // snapshot percent preserved (no sticky size, no overwrite)
+  });
+
+  it("session.usage percent recomputes against a sticky size once one arrives (late size, then size-less)", () => {
+    // A late size-bearing event must persist into the fold's sticky size, so a
+    // FOLLOWING size-less event recomputes against it (not the snapshot value).
+    // Guards against the fix reading the frame's size only when present but
+    // dropping it on the very next size-less frame.
+    const SESSION = "sess-usage-late-size";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    qc.setQueryData(["sessions", "detail", SESSION], {
+      id: SESSION,
+      status: "idle",
+      context_token_count: 0,
+      context_used_percent: 5,
+    });
+    const ctx = makeCtx(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(ctx, SESSION);
+
+    // First event: size-less — no sticky size yet, snapshot percent preserved.
+    onFrame({
+      type: "session.usage",
+      sessionId: SESSION,
+      turnId: "t1",
+      used: 30_000,
+      timestamp: T,
+    });
+    let d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(30_000);
+    expect(d.context_used_percent).toBe(5);
+
+    // Second event: introduces size — percent computes.
+    onFrame({
+      type: "session.usage",
+      sessionId: SESSION,
+      turnId: "t1",
+      used: 40_000,
+      size: 160_000,
+      timestamp: T,
+    });
+    d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(40_000);
+    expect(d.context_used_percent).toBe(25); // 40k / 160k
+
+    // Third event: size-less again — sticky size kept, percent ADVANCES.
+    onFrame({
+      type: "session.usage",
+      sessionId: SESSION,
+      turnId: "t1",
+      used: 80_000,
+      timestamp: T,
+    });
+    expect(ctx.folds.get(SESSION)?.state.usage?.size).toBe(160_000); // sticky from event 2
+    d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
+      "sessions",
+      "detail",
+      SESSION,
+    ])!;
+    expect(d.context_token_count).toBe(80_000);
+    expect(d.context_used_percent).toBe(50); // 80k / 160k
   });
 
   it("snapshot restates session facts: live turn → working, real message_count", () => {
