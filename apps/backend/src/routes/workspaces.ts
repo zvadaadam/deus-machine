@@ -369,7 +369,7 @@ app.post("/workspaces/:id/sessions", (c) => {
 app.get("/workspaces/:id/manifest", withWorkspace, (c) => {
   const workspace = c.get("workspace");
   const workspacePath = c.get("workspacePath");
-  if (!workspace.root_path) {
+  if (workspace.kind === "cloud" || !workspace.root_path) {
     return c.json({ manifest: null, tasks: [] });
   }
   const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
@@ -388,7 +388,7 @@ app.post("/workspaces/:id/retry-setup", withWorkspace, (c) => {
     throw new ValidationError("Can only retry when setup_status is failed");
   }
 
-  if (!workspace.root_path) {
+  if (workspace.kind === "cloud" || !workspace.root_path) {
     throw new ValidationError("Repository path not found");
   }
 
@@ -435,7 +435,7 @@ app.post("/workspaces/:id/tasks/:name/run", withWorkspace, (c) => {
   const workspacePath = c.get("workspacePath");
   const taskName = c.req.param("name");
 
-  if (!workspace.root_path) {
+  if (workspace.kind === "cloud" || !workspace.root_path) {
     throw new ValidationError("Repository path not found");
   }
 
