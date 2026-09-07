@@ -132,7 +132,7 @@ export class StreamManager {
       child.once("exit", () => resolve());
       child.kill("SIGTERM");
       setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
+        child.kill("SIGKILL");
       }, 2000);
     });
   }
