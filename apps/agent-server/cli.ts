@@ -217,7 +217,9 @@ async function resolveServerUrl(opts: {
 }): Promise<{ url: string; proc: ChildProcess | null }> {
   if (opts.url) return { url: opts.url, proc: null };
 
-  const bundlePath = path.resolve(__dirname, "dist", "index.bundled.cjs");
+  const bundlePath = process.env.DEUS_CLI_BUNDLE_PATH
+    ? path.resolve(process.env.DEUS_CLI_BUNDLE_PATH)
+    : path.resolve(__dirname, "dist", "index.bundled.cjs");
   if (!fs.existsSync(bundlePath)) {
     console.error(`${c.red}Bundle missing. Run: bun run build:agent-server${c.reset}`);
     process.exit(1);
@@ -226,6 +228,22 @@ async function resolveServerUrl(opts: {
     env: { ...process.env, LOG_LEVEL: process.env.LOG_LEVEL ?? "info" },
     stdio: ["pipe", "pipe", "pipe"],
   });
+  // We own this child the moment it is spawned — tear it down on every parent
+  // exit path, not only the shutdown() closure built after connect() resolves.
+  // "exit" fires on an explicit process.exit(1) (the main().catch path) under
+  // both node and bun, so a rejection from resolveServerUrl/connect still
+  // signals the child, which would otherwise be re-parented to PID 1. A bare
+  // SIGTERM to the parent uses default termination which leapfrogs shutdown()
+  // and does NOT fire "exit" (verified under node+bun) — route it through an
+  // explicit exit(143) so the handler above runs.
+  process.on("exit", () => {
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      // Already dead — nothing to signal.
+    }
+  });
+  process.on("SIGTERM", () => process.exit(143));
   let stderr = "";
   proc.stderr?.on("data", (d: Buffer) => {
     stderr += d.toString();
