@@ -291,16 +291,26 @@ export class FfmpegRecorder {
       return this.rawCapturePath;
     }
 
-    const path = await new Promise<string | null>((resolve) => {
+    const path = await new Promise<string | null>((resolve, reject) => {
       const proc = this.captureProcess!;
 
       const killTimer = setTimeout(() => {
         proc.kill("SIGKILL");
       }, 10_000);
 
-      proc.on("close", () => {
+      proc.on("close", (code, signal) => {
         clearTimeout(killTimer);
         this.captureProcess = null;
+        // We sent SIGKILL ourselves after the 10s timeout — treat as best-effort.
+        const forced = signal === "SIGKILL";
+        if (code !== 0 && !forced) {
+          const msg =
+            this.captureExitError ??
+            `ffmpeg capture exited unexpectedly (code ${code ?? "null"}, signal ${signal ?? "null"}).\nstderr: ${this.captureStderr.slice(-300)}`;
+          this.captureExitError = null;
+          return reject(new Error(`Capture failed during stop: ${msg}`));
+        }
+        this.captureExitError = null;
         resolve(this.rawCapturePath);
       });
 
