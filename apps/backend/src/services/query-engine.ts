@@ -102,6 +102,13 @@ interface CommandContext {
   relayClient: boolean;
 }
 
+/** Mutation dispatch context — same caller-identity shape as RequestContext. */
+interface MutationContext {
+  relayClient: boolean;
+  /** The caller's paired-device id, or null for local/unaffiliated connections. */
+  deviceId: string | null;
+}
+
 /** Per-connection active subscriptions, keyed by client-assigned sub ID. */
 const subs = new Map<string, Map<string, Sub>>();
 
@@ -363,7 +370,7 @@ async function handleMutate(connectionId: string, msg: MutateFrameInput): Promis
   const { id, action, params } = msg;
 
   try {
-    const result = await runMutation(action, params);
+    const result = await runMutation(action, params, getMutationContext(connectionId));
     sendFrame(connectionId, {
       type: "q:mutate_result",
       id,
@@ -489,16 +496,41 @@ function isRequestResource(value: string): value is RequestResourceName {
 }
 
 function getRequestContext(connectionId: string): RequestContext {
-  return { relayClient: getConnection(connectionId)?.isVirtual === true };
+  const conn = getConnection(connectionId);
+  return {
+    relayClient: conn?.isVirtual === true,
+    deviceId: conn?.deviceId ?? null,
+  };
 }
 
 function getCommandContext(connectionId: string): CommandContext {
   return { relayClient: getConnection(connectionId)?.isVirtual === true };
 }
 
+/**
+ * Build mutation dispatch context from the calling WS connection.
+ *
+ * Mirrors getRequestContext/getCommandContext so mutations get the same
+ * caller-identity plumbing as requests/commands. Without this, q:mutate
+ * could not distinguish a relay ("virtual") paired device from the local
+ * desktop owner — which is what allowed relay devices to bypass the
+ * localhost-only guard on device-management routes via delegateToRoute.
+ */
+function getMutationContext(connectionId: string): MutationContext {
+  const conn = getConnection(connectionId);
+  return {
+    relayClient: conn?.isVirtual === true,
+    deviceId: conn?.deviceId ?? null,
+  };
+}
+
 // ---- Mutation Dispatch ----
 
-async function runMutation(action: string, params: QueryParams): Promise<unknown> {
+async function runMutation(
+  action: string,
+  params: QueryParams,
+  context: MutationContext
+): Promise<unknown> {
   const typedAction = toMutationName(action);
 
   return (
@@ -591,6 +623,18 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
       })
       .with("revokeDevice", () => {
         const deviceId = requireParam(params, "deviceId", "revokeDevice");
+        // Relay ("virtual") paired devices must only be able to revoke their
+        // OWN device — never another paired device's row. The local machine
+        // owner (relayClient === false) retains full localhost-equivalent
+        // control. revokeDevice deletes purely by id (no ownership check in
+        // the service layer), so the gate has to live here at the dispatch
+        // tier; otherwise delegateToRoute("DELETE", ...) bypasses both the
+        // localhostOnly and authMiddleware guards via c.env.relayBridged.
+        if (context.relayClient && deviceId !== context.deviceId) {
+          throw new Error(
+            "Relay clients can only revoke their own device; ask the local owner to revoke other devices from the desktop app."
+          );
+        }
         return delegateToRoute(
           "DELETE",
           `/api/remote-auth/devices/${encodeURIComponent(deviceId)}`

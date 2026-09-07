@@ -19,6 +19,8 @@ export type RequestResourceName = (typeof REQUEST_RESOURCES)[number];
 
 export interface RequestContext {
   relayClient: boolean;
+  /** The caller's paired-device id, or null for local/unaffiliated connections. */
+  deviceId?: string | null;
 }
 
 /**
@@ -96,7 +98,25 @@ export async function runRequest(
         });
       })
       .with("recentProjects", () => delegateToRoute("GET", "/api/onboarding/recent-projects"))
-      .with("pairedDevices", () => delegateToRoute("GET", "/api/remote-auth/devices"))
+      .with("pairedDevices", async () => {
+        // Relay ("virtual") paired devices can only see their own device — the
+        // full pairedDevices list is the means by which a guest would obtain
+        // other devices' ids, which the bypassed localhostOnly guard would let
+        // them revoke. The local owner (relayClient === false) sees all rows
+        // exactly as before, via the existing localhost-only route.
+        //
+        // `remote-auth.service` is loaded lazily here so the dispatcher does
+        // not eagerly pull its transitive `settings.service` (which reads
+        // `DB_PATH` at module load) into every import graph that touches the
+        // dispatcher — that would require every database mock in the suite to
+        // export `DB_PATH`.
+        if (context.relayClient) {
+          const { getDeviceById } = await import("./remote-auth.service");
+          const own = context.deviceId ? getDeviceById(context.deviceId) : null;
+          return { devices: own ? [own] : [] };
+        }
+        return delegateToRoute("GET", "/api/remote-auth/devices");
+      })
       .with("relayStatus", () => delegateToRoute("GET", "/api/relay/status"))
       .with("simulatorCapabilities", () =>
         getSimulatorCapabilities({ relayClient: context.relayClient })
