@@ -55,8 +55,13 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
         releaseNotes?: string;
         error?: string;
       };
-      if (s.stage === "ready" && s.version) {
-        localStorage.setItem(PENDING_VERSION_KEY, s.version);
+      if (s.stage === "ready") {
+        // Reset the download race-guard: a genuine "ready" (update-downloaded)
+        // means the in-flight download finished. Do NOT persist the pending
+        // version here — a "ready" push could arrive before the download is
+        // genuinely complete (the main-process stage contract must not be
+        // trusted for re-download suppression). The pending version is
+        // recorded in check() only once downloadUpdate() resolves.
         isDownloadingRef.current = false;
       }
       if (s.stage === "error") {
@@ -101,6 +106,13 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
         isDownloadingRef.current = true;
         setState((prev) => ({ ...prev, stage: "downloading" }));
         await window.electronAPI!.downloadUpdate();
+        // Record the staged version only after the download resolves, so a
+        // spurious "ready" push can never suppress a needed download. This is
+        // what subsequent checks use to skip re-downloading a version we have
+        // truly staged.
+        if (result.version) {
+          localStorage.setItem(PENDING_VERSION_KEY, result.version);
+        }
       }
 
       return false;
