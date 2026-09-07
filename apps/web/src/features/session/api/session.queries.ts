@@ -455,11 +455,23 @@ export function useStopSession() {
         session_id: sessionId,
         agent_harness: session?.agent_harness,
       });
-      // Immediate invalidation for snappy UI feedback.
-      // Backend also pushes via WS q:invalidate. React Query deduplicates.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions.detail(sessionId),
-      });
+      // Mac-CLOSED direct lane: `sessions.detail` is the fold's authoritative
+      // projection (status, message_count, context_*). A refetch through the
+      // discovery adapter (`cloudDataAdapter.toSession`) hard-codes zeroed
+      // counts/gauge and would REPLACE that row — dropping the composer's
+      // context indicator to 0% until the next turn's `session.usage`, and
+      // `message_count` until the next agnt snapshot. Hold the invalidation to
+      // the Mac lane, exactly as `mutationFn` holds the cancel: the same
+      // `getDirectSession` signal gates both halves (cancel does NOT unregister
+      // the channel — only the unmount disposer does — so the lane-of-record at
+      // `onSuccess` time is unambiguous). The sidebar's `workspaces.all`
+      // invalidation stays: its key never carries a fold projection, so it
+      // cannot race one.
+      if (!getDirectSession(sessionId)) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.sessions.detail(sessionId),
+        });
+      }
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.all,
       });
