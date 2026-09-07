@@ -3,6 +3,7 @@ import { getAllSettings, saveSetting } from "../services/settings.service";
 import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas";
 import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
+import { invalidateRemoteGateCache } from "../middleware/remote-gate";
 import { checkAuth, isConnected, getAgents } from "../services/agent";
 import {
   getCloudSettingsStatus,
@@ -26,6 +27,7 @@ app.post("/settings", async (c) => {
   saveSetting(key, value);
 
   if (key === "remote_access_enabled") {
+    invalidateRemoteGateCache();
     if (value === true) {
       ensureRelayConnected();
     } else {
