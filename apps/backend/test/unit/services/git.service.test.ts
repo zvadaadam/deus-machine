@@ -143,6 +143,14 @@ describe("pure functions", () => {
     it("returns null for non-string input", () => {
       expect(resolveWorkspaceRelativePath("/workspace", null as unknown as string)).toBeNull();
     });
+
+    it("returns null for an empty workspacePath (prevents cwd-anchored containment bypass)", () => {
+      // withWorkspace stores "" for cloud workspaces; path.resolve("")/realpathSync("")
+      // bottom out at process.cwd() instead of throwing, so "" must be rejected as a root.
+      expect(resolveWorkspaceRelativePath("", "src/file.ts")).toBeNull();
+      expect(resolveWorkspaceRelativePath("", "apps/web/index.html")).toBeNull();
+      expect(resolveWorkspaceRelativePath("", "relative/nested/file.png")).toBeNull();
+    });
   });
 
   describe("getOpenCommand", () => {
