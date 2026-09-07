@@ -24,7 +24,7 @@
  *
  * Two grades of delivery:
  *
- *   live       — the session whose panel is mounted. Everything, deltas
+ *   live       — a session whose messages are observed. Everything, deltas
  *                included, and the page may be seeded before the first fetch
  *                resolves.
  *   background — any other session that already has a cached page. Only the
@@ -36,6 +36,7 @@
  */
 
 import type { QueryClient } from "@tanstack/react-query";
+import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 // The reducer is the one value the renderer takes from the protocol BARREL,
 // because `reduce.ts` imports zod and the package ships no zod-free subpath
 // for it. Everything else here comes from a narrow subpath. See the note in
@@ -52,6 +53,7 @@ import {
   compactionRow,
   findConversationCompaction,
   findConversationMessage,
+  supersededCancellationMarkers,
   turnAccountingRow,
 } from "@shared/conversation-rows";
 import {
@@ -95,8 +97,8 @@ export function createStreamCursor(): SeqCursor {
 
 export interface AgentStreamContext {
   queryClient: QueryClient;
-  /** The session whose panel is mounted — the only one that streams deltas. */
-  activeSessionId: string;
+  /** The observed session being routed; only live consumers stream deltas. */
+  activeSessionId: string | null;
   /** Folded conversation per session; the source of every cache write. */
   folds: Map<string, SessionFold>;
   /** Per-session wire cursor, for gap and reset detection. */
@@ -145,6 +147,56 @@ export function pruneFolds(qc: QueryClient, folds: Map<string, SessionFold>): vo
 }
 
 // ---- Routing ----
+
+/** Adopt the restored fold and project it without replacing optimistic rows. */
+export function hydrateConversation(
+  ctx: AgentStreamContext,
+  snapshot: AgentConversationSnapshot
+): void {
+  const { sessionId, seq, conversation, messageIds } = snapshot;
+  ctx.cursor.seek(sessionId, seq);
+  if (sessionId !== ctx.activeSessionId && !ctx.queryClient.getQueryData(messagesKey(sessionId)))
+    return;
+  ctx.folds.set(sessionId, { state: conversation, dirtyMessages: new Set() });
+  // An older HTTP page cannot overwrite a snapshot delivered on this stream.
+  void ctx.queryClient.cancelQueries({ queryKey: messagesKey(sessionId), exact: true });
+  ctx.queryClient.setQueryData<PaginatedMessages>(
+    messagesKey(sessionId),
+    (old) => old ?? { messages: [], compactions: [], has_older: false, has_newer: false }
+  );
+  const markers = supersededCancellationMarkers(conversation);
+  if (markers.size) {
+    ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
+      old ? { ...old, messages: old.messages.filter((message) => !markers.has(message.id)) } : old
+    );
+  }
+  for (const entry of conversation.timeline) {
+    if (entry.kind === "message") {
+      writeMessage(ctx.queryClient, sessionId, conversation, entry.messageId, { seed: true });
+    } else {
+      writeCompaction(ctx.queryClient, sessionId, conversation, entry.compactionId);
+    }
+  }
+  // Ordering must precede accounting, which targets each turn's last message.
+  commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
+  for (const turn of conversation.turns) {
+    writeTurnAccounting(ctx.queryClient, sessionId, conversation, turn.turnId);
+  }
+  // Accounting may have inserted cancellation markers. Restate their position
+  // and SQLite's seq while leaving a new local prompt after the saved rows.
+  const rank = new Map(messageIds.map((id, index) => [id, index + 1]));
+  commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
+  ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
+    old
+      ? {
+          ...old,
+          messages: old.messages.map((message) =>
+            rank.has(message.id) ? { ...message, seq: rank.get(message.id)! } : message
+          ),
+        }
+      : old
+  );
+}
 
 /** Fold one envelope. The single entry point the hook calls per WS frame. */
 export function routeEnvelope(ctx: AgentStreamContext, envelope: DecodedWireEventEnvelope): void {
@@ -462,7 +514,21 @@ function writeTurnAccounting(
         : old;
     }
 
-    const messages = [...old.messages];
+    const messages = old.messages.map((message, i) =>
+      i !== index &&
+      message.turn_id === turnId &&
+      message.role === "assistant" &&
+      !message.parent_tool_call_id
+        ? {
+            ...message,
+            turn_stop_reason: null,
+            ...(accounting.tokens !== null && message.tokens != null && { tokens: null }),
+            ...(accounting.cost !== null && message.cost != null && { cost: null }),
+            ...(accounting.cancelled_at !== null &&
+              message.cancelled_at != null && { cancelled_at: null }),
+          }
+        : message
+    );
     messages[index] = {
       ...messages[index],
       turn_stop_reason: accounting.turn_stop_reason,

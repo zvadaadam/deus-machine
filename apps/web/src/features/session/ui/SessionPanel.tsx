@@ -13,7 +13,6 @@ import { conversationView } from "../lib/conversationView";
 import type { Message } from "../types";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
 import { CloudEnvSetupChip } from "./CloudEnvSetupChip";
-import { useAgentEvents } from "../hooks/useAgentEvents";
 import { useCloudDirect } from "../hooks/useCloudDirect";
 import { useIsDirectSession } from "../cloud/useIsDirectSession";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
@@ -139,12 +138,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     // WS part events mutate the TanStack Query cache directly. No parallel store,
     // no merge function. One source of truth.
     //
-    // Exactly one lane drives that cache key: the Mac q: fold, or — when
-    // cloud-direct — the browser's own agnt socket. `direct === false`/`true` are
-    // strict, so the unknown beat arms NEITHER. The direct lane's state is kept
-    // so its token/socket failures surface in the transcript instead of showing
-    // an empty, silent conversation.
-    useAgentEvents(direct === false ? sessionId : null);
+    // The shell keeps the backend fold alive even while chat is closed. For
+    // direct sessions, only this agnt socket writes the transcript; both lanes
+    // wait until the session row identifies which one owns it. Keep the direct
+    // lane's failures visible in the transcript.
     const cloudDirectState = useCloudDirect(
       sessionId,
       direct === true,

@@ -20,6 +20,7 @@ import { native } from "@/platform";
 import { ServerOfflinePage } from "@/features/connection";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
+import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
 import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
@@ -37,6 +38,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   // Global listener: fire OS notifications for ALL session events when backgrounded
   useGlobalSessionNotifications();
+  useAgentEvents();
 
   // Global listener: workspace init progress -> invalidate queries on completion
   useWorkspaceInitEvents();

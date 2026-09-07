@@ -18,6 +18,8 @@
 // Ordering matters: persist first, then invalidate, then push.
 
 import { match } from "ts-pattern";
+import type { SessionSnapshotEvent } from "@deus-hq/api";
+import type { RestoredCloudConversation } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
 import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
@@ -28,12 +30,18 @@ import { persistChanges, persistSessionTitle, type WriteResult } from "./persist
 import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
+import { restoreCloudSnapshot } from "./cloud/snapshot";
 
 // ---- Types ----
 
 export interface AgentEventHandler {
   /** Feed one sequenced wire envelope (post-dedupe, in seq order). */
   handle(envelope: DecodedWireEventEnvelope): void;
+  /** Restore durable cloud history without executing historical live effects. */
+  hydrateCloudSnapshot(
+    sessionId: string,
+    snapshot: SessionSnapshotEvent
+  ): RestoredCloudConversation | undefined;
   /**
    * Mirror a turn admission before its quick-ack round-trip, so the handler
    * knows which turn is live when the first envelopes arrive in the same tick
@@ -160,6 +168,30 @@ export function createAgentEventHandler(): AgentEventHandler {
   };
 
   return {
+    hydrateCloudSnapshot(sessionId, snapshot) {
+      const state = stateFor(sessionId);
+      const pending =
+        state.turnId !== undefined &&
+        !state.conversation.turns.some((turn) => turn.turnId === state.turnId) &&
+        snapshot.state.currentTurnId !== state.turnId &&
+        !snapshot.state.turns?.some((turn) => turn.turnId === state.turnId);
+      const result = restoreCloudSnapshot(sessionId, snapshot, pending, state.conversation);
+      if (!result.ok) {
+        console.warn(
+          `[AgentEvent] Cloud history restore failed: session=${sessionId}`,
+          result.error
+        );
+        return;
+      }
+      state.conversation = result.value.conversation;
+      if (!pending) {
+        state.turnId = snapshot.state.currentTurnId ?? undefined;
+        state.errorReported = snapshot.state.status === "error";
+      }
+      invalidate(TURN_END_RESOURCES, { sessionIds: [sessionId], resetMessageCursors: true });
+      return result.value;
+    },
+
     beginTurn(sessionId, turnId, opts = {}) {
       const existing = sessions.get(sessionId);
       if (existing?.turnId !== undefined && !opts.force) return false;
