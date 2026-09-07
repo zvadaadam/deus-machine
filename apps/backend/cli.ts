@@ -274,6 +274,19 @@ async function main() {
     env: { ...process.env, LOG_LEVEL: "info" },
     stdio: ["pipe", "pipe", "pipe"],
   });
+  // Tear the child down on every parent exit path, not only the explicit
+  // proc.kill at the end of main(). A rejection that escapes to main().catch →
+  // process.exit(1) fires "exit" under node+bun; a bare SIGTERM to this parent
+  // uses default termination which does NOT fire "exit", so route it through an
+  // explicit exit(143) so the kill handler runs.
+  process.on("exit", () => {
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      // Already dead — nothing to signal.
+    }
+  });
+  process.on("SIGTERM", () => process.exit(143));
   proc.stderr?.on("data", () => {});
 
   const wsUrl = await new Promise<string>((resolve, reject) => {
