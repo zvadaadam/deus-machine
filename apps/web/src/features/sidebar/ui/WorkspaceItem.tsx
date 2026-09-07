@@ -1,12 +1,12 @@
 import React from "react";
 import { match } from "ts-pattern";
-import { Archive, Cloud, ClockFading, Loader2 } from "lucide-react";
+import { Archive, Cloud, CloudOff, ClockFading, Loader2 } from "lucide-react";
 import NumberFlow from "@number-flow/react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
-import { apiClient } from "@/shared/api/client";
+import { wakeCloudWorkspace } from "@/features/workspace/api/wakeCloudWorkspace";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { useWorkingDuration, formatDuration } from "@/shared/hooks";
@@ -36,33 +36,38 @@ import { WorkspaceStatusMenu } from "./WorkspaceStatusMenu";
  * stats or relative time. Hover swaps meta for the archive button; the
  * slug hides in the row title attribute.
  */
-/**
- * Cloud sandbox liveness dot. The cloud driver mirrors agnt's workspace.state
- * into init_stage (paused/stopped/resuming while the row stays ready), so the
- * icon shows green = online, dimmed = asleep. Click wakes the sandbox and
- * reopens its channel; sending a message also wakes it.
- */
+/** The same presence as the header and panels; only recoverable states offer wake. */
 function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["workspace"] }) {
-  const presence = cloudPresence(workspace.init_stage);
-  if (presence === "waking") {
+  const presence = cloudPresence(workspace);
+  if (presence === "waking" || presence === "provisioning") {
     return <Loader2 className="text-text-muted h-3 w-3 shrink-0 animate-spin" />;
   }
-  const asleep = presence === "asleep";
-  // Web-direct has no wake transport (agnt's resume is secret-key-only,
-  // Mac-backend territory) — a send auto-wakes via the DO, so the icon is a
-  // plain status indicator there, not a control promising a click action.
-  if (isCloudDirectWebMode()) {
+  const description = match(presence)
+    .with("awake", () => "Cloud computer online")
+    .with("asleep", () => `Cloud computer ${workspace.init_stage}`)
+    .with("unavailable", () => "Cloud computer unavailable")
+    .with("error", () => "Cloud computer failed")
+    .exhaustive();
+  const Icon = presence === "error" || presence === "unavailable" ? CloudOff : Cloud;
+  const icon = (
+    <Icon
+      className={cn("h-3 w-3", presence === "awake" ? "text-accent-green" : "text-text-disabled")}
+    />
+  );
+  // Web-direct wakes on send; it has no explicit wake transport.
+  if (isCloudDirectWebMode() || presence === "error") {
     return (
       <span
         title={
-          asleep
-            ? `Cloud computer ${workspace.init_stage} — a message wakes it`
-            : "Cloud computer online"
+          description +
+          (presence === "asleep" || presence === "unavailable"
+            ? " — send a message to wake it"
+            : "")
         }
         aria-label="Cloud workspace status"
         className="flex shrink-0 items-center"
       >
-        <Cloud className={cn("h-3 w-3", asleep ? "text-text-disabled" : "text-accent-green")} />
+        {icon}
       </span>
     );
   }
@@ -71,17 +76,13 @@ function CloudLivenessIcon({ workspace }: { workspace: WorkspaceItemProps["works
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        void apiClient.post(`/workspaces/${workspace.id}/cloud-wake`).catch(() => {});
+        void wakeCloudWorkspace(workspace.id);
       }}
-      title={
-        asleep
-          ? `Cloud computer ${workspace.init_stage} — click to wake (a message also wakes it)`
-          : "Cloud computer online — click to refresh"
-      }
+      title={`${description} — click to ${presence === "awake" ? "refresh" : presence === "unavailable" ? "try again" : "wake"}`}
       aria-label="Cloud workspace status"
       className="flex shrink-0 cursor-pointer items-center"
     >
-      <Cloud className={cn("h-3 w-3", asleep ? "text-text-disabled" : "text-accent-green")} />
+      {icon}
     </button>
   );
 }
@@ -163,16 +164,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         .with("session", () => "Finalizing...")
         .otherwise(() => "Setting up...");
     }
-    // 'error' covers a failed provision AND a sandbox that died later, so the
-    // copy must not claim it was the setup. A non-empty init_stage is not
-    // proof of that on its own — the driver also parks paused/stopped/
-    // resuming there — so ask the shared vocabulary instead.
-    if (isFailed) {
-      if (workspace.kind !== "cloud") return "Failed";
-      const stillProvisioning =
-        Boolean(workspace.init_stage) && cloudPresence(workspace.init_stage) === "awake";
-      return stillProvisioning ? "Cloud setup failed" : "Computer failed";
-    }
+    if (isFailed) return workspace.kind === "cloud" ? "Computer failed" : "Failed";
     if (isSetupRunning) return "Installing...";
     if (isSetupFailed) return "Setup failed";
     return (

@@ -11287,7 +11287,7 @@
                       "id": "dUrry",
                       "name": "Meta",
                       "fill": "$accent-red-muted",
-                      "content": "Cloud setup failed",
+                      "content": "Computer failed",
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-xs",
                       "fontWeight": "normal"
@@ -14702,6 +14702,117 @@
                   "fontWeight": "500"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "P40gk",
+              "name": "Unavailable — retry wake",
+              "cornerRadius": "$radius-full",
+              "stroke": "$border-strong",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 4,
+              "padding": [
+                1,
+                6
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "V4EZe3",
+                  "name": "i",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "cloud-off",
+                  "library": "lucide",
+                  "fill": "$text-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "iOplu",
+                  "name": "Asleep",
+                  "fill": "$text-muted",
+                  "content": "Unavailable",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Ti14M",
+              "name": "Failed — no wake affordance",
+              "cornerRadius": "$radius-full",
+              "stroke": "$border-strong",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 4,
+              "padding": [
+                1,
+                6
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "xNSXP",
+                  "name": "i",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "cloud-off",
+                  "library": "lucide",
+                  "fill": "$text-tertiary"
+                },
+                {
+                  "type": "text",
+                  "id": "oY04n",
+                  "name": "Cloud",
+                  "fill": "$text-tertiary",
+                  "content": "Failed",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "FxHVY",
+              "name": "Setting up — initial provision",
+              "cornerRadius": "$radius-full",
+              "stroke": "$border-strong",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 4,
+              "padding": [
+                1,
+                6
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "M8q8Hz",
+                  "name": "i",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "loader",
+                  "library": "lucide",
+                  "fill": "$text-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "bm4uS",
+                  "name": "Waking",
+                  "fill": "$text-muted",
+                  "content": "Setting up",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "500"
+                }
+              ]
             }
           ]
         },
@@ -14709,10 +14820,12 @@
           "type": "text",
           "id": "lrvfG",
           "x": 730,
-          "y": 352,
+          "y": 440,
           "name": "WorkspaceHeader cloud chip · solid = online,",
           "fill": "$text-disabled",
-          "content": "WorkspaceHeader cloud chip · solid = online, dashed = asleep/waking",
+          "textGrowth": "fixed-width",
+          "width": 330,
+          "content": "WorkspaceHeader · Unavailable retries a failed wake. Failed is a workspace error; no wake button. Setting up and Waking show a spinner.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -16902,7 +17015,7 @@
       },
       "clip": true,
       "width": 1100,
-      "height": 920,
+      "height": 960,
       "fill": "$bg-base",
       "cornerRadius": "$radius-2xl",
       "layout": "none",
@@ -19159,13 +19272,149 @@
               ]
             },
             {
+              "type": "frame",
+              "id": "ImMS0",
+              "name": "Failed wake — retry",
+              "width": 244,
+              "height": 32,
+              "cornerRadius": "$radius-lg",
+              "gap": 12,
+              "padding": [
+                0,
+                12
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "eqJbz",
+                  "name": "Main",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "utb77",
+                      "name": "git-branch",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "git-branch",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "E0m3CK",
+                      "name": "aquila",
+                      "fill": "$text-tertiary",
+                      "content": "phoenix",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.14
+                    },
+                    {
+                      "type": "icon",
+                      "id": "Z39VP",
+                      "name": "cloud",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "cloud-off",
+                      "library": "lucide",
+                      "fill": "$text-disabled"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "QwMME",
+                  "name": "asleep",
+                  "fill": "$text-disabled",
+                  "content": "unavailable",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-2xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "yoffU",
+              "name": "Workspace error — no wake",
+              "width": 244,
+              "height": 32,
+              "cornerRadius": "$radius-lg",
+              "gap": 12,
+              "padding": [
+                0,
+                12
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "qLSlx",
+                  "name": "Main",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "aWD01",
+                      "name": "git-branch",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "git-branch",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "iixA8",
+                      "name": "aquila",
+                      "fill": "$text-tertiary",
+                      "content": "icarus",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.14
+                    },
+                    {
+                      "type": "icon",
+                      "id": "XT4cn",
+                      "name": "cloud",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "cloud-off",
+                      "library": "lucide",
+                      "fill": "$text-disabled"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "ci8hj",
+                  "name": "asleep",
+                  "fill": "$accent-red-muted",
+                  "content": "Computer failed",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-2xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
               "type": "text",
               "id": "gGcIj",
               "name": "note",
               "fill": "$text-disabled",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "CloudLivenessIcon sits after the name: green = sandbox online, dimmed = paused or stopped, spinner while waking. Clicking it wakes the sandbox.",
+              "content": "Online = green. Paused/stopped = dimmed. Unavailable = failed wake, click to retry. A workspace error stays Failed and has no wake action. Web-direct offers recovery on send.",
               "lineHeight": 1.5,
               "fontFamily": "$font-sans",
               "fontSize": "$text-2xs",
@@ -81252,6 +81501,539 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "NEgOy",
+      "x": 11440,
+      "y": 2880,
+      "name": "30a · States — Cloud availability",
+      "theme": {
+        "mode": "dark"
+      },
+      "width": 1100,
+      "height": 600,
+      "fill": "$bg-base",
+      "cornerRadius": "$radius-2xl",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": 32,
+      "children": [
+        {
+          "type": "text",
+          "id": "JdJEj",
+          "name": "Title",
+          "fill": "$text-primary",
+          "content": "Cloud availability and recovery",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-lg",
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "YipEq",
+          "name": "State contract",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "CloudSandboxGate · shared cloudPresence drives the header, sidebar and panels. A failed wake stays retryable; a workspace error stays a failure.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "e5JR8g",
+          "name": "Recovery states",
+          "width": "fill_container",
+          "height": 365,
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "uXrKY",
+              "name": "Failed wake",
+              "clip": true,
+              "width": "fill_container",
+              "height": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "U2mxL",
+                  "name": "WorkspaceHeader",
+                  "width": "fill_container",
+                  "height": 44,
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "O70LU",
+                      "name": "Workspace title",
+                      "fill": "$text-primary",
+                      "content": "Cloud workspace",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "snz40",
+                      "name": "Unavailable — retry wake",
+                      "cornerRadius": "$radius-full",
+                      "stroke": "$border-strong",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        1,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "h92QfG",
+                          "name": "i",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "cloud-off",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "vaGP8",
+                          "name": "Asleep",
+                          "fill": "$text-muted",
+                          "content": "Unavailable",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MPa6F",
+                  "name": "CloudSandboxGate · Failed wake",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg-base",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 24,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "wTSL5",
+                      "name": "Status icon",
+                      "width": 40,
+                      "height": 40,
+                      "fill": "$bg-muted",
+                      "cornerRadius": "$radius-xl",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "cFtOm",
+                          "name": "cloud-off",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "cloud-off",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "W2q5K",
+                      "name": "Title",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Couldn't wake your computer",
+                      "textAlign": "center",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "hapdG",
+                      "name": "Recovery description",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Try again, or send a message to reconnect.",
+                      "lineHeight": 1.5,
+                      "textAlign": "center",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gDu0h",
+                      "name": "Recovery button",
+                      "fill": "$primary",
+                      "cornerRadius": "$radius-lg",
+                      "padding": [
+                        8,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Ben6c",
+                          "name": "Action",
+                          "fill": "$primary-foreground",
+                          "content": "Try again",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "MwVI8",
+              "name": "Paused or stopped",
+              "clip": true,
+              "width": "fill_container",
+              "height": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "i2HbS",
+                  "name": "WorkspaceHeader",
+                  "width": "fill_container",
+                  "height": 44,
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "j6p7oe",
+                      "name": "Workspace title",
+                      "fill": "$text-primary",
+                      "content": "Cloud workspace",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JWtt5",
+                      "name": "Asleep",
+                      "cornerRadius": "$radius-full",
+                      "stroke": "$border-strong",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        1,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "q7qGn",
+                          "name": "i",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "cloud-off",
+                          "library": "lucide",
+                          "fill": "$text-disabled"
+                        },
+                        {
+                          "type": "text",
+                          "id": "pwqtG",
+                          "name": "Asleep",
+                          "fill": "$text-disabled",
+                          "content": "Asleep",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "HA3Is",
+                  "name": "CloudSandboxGate · Paused or stopped",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg-base",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 24,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "oCbdH",
+                      "name": "Status icon",
+                      "width": 40,
+                      "height": 40,
+                      "fill": "$bg-muted",
+                      "cornerRadius": "$radius-xl",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "d80OaI",
+                          "name": "cloud",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "cloud",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "u1C0FU",
+                      "name": "Title",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "This computer is asleep",
+                      "textAlign": "center",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "llAtY",
+                      "name": "Recovery description",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Wake it to browse files and use the terminal — or just send a message.",
+                      "lineHeight": 1.5,
+                      "textAlign": "center",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K52HC",
+                      "name": "Recovery button",
+                      "fill": "$primary",
+                      "cornerRadius": "$radius-lg",
+                      "padding": [
+                        8,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gWu5q",
+                          "name": "Action",
+                          "fill": "$primary-foreground",
+                          "content": "Wake computer",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "z3VAb",
+              "name": "Workspace failed",
+              "clip": true,
+              "width": "fill_container",
+              "height": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "NoaFP",
+                  "name": "WorkspaceHeader",
+                  "width": "fill_container",
+                  "height": 44,
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "GLN3a",
+                      "name": "Workspace title",
+                      "fill": "$text-primary",
+                      "content": "Cloud workspace",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "LM6so",
+                      "name": "Failed — no wake affordance",
+                      "cornerRadius": "$radius-full",
+                      "stroke": "$border-strong",
+                      "strokeWidth": 1,
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        1,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "z9xNX7",
+                          "name": "i",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "cloud-off",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "zKUFu",
+                          "name": "Cloud",
+                          "fill": "$text-tertiary",
+                          "content": "Failed",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "NbU9k",
+                  "name": "CloudSandboxGate · Workspace failed",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg-base",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 24,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "aN0wf",
+                      "name": "Status icon",
+                      "width": 40,
+                      "height": 40,
+                      "fill": "$bg-muted",
+                      "cornerRadius": "$radius-xl",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "Pzaq8",
+                          "name": "cloud-off",
+                          "width": 20,
+                          "height": 20,
+                          "icon": "cloud-off",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "vI9dR",
+                      "name": "Title",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "This computer failed to start",
+                      "textAlign": "center",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "p0pWr",
+                      "name": "Recovery description",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Provisioning didn't finish. Set up your cloud environment again, or send a message to start a fresh one.",
+                      "lineHeight": 1.5,
+                      "textAlign": "center",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "A6Gn6C",
+          "name": "Recovery behavior",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Retry → Waking → running snapshot lifts the gate. A rejected wake resets its button and shows the existing Sonner error. An HTTP status refresh failure preserves a connected, running computer and its panels.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
         }
       ]
     }

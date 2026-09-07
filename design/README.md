@@ -351,3 +351,12 @@ components — if you change an easing or a duration in code, change it there to
    built from primitives rather than `DS/*` instances.
 6. Keep the numbering and the bands. New screens get the next number in their band; new
    components go on the board they belong to, not loose at the document root.
+
+### Cloud wake recovery
+
+`30a · States — Cloud availability` records `CloudSandboxGate` after a failed wake,
+normal sleep, and a workspace error. `13` includes the corresponding header chips;
+`14` includes sidebar availability examples. All three surfaces derive from
+`features/workspace/lib/cloudPresence.ts`: a ready row with a wake error is
+**Unavailable** with retry; a workspace error remains **Failed**. Successful running
+events lift the gate. A failed HTTP refresh preserves an existing serving connection.

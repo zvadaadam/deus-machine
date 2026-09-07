@@ -1,3 +1,4 @@
+import type { CloudPresence } from "../lib/cloudPresence";
 import { useState, useEffect, useRef } from "react";
 import {
   ArrowUpRight,
@@ -34,7 +35,6 @@ import type { NormalizedTask } from "../api/workspace.service";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
-import { WORKFLOW_STATUS_CONFIG } from "@/features/sidebar/lib/status";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 import { useLastOpenInApp } from "@/shared/hooks/useLastOpenInApp";
 import { fixSetupErrorPrompt, GENERATE_HIVE_JSON } from "@/features/session/lib/sessionPrompts";
@@ -56,10 +56,7 @@ interface WorkspaceHeaderProps {
   onRunTask?: (taskName: string) => void;
   /** Where the files live — 'cloud' renders the sandbox chip. */
   kind?: WorkspaceKind;
-  /** Cloud only: the sandbox is paused/stopped — dim the chip, click wakes it. */
-  cloudAsleep?: boolean;
-  /** Cloud only: a wake is in flight — spinner chip, not clickable. */
-  cloudWaking?: boolean;
+  cloudPresence?: CloudPresence;
   /** Cloud only: manual unpause (the chip is the wake affordance — no separate button). */
   onCloudWake?: () => void;
   /** Compact mode for mobile -- always show hamburger, hide Open button, tighter truncation */
@@ -92,8 +89,7 @@ export function WorkspaceHeader({
   hasManifest,
   onRunTask,
   kind,
-  cloudAsleep,
-  cloudWaking,
+  cloudPresence = "awake",
   onCloudWake,
   mobile,
   automationName,
@@ -103,6 +99,9 @@ export function WorkspaceHeader({
   const sidebarCollapsed = sidebarState === "collapsed";
   const showSidebarToggle = sidebarCollapsed || mobile;
 
+  const cloudPending = cloudPresence === "waking" || cloudPresence === "provisioning";
+  const cloudUnavailable = cloudPresence === "unavailable";
+  const cloudFailed = cloudPresence === "error";
   const subtitle = [repositoryName, branch].filter(Boolean).join(" / ");
 
   return (
@@ -156,39 +155,49 @@ export function WorkspaceHeader({
         )}
 
         {kind === "cloud" &&
-          (cloudWaking ? (
+          (cloudPending ? (
             <span className="text-text-muted border-border-secondary mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Waking
+              {cloudPresence === "provisioning" ? "Setting up" : "Waking"}
             </span>
-          ) : cloudAsleep ? (
+          ) : cloudPresence === "asleep" || cloudUnavailable ? (
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
                 {onCloudWake ? (
                   <button
                     type="button"
                     onClick={onCloudWake}
-                    className="text-text-disabled border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                    className={cn(
+                      "border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none",
+                      cloudUnavailable ? "text-text-muted" : "text-text-disabled"
+                    )}
                   >
                     <CloudOff className="h-3 w-3" />
-                    Asleep
+                    {cloudUnavailable ? "Unavailable" : "Asleep"}
                   </button>
                 ) : (
                   // No wake transport (web-direct): a status, not a control.
                   <span
                     tabIndex={0}
-                    className="text-text-disabled border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
+                    className={cn(
+                      "border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none",
+                      cloudUnavailable ? "text-text-muted" : "text-text-disabled"
+                    )}
                   >
                     <CloudOff className="h-3 w-3" />
-                    Asleep
+                    {cloudUnavailable ? "Unavailable" : "Asleep"}
                   </span>
                 )}
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  {onCloudWake
-                    ? "Computer asleep — click to wake it, or just send a message"
-                    : "Computer asleep — sending a message wakes it"}
+                  {cloudUnavailable
+                    ? onCloudWake
+                      ? "Could not wake the computer — click to try again"
+                      : "Computer unavailable — send a message to try again"
+                    : onCloudWake
+                      ? "Computer asleep — click to wake it, or just send a message"
+                      : "Computer asleep — sending a message wakes it"}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -199,15 +208,21 @@ export function WorkspaceHeader({
                   tabIndex={0}
                   className="text-text-tertiary border-border-secondary focus-visible:ring-ring mr-0.5 flex flex-shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium focus-visible:ring-2 focus-visible:outline-none"
                 >
-                  <CloudIcon className="h-3 w-3" />
-                  Cloud
+                  {cloudFailed ? (
+                    <CloudOff className="h-3 w-3" />
+                  ) : (
+                    <CloudIcon className="h-3 w-3" />
+                  )}
+                  {cloudFailed ? "Failed" : "Cloud"}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 <p className="text-xs">
-                  {isCloudDirectWebMode()
-                    ? "Runs on a cloud computer — files live remotely"
-                    : "Runs on a cloud computer — files live remotely; the Changes tab shows the live diff"}
+                  {cloudFailed
+                    ? "Cloud computer failed — check the environment error"
+                    : isCloudDirectWebMode()
+                      ? "Runs on a cloud computer — files live remotely"
+                      : "Runs on a cloud computer — files live remotely; the Changes tab shows the live diff"}
                 </p>
               </TooltipContent>
             </Tooltip>

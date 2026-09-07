@@ -18,7 +18,7 @@
  */
 
 import { useRef, useCallback, useEffect } from "react";
-import { apiClient } from "@/shared/api/client";
+import { wakeCloudWorkspace } from "@/features/workspace/api/wakeCloudWorkspace";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
@@ -35,7 +35,6 @@ import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { ContentTabBar } from "./ContentTabBar";
 import { isTabVisible, anyContentTabVisible } from "./content-tabs";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import { toast } from "sonner";
 import { PRActions } from "@/features/workspace/ui/PRActions";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { SidebarInset, useSidebar } from "@/components/ui";
@@ -166,15 +165,10 @@ export function MainContent({
   // the header menu doesn't render — WorkspaceHeader gates on the handler.
   const webDirect = isCloudDirectWebMode();
 
-  // Cloud presence — ONE derivation for the desktop and mobile headers, so a
-  // paused sandbox reads "Asleep" on both rather than a plain "Cloud" chip.
-  const cloudAsleep =
-    selectedWorkspace?.kind === "cloud" && cloudPresence(selectedWorkspace.init_stage) === "asleep";
-  const cloudWaking =
-    selectedWorkspace?.kind === "cloud" && cloudPresence(selectedWorkspace.init_stage) === "waking";
+  const cloudState =
+    selectedWorkspace?.kind === "cloud" ? cloudPresence(selectedWorkspace) : undefined;
   const handleCloudWake = useCallback(() => {
-    if (!selectedWorkspaceId) return;
-    void apiClient.post(`/workspaces/${selectedWorkspaceId}/cloud-wake`).catch(() => {});
+    if (selectedWorkspaceId) void wakeCloudWorkspace(selectedWorkspaceId);
   }, [selectedWorkspaceId]);
 
   // Only start watching and querying diffs once the worktree checkout is complete.
@@ -384,8 +378,7 @@ export function MainContent({
                   ? undefined
                   : (status) => statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
               }
-              cloudAsleep={cloudAsleep}
-              cloudWaking={cloudWaking}
+              cloudPresence={cloudState}
               onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
               prStatus={prStatus}
               ghStatus={ghStatus}
@@ -436,8 +429,7 @@ export function MainContent({
                             ? () => uiActions.openAutomations(workspaceAutomation.id)
                             : undefined
                         }
-                        cloudAsleep={cloudAsleep}
-                        cloudWaking={cloudWaking}
+                        cloudPresence={cloudState}
                         onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
                         setupStatus={selectedWorkspace.setup_status}
                         setupError={selectedWorkspace.error_message}

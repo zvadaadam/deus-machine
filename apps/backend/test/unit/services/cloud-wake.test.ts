@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   run: vi.fn(),
   announce: vi.fn(),
   connect: vi.fn(),
+  live: vi.fn(),
+  workspace: { state: "ready", init_stage: null as string | null },
 }));
 vi.mock("@deus-hq/sdk", async (original) => ({
   ...(await original<typeof import("@deus-hq/sdk")>()),
@@ -27,6 +29,7 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   announceCloudEnv: mocks.announce,
   ensureCloudSession: mocks.connect,
+  hasLiveCloudSession: mocks.live,
   getCloudIdentityGeneration: () => 0,
 }));
 vi.mock("../../../src/services/cloud-environment.service", () => ({
@@ -36,7 +39,10 @@ vi.mock("../../../src/services/cloud-environment.service", () => ({
 vi.mock("../../../src/db", () => ({ getRepositoryById: mocks.repository }));
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({
-    prepare: () => ({ run: mocks.run, get: () => ({ last_inline_mint_at: 0 }) }),
+    prepare: (sql: string) => ({
+      run: mocks.run,
+      get: () => (sql.includes("init_stage") ? mocks.workspace : { last_inline_mint_at: 0 }),
+    }),
   }),
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
@@ -49,6 +55,7 @@ import {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.workspace = { state: "ready", init_stage: null };
   clearGithubTokenRefreshFlights();
   mocks.config.mockReturnValue({ apiKey: "test", baseUrl: "https://cloud.test" });
   mocks.repository.mockReturnValue({ git_origin_url: "https://github.com/owner/repo" });
@@ -88,6 +95,57 @@ describe("explicit cloud wake", () => {
     ).toEqual({ ok: false, status: "error" });
     expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
     expect(mocks.connect).not.toHaveBeenCalled();
+  });
+
+  it("preserves a serving computer when its HTTP refresh fails", async () => {
+    mocks.get.mockRejectedValue(new Error("control plane unavailable"));
+    mocks.live.mockReturnValue(true);
+    mocks.resume.mockRejectedValue(new Error("control plane unavailable"));
+    expect(
+      await wakeCloudWorkspaceWithFeedback({
+        id: "ws",
+        provider_workspace_id: "vm",
+        current_session_id: "session",
+      })
+    ).toEqual({ ok: false, status: "running" });
+    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.announce).not.toHaveBeenCalled();
+  });
+
+  it.each(["paused", "stopped", "error", null])(
+    "does not treat an open channel as proof that a %s computer is serving",
+    async (status) => {
+      mocks.get.mockResolvedValue({ status });
+      mocks.workspace.init_stage = status ?? "paused";
+      mocks.live.mockReturnValue(true);
+      mocks.resume.mockRejectedValue(new Error("resume failed"));
+      const expected = status === "paused" || status === "stopped" ? status : "error";
+      expect(
+        await wakeCloudWorkspaceWithFeedback({
+          id: "ws",
+          provider_workspace_id: "vm",
+          current_session_id: "session",
+        })
+      ).toEqual({ ok: false, status: expected });
+      expect(mocks.run).toHaveBeenLastCalledWith(expected, "ws");
+    }
+  );
+
+  it("gates recovery if the previously-serving channel closes during refresh", async () => {
+    mocks.get.mockRejectedValue(new Error("control plane unavailable"));
+    mocks.live.mockReturnValue(true);
+    mocks.resume.mockImplementation(async () => {
+      mocks.live.mockReturnValue(false);
+      throw new Error("resume failed");
+    });
+    expect(
+      await wakeCloudWorkspaceWithFeedback({
+        id: "ws",
+        provider_workspace_id: "vm",
+        current_session_id: "session",
+      })
+    ).toEqual({ ok: false, status: "error" });
+    expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
   });
 });
 
