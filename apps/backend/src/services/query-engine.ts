@@ -10,7 +10,6 @@
 import { match } from "ts-pattern";
 import { getDatabase } from "../lib/database";
 import {
-  getDashboardWorkspaces,
   getStats,
   getSessionsByWorkspaceId,
   getSessionById,
