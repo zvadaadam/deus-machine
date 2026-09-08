@@ -62,13 +62,27 @@ the canvas — read left to right, top to bottom.
   `56` Environment · `57` Experimental · `58` Remote Access
 - `54a`–`54c` and `59`/`59a` are a **proposal, not built** — the settings revamp. `54a` is
   the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
-  14-state matrix, `54c` the four setup flows with every command and failure string from
-  the main process. `59` carries the system behind it — the `cell` row primitive
+  local status matrix. Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.
+  `59` carries the system behind it — the `cell` row primitive
   (leading · trailing · below, hairline inset dividers, no card per row, controls sized to
   their content) and a regrouped nav — and `59a` applies it to General. The primitive is
   lifted from Cursor's own `.cursor-settings-cell`, read out of its app bundle.
   These boards are the file's one deliberate divergence: either implement them or delete
   them. They must not sit here indefinitely.
+- `54d` is the implemented **shared cloud provider accounts** flow in
+  `features/settings/ui/sections/ProviderAccounts.tsx`: API-key creation/replacement,
+  subscription device approval and token setup, named accounts, one default per
+  provider, reconnect, disconnect and error states. Claude offers API keys and
+  personal subscription tokens from `claude setup-token`; Codex offers API keys
+  and ChatGPT device approval. Both support multiple named accounts. The old
+  desktop subscription vaults and imports are removed.
+  `DS/ProviderAccounts` and `DS/ProviderDeviceLogin` map to those two components.
+  Saved-account rows are rendered by the adjacent `ProviderAccountRow.tsx`; it uses
+  the same layout and states shown in `54d`.
+  Board `54` puts cloud accounts before local CLI connections and removes the inert
+  local API-key inputs; `55` shows both provider defaults and links to AI Providers.
+  Hosted web exposes Account and AI Providers, without desktop CLI controls.
+  This feature is implemented on the credentials branch, not yet deployed.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
@@ -319,16 +333,11 @@ in step with it:
   `PlanApprovalOverlay` and `AgentQuestionOverlay`. The marks in this file are those exact
   paths, transcribed with their `viewBox="29 29 42 42"` and bound to a text colour the way
   `currentColor` behaves in code — so a `sparkles` icon in any of those slots is a bug.
-- **Cloud setup counts three steps, and the GitHub one ticks on less than it looks like.**
-  Either subscription satisfies the Agents step now that the sandbox runs
-  `codex-app-server` — Codex counts. But an installed GitHub App only satisfies the repo
-  step when it covers **every** local repo; with one repo missing the step stays open and
-  the header still reads `1/3`, which is why board `55` is drawn that way. Each agent and
-  GitHub row is an accordion — **one open at a time**, chevron rotated 180° when it is.
-  That is why board `55` shows Claude Code open (paste a `claude setup-token`) and the
-  Codex row's own expanded state lives on board `22`: one-click **Sign in with ChatGPT**
-  with a ghost **Import existing** beside it, and the `codex login --device-auth` chip
-  above them as the headless fallback.
+- **Cloud setup counts three steps.** A connected personal default account satisfies
+  the Agents step. Board `55` shows a connected Codex account and links to
+  **Manage accounts** in AI Providers; it has no separate provider token forms.
+  GitHub completes only when a PAT is present or the installed App covers every
+  local repo. The GitHub App and PAT rows remain accordions, one open at a time.
 - **A failed workspace stays in the sidebar.** `SIDEBAR_WORKSPACE_STATE` includes `error`
   precisely so the failure is visible, so the row needs a reason in the meta cell, not a
   red dot: `Computer failed` for a cloud workspace, `Failed` for a local worktree —

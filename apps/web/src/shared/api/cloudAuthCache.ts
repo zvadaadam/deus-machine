@@ -36,8 +36,7 @@ export function applyDeusCloudAuthChange(
   for (const key of [
     ["settings", "cloud"],
     ["settings", "github-app"],
-    ["settings", "claude-subscription"],
-    ["settings", "codex-subscription"],
+    ["settings", "provider-accounts"],
     ["settings", "cloud-environments"],
     ["repo-cloud-environment"],
     ["workspaces"],

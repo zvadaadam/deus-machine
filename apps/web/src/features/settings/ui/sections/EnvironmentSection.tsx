@@ -32,7 +32,8 @@ import {
 import { TaskRow } from "./TaskRow";
 import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
-import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
+import { useProviderAccounts } from "../../api/provider-accounts.queries";
+import { defaultProviderAccount } from "@shared/types/provider-account";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 
 export function EnvironmentSection() {
@@ -40,9 +41,7 @@ export function EnvironmentSection() {
   // Agent-driven environment setup provisions a real cloud workspace, so it
   // needs the lane up: signed in AND holding this device's platform key.
   const cloudSession = useDeusCloudSession();
-  // Shared cache with Settings → Cloud (same key); this section only reads
-  // whether a turn can actually run.
-  const cloudStatus = useCloudSettings();
+  const providerAccounts = useProviderAccounts();
   // A reason, not a boolean — distinct states need distinct next steps.
   // vaultLocked FIRST: with the keyring locked hasPlatformKey reads false
   // too, and "finish device setup" would send the user to redo a setup
@@ -53,19 +52,13 @@ export function EnvironmentSection() {
       ? "Sign in to Deus Cloud first"
       : !cloudSession.data?.hasPlatformKey
         ? "Finish device setup in Settings → Cloud"
-        : !cloudStatus.data
-          ? // Fail CLOSED while unknown: enabling on a fast session read and a
-            // slow settings read provisions a sandbox whose only outcome is an
-            // auth error.
-            cloudStatus.isError
-            ? "Can't reach the Deus backend"
-            : "Checking cloud status…"
-          : !(cloudStatus.data.hasClaudeTurnCredential ?? cloudStatus.data.hasTurnCredential)
-            ? // CLAUDE-scoped, not the full union: this flow pins its turn to a
-              // Claude model, so a codex-only credential would enable a button
-              // whose turn can only fail.
-              "Connect Claude in Settings → Cloud first — setup runs a real agent turn"
-            : null;
+        : providerAccounts.isError
+          ? "Couldn't check your provider accounts — retry in Settings → AI Providers"
+          : !providerAccounts.data
+            ? "Checking provider accounts…"
+            : defaultProviderAccount(providerAccounts.data, "claude")?.status !== "connected"
+              ? "Choose a connected Claude account in Settings → AI Providers — setup runs a real agent turn"
+              : null;
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   // Auto-select first repo

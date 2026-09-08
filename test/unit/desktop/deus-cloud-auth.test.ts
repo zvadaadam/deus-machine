@@ -56,7 +56,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   electronMocks.sentEvents = [];
   electronMocks.userDataDir = await mkdtemp(join(tmpdir(), "deus-cloud-auth-"));
-  process.env.DEUS_MACHINE_CLOUD_URL = "http://cloud.test";
+  process.env.DEUS_MACHINE_CLOUD_URL = "https://cloud.test";
 });
 
 afterEach(async () => {
@@ -239,7 +239,7 @@ describe("desktop Deus Cloud auth flow", () => {
         signedIn: true,
         accountId: "user_test",
         tokenType: "Bearer",
-        cloudUrl: "http://cloud.test",
+        cloudUrl: "https://cloud.test",
       },
     });
 
@@ -263,7 +263,7 @@ describe("desktop Deus Cloud auth flow", () => {
   });
 
   it("rejects overlapping sign-in attempts while login setup is pending", async () => {
-    process.env.DEUS_MACHINE_CLOUD_URL = "http://cloud.test/deus";
+    process.env.DEUS_MACHINE_CLOUD_URL = "https://cloud.test/deus";
     let resolveConfig: (response: Response) => void = () => {};
     const configResponse = new Promise<Response>((resolve) => {
       resolveConfig = resolve;
@@ -322,7 +322,7 @@ describe("desktop Deus Cloud auth flow", () => {
       session: {
         signedIn: true,
         accountId: "user_test",
-        cloudUrl: "http://cloud.test/deus",
+        cloudUrl: "https://cloud.test/deus",
       },
     });
   });

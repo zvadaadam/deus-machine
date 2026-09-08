@@ -16,6 +16,7 @@
  */
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { queryClient } from "@/shared/api/queryClient";
+import { assertSecureCloudUrl } from "@shared/cloud-url";
 export { isCloudDirectWebMode };
 
 const BEARER_KEY = "deus_cloud_session";
@@ -25,13 +26,17 @@ const stripTrailingSlash = (u: string): string => u.replace(/\/$/, "");
 /** The agnt REST/WS origin the browser mints against + connects to. */
 export function resolveAgntBaseUrl(): string {
   const configured = import.meta.env.VITE_AGNT_BASE_URL as string | undefined;
-  return stripTrailingSlash(configured || "https://api.deusmachine.ai");
+  const url = configured || "https://api.deusmachine.ai";
+  assertSecureCloudUrl(url);
+  return stripTrailingSlash(url);
 }
 
 /** The deus-cloud auth origin — the WorkOS `deus-web` login lives here. */
 export function resolveDeusCloudUrl(): string {
   const configured = import.meta.env.VITE_DEUS_CLOUD_URL as string | undefined;
-  return stripTrailingSlash(configured || "https://cloud.deusmachine.ai");
+  const url = configured || "https://cloud.deusmachine.ai";
+  assertSecureCloudUrl(url);
+  return stripTrailingSlash(url);
 }
 
 /** The browser's `deus_cloud_session` bearer, or null when signed out. */

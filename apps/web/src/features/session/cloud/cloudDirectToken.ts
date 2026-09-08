@@ -5,7 +5,7 @@
 // token (+ the agnt base URL). WHERE that token is minted depends on what the
 // client is:
 //
-//   - backend seam — the Mac backend mints it from the org API key
+//   - backend seam — the Mac backend mints it from the signed-in Deus session
 //     (`cloudDirectToken` q: → GET /sessions/:id/cloud-direct-token). The default
 //     whenever a Mac backend is reachable (electron, web-dev, relay).
 //   - WorkOS desktop mint — Electron main mints it from the stored
@@ -61,7 +61,7 @@ export function pickCloudDirectTokenSource(): CloudDirectTokenSource {
   if (override) return override;
   // Fully Mac-closed web build → the browser is the only client, so it mints from
   // its own WorkOS session. Every other build (electron / web-dev / relay) has a
-  // Mac backend and uses the org-key seam.
+  // Mac backend and uses its token seam.
   return isCloudDirectWebMode() ? "workos-web" : "backend";
 }
 

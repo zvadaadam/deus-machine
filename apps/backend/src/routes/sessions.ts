@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { createSessionToken } from "@deus-hq/sdk";
 import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import {
@@ -14,6 +13,7 @@ import {
 } from "../db";
 import { invalidate } from "../services/query-engine";
 import { getCloudConfig } from "../services/agent/cloud/config";
+import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
 import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
 
 /**
@@ -105,10 +105,8 @@ app.post("/sessions/:id/stop", (c) => {
  * The "Mac-up" token seam for Path B (direct-agnt rendering). Mints a
  * session-scoped token so the BROWSER can open this cloud session's agnt
  * WebSocket directly, bypassing this backend's `q:` relay. The desktop backend
- * holds the cloud credentials, so it mints via the SDK's `createSessionToken`
- * (the same token its own socket uses). The fully-Mac-closed variant instead
- * mints from the browser's own `deus_cloud_session` via agnt's `/dashboard`
- * exchange — same engine, different token source.
+ * uses its signed-in Deus session for the same dashboard exchange as hosted
+ * web. Environment-only setups keep the SDK's org-key token path.
  */
 /** The browser renews the direct token at 80% of its hour (48 min); a GitHub
  *  mint older than this at renewal time would expire before the next one. */
@@ -142,12 +140,11 @@ app.get("/sessions/:id/cloud-direct-token", async (c) => {
     }
   }
 
-  const expiresIn = 60 * 60;
-  const { token } = await createSessionToken(session.provider_session_id, {
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    expiresIn,
-  });
+  const { token, expiresIn } = await mintCloudSessionToken(
+    session.provider_session_id,
+    config,
+    60 * 60
+  );
 
   // Belt-and-suspenders: this response carries a session-scoped JWT. Today it's
   // delivered over the `q:` WS (delegateToRoute), so it never becomes a cacheable

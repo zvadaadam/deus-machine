@@ -18,11 +18,20 @@ import { generateUniqueName } from "../workspace.service";
 import type { AutomationWithDetailsRow, RepositoryRow } from "../../db/types";
 import * as platform from "./platform";
 import * as store from "./store";
+import { getProviderAccounts } from "../provider-accounts.service";
+import { defaultProviderAccount } from "@shared/types/provider-account";
+import { getCloudConnectionIdentity } from "../agent/cloud/config";
 
 /** Platform parity: next-fire gaps must be at least 5 minutes apart. */
 export const MIN_FIRE_INTERVAL_MS = 5 * 60 * 1000;
 
 const AUTOMATION_RESOURCES = ["automations", "automation_runs"] as const;
+
+function assertCurrentAccount(identity: string): void {
+  if (getCloudConnectionIdentity() !== identity) {
+    throw new Error("Your Deus account changed. Refresh automations and try again.");
+  }
+}
 
 // ─── Schedule preflight (instant UX errors; the platform re-validates) ───
 
@@ -96,10 +105,11 @@ async function repoIdByEnvName(): Promise<Map<string, string>> {
 }
 
 /** The repo's derived environment, created platform-side when missing. */
-async function ensureRepoEnvironment(repositoryId: string): Promise<string> {
+async function ensureRepoEnvironment(repositoryId: string, identity: string): Promise<string> {
   const repo = repoWithOrigin(repositoryId);
   const origin = httpsOrigin(repo.git_origin_url);
   const info = await getCloudEnvironmentInfo(origin);
+  assertCurrentAccount(identity);
   if (info.lookupFailed) {
     throw new Error("Deus Cloud is unreachable right now — try again in a moment.");
   }
@@ -110,6 +120,7 @@ async function ensureRepoEnvironment(repositoryId: string): Promise<string> {
 // ─── Sync (platform → cache) ─────────────────────────────────
 
 let refreshInFlight: Promise<void> | null = null;
+let cacheIdentity: string | null = null;
 let lastFullRefreshAt = 0;
 /** Bumped by every scoped write (create/update/toggle/delete/refresh(id)) —
  *  a full refresh whose platform snapshot predates it must not replace the
@@ -128,6 +139,15 @@ export function markScopedWrite(): void {
  */
 export async function refreshAutomations(automationId?: string): Promise<void> {
   if (!platform.platformConfigured()) return;
+  const identity = getCloudConnectionIdentity();
+  if (cacheIdentity !== identity) {
+    cacheIdentity = identity;
+    refreshInFlight = null;
+    lastFullRefreshAt = 0;
+    lastScopedWriteAt = 0;
+    store.replaceAutomationsCache([]);
+    invalidate([...AUTOMATION_RESOURCES]);
+  }
 
   if (automationId) {
     const [summary, runs, envMap] = await Promise.all([
@@ -135,6 +155,7 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
       platform.fetchRuns(automationId),
       repoIdByEnvName(),
     ]);
+    if (getCloudConnectionIdentity() !== identity) return;
     const previous = store.getAutomationRaw(automationId);
     store.upsertAutomation(platform.summaryToRow(summary, envMap, previous));
     store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
@@ -145,42 +166,43 @@ export async function refreshAutomations(automationId?: string): Promise<void> {
 
   if (refreshInFlight) return refreshInFlight;
   if (Date.now() - lastFullRefreshAt < FULL_REFRESH_MIN_INTERVAL_MS) return;
-  refreshInFlight = (async () => {
-    try {
-      const snapshotStartedAt = Date.now();
-      const [summaries, envMap] = await Promise.all([
-        platform.fetchAutomations(),
-        repoIdByEnvName(),
-      ]);
-      // A scoped write landed while this list was in flight — its snapshot
-      // is already stale; dropping it beats restoring an old name/status or
-      // resurrecting a deleted row. The next mount/focus refresh converges.
-      if (lastScopedWriteAt > snapshotStartedAt) return;
-      const locals = store.localColumnsById();
-      // Read BEFORE the replace: an automation whose platform last-run moved
-      // has a stale run ledger — the list derives last_run_status from it, so
-      // a new timestamp over an old failed row would show "Failed just now".
-      const prevLastRun = store.lastRunAtById();
-      store.replaceAutomationsCache(
-        summaries.map((summary) => platform.summaryToRow(summary, envMap, locals.get(summary.id)))
-      );
-      const changed = summaries.filter((summary) => {
-        const prev = prevLastRun.get(summary.id);
-        return prev !== undefined && summary.lastRunAt !== null && prev !== summary.lastRunAt;
-      });
-      await Promise.all(
-        changed.map(async (summary) => {
-          const runs = await platform.fetchRuns(summary.id);
-          store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
-        })
-      );
-      lastFullRefreshAt = Date.now();
-      invalidate(changed.length > 0 ? [...AUTOMATION_RESOURCES] : ["automations"]);
-    } finally {
-      refreshInFlight = null;
-    }
+  const refresh = (async () => {
+    const snapshotStartedAt = Date.now();
+    const [summaries, envMap] = await Promise.all([platform.fetchAutomations(), repoIdByEnvName()]);
+    if (getCloudConnectionIdentity() !== identity) return;
+    // A scoped write landed while this list was in flight — its snapshot
+    // is already stale; dropping it beats restoring an old name/status or
+    // resurrecting a deleted row. The next mount/focus refresh converges.
+    if (lastScopedWriteAt > snapshotStartedAt) return;
+    const locals = store.localColumnsById();
+    // Read BEFORE the replace: an automation whose platform last-run moved
+    // has a stale run ledger — the list derives last_run_status from it, so
+    // a new timestamp over an old failed row would show "Failed just now".
+    const prevLastRun = store.lastRunAtById();
+    store.replaceAutomationsCache(
+      summaries.map((summary) => platform.summaryToRow(summary, envMap, locals.get(summary.id)))
+    );
+    const changed = summaries.filter((summary) => {
+      const prev = prevLastRun.get(summary.id);
+      return prev !== undefined && summary.lastRunAt !== null && prev !== summary.lastRunAt;
+    });
+    await Promise.all(
+      changed.map(async (summary) => {
+        const runs = await platform.fetchRuns(summary.id);
+        if (getCloudConnectionIdentity() !== identity) return;
+        store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
+      })
+    );
+    if (getCloudConnectionIdentity() !== identity) return;
+    lastFullRefreshAt = Date.now();
+    invalidate(changed.length > 0 ? [...AUTOMATION_RESOURCES] : ["automations"]);
   })();
-  return refreshInFlight;
+  refreshInFlight = refresh;
+  try {
+    await refresh;
+  } finally {
+    if (refreshInFlight === refresh) refreshInFlight = null;
+  }
 }
 
 /** Boot / credentials-arrived hook: best-effort background mirror. */
@@ -190,6 +212,9 @@ export function initAutomations(): void {
     // serving the previous identity's prompts and run history — list/view
     // stay live app-wide and the agent tool reads the same cache. Runs
     // cascade with their automations.
+    cacheIdentity = null;
+    refreshInFlight = null;
+    lastFullRefreshAt = 0;
     store.replaceAutomationsCache([]);
     invalidate([...AUTOMATION_RESOURCES]);
     return;
@@ -248,20 +273,19 @@ export async function createAutomation(
   input: AutomationInput,
   createdBy: "user" | "agent"
 ): Promise<Automation> {
-  platform.requirePlatform();
+  platform.requireAutomationPlatform();
+  const identity = getCloudConnectionIdentity();
   const valid = validateInput(input);
-  // Scheduling something that can never run is worse than refusing: without a
-  // Claude turn credential every fire fails until auto-pause. (Call-time
-  // import: the settings status lives beside the cloud driver, which imports
-  // this module through the agent service graph.)
-  const { getCloudSettingsStatus } = await import("../cloud-workspace-init.service");
-  const status = await getCloudSettingsStatus();
-  if (!status.hasClaudeTurnCredential) {
+  // Automations currently run Claude. A different provider or an unselected
+  // account cannot make that scheduled turn runnable.
+  const accounts = await getProviderAccounts();
+  if (defaultProviderAccount(accounts, "claude")?.status !== "connected") {
     throw new Error(
-      "Deus Cloud can't run Claude yet — add your Claude subscription or an Anthropic API key under Settings → Cloud, then create the automation."
+      "Choose a connected Claude account under Settings → AI Providers before creating an automation."
     );
   }
-  const environment = await ensureRepoEnvironment(valid.repository_id);
+  const environment = await ensureRepoEnvironment(valid.repository_id, identity);
+  assertCurrentAccount(identity);
   const id = await platform.createPlatformAutomation({
     displayName: valid.name,
     prompt: valid.prompt,
@@ -271,15 +295,18 @@ export async function createAutomation(
     model: valid.model,
     sessionPolicy: valid.session_policy,
   });
+  assertCurrentAccount(identity);
   // Seed the row directly with its provenance — writing a "user"-labelled row
   // first and patching created_by after would broadcast the intermediate
   // state to every subscriber. A fresh automation has no runs to pull.
   try {
     const [summary, envMap] = await Promise.all([platform.fetchAutomation(id), repoIdByEnvName()]);
+    assertCurrentAccount(identity);
     store.upsertAutomation(
       platform.summaryToRow(summary, envMap, { created_by: createdBy, workspace_id: null })
     );
   } catch (err) {
+    assertCurrentAccount(identity);
     // The platform ACCEPTED the create — a transient follow-up read must not
     // report failure (the caller would retry and duplicate). Seed the cache
     // from the validated input; the next refresh reconciles the details.
@@ -315,6 +342,7 @@ export async function updateAutomation(
   id: string,
   input: Partial<AutomationInput>
 ): Promise<Automation> {
+  const identity = getCloudConnectionIdentity();
   const existing = store.getAutomationRaw(id);
   if (!existing) throw new Error("Automation not found.");
 
@@ -322,6 +350,7 @@ export async function updateAutomation(
   // and the cache doesn't carry every field (mcpServers, delivery, overlap) —
   // so patch on top of the platform's CURRENT spec, never a rebuilt one.
   const summary = await platform.fetchAutomation(id);
+  assertCurrentAccount(identity);
   const spec = { ...summary.spec };
 
   const name = input.name?.trim() || (summary.description?.trim() ?? summary.name);
@@ -352,14 +381,17 @@ export async function updateAutomation(
   const retargeted =
     input.repository_id !== undefined && input.repository_id !== existing.repository_id;
   if (retargeted) {
-    spec.environment = await ensureRepoEnvironment(input.repository_id as string);
+    spec.environment = await ensureRepoEnvironment(input.repository_id as string, identity);
   }
 
+  assertCurrentAccount(identity);
   await platform.updatePlatformAutomation(id, { description: name, spec });
+  assertCurrentAccount(identity);
   // Only AFTER the platform accepted the retarget: the held sandbox belongs
   // to the old repo, but a failed update must not strip the provenance link.
   if (retargeted) store.updateLocalColumns(id, { workspace_id: null });
   await refreshAutomations(id);
+  assertCurrentAccount(identity);
   const updated = getAutomation(id);
   if (!updated) throw new Error("Automation not found after update");
   return updated;
@@ -370,18 +402,23 @@ export async function toggleAutomation(
   id: string,
   status: "active" | "paused"
 ): Promise<Automation> {
+  const identity = getCloudConnectionIdentity();
   if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
   if (status === "paused") await platform.pausePlatformAutomation(id);
   else await platform.resumePlatformAutomation(id);
+  assertCurrentAccount(identity);
   await refreshAutomations(id);
+  assertCurrentAccount(identity);
   const updated = getAutomation(id);
   if (!updated) throw new Error("Automation not found after toggle");
   return updated;
 }
 
 export async function deleteAutomation(id: string): Promise<void> {
+  const identity = getCloudConnectionIdentity();
   if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
   await platform.deletePlatformAutomation(id);
+  assertCurrentAccount(identity);
   store.deleteAutomationRow(id);
   markScopedWrite();
   invalidate([...AUTOMATION_RESOURCES]);
@@ -389,9 +426,11 @@ export async function deleteAutomation(id: string): Promise<void> {
 
 /** Manual "Run now" — a platform fire; works on paused automations by design. */
 export async function runAutomationNow(id: string): Promise<string> {
+  const identity = getCloudConnectionIdentity();
   const automation = store.getAutomationRaw(id);
   if (!automation) throw new Error("Automation not found.");
   const { runId, status } = await platform.triggerPlatformAutomation(id, uuidv7());
+  assertCurrentAccount(identity);
   // Seed the ledger row immediately; the detail view's live-run refresh
   // converges it onto the platform truth as the run progresses.
   store.upsertRuns([
@@ -422,13 +461,12 @@ export async function runAutomationNow(id: string): Promise<string> {
  * Adopt a run's sandbox into deus rows so it opens like any cloud workspace:
  * find-or-create the workspace row (by the platform workspace id) and the
  * session row (by the platform session id), point current_session_id at it,
- * and attach the live session channel. Transcript history for runs that fired
- * while deus was closed is a known follow-up (SessionDetail.messages exists
- * platform-side); the live channel + run summary carry v1.
+ * backfill the transcript, and attach the live session channel.
  */
 export async function openAutomationRun(
   runId: string
 ): Promise<{ workspaceId: string; sessionId: string }> {
+  const identity = getCloudConnectionIdentity();
   const run = store.getRun(runId);
   if (!run) throw new Error("Run not found.");
   const automation = store.getAutomationRaw(run.automation_id);
@@ -439,15 +477,16 @@ export async function openAutomationRun(
   // transcript is as stale as an empty one — a message-count gate would
   // freeze it forever. The insert path is idempotent, so backfill always.
   if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
+    if (run.provider_session_id) {
+      await backfillTranscript(run.session_id, run.provider_session_id, identity);
+    }
+    assertCurrentAccount(identity);
     // The user may have archived the adopted workspace since — an archived
     // row is invisible to the workspace queries, so opening the run would
     // select an id the frontend cannot resolve. Resurface it, like the
     // adoption path does.
     if (store.reviveAdoptedWorkspace(run.workspace_id, run.session_id)) {
       invalidate(["workspaces", "stats"]);
-    }
-    if (run.provider_session_id) {
-      await backfillTranscript(run.session_id, run.provider_session_id);
     }
     return { workspaceId: run.workspace_id, sessionId: run.session_id };
   }
@@ -460,6 +499,7 @@ export async function openAutomationRun(
   }
 
   const detail = await platform.fetchSessionDetail(run.provider_session_id);
+  assertCurrentAccount(identity);
   if (!detail.workspaceId) throw new Error("The run's sandbox is gone.");
 
   const { workspaceId, sessionId } = store.adoptRunRows({
@@ -487,7 +527,10 @@ export async function openAutomationRun(
   // Attach the live session channel (call-time import: the driver sits in the
   // agent service graph, which imports this module through the tool dispatch).
   void import("../agent/cloud/driver")
-    .then(({ ensureCloudSession }) => ensureCloudSession(sessionId))
+    .then(({ ensureCloudSession }) => {
+      assertCurrentAccount(identity);
+      return ensureCloudSession(sessionId);
+    })
     .catch((err) => {
       console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
     });
@@ -496,9 +539,14 @@ export async function openAutomationRun(
 }
 
 /** Heal an adopted-but-empty transcript from the platform's stored messages. */
-async function backfillTranscript(deusSessionId: string, providerSessionId: string): Promise<void> {
+async function backfillTranscript(
+  deusSessionId: string,
+  providerSessionId: string,
+  identity: string
+): Promise<void> {
   try {
     const detail = await platform.fetchSessionDetail(providerSessionId);
+    if (getCloudConnectionIdentity() !== identity) return;
     const inserted = store.backfillSessionTranscript(deusSessionId, detail.messages);
     if (inserted > 0) {
       invalidate(["sessions", "session", "messages"], { sessionIds: [deusSessionId] });

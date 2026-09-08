@@ -7,8 +7,6 @@ import { checkAuth, isConnected, getAgents } from "../services/agent";
 import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
-  saveCloudCodexAuth,
-  disconnectCloudCodexAuth,
 } from "../services/cloud-workspace-init.service";
 import { listCloudEnvironments } from "../services/cloud-environment.service";
 import { initAutomations } from "../services/automations";
@@ -77,22 +75,6 @@ app.get("/settings/agent-auth", async (c) => {
 
 app.get("/settings/cloud", async (c) => {
   return c.json(await getCloudSettingsStatus());
-});
-
-// WEB-lane Codex connect/disconnect: the desktop has its own vault+sync
-// path (main process); the web app writes the canonical platform secret
-// directly — which is the only copy cloud turns read on ANY surface.
-app.post("/settings/cloud/codex-auth", async (c) => {
-  const body = (await c.req.json()) as { authJson?: string };
-  const authJson = body.authJson?.trim();
-  if (!authJson) throw new ValidationError("authJson is required");
-  await saveCloudCodexAuth(authJson);
-  return c.json({ ok: true });
-});
-
-app.delete("/settings/cloud/codex-auth", async (c) => {
-  await disconnectCloudCodexAuth();
-  return c.json({ ok: true });
 });
 
 app.post("/settings/cloud/github-token", async (c) => {

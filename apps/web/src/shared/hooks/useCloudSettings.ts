@@ -11,11 +11,7 @@ import { apiClient } from "@/shared/api/client";
 export interface CloudSettings {
   enabled: boolean;
   baseUrl: string | null;
-  hasAnthropicKey: boolean;
   hasGithubToken: boolean;
-  hasTurnCredential?: boolean;
-  hasClaudeTurnCredential?: boolean;
-  hasPlatformCodex?: boolean;
 }
 
 export const CLOUD_SETTINGS_QUERY_KEY = ["settings", "cloud"] as const;

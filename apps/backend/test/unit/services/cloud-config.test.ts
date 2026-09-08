@@ -1,8 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCloudConfig,
+  getCloudIdentitySignal,
+  getDeusCloudSessionConfig,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
+  setCloudIdentityChangedHandler,
 } from "../../../src/services/agent/cloud/config";
 
 const ENV_KEYS = [
@@ -10,8 +13,6 @@ const ENV_KEYS = [
   "AGNT_API_KEY",
   "DEUS_CLOUD_AGNT_URL",
   "AGNT_BASE_URL",
-  "DEUS_CLOUD_ANTHROPIC_KEY",
-  "ANTHROPIC_API_KEY",
   "DEUS_CLOUD_URL",
   "DEUS_CLOUD_ENV",
 ] as const;
@@ -27,6 +28,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setCloudIdentityChangedHandler(() => {});
   for (const key of ENV_KEYS) {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];
@@ -35,6 +37,32 @@ afterEach(() => {
 });
 
 describe("cloud config runtime credentials", () => {
+  it("invalidates on product principal changes, while same-account token renewal retains sockets", () => {
+    const bearer = (sub: string, exp = 1000) =>
+      `header.${Buffer.from(JSON.stringify({ sub, iss: "deus-cloud", exp })).toString("base64url")}.signature`;
+    const changed = vi.fn();
+    setCloudIdentityChangedHandler(changed);
+    setCloudRuntimeCredentials({
+      apiKey: "shared-org-key",
+      orgId: "shared-org",
+      deusCloudSessionToken: bearer("alice"),
+    });
+    changed.mockClear();
+    const signal = getCloudIdentitySignal();
+
+    setCloudRuntimeCredentials({ deusCloudSessionToken: bearer("alice", 2000) });
+    expect(changed).not.toHaveBeenCalled();
+    expect(getCloudIdentitySignal()).toBe(signal);
+    expect(signal.aborted).toBe(false);
+    setCloudRuntimeCredentials({ deusCloudSessionToken: bearer("bob") });
+    expect(changed).toHaveBeenCalledOnce();
+    expect(signal.aborted).toBe(true);
+    expect(getCloudIdentitySignal().aborted).toBe(false);
+    setCloudRuntimeCredentials({ deusCloudSessionToken: null });
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(getCloudConfig()?.apiKey).toBe("shared-org-key");
+  });
+
   it("no env, no runtime → lane disabled (null)", () => {
     expect(getCloudConfig()).toBeNull();
   });
@@ -71,26 +99,36 @@ describe("cloud config runtime credentials", () => {
     expect(getCloudConfig()).toBeNull();
   });
 
-  it("carries the Claude subscription token and strips trailing slash on runtime baseUrl", () => {
-    setCloudRuntimeCredentials({
-      apiKey: "agnt_sk_x",
-      baseUrl: "https://agnt.example/",
-      claudeOauthToken: "sk-ant-oat01-abc",
-    });
-    const config = getCloudConfig();
-    expect(config?.baseUrl).toBe("https://agnt.example");
-    expect(config?.claudeOauthToken).toBe("sk-ant-oat01-abc");
-    // Anthropic API key fallback stays independent of the subscription token.
-    expect(config?.anthropicApiKey).toBeNull();
+  it("strips trailing slash on runtime baseUrl", () => {
+    setCloudRuntimeCredentials({ apiKey: "agnt_sk_x", baseUrl: "https://agnt.example/" });
+    expect(getCloudConfig()?.baseUrl).toBe("https://agnt.example");
   });
 
-  it("partial updates do not disturb other runtime values", () => {
-    setCloudRuntimeCredentials({ apiKey: "agnt_sk_x", claudeOauthToken: "sk-ant-oat01-abc" });
-    setCloudRuntimeCredentials({ anthropicApiKey: "sk-ant-key" });
+  it("partial updates retain the product session and device key", () => {
+    setCloudRuntimeCredentials({ apiKey: "agnt_sk_x", deusCloudSessionToken: "workos-token" });
+    setCloudRuntimeCredentials({ orgId: "org-a" });
     const config = getCloudConfig();
     expect(config?.apiKey).toBe("agnt_sk_x");
-    expect(config?.claudeOauthToken).toBe("sk-ant-oat01-abc");
-    expect(config?.anthropicApiKey).toBe("sk-ant-key");
+    expect(config?.deusCloudSessionToken).toBe("workos-token");
+    expect(config?.orgId).toBe("org-a");
+  });
+
+  it.each(["baseUrl", "deusCloudUrl"] as const)(
+    "rejects an insecure runtime %s before changing the current credentials",
+    (field) => {
+      setCloudRuntimeCredentials({ apiKey: "agnt_sk_device", deusCloudUrl: "https://cloud.test" });
+      const config = getCloudConfig();
+      const signal = getCloudIdentitySignal();
+      expect(() => setCloudRuntimeCredentials({ [field]: "http://cloud.test" })).toThrow(/HTTPS/);
+      expect(getCloudConfig()).toBe(config);
+      expect(signal.aborted).toBe(false);
+    }
+  );
+
+  it("rejects an insecure product environment URL even before VM-key provisioning", () => {
+    process.env.DEUS_CLOUD_URL = "http://cloud.test";
+    expect(getCloudConfig()).toBeNull();
+    expect(() => getDeusCloudSessionConfig()).toThrow(/HTTPS/);
   });
 });
 

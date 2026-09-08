@@ -1,8 +1,7 @@
 // The Path B (direct-agnt) token seam, main-process side.
 //
 // Mints a session-scoped token for a cloud session's agnt socket from the
-// desktop's stored `deus_cloud_session` bearer — the WorkOS-sourced twin of the
-// backend's org-key `cloud-direct-token` endpoint. The bearer NEVER leaves main:
+// desktop's stored `deus_cloud_session` bearer. The bearer NEVER leaves main:
 // the renderer receives only the short-lived session token, exactly as it does
 // from the backend seam, so exposing this IPC does not widen the credential's
 // blast radius.
@@ -15,6 +14,7 @@
 import { ipcMain } from "electron";
 import { getStoredDeusCloudSessionToken } from "./deus-cloud-auth";
 import { resolveAgntBaseUrl } from "./deus-cloud-provision";
+import { exchangeCloudSessionToken } from "../../../shared/cloud-session-token";
 
 export interface DirectTokenResult {
   token: string;
@@ -34,37 +34,16 @@ export async function mintDeusCloudDirectToken(
   if (!bearer) throw new Error("Not signed in to Deus Cloud");
 
   const baseUrl = resolveAgntBaseUrl();
-  // Renderer-supplied id: encode so `../`/`?`/`#` can't steer the authed
-  // request onto a different agnt route.
-  const sessionPath = encodeURIComponent(providerSessionId);
-  const response = await fetch(`${baseUrl}/dashboard/sessions/${sessionPath}/token`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
-    // Empty body — `expires_in` defaults server-side. The exchange is tolerant of
-    // an absent body but rejects malformed JSON, so send a clean `{}`.
-    body: "{}",
+  const { token, expiresIn } = await exchangeCloudSessionToken({
+    baseUrl,
+    sessionId: providerSessionId,
+    bearer,
   });
-
-  if (!response.ok) {
-    // 401 here means the stored session lapsed (it refreshes on its own cadence);
-    // 403 means the account lost membership in the session's org. Either way the
-    // renderer surfaces it as a direct-lane connection error.
-    throw new Error(`Session token exchange failed (${response.status})`);
-  }
-
-  const body = (await response.json().catch(() => ({}))) as {
-    token?: unknown;
-    expires_in?: unknown;
-  };
-  if (typeof body.token !== "string") {
-    throw new Error("Session token exchange returned no token");
-  }
   return {
-    token: body.token,
+    token,
     base_url: baseUrl,
     provider_session_id: providerSessionId,
-    // Fall back to the server's own default lifetime if the field is absent.
-    expires_in: typeof body.expires_in === "number" ? body.expires_in : 60 * 60,
+    expires_in: expiresIn,
   };
 }
 

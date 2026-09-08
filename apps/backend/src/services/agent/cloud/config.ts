@@ -3,24 +3,16 @@
 //
 // Two credential sources, merged: environment variables (dev workflow, read
 // once) and RUNTIME credentials handed over by the desktop main process (the
-// D1 handshake — a per-device key minted after sign-in, tokens saved in
-// Settings). Runtime values win. `null` config = cloud lane disabled with
+// D1 handshake — a per-device key minted after sign-in and its WorkOS session). Runtime values win. `null` config = cloud lane disabled with
 // honest errors at the create/send boundaries.
+
+import { assertSecureCloudUrl } from "@shared/cloud-url";
 
 export interface CloudConfig {
   /** agnt backend base URL (REST + session WebSockets). */
   baseUrl: string;
   /** Organization API key (agnt_sk_*). */
   apiKey: string;
-  /** BYOK Anthropic key for turn execution (proxied sandbox-side, turn-scoped). */
-  anthropicApiKey: string | null;
-  /**
-   * Claude subscription token (`claude setup-token`, sk-ant-oat01-…).
-   * PREFERRED over anthropicApiKey when present — deus picks the per-turn
-   * credential explicitly, so subscription-first is a rule here, not an
-   * env-ordering accident.
-   */
-  claudeOauthToken: string | null;
   /**
    * deus-cloud mint context (per-repo GitHub App installation tokens at
    * provision time). All three or nothing — a partial set disables the mint.
@@ -36,8 +28,6 @@ export interface CloudConfig {
 export interface CloudRuntimeCredentials {
   apiKey?: string | null;
   baseUrl?: string | null;
-  anthropicApiKey?: string | null;
-  claudeOauthToken?: string | null;
   deusCloudUrl?: string | null;
   deusCloudSessionToken?: string | null;
   orgId?: string | null;
@@ -58,6 +48,19 @@ const LOCAL_AGNT_URL = "http://127.0.0.1:8788";
 const LOCAL_DEUS_CLOUD_URL = "http://127.0.0.1:5788";
 const isLocalCloudEnv = (): boolean => process.env.DEUS_CLOUD_ENV === "local";
 
+/** Personal account settings need the WorkOS session even before VM-key provisioning succeeds. */
+export function getDeusCloudSessionConfig() {
+  const deusCloudUrl =
+    runtime.deusCloudUrl ??
+    process.env.DEUS_CLOUD_URL ??
+    (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null);
+  if (deusCloudUrl) assertSecureCloudUrl(deusCloudUrl);
+  return {
+    deusCloudUrl,
+    deusCloudSessionToken: runtime.deusCloudSessionToken ?? null,
+  };
+}
+
 /** Read the cloud config (memoized until credentials change). `null` = lane disabled. */
 export function getCloudConfig(): CloudConfig | null {
   if (cached !== undefined) return cached;
@@ -67,25 +70,17 @@ export function getCloudConfig(): CloudConfig | null {
     cached = null;
     return cached;
   }
+  const baseUrl = (
+    runtime.baseUrl ??
+    process.env.DEUS_CLOUD_AGNT_URL ??
+    process.env.AGNT_BASE_URL ??
+    (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
+  ).replace(/\/$/, "");
+  assertSecureCloudUrl(baseUrl);
   cached = {
-    baseUrl: (
-      runtime.baseUrl ??
-      process.env.DEUS_CLOUD_AGNT_URL ??
-      process.env.AGNT_BASE_URL ??
-      (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
-    ).replace(/\/$/, ""),
+    baseUrl,
     apiKey,
-    anthropicApiKey:
-      runtime.anthropicApiKey ??
-      process.env.DEUS_CLOUD_ANTHROPIC_KEY ??
-      process.env.ANTHROPIC_API_KEY ??
-      null,
-    claudeOauthToken: runtime.claudeOauthToken ?? null,
-    deusCloudUrl:
-      runtime.deusCloudUrl ??
-      process.env.DEUS_CLOUD_URL ??
-      (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null),
-    deusCloudSessionToken: runtime.deusCloudSessionToken ?? null,
+    ...getDeusCloudSessionConfig(),
     orgId: runtime.orgId ?? null,
   };
   return cached;
@@ -102,6 +97,12 @@ export function getCloudConfig(): CloudConfig | null {
  * session channel authenticated as account A.
  */
 let onIdentityChanged: (() => void) | null = null;
+let identityController = new AbortController();
+
+/** Pending HTTP requests and response streams belong to the current cloud identity. */
+export function getCloudIdentitySignal(): AbortSignal {
+  return identityController.signal;
+}
 
 export function setCloudIdentityChangedHandler(handler: () => void): void {
   onIdentityChanged = handler;
@@ -125,13 +126,39 @@ export async function runCloudConnectHook(workspaceId: string): Promise<void> {
   if (beforeConnect) await beforeConnect(workspaceId);
 }
 
+/** Cache invalidation only; the platform still verifies the JWT before granting access. */
+function sessionPrincipal(token: string | undefined): string | null {
+  if (!token) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+    if (typeof claims.sub === "string" && claims.sub)
+      return JSON.stringify([claims.iss, claims.sub]);
+  } catch {
+    /* An unreadable token must still invalidate the previous identity. */
+  }
+  return token;
+}
+
+/** Ordinary bearer renewal keeps the same principal and does not tear down live sockets. */
+export function getCloudConnectionIdentity(
+  config: CloudRuntimeCredentials = getCloudConfig() ?? runtime
+): string {
+  return JSON.stringify([
+    config.apiKey ?? null,
+    config.baseUrl ?? null,
+    config.orgId ?? null,
+    config.deusCloudUrl ?? null,
+    sessionPrincipal(config.deusCloudSessionToken ?? undefined),
+  ]);
+}
+
 export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): void {
-  const identityBefore = `${runtime.apiKey}|${runtime.baseUrl}|${runtime.orgId}`;
+  if (update.baseUrl) assertSecureCloudUrl(update.baseUrl);
+  if (update.deusCloudUrl) assertSecureCloudUrl(update.deusCloudUrl);
+  const identityBefore = getCloudConnectionIdentity();
   for (const key of [
     "apiKey",
     "baseUrl",
-    "anthropicApiKey",
-    "claudeOauthToken",
     "deusCloudUrl",
     "deusCloudSessionToken",
     "orgId",
@@ -141,13 +168,18 @@ export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): voi
     runtime[key] = value === null ? undefined : value;
   }
   cached = undefined;
-  if (`${runtime.apiKey}|${runtime.baseUrl}|${runtime.orgId}` !== identityBefore) {
+  if (getCloudConnectionIdentity() !== identityBefore) {
+    const previous = identityController;
+    identityController = new AbortController();
+    previous.abort(new Error("Your Deus account changed. Try again."));
     onIdentityChanged?.();
   }
 }
 
 /** Test seam: clear the memoized config AND runtime overrides. */
 export function resetCloudConfigForTests(): void {
+  identityController.abort();
+  identityController = new AbortController();
   for (const key of Object.keys(runtime) as (keyof CloudRuntimeCredentials)[]) {
     runtime[key] = undefined;
   }

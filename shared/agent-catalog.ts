@@ -100,9 +100,7 @@ export const AGENT_CONFIGS = {
     label: "Codex",
     thinkingLevels: ["low", "medium", "high", "xhigh"],
     models: [
-      // gpt-5.6-sol is the current Codex flagship (ChatGPT-auth accounts run
-      // it as their default; bare "gpt-5.6" and the -codex variants are not
-      // available under ChatGPT auth — verified live).
+      { model: "gpt-6-astra", label: "GPT-6 Astra", isNew: true },
       { model: "gpt-5.6-sol", label: "GPT-5.6 Sol", isNew: true },
       { model: "gpt-5.5", label: "GPT-5.5" },
       { model: "gpt-5.4", label: "GPT-5.4" },

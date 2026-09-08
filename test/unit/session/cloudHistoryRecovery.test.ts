@@ -33,11 +33,15 @@ vi.mock("../../../apps/backend/src/services/agent/cloud/config", () => ({
   setCloudConnectHook: vi.fn(),
   setCloudIdentityChangedHandler: vi.fn(),
   runCloudConnectHook: vi.fn(),
-  getCloudConfig: () => ({ baseUrl: "http://agnt.test", apiKey: "agnt_test" }),
+  getCloudConfig: () => ({
+    baseUrl: "https://agnt.test",
+    apiKey: "agnt_test",
+    deusCloudSessionToken: "workos-test",
+  }),
+  getCloudConnectionIdentity: () => "history-test",
 }));
 vi.mock("@deus-hq/sdk", () => ({
   createSession: vi.fn(),
-  createSessionToken: vi.fn(async () => ({ token: "test-token" })),
 }));
 vi.mock("../../../apps/backend/src/services/agent/tool-relay", () => ({
   relay: vi.fn(),
@@ -138,7 +142,9 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => Response.json({}))
+      vi.fn(async (url) =>
+        Response.json(String(url).includes("/dashboard/sessions/") ? { token: "test-token" } : {})
+      )
     );
     directory = mkdtempSync(join(tmpdir(), "deus-cloud-history-"));
     db = new Database(join(directory, "history.db"));

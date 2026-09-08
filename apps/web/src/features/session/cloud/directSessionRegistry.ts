@@ -19,10 +19,9 @@
 //
 // Wire contract: agnt's `handleClientCommand` (`message.send` → `postMessage`,
 // `agent.cancel` → `requestCancel`). The frame mirrors the desktop backend's own
-// cloud driver (`services/agent/cloud/driver.ts::startCloudTurn`) with ONE
-// deliberate difference: no credential rides the wire. The browser holds no org
-// key; agnt's session DO resolves it at dispatch (`resolveTurnCredential`, the
-// "phone / Mac-off clients" path), so only the harness + per-turn overrides ship.
+// cloud driver (`services/agent/cloud/driver.ts::startCloudTurn`). Both send only
+// the harness and per-turn preferences; the platform selects the signed-in user's
+// default provider account when admitting the turn.
 
 /** Per-turn overrides the composer offers — never a credential (agnt resolves that). */
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
@@ -76,9 +75,8 @@ export function getDirectSession(sessionId: string): DirectSessionChannel | unde
 /**
  * The `message.send` client command. `idempotencyKey` is the turn id (as the
  * driver does), so an at-least-once socket redelivery replays the same admission
- * instead of minting a second turn. No `apiKey`/`authKind`/`codexAuthJson` —
- * agnt injects the org credential at dispatch; putting one here would both leak it
- * to the browser and be rejected per-turn for codex.
+ * instead of minting a second turn. Provider credentials stay on the platform —
+ * admission selects the signed-in account, and execution resolves its credential.
  */
 export function buildMessageSendFrame(
   prompt: string,

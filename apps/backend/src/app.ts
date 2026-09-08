@@ -19,6 +19,7 @@ import sessionRoutes from "./routes/sessions";
 import repoRoutes from "./routes/repos";
 import agentConfigRoutes from "./routes/agent-config";
 import settingsRoutes from "./routes/settings";
+import providerAccountRoutes from "./routes/provider-accounts";
 import statsRoutes from "./routes/stats";
 import onboardingRoutes from "./routes/onboarding";
 import authRoutes from "./routes/remote-auth";
@@ -47,6 +48,7 @@ export function createApp() {
   app.route("/api", repoRoutes);
   app.route("/api", agentConfigRoutes);
   app.route("/api", settingsRoutes);
+  app.route("/api", providerAccountRoutes);
   app.route("/api", statsRoutes);
   app.route("/api", filesRoutes);
   app.route("/api", browserImportRoutes);

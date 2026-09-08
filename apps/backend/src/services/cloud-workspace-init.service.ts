@@ -20,7 +20,7 @@ import {
   deleteSecret as agntDeleteSecret,
   Environment,
 } from "@deus-hq/sdk";
-import { apiCreateWorkspace } from "@deus-hq/sdk/client";
+import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
@@ -100,36 +100,6 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   );
 
   return { workspaceId, slug };
-}
-
-type CloudRepositoryAuth = { type: "github_app" | "secret" };
-
-/** The installed SDK's public HTTP client supports additive workspace fields. */
-async function createRuntimeWorkspace(
-  options: {
-    baseUrl: string;
-    apiKey: string;
-    workspaceId?: string;
-    environment: string | ReturnType<typeof Environment.from>;
-    checkout?: { branch: string; from: string };
-  },
-  repositoryAuth?: CloudRepositoryAuth
-): Promise<{ id: string; organizationId: string }> {
-  if (!repositoryAuth) return agntCreateWorkspace(options);
-  const { environment, baseUrl, apiKey, ...body } = options;
-  const payload = typeof environment === "string" ? null : environment.toPayload();
-  const { secrets, metadata, ...config } = payload ?? {};
-  const result = await apiCreateWorkspace(
-    { baseUrl, apiKey },
-    {
-      ...body,
-      repositoryAuth,
-      ...(typeof environment === "string"
-        ? { environmentId: environment }
-        : { config, secrets, metadata }),
-    }
-  );
-  return { id: result.workspaceId, organizationId: result.organizationId };
 }
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
@@ -225,15 +195,13 @@ export async function refreshWorkspaceGithubToken(workspace: {
       // restarts a stopped sandbox (chip + send paths) — swallowing its
       // failure reported successful wakes over a sandbox that never moved,
       // and resumes rewriting auth files from a stale map.
-      await createRuntimeWorkspace(
-        {
-          workspaceId: workspace.provider_workspace_id,
-          environment: envInfo.name,
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
-        },
-        repositoryAuth ?? undefined
-      );
+      await agntCreateWorkspace({
+        workspaceId: workspace.provider_workspace_id,
+        environment: envInfo.name,
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        repositoryAuth: repositoryAuth ?? undefined,
+      });
       // A secret write that failed leaves the platform resolving the OLD
       // token: the re-create still restarts a stopped sandbox, but it is no
       // mint — the next connect must try again.
@@ -274,21 +242,23 @@ export async function refreshWorkspaceGithubToken(workspace: {
       stampedAt === 0 || (stampedAt !== null && Date.now() - stampedAt > 55 * 60_000);
     if (!mapProvablyStrippable) return false;
   }
-  await createRuntimeWorkspace(
-    {
-      workspaceId: workspace.provider_workspace_id,
-      // `.simulator()` on BOTH inline recipes (this re-create and the create in
-      // createCloudWorkspace): agnt converges the DO's environment config on
-      // re-create, so a token refresh without it would silently drop the
-      // hosted-device support the workspace was born with.
-      environment: mint.token
-        ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
-        : Environment.from("agnt-base").simulator(),
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    },
-    mint.token ? { type: "github_app" } : mint.definitive ? { type: "secret" } : undefined
-  );
+  await agntCreateWorkspace({
+    workspaceId: workspace.provider_workspace_id,
+    // `.simulator()` on BOTH inline recipes (this re-create and the create in
+    // createCloudWorkspace): agnt converges the DO's environment config on
+    // re-create, so a token refresh without it would silently drop the
+    // hosted-device support the workspace was born with.
+    environment: mint.token
+      ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
+      : Environment.from("agnt-base").simulator(),
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    repositoryAuth: mint.token
+      ? { type: "github_app" }
+      : mint.definitive
+        ? { type: "secret" }
+        : undefined,
+  });
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
   if (generationAtStart === getCloudIdentityGeneration()) {
     markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
@@ -399,7 +369,7 @@ function setInlineMintStamp(
     .run(stamp, workspace.provider_workspace_id);
 }
 
-const githubTokenRefreshes = new Map<string, Promise<CloudRepositoryAuth | null>>();
+const githubTokenRefreshes = new Map<string, Promise<RepositoryAuth | null>>();
 
 /** Explicit wake releases the platform hold; the runtime owns resume and recovery. */
 export async function wakeCloudWorkspaceWithFeedback(workspace: {
@@ -482,129 +452,31 @@ export async function resumeCloudWorkspace(providerWorkspaceId: string): Promise
   });
 }
 
-/** Settings surface: connection + secret status for the Cloud section. */
+/** Connection and repository access; provider accounts have their own personal API. */
 export async function getCloudSettingsStatus(): Promise<{
   enabled: boolean;
   baseUrl: string | null;
-  hasAnthropicKey: boolean;
-  /** A cloud turn can actually run: subscription token or API key present. */
-  hasTurnCredential: boolean;
-  /** A CLAUDE cloud turn can run — gates flows pinned to a Claude model. */
-  hasClaudeTurnCredential: boolean;
-  /** Canonical CODEX_AUTH_JSON exists on the platform — the web app's only
-   *  codex-connected signal (no desktop vault there). */
-  hasPlatformCodex: boolean;
   hasGithubToken: boolean;
 }> {
   const config = getCloudConfig();
-  if (!config) {
-    return {
-      enabled: false,
-      baseUrl: null,
-      hasAnthropicKey: false,
-      hasTurnCredential: false,
-      hasClaudeTurnCredential: false,
-      hasPlatformCodex: false,
-      hasGithubToken: false,
-    };
-  }
+  if (!config) return { enabled: false, baseUrl: null, hasGithubToken: false };
   let hasGithubToken = false;
-  // A second device in the same org may hold NO local Claude token while the
-  // canonical CLAUDE_CODE_OAUTH_TOKEN platform secret exists — the session DO
-  // fills it at dispatch, so turns are runnable and the status must say so.
-  let hasPlatformClaude = false;
-  let hasPlatformCodex = false;
   try {
     for await (const secret of agntListSecrets({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     })) {
-      if (secret.keyName === "CLAUDE_CODE_OAUTH_TOKEN") hasPlatformClaude = true;
-      if (secret.keyName === "CODEX_AUTH_JSON") hasPlatformCodex = true;
-      if (hasGithubToken) continue; // both flags found by scanning the FULL list
-      if (secret.keyName.toLowerCase() !== "github_token") continue;
-      // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
-      // short-lived, environment-scoped `github_token` App mints; counting
-      // those would make Settings claim a personal token is saved when none
-      // is, and mark the repo-access step done off a credential that expires
-      // in an hour.
-      if (secret.appliesToAll === false) continue;
-      // No break: an org-wide github_token yielded BEFORE the Claude entry
-      // must not stop the scan and leave hasPlatformClaude iteration-order
-      // dependent.
-      hasGithubToken = true;
+      // Environment-scoped GitHub App mints expire; only an org-wide token
+      // counts as the user's saved PAT.
+      if (secret.keyName.toLowerCase() === "github_token" && secret.appliesToAll !== false) {
+        hasGithubToken = true;
+        break;
+      }
     }
   } catch (err) {
     console.warn(`[CloudSettings] listSecrets failed: ${err instanceof Error ? err.message : err}`);
   }
-  return {
-    enabled: true,
-    baseUrl: config.baseUrl,
-    hasAnthropicKey: Boolean(config.anthropicApiKey),
-    hasTurnCredential:
-      Boolean(config.claudeOauthToken || config.anthropicApiKey) ||
-      hasPlatformClaude ||
-      hasPlatformCodex,
-    // Claude-only readiness: the environment-setup flow pins its turn to a
-    // Claude model, so its gate must NOT open on a codex-only credential.
-    hasClaudeTurnCredential:
-      Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
-    hasPlatformCodex,
-    hasGithubToken,
-  };
-}
-
-/**
- * WEB-lane Codex connect: validate and store the pasted auth.json as the
- * canonical platform secret. Same validation as the desktop import; unlinked
- * (appliesToAll false) exactly like the desktop sync — turn credentials are
- * resolved per-dispatch by the session DO, never fanned into sandbox env.
- */
-export async function saveCloudCodexAuth(authJson: string): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
-  let parsed: { auth_mode?: string; tokens?: { access_token?: string; refresh_token?: string } };
-  try {
-    parsed = JSON.parse(authJson) as typeof parsed;
-  } catch {
-    throw new Error("That isn't valid JSON — paste the full contents of ~/.codex/auth.json");
-  }
-  if (
-    parsed.auth_mode !== "chatgpt" ||
-    !parsed.tokens?.access_token ||
-    !parsed.tokens?.refresh_token
-  ) {
-    // refresh_token required: an access-token-only paste works until first
-    // expiry, then every cloud turn fails while Settings still reads
-    // Connected off the secret's mere presence.
-    throw new Error(
-      "That auth.json isn't a complete ChatGPT-plan login (needs access AND refresh tokens) — run `codex login` (or `codex login --device-auth` on a headless machine) and paste the full file it writes."
-    );
-  }
-  await agntCreateSecret("CODEX_AUTH_JSON", authJson, {
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-    appliesToAll: false,
-  });
-}
-
-export async function disconnectCloudCodexAuth(): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
-  // deleteSecret is id-addressed; resolve the entry by canonical name first.
-  for await (const secret of agntListSecrets({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-  })) {
-    if (secret.keyName !== "CODEX_AUTH_JSON") continue;
-    const deleted = await agntDeleteSecret(secret.id, {
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    });
-    if (!deleted) throw new Error("The platform did not confirm the delete — try again.");
-    return;
-  }
-  // Nothing to delete = already disconnected; not an error.
+  return { enabled: true, baseUrl: config.baseUrl, hasGithubToken };
 }
 
 /** Store the org github_token secret (unlocks private repos in sandboxes). */
@@ -808,7 +680,7 @@ function refreshEnvironmentGithubTokenOnce(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<CloudRepositoryAuth | null> {
+): Promise<RepositoryAuth | null> {
   // Normalized key: provisioning passes the https form, wake/send pass the
   // raw stored origin — an ssh-form remote would otherwise key two separate
   // flights for the same environment and re-open the delete-vs-write race
@@ -816,7 +688,7 @@ function refreshEnvironmentGithubTokenOnce(
   const key = httpsOrigin(originUrl);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
-  const run: Promise<CloudRepositoryAuth | null> = refreshEnvironmentGithubToken(
+  const run: Promise<RepositoryAuth | null> = refreshEnvironmentGithubToken(
     originUrl,
     environmentId,
     baseUrl,
@@ -848,7 +720,7 @@ async function refreshEnvironmentGithubToken(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<CloudRepositoryAuth | null> {
+): Promise<RepositoryAuth | null> {
   const mint = await mintRepoInstallationToken(originUrl);
   try {
     if (mint.token) {
@@ -914,7 +786,7 @@ async function provisionInBackground(
     let inlineMintStampAtCreate: number | null = null;
     // Named lane: whether the environment-scoped token landed before create —
     // then the connect that follows provisioning has nothing to re-mint.
-    let repositoryAuth: CloudRepositoryAuth | undefined;
+    let repositoryAuth: RepositoryAuth | undefined;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -986,16 +858,14 @@ async function provisionInBackground(
       }
       environment = recipe;
     }
-    const provider = await createRuntimeWorkspace(
-      {
-        baseUrl,
-        apiKey,
-        environment,
-        // New branch off the source — the sandbox's whole life happens here.
-        checkout: { branch: branch.work, from: branch.source },
-      },
-      repositoryAuth
-    );
+    const provider = await agntCreateWorkspace({
+      baseUrl,
+      apiKey,
+      environment,
+      repositoryAuth,
+      // New branch off the source — the sandbox's whole life happens here.
+      checkout: { branch: branch.work, from: branch.source },
+    });
     db.prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
     ).run(provider.id, inlineMintStampAtCreate, workspaceId);

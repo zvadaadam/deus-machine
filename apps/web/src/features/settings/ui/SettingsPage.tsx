@@ -36,9 +36,8 @@ const SECTION_LABELS: Record<string, string> = {
 
 export function SettingsPage() {
   const storedSection = useUIStore((s) => s.activeSettingsSection);
-  // Web-direct: only Account works (there is no Mac settings store) — clamp
-  // whatever section the store remembers; the sidebar lists Account alone.
-  const activeSection = isCloudDirectWebMode() ? "account" : storedSection;
+  const cloudOnly = isCloudDirectWebMode();
+  const activeSection = cloudOnly && storedSection !== "ai" ? "account" : storedSection;
   const closeSettings = useUIStore((s) => s.closeSettings);
   const { theme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
@@ -102,7 +101,7 @@ export function SettingsPage() {
       .with("general", () => <GeneralSection {...sectionProps} theme={theme} setTheme={setTheme} />)
       .with("github", () => <GitHubSection />)
       .with("browser", () => <BrowserSection />)
-      .with("ai", () => <AISection {...sectionProps} />)
+      .with("ai", () => <AISection {...sectionProps} cloudOnly={cloudOnly} />)
       .with("cloud", () => <CloudSection />)
       .with("environment", () => <EnvironmentSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)

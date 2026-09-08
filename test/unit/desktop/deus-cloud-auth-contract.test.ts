@@ -79,4 +79,10 @@ describe("desktop Deus Cloud auth contract", () => {
       "http://localhost:8788"
     );
   });
+
+  it("rejects a product URL that would expose credentials outside localhost", () => {
+    expect(() => resolveDeusCloudUrl({ DEUS_MACHINE_CLOUD_URL: "http://cloud.test" })).toThrow(
+      /HTTPS/
+    );
+  });
 });

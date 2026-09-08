@@ -17,6 +17,7 @@ import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import type { AgentProviderAuth } from "../../types";
 import { readThinkingLevel } from "@shared/protocol";
+import { ProviderAccounts } from "./ProviderAccounts";
 
 function AuthBadge({
   auth,
@@ -33,6 +34,10 @@ function AuthBadge({
     return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
   }
 
+  if (installed === undefined) {
+    return <span className="text-muted-foreground text-xs font-medium">Status unavailable</span>;
+  }
+
   // Not installed at all
   if (installed === false) {
     return (
@@ -45,7 +50,7 @@ function AuthBadge({
 
   if (isAuthenticated) {
     return (
-      <div className="flex items-center gap-1.5 text-emerald-500">
+      <div className="text-accent-green flex items-center gap-1.5">
         <CheckCircle2 className="size-4" />
         <span className="text-xs font-medium">Connected</span>
       </div>
@@ -71,15 +76,21 @@ function openInTerminal(command: string) {
   }
 }
 
-export function AISection({ settings, saveSetting }: SettingsSectionProps) {
-  const agentAuthQuery = useAgentAuth();
-  const claudeAuth = agentAuthQuery.data?.claude;
-  const codexAuth = agentAuthQuery.data?.codex;
-  const agents = agentAuthQuery.data?.agents ?? [];
-  const claudeInstalled = agents.find((a) => a.type === "claude-code")?.installed;
-  const codexInstalled =
-    agents.some((a) => a.type === "codex-app-server" && a.installed) ||
-    agents.some((a) => a.type === "codex-sdk" && a.installed);
+export function AISection({
+  settings,
+  saveSetting,
+  cloudOnly = false,
+}: SettingsSectionProps & { cloudOnly?: boolean }) {
+  const agentAuthQuery = useAgentAuth(!cloudOnly);
+  const authStatus =
+    agentAuthQuery.isError || agentAuthQuery.data?.error ? undefined : agentAuthQuery.data;
+  const claudeAuth = authStatus?.claude;
+  const codexAuth = authStatus?.codex;
+  const agents = authStatus?.agents;
+  const claudeInstalled = agents?.some((a) => a.type === "claude-code" && a.installed);
+  const codexInstalled = agents?.some(
+    (a) => (a.type === "codex-app-server" || a.type === "codex-sdk") && a.installed
+  );
   const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
   const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
 
@@ -115,6 +126,20 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (cloudOnly) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h3 className="text-base font-semibold">AI Providers</h3>
+          <p className="text-text-muted mt-1 text-base">
+            Connect the accounts you use for cloud agents.
+          </p>
+        </div>
+        <ProviderAccounts />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between">
@@ -127,6 +152,7 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Refresh local provider status"
           className="size-8 shrink-0"
           onClick={() => agentAuthQuery.refetch()}
           disabled={agentAuthQuery.isFetching}
@@ -135,9 +161,14 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         </Button>
       </div>
 
-      {/* ================================================================
-          Claude Code
-          ================================================================ */}
+      <ProviderAccounts />
+
+      <div>
+        <h4 className="text-text-primary text-sm font-medium">On this computer</h4>
+        <p className="text-text-muted mt-1 text-sm">
+          Local agents use their own CLI login. Cloud account defaults do not change it.
+        </p>
+      </div>
       <div className="border-border-subtle space-y-4 rounded-lg border p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -184,34 +215,6 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
         </div>
 
         <Separator />
-
-        {/* API Key */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="api-key" className="text-sm">
-              API key
-            </Label>
-            <a
-              href="https://console.anthropic.com/settings/keys"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs transition-colors"
-            >
-              Get key
-              <ExternalLink className="size-3" />
-            </a>
-          </div>
-          <p className="text-muted-foreground text-sm">
-            Used for direct API access. Stored locally on your machine.
-          </p>
-          <Input
-            id="api-key"
-            type="password"
-            defaultValue={settings.anthropic_api_key ?? ""}
-            onBlur={(e) => saveSetting("anthropic_api_key", e.currentTarget.value)}
-            placeholder="sk-ant-api03-..."
-          />
-        </div>
 
         {/* Provider */}
         <div className="space-y-2">
@@ -309,12 +312,16 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
             <p className="text-sm font-medium">Codex</p>
             <p className="text-muted-foreground text-sm">OpenAI</p>
           </div>
-          <div className="flex items-center gap-2">
-            <AuthBadge
-              auth={codexAuth}
-              installed={codexInstalled}
-              isLoading={agentAuthQuery.isLoading}
-            />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {!agentAuthQuery.isLoading && codexInstalled && codexAuth == null ? (
+              <span className="text-text-muted text-xs">Login managed by Codex</span>
+            ) : (
+              <AuthBadge
+                auth={codexAuth}
+                installed={codexInstalled}
+                isLoading={agentAuthQuery.isLoading}
+              />
+            )}
             {!agentAuthQuery.isLoading && codexInstalled === false && (
               <Button
                 variant="outline"
@@ -338,36 +345,6 @@ export function AISection({ settings, saveSetting }: SettingsSectionProps) {
               </Button>
             )}
           </div>
-        </div>
-
-        <Separator />
-
-        {/* OpenAI API Key */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="openai-api-key" className="text-sm">
-              API key
-            </Label>
-            <a
-              href="https://platform.openai.com/api-keys"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs transition-colors"
-            >
-              Get key
-              <ExternalLink className="size-3" />
-            </a>
-          </div>
-          <p className="text-muted-foreground text-sm">
-            Required for Codex. Stored locally on your machine.
-          </p>
-          <Input
-            id="openai-api-key"
-            type="password"
-            defaultValue={settings.openai_api_key ?? ""}
-            onBlur={(e) => saveSetting("openai_api_key", e.currentTarget.value)}
-            placeholder="sk-..."
-          />
         </div>
       </div>
     </div>

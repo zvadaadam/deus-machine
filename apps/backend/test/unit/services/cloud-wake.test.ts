@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   resume: vi.fn(),
   create: vi.fn(),
-  apiCreate: vi.fn(),
   environment: vi.fn(),
   repository: vi.fn(),
   run: vi.fn(),
@@ -21,7 +20,6 @@ vi.mock("@deus-hq/sdk", async (original) => ({
   createWorkspace: mocks.create,
   listSecrets: async function* () {},
 }));
-vi.mock("@deus-hq/sdk/client", () => ({ apiCreateWorkspace: mocks.apiCreate }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
   getCloudConfig: mocks.config,
   setCloudConnectHook: vi.fn(),
@@ -185,11 +183,9 @@ describe("cloud credential provenance", () => {
         named ? { configured: true, environmentId: "env", name: "env-name" } : { configured: false }
       );
       await refreshWorkspaceGithubToken({ repository_id: "repo", provider_workspace_id: "vm" });
-      expect(mocks.apiCreate).not.toHaveBeenCalled();
-      // The standard SDK call omits repositoryAuth, preserving the runtime choice.
-      if (mocks.create.mock.calls.length)
-        expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("repositoryAuth");
       expect(mocks.create).toHaveBeenCalledOnce();
+      // An undefined source is omitted on the wire, preserving the runtime choice.
+      expect(mocks.create.mock.calls[0][0].repositoryAuth).toBeUndefined();
     }
   );
 });

@@ -48,9 +48,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability])
-  // Web-direct has no Mac settings store — every section except Account reads
-  // and writes it, so their controls would optimistically flip and roll back.
-  .filter((item) => !isCloudDirectWebMode() || item.id === "account");
+  // Cloud accounts work without the Mac settings store.
+  .filter((item) => !isCloudDirectWebMode() || item.id === "account" || item.id === "ai");
 
 export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);

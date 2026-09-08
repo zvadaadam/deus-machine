@@ -57,8 +57,6 @@ interface Window {
       session: import("@shared/types").DeusCloudSessionStatus;
       error?: string;
     }>;
-    getClaudeSubscriptionStatus: () => Promise<import("@shared/types").ClaudeSubscriptionResult>;
-    openAgentSetupTerminal: (agentId: string) => Promise<{ ok: boolean; error?: string }>;
     getGithubAppStatus: () => Promise<{
       configured: boolean;
       signedIn: boolean;
@@ -68,14 +66,6 @@ interface Window {
       error?: string;
     }>;
     installGithubApp: () => Promise<{ ok: boolean; error?: string }>;
-    getCodexSubscriptionStatus: () => Promise<import("@shared/types").CodexSubscriptionResult>;
-    importCodexAuth: () => Promise<import("@shared/types").CodexSubscriptionResult>;
-    startCodexLogin: () => Promise<import("@shared/types").CodexSubscriptionResult>;
-    disconnectCodexSubscription: () => Promise<import("@shared/types").CodexSubscriptionResult>;
-    saveClaudeSubscriptionToken: (
-      token: string
-    ) => Promise<import("@shared/types").ClaudeSubscriptionResult>;
-    disconnectClaudeSubscription: () => Promise<import("@shared/types").ClaudeSubscriptionResult>;
     signOutDeusCloud: () => Promise<{
       success: boolean;
       session: import("@shared/types").DeusCloudSessionStatus;
