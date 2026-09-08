@@ -356,7 +356,7 @@ function verifyMachO64Arch(filePath, label, expectedFileArch) {
 
 function verifyExecutableFileFormat(filePath, label, expectedFileFormat, expectedFileArch) {
   const fileOutput = require("node:child_process")
-    .execFileSync("file", [filePath], {
+    .execFileSync("file", ["-L", filePath], {
       encoding: "utf8",
       timeout: 20_000,
       stdio: ["ignore", "pipe", "pipe"],
@@ -642,6 +642,14 @@ function verifyManifestFileEntry(entry, filePath, label, options = {}) {
   }
 }
 
+function codexHelpers(runtimeKey) {
+  return [
+    "codex-runtime/bin/codex-code-mode-host",
+    "codex-runtime/codex-resources/zsh/bin/zsh",
+    ...(runtimeKey?.startsWith("linux-") ? ["codex-runtime/codex-resources/bwrap"] : []),
+  ];
+}
+
 function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options = {}) {
   const runtimeKey = targetArchOrRuntimeKey
     ? String(targetArchOrRuntimeKey).includes("-")
@@ -673,7 +681,7 @@ function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options 
       verifyFileHashes: options.verifyFileHashes,
     });
 
-    for (const tool of ["codex", "claude", "rg", "agent-browser"]) {
+    for (const tool of ["codex", "claude", "rg", "agent-browser", ...codexHelpers(runtimeKey)]) {
       const entry = agentCliManifest.targets.find(
         (candidate) => candidate.runtimeKey === runtimeKey && candidate.tool === tool
       );
@@ -683,6 +691,15 @@ function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options 
       verifyManifestFileEntry(entry, path.join(binDir, tool), `${tool} CLI`, {
         verifyFileHashes: options.verifyFileHashes,
       });
+    }
+    if (!fs.existsSync(path.join(binDir, "codex-runtime", "codex-package.json"))) {
+      throw new Error("Packaged Codex runtime is missing its package metadata");
+    }
+    for (const [alias, entry] of [["codex", "bin/codex"], ["rg", "codex-path/rg"]]) {
+      if (fs.realpathSync(path.join(binDir, alias)) !==
+          fs.realpathSync(path.join(binDir, "codex-runtime", entry))) {
+        throw new Error(`Packaged ${alias} must resolve inside the Codex package`);
+      }
     }
     const ghEntry = ghCliManifest.targets.find(
       (entry) => entry.runtimeKey === runtimeKey && entry.tool === "gh"
@@ -1029,6 +1046,7 @@ async function verifyPackagedAgentClis(context, options = {}) {
     ["Claude CLI", path.join(binDir, "claude")],
     ["Codex ripgrep helper", path.join(binDir, "rg")],
     ["agent-browser CLI", path.join(binDir, "agent-browser")],
+    ...codexHelpers(runtimeKey).map((helper) => [helper, path.join(binDir, helper)]),
   ];
 
   for (const [label, executablePath] of packagedExecutables) {
