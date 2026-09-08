@@ -28,6 +28,7 @@ const server = await createServer({
   root,
   logLevel: "error",
   esbuild: { jsx: "automatic" },
+  optimizeDeps: { entries: [path.join(fixturePath, "entry.tsx")] },
   define: {
     "import.meta.env.VITE_CLOUD_DIRECT": JSON.stringify("1"),
     "import.meta.env.VITE_DEUS_CLOUD_URL": JSON.stringify("https://cloud.test"),
@@ -112,7 +113,8 @@ try {
       vendor: "Anthropic",
       authMethods: ["api_key", "subscription"],
       subscriptionName: "Claude",
-      subscriptionInstructions: "Run this command in your terminal, then paste the token here.",
+      subscriptionInstructions:
+        "Run this command in your terminal, then paste the token here. The token doesn't include your email, so give each account a name you recognize.",
       subscriptionTokenSetup: {
         command: "claude setup-token",
         documentationUrl:
@@ -130,6 +132,8 @@ try {
     },
   ];
   const savedCredentials = [];
+  const accountUpdates = [];
+  let failNextRename = false;
   let failNextList = false;
   const starts = [];
   const cancelled = [];
@@ -200,6 +204,7 @@ try {
       assert(account);
       assert.equal(account.provider, input.provider);
       assert.equal(account.authMethod, input.authMethod);
+      if (input.label !== undefined) account.label = input.label;
       account.status = "connected";
       if (!input.replaceAccountId) accounts.push(account);
       if (!accounts.some((item) => item.id === defaultAccountIds[input.provider]))
@@ -239,7 +244,16 @@ try {
     const account = accounts.find((item) => item.id === suffix.slice(1));
     assert(account);
     if (request.method() === "PATCH") {
-      defaultAccountIds[account.provider] = account.id;
+      const update = toCamelCaseKeys(request.postDataJSON());
+      accountUpdates.push(update);
+      if (update.label !== undefined) {
+        if (failNextRename) {
+          failNextRename = false;
+          return route.fulfill({ status: 503, json: { message: "Temporary rename failure" } });
+        }
+        account.label = update.label;
+      }
+      if (update.isDefault) defaultAccountIds[account.provider] = account.id;
       for (const item of accounts) item.isDefault = item.id === defaultAccountIds[item.provider];
       return json({ account });
     }
@@ -328,6 +342,46 @@ try {
     assert.equal(await claudeToken.inputValue(), "");
   }
   assert.equal(defaultAccountIds.claude, claudeDefault);
+  // Naming a token-only subscription never needs the token again or changes its default.
+  const personalSubscription = claude.getByRole("group", {
+    name: "Claude Code account Personal subscription",
+    exact: true,
+  });
+  const credentialWrites = savedCredentials.length;
+  const updatesBeforeCancel = accountUpdates.length;
+  await personalSubscription.getByRole("button", { name: "Rename account" }).click();
+  await personalSubscription
+    .getByRole("textbox", { name: "Account name", exact: true })
+    .fill("Cancel me");
+  await personalSubscription.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal(accountUpdates.length, updatesBeforeCancel);
+  await personalSubscription.getByRole("button", { name: "Rename account" }).click();
+  const nameInput = personalSubscription.getByRole("textbox", {
+    name: "Account name",
+    exact: true,
+  });
+  assert.equal(await nameInput.inputValue(), "Personal subscription");
+  await nameInput.fill("  ");
+  assert.equal(
+    await personalSubscription.getByRole("button", { name: "Save", exact: true }).isDisabled(),
+    true
+  );
+  await nameInput.fill("  personal@example.com  ");
+  failNextRename = true;
+  await personalSubscription.getByRole("button", { name: "Save", exact: true }).click();
+  await nameInput.waitFor({ state: "visible" });
+  await page.waitForFunction(
+    () => !globalThis.document.querySelector('input[aria-label="Account name"]').disabled
+  );
+  assert.equal(await nameInput.inputValue(), "  personal@example.com  ");
+  await nameInput.press("Enter");
+  await claude
+    .getByRole("group", { name: "Claude Code account personal@example.com", exact: true })
+    .waitFor();
+  assert.deepEqual(accountUpdates.at(-1), { label: "personal@example.com" });
+  assert.equal(savedCredentials.length, credentialWrites);
+  assert.equal(defaultAccountIds.claude, claudeDefault);
+  assert.match(await claude.textContent(), /The token doesn't include your email/);
   const subscriptionRow = claude.getByRole("group", {
     name: "Claude Code account Work subscription",
     exact: true,
@@ -335,6 +389,31 @@ try {
   await subscriptionRow.getByRole("button", { name: "Use by default", exact: true }).click();
   await subscriptionRow.getByText("Default", { exact: true }).waitFor();
   const selectedSubscription = defaultAccountIds.claude;
+  await subscriptionRow.getByRole("button", { name: "Replace token", exact: true }).click();
+  await subscriptionRow.getByRole("button", { name: "Rename account", exact: true }).click();
+  await subscriptionRow
+    .getByRole("textbox", { name: "Account name", exact: true })
+    .fill("Work renamed");
+  await subscriptionRow.getByRole("button", { name: "Save", exact: true }).click();
+  const renamedSubscription = claude.getByRole("group", {
+    name: "Claude Code account Work renamed",
+    exact: true,
+  });
+  await renamedSubscription.waitFor();
+  await claudeToken.fill("sk-ant-oat01-rename-replacement");
+  await claude.getByRole("button", { name: "Save replacement token", exact: true }).click();
+  await claude.getByRole("button", { name: "Connect Claude", exact: true }).waitFor();
+  assert.equal(
+    accounts.find((account) => account.id === selectedSubscription).label,
+    "Work renamed"
+  );
+  assert.equal(savedCredentials.at(-1).label, undefined);
+  await renamedSubscription.getByRole("button", { name: "Rename account", exact: true }).click();
+  await renamedSubscription
+    .getByRole("textbox", { name: "Account name", exact: true })
+    .fill("Work subscription");
+  await renamedSubscription.getByRole("button", { name: "Save", exact: true }).click();
+  await subscriptionRow.waitFor();
   await subscriptionRow.getByRole("button", { name: "Replace token", exact: true }).click();
   assert.equal(
     await claudeToken.evaluate((input) => input === input.ownerDocument.activeElement),
@@ -424,6 +503,7 @@ try {
   await row("Work").getByRole("button", { name: "Reconnect", exact: true }).click();
   await waitForEvent("login-4");
   assert.equal(starts.at(-1).replaceAccountId, "work-added-again");
+  assert.equal(starts.at(-1).label, undefined);
   await events.get("login-4")("error", { message: "Use the original ChatGPT account." });
   await page.getByRole("alert").filter({ hasText: "original ChatGPT" }).waitFor();
   await page.getByRole("button", { name: "Try again", exact: true }).click();

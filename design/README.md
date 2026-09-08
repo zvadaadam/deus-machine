@@ -72,17 +72,18 @@ the canvas — read left to right, top to bottom.
 - `54d` is the implemented **shared cloud provider accounts** flow in
   `features/settings/ui/sections/ProviderAccounts.tsx`: API-key creation/replacement,
   subscription device approval and token setup, named accounts, one default per
-  provider, reconnect, disconnect and error states. Claude offers API keys and
+  provider, rename, reconnect, disconnect and error states. Claude offers API keys and
   personal subscription tokens from `claude setup-token`; Codex offers API keys
   and ChatGPT device approval. Both support multiple named accounts. The old
   desktop subscription vaults and imports are removed.
   `DS/ProviderAccounts` and `DS/ProviderDeviceLogin` map to those two components.
   Saved-account rows are rendered by the adjacent `ProviderAccountRow.tsx`; it uses
   the same layout and states shown in `54d`.
+  Names can be edited without replacing credentials or changing the default.
+  Claude setup tokens do not expose a verified email; the name identifies the account.
   Board `54` puts cloud accounts before local CLI connections and removes the inert
   local API-key inputs; `55` shows both provider defaults and links to AI Providers.
   Hosted web exposes Account and AI Providers, without desktop CLI controls.
-  This feature is implemented on the credentials branch, not yet deployed.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states

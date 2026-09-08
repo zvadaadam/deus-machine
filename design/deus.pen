@@ -78887,17 +78887,49 @@
                           "gap": 4,
                           "children": [
                             {
-                              "type": "text",
-                              "id": "DAUrN",
-                              "name": "Name",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
+                              "type": "frame",
+                              "id": "E9MLHI",
+                              "name": "Account name and rename action",
                               "width": "fill_container",
-                              "content": "Personal   Default",
-                              "lineHeight": 1.5,
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "DAUrN",
+                                  "name": "Name",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Personal   Default",
+                                  "lineHeight": 1.5,
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "P6lWc",
+                                  "name": "Rename account",
+                                  "width": 32,
+                                  "height": 32,
+                                  "cornerRadius": "$radius-lg",
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "Wr5M0",
+                                      "name": "Rename pencil",
+                                      "width": 14,
+                                      "height": 14,
+                                      "icon": "pencil",
+                                      "library": "lucide",
+                                      "fill": "$text-primary"
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "type": "text",
@@ -78994,17 +79026,49 @@
                           "gap": 4,
                           "children": [
                             {
-                              "type": "text",
-                              "id": "N6fiT",
-                              "name": "Name",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
+                              "type": "frame",
+                              "id": "xrB5N",
+                              "name": "Account name and rename action",
                               "width": "fill_container",
-                              "content": "Work",
-                              "lineHeight": 1.5,
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "N6fiT",
+                                  "name": "Name",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Work",
+                                  "lineHeight": 1.5,
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "gGFDU",
+                                  "name": "Rename account",
+                                  "width": 32,
+                                  "height": 32,
+                                  "cornerRadius": "$radius-lg",
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "UBmyl",
+                                      "name": "Rename pencil",
+                                      "width": 14,
+                                      "height": 14,
+                                      "icon": "pencil",
+                                      "library": "lucide",
+                                      "fill": "$text-primary"
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "type": "text",
@@ -79161,7 +79225,7 @@
                           "fill": "$text-muted",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "Run this command in your terminal, sign in to the Claude account you want, then paste the token here. Add each account separately and replace its token when it expires.",
+                          "content": "Run this command in your terminal, sign in to the Claude account you want, then paste the token here. The token doesn't include your email, so give each account a name you recognize. Replace its token when it expires.",
                           "lineHeight": 1.5,
                           "fontFamily": "$font-sans",
                           "fontSize": "$text-xs",
@@ -79329,17 +79393,49 @@
                           "gap": 4,
                           "children": [
                             {
-                              "type": "text",
-                              "id": "HN1WN",
-                              "name": "Name",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
+                              "type": "frame",
+                              "id": "r2LsDC",
+                              "name": "Account name and rename action",
                               "width": "fill_container",
-                              "content": "Personal   Default",
-                              "lineHeight": 1.5,
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "HN1WN",
+                                  "name": "Name",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Personal   Default",
+                                  "lineHeight": 1.5,
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "PRaLX",
+                                  "name": "Rename account",
+                                  "width": 32,
+                                  "height": 32,
+                                  "cornerRadius": "$radius-lg",
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "fZhhv",
+                                      "name": "Rename pencil",
+                                      "width": 14,
+                                      "height": 14,
+                                      "icon": "pencil",
+                                      "library": "lucide",
+                                      "fill": "$text-primary"
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "type": "text",
@@ -79436,17 +79532,49 @@
                           "gap": 4,
                           "children": [
                             {
-                              "type": "text",
-                              "id": "q4eL1K",
-                              "name": "Name",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
+                              "type": "frame",
+                              "id": "X3uoFz",
+                              "name": "Account name and rename action",
                               "width": "fill_container",
-                              "content": "Work",
-                              "lineHeight": 1.5,
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "q4eL1K",
+                                  "name": "Name",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Work",
+                                  "lineHeight": 1.5,
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "roQks",
+                                  "name": "Rename account",
+                                  "width": 32,
+                                  "height": 32,
+                                  "cornerRadius": "$radius-lg",
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "gn2bO",
+                                      "name": "Rename pencil",
+                                      "width": 14,
+                                      "height": 14,
+                                      "icon": "pencil",
+                                      "library": "lucide",
+                                      "fill": "$text-primary"
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "type": "text",
@@ -79812,18 +79940,6 @@
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-sm",
                       "fontWeight": "normal"
-                    },
-                    {
-                      "id": "Isahi",
-                      "type": "ref",
-                      "ref": "YqG8t",
-                      "name": "Work",
-                      "width": 320,
-                      "descendants": {
-                        "E8yhJ5": {
-                          "content": "Work"
-                        }
-                      }
                     },
                     {
                       "id": "t9udIf",
@@ -80229,7 +80345,99 @@
               "fill": "$text-muted",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Claude subscription: rejected tokens are not saved. Replace token keeps the account name and default, clears the input, and invalidates queued turns using the old token. Cancelling leaves the saved account unchanged.",
+              "content": "Claude subscription: rejected tokens are not saved. Replace token keeps the current account name and default, clears the input, and invalidates queued turns using the old token. Rename is a separate label-only action. Cancelling leaves the saved account unchanged.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "So3PI",
+          "name": "Rename saved account",
+          "width": 672,
+          "cornerRadius": "$radius-lg",
+          "stroke": "$border-subtle",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 8,
+          "padding": 16,
+          "children": [
+            {
+              "type": "text",
+              "id": "zTml2",
+              "name": "Rename state caption",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Rename account · saves the name only; does not replace credentials or change the default.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "KWqh0",
+              "name": "Inline name editor",
+              "width": "fill_container",
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "zwhoX",
+                  "type": "ref",
+                  "ref": "YqG8t",
+                  "name": "Account name",
+                  "width": 320,
+                  "descendants": {
+                    "E8yhJ5": {
+                      "content": "Personal Claude"
+                    }
+                  }
+                },
+                {
+                  "id": "UQvkC",
+                  "type": "ref",
+                  "ref": "rg2x2",
+                  "name": "Save name",
+                  "height": 32,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "descendants": {
+                    "z4bI4": {
+                      "content": "Save"
+                    }
+                  }
+                },
+                {
+                  "id": "fypVh",
+                  "type": "ref",
+                  "ref": "WNY4N",
+                  "name": "Cancel rename",
+                  "height": 32,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "descendants": {
+                    "XQbnF": {
+                      "content": "Cancel"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "NUyWE",
+              "name": "Connected subscription status",
+              "fill": "$text-muted",
+              "content": "Claude subscription\n✓ Connected",
               "lineHeight": 1.5,
               "fontFamily": "$font-sans",
               "fontSize": "$text-xs",

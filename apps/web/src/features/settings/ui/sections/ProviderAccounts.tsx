@@ -128,6 +128,7 @@ function ProviderAccountPanel({
   const secretInput = useRef<HTMLInputElement>(null);
   const selected = defaultProviderAccount(data, provider.id);
   const accounts = data.accounts.filter((account) => account.provider === provider.id);
+  const replacingAccount = accounts.find((account) => account.id === replaceAccountId);
   const subscriptionName = provider.subscriptionName ?? provider.name;
   const tokenSetup = provider.subscriptionTokenSetup;
   const readsSecret = method === "api_key" || Boolean(tokenSetup);
@@ -161,18 +162,26 @@ function ProviderAccountPanel({
 
   const action = useMutation({
     retry: false,
-    mutationFn: (change: { kind: "default" | "disconnect"; id: string }) =>
-      change.kind === "default"
-        ? updateProviderAccount(change.id, { isDefault: true })
-        : disconnectProviderAccount(change.id),
+    mutationFn: (
+      change:
+        | { kind: "default" | "disconnect"; id: string }
+        | { kind: "rename"; id: string; label: string }
+    ) =>
+      match(change)
+        .with({ kind: "default" }, ({ id }) => updateProviderAccount(id, { isDefault: true }))
+        .with({ kind: "rename" }, ({ id, label }) => updateProviderAccount(id, { label }))
+        .with({ kind: "disconnect" }, ({ id }) => disconnectProviderAccount(id))
+        .exhaustive(),
     onSuccess: async (_result, change) => {
       if (!mounted.current) return;
       await refresh();
       if (mounted.current)
         toast.success(
-          change.kind === "default"
-            ? `Default ${provider.name} account updated`
-            : `${provider.name} account disconnected`
+          match(change.kind)
+            .with("default", () => `Default ${provider.name} account updated`)
+            .with("rename", () => `${provider.name} account renamed`)
+            .with("disconnect", () => `${provider.name} account disconnected`)
+            .exhaustive()
         );
     },
     onError: (error) => {
@@ -228,7 +237,7 @@ function ProviderAccountPanel({
           provider: provider.id,
           authMethod: method,
           secret: value,
-          ...(label.trim() ? { label: label.trim() } : {}),
+          ...(!replaceAccountId && label.trim() ? { label: label.trim() } : {}),
           ...(replaceAccountId ? { replaceAccountId } : {}),
         },
         current.controller.signal
@@ -272,13 +281,12 @@ function ProviderAccountPanel({
       void startLogin({
         provider: provider.id,
         replaceAccountId: account.id,
-        label: account.label,
       });
       return;
     }
     setMethod(account.authMethod);
     setReplaceAccountId(account.id);
-    setLabel(account.label);
+    setLabel("");
     setSecret("");
     setConnection({ stage: "idle" });
   }
@@ -321,6 +329,7 @@ function ProviderAccountPanel({
             disabled={busy || action.isPending}
             onReconnect={reconnectAccount}
             onDefault={(id) => action.mutate({ kind: "default", id })}
+            onRename={(id, label) => action.mutateAsync({ kind: "rename", id, label })}
             onDisconnect={(id) => action.mutate({ kind: "disconnect", id })}
           />
         ))}
@@ -379,7 +388,7 @@ function ProviderAccountPanel({
             >
               {replaceAccountId ? (
                 <p className="text-text-primary text-sm">
-                  Replace {secretLabel} for {label}
+                  Replace {secretLabel} for {replacingAccount?.label ?? "this account"}
                 </p>
               ) : (
                 provider.authMethods.length > 1 && (
@@ -408,15 +417,17 @@ function ProviderAccountPanel({
                   </div>
                 )
               )}
-              <Input
-                aria-label={`${provider.name} account name`}
-                placeholder="Account name (optional)"
-                maxLength={80}
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                className="max-w-xs"
-                disabled={action.isPending}
-              />
+              {!replaceAccountId && (
+                <Input
+                  aria-label={`${provider.name} account name`}
+                  placeholder="Account name (optional)"
+                  maxLength={80}
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  className="max-w-xs"
+                  disabled={action.isPending}
+                />
+              )}
               {method === "subscription" && tokenSetup && (
                 <div className="space-y-2">
                   <p className="text-text-muted text-xs">{provider.subscriptionInstructions}</p>
