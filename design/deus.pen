@@ -79376,6 +79376,22 @@
                           "gap": 4,
                           "children": [
                             {
+                              "id": "vaiXg",
+                              "type": "ref",
+                              "ref": "Rcfnv",
+                              "name": "Reconnect",
+                              "height": 28,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "descendants": {
+                                "kB8v8": {
+                                  "content": "Reconnect"
+                                }
+                              }
+                            },
+                            {
                               "id": "C5ZA7",
                               "type": "ref",
                               "ref": "Rcfnv",

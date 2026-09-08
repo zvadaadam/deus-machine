@@ -23,8 +23,7 @@ export function ProviderAccountRow({
   const isApiKey = account.authMethod === "api_key";
   const connected = account.status === "connected";
   const replacesToken = !isApiKey && Boolean(provider.subscriptionTokenSetup);
-  const canReconnect =
-    isApiKey || replacesToken || (!connected && provider.authMethods.includes("subscription"));
+  const canReconnect = isApiKey || provider.authMethods.includes("subscription");
   let reconnectLabel = "Reconnect";
   if (isApiKey) reconnectLabel = "Replace key";
   if (replacesToken) reconnectLabel = "Replace token";

@@ -433,8 +433,16 @@ try {
   await events.get("login-5")("connected", { account: work });
   await row("Work").getByText("Connected", { exact: true }).waitFor();
 
-  await page.getByRole("button", { name: "Connect ChatGPT" }).click();
+  // A connected subscription can be renewed without disconnecting its default.
+  await row("Work").getByRole("button", { name: "Reconnect", exact: true }).click();
   await waitForEvent("login-6");
+  assert.equal(starts.at(-1).replaceAccountId, "work-added-again");
+  await events.get("login-6")("connected", { account: work });
+  await row("Work").getByRole("button", { name: "Reconnect", exact: true }).waitFor();
+  assert.equal(defaultAccountIds.codex, "work-added-again");
+
+  await page.getByRole("button", { name: "Connect ChatGPT" }).click();
+  await waitForEvent("login-7");
   await page.evaluate(() => globalThis.switchDeusAccount("user-b"));
   await page.getByRole("button", { name: "Connect ChatGPT", exact: true }).waitFor();
   assert.equal(await row("Personal").count(), 0);
@@ -442,7 +450,7 @@ try {
   assert.equal(await row("API work").count(), 0);
   assert.equal(await claudeRow.count(), 0);
   assert.equal(await page.getByText("ABCD-1234", { exact: true }).count(), 0);
-  await events.get("login-6")("connected", { account: work });
+  await events.get("login-7")("connected", { account: work });
   assert.equal(await row("Work").count(), 0);
   assert.deepEqual(errors, []);
   assert.deepEqual(refWarnings, []);
