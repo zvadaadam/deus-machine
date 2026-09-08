@@ -161,18 +161,26 @@ function ProviderAccountPanel({
 
   const action = useMutation({
     retry: false,
-    mutationFn: (change: { kind: "default" | "disconnect"; id: string }) =>
-      change.kind === "default"
-        ? updateProviderAccount(change.id, { isDefault: true })
-        : disconnectProviderAccount(change.id),
+    mutationFn: (
+      change:
+        | { kind: "default" | "disconnect"; id: string }
+        | { kind: "rename"; id: string; label: string }
+    ) =>
+      match(change)
+        .with({ kind: "default" }, ({ id }) => updateProviderAccount(id, { isDefault: true }))
+        .with({ kind: "rename" }, ({ id, label }) => updateProviderAccount(id, { label }))
+        .with({ kind: "disconnect" }, ({ id }) => disconnectProviderAccount(id))
+        .exhaustive(),
     onSuccess: async (_result, change) => {
       if (!mounted.current) return;
       await refresh();
       if (mounted.current)
         toast.success(
-          change.kind === "default"
-            ? `Default ${provider.name} account updated`
-            : `${provider.name} account disconnected`
+          match(change.kind)
+            .with("default", () => `Default ${provider.name} account updated`)
+            .with("rename", () => `${provider.name} account renamed`)
+            .with("disconnect", () => `${provider.name} account disconnected`)
+            .exhaustive()
         );
     },
     onError: (error) => {
@@ -321,6 +329,7 @@ function ProviderAccountPanel({
             disabled={busy || action.isPending}
             onReconnect={reconnectAccount}
             onDefault={(id) => action.mutate({ kind: "default", id })}
+            onRename={(id, label) => action.mutateAsync({ kind: "rename", id, label })}
             onDisconnect={(id) => action.mutate({ kind: "disconnect", id })}
           />
         ))}
