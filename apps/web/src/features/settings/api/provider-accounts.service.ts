@@ -1,3 +1,4 @@
+import { toCamelCaseKeys, toSnakeCaseKeys } from "@deus-hq/api";
 import type {
   ProviderLogin,
   ProviderLoginOptions,
@@ -14,7 +15,7 @@ import {
   resolveDeusCloudUrl,
 } from "@/features/session/cloud/webCloudDirectConfig";
 
-async function request(path: string, init: RequestInit = {}): Promise<Response> {
+async function request(path: string, init: RequestInit = {}, streaming = false): Promise<Response> {
   const direct = isCloudDirectWebMode();
   const headers = new Headers(init.headers);
   let base: string;
@@ -30,7 +31,10 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
       if (token) headers.set("authorization", `Bearer ${token}`);
     }
   }
-  const response = await fetch(`${base}${path}`, { ...init, headers });
+  const signal = streaming
+    ? init.signal
+    : AbortSignal.any([AbortSignal.timeout(15_000), ...(init.signal ? [init.signal] : [])]);
+  const response = await fetch(`${base}${path}`, { ...init, headers, signal });
   if (!response.ok) {
     if (direct && response.status === 401) handleWebCloudSessionExpired();
     const error = (await response.json().catch(() => null)) as {
@@ -45,7 +49,8 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
 }
 
 export async function listProviderAccounts(signal?: AbortSignal): Promise<ProviderAccounts> {
-  return (await request("", { signal })).json();
+  const response = await request("", { signal });
+  return toCamelCaseKeys(await response.json());
 }
 
 export async function saveProviderAccountSecret(
@@ -55,7 +60,7 @@ export async function saveProviderAccountSecret(
   await request("", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(toSnakeCaseKeys(input)),
     signal,
   });
 }
@@ -64,14 +69,13 @@ export async function startProviderAccountLogin(
   options: ProviderLoginOptions,
   signal: AbortSignal
 ): Promise<ProviderLogin> {
-  return (
-    await request("/logins", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(options),
-      signal,
-    })
-  ).json();
+  const response = await request("/logins", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(toSnakeCaseKeys(options)),
+    signal,
+  });
+  return toCamelCaseKeys(await response.json());
 }
 
 export async function cancelProviderAccountLogin(loginId: string): Promise<void> {
@@ -85,7 +89,7 @@ export async function updateProviderAccount(
   await request(`/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(update),
+    body: JSON.stringify(toSnakeCaseKeys(update)),
   });
 }
 
@@ -98,10 +102,11 @@ export async function waitForProviderAccountLogin(
   loginId: string,
   signal: AbortSignal
 ): Promise<ProviderAccount> {
-  const response = await request(`/logins/${encodeURIComponent(loginId)}/events`, {
-    headers: { accept: "text/event-stream" },
-    signal,
-  });
+  const response = await request(
+    `/logins/${encodeURIComponent(loginId)}/events`,
+    { headers: { accept: "text/event-stream" }, signal },
+    true
+  );
   if (!response.body) throw new Error("Sign-in updates are unavailable. Try again.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

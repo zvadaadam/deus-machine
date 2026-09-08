@@ -72,6 +72,35 @@ describe("exchangeCloudSessionToken", () => {
     );
   });
 
+  it.each(["http://api.agnt", "http://localhost.evil.test", "ftp://localhost"])(
+    "rejects insecure endpoint %s before sending the bearer",
+    async (baseUrl) => {
+      const fetchMock = vi.fn();
+      global.fetch = fetchMock;
+      await expect(
+        exchangeCloudSessionToken({ baseUrl, sessionId: "session-1", bearer: "private-bearer" })
+      ).rejects.toThrow(/HTTPS/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["http://127.0.0.1:8788", "http://localhost:8788", "http://[::1]:8788"])(
+    "allows explicit loopback endpoint %s for local development",
+    async (baseUrl) => {
+      const fetchMock = vi.fn(async () => new Response('{"token":"local-token"}'));
+      global.fetch = fetchMock;
+      await expect(
+        exchangeCloudSessionToken({ baseUrl, sessionId: "session-1", bearer: "local-bearer" })
+      ).resolves.toMatchObject({ token: "local-token" });
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${baseUrl}/dashboard/sessions/session-1/token`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: "Bearer local-bearer" }),
+        })
+      );
+    }
+  );
+
   it.each([null, {}, { token: "" }])("does not return malformed token payload %j", async (body) => {
     global.fetch = vi.fn(async () => new Response(JSON.stringify(body))) as unknown as typeof fetch;
     await expect(

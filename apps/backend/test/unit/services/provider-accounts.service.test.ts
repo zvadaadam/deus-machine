@@ -6,10 +6,19 @@ import {
 } from "../../../src/services/agent/cloud/config";
 
 const fetchMock = vi.fn();
-const accounts = { providers: [], accounts: [], defaultAccountIds: {} };
+const accounts = {
+  providers: [{ id: "claude", authMethods: ["api_key"] }],
+  accounts: [{ id: "personal", authMethod: "api_key", isDefault: true }],
+  defaultAccountIds: { claude: "personal" },
+};
+const wireAccounts = {
+  providers: [{ id: "claude", auth_methods: ["api_key"] }],
+  accounts: [{ id: "personal", auth_method: "api_key", is_default: true }],
+  default_account_ids: { claude: "personal" },
+};
 beforeEach(() => {
   resetCloudConfigForTests();
-  fetchMock.mockReset().mockResolvedValue(new Response(JSON.stringify(accounts)));
+  fetchMock.mockReset().mockResolvedValue(new Response(JSON.stringify(wireAccounts)));
   vi.stubGlobal("fetch", fetchMock);
   setCloudRuntimeCredentials({
     deusCloudUrl: "https://cloud.test",
@@ -40,7 +49,7 @@ describe("personal provider account preflight", () => {
   it("rejects results from the previous account", async () => {
     fetchMock.mockImplementationOnce(async () => {
       setCloudRuntimeCredentials({ deusCloudSessionToken: "workos-b" });
-      return new Response(JSON.stringify(accounts));
+      return new Response(JSON.stringify(wireAccounts));
     });
     await expect(getProviderAccounts()).rejects.toThrow("account changed");
   });

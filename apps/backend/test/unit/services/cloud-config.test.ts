@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCloudConfig,
+  getCloudIdentitySignal,
+  getDeusCloudSessionConfig,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
   setCloudIdentityChangedHandler,
@@ -46,11 +48,16 @@ describe("cloud config runtime credentials", () => {
       deusCloudSessionToken: bearer("alice"),
     });
     changed.mockClear();
+    const signal = getCloudIdentitySignal();
 
     setCloudRuntimeCredentials({ deusCloudSessionToken: bearer("alice", 2000) });
     expect(changed).not.toHaveBeenCalled();
+    expect(getCloudIdentitySignal()).toBe(signal);
+    expect(signal.aborted).toBe(false);
     setCloudRuntimeCredentials({ deusCloudSessionToken: bearer("bob") });
     expect(changed).toHaveBeenCalledOnce();
+    expect(signal.aborted).toBe(true);
+    expect(getCloudIdentitySignal().aborted).toBe(false);
     setCloudRuntimeCredentials({ deusCloudSessionToken: null });
     expect(changed).toHaveBeenCalledTimes(2);
     expect(getCloudConfig()?.apiKey).toBe("shared-org-key");
@@ -104,6 +111,24 @@ describe("cloud config runtime credentials", () => {
     expect(config?.apiKey).toBe("agnt_sk_x");
     expect(config?.deusCloudSessionToken).toBe("workos-token");
     expect(config?.orgId).toBe("org-a");
+  });
+
+  it.each(["baseUrl", "deusCloudUrl"] as const)(
+    "rejects an insecure runtime %s before changing the current credentials",
+    (field) => {
+      setCloudRuntimeCredentials({ apiKey: "agnt_sk_device", deusCloudUrl: "https://cloud.test" });
+      const config = getCloudConfig();
+      const signal = getCloudIdentitySignal();
+      expect(() => setCloudRuntimeCredentials({ [field]: "http://cloud.test" })).toThrow(/HTTPS/);
+      expect(getCloudConfig()).toBe(config);
+      expect(signal.aborted).toBe(false);
+    }
+  );
+
+  it("rejects an insecure product environment URL even before VM-key provisioning", () => {
+    process.env.DEUS_CLOUD_URL = "http://cloud.test";
+    expect(getCloudConfig()).toBeNull();
+    expect(() => getDeusCloudSessionConfig()).toThrow(/HTTPS/);
   });
 });
 

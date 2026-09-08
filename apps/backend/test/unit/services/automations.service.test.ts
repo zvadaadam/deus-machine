@@ -628,6 +628,63 @@ describeWithDb("openAutomationRun", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM workspaces").get()).toEqual({ n: 1 });
   });
 
+  it("does not adopt a late session after the account changes", async () => {
+    sdk.getSession.mockImplementationOnce(async () => {
+      mockGetCloudConfig.mockReturnValue({
+        ...CLOUD_CONFIG,
+        apiKey: "agnt_sk_other",
+        orgId: "org-2",
+      });
+      sdk.listAutomations.mockReturnValue(gen([]));
+      await refreshAutomations();
+      return {
+        workspaceId: "agnt-ws-1",
+        messages: [{ id: "old-account-message", role: "assistant", parts: [] }],
+      };
+    });
+
+    await expect(openAutomationRun("run-1")).rejects.toThrow(/account changed/);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM workspaces").get()).toEqual({ n: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM messages").get()).toEqual({ n: 0 });
+  });
+
+  it("does not backfill or revive an adopted run after the account changes", async () => {
+    const adopted = store.adoptRunRows({
+      runId: "run-1",
+      automationId: "auto-1",
+      repositoryId: "r1",
+      automationName: "Morning PR review",
+      providerSessionId: "run-1",
+      providerWorkspaceId: "agnt-ws-1",
+      newWorkspaceSlug: () => "adopted-run",
+    });
+    db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(adopted.workspaceId);
+    mockInvalidate.mockClear();
+    sdk.getSession.mockImplementationOnce(async () => {
+      mockGetCloudConfig.mockReturnValue({
+        ...CLOUD_CONFIG,
+        apiKey: "agnt_sk_other",
+        orgId: "org-2",
+      });
+      sdk.listAutomations.mockReturnValue(gen([]));
+      await refreshAutomations();
+      return {
+        workspaceId: "agnt-ws-1",
+        messages: [{ id: "old-account-message", role: "assistant", parts: [] }],
+      };
+    });
+
+    await expect(openAutomationRun("run-1")).rejects.toThrow(/account changed/);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM messages").get()).toEqual({ n: 0 });
+    expect(
+      db.prepare("SELECT state FROM workspaces WHERE id = ?").get(adopted.workspaceId)
+    ).toEqual({
+      state: "archived",
+    });
+    expect(mockInvalidate.mock.calls.flatMap(([resources]) => resources)).not.toContain("messages");
+  });
+
   it("refuses when the run has no session or the repo isn't local", async () => {
     store.upsertRuns([
       runSummaryToRow(runFixture({ id: "run-skip", status: "skipped", sessionId: null }) as never),

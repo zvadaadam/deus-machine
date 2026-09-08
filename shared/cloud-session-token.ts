@@ -1,5 +1,7 @@
 // Product session-token exchange shared by hosted web, desktop main, and backend.
 
+import { assertSecureCloudUrl } from "./cloud-url";
+
 export interface ExchangeCloudSessionTokenParams {
   /** agnt dashboard API origin, e.g. `https://api.agnt.dev`. */
   baseUrl: string;
@@ -31,6 +33,7 @@ export async function exchangeCloudSessionToken(
   params: ExchangeCloudSessionTokenParams
 ): Promise<ExchangeCloudSessionTokenResult> {
   const { baseUrl, sessionId, bearer, expiresIn } = params;
+  assertSecureCloudUrl(baseUrl);
   // Encode the id so a hostile value can't steer the request onto another route.
   const url = `${baseUrl.replace(/\/$/, "")}/dashboard/sessions/${encodeURIComponent(sessionId)}/token`;
 

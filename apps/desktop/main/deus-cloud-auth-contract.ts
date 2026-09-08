@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { assertSecureCloudUrl } from "../../../shared/cloud-url";
 
 export const DEUS_CLOUD_DEFAULT_URL = "https://cloud.deusmachine.ai";
 export const DEUS_CLOUD_DESKTOP_CALLBACK_HOST = "127.0.0.1";
@@ -70,10 +71,8 @@ export function resolveDeusCloudUrl(env: NodeJS.ProcessEnv = process.env): strin
     env.DEUS_CLOUD_URL ||
     env.VITE_DEUS_CLOUD_URL ||
     (isLocalCloudEnv(env) ? DEUS_CLOUD_LOCAL_URL : DEUS_CLOUD_DEFAULT_URL);
+  assertSecureCloudUrl(raw);
   const parsed = new URL(raw);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Deus Cloud URL must use http or https");
-  }
   parsed.pathname = parsed.pathname.replace(/\/+$/u, "");
   parsed.search = "";
   parsed.hash = "";

@@ -1,3 +1,4 @@
+import { toCamelCaseKeys } from "@deus-hq/api";
 import type { ProviderAccounts } from "@shared/types/provider-account";
 import { getCloudConnectionIdentity, getDeusCloudSessionConfig } from "./agent/cloud/config";
 import { AppError } from "../lib/errors";
@@ -19,7 +20,7 @@ export async function getProviderAccounts(): Promise<ProviderAccounts> {
       response.status,
       "Couldn't check your provider accounts. Open Settings → AI Providers and try again."
     );
-  const accounts = (await response.json()) as ProviderAccounts;
+  const accounts = toCamelCaseKeys(await response.json()) as ProviderAccounts;
   if (getCloudConnectionIdentity() !== identity)
     throw new AppError(409, "Your Deus account changed. Try again.");
   return accounts;

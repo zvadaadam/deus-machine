@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,12 +88,41 @@ describe("cloud credential store", () => {
     await expect(readFile(CREDENTIALS_FILE(), "utf8")).rejects.toThrow();
   });
 
+  it("removes retired ciphertext from disk while retaining the device key", async () => {
+    await setCloudCredential("agntApiKey", "agnt_sk_x", { keyId: "key_1" });
+    const stored = JSON.parse(await readFile(CREDENTIALS_FILE(), "utf8"));
+    stored.entries.claudeOauthToken = { encryptedValue: "retired-claude-ciphertext" };
+    stored.entries.codexAuthJson = { encryptedValue: "retired-codex-ciphertext" };
+    await writeFile(CREDENTIALS_FILE(), JSON.stringify(stored));
+
+    expect((await getCloudCredentialsStatus()).hasPlatformKey).toBe(true);
+    expect(JSON.parse(await readFile(CREDENTIALS_FILE(), "utf8"))).toEqual({
+      version: 1,
+      entries: { agntApiKey: stored.entries.agntApiKey },
+    });
+    expect(await getCloudCredential("agntApiKey")).toBe("agnt_sk_x");
+  });
+
+  it.each(["read", "delete"])("removes a retired-only vault on %s", async (operation) => {
+    await writeFile(
+      CREDENTIALS_FILE(),
+      JSON.stringify({
+        version: 1,
+        entries: { codexAuthJson: { encryptedValue: "retired-ciphertext" } },
+      })
+    );
+
+    if (operation === "read")
+      expect((await getCloudCredentialsStatus()).hasPlatformKey).toBe(false);
+    else await deleteCloudCredential("agntApiKey");
+    await expect(readFile(CREDENTIALS_FILE(), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("an undecryptable entry is dropped instead of poisoning reads", async () => {
     await setCloudCredential("agntApiKey", "agnt_sk_x");
     // Simulate an OS keychain reset: stored bytes no longer decrypt.
     const raw = JSON.parse(await readFile(CREDENTIALS_FILE(), "utf8"));
     raw.entries.agntApiKey.encryptedValue = Buffer.from("garbage", "utf8").toString("base64");
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(CREDENTIALS_FILE(), JSON.stringify(raw));
 
     expect(await getCloudCredential("agntApiKey")).toBeNull();

@@ -460,13 +460,12 @@ export async function runAutomationNow(id: string): Promise<string> {
  * Adopt a run's sandbox into deus rows so it opens like any cloud workspace:
  * find-or-create the workspace row (by the platform workspace id) and the
  * session row (by the platform session id), point current_session_id at it,
- * and attach the live session channel. Transcript history for runs that fired
- * while deus was closed is a known follow-up (SessionDetail.messages exists
- * platform-side); the live channel + run summary carry v1.
+ * backfill the transcript, and attach the live session channel.
  */
 export async function openAutomationRun(
   runId: string
 ): Promise<{ workspaceId: string; sessionId: string }> {
+  const identity = getCloudConnectionIdentity();
   const run = store.getRun(runId);
   if (!run) throw new Error("Run not found.");
   const automation = store.getAutomationRaw(run.automation_id);
@@ -477,15 +476,16 @@ export async function openAutomationRun(
   // transcript is as stale as an empty one — a message-count gate would
   // freeze it forever. The insert path is idempotent, so backfill always.
   if (run.session_id && run.workspace_id && store.sessionExists(run.session_id)) {
+    if (run.provider_session_id) {
+      await backfillTranscript(run.session_id, run.provider_session_id, identity);
+    }
+    assertCurrentAccount(identity);
     // The user may have archived the adopted workspace since — an archived
     // row is invisible to the workspace queries, so opening the run would
     // select an id the frontend cannot resolve. Resurface it, like the
     // adoption path does.
     if (store.reviveAdoptedWorkspace(run.workspace_id, run.session_id)) {
       invalidate(["workspaces", "stats"]);
-    }
-    if (run.provider_session_id) {
-      await backfillTranscript(run.session_id, run.provider_session_id);
     }
     return { workspaceId: run.workspace_id, sessionId: run.session_id };
   }
@@ -498,6 +498,7 @@ export async function openAutomationRun(
   }
 
   const detail = await platform.fetchSessionDetail(run.provider_session_id);
+  assertCurrentAccount(identity);
   if (!detail.workspaceId) throw new Error("The run's sandbox is gone.");
 
   const { workspaceId, sessionId } = store.adoptRunRows({
@@ -525,7 +526,10 @@ export async function openAutomationRun(
   // Attach the live session channel (call-time import: the driver sits in the
   // agent service graph, which imports this module through the tool dispatch).
   void import("../agent/cloud/driver")
-    .then(({ ensureCloudSession }) => ensureCloudSession(sessionId))
+    .then(({ ensureCloudSession }) => {
+      assertCurrentAccount(identity);
+      return ensureCloudSession(sessionId);
+    })
     .catch((err) => {
       console.warn(`[Automations] session channel attach failed for run ${runId}:`, err);
     });
@@ -534,9 +538,14 @@ export async function openAutomationRun(
 }
 
 /** Heal an adopted-but-empty transcript from the platform's stored messages. */
-async function backfillTranscript(deusSessionId: string, providerSessionId: string): Promise<void> {
+async function backfillTranscript(
+  deusSessionId: string,
+  providerSessionId: string,
+  identity: string
+): Promise<void> {
   try {
     const detail = await platform.fetchSessionDetail(providerSessionId);
+    if (getCloudConnectionIdentity() !== identity) return;
     const inserted = store.backfillSessionTranscript(deusSessionId, detail.messages);
     if (inserted > 0) {
       invalidate(["sessions", "session", "messages"], { sessionIds: [deusSessionId] });

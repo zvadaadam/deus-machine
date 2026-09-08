@@ -5,6 +5,7 @@ import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "vite";
 import { chromium } from "playwright";
+import { toCamelCaseKeys, toSnakeCaseKeys } from "@deus-hq/api";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const fixturePath = path.join(root, ".context/provider-accounts-ui");
@@ -146,7 +147,10 @@ try {
     const url = new URL(request.url());
     const suffix = url.pathname.slice("/me/provider-accounts".length);
     const json = (data) =>
-      route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(toSnakeCaseKeys(data)),
+      });
     if (!suffix && request.method() === "GET") {
       if (failNextList) {
         failNextList = false;
@@ -164,7 +168,10 @@ try {
       });
     }
     if (!suffix && request.method() === "POST") {
-      const input = request.postDataJSON();
+      const wireInput = request.postDataJSON();
+      assert.equal(wireInput.authMethod, undefined);
+      assert.equal(typeof wireInput.auth_method, "string");
+      const input = toCamelCaseKeys(wireInput);
       savedCredentials.push(input);
       if (input.secret === "invalid-key" || input.secret === "invalid-token")
         return route.fulfill({
@@ -201,7 +208,7 @@ try {
     }
     if (suffix === "/logins") {
       const loginId = `login-${++loginNumber}`;
-      starts.push(request.postDataJSON());
+      starts.push(toCamelCaseKeys(request.postDataJSON()));
       return json({
         loginId,
         type: "device_code",

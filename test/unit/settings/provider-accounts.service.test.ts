@@ -28,6 +28,16 @@ const account = {
   status: "connected",
   isDefault: true,
 };
+const wireAccount = {
+  id: "account-a",
+  provider: "codex",
+  auth_method: "subscription",
+  label: "Personal",
+  email: "person@example.com",
+  plan_type: "plus",
+  status: "connected",
+  is_default: true,
+};
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -48,6 +58,7 @@ beforeEach(() => {
   vi.stubEnv("VITE_DEUS_CLOUD_URL", "https://cloud.test");
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -56,10 +67,13 @@ describe("provider account transport", () => {
   it("uses the hosted web auth origin and bearer without resolving a localhost backend", async () => {
     fetchMock.mockResolvedValue(
       new Response(
-        JSON.stringify({ accounts: [account], defaultAccountIds: { codex: account.id } })
+        JSON.stringify({ accounts: [wireAccount], default_account_ids: { codex: account.id } })
       )
     );
-    expect((await listProviderAccounts()).accounts).toEqual([account]);
+    expect(await listProviderAccounts()).toEqual({
+      accounts: [account],
+      defaultAccountIds: { codex: account.id },
+    });
     expect(fetchMock.mock.calls[0][0]).toBe("https://cloud.test/me/provider-accounts");
     expect(fetchMock.mock.calls[0][1].headers.get("authorization")).toBe(
       "Bearer browser-workos-bearer"
@@ -70,7 +84,7 @@ describe("provider account transport", () => {
   it("uses the backend proxy on backed builds without giving it the cloud bearer", async () => {
     vi.stubEnv("VITE_CLOUD_DIRECT", "0");
     fetchMock.mockResolvedValue(
-      new Response('{"providers":[],"accounts":[],"defaultAccountIds":{}}')
+      new Response('{"providers":[],"accounts":[],"default_account_ids":{}}')
     );
     await listProviderAccounts();
     expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:5123/api/settings/provider-accounts");
@@ -93,13 +107,54 @@ describe("provider account transport", () => {
       [
         "https://cloud.test/me/provider-accounts/logins",
         "POST",
-        '{"provider":"codex","label":"Work","replaceAccountId":"account-a"}',
+        '{"provider":"codex","label":"Work","replace_account_id":"account-a"}',
       ],
-      ["https://cloud.test/me/provider-accounts/account-a", "PATCH", '{"isDefault":true}'],
+      ["https://cloud.test/me/provider-accounts/account-a", "PATCH", '{"is_default":true}'],
       ["https://cloud.test/me/provider-accounts/account-a", "DELETE", undefined],
       ["https://cloud.test/me/provider-accounts/logins/login-a", "DELETE", undefined],
     ]);
-    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+    controller.abort();
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+  });
+
+  it("decodes the device-login REST response into UI fields", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          login_id: "login-a",
+          type: "device_code",
+          user_code: "ABCD-1234",
+          verification_url: "https://auth.openai.com/codex/device",
+          expires_at: 123456789,
+        })
+      )
+    );
+    expect(
+      await startProviderAccountLogin({ provider: "codex" }, new AbortController().signal)
+    ).toEqual({
+      loginId: "login-a",
+      type: "device_code",
+      userCode: "ABCD-1234",
+      verificationUrl: "https://auth.openai.com/codex/device",
+      expiresAt: 123456789,
+    });
+  });
+
+  it("terminates a stalled metadata request at its 15-second deadline", async () => {
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+        })
+    );
+    const request = listProviderAccounts();
+    const rejected = expect(request).rejects.toThrow("Request deadline elapsed");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(timeout).toHaveBeenCalledWith(15_000);
+    deadline.abort(new Error("Request deadline elapsed"));
+    await rejected;
   });
 
   it("shows the API's message instead of its stable error code", async () => {
@@ -116,7 +171,7 @@ describe("provider account transport", () => {
   it.each(["claude", "codex"] as const)(
     "saves a %s API key through the same write-only endpoint",
     async (provider) => {
-      fetchMock.mockResolvedValue(new Response(JSON.stringify({ account })));
+      fetchMock.mockResolvedValue(new Response(JSON.stringify({ account: wireAccount })));
       const controller = new AbortController();
       const input = {
         provider,
@@ -128,8 +183,15 @@ describe("provider account transport", () => {
       expect(await saveProviderAccountSecret(input, controller.signal)).toBeUndefined();
       expect(fetchMock.mock.calls[0][0]).toBe("https://cloud.test/me/provider-accounts");
       expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-      expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify(input));
-      expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        provider,
+        auth_method: "api_key",
+        secret: "test-key",
+        label: "Work",
+        replace_account_id: "account-a",
+      });
+      controller.abort();
+      expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
       expect(fetchMock.mock.calls[0][1].headers.get("content-type")).toBe("application/json");
     }
   );
@@ -150,6 +212,8 @@ describe("provider account transport", () => {
 
 describe("device login event stream", () => {
   it("accepts a completed login across arbitrary chunks and keepalive comments, then closes the stream", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const signal = new AbortController().signal;
     const cancelled = vi.fn();
     const encoded = new TextEncoder().encode(
       `:keepalive\r\n\r\nevent: connected\r\ndata: ${JSON.stringify({ account: { ...account, label: "Práce" } })}\r\n\r\n`
@@ -164,11 +228,13 @@ describe("device login event stream", () => {
         })
       )
     );
-    expect(await waitForProviderAccountLogin("login-a", new AbortController().signal)).toEqual({
+    expect(await waitForProviderAccountLogin("login-a", signal)).toEqual({
       ...account,
       label: "Práce",
     });
     expect(cancelled).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][1].signal).toBe(signal);
+    expect(timeout).not.toHaveBeenCalled();
   });
 
   it("surfaces expiry/cancellation errors and a stream that closes without completion", async () => {

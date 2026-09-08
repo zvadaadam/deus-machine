@@ -34,7 +34,7 @@ vi.mock("../../../apps/backend/src/services/agent/cloud/config", () => ({
   setCloudIdentityChangedHandler: vi.fn(),
   runCloudConnectHook: vi.fn(),
   getCloudConfig: () => ({
-    baseUrl: "http://agnt.test",
+    baseUrl: "https://agnt.test",
     apiKey: "agnt_test",
     deusCloudSessionToken: "workos-test",
   }),

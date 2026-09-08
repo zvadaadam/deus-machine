@@ -190,7 +190,7 @@ function simulatorSnapshot(
 beforeEach(async () => {
   resetCloudConfigForTests();
   setCloudRuntimeCredentials({
-    baseUrl: "http://agnt.test",
+    baseUrl: "https://agnt.test",
     apiKey: "agnt_sk_test_x",
     deusCloudSessionToken: "workos-default",
   });
@@ -761,7 +761,7 @@ describe("cloud driver frame → fold contract", () => {
             );
           }
         );
-        const cloudOptions = { baseUrl: "http://agnt.test", apiKey: "agnt_sk_test_x" };
+        const cloudOptions = { baseUrl: "https://agnt.test", apiKey: "agnt_sk_test_x" };
         expect(mockGetWorkspace).toHaveBeenCalledWith("agnt-ws-1", cloudOptions);
         expect(mockResumeWorkspace).toHaveBeenCalledWith("agnt-ws-1", cloudOptions);
         expect(
@@ -921,7 +921,7 @@ describe("cloud driver session lifecycle", () => {
 
     const first = await ensureCloudSession("deus-session-1");
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://agnt.test/dashboard/sessions/agnt-session-1/token",
+      "https://agnt.test/dashboard/sessions/agnt-session-1/token",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ Authorization: `Bearer ${bearer}` }),
@@ -1766,7 +1766,7 @@ describe("cloud driver simulator channel", () => {
     expect(mockGetSession).toHaveBeenCalledWith(
       "agnt-session-1",
       // Bounded: a stalled platform connection must not pin the request.
-      expect.objectContaining({ baseUrl: "http://agnt.test", signal: expect.any(AbortSignal) })
+      expect.objectContaining({ baseUrl: "https://agnt.test", signal: expect.any(AbortSignal) })
     );
     await getCloudSimulatorStatus("deus-ws-1");
     expect(mockGetSession).toHaveBeenCalledTimes(1);

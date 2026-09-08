@@ -49,10 +49,15 @@ async function readStore(): Promise<StoredCredentialsFile> {
   if (parsed?.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null) {
     return { version: 1, entries: {} };
   }
-  return {
+  const store: StoredCredentialsFile = {
     version: 1,
     entries: parsed.entries.agntApiKey ? { agntApiKey: parsed.entries.agntApiKey } : {},
   };
+  if (Object.keys(parsed.entries).some((name) => name !== "agntApiKey")) {
+    if (store.entries.agntApiKey) await writeJsonFile(filePath(), store);
+    else await removeFile(filePath());
+  }
+  return store;
 }
 
 export async function setCloudCredential(
@@ -99,15 +104,8 @@ export async function getCloudCredentialMeta(
   return { keyId: entry.keyId, orgId: entry.orgId, label: entry.label, createdAt: entry.createdAt };
 }
 
-export async function deleteCloudCredential(name: CloudCredentialName): Promise<void> {
-  const store = await readStore();
-  if (!store.entries[name]) return;
-  delete store.entries[name];
-  if (Object.keys(store.entries).length === 0) {
-    await removeFile(filePath());
-    return;
-  }
-  await writeJsonFile(filePath(), store);
+export async function deleteCloudCredential(_name: CloudCredentialName): Promise<void> {
+  await removeFile(filePath());
 }
 
 /**

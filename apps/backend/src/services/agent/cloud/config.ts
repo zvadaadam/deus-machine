@@ -6,6 +6,8 @@
 // D1 handshake — a per-device key minted after sign-in and its WorkOS session). Runtime values win. `null` config = cloud lane disabled with
 // honest errors at the create/send boundaries.
 
+import { assertSecureCloudUrl } from "@shared/cloud-url";
+
 export interface CloudConfig {
   /** agnt backend base URL (REST + session WebSockets). */
   baseUrl: string;
@@ -48,11 +50,13 @@ const isLocalCloudEnv = (): boolean => process.env.DEUS_CLOUD_ENV === "local";
 
 /** Personal account settings need the WorkOS session even before VM-key provisioning succeeds. */
 export function getDeusCloudSessionConfig() {
+  const deusCloudUrl =
+    runtime.deusCloudUrl ??
+    process.env.DEUS_CLOUD_URL ??
+    (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null);
+  if (deusCloudUrl) assertSecureCloudUrl(deusCloudUrl);
   return {
-    deusCloudUrl:
-      runtime.deusCloudUrl ??
-      process.env.DEUS_CLOUD_URL ??
-      (isLocalCloudEnv() ? LOCAL_DEUS_CLOUD_URL : null),
+    deusCloudUrl,
     deusCloudSessionToken: runtime.deusCloudSessionToken ?? null,
   };
 }
@@ -66,13 +70,15 @@ export function getCloudConfig(): CloudConfig | null {
     cached = null;
     return cached;
   }
+  const baseUrl = (
+    runtime.baseUrl ??
+    process.env.DEUS_CLOUD_AGNT_URL ??
+    process.env.AGNT_BASE_URL ??
+    (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
+  ).replace(/\/$/, "");
+  assertSecureCloudUrl(baseUrl);
   cached = {
-    baseUrl: (
-      runtime.baseUrl ??
-      process.env.DEUS_CLOUD_AGNT_URL ??
-      process.env.AGNT_BASE_URL ??
-      (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
-    ).replace(/\/$/, ""),
+    baseUrl,
     apiKey,
     ...getDeusCloudSessionConfig(),
     orgId: runtime.orgId ?? null,
@@ -91,6 +97,12 @@ export function getCloudConfig(): CloudConfig | null {
  * session channel authenticated as account A.
  */
 let onIdentityChanged: (() => void) | null = null;
+let identityController = new AbortController();
+
+/** Pending HTTP requests and response streams belong to the current cloud identity. */
+export function getCloudIdentitySignal(): AbortSignal {
+  return identityController.signal;
+}
 
 export function setCloudIdentityChangedHandler(handler: () => void): void {
   onIdentityChanged = handler;
@@ -141,6 +153,8 @@ export function getCloudConnectionIdentity(
 }
 
 export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): void {
+  if (update.baseUrl) assertSecureCloudUrl(update.baseUrl);
+  if (update.deusCloudUrl) assertSecureCloudUrl(update.deusCloudUrl);
   const identityBefore = getCloudConnectionIdentity();
   for (const key of [
     "apiKey",
@@ -155,12 +169,17 @@ export function setCloudRuntimeCredentials(update: CloudRuntimeCredentials): voi
   }
   cached = undefined;
   if (getCloudConnectionIdentity() !== identityBefore) {
+    const previous = identityController;
+    identityController = new AbortController();
+    previous.abort(new Error("Your Deus account changed. Try again."));
     onIdentityChanged?.();
   }
 }
 
 /** Test seam: clear the memoized config AND runtime overrides. */
 export function resetCloudConfigForTests(): void {
+  identityController.abort();
+  identityController = new AbortController();
   for (const key of Object.keys(runtime) as (keyof CloudRuntimeCredentials)[]) {
     runtime[key] = undefined;
   }

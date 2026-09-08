@@ -5,6 +5,8 @@ import {
   markWebCloudSignOut,
   readWebCloudSessionBearer,
   redirectToWebCloudLogin,
+  resolveAgntBaseUrl,
+  resolveDeusCloudUrl,
 } from "@/features/session/cloud/webCloudDirectConfig";
 
 // Minimal Map-backed Web Storage stand-ins (the suite runs node-env, no DOM).
@@ -44,6 +46,21 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+describe.each([
+  ["VITE_DEUS_CLOUD_URL", resolveDeusCloudUrl],
+  ["VITE_AGNT_BASE_URL", resolveAgntBaseUrl],
+] as const)("%s endpoint", (envKey, resolveUrl) => {
+  it("rejects non-loopback HTTP before authenticated web requests can use it", () => {
+    vi.stubEnv(envKey, "http://cloud.test");
+    expect(() => resolveUrl()).toThrow(/HTTPS/);
+  });
+
+  it("supports an explicit local development endpoint", () => {
+    vi.stubEnv(envKey, "http://127.0.0.1:5788/");
+    expect(resolveUrl()).toBe("http://127.0.0.1:5788");
+  });
 });
 
 describe("login loop guard", () => {
