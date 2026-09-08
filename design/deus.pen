@@ -79942,18 +79942,6 @@
                       "fontWeight": "normal"
                     },
                     {
-                      "id": "Isahi",
-                      "type": "ref",
-                      "ref": "YqG8t",
-                      "name": "Work",
-                      "width": 320,
-                      "descendants": {
-                        "E8yhJ5": {
-                          "content": "Work"
-                        }
-                      }
-                    },
-                    {
                       "id": "t9udIf",
                       "type": "ref",
                       "ref": "YqG8t",
@@ -80357,7 +80345,7 @@
               "fill": "$text-muted",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Claude subscription: rejected tokens are not saved. Replace token keeps the account name and default, clears the input, and invalidates queued turns using the old token. Cancelling leaves the saved account unchanged.",
+              "content": "Claude subscription: rejected tokens are not saved. Replace token keeps the current account name and default, clears the input, and invalidates queued turns using the old token. Rename is a separate label-only action. Cancelling leaves the saved account unchanged.",
               "lineHeight": 1.5,
               "fontFamily": "$font-sans",
               "fontSize": "$text-xs",

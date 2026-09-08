@@ -128,6 +128,7 @@ function ProviderAccountPanel({
   const secretInput = useRef<HTMLInputElement>(null);
   const selected = defaultProviderAccount(data, provider.id);
   const accounts = data.accounts.filter((account) => account.provider === provider.id);
+  const replacingAccount = accounts.find((account) => account.id === replaceAccountId);
   const subscriptionName = provider.subscriptionName ?? provider.name;
   const tokenSetup = provider.subscriptionTokenSetup;
   const readsSecret = method === "api_key" || Boolean(tokenSetup);
@@ -236,7 +237,7 @@ function ProviderAccountPanel({
           provider: provider.id,
           authMethod: method,
           secret: value,
-          ...(label.trim() ? { label: label.trim() } : {}),
+          ...(!replaceAccountId && label.trim() ? { label: label.trim() } : {}),
           ...(replaceAccountId ? { replaceAccountId } : {}),
         },
         current.controller.signal
@@ -280,13 +281,12 @@ function ProviderAccountPanel({
       void startLogin({
         provider: provider.id,
         replaceAccountId: account.id,
-        label: account.label,
       });
       return;
     }
     setMethod(account.authMethod);
     setReplaceAccountId(account.id);
-    setLabel(account.label);
+    setLabel("");
     setSecret("");
     setConnection({ stage: "idle" });
   }
@@ -388,7 +388,7 @@ function ProviderAccountPanel({
             >
               {replaceAccountId ? (
                 <p className="text-text-primary text-sm">
-                  Replace {secretLabel} for {label}
+                  Replace {secretLabel} for {replacingAccount?.label ?? "this account"}
                 </p>
               ) : (
                 provider.authMethods.length > 1 && (
@@ -417,15 +417,17 @@ function ProviderAccountPanel({
                   </div>
                 )
               )}
-              <Input
-                aria-label={`${provider.name} account name`}
-                placeholder="Account name (optional)"
-                maxLength={80}
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                className="max-w-xs"
-                disabled={action.isPending}
-              />
+              {!replaceAccountId && (
+                <Input
+                  aria-label={`${provider.name} account name`}
+                  placeholder="Account name (optional)"
+                  maxLength={80}
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  className="max-w-xs"
+                  disabled={action.isPending}
+                />
+              )}
               {method === "subscription" && tokenSetup && (
                 <div className="space-y-2">
                   <p className="text-text-muted text-xs">{provider.subscriptionInstructions}</p>

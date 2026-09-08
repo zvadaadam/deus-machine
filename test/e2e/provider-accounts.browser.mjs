@@ -204,6 +204,7 @@ try {
       assert(account);
       assert.equal(account.provider, input.provider);
       assert.equal(account.authMethod, input.authMethod);
+      if (input.label !== undefined) account.label = input.label;
       account.status = "connected";
       if (!input.replaceAccountId) accounts.push(account);
       if (!accounts.some((item) => item.id === defaultAccountIds[input.provider]))
@@ -389,6 +390,31 @@ try {
   await subscriptionRow.getByText("Default", { exact: true }).waitFor();
   const selectedSubscription = defaultAccountIds.claude;
   await subscriptionRow.getByRole("button", { name: "Replace token", exact: true }).click();
+  await subscriptionRow.getByRole("button", { name: "Rename account", exact: true }).click();
+  await subscriptionRow
+    .getByRole("textbox", { name: "Account name", exact: true })
+    .fill("Work renamed");
+  await subscriptionRow.getByRole("button", { name: "Save", exact: true }).click();
+  const renamedSubscription = claude.getByRole("group", {
+    name: "Claude Code account Work renamed",
+    exact: true,
+  });
+  await renamedSubscription.waitFor();
+  await claudeToken.fill("sk-ant-oat01-rename-replacement");
+  await claude.getByRole("button", { name: "Save replacement token", exact: true }).click();
+  await claude.getByRole("button", { name: "Connect Claude", exact: true }).waitFor();
+  assert.equal(
+    accounts.find((account) => account.id === selectedSubscription).label,
+    "Work renamed"
+  );
+  assert.equal(savedCredentials.at(-1).label, undefined);
+  await renamedSubscription.getByRole("button", { name: "Rename account", exact: true }).click();
+  await renamedSubscription
+    .getByRole("textbox", { name: "Account name", exact: true })
+    .fill("Work subscription");
+  await renamedSubscription.getByRole("button", { name: "Save", exact: true }).click();
+  await subscriptionRow.waitFor();
+  await subscriptionRow.getByRole("button", { name: "Replace token", exact: true }).click();
   assert.equal(
     await claudeToken.evaluate((input) => input === input.ownerDocument.activeElement),
     true
@@ -477,6 +503,7 @@ try {
   await row("Work").getByRole("button", { name: "Reconnect", exact: true }).click();
   await waitForEvent("login-4");
   assert.equal(starts.at(-1).replaceAccountId, "work-added-again");
+  assert.equal(starts.at(-1).label, undefined);
   await events.get("login-4")("error", { message: "Use the original ChatGPT account." });
   await page.getByRole("alert").filter({ hasText: "original ChatGPT" }).waitFor();
   await page.getByRole("button", { name: "Try again", exact: true }).click();
