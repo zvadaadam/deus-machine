@@ -20,7 +20,7 @@ import {
   deleteSecret as agntDeleteSecret,
   Environment,
 } from "@deus-hq/sdk";
-import { apiCreateWorkspace } from "@deus-hq/sdk/client";
+import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
@@ -100,36 +100,6 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   );
 
   return { workspaceId, slug };
-}
-
-type CloudRepositoryAuth = { type: "github_app" | "secret" };
-
-/** The installed SDK's public HTTP client supports additive workspace fields. */
-async function createRuntimeWorkspace(
-  options: {
-    baseUrl: string;
-    apiKey: string;
-    workspaceId?: string;
-    environment: string | ReturnType<typeof Environment.from>;
-    checkout?: { branch: string; from: string };
-  },
-  repositoryAuth?: CloudRepositoryAuth
-): Promise<{ id: string; organizationId: string }> {
-  if (!repositoryAuth) return agntCreateWorkspace(options);
-  const { environment, baseUrl, apiKey, ...body } = options;
-  const payload = typeof environment === "string" ? null : environment.toPayload();
-  const { secrets, metadata, ...config } = payload ?? {};
-  const result = await apiCreateWorkspace(
-    { baseUrl, apiKey },
-    {
-      ...body,
-      repositoryAuth,
-      ...(typeof environment === "string"
-        ? { environmentId: environment }
-        : { config, secrets, metadata }),
-    }
-  );
-  return { id: result.workspaceId, organizationId: result.organizationId };
 }
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
@@ -225,15 +195,13 @@ export async function refreshWorkspaceGithubToken(workspace: {
       // restarts a stopped sandbox (chip + send paths) — swallowing its
       // failure reported successful wakes over a sandbox that never moved,
       // and resumes rewriting auth files from a stale map.
-      await createRuntimeWorkspace(
-        {
-          workspaceId: workspace.provider_workspace_id,
-          environment: envInfo.name,
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
-        },
-        repositoryAuth ?? undefined
-      );
+      await agntCreateWorkspace({
+        workspaceId: workspace.provider_workspace_id,
+        environment: envInfo.name,
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        repositoryAuth: repositoryAuth ?? undefined,
+      });
       // A secret write that failed leaves the platform resolving the OLD
       // token: the re-create still restarts a stopped sandbox, but it is no
       // mint — the next connect must try again.
@@ -274,21 +242,23 @@ export async function refreshWorkspaceGithubToken(workspace: {
       stampedAt === 0 || (stampedAt !== null && Date.now() - stampedAt > 55 * 60_000);
     if (!mapProvablyStrippable) return false;
   }
-  await createRuntimeWorkspace(
-    {
-      workspaceId: workspace.provider_workspace_id,
-      // `.simulator()` on BOTH inline recipes (this re-create and the create in
-      // createCloudWorkspace): agnt converges the DO's environment config on
-      // re-create, so a token refresh without it would silently drop the
-      // hosted-device support the workspace was born with.
-      environment: mint.token
-        ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
-        : Environment.from("agnt-base").simulator(),
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    },
-    mint.token ? { type: "github_app" } : mint.definitive ? { type: "secret" } : undefined
-  );
+  await agntCreateWorkspace({
+    workspaceId: workspace.provider_workspace_id,
+    // `.simulator()` on BOTH inline recipes (this re-create and the create in
+    // createCloudWorkspace): agnt converges the DO's environment config on
+    // re-create, so a token refresh without it would silently drop the
+    // hosted-device support the workspace was born with.
+    environment: mint.token
+      ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
+      : Environment.from("agnt-base").simulator(),
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    repositoryAuth: mint.token
+      ? { type: "github_app" }
+      : mint.definitive
+        ? { type: "secret" }
+        : undefined,
+  });
   setInlineMintStamp(workspace, mint.token ? Date.now() : 0);
   if (generationAtStart === getCloudIdentityGeneration()) {
     markWorkspaceTokenRefreshed(workspace.provider_workspace_id);
@@ -399,7 +369,7 @@ function setInlineMintStamp(
     .run(stamp, workspace.provider_workspace_id);
 }
 
-const githubTokenRefreshes = new Map<string, Promise<CloudRepositoryAuth | null>>();
+const githubTokenRefreshes = new Map<string, Promise<RepositoryAuth | null>>();
 
 /** Explicit wake releases the platform hold; the runtime owns resume and recovery. */
 export async function wakeCloudWorkspaceWithFeedback(workspace: {
@@ -710,7 +680,7 @@ function refreshEnvironmentGithubTokenOnce(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<CloudRepositoryAuth | null> {
+): Promise<RepositoryAuth | null> {
   // Normalized key: provisioning passes the https form, wake/send pass the
   // raw stored origin — an ssh-form remote would otherwise key two separate
   // flights for the same environment and re-open the delete-vs-write race
@@ -718,7 +688,7 @@ function refreshEnvironmentGithubTokenOnce(
   const key = httpsOrigin(originUrl);
   const inFlight = githubTokenRefreshes.get(key);
   if (inFlight) return inFlight;
-  const run: Promise<CloudRepositoryAuth | null> = refreshEnvironmentGithubToken(
+  const run: Promise<RepositoryAuth | null> = refreshEnvironmentGithubToken(
     originUrl,
     environmentId,
     baseUrl,
@@ -750,7 +720,7 @@ async function refreshEnvironmentGithubToken(
   environmentId: string,
   baseUrl: string,
   apiKey: string
-): Promise<CloudRepositoryAuth | null> {
+): Promise<RepositoryAuth | null> {
   const mint = await mintRepoInstallationToken(originUrl);
   try {
     if (mint.token) {
@@ -816,7 +786,7 @@ async function provisionInBackground(
     let inlineMintStampAtCreate: number | null = null;
     // Named lane: whether the environment-scoped token landed before create —
     // then the connect that follows provisioning has nothing to re-mint.
-    let repositoryAuth: CloudRepositoryAuth | undefined;
+    let repositoryAuth: RepositoryAuth | undefined;
     if (envInfo.configured) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
@@ -888,16 +858,14 @@ async function provisionInBackground(
       }
       environment = recipe;
     }
-    const provider = await createRuntimeWorkspace(
-      {
-        baseUrl,
-        apiKey,
-        environment,
-        // New branch off the source — the sandbox's whole life happens here.
-        checkout: { branch: branch.work, from: branch.source },
-      },
-      repositoryAuth
-    );
+    const provider = await agntCreateWorkspace({
+      baseUrl,
+      apiKey,
+      environment,
+      repositoryAuth,
+      // New branch off the source — the sandbox's whole life happens here.
+      checkout: { branch: branch.work, from: branch.source },
+    });
     db.prepare(
       "UPDATE workspaces SET provider_workspace_id = ?, init_stage = 'creating cloud session', last_inline_mint_at = ? WHERE id = ?"
     ).run(provider.id, inlineMintStampAtCreate, workspaceId);

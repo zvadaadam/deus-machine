@@ -272,7 +272,7 @@ BIGINT, registration_id)` and nothing else — NO tokens at rest, NO status
 
 ### Cloud agent auth — personal provider accounts
 
-The credentials branch replaces desktop token imports and organization-wide
+Personal provider accounts replace desktop token imports and organization-wide
 subscription secrets with one account system in Deus Cloud. This is pre-launch;
 the old credential paths are removed rather than migrated.
 
@@ -305,9 +305,10 @@ the old credential paths are removed rather than migrated.
   disconnected credentials fail clearly; there is no ambient credential fallback.
 
 The Cloud setup screen links to these accounts and keeps infrastructure/GitHub
-setup separate. The full contract, current qualification, and coordinated engine
-→ cloud runtime → desktop release sequence are in AGNT's
-`docs/provider-accounts.md` on the credentials branch (not yet released).
+setup separate. Deus consumes published `@deus-hq/api` and `@deus-hq/sdk` 2.0.0;
+all engine dependencies resolve to `@zvada/agent-server` 0.3.3. The full contract,
+current qualification, and engine → cloud runtime → desktop release sequence
+are in AGNT's `docs/provider-accounts.md`.
 
 ### Sprint 2 — durability rails — SHIPPED (simplified; see "Also shipped")
 
@@ -465,7 +466,7 @@ machinery) for negligible marginal risk reduction.
 ### D2.3 Codex in the cloud
 
 The E2B template contains the pinned Codex CLI and the sidecar dispatches the
-selected native harness. The credentials branch now uses personal provider
+selected native harness. Cloud execution uses personal provider
 accounts and the native app-server auth callback; desktop auth.json import,
 per-turn file materialization, and shared refresh-token lineage are removed.
 See “Cloud agent auth” above for the current contract. Engine release, sidecar
