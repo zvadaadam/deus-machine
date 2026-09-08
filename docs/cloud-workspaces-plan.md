@@ -317,8 +317,8 @@ Claude subscription inference, switching to an API key and back, ChatGPT approva
 and Reconnect, and Codex GPT-5.5 inference. Normal archive on a writable repository
 saved the Git recovery ref and credential-free R2 history before pausing. After
 replacing the backed-up Codex test VM, GPT-6 Astra read the repository and recalled
-the original conversation nonce under the same native session ID; another turn
-after the idle deadline also completed without a manual wake. Automatic OAuth
+the original conversation nonce under the same native session ID. Subsequent
+turns completed without a manual wake. Automatic OAuth
 renewal, a second ChatGPT identity, and installing Deus Bot from another GitHub
 account remain separate live checks. Anthropic's third-party subscription approval
 requirement remains a public-rollout prerequisite documented in the AGNT plan.

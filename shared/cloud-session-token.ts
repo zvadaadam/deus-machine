@@ -45,6 +45,7 @@ export async function exchangeCloudSessionToken(
     },
     body: JSON.stringify(expiresIn !== undefined ? { expires_in: expiresIn } : {}),
     redirect: "error",
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!response.ok) {

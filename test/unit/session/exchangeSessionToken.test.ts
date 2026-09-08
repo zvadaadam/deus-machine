@@ -46,6 +46,29 @@ describe("exchangeCloudSessionToken", () => {
     ).rejects.toThrow(/403/);
   });
 
+  it("terminates a stalled exchange at its 15-second deadline", async () => {
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+    global.fetch = vi.fn(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal!.reason), {
+            once: true,
+          });
+        })
+    );
+
+    const request = exchangeCloudSessionToken({
+      baseUrl: "https://api.agnt",
+      sessionId: "sess-9",
+      bearer: "dcs-token",
+    });
+    expect(timeout).toHaveBeenCalledWith(15_000);
+    const rejected = expect(request).rejects.toThrow("Request deadline elapsed");
+    deadline.abort(new Error("Request deadline elapsed"));
+    await rejected;
+  });
+
   it("omits expires_in from the body when not provided", async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ token: "t", expires_in: 3600 }), { status: 200 })
