@@ -174,26 +174,3 @@ export async function registerServer(
 
   return tunnelWs;
 }
-
-// ---- Helper: Connect and authenticate a client ----
-
-export async function connectAndAuthClient(
-  relay: any,
-  state: MockDOState,
-  opts: { clientId?: string; deviceToken?: string } = {}
-) {
-  const { clientId = crypto.randomUUID(), deviceToken = "dev_tok_test" } = opts;
-
-  // Simulate client WebSocket
-  const clientWs = createMockWebSocket(["client", clientId]);
-  state._websockets.set(clientWs, ["client", clientId]);
-  await state.storage.put(`pending:${clientId}`, Date.now() + 5000);
-
-  // Send auth message
-  await relay.webSocketMessage(
-    clientWs,
-    JSON.stringify({ type: "authenticate", token: deviceToken })
-  );
-
-  return { clientWs, clientId };
-}
