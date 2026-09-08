@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { match } from "ts-pattern";
 import type { ReactNode } from "react";
 import { githubRepoSlug } from "@shared/git-origin";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
-import { Check, ChevronDown, Cloud, Copy, TerminalSquare } from "lucide-react";
+import { Check, ChevronDown, Cloud } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/shared/api/client";
 import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
-import { capabilities } from "@/platform/capabilities";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useRepos } from "@/features/repository";
@@ -16,47 +14,10 @@ import { githubAppBlockedLabel } from "../../lib/github-app-label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/shared/lib/utils";
-import {
-  retryProvision,
-  type ClaudeSubscriptionState,
-  type CodexSubscriptionState,
-  disconnectClaudeSubscription,
-  disconnectCodexSubscription,
-  getClaudeSubscriptionStatus,
-  getCodexSubscriptionStatus,
-  getGithubAppStatus,
-  importCodexAuth,
-  startCodexLogin,
-  installGithubApp,
-  openAgentSetupTerminal,
-  saveClaudeSubscriptionToken,
-} from "@/platform/native/deus-cloud";
-
-/**
- * Agent subscription setups. One entry per agent; a new agent also needs its
- * mint command in the main-process registry, a credential slot, and wiring in
- * agentConnected/the action mutations below.
- */
-const AGENT_SUBSCRIPTIONS = [
-  {
-    id: "claude-code",
-    name: "Claude Code",
-    kind: "paste" as const,
-    command: "claude setup-token",
-    placeholder: "sk-ant-oat…",
-    instructions:
-      "Run this in a terminal, approve in the browser, then paste the token it prints. One-year token, stored encrypted, streamed per turn — the cloud agent never sees it.",
-  },
-  {
-    id: "codex",
-    name: "Codex",
-    kind: "import" as const,
-    command: "codex login --device-auth",
-    placeholder: null,
-    instructions:
-      "Sign in opens your browser on your ChatGPT account — the codex CLI owns the whole exchange and Deus imports the credential it writes (on the web app, paste the file instead). Unlike Claude's proxied token, Codex needs its auth file INSIDE the sandbox during its turns — same exposure as running codex on your own machine; it's removed the moment the turn ends. The command above is the manual fallback (device-auth) for headless machines.",
-  },
-] as const;
+import { uiActions } from "@/shared/stores/uiStore";
+import { defaultProviderAccount } from "@shared/types/provider-account";
+import { useProviderAccounts } from "../../api/provider-accounts.queries";
+import { retryProvision, getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 
 /**
  * Cloud workspaces settings — connection status + the org GitHub token that
@@ -66,102 +27,9 @@ const AGENT_SUBSCRIPTIONS = [
 export function CloudSection() {
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
-  const [subToken, setSubToken] = useState("");
-  const [codexAuthJson, setCodexAuthJson] = useState("");
-  // One agent row expanded at a time — compact list, setup opens inline.
-  const [openAgent, setOpenAgent] = useState<string | null>(null);
   const [openGithub, setOpenGithub] = useState<"app" | "pat" | null>(null);
 
-  const sub = useQuery({
-    queryKey: ["settings", "claude-subscription"],
-    queryFn: getClaudeSubscriptionStatus,
-    staleTime: 30_000,
-    retry: false,
-  });
-
-  const codexSub = useQuery({
-    queryKey: ["settings", "codex-subscription"],
-    queryFn: getCodexSubscriptionStatus,
-    staleTime: 30_000,
-    retry: false,
-  });
-
-  const codexAction = useMutation({
-    mutationFn: async (action: { kind: "login" } | { kind: "import" } | { kind: "disconnect" }) => {
-      const result = await match(action.kind)
-        .with("login", () => startCodexLogin())
-        .with("import", () => importCodexAuth())
-        .with(
-          "disconnect",
-          (): Promise<CodexSubscriptionState> =>
-            capabilities.ipcInvoke
-              ? disconnectCodexSubscription()
-              : // Web: no vault to clear — delete the platform copy directly.
-                apiClient
-                  .delete<{ ok: boolean }>("/settings/cloud/codex-auth")
-                  .then(() => ({ success: true, hasCodexSubscription: false }))
-        )
-        .exhaustive();
-      if (result.error) throw new Error(result.error);
-      return result;
-    },
-    onSuccess: async (result) => {
-      if (result.warning) {
-        // Connected locally but the platform copy failed — cloud turns
-        // resolve ONLY the platform copy, so "connected" alone would lie.
-        toast.warning(result.warning);
-      } else {
-        toast.success(
-          result.hasCodexSubscription
-            ? "Codex connected — cloud computers can run Codex on your plan"
-            : "Codex subscription disconnected"
-        );
-      }
-      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
-      // hasTurnCredential (checklist + send-gating) folds Codex in — same
-      // pairing the Claude action below does.
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex action failed"),
-  });
-
-  // Universal fallback (and the ONLY path on web, where no CLI can spawn):
-  // paste ~/.codex/auth.json, backend validates and writes the canonical
-  // platform secret — the copy cloud turns actually read, on every surface.
-  const codexPaste = useMutation({
-    mutationFn: (authJson: string) =>
-      apiClient.post<{ ok: boolean }>("/settings/cloud/codex-auth", { authJson }),
-    onSuccess: async () => {
-      setCodexAuthJson("");
-      toast.success("Codex connected — cloud computers can run Codex on your plan");
-      await queryClient.invalidateQueries({ queryKey: ["settings", "codex-subscription"] });
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Codex connect failed"),
-  });
-
-  const subAction = useMutation({
-    mutationFn: async (action: { kind: "disconnect" } | { kind: "paste"; token: string }) => {
-      const result: ClaudeSubscriptionState =
-        action.kind === "paste"
-          ? await saveClaudeSubscriptionToken(action.token)
-          : await disconnectClaudeSubscription();
-      if (result.error) throw new Error(result.error);
-      return result;
-    },
-    onSuccess: async (result) => {
-      setSubToken("");
-      toast.success(
-        result.hasClaudeSubscription
-          ? "Claude subscription connected — cloud agents run on your plan"
-          : "Claude subscription disconnected"
-      );
-      await queryClient.invalidateQueries({ queryKey: ["settings", "claude-subscription"] });
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
-    },
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : "Subscription action failed"),
-  });
+  const providerAccounts = useProviderAccounts();
 
   // useRepos, not a local query: an inline ["repos"] key collided with
   // queryKeys.repos.all — same cache entry, different transport and
@@ -212,24 +80,10 @@ export function CloudSection() {
 
   const s = status.data;
 
-  // ONE derivation for the header counter and the step tick — they were
-  // written twice and disagreed about Codex (which the cloud lane cannot
-  // run, so a Codex-only setup must not tick this).
-  // hasTurnCredential is the backend's full disjunction (API key, pushed
-  // token, either canonical platform secret) — a second device in the same
-  // org has runnable turns with an empty local vault. The local subscription
-  // flags still count for the pre-push moment right after connecting; Codex
-  // counts since the sandbox runs codex-app-server.
-  // Codex deliberately ABSENT as a local signal: cloud turns read only the
-  // platform copy, and hasTurnCredential already folds hasPlatformCodex in —
-  // counting the local vault would mark setup done while an unsynced codex
-  // connect still fails every cloud turn (the warning-toast case).
-  const agentsDone = s?.hasTurnCredential || sub.data?.hasClaudeSubscription;
-
-  const agentConnected = (id: string) =>
-    id === "codex"
-      ? codexSub.data?.hasCodexSubscription || s?.hasPlatformCodex
-      : sub.data?.hasClaudeSubscription;
+  const personalAccountReady = providerAccounts.data?.providers.some(
+    (provider) => defaultProviderAccount(providerAccounts.data, provider.id)?.status === "connected"
+  );
+  const agentsDone = personalAccountReady;
 
   // Repos the installed GitHub App cannot reach — drives the missing-access
   // list and, when empty, lets the App satisfy the repo-access step without a PAT.
@@ -398,156 +252,43 @@ export function CloudSection() {
       </div>
 
       <div className="mb-8">
-        {step(agentsDone, "Agents — run on your own subscriptions")}
+        {step(agentsDone, "Agents — choose your accounts")}
         <p className="text-text-muted mb-3 text-sm">
-          Connect a personal plan and cloud agents bill it instead of an API key. Tokens are minted
-          by you, in your terminal — Deus stores the result encrypted and hands it out per turn. How
-          each agent receives it differs; the row below says so honestly.
+          Connect an API key or supported subscription under AI Providers.
         </p>
         <div className="border-border-subtle divide-border-subtle divide-y rounded-lg border">
-          {AGENT_SUBSCRIPTIONS.map((agent) => {
-            const connected = agentConnected(agent.id);
-            const open = openAgent === agent.id;
-            return (
-              <DisclosureRow
-                key={agent.id}
-                title={agent.name}
-                status={
-                  connected ? (
-                    <span className="text-accent-green flex items-center gap-1.5 text-xs">
-                      <Check className="h-3.5 w-3.5" /> Connected
-                    </span>
-                  ) : (
-                    <span className="text-text-muted text-xs">Not connected</span>
-                  )
-                }
-                open={open}
-                onToggle={() => setOpenAgent(open ? null : agent.id)}
-              >
-                <p className="text-text-muted text-xs">{agent.instructions}</p>
-                {connected ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="self-start"
-                    onClick={() =>
-                      agent.id === "codex"
-                        ? codexAction.mutate({ kind: "disconnect" })
-                        : subAction.mutate({ kind: "disconnect" })
-                    }
-                    disabled={agent.id === "codex" ? codexAction.isPending : subAction.isPending}
-                  >
-                    Disconnect
-                  </Button>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <code className="bg-muted text-text-secondary rounded px-2 py-1 text-xs">
-                        {agent.command}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label="Copy command"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(agent.command ?? "");
-                          toast.success("Command copied");
-                        }}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      {capabilities.ipcInvoke && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            const res = await openAgentSetupTerminal(agent.id);
-                            if (!res.ok) toast.error(res.error ?? "Could not open Terminal");
-                          }}
-                        >
-                          <TerminalSquare className="mr-1.5 h-3.5 w-3.5" /> Open in Terminal
-                        </Button>
-                      )}
-                    </div>
-                    {agent.kind === "paste" ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          aria-label={`${agent.name} subscription token`}
-                          type="password"
-                          value={subToken}
-                          onChange={(e) => setSubToken(e.target.value)}
-                          placeholder={agent.placeholder ?? ""}
-                          className="max-w-md text-sm"
-                          disabled={subAction.isPending}
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            subToken.trim() &&
-                            subAction.mutate({ kind: "paste", token: subToken.trim() })
-                          }
-                          disabled={!subToken.trim() || subAction.isPending}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        {capabilities.ipcInvoke && (
-                          <div className="flex items-center gap-2">
-                            {/* One click: main spawns the bundled `codex login`
-                                (browser OAuth, no device codes) and imports the
-                                credential it writes. Desktop only — the web app
-                                has no CLI to spawn, so it uses the paste path
-                                below instead of a dead button. */}
-                            <Button
-                              size="sm"
-                              className="self-start"
-                              onClick={() => codexAction.mutate({ kind: "login" })}
-                              disabled={codexAction.isPending}
-                            >
-                              {codexAction.isPending
-                                ? "Waiting for browser…"
-                                : "Sign in with ChatGPT"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => codexAction.mutate({ kind: "import" })}
-                              disabled={codexAction.isPending}
-                            >
-                              Import existing
-                            </Button>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Input
-                            aria-label="Codex auth.json contents"
-                            type="password"
-                            value={codexAuthJson}
-                            onChange={(e) => setCodexAuthJson(e.target.value)}
-                            placeholder={"Paste ~/.codex/auth.json contents"}
-                            className="max-w-md text-sm"
-                            disabled={codexPaste.isPending}
-                          />
-                          <Button
-                            size="sm"
-                            variant={capabilities.ipcInvoke ? "outline" : "default"}
-                            onClick={() =>
-                              codexAuthJson.trim() && codexPaste.mutate(codexAuthJson.trim())
-                            }
-                            disabled={!codexAuthJson.trim() || codexPaste.isPending}
-                          >
-                            Save
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-              </DisclosureRow>
-            );
-          })}
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="space-y-2">
+              <p className="text-text-primary text-sm font-medium">Cloud accounts</p>
+              {providerAccounts.data?.providers.map((provider) => {
+                const account = defaultProviderAccount(providerAccounts.data, provider.id);
+                return (
+                  <p key={provider.id} className="text-text-muted text-xs">
+                    {provider.name} ·{" "}
+                    {account?.status === "connected"
+                      ? `${account.label} · ${account.authMethod === "api_key" ? "API key" : `${provider.subscriptionName ?? provider.name} subscription`}`
+                      : providerAccounts.data?.defaultAccountIds[provider.id]
+                        ? "Choose or reconnect an account"
+                        : "No default account"}
+                  </p>
+                );
+              })}
+              {!providerAccounts.data && (
+                <p className="text-text-muted text-xs">
+                  {providerAccounts.isLoading
+                    ? "Checking accounts…"
+                    : "Manage API keys and subscriptions"}
+                </p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => uiActions.setActiveSettingsSection("ai")}
+            >
+              Manage accounts
+            </Button>
+          </div>
         </div>
       </div>
 

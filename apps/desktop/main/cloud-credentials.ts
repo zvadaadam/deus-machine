@@ -1,8 +1,5 @@
-// Durable home for cloud credentials on this device: the per-device agnt
-// platform key (minted after Deus Cloud sign-in) and the Claude subscription
-// token (Settings → Agents). Built on the shared safeStorage-file primitive;
-// the renderer never sees values — only presence/meta. The backend receives
-// them at spawn (env) and at runtime (local credentials route).
+// The per-device platform key, encrypted with the shared safeStorage primitive.
+// Provider credentials live only in the signed-in user's cloud account store.
 
 import {
   decryptSecret,
@@ -16,7 +13,7 @@ import {
 
 const CREDENTIALS_FILE_NAME = "deus-cloud-credentials.json";
 
-export type CloudCredentialName = "agntApiKey" | "claudeOauthToken" | "codexAuthJson";
+export type CloudCredentialName = "agntApiKey";
 
 export interface CloudCredentialMeta {
   /** agnt-side key id — needed to revoke the device key on sign-out. */
@@ -25,21 +22,6 @@ export interface CloudCredentialMeta {
   orgId?: string;
   /** Mint label (hostname) shown in Settings. */
   label?: string;
-  /**
-   * Set when a copy of this credential was successfully written to the
-   * platform. Disconnect needs it: after an account sign-out the device key
-   * is gone, so a platform delete is impossible — and without this flag the
-   * only choices were to claim success (leaving a token that keeps billing
-   * cloud turns) or to warn about a cloud copy that may never have existed.
-   */
-  syncedToPlatform?: boolean;
-  /**
-   * The org the platform copy was written to. Sign-out leaves subscription
-   * credentials on disk (only the device key is deleted), so signing into a
-   * DIFFERENT account would otherwise upload the same token into a second
-   * org — live in both, deletable from only one.
-   */
-  syncedOrgId?: string;
   createdAt?: string;
 }
 
@@ -56,14 +38,7 @@ export interface CloudCredentialsStatus {
   hasPlatformKey: boolean;
   platformKeyLabel: string | null;
   platformOrgId: string | null;
-  hasClaudeSubscription: boolean;
-  hasCodexSubscription: boolean;
-  /**
-   * The OS keyring cannot decrypt right now, so stored credentials exist on
-   * disk but are UNUSABLE this session. Distinct from "not connected":
-   * reporting these as connected would show a working subscription while
-   * every cloud turn runs without one.
-   */
+  /** The OS keyring cannot decrypt the stored platform key this session. */
   vaultLocked: boolean;
 }
 
@@ -74,7 +49,10 @@ async function readStore(): Promise<StoredCredentialsFile> {
   if (parsed?.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null) {
     return { version: 1, entries: {} };
   }
-  return parsed;
+  return {
+    version: 1,
+    entries: parsed.entries.agntApiKey ? { agntApiKey: parsed.entries.agntApiKey } : {},
+  };
 }
 
 export async function setCloudCredential(
@@ -84,11 +62,6 @@ export async function setCloudCredential(
 ): Promise<void> {
   const store = await readStore();
   store.entries[name] = {
-    // Carry meta the caller did not restate: a value-only rewrite (re-pasting
-    // a token while signed out) must NOT wipe syncedToPlatform/syncedOrgId —
-    // the platform still holds the OLD copy under this name, and disconnect
-    // relies on those flags to refuse a false "disconnected".
-    ...store.entries[name],
     encryptedValue: encryptSecret(value),
     createdAt: new Date().toISOString(),
     ...meta,
@@ -103,7 +76,7 @@ export async function getCloudCredential(name: CloudCredentialName): Promise<str
   if (!isSafeStorageAvailable()) {
     // The keyring is not ready (Linux login keyring still locked, first boot).
     // Nothing was even attempted, so this says nothing about the ciphertext —
-    // deleting here would destroy the device key and every subscription token
+    // deleting here would destroy the device key
     // over a condition that resolves on its own a second later.
     return null;
   }
@@ -123,8 +96,7 @@ export async function getCloudCredentialMeta(
   const store = await readStore();
   const entry = store.entries[name];
   if (!entry) return null;
-  const { encryptedValue: _encrypted, ...meta } = entry;
-  return meta;
+  return { keyId: entry.keyId, orgId: entry.orgId, label: entry.label, createdAt: entry.createdAt };
 }
 
 export async function deleteCloudCredential(name: CloudCredentialName): Promise<void> {
@@ -152,18 +124,6 @@ export async function hasStoredCredentials(): Promise<boolean> {
   return Object.keys(store.entries).length > 0;
 }
 
-/**
- * The ownership rule, in ONE place. A credential's platform copy is foreign
- * only when BOTH org ids are known and differ — an unknown side proves
- * nothing, and the two previous inline spellings disagreed on exactly that.
- */
-export function foreignToOrg(
-  meta: { syncedOrgId?: string } | null | undefined,
-  orgId: string | null | undefined
-): boolean {
-  return Boolean(meta?.syncedOrgId && orgId && meta.syncedOrgId !== orgId);
-}
-
 /** Presence/meta only — safe for the renderer; values never cross IPC. */
 export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatus> {
   const store = await readStore();
@@ -173,20 +133,10 @@ export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatu
   // would have Settings disagree with what the cloud lane actually holds.
   // Only probe the keyring when something is stored — see hasStoredCredentials.
   const usable = Object.keys(store.entries).length === 0 || isSafeStorageAvailable();
-  // Same ownership rule as the backend push: a token stamped for ANOTHER
-  // account's org is not "connected" here — reporting it would show a green
-  // check while every cloud turn runs without a credential.
-  const ownedHere = (name: "claudeOauthToken" | "codexAuthJson") => {
-    const entry = store.entries[name];
-    if (!entry) return false;
-    return !foreignToOrg(entry, key?.orgId);
-  };
   return {
     hasPlatformKey: usable && Boolean(key),
     platformKeyLabel: key?.label ?? null,
     platformOrgId: key?.orgId ?? null,
-    hasClaudeSubscription: usable && ownedHere("claudeOauthToken"),
-    hasCodexSubscription: usable && ownedHere("codexAuthJson"),
     vaultLocked: !usable && Object.keys(store.entries).length > 0,
   };
 }

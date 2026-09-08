@@ -14,7 +14,7 @@
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
 
-import { createSession, createSessionToken } from "@deus-hq/sdk";
+import { createSession } from "@deus-hq/sdk";
 import {
   LIFECYCLE_EVENT_TYPES,
   SessionErrorEventSchema,
@@ -57,6 +57,7 @@ import {
 } from "@shared/ask-user-question";
 import { getCloudConfig, runCloudConnectHook, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
+import { mintCloudSessionToken } from "./session-token";
 import type { AgentEventHandler } from "../event-handler";
 import { relay, cancelSessionRelays } from "../tool-relay";
 import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../persistence";
@@ -911,11 +912,10 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       `[CloudDriver] pre-connect token refresh failed for ${row.workspace_id}: ${String(err)}`
     );
   }
-  const { token } = await createSessionToken(row.provider_session_id, {
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    expiresIn: 24 * 60 * 60,
-  });
+  const { token } = await mintCloudSessionToken(row.provider_session_id, config, 24 * 60 * 60);
+  if (generationAtStart !== identityGeneration) {
+    throw new Error("Platform identity changed during connect — retry under the new account");
+  }
 
   const session: CloudSession = {
     deusSessionId,
@@ -1075,21 +1075,8 @@ export async function startCloudTurn(
   const registered = handler.beginTurn(deusSessionId, turnId);
   try {
     const wsOptions: Record<string, unknown> = {};
-    if (options.agentHarness === "codex-app-server") {
-      // Codex: the credential is the auth.json FILE, held only as the
-      // canonical platform secret — the session DO resolves it at dispatch
-      // (deus's backend never carries it). Only the harness rides the wire.
-      wsOptions.harness = "codex-app-server";
-    } else if (config.claudeOauthToken) {
-      // Deus picks the per-turn credential EXPLICITLY — subscription first,
-      // API key fallback. No env-ordering accidents like the raw CLI (where
-      // a stray ANTHROPIC_API_KEY silently outranks the subscription token).
-      // The oauth branch requires agnt's authKind-aware sidecar (0.3.1+).
-      wsOptions.apiKey = config.claudeOauthToken;
-      wsOptions.authKind = "oauth";
-    } else if (config.anthropicApiKey) {
-      wsOptions.apiKey = config.anthropicApiKey;
-    }
+    // The platform selects the signed-in user's provider account at admission.
+    if (options.agentHarness) wsOptions.harness = options.agentHarness;
     if (options.model) wsOptions.model = options.model;
     if (options.thinkingLevel) wsOptions.thinkingLevel = options.thinkingLevel;
     session.socket.send({

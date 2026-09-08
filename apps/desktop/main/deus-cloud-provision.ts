@@ -10,7 +10,6 @@ import { hostname } from "node:os";
 import { isSafeStorageAvailable } from "./safe-storage-file";
 import {
   deleteCloudCredential,
-  foreignToOrg,
   hasStoredCredentials,
   getCloudCredential,
   getCloudCredentialMeta,
@@ -154,17 +153,12 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
     return false;
   }
 
-  const [apiKey, claudeOauthToken, sessionToken, keyMeta, claudeMeta] = await Promise.all([
+  const [apiKey, sessionToken, keyMeta] = await Promise.all([
     getCloudCredential("agntApiKey"),
-    getCloudCredential("claudeOauthToken"),
     getStoredDeusCloudSessionToken().catch(() => null),
     getCloudCredentialMeta("agntApiKey").catch(() => null),
-    getCloudCredentialMeta("claudeOauthToken").catch(() => null),
   ]);
-  // Same ownership rule as the catch-up sync and the status flags: a token
-  // stamped for ANOTHER account's org must not run this org's turns.
   const orgId = keyMeta?.orgId ?? null;
-  const claudeForThisOrg = foreignToOrg(claudeMeta, orgId) ? null : claudeOauthToken;
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
@@ -176,7 +170,6 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
       signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
       body: JSON.stringify({
         apiKey: apiKey ?? null,
-        claudeOauthToken: claudeForThisOrg ?? null,
         // deus-cloud mint context: lets the backend request per-repo GitHub
         // App installation tokens at workspace-provision time. Session-token
         // auth — expiry just disables the mint until the next push.
@@ -254,51 +247,6 @@ export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): P
   return true;
 }
 
-/**
- * Sync any agent turn-credential's CANONICAL platform copy (an UNLINKED
- * secret — applies_to_all=false, zero environment links: resolvable only by
- * name-targeted turn lookups, never fanned into sandbox env). `null`
- * deletes. Best-effort without a device key.
- */
-export async function syncAgentSecretToPlatform(
-  name: string,
-  value: string | null
-): Promise<boolean> {
-  const apiKey = await getCloudCredential("agntApiKey");
-  if (!apiKey) return false;
-  const url = `${resolveAgntBaseUrl()}/secrets/${name}`;
-  const headers = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
-  try {
-    const response =
-      value === null
-        ? await fetch(url, {
-            method: "DELETE",
-            headers,
-            signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
-          })
-        : await fetch(url, {
-            method: "PUT",
-            headers,
-            signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
-            body: JSON.stringify({ value, appliesToAll: false }),
-          });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The in-flight post-login catch-up. Disconnect awaits it so the pair
- * serializes: the one real overlap between a background platform PUT and a
- * user-initiated delete of the same credential.
- */
-let credentialCatchUp: Promise<void> = Promise.resolve();
-
-export function whenCredentialCatchUpSettled(): Promise<void> {
-  return credentialCatchUp.catch(() => {});
-}
-
 /** Post-login hook: mint if needed, then hand credentials to the backend. */
 export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
   try {
@@ -312,62 +260,7 @@ export async function provisionAfterLogin(sessionToken: string, cloudUrl: string
     setPlatformKeyError(message);
     logMainProcess(`[deus-cloud] device key provisioning failed: ${message}`);
   }
-  // Credentials connected before sign-in were local-only — the device key now
-  // exists, so the platform copies can catch up. BOTH agents: syncing only
-  // Claude leaves a Codex login connected pre-sign-in invisible to the cloud
-  // forever (nothing else re-runs this).
-  const catchUp = (async () => {
-    const [storedClaude, storedCodex] = await Promise.all([
-      getCloudCredential("claudeOauthToken").catch(() => null),
-      getCloudCredential("codexAuthJson").catch(() => null),
-    ]);
-    // Record the sync the same way the connect paths do. Without this a
-    // credential first uploaded HERE never gets the flag, and a later
-    // signed-out disconnect deletes the local copy while reporting success —
-    // leaving the platform copy running (and billing) cloud turns.
-    //
-    // Skipping a credential already synced ELSEWHERE is the other half: these
-    // survive sign-out (only the device key is deleted), so a sign-in to a
-    // different account would upload the same token into a second org — live
-    // in both, and deletable from only the one you are signed into.
-    const orgId = (await getCloudCredentialMeta("agntApiKey").catch(() => null))?.orgId ?? null;
-    for (const [name, value, secretName] of [
-      ["claudeOauthToken", storedClaude, "CLAUDE_CODE_OAUTH_TOKEN"],
-      ["codexAuthJson", storedCodex, "CODEX_AUTH_JSON"],
-    ] as const) {
-      if (!value) continue;
-      const meta = await getCloudCredentialMeta(name).catch(() => null);
-      if (foreignToOrg(meta, orgId)) {
-        logMainProcess(
-          `[deus-cloud] ${name} belongs to another account — not syncing it to ${orgId ?? "unknown"}`
-        );
-        continue;
-      }
-      // HEAL-ONLY: re-uploading an already-synced credential would silently
-      // resurrect a platform copy the user deleted from ANOTHER surface (the
-      // web app's Disconnect removes only the platform secret — this desktop's
-      // vault copy survives and must not undo that decision on next launch).
-      // Rotations still propagate: every explicit connect PUTs unconditionally
-      // and re-stamps.
-      if (meta?.syncedToPlatform) continue;
-      // The user can hit Disconnect while this background PUT is in flight;
-      // committing the captured value afterwards would silently resurrect the
-      // credential Disconnect just reported removed. Re-check around the PUT
-      // (disconnect itself awaits this whole catch-up — see
-      // whenCredentialCatchUpSettled — so the pair cannot interleave).
-      if ((await getCloudCredential(name).catch(() => null)) !== value) continue;
-      if (await syncAgentSecretToPlatform(secretName, value)) {
-        if ((await getCloudCredential(name).catch(() => null)) !== value) continue;
-        await setCloudCredential(name, value, {
-          syncedToPlatform: true,
-          ...(orgId ? { syncedOrgId: orgId } : {}),
-        });
-      }
-    }
-    await pushCloudCredentialsToBackend();
-  })();
-  credentialCatchUp = catchUp;
-  await catchUp;
+  await pushCloudCredentialsToBackend();
 }
 
 /**

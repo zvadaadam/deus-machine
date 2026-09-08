@@ -38,16 +38,8 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "deus_cloud:get_session",
   "deus_cloud:start_login",
   "deus_cloud:sign_out",
-  "deus_cloud:claude_sub_status",
-  "deus_cloud:agent_setup_terminal",
-  "deus_cloud:claude_sub_save_token",
-  "deus_cloud:claude_sub_disconnect",
   "deus_cloud:github_app_status",
   "deus_cloud:github_app_install",
-  "deus_cloud:codex_sub_status",
-  "deus_cloud:codex_sub_import",
-  "deus_cloud:codex_sub_login",
-  "deus_cloud:codex_sub_disconnect",
   "get_installed_apps",
   "open_in_app",
 
@@ -183,22 +175,8 @@ const electronAPI = {
   startDeusCloudLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:start_login"),
   signOutDeusCloud: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:sign_out"),
   retryDeusCloudProvision: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:retry_provision"),
-  getClaudeSubscriptionStatus: (): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:claude_sub_status"),
-  openAgentSetupTerminal: (agentId: string): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:agent_setup_terminal", agentId),
-  saveClaudeSubscriptionToken: (token: string): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:claude_sub_save_token", token),
-  disconnectClaudeSubscription: (): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:claude_sub_disconnect"),
   getGithubAppStatus: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_status"),
   installGithubApp: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:github_app_install"),
-  getCodexSubscriptionStatus: (): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:codex_sub_status"),
-  importCodexAuth: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:codex_sub_import"),
-  startCodexLogin: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:codex_sub_login"),
-  disconnectCodexSubscription: (): Promise<unknown> =>
-    ipcRenderer.invoke("deus_cloud:codex_sub_disconnect"),
   onDeusCloudAuthChanged: (callback: (session: unknown) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, session: unknown): void => callback(session);
     ipcRenderer.on("deus_cloud:changed", listener);

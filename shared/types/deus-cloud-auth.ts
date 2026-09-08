@@ -30,19 +30,3 @@ export interface DeusCloudAuthResult {
   session: DeusCloudSessionStatus;
   error?: string;
 }
-
-export interface ClaudeSubscriptionResult {
-  success: boolean;
-  hasClaudeSubscription: boolean;
-  error?: string;
-}
-
-export interface CodexSubscriptionResult {
-  success: boolean;
-  hasCodexSubscription: boolean;
-  accountEmail?: string;
-  error?: string;
-  /** Connected locally but NOT yet on the platform — cloud turns will fail
-   *  until the startup catch-up lands the copy. */
-  warning?: string;
-}

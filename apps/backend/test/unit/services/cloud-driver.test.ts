@@ -24,16 +24,19 @@ let capturedOnFrame: ((frame: Record<string, unknown>) => void) | null = null;
 let capturedOnDown: ((reason: string) => void) | null = null;
 let capturedOnOpen: (() => void) | null = null;
 let connectCount = 0;
+let capturedToken = "";
 /** Toggled by the reconnect tests: a closed socket reads false. */
 let socketOpen = true;
 
 vi.mock("../../../src/services/agent/cloud/session-socket", () => ({
   connectSessionSocket: (options: {
+    token: string;
     onFrame: (frame: Record<string, unknown>) => void;
     onOpen?: () => void;
     onDown?: (reason: string) => void;
   }) => {
     connectCount += 1;
+    capturedToken = options.token;
     capturedOnFrame = options.onFrame;
     capturedOnOpen = options.onOpen ?? null;
     capturedOnDown = options.onDown ?? null;
@@ -52,28 +55,26 @@ let identityChanged: (() => void) | null = null;
 const { mockRunCloudConnectHook } = vi.hoisted(() => ({
   mockRunCloudConnectHook: vi.fn(async (_workspaceId: string) => {}),
 }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({
-  // The workspace-init service registers its pre-connect refresh at import.
-  setCloudConnectHook: () => {},
-  setCloudIdentityChangedHandler: (fn: () => void) => {
-    identityChanged = fn;
-  },
-  runCloudConnectHook: (workspaceId: string) => mockRunCloudConnectHook(workspaceId),
-  getCloudConfig: () => ({
-    baseUrl: "http://agnt.test",
-    apiKey: "agnt_sk_test_x",
-    anthropicApiKey: "sk-ant-test",
-    claudeOauthToken: null,
-  }),
-}));
+vi.mock("../../../src/services/agent/cloud/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/services/agent/cloud/config")>();
+  return {
+    ...actual,
+    // The workspace-init service registers its pre-connect refresh at import.
+    setCloudConnectHook: () => {},
+    setCloudIdentityChangedHandler: (fn: () => void) => {
+      identityChanged = fn;
+      actual.setCloudIdentityChangedHandler(fn);
+    },
+    runCloudConnectHook: (workspaceId: string) => mockRunCloudConnectHook(workspaceId),
+  };
+});
 
 const mockCreateSession = vi.fn(async (_opts: Record<string, unknown>) => ({ id: "agnt-lazy-1" }));
-const mockCreateSessionToken = vi.fn(async () => ({ token: "session-jwt" }));
+const mockTokenExchange = vi.fn(async () => ({ token: "session-jwt" }));
 const mockGetSession = vi.fn(async (..._args: unknown[]) => ({ simulator: null }) as unknown);
 const mockGetWorkspace = vi.fn(async (..._args: unknown[]) => ({ status: "paused" }));
 const mockResumeWorkspace = vi.fn(async (..._args: unknown[]) => {});
 vi.mock("@deus-hq/sdk", () => ({
-  createSessionToken: () => mockCreateSessionToken(),
   createSession: (opts: Record<string, unknown>) => mockCreateSession(opts),
   getSession: (...args: unknown[]) => mockGetSession(...args),
   getWorkspace: (...args: unknown[]) => mockGetWorkspace(...args),
@@ -141,6 +142,10 @@ import {
   readCloudPreviewTemplate,
 } from "../../../src/services/agent/cloud/driver";
 import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
+import {
+  resetCloudConfigForTests,
+  setCloudRuntimeCredentials,
+} from "../../../src/services/agent/cloud/config";
 import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
 
 function makeHandler() {
@@ -183,7 +188,21 @@ function simulatorSnapshot(
 }
 
 beforeEach(async () => {
+  resetCloudConfigForTests();
+  setCloudRuntimeCredentials({
+    baseUrl: "http://agnt.test",
+    apiKey: "agnt_sk_test_x",
+    deusCloudSessionToken: "workos-default",
+  });
   vi.clearAllMocks();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url) =>
+      String(url).includes("/dashboard/sessions/")
+        ? new Response(JSON.stringify(await mockTokenExchange()))
+        : new Response(null)
+    )
+  );
   capturedOnFrame = null;
   capturedOnDown = null;
   socketOpen = true;
@@ -194,6 +213,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   shutdownCloudDriver();
+  vi.unstubAllGlobals();
 });
 
 describe("cloud driver frame → fold contract", () => {
@@ -580,7 +600,7 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnDown!("session socket down after 8 retries");
     // The first reconnect attempt fails at the token mint: the queue must
     // survive that too (it is only handed over once a session is registered).
-    mockCreateSessionToken.mockRejectedValueOnce(new Error("mint failed"));
+    mockTokenExchange.mockRejectedValueOnce(new Error("mint failed"));
     await expect(ensureCloudSession("deus-session-1")).rejects.toThrow("mint failed");
     // The next caller reconnects: the replacement inherits the queue and its
     // onOpen delivers it.
@@ -617,7 +637,7 @@ describe("cloud driver frame → fold contract", () => {
     // then fails at the token mint.
     socketOpen = false;
     capturedOnDown!("session socket down after 8 retries");
-    mockCreateSessionToken.mockRejectedValueOnce(new Error("mint failed"));
+    mockTokenExchange.mockRejectedValueOnce(new Error("mint failed"));
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(mockSend).not.toHaveBeenCalledWith(
@@ -886,6 +906,93 @@ describe("cloud driver frame → fold contract", () => {
 });
 
 describe("cloud driver session lifecycle", () => {
+  const productSession = (sub: string, exp = 1000) =>
+    `header.${Buffer.from(JSON.stringify({ sub, iss: "deus-cloud", exp })).toString("base64url")}.signature`;
+
+  it("uses the signed-in person for the socket and keeps it across ordinary bearer renewal", async () => {
+    const bearer = productSession("alice");
+    setCloudRuntimeCredentials({ deusCloudSessionToken: bearer });
+    mockTokenExchange.mockClear();
+    mockClose.mockClear();
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ token: "alice-session", expires_in: 86400 }))
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await ensureCloudSession("deus-session-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://agnt.test/dashboard/sessions/agnt-session-1/token",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: `Bearer ${bearer}` }),
+        body: JSON.stringify({ expires_in: 86400 }),
+      })
+    );
+    expect(capturedToken).toBe("alice-session");
+    expect(mockTokenExchange).not.toHaveBeenCalled();
+
+    fetchMock.mockClear();
+    setCloudRuntimeCredentials({ deusCloudSessionToken: productSession("alice", 2000) });
+    expect(await ensureCloudSession("deus-session-1")).toBe(first);
+    expect(mockClose).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403])(
+    "never falls back to an org-key token after the product exchange returns %s",
+    async (status) => {
+      setCloudRuntimeCredentials({ deusCloudSessionToken: productSession("alice") });
+      mockTokenExchange.mockClear();
+      connectCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async (_url, init) =>
+            new Response(null, { status: init.method === "POST" ? status : 200 })
+        )
+      );
+      await expect(ensureCloudSession("deus-session-1")).rejects.toThrow(String(status));
+      expect(mockTokenExchange).not.toHaveBeenCalled();
+      expect(connectCount).toBe(0);
+    }
+  );
+
+  it("discards a pending personal token when the user changes without changing the org key", async () => {
+    setCloudRuntimeCredentials({ deusCloudSessionToken: productSession("alice") });
+    mockTokenExchange.mockClear();
+    connectCount = 0;
+    let finish!: (response: Response) => void;
+    let started!: () => void;
+    const exchanged = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const token = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        if (init.method !== "POST") return new Response(null);
+        started();
+        return token;
+      })
+    );
+    const attempt = ensureCloudSession("deus-session-1");
+    const rejected = expect(attempt).rejects.toThrow("identity changed");
+    await exchanged;
+    setCloudRuntimeCredentials({ deusCloudSessionToken: productSession("bob") });
+    finish(new Response(JSON.stringify({ token: "alice-session", expires_in: 86400 })));
+    await rejected;
+    expect(connectCount).toBe(0);
+    expect(mockTokenExchange).not.toHaveBeenCalled();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ token: "bob-session", expires_in: 86400 })))
+    );
+    await ensureCloudSession("deus-session-1");
+    expect(capturedToken).toBe("bob-session");
+  });
+
   it("lazily creates the agnt session for a bare new-tab session row", async () => {
     // New chat tabs insert plain session rows with no provider twin — the
     // driver must create one on first cloud contact, not error out.
@@ -907,7 +1014,7 @@ describe("cloud driver session lifecycle", () => {
 
   it("dedupes concurrent connects — a lost race would double-deliver frames", async () => {
     // Fresh driver state, then race two ensures for the same session: they
-    // must share ONE socket connect (createSessionToken awaits, so the
+    // must share ONE socket connect (the token exchange awaits, so the
     // check-then-connect window is real).
     shutdownCloudDriver();
     initCloudDriver(handler);
@@ -959,9 +1066,25 @@ describe("cloud driver turn API", () => {
       text: "hello",
       turnId: "turn-42",
       idempotencyKey: "turn-42",
-      options: { apiKey: "sk-ant-test" },
     });
+    expect(frame.options).toBeUndefined();
   });
+
+  it.each(["claude-code", "codex-app-server"])(
+    "sends only turn preferences for %s",
+    async (agentHarness) => {
+      await startCloudTurn("deus-session-1", "turn-preferences", "hello", {
+        agentHarness,
+        model: "selected-model",
+        thinkingLevel: "high",
+      });
+      expect(mockSend.mock.calls.at(-1)![0].options).toEqual({
+        harness: agentHarness,
+        model: "selected-model",
+        thinkingLevel: "high",
+      });
+    }
+  );
 
   it("rejects a send while a turn is live (agnt would queue, deus's contract is one turn)", async () => {
     handler.liveTurnId.mockReturnValue("busy-turn");
@@ -1931,6 +2054,8 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     });
     // The primary changed (ready ios → stopped android): every client hears it.
     expect(mockBroadcast).toHaveBeenCalledWith(expect.stringContaining('"kind":"status"'));
+    // The REST read also reconnects; subsequent frames come from that channel.
+    await ensureCloudSession("deus-session-1");
     // The single-status shape of an older platform prunes nothing.
     capturedOnFrame!({
       type: "simulator.status",
@@ -2108,7 +2233,7 @@ describe("cloud simulator cache — round six (every platform, ordered REST, reg
     const oldOnFrame = capturedOnFrame!;
     socketOpen = false; // the old socket is not open: the next ensure replaces it
     let release!: (value: { token: string }) => void;
-    mockCreateSessionToken.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+    mockTokenExchange.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
     const next = ensureCloudSession("deus-session-1");
     await Promise.resolve();
     await Promise.resolve();
@@ -2136,12 +2261,12 @@ describe("cloud driver pre-connect hook", () => {
     shutdownCloudDriver();
     initCloudDriver(handler);
     mockRunCloudConnectHook.mockClear();
-    mockCreateSessionToken.mockClear();
+    mockTokenExchange.mockClear();
     const order: string[] = [];
     mockRunCloudConnectHook.mockImplementationOnce(async () => {
       order.push("hook");
     });
-    mockCreateSessionToken.mockImplementationOnce(async () => {
+    mockTokenExchange.mockImplementationOnce(async () => {
       order.push("token");
       return { token: "session-jwt" };
     });

@@ -482,129 +482,31 @@ export async function resumeCloudWorkspace(providerWorkspaceId: string): Promise
   });
 }
 
-/** Settings surface: connection + secret status for the Cloud section. */
+/** Connection and repository access; provider accounts have their own personal API. */
 export async function getCloudSettingsStatus(): Promise<{
   enabled: boolean;
   baseUrl: string | null;
-  hasAnthropicKey: boolean;
-  /** A cloud turn can actually run: subscription token or API key present. */
-  hasTurnCredential: boolean;
-  /** A CLAUDE cloud turn can run — gates flows pinned to a Claude model. */
-  hasClaudeTurnCredential: boolean;
-  /** Canonical CODEX_AUTH_JSON exists on the platform — the web app's only
-   *  codex-connected signal (no desktop vault there). */
-  hasPlatformCodex: boolean;
   hasGithubToken: boolean;
 }> {
   const config = getCloudConfig();
-  if (!config) {
-    return {
-      enabled: false,
-      baseUrl: null,
-      hasAnthropicKey: false,
-      hasTurnCredential: false,
-      hasClaudeTurnCredential: false,
-      hasPlatformCodex: false,
-      hasGithubToken: false,
-    };
-  }
+  if (!config) return { enabled: false, baseUrl: null, hasGithubToken: false };
   let hasGithubToken = false;
-  // A second device in the same org may hold NO local Claude token while the
-  // canonical CLAUDE_CODE_OAUTH_TOKEN platform secret exists — the session DO
-  // fills it at dispatch, so turns are runnable and the status must say so.
-  let hasPlatformClaude = false;
-  let hasPlatformCodex = false;
   try {
     for await (const secret of agntListSecrets({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
     })) {
-      if (secret.keyName === "CLAUDE_CODE_OAUTH_TOKEN") hasPlatformClaude = true;
-      if (secret.keyName === "CODEX_AUTH_JSON") hasPlatformCodex = true;
-      if (hasGithubToken) continue; // both flags found by scanning the FULL list
-      if (secret.keyName.toLowerCase() !== "github_token") continue;
-      // Only an ORG-WIDE secret is the user's PAT. Provisioning also writes
-      // short-lived, environment-scoped `github_token` App mints; counting
-      // those would make Settings claim a personal token is saved when none
-      // is, and mark the repo-access step done off a credential that expires
-      // in an hour.
-      if (secret.appliesToAll === false) continue;
-      // No break: an org-wide github_token yielded BEFORE the Claude entry
-      // must not stop the scan and leave hasPlatformClaude iteration-order
-      // dependent.
-      hasGithubToken = true;
+      // Environment-scoped GitHub App mints expire; only an org-wide token
+      // counts as the user's saved PAT.
+      if (secret.keyName.toLowerCase() === "github_token" && secret.appliesToAll !== false) {
+        hasGithubToken = true;
+        break;
+      }
     }
   } catch (err) {
     console.warn(`[CloudSettings] listSecrets failed: ${err instanceof Error ? err.message : err}`);
   }
-  return {
-    enabled: true,
-    baseUrl: config.baseUrl,
-    hasAnthropicKey: Boolean(config.anthropicApiKey),
-    hasTurnCredential:
-      Boolean(config.claudeOauthToken || config.anthropicApiKey) ||
-      hasPlatformClaude ||
-      hasPlatformCodex,
-    // Claude-only readiness: the environment-setup flow pins its turn to a
-    // Claude model, so its gate must NOT open on a codex-only credential.
-    hasClaudeTurnCredential:
-      Boolean(config.claudeOauthToken || config.anthropicApiKey) || hasPlatformClaude,
-    hasPlatformCodex,
-    hasGithubToken,
-  };
-}
-
-/**
- * WEB-lane Codex connect: validate and store the pasted auth.json as the
- * canonical platform secret. Same validation as the desktop import; unlinked
- * (appliesToAll false) exactly like the desktop sync — turn credentials are
- * resolved per-dispatch by the session DO, never fanned into sandbox env.
- */
-export async function saveCloudCodexAuth(authJson: string): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
-  let parsed: { auth_mode?: string; tokens?: { access_token?: string; refresh_token?: string } };
-  try {
-    parsed = JSON.parse(authJson) as typeof parsed;
-  } catch {
-    throw new Error("That isn't valid JSON — paste the full contents of ~/.codex/auth.json");
-  }
-  if (
-    parsed.auth_mode !== "chatgpt" ||
-    !parsed.tokens?.access_token ||
-    !parsed.tokens?.refresh_token
-  ) {
-    // refresh_token required: an access-token-only paste works until first
-    // expiry, then every cloud turn fails while Settings still reads
-    // Connected off the secret's mere presence.
-    throw new Error(
-      "That auth.json isn't a complete ChatGPT-plan login (needs access AND refresh tokens) — run `codex login` (or `codex login --device-auth` on a headless machine) and paste the full file it writes."
-    );
-  }
-  await agntCreateSecret("CODEX_AUTH_JSON", authJson, {
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-    appliesToAll: false,
-  });
-}
-
-export async function disconnectCloudCodexAuth(): Promise<void> {
-  const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
-  // deleteSecret is id-addressed; resolve the entry by canonical name first.
-  for await (const secret of agntListSecrets({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-  })) {
-    if (secret.keyName !== "CODEX_AUTH_JSON") continue;
-    const deleted = await agntDeleteSecret(secret.id, {
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    });
-    if (!deleted) throw new Error("The platform did not confirm the delete — try again.");
-    return;
-  }
-  // Nothing to delete = already disconnected; not an error.
+  return { enabled: true, baseUrl: config.baseUrl, hasGithubToken };
 }
 
 /** Store the org github_token secret (unlocks private repos in sandboxes). */

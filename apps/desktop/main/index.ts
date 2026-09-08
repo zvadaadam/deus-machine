@@ -32,9 +32,7 @@ import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from ".
 import { registerDeusCloudDirectTokenHandler } from "./deus-cloud-direct-token";
 import { resolveDeusCloudUrl } from "./deus-cloud-auth-contract";
 import { provisionAtStartup } from "./deus-cloud-provision";
-import { registerClaudeSubscriptionHandlers } from "./claude-subscription";
 import { registerGithubAppHandlers } from "./github-app";
-import { registerCodexSubscriptionHandlers } from "./codex-subscription";
 import {
   formatStartupFailureDetail,
   getMainLogPath,
@@ -343,9 +341,7 @@ app.whenReady().then(async () => {
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
   registerDeusCloudDirectTokenHandler();
-  registerClaudeSubscriptionHandlers();
   registerGithubAppHandlers();
-  registerCodexSubscriptionHandlers();
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers();

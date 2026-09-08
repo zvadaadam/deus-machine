@@ -24,14 +24,14 @@ const {
   mockInvalidate,
   mockGetCloudConfig,
   mockGetCloudEnvironmentInfo,
-  mockGetCloudSettingsStatus,
+  mockGetProviderAccounts,
   sdk,
 } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
   mockInvalidate: vi.fn(),
   mockGetCloudConfig: vi.fn(),
   mockGetCloudEnvironmentInfo: vi.fn(),
-  mockGetCloudSettingsStatus: vi.fn(async () => ({ hasClaudeTurnCredential: true })),
+  mockGetProviderAccounts: vi.fn(),
   sdk: {
     createAutomation: vi.fn(),
     getAutomation: vi.fn(),
@@ -53,6 +53,7 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({
   // The workspace-init service registers its pre-connect refresh at import.
   setCloudConnectHook: () => {},
   getCloudConfig: mockGetCloudConfig,
+  getCloudConnectionIdentity: () => JSON.stringify(mockGetCloudConfig()),
 }));
 vi.mock("../../../src/services/cloud-environment.service", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -64,8 +65,8 @@ vi.mock("../../../src/services/workspace.service", () => ({
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   ensureCloudSession: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
-  getCloudSettingsStatus: mockGetCloudSettingsStatus,
+vi.mock("../../../src/services/provider-accounts.service", () => ({
+  getProviderAccounts: mockGetProviderAccounts,
 }));
 vi.mock("@deus-hq/sdk", () => ({
   ...sdk,
@@ -79,8 +80,10 @@ import {
   listAutomations,
   openAutomationRun,
   refreshAutomations,
+  initAutomations,
   runAutomationNow,
   toggleAutomation,
+  updateAutomation,
   validateSchedule,
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
@@ -92,6 +95,21 @@ import * as store from "../../../src/services/automations/store";
 
 const ORIGIN = "https://github.com/acme/widgets";
 const AUTH = { baseUrl: "https://api.test", apiKey: "agnt_sk_test" };
+const CLOUD_CONFIG = { ...AUTH, orgId: "org-1", deusCloudSessionToken: "workos-bearer" };
+const AUTOMATION_AUTH = {
+  baseUrl: "https://api.test/dashboard/orgs/org-1",
+  apiKey: "workos-bearer",
+};
+const CLAUDE_ACCOUNT = {
+  id: "claude-a",
+  provider: "claude",
+  authMethod: "api_key",
+  label: "Work",
+  email: null,
+  planType: null,
+  status: "connected",
+  isDefault: true,
+};
 const WEEKDAYS_9 = "0 9 * * 1-5";
 
 async function* gen<T>(items: T[]): AsyncGenerator<T> {
@@ -159,7 +177,12 @@ beforeEach(async () => {
   db.exec(SCHEMA_SQL);
   mockGetDatabase.mockReturnValue(db);
   mockInvalidate.mockClear();
-  mockGetCloudConfig.mockReturnValue(AUTH);
+  mockGetCloudConfig.mockReturnValue(CLOUD_CONFIG);
+  mockGetProviderAccounts.mockReset().mockResolvedValue({
+    accounts: [CLAUDE_ACCOUNT],
+    defaultAccountIds: { claude: CLAUDE_ACCOUNT.id },
+    providers: [],
+  });
   envName = await environmentNameForRepo(ORIGIN);
   mockGetCloudEnvironmentInfo.mockResolvedValue({ configured: true, name: envName });
   for (const fn of Object.values(sdk)) fn.mockReset();
@@ -241,6 +264,51 @@ describeWithDb("runSummaryToRow", () => {
 // ============================================================================
 
 describeWithDb("refreshAutomations", () => {
+  it.each(["full", "single"])("discards an in-flight %s refresh after sign-out", async (kind) => {
+    mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: `owner-${kind}` });
+    let release!: (summary: ReturnType<typeof localSummary>) => void;
+    const pendingSummary = new Promise<ReturnType<typeof localSummary>>((resolve) => {
+      release = resolve;
+    });
+    sdk.listAutomations.mockReturnValue(
+      (async function* () {
+        yield await pendingSummary;
+      })()
+    );
+    sdk.getAutomation.mockReturnValue(pendingSummary);
+    sdk.listAutomationRuns.mockReturnValue(gen([]));
+    const pending = refreshAutomations(kind === "single" ? "auto-1" : undefined);
+    mockGetCloudConfig.mockReturnValue(null);
+    initAutomations();
+    release(localSummary());
+    await pending;
+    expect(listAutomations()).toEqual([]);
+    expect(store.listRuns("auto-1")).toEqual([]);
+  });
+
+  it("refreshes the next account immediately and ignores the previous account's late result", async () => {
+    mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "owner-a" });
+    let release!: (summary: ReturnType<typeof localSummary>) => void;
+    const oldSummary = new Promise<ReturnType<typeof localSummary>>((resolve) => {
+      release = resolve;
+    });
+    sdk.listAutomations.mockReturnValueOnce(
+      (async function* () {
+        yield await oldSummary;
+      })()
+    );
+    const previous = refreshAutomations();
+    mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "owner-b" });
+    sdk.listAutomations.mockReturnValueOnce(
+      gen([localSummary({ id: "auto-b", description: "B's schedule" })])
+    );
+    await refreshAutomations();
+    expect(listAutomations().map((automation) => automation.id)).toEqual(["auto-b"]);
+    release(localSummary({ id: "auto-a", description: "A's private schedule" }));
+    await previous;
+    expect(listAutomations().map((automation) => automation.id)).toEqual(["auto-b"]);
+  });
+
   it("mirrors the full list and drops rows the platform no longer has", async () => {
     store.upsertAutomation(summaryToRow(localSummary({ id: "gone" }) as never, new Map()));
     sdk.listAutomations.mockReturnValue(gen([localSummary()]));
@@ -259,6 +327,8 @@ describeWithDb("refreshAutomations", () => {
 
     await refreshAutomations("auto-1");
 
+    expect(sdk.getAutomation).toHaveBeenCalledWith("auto-1", AUTOMATION_AUTH);
+    expect(sdk.listAutomationRuns).toHaveBeenCalledWith("auto-1", AUTOMATION_AUTH);
     expect(store.listRuns("auto-1")).toHaveLength(1);
     expect(store.listRuns("auto-1")[0].provider_session_id).toBe("run-1");
   });
@@ -294,6 +364,7 @@ describeWithDb("createAutomation", () => {
     );
     expect(sdk.createAutomation).toHaveBeenCalledWith(
       expect.objectContaining({
+        ...AUTOMATION_AUTH,
         name: "morning-pr-review",
         description: "Morning PR review",
         cron: WEEKDAYS_9,
@@ -313,19 +384,110 @@ describeWithDb("createAutomation", () => {
       { repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 },
       "user"
     );
-    expect(sdk.createEnvironment).toHaveBeenCalledWith(expect.objectContaining({ name: envName }));
+    expect(sdk.createEnvironment).toHaveBeenCalledWith(
+      expect.objectContaining({ ...AUTH, name: envName })
+    );
   });
 
-  it("refuses to create when no Claude turn credential exists", async () => {
-    // Scheduling something that can never run would fail every fire until
-    // auto-pause — refuse up front and point at Settings → Cloud.
-    mockGetCloudSettingsStatus.mockResolvedValueOnce({ hasClaudeTurnCredential: false });
+  it.each(["codex only", "missing default", "reconnect required"])(
+    "refuses to schedule Claude with %s",
+    async (scenario) => {
+      mockGetProviderAccounts.mockResolvedValueOnce({
+        providers: [],
+        accounts:
+          scenario === "codex only"
+            ? [{ ...CLAUDE_ACCOUNT, provider: "codex" }]
+            : [
+                {
+                  ...CLAUDE_ACCOUNT,
+                  ...(scenario === "reconnect required" ? { status: "reconnect_required" } : {}),
+                },
+              ],
+        defaultAccountIds:
+          scenario === "codex only"
+            ? { codex: CLAUDE_ACCOUNT.id }
+            : { claude: scenario === "missing default" ? "deleted-id" : CLAUDE_ACCOUNT.id },
+      });
+      await expect(
+        createAutomation(
+          { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+          "user"
+        )
+      ).rejects.toThrow(/Choose a connected Claude account/);
+      expect(sdk.createAutomation).not.toHaveBeenCalled();
+      expect(sdk.createEnvironment).not.toHaveBeenCalled();
+    }
+  );
+
+  it("rejects an org device key without a signed-in product session", async () => {
+    mockGetCloudConfig.mockReturnValue(AUTH);
     await expect(
       createAutomation(
-        { repository_id: "repo-1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+        { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
         "user"
       )
-    ).rejects.toThrow(/can't run Claude yet/);
+    ).rejects.toThrow(/Sign in to Deus Cloud/);
+    expect(mockGetProviderAccounts).not.toHaveBeenCalled();
+    expect(sdk.createAutomation).not.toHaveBeenCalled();
+  });
+
+  it("refuses creation if the signed-in account changed during environment lookup", async () => {
+    mockGetCloudEnvironmentInfo.mockImplementationOnce(async () => {
+      mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "other-user" });
+      return { configured: true, name: envName };
+    });
+    await expect(
+      createAutomation(
+        { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+        "user"
+      )
+    ).rejects.toThrow(/account changed/);
+    expect(sdk.createAutomation).not.toHaveBeenCalled();
+  });
+
+  it.each(["create", "reconcile", "failed reconcile"])(
+    "does not seed the previous account's prompt after a late %s response",
+    async (stage) => {
+      const signOut = () => {
+        mockGetCloudConfig.mockReturnValue(null);
+        initAutomations();
+      };
+      if (stage === "create") {
+        sdk.createAutomation.mockImplementationOnce(async () => {
+          signOut();
+          return { id: "auto-1" };
+        });
+      } else {
+        sdk.getAutomation.mockImplementationOnce(async () => {
+          signOut();
+          if (stage === "failed reconcile") throw new Error("Disconnected");
+          return localSummary();
+        });
+      }
+      await expect(
+        createAutomation(
+          {
+            repository_id: "r1",
+            name: "Private audit",
+            prompt: "Private prompt",
+            cron: WEEKDAYS_9,
+          },
+          "user"
+        )
+      ).rejects.toThrow(/account changed/);
+      expect(sdk.createAutomation).toHaveBeenCalledTimes(1);
+      expect(listAutomations()).toEqual([]);
+    }
+  );
+
+  it("keeps an accepted create when its follow-up read fails under the same account", async () => {
+    sdk.getAutomation.mockRejectedValueOnce(new Error("Temporarily unavailable"));
+    const created = await createAutomation(
+      { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+      "user"
+    );
+    expect(created).toMatchObject({ name: "Audit", prompt: "Audit deps.", status: "active" });
+    expect(sdk.createAutomation).toHaveBeenCalledTimes(1);
   });
 
   it("rejects without cloud credentials, a remote, or a sane schedule", async () => {
@@ -334,7 +496,7 @@ describeWithDb("createAutomation", () => {
       createAutomation({ repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 }, "user")
     ).rejects.toThrow(/Deus Cloud/);
 
-    mockGetCloudConfig.mockReturnValue(AUTH);
+    mockGetCloudConfig.mockReturnValue(CLOUD_CONFIG);
     db.prepare("UPDATE repositories SET git_origin_url = NULL WHERE id = 'r1'").run();
     await expect(
       createAutomation({ repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 }, "user")
@@ -347,6 +509,36 @@ describeWithDb("createAutomation", () => {
   });
 });
 
+describeWithDb("automation mutation identity", () => {
+  it.each(["update", "pause", "delete", "run now"])(
+    "drops a late %s result after sign-out",
+    async (operation) => {
+      store.upsertAutomation(summaryToRow(localSummary() as never, new Map()));
+      sdk.getAutomation.mockResolvedValue(localSummary());
+      const signOut = async () => {
+        mockGetCloudConfig.mockReturnValue(null);
+        initAutomations();
+        return { runId: "run-9", status: "queued" };
+      };
+      sdk.updateAutomation.mockImplementationOnce(signOut);
+      sdk.pauseAutomation.mockImplementationOnce(signOut);
+      sdk.deleteAutomation.mockImplementationOnce(signOut);
+      sdk.triggerAutomation.mockImplementationOnce(signOut);
+      const pending =
+        operation === "update"
+          ? updateAutomation("auto-1", { name: "Updated" })
+          : operation === "pause"
+            ? toggleAutomation("auto-1", "paused")
+            : operation === "delete"
+              ? deleteAutomation("auto-1")
+              : runAutomationNow("auto-1");
+      await expect(pending).rejects.toThrow(/account changed/);
+      expect(listAutomations()).toEqual([]);
+      expect(store.listRuns("auto-1")).toEqual([]);
+    }
+  );
+});
+
 describeWithDb("toggleAutomation", () => {
   it("routes pause/resume to the platform and re-mirrors", async () => {
     store.upsertAutomation(summaryToRow(localSummary() as never, new Map()));
@@ -357,7 +549,10 @@ describeWithDb("toggleAutomation", () => {
     sdk.listAutomationRuns.mockReturnValue(gen([]));
 
     const paused = await toggleAutomation("auto-1", "paused");
-    expect(sdk.pauseAutomation).toHaveBeenCalledWith("auto-1", expect.objectContaining(AUTH));
+    expect(sdk.pauseAutomation).toHaveBeenCalledWith(
+      "auto-1",
+      expect.objectContaining(AUTOMATION_AUTH)
+    );
     expect(paused.status).toBe("paused");
     expect(paused.paused_reason).toBe("manual");
     expect(paused.next_run_at).toBeNull();
@@ -371,6 +566,7 @@ describeWithDb("deleteAutomation", () => {
     sdk.deleteAutomation.mockResolvedValue(undefined);
 
     await deleteAutomation("auto-1");
+    expect(sdk.deleteAutomation).toHaveBeenCalledWith("auto-1", AUTOMATION_AUTH);
     expect(listAutomations()).toHaveLength(0);
     expect(db.prepare("SELECT COUNT(*) AS n FROM automation_runs").get()).toEqual({ n: 0 });
   });
@@ -387,6 +583,10 @@ describeWithDb("runAutomationNow", () => {
 
     const runId = await runAutomationNow("auto-1");
     expect(runId).toBe("run-9");
+    expect(sdk.triggerAutomation).toHaveBeenCalledWith(
+      "auto-1",
+      expect.objectContaining(AUTOMATION_AUTH)
+    );
     const runs = store.listRuns("auto-1");
     expect(runs[0]).toMatchObject({ id: "run-9", status: "queued", trigger: "manual" });
   });
@@ -411,6 +611,7 @@ describeWithDb("openAutomationRun", () => {
 
   it("adopts the sandbox into deus rows and is idempotent", async () => {
     const first = await openAutomationRun("run-1");
+    expect(sdk.getSession).toHaveBeenCalledWith("run-1", AUTH);
     const workspace = db
       .prepare("SELECT * FROM workspaces WHERE id = ?")
       .get(first.workspaceId) as Record<string, unknown>;

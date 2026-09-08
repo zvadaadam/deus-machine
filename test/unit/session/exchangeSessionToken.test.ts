@@ -55,4 +55,27 @@ describe("exchangeCloudSessionToken", () => {
     await exchangeCloudSessionToken({ baseUrl: "https://b", sessionId: "s", bearer: "d" });
     expect((fetchMock.mock.calls[0]![1] as RequestInit).body).toBe(JSON.stringify({}));
   });
+
+  it("keeps a supplied session id inside its one route and rejects redirects", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ token: "t", expires_in: 3600 }))
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await exchangeCloudSessionToken({
+      baseUrl: "https://api.agnt/",
+      sessionId: "../other?secret=1",
+      bearer: "dcs",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.agnt/dashboard/sessions/..%2Fother%3Fsecret%3D1/token",
+      expect.objectContaining({ redirect: "error" })
+    );
+  });
+
+  it.each([null, {}, { token: "" }])("does not return malformed token payload %j", async (body) => {
+    global.fetch = vi.fn(async () => new Response(JSON.stringify(body))) as unknown as typeof fetch;
+    await expect(
+      exchangeCloudSessionToken({ baseUrl: "https://b", sessionId: "s", bearer: "d" })
+    ).rejects.toThrow("no token");
+  });
 });

@@ -7,7 +7,11 @@ import {
   type DirectSessionChannel,
 } from "@/features/session/cloud/directSessionRegistry";
 
-const channel = (): DirectSessionChannel => ({ sendMessage: vi.fn(), cancel: vi.fn() });
+const channel = (): DirectSessionChannel => ({
+  sendMessage: vi.fn(),
+  cancel: vi.fn(),
+  sendRaw: vi.fn(),
+});
 
 describe("directSessionRegistry", () => {
   it("round-trips register → get, and the disposer clears the entry", () => {
@@ -71,16 +75,17 @@ describe("buildMessageSendFrame", () => {
     expect(frame.options).toEqual({ harness: "codex-app-server", model: "gpt-5" });
   });
 
-  it("NEVER puts a credential on the wire (agnt resolves the org key at dispatch)", () => {
+  it("sends only turn preferences (the platform selects the personal account)", () => {
     const frame = buildMessageSendFrame("secret?", "turn-4", {
       agentHarness: "codex-app-server",
       model: "gpt-5",
       thinkingLevel: "low",
     });
-    const opts = (frame.options ?? {}) as Record<string, unknown>;
-    expect(opts.apiKey).toBeUndefined();
-    expect(opts.authKind).toBeUndefined();
-    expect(opts.codexAuthJson).toBeUndefined();
+    expect(frame.options).toEqual({
+      harness: "codex-app-server",
+      model: "gpt-5",
+      thinkingLevel: "low",
+    });
   });
 });
 

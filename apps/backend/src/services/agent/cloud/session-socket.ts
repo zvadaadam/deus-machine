@@ -14,7 +14,7 @@ export interface SessionSocketOptions {
   baseUrl: string;
   /** agnt session id (provider id, not the deus session id). */
   providerSessionId: string;
-  /** Session-scoped JWT minted via createSessionToken. */
+  /** Session-scoped JWT from the product exchange or environment-only SDK path. */
   token: string;
   onFrame: (frame: Record<string, unknown>) => void;
   onOpen?: () => void;

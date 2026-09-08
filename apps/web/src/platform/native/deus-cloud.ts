@@ -139,44 +139,6 @@ export function onAuthChanged(callback: (session: DeusCloudSessionStatus) => voi
   return window.electronAPI.onDeusCloudAuthChanged(callback);
 }
 
-export type ClaudeSubscriptionState = import("@shared/types").ClaudeSubscriptionResult;
-
-const WEB_SUBSCRIPTION: ClaudeSubscriptionState = {
-  success: false,
-  hasClaudeSubscription: false,
-  error: "Claude subscription connect requires the desktop app",
-};
-
-export async function getClaudeSubscriptionStatus(): Promise<ClaudeSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.getClaudeSubscriptionStatus) {
-    return { ...WEB_SUBSCRIPTION, success: true, error: undefined };
-  }
-  return window.electronAPI.getClaudeSubscriptionStatus();
-}
-
-export async function openAgentSetupTerminal(
-  agentId: string
-): Promise<{ ok: boolean; error?: string }> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.openAgentSetupTerminal) {
-    return { ok: false, error: "Opening a terminal requires the desktop app" };
-  }
-  return window.electronAPI.openAgentSetupTerminal(agentId);
-}
-
-export async function saveClaudeSubscriptionToken(token: string): Promise<ClaudeSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.saveClaudeSubscriptionToken) {
-    return WEB_SUBSCRIPTION;
-  }
-  return window.electronAPI.saveClaudeSubscriptionToken(token);
-}
-
-export async function disconnectClaudeSubscription(): Promise<ClaudeSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.disconnectClaudeSubscription) {
-    return WEB_SUBSCRIPTION;
-  }
-  return window.electronAPI.disconnectClaudeSubscription();
-}
-
 export interface GithubAppState {
   configured: boolean;
   signedIn: boolean;
@@ -205,41 +167,4 @@ export async function installGithubApp(): Promise<{ ok: boolean; error?: string 
     return { ok: false, error: "Installing the GitHub App requires the desktop app" };
   }
   return window.electronAPI.installGithubApp();
-}
-
-export type CodexSubscriptionState = import("@shared/types").CodexSubscriptionResult;
-
-const WEB_CODEX: CodexSubscriptionState = {
-  success: false,
-  hasCodexSubscription: false,
-  error: "Codex subscription connect requires the desktop app",
-};
-
-export async function getCodexSubscriptionStatus(): Promise<CodexSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.getCodexSubscriptionStatus) {
-    return { ...WEB_CODEX, success: true, error: undefined };
-  }
-  return window.electronAPI.getCodexSubscriptionStatus();
-}
-
-export async function importCodexAuth(): Promise<CodexSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.importCodexAuth) {
-    return WEB_CODEX;
-  }
-  return window.electronAPI.importCodexAuth();
-}
-
-/** One-click ChatGPT sign-in: main spawns `codex login`, imports the result. */
-export async function startCodexLogin(): Promise<CodexSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.startCodexLogin) {
-    return { success: false, hasCodexSubscription: false, error: "Requires the desktop app" };
-  }
-  return window.electronAPI.startCodexLogin() as Promise<CodexSubscriptionState>;
-}
-
-export async function disconnectCodexSubscription(): Promise<CodexSubscriptionState> {
-  if (!capabilities.ipcInvoke || !window.electronAPI?.disconnectCodexSubscription) {
-    return WEB_CODEX;
-  }
-  return window.electronAPI.disconnectCodexSubscription();
 }

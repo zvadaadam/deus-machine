@@ -72,16 +72,13 @@ describe("cloud credential store", () => {
   it("status reports presence flags only", async () => {
     expect(await getCloudCredentialsStatus()).toMatchObject({
       hasPlatformKey: false,
-      hasClaudeSubscription: false,
     });
 
-    await setCloudCredential("claudeOauthToken", "sk-ant-oat01-secret");
     await setCloudCredential("agntApiKey", "agnt_sk_x", { label: "mac" });
 
     expect(await getCloudCredentialsStatus()).toMatchObject({
       hasPlatformKey: true,
       platformKeyLabel: "mac",
-      hasClaudeSubscription: true,
     });
   });
 

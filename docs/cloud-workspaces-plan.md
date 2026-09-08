@@ -270,139 +270,44 @@ BIGINT, registration_id)` and nothing else — NO tokens at rest, NO status
   sidecar → backend → deus-cloud for a fresh token on demand, so >1h-old
   workspaces never push with expired credentials.
 
-### Cloud agent auth — BYO subscription + the Cloud setup page (with D1)
+### Cloud agent auth — personal provider accounts
 
-Researched in depth 2026-08-20 (Conductor teardown + vendor docs + full
-credential-path trace). Today the cloud lane runs ONLY on a raw
-`ANTHROPIC_API_KEY`; most users' buying power is their Claude Pro/Max or
-ChatGPT subscription. This package is what makes cloud workspaces run on
-those subscriptions — and it is the reason the Settings story needs one
-"Cloud setup" page (Conductor's model, mapped from their live UI):
+The credentials branch replaces desktop token imports and organization-wide
+subscription secrets with one account system in Deus Cloud. This is pre-launch;
+the old credential paths are removed rather than migrated.
 
-1. **Deus Cloud account** — the D1 sign-in (WorkOS) + connection status.
-2. **Agents** — per-agent rows ("Connected via subscription ✓" / "Set up"),
-   each opening a 3-option card: Subscription / API key / Custom provider.
-3. **GitHub** — App (recommended, D1.5) with the per-repo "Install app"
-   missing-access list; PAT stays as fallback.
+- **Settings → AI Providers → Deus Cloud** manages named accounts and one default
+  per provider. The shared form offers only methods implemented by the provider:
+  Claude Code API keys or personal tokens from `claude setup-token`; Codex API
+  keys and ChatGPT device approval. Both support multiple named accounts. Local
+  CLI sign-in remains independent. Claude tokens are replaced manually; they do
+  not provide a refresh token or account profile. Cursor still needs a supported
+  authentication adapter and harness before being offered.
+- **Deus Cloud owns credentials.** A per-user ProviderAccounts Durable Object
+  stores encrypted keys/tokens and returns metadata only. Device approval and
+  rotating-token renewal happen there, once per account revision. Neither the
+  desktop vault nor sandbox snapshots hold the canonical credential.
+- **The signed-in person authorizes execution.** The WorkOS-authenticated session
+  exchange puts a verified actor into the session token. An org API key or an
+  arbitrary SDK user label cannot select a person's provider account. Admission
+  captures the chosen account/revision; dispatch resolves it over the private
+  ProviderTokens binding. Changing a default affects newly admitted turns.
+- **Private runtime authentication.** Sidecar execute messages carry a private
+  credential separately from public turn options. Native Codex uses the
+  agent-server operator auth hook and its refresh callback; it does not receive
+  a shared auth.json or refresh token. Claude uses the existing per-session
+  Anthropic proxy, which selects API-key or OAuth authentication without putting
+  the real credential into the child process configuration. SDK callers can explicitly supply a key;
+  the queued copy is encrypted and removed at settlement.
+- **Scheduled runs keep their authority.** Product automations store their verified
+  creator and check active organization access before provisioning. SDK
+  automations use an explicitly configured environment key. Missing or
+  disconnected credentials fail clearly; there is no ambient credential fallback.
 
-**Claude Code subscription — the mechanics (all verified):**
-
-- `claude setup-token` mints a ONE-YEAR bearer token (`sk-ant-oat01-…`);
-  the CLI and the Agent SDK honor `CLAUDE_CODE_OAUTH_TOKEN` (grep-verified
-  in our pinned SDK). Headless consumption is its documented purpose. No
-  refresh; re-mint at expiry. No list/revoke API exists — a leaked token
-  means containment, so server-side storage must be encrypted and
-  disconnect = delete + advise rotating.
-- **Policy posture (the load-bearing constraint):** Anthropic sanctions the
-  USER minting the token on their own machine and pasting it into a
-  product; a product performing claude.ai OAuth on users' behalf is
-  prohibited text (enforcement paused — the $20/$100/$200 Agent SDK
-  monthly credit was announced then paused 2026-06-15; Anthropic promised
-  advance notice). Deus advantage inside that boundary: we SHIP the claude
-  CLI, so "Connect subscription" can spawn `claude setup-token` in a local
-  PTY (the gh-CLI-auth precedent) and capture the token — the mint still
-  happens on the user's machine via Anthropic's own CLI + browser; paste
-  stays as fallback. Ship API-key and gateway fallbacks alongside; policy
-  volatility is the top product risk here.
-- **Transport (the design decision):** deus already sends the Anthropic
-  credential PER TURN, and the sandbox's loopback proxy keeps the real
-  value out of the agent's env (placeholder key + rewritten upstream
-  headers). Extend that, don't bypass it: per-turn options gain
-  `{authKind: "oauth", token}` (schema gate in shared agent.ts), the
-  engine's ApiKeyStore learns a credential kind, and the proxy branches to
-  `Authorization: Bearer` + the `anthropic-beta` OAuth capability instead
-  of `x-api-key` — an UPSTREAM @zvada/agent-server change (proxy is
-  x-api-key-only today and deletes Authorization; that one line is the
-  whole blocker). Anthropic shape-checks OAuth traffic, so if header
-  surgery fights enforcement the fallback is handing
-  `CLAUDE_CODE_OAUTH_TOKEN` directly to the child env for oauth turns
-  (forfeits the no-exfiltration property — proxy path preferred). Note the
-  CLI's own precedence trap: an env `ANTHROPIC_API_KEY` silently outranks
-  the subscription token, so oauth turns must guarantee no API key reaches
-  the child env (engine needs explicit unset semantics; Lane A's
-  runtime.env backfill must not fight it). Because WE pick the per-turn
-  credential, deus controls subscription-vs-key precedence explicitly —
-  no silent env-order surprises like the raw CLI.
-- **Storage — decided 2026-08-20 (the phone test):** the token's canonical
-  home is a **user-scoped agnt secret** (encrypted at rest), because
-  device-local storage breaks the Mac-off/phone story — Conductor stores
-  cloud credentials server-side for exactly this reason (their iOS app
-  drives cloud computers with the laptop closed). The difference we keep:
-  it is a **turn credential, never an environment secret** — structurally
-  excluded from the sandbox env fan-out (reserved-name rule, like the E2B
-  key strip) and resolved by the SESSION DO at turn start into
-  `{authKind: oauth}` toward the sidecar proxy. A client-supplied per-turn
-  credential (desktop) wins; absent one (phone-direct), the platform
-  fills. Desktop's safeStorage vault becomes a cache; connect-once syncs
-  every device. Conductor parity on availability, minus their two
-  weaknesses (durable plaintext env config; agent-readable token in the
-  VM). Never into ordinary workspace secrets (Lane A fans those into
-  sandbox env AND /home/user/.env plaintext — agent-visible).
-- **Ship-before hardening (agnt, one line):** the pause/resume agent
-  snapshot tars ~/.claude into R2 WITHOUT excluding `.credentials.json` —
-  harmless today (no login creds exist in sandboxes) but must be excluded
-  before subscription tokens ever touch a sandbox filesystem.
-
-**Codex subscription — different shape, harder constraint:**
-
-- Subscription auth lives in `~/.codex/auth.json` (`auth_mode: "chatgpt"`,
-  access + REFRESH tokens; ~8-day staleness window, auto-refresh, file
-  rewritten in place). OpenAI sanctions copying it into private automation
-  with hard rules — and **refresh tokens are single-use**: one auth.json
-  fanned out to N concurrent sandboxes 401s on the second refresh
-  ("refresh token has already been used", closed not-planned). That
-  collides head-on with deus's parallel-workspaces model. Consequences:
-  per-sandbox seeding via the DEVICE-CODE flow (`codex login
---device-auth`, needs the user's ChatGPT security toggle; the
-  three-step + poll UI in Conductor's modal) or a persist-after-run
-  auth.json lineage per workspace — never one shared seed.
-- Mint UX converges with Claude's (verified vs Conductor 2026-08-21: their
-  device-flow UI lives in their remote frontend; the binary holds nothing):
-  our open-terminal-with-command pattern covers Codex too — the agents
-  registry gains `codex login --device-auth`, the user approves on their
-  own devices, deus collects the resulting auth.json for per-sandbox
-  seeding. No product-side OAuth, same posture as Claude.
-- Order of work: API-key path FIRST (trivial — the engine's codex adapter
-  maps `apiKey → CODEX_API_KEY`; rides the same per-turn plumbing), device
-  flow after, as its own iteration. Both need the codex-in-cloud package
-  below (binary in template, CODEX_HOME, sidecar unpin) regardless.
-- ChatGPT plan limits pool across local + cloud (5-hour window + weekly),
-  same as Claude — set that expectation in the UI copy.
-
-**Enterprise secrets posture (Expo/EAS prior art, teardown 2026-08-20 —
-their production code, file-level evidence in session notes):**
-
-- Adopt cheaply now: ciphertext blobs carry their own `{method, keyName}`
-  metadata (enables key/provider migration with zero schema change — agnt's
-  encrypted values today have no self-description); a DB CHECK encoding the
-  tier↔storage invariant when we grow visibility tiers; write-only secret
-  values with a one-way ratchet (never downgrade a secret to readable).
-- Adopt at D1/team era: audit rows that record THAT a sensitive field
-  changed, never the value (`was_sensitive_field_changed` — the exact right
-  primitive); per-data-class encryption keys (env secrets vs github tokens
-  vs model tokens — one compromised class doesn't open the rest); their
-  encrypted-job cache + retry-window TTL reaper is the answer shape for our
-  DO execute-queue token exposure (redact/reap after dispatch).
-- Adopt with turn logs: their scrubbing stack — secrets replaced in raw +
-  base64 forms, a branded type + lint rule making unscrubbed persistence a
-  compile error, and a mutation validator that BLOCKS writes containing
-  secret strings.
-- Consciously rejected from their design: SENSITIVE-tier plaintext at rest
-  (tier ≠ encryption there; ours stays encrypted for everything),
-  read-requires-deploy-rights (anyone who can publish reads all values —
-  our user-scoped values are the better boundary), and their unimplemented
-  key rotation (if we add KMS, set rotation from day one).
-
-**Custom provider (both agents, later):** a base-URL + key form.
-Claude: `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` — our per-turn
-`baseUrl` option already rides the wire, so OpenRouter/Vercel-gateway is
-nearly free. Codex: `model_providers` in config.toml (`wire_api = "chat"`
-for most gateways) or `OPENAI_BASE_URL`.
-
-**Sprint fit:** the Cloud setup page + Claude subscription path belong in
-D1 (the page is where D1's sign-in lands anyway; one settings story, not
-two). Codex auth ships with the codex-in-cloud package. Custom providers
-whenever a user asks.
+The Cloud setup screen links to these accounts and keeps infrastructure/GitHub
+setup separate. The full contract, current qualification, and coordinated engine
+→ cloud runtime → desktop release sequence are in AGNT's
+`docs/provider-accounts.md` on the credentials branch (not yet released).
 
 ### Sprint 2 — durability rails — SHIPPED (simplified; see "Also shipped")
 
@@ -557,56 +462,15 @@ token for its lifetime, contents:write already implies push-anything, and
 per-purpose tokens require the on-demand credential helper (D2.3-sized
 machinery) for negligible marginal risk reduction.
 
-### D2.3 Codex in the cloud — BUILT (agnt `d2-cloud-loop` + this branch)
+### D2.3 Codex in the cloud
 
-All four pieces landed: (1) codex CLI baked into the E2B template
-(`@openai/codex@0.146.1`, pinned to deus's local version, `CODEX_CLI_PATH`);
-(2) sidecar engine registers both harnesses and dispatches per-turn on
-`options.harness`; (3) CODEX_AUTH_JSON materializes to a session-scoped
-`CODEX_HOME` (0700 dir / 0600 file) before spawn and is shredded at turn
-end and on session reset — never ambient env, no proxy/apiKeyStore (that
-machinery is Anthropic-bearer-specific); (4) deus's cloud gate admits
-`codex-app-server` and the desktop ships auth via spawned `codex login`
-(Conductor-style) or auth.json import.
-
-**Operational gate, not a code gate:** live Codex turns need the agnt branch
-deployed AND the E2B template rebuilt+promoted (`sandbox/e2b/build.ts`).
-Until then a cloud Codex turn fails with the sidecar's honest
-unknown-harness/missing-CLI error — same failure class as any deploy skew,
-so the deus-side gate deliberately does NOT re-block on it. The two PRs
-(deus #314, agnt #151) merge together; template promote is a release step.
-
-**Codex v1 boundaries, recorded:**
-
-- _Credential visibility._ The materialized auth.json is readable by the
-  agent process for the turn's duration — a necessity of the codex CLI's
-  file-based auth, and the same exposure as running codex on the user's own
-  machine (Conductor ships exactly this). The Claude lane avoids it only
-  because Anthropic bearers can ride a loopback proxy; there is no
-  equivalent indirection for ChatGPT device auth short of MITM-ing their
-  OAuth. Mitigations that DO exist: session-scoped CODEX_HOME (0700/0600),
-  shredded at turn end and reset, never ambient env.
-- _Pre-Codex sidecar coexistence._ A sandbox PAUSED on a pre-codex image
-  resumes with the old sidecar, whose schema strips the unknown harness
-  fields — a codex turn would silently run Claude. There is no sidecar
-  version handshake yet (queued in D2.5); the window is accepted pre-launch
-  because it closes at template promote and paused pre-codex sandboxes with
-  codex turns require a user who had codex UI before the deploy — an empty
-  set. Post-launch, the handshake is mandatory before the NEXT harness.
-- _No MCP bridge._ Codex turns ignore `mcpServers` (the runtime factory is
-  claude-only) — AskUserQuestion/browser tools are absent; the sidecar logs
-  a warning rather than dropping silently.
-- _Shared refresh-token lineage._ Every sandbox turn is seeded from the ONE
-  canonical CODEX_AUTH_JSON; when the codex CLI rotates the refresh token
-  inside a session-scoped home, that rotation dies with the turn-end shred
-  and the canonical copy keeps the older lineage. Whether OpenAI's refresh
-  grant tolerates this reuse is their server policy — the user's own
-  ~/.codex rotates against the same lineage constantly, and Conductor ships
-  the identical import model, so it demonstrably survives in practice — but
-  it is NOT a guarantee we control. If canonical-copy refreshes ever start
-  failing, the fix is per-workspace device-flow credentials (D3's in-app
-  device-code work makes that natural); recorded here so the failure mode
-  is a lookup, not a mystery.
+The E2B template contains the pinned Codex CLI and the sidecar dispatches the
+selected native harness. The credentials branch now uses personal provider
+accounts and the native app-server auth callback; desktop auth.json import,
+per-turn file materialization, and shared refresh-token lineage are removed.
+See “Cloud agent auth” above for the current contract. Engine release, sidecar
+build, product/platform deployment, and real cloud execution must be qualified
+as one release before shipping the desktop UI.
 
 ### D2.4 installation_repositories webhook — DROPPED, with reasoning
 

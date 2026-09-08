@@ -24,11 +24,12 @@ export function useSettings() {
 /**
  * Fetch agent provider auth status (Claude / Codex)
  */
-export function useAgentAuth() {
+export function useAgentAuth(enabled = true) {
   return useQuery({
     queryKey: queryKeys.settings.agentAuth,
     queryFn: () => SettingsService.fetchAgentAuth(),
     staleTime: 60000, // Cache for 60s — auth status changes infrequently
+    enabled,
   });
 }
 

@@ -101,10 +101,17 @@ export async function startGithubAppInstall(): Promise<{ ok: boolean; error?: st
       // the button stayed clickable and stacked more hung requests.
       signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
     });
-    if (res.status === 503 || res.status === 404) {
-      return { ok: false, error: "The Deus GitHub App isn't registered yet" };
+    if (res.status === 404) {
+      return { ok: false, error: "GitHub linking is unavailable in this cloud environment." };
     }
-    if (!res.ok) return { ok: false, error: `install-url failed (${res.status})` };
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
+      const message = body && typeof body.message === "string" ? body.message : null;
+      return {
+        ok: false,
+        error: message ?? `Couldn't start GitHub linking (${res.status}). Try again.`,
+      };
+    }
     const body = (await res.json()) as { url?: string };
     if (!body.url) return { ok: false, error: "No install URL returned" };
     // shell.openExternal hands the string to the OS, which will happily launch

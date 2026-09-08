@@ -215,7 +215,6 @@ describe("pushCloudCredentialsToBackend", () => {
     // backend needs to request per-repo GitHub App installation tokens.
     expect(JSON.parse(init.body)).toEqual({
       apiKey: "agnt_sk_live_x",
-      claudeOauthToken: null,
       deusCloudUrl: expect.any(String),
       deusCloudSessionToken: null,
       orgId: null,
@@ -250,45 +249,5 @@ describe("revokeDeviceKey", () => {
     await revokeDeviceKey("session-jwt");
 
     expect(await getCloudCredential("agntApiKey")).toBeNull();
-  });
-});
-
-describe("syncAgentSecretToPlatform (Claude token)", () => {
-  it("PUTs the token as a non-fanout secret with the device key", async () => {
-    const { syncAgentSecretToPlatform } =
-      await import("../../../apps/desktop/main/deus-cloud-provision");
-    await setCloudCredential("agntApiKey", "agnt_sk_live_x");
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
-
-    expect(await syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-secret")).toBe(
-      true
-    );
-
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://agnt.test/secrets/CLAUDE_CODE_OAUTH_TOKEN");
-    expect(init.method).toBe("PUT");
-    expect(init.headers.authorization).toBe("Bearer agnt_sk_live_x");
-    // applies_to_all=false is the load-bearing bit: a TURN credential the
-    // session DO resolves — never fanned into sandbox env.
-    expect(JSON.parse(init.body)).toEqual({ value: "sk-ant-oat01-secret", appliesToAll: false });
-  });
-
-  it("DELETEs the platform copy on disconnect (null)", async () => {
-    const { syncAgentSecretToPlatform } =
-      await import("../../../apps/desktop/main/deus-cloud-provision");
-    await setCloudCredential("agntApiKey", "agnt_sk_live_x");
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
-
-    expect(await syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", null)).toBe(true);
-    expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
-  });
-
-  it("is a quiet no-op before a device key exists (local-only until sign-in)", async () => {
-    const { syncAgentSecretToPlatform } =
-      await import("../../../apps/desktop/main/deus-cloud-provision");
-    expect(await syncAgentSecretToPlatform("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-secret")).toBe(
-      false
-    );
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
