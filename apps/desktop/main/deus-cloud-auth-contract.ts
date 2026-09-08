@@ -4,7 +4,6 @@ export const DEUS_CLOUD_DEFAULT_URL = "https://cloud.deusmachine.ai";
 export const DEUS_CLOUD_DESKTOP_CALLBACK_HOST = "127.0.0.1";
 export const DEUS_CLOUD_DESKTOP_CALLBACK_PATH = "/auth/callback";
 
-const PKCE_VERIFIER_RE = /^[A-Za-z0-9._~-]{43,128}$/;
 const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43,128}$/;
 const WORKOS_AUTH_CODE_RE = /^[!-~]{1,2048}$/;
 const STATE_RE = /^[A-Za-z0-9._~-]{16,128}$/;
@@ -39,15 +38,6 @@ export function createDesktopPkcePair(): DesktopPkcePair {
 
 export function createDesktopState(): string {
   return base64UrlEncode(randomBytes(32));
-}
-
-export function assertDesktopPkcePair(pair: DesktopPkcePair): void {
-  if (!PKCE_VERIFIER_RE.test(pair.verifier)) {
-    throw new Error("Generated PKCE verifier is invalid");
-  }
-  if (!PKCE_CHALLENGE_RE.test(pair.challenge)) {
-    throw new Error("Generated PKCE challenge is invalid");
-  }
 }
 
 /**
