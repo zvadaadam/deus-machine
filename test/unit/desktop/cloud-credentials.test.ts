@@ -32,6 +32,7 @@ import {
   getCloudCredentialsStatus,
   setCloudCredential,
 } from "../../../apps/desktop/main/cloud-credentials";
+import * as credentialFile from "../../../apps/desktop/main/safe-storage-file";
 
 const CREDENTIALS_FILE = () => join(electronMocks.userDataDir, "deus-cloud-credentials.json");
 
@@ -40,6 +41,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(electronMocks.userDataDir, { recursive: true, force: true });
 });
 
@@ -116,6 +118,62 @@ describe("cloud credential store", () => {
       expect((await getCloudCredentialsStatus()).hasPlatformKey).toBe(false);
     else await deleteCloudCredential("agntApiKey");
     await expect(readFile(CREDENTIALS_FILE(), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each(["replace", "delete"])(
+    "orders %s after an in-flight vault cleanup",
+    async (operation) => {
+      await setCloudCredential("agntApiKey", "old-key");
+      const stored = JSON.parse(await readFile(CREDENTIALS_FILE(), "utf8"));
+      stored.entries.codexAuthJson = { encryptedValue: "retired-ciphertext" };
+      await writeFile(CREDENTIALS_FILE(), JSON.stringify(stored));
+
+      let resumeCleanup!: () => void;
+      const cleanupGate = new Promise<void>((resolve) => {
+        resumeCleanup = resolve;
+      });
+      let announceCleanup!: () => void;
+      const cleanupStarted = new Promise<void>((resolve) => {
+        announceCleanup = resolve;
+      });
+      const write = credentialFile.writeJsonFile;
+      vi.spyOn(credentialFile, "writeJsonFile").mockImplementationOnce(async (path, value) => {
+        announceCleanup();
+        await cleanupGate;
+        await write(path, value);
+      });
+      const reads = vi.spyOn(credentialFile, "readJsonFile");
+      const deletes = vi.spyOn(credentialFile, "removeFile");
+      const reading = getCloudCredentialsStatus();
+      await cleanupStarted;
+      const mutation =
+        operation === "replace"
+          ? setCloudCredential("agntApiKey", "new-key")
+          : deleteCloudCredential("agntApiKey");
+      try {
+        await Promise.resolve();
+        // The later operation cannot read or delete the stale cleanup snapshot.
+        expect(reads).toHaveBeenCalledTimes(1);
+        expect(deletes).not.toHaveBeenCalled();
+      } finally {
+        resumeCleanup();
+        await Promise.all([reading, mutation]);
+      }
+      if (operation === "replace") expect(await getCloudCredential("agntApiKey")).toBe("new-key");
+      else
+        await expect(readFile(CREDENTIALS_FILE(), "utf8")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+    }
+  );
+
+  it("allows later credential writes after a failed write", async () => {
+    vi.spyOn(credentialFile, "writeJsonFile").mockRejectedValueOnce(new Error("disk unavailable"));
+    await expect(setCloudCredential("agntApiKey", "failed-key")).rejects.toThrow(
+      "disk unavailable"
+    );
+    await setCloudCredential("agntApiKey", "working-key");
+    expect(await getCloudCredential("agntApiKey")).toBe("working-key");
   });
 
   it("an undecryptable entry is dropped instead of poisoning reads", async () => {

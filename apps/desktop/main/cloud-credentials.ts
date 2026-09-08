@@ -44,6 +44,18 @@ export interface CloudCredentialsStatus {
 
 const filePath = () => userDataFilePath(CREDENTIALS_FILE_NAME);
 
+let credentialFileTail: Promise<void> = Promise.resolve();
+
+/** Reads can scrub retired entries, so every vault operation shares one queue. */
+function withCredentialFile<T>(operation: () => Promise<T>): Promise<T> {
+  const result = credentialFileTail.then(operation);
+  credentialFileTail = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
 async function readStore(): Promise<StoredCredentialsFile> {
   const parsed = await readJsonFile<StoredCredentialsFile>(filePath());
   if (parsed?.version !== 1 || typeof parsed.entries !== "object" || parsed.entries === null) {
@@ -65,47 +77,58 @@ export async function setCloudCredential(
   value: string,
   meta: CloudCredentialMeta = {}
 ): Promise<void> {
-  const store = await readStore();
-  store.entries[name] = {
-    encryptedValue: encryptSecret(value),
-    createdAt: new Date().toISOString(),
-    ...meta,
-  };
-  await writeJsonFile(filePath(), store);
+  return withCredentialFile(async () => {
+    const store = await readStore();
+    store.entries[name] = {
+      encryptedValue: encryptSecret(value),
+      createdAt: new Date().toISOString(),
+      ...meta,
+    };
+    await writeJsonFile(filePath(), store);
+  });
 }
 
 export async function getCloudCredential(name: CloudCredentialName): Promise<string | null> {
-  const store = await readStore();
-  const entry = store.entries[name];
-  if (!entry) return null;
-  if (!isSafeStorageAvailable()) {
-    // The keyring is not ready (Linux login keyring still locked, first boot).
-    // Nothing was even attempted, so this says nothing about the ciphertext —
-    // deleting here would destroy the device key
-    // over a condition that resolves on its own a second later.
-    return null;
-  }
-  try {
-    return decryptSecret(entry.encryptedValue);
-  } catch {
-    // Encryption key changed (OS reinstall, keychain reset) — the entry is
-    // unrecoverable; drop it so status reads honestly disconnected.
-    await deleteCloudCredential(name);
-    return null;
-  }
+  return withCredentialFile(async () => {
+    const store = await readStore();
+    const entry = store.entries[name];
+    if (!entry) return null;
+    if (!isSafeStorageAvailable()) {
+      // The keyring is not ready (Linux login keyring still locked, first boot).
+      // Nothing was even attempted, so this says nothing about the ciphertext —
+      // deleting here would destroy the device key
+      // over a condition that resolves on its own a second later.
+      return null;
+    }
+    try {
+      return decryptSecret(entry.encryptedValue);
+    } catch {
+      // Encryption key changed (OS reinstall, keychain reset) — the entry is
+      // unrecoverable; drop it so status reads honestly disconnected.
+      await removeFile(filePath());
+      return null;
+    }
+  });
 }
 
 export async function getCloudCredentialMeta(
   name: CloudCredentialName
 ): Promise<CloudCredentialMeta | null> {
-  const store = await readStore();
-  const entry = store.entries[name];
-  if (!entry) return null;
-  return { keyId: entry.keyId, orgId: entry.orgId, label: entry.label, createdAt: entry.createdAt };
+  return withCredentialFile(async () => {
+    const store = await readStore();
+    const entry = store.entries[name];
+    if (!entry) return null;
+    return {
+      keyId: entry.keyId,
+      orgId: entry.orgId,
+      label: entry.label,
+      createdAt: entry.createdAt,
+    };
+  });
 }
 
 export async function deleteCloudCredential(_name: CloudCredentialName): Promise<void> {
-  await removeFile(filePath());
+  return withCredentialFile(() => removeFile(filePath()));
 }
 
 /**
@@ -118,23 +141,27 @@ export async function deleteCloudCredential(_name: CloudCredentialName): Promise
  * everything behind it — including window creation.
  */
 export async function hasStoredCredentials(): Promise<boolean> {
-  const store = await readStore();
-  return Object.keys(store.entries).length > 0;
+  return withCredentialFile(async () => {
+    const store = await readStore();
+    return Object.keys(store.entries).length > 0;
+  });
 }
 
 /** Presence/meta only — safe for the renderer; values never cross IPC. */
 export async function getCloudCredentialsStatus(): Promise<CloudCredentialsStatus> {
-  const store = await readStore();
-  const key = store.entries.agntApiKey;
-  // Entries are ciphertext; with the keyring locked, getCloudCredential()
-  // hands the backend nothing, so claiming "connected" off mere presence
-  // would have Settings disagree with what the cloud lane actually holds.
-  // Only probe the keyring when something is stored — see hasStoredCredentials.
-  const usable = Object.keys(store.entries).length === 0 || isSafeStorageAvailable();
-  return {
-    hasPlatformKey: usable && Boolean(key),
-    platformKeyLabel: key?.label ?? null,
-    platformOrgId: key?.orgId ?? null,
-    vaultLocked: !usable && Object.keys(store.entries).length > 0,
-  };
+  return withCredentialFile(async () => {
+    const store = await readStore();
+    const key = store.entries.agntApiKey;
+    // Entries are ciphertext; with the keyring locked, getCloudCredential()
+    // hands the backend nothing, so claiming "connected" off mere presence
+    // would have Settings disagree with what the cloud lane actually holds.
+    // Only probe the keyring when something is stored — see hasStoredCredentials.
+    const usable = Object.keys(store.entries).length === 0 || isSafeStorageAvailable();
+    return {
+      hasPlatformKey: usable && Boolean(key),
+      platformKeyLabel: key?.label ?? null,
+      platformOrgId: key?.orgId ?? null,
+      vaultLocked: !usable && Object.keys(store.entries).length > 0,
+    };
+  });
 }

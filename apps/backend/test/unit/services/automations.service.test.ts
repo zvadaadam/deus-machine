@@ -431,19 +431,28 @@ describeWithDb("createAutomation", () => {
     expect(sdk.createAutomation).not.toHaveBeenCalled();
   });
 
-  it("refuses creation if the signed-in account changed during environment lookup", async () => {
-    mockGetCloudEnvironmentInfo.mockImplementationOnce(async () => {
-      mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "other-user" });
-      return { configured: true, name: envName };
-    });
-    await expect(
-      createAutomation(
-        { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
-        "user"
-      )
-    ).rejects.toThrow(/account changed/);
-    expect(sdk.createAutomation).not.toHaveBeenCalled();
-  });
+  it.each([false, true])(
+    "refuses all writes after an account switch during environment lookup (configured=%s)",
+    async (configured) => {
+      mockGetCloudEnvironmentInfo.mockImplementationOnce(async () => {
+        mockGetCloudConfig.mockReturnValue({
+          ...CLOUD_CONFIG,
+          apiKey: "other-device-key",
+          orgId: "org-2",
+          deusCloudSessionToken: "other-user",
+        });
+        return { configured, name: envName };
+      });
+      await expect(
+        createAutomation(
+          { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+          "user"
+        )
+      ).rejects.toThrow(/account changed/);
+      expect(sdk.createEnvironment).not.toHaveBeenCalled();
+      expect(sdk.createAutomation).not.toHaveBeenCalled();
+    }
+  );
 
   it.each(["create", "reconcile", "failed reconcile"])(
     "does not seed the previous account's prompt after a late %s response",
@@ -510,6 +519,29 @@ describeWithDb("createAutomation", () => {
 });
 
 describeWithDb("automation mutation identity", () => {
+  it("does not create an environment for a retarget after an account switch during environment lookup", async () => {
+    store.upsertAutomation(summaryToRow(localSummary() as never, new Map([[envName, "r1"]])));
+    db.prepare(
+      "INSERT INTO repositories (id, name, root_path, git_origin_url) VALUES ('r2', 'private', '/tmp/private', ?)"
+    ).run("https://github.com/acme/private");
+    sdk.getAutomation.mockResolvedValue(localSummary());
+    mockGetCloudEnvironmentInfo.mockImplementationOnce(async () => {
+      mockGetCloudConfig.mockReturnValue({
+        ...CLOUD_CONFIG,
+        apiKey: "other-device-key",
+        orgId: "org-2",
+        deusCloudSessionToken: "other-user",
+      });
+      return { configured: false, name: "private-env" };
+    });
+    await expect(updateAutomation("auto-1", { repository_id: "r2" })).rejects.toThrow(
+      /account changed/
+    );
+    expect(sdk.createEnvironment).not.toHaveBeenCalled();
+    expect(sdk.updateAutomation).not.toHaveBeenCalled();
+    expect(store.getAutomationRaw("auto-1")?.repository_id).toBe("r1");
+  });
+
   it.each(["update", "pause", "delete", "run now"])(
     "drops a late %s result after sign-out",
     async (operation) => {

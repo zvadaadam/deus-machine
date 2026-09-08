@@ -105,10 +105,11 @@ async function repoIdByEnvName(): Promise<Map<string, string>> {
 }
 
 /** The repo's derived environment, created platform-side when missing. */
-async function ensureRepoEnvironment(repositoryId: string): Promise<string> {
+async function ensureRepoEnvironment(repositoryId: string, identity: string): Promise<string> {
   const repo = repoWithOrigin(repositoryId);
   const origin = httpsOrigin(repo.git_origin_url);
   const info = await getCloudEnvironmentInfo(origin);
+  assertCurrentAccount(identity);
   if (info.lookupFailed) {
     throw new Error("Deus Cloud is unreachable right now — try again in a moment.");
   }
@@ -283,7 +284,7 @@ export async function createAutomation(
       "Choose a connected Claude account under Settings → AI Providers before creating an automation."
     );
   }
-  const environment = await ensureRepoEnvironment(valid.repository_id);
+  const environment = await ensureRepoEnvironment(valid.repository_id, identity);
   assertCurrentAccount(identity);
   const id = await platform.createPlatformAutomation({
     displayName: valid.name,
@@ -380,7 +381,7 @@ export async function updateAutomation(
   const retargeted =
     input.repository_id !== undefined && input.repository_id !== existing.repository_id;
   if (retargeted) {
-    spec.environment = await ensureRepoEnvironment(input.repository_id as string);
+    spec.environment = await ensureRepoEnvironment(input.repository_id as string, identity);
   }
 
   assertCurrentAccount(identity);
