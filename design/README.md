@@ -84,7 +84,6 @@ the canvas — read left to right, top to bottom.
   Board `54` puts cloud accounts before local CLI connections and removes the inert
   local API-key inputs; `55` shows both provider defaults and links to AI Providers.
   Hosted web exposes Account and AI Providers, without desktop CLI controls.
-  The shared account flow is deployed; inline renaming is the current follow-up.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
