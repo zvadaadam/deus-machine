@@ -305,10 +305,23 @@ the old credential paths are removed rather than migrated.
   disconnected credentials fail clearly; there is no ambient credential fallback.
 
 The Cloud setup screen links to these accounts and keeps infrastructure/GitHub
-setup separate. Deus consumes published `@deus-hq/api` and `@deus-hq/sdk` 2.0.0;
-all engine dependencies resolve to `@zvada/agent-server` 0.3.3. The full contract,
+setup separate. Deus consumes published `@deus-hq/api` and `@deus-hq/sdk` 2.0.1;
+all engine dependencies resolve to `@zvada/agent-server` 0.3.4. The desktop and new
+cloud images pin Codex 0.153.4, including GPT-6 Astra. Existing paused cloud VMs
+keep their old CLI until recreated. The full contract,
 current qualification, and engine → cloud runtime → desktop release sequence
 are in AGNT's `docs/provider-accounts.md`.
+
+Production qualification on 2026-09-08 passed through the actual desktop:
+Claude subscription inference, switching to an API key and back, ChatGPT approval
+and Reconnect, and Codex GPT-5.5 inference. Normal archive on a writable repository
+saved the Git recovery ref and credential-free R2 history before pausing. After
+replacing the backed-up Codex test VM, GPT-6 Astra read the repository and recalled
+the original conversation nonce under the same native session ID; another turn
+after the idle deadline also completed without a manual wake. Automatic OAuth
+renewal, a second ChatGPT identity, and installing Deus Bot from another GitHub
+account remain separate live checks. Anthropic's third-party subscription approval
+requirement remains a public-rollout prerequisite documented in the AGNT plan.
 
 ### Sprint 2 — durability rails — SHIPPED (simplified; see "Also shipped")
 
