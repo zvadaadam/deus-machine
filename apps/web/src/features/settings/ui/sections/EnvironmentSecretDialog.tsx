@@ -25,6 +25,7 @@ import {
   deleteEnvironmentSecret,
   saveEnvironmentSecret,
 } from "../../api/environment-secrets.service";
+import { repositoryLabel } from "../../lib/environment-repositories";
 
 export type SecretAction =
   | { type: "add"; name?: string }
@@ -51,23 +52,19 @@ export function EnvironmentSecretDialog({
   );
   const [value, setValue] = useState("");
   const [ownerType, setOwnerType] = useState<"ORG" | "USER">(existing?.ownerType ?? "USER");
-  const [scope, setScope] = useState(environmentId ?? "all");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const removing = action.type === "delete";
-  const applicable = settings.environments.filter(
-    (env) => ownerType === "USER" || env.ownerType === "ORG"
-  );
   const scopeLabel = existing
     ? existing.appliesToAll
-      ? "all environments"
+      ? "all repositories"
       : existing.environmentIds
-          .map(
-            (id) =>
-              settings.environments.find((env) => env.id === id)?.name ?? "another environment"
-          )
+          .map((id) => {
+            const env = settings.environments.find((item) => item.id === id);
+            return env?.repo ? repositoryLabel(env.repo) : (env?.name ?? "another repository");
+          })
           .join(", ")
     : null;
 
@@ -87,8 +84,9 @@ export function EnvironmentSecretDialog({
           {
             value,
             ownerType,
-            appliesToAll: existing?.appliesToAll ?? scope === "all",
-            environmentIds: existing?.environmentIds ?? (scope === "all" ? [] : [scope]),
+            appliesToAll: existing?.appliesToAll ?? environmentId === null,
+            environmentIds:
+              existing?.environmentIds ?? (environmentId === null ? [] : [environmentId!]),
           },
           controller.signal
         );
@@ -113,16 +111,12 @@ export function EnvironmentSecretDialog({
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>
-              {removing
-                ? "Delete secret"
-                : existing
-                  ? "Replace secret value"
-                  : "Add application secret"}
+              {removing ? "Delete secret" : existing ? "Replace secret value" : "Add secret"}
             </DialogTitle>
             <DialogDescription>
               {existing
                 ? `${name} · ${ownerType === "USER" ? "Personal" : "Shared"} · ${scopeLabel}`
-                : "Stored securely in the cloud and supplied to your app. Saved values are never shown again."}
+                : `For ${environmentId ? "this repository" : "all repositories"}. Stored securely and supplied to new cloud workspaces.`}
             </DialogDescription>
           </DialogHeader>
           {removing ? (
@@ -168,42 +162,18 @@ export function EnvironmentSecretDialog({
                     <Label htmlFor="secret-owner">Available to</Label>
                     <Select
                       value={ownerType}
-                      onValueChange={(next: "ORG" | "USER") => {
-                        setOwnerType(next);
-                        if (
-                          next === "ORG" &&
-                          settings.environments.find((env) => env.id === scope)?.ownerType ===
-                            "USER"
-                        )
-                          setScope("all");
-                      }}
+                      onValueChange={(next: "ORG" | "USER") => setOwnerType(next)}
                     >
                       <SelectTrigger id="secret-owner" className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="USER">Personal · my cloud workspaces</SelectItem>
-                        {settings.canManageShared && (
-                          <SelectItem value="ORG">Shared · organization workspaces</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="secret-scope">Environment scope</Label>
-                    <Select value={scope} onValueChange={setScope}>
-                      <SelectTrigger id="secret-scope" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All environments</SelectItem>
-                        {applicable.map((env) => (
-                          <SelectItem key={env.id} value={env.id}>
-                            {env.repo
-                              ?.replace(/^https?:\/\/github.com\//, "")
-                              .replace(/\.git$/, "") ?? env.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="USER">Only me</SelectItem>
+                        {settings.canManageShared &&
+                          settings.environments.find((env) => env.id === environmentId)
+                            ?.ownerType !== "USER" && (
+                            <SelectItem value="ORG">Everyone in the organization</SelectItem>
+                          )}
                       </SelectContent>
                     </Select>
                   </div>

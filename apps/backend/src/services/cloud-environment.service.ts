@@ -1,9 +1,8 @@
 // backend/src/services/cloud-environment.service.ts
 // The repo→environment link and its platform lookup.
 //
-// Cloud environments are agent-authored: the sandbox agent explores a repo,
-// verifies its setup by running it, and persists the config via agnt's
-// configure_environment tool. This service is deus's half of the link — it
+// Cloud recipes are saved by the sandbox agent's configure_environment tool
+// or the repository settings editor. This service is deus's half of the link — it
 // derives the same deterministic name the platform derives, so both sides
 // resolve the same environment with no mapping table anywhere (and nothing
 // machine-local to lose when switching computers).
@@ -13,7 +12,7 @@ import {
   updateEnvironment as agntUpdateEnvironment,
 } from "@deus-hq/sdk";
 import { getCloudConfig } from "./agent/cloud/config";
-import { httpsOrigin } from "@shared/git-origin";
+import { httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
 
 /**
  * Deterministic org-unique environment name for a repository — MUST match
@@ -22,11 +21,7 @@ import { httpsOrigin } from "@shared/git-origin";
  * Shape: repo-<slug>-<hash8> over the https-normalized origin.
  */
 export async function environmentNameForRepo(repoRef: string): Promise<string> {
-  const normalized = repoRef
-    .trim()
-    .toLowerCase()
-    .replace(/\.git$/, "")
-    .replace(/\/+$/, "");
+  const normalized = normalizeRepoRef(repoRef);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
   const hash8 = [...new Uint8Array(digest)]
     .slice(0, 4)

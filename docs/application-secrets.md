@@ -1,9 +1,30 @@
 # Application secrets
 
 Environment settings manages private values used by apps running in cloud
-workspaces, including `ELEVENLABS_API_KEY` and an explicitly supplied
-`OPENAI_API_KEY`. AI Providers remains the place to connect the agent's subscription
-or inference account. GitHub and platform credentials keep their existing settings.
+workspaces, including `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` and
+`E2B_API_KEY`. A project's E2B key is separate from AGNT's Worker-bound provisioning
+key. AI Providers remains the place to connect the agent's subscription or inference
+account. Names consumed by repository auth (`github_token`, `GITHUB_TOKEN`, `GH_TOKEN`)
+or agent login (`CLAUDE_CODE_OAUTH_TOKEN`, `CODEX_AUTH_JSON`) remain reserved by the
+runtime's existing auth contracts.
+
+## Repository settings
+
+Environment opens a searchable list of local repositories, repositories accessible
+through the Deus GitHub App, and saved cloud recipes. GitHub owner avatars use a
+folder fallback. Multiple local clones and additional recipes remain distinguishable.
+An unconfirmed GitHub lookup is not presented as missing access.
+
+Open a repository to edit its Cloud or Local setup; breadcrumbs return to the list.
+Cloud setup edits the existing recipe's commands while preserving phases, parallel
+steps and unrelated configuration. Local setup keeps setup/run scripts together,
+with tasks, requirements, public variables and raw JSON under Advanced setup.
+Tab, repository and organization navigation warn before discarding unsaved scripts.
+GitHub App access is required for private repositories, not for saving a recipe.
+
+Secrets added on a repository page apply to that recipe automatically. Default
+secrets have their own page and cannot be edited accidentally from a repository.
+Cloud secrets are not injected into local processes by this feature.
 
 ## Behavior
 

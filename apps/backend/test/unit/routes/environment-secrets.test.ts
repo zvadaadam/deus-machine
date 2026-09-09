@@ -14,6 +14,7 @@ beforeEach(() => {
   resetCloudConfigForTests();
   setCloudRuntimeCredentials({
     baseUrl: "https://platform.test",
+    deusCloudUrl: "https://product.test",
     deusCloudSessionToken: "session-a",
     orgId: "org",
     apiKey: null,
@@ -54,6 +55,44 @@ describe("application secret forwarding", () => {
     setCloudRuntimeCredentials({ deusCloudSessionToken: null });
     expect((await app.request("/api/settings/environment-secrets/orgs")).status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("forwards GitHub discovery only to fixed product routes with the human session", async () => {
+    const response = await app.request(
+      "/api/settings/environment-secrets/orgs/org/github/accessible-repos?url=https://elsewhere.test"
+    );
+    expect(response.status).toBe(200);
+    expect(fetchMock.mock.calls[0]).toEqual([
+      "https://product.test/orgs/org/github/accessible-repos",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer session-a" }),
+      }),
+    ]);
+  });
+  it("forwards setup edits without interpreting script contents", async () => {
+    const body = {
+      setup: [{ commands: ["export SOME_KEY=value\nbun run prepare"], phase: "pre-clone" }],
+    };
+    const response = await app.request(
+      "/api/settings/environment-secrets/orgs/org/environments/env",
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+    expect(response.status).toBe(200);
+    expect(fetchMock.mock.calls[0]).toEqual([
+      "https://platform.test/dashboard/orgs/org/environment-settings/environments/env",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify(body) }),
+    ]);
+  });
+  it.each([401, 502])("preserves a non-JSON cloud error's HTTP status (%s)", async (status) => {
+    fetchMock.mockResolvedValue(
+      new Response(status === 401 ? null : "Gateway unavailable", { status })
+    );
+    const response = await app.request("/api/settings/environment-secrets/orgs");
+    expect(response.status).toBe(status);
+    expect((await response.json()).error).toBe("Couldn't update cloud environment settings.");
   });
   it("does not lend the desktop owner's session to paired clients or the relay", async () => {
     const paired = new Hono<{ Variables: { device?: unknown } }>()

@@ -4,12 +4,18 @@ import { AppError } from "../lib/errors";
 import { getCloudSettingsConfig, getCloudIdentitySignal } from "./agent/cloud/config";
 
 /** Fixed dashboard paths use the human's session, never the organization SDK key. */
-export async function requestCloudEnvironmentSettings(path: string, init: RequestInit = {}) {
+export async function requestCloudEnvironmentSettings(
+  path: string,
+  init: RequestInit = {},
+  service: "platform" | "product" = "platform"
+) {
   const config = getCloudSettingsConfig();
   if (!config?.deusCloudSessionToken)
     throw new AppError(401, "Sign in to Deus Cloud to manage application secrets.");
   const identity = getCloudIdentitySignal();
-  const response = await fetch(`${config.baseUrl}/dashboard${path}`, {
+  const base = service === "platform" ? `${config.baseUrl}/dashboard` : config.deusCloudUrl;
+  if (!base) throw new AppError(503, "Deus Cloud is not configured.");
+  const response = await fetch(`${base}${path}`, {
     ...init,
     headers: {
       authorization: `Bearer ${config.deusCloudSessionToken}`,
@@ -22,12 +28,14 @@ export async function requestCloudEnvironmentSettings(path: string, init: Reques
     ]),
     redirect: "manual",
   });
-  const data = await response.json();
+  const data = response.ok ? await response.json() : await response.json().catch(() => null);
   if (identity.aborted) throw new AppError(409, "Your Deus account changed. Try again.");
   if (!response.ok)
     throw new AppError(
       response.status,
-      data.message ?? "Couldn't update cloud environment settings."
+      typeof data?.message === "string"
+        ? data.message
+        : "Couldn't update cloud environment settings."
     );
   return toCamelCaseKeys(data);
 }

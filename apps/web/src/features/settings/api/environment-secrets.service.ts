@@ -1,4 +1,4 @@
-import { toCamelCaseKeys, toSnakeCaseKeys } from "@deus-hq/api";
+import { toCamelCaseKeys, toSnakeCaseKeys, type SetupStep } from "@deus-hq/api";
 import type {
   CloudEnvironmentSettings,
   CloudSecretInput,
@@ -11,6 +11,7 @@ import {
   isCloudDirectWebMode,
   readWebCloudSessionBearer,
   resolveAgntBaseUrl,
+  resolveDeusCloudUrl,
 } from "@/features/session/cloud/webCloudDirectConfig";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -21,10 +22,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ? getStoredToken()
       : null;
   if (direct && !bearer) throw new Error("Sign in to Deus Cloud to manage application secrets.");
+  const product = /^\/orgs\/[^/]+\/github\//.test(path);
   const remotePath =
-    path === "/orgs" ? path : path.replace(/^(\/orgs\/[^/?]+)(.*)$/, "$1/environment-settings$2");
+    path === "/orgs" || product
+      ? path
+      : path.replace(/^(\/orgs\/[^/?]+)(.*)$/, "$1/environment-settings$2");
   const url = direct
-    ? `${resolveAgntBaseUrl()}/dashboard${remotePath}`
+    ? `${product ? resolveDeusCloudUrl() : `${resolveAgntBaseUrl()}/dashboard`}${remotePath}`
     : `${await getBaseURL()}/settings/environment-secrets${path}`;
   const response = await fetch(url, {
     ...init,
@@ -35,16 +39,50 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(init.signal ? [init.signal] : [])]),
     redirect: "error",
   });
-  const body = await response.json();
   if (!response.ok) {
     if (direct && response.status === 401) handleWebCloudSessionExpired();
-    throw new Error(body.message ?? body.error ?? "Couldn't update cloud environment settings.");
+    const body = await response.json().catch(() => null);
+    throw new Error(
+      typeof body?.message === "string"
+        ? body.message
+        : typeof body?.error === "string"
+          ? body.error
+          : "Couldn't update cloud environment settings."
+    );
   }
-  return toCamelCaseKeys(body);
+  return toCamelCaseKeys(await response.json());
 }
 
 export const listSecretOrganizations = (signal: AbortSignal) =>
   request<CloudSettingsOrganizations>("/orgs", { signal });
+export const listEnvironmentRepositories = (orgId: string, signal: AbortSignal) =>
+  request<{ repos: string[] }>(`/orgs/${encodeURIComponent(orgId)}/github/accessible-repos`, {
+    signal,
+  });
+export async function getEnvironmentInstallUrl(orgId: string, signal: AbortSignal) {
+  const result = await request<{ url: string }>(
+    `/orgs/${encodeURIComponent(orgId)}/github/install-url`,
+    { signal }
+  );
+  const url = new URL(result.url);
+  if (url.protocol !== "https:" || url.hostname !== "github.com")
+    throw new Error("GitHub connection returned an invalid installation link.");
+  return result;
+}
+export const saveCloudEnvironmentSetup = (
+  orgId: string,
+  target: { environmentId: string } | { repo: string },
+  setup: SetupStep[],
+  signal: AbortSignal
+) =>
+  request<{ id: string }>(
+    `/orgs/${encodeURIComponent(orgId)}/environments${"environmentId" in target ? `/${encodeURIComponent(target.environmentId)}` : ""}`,
+    {
+      method: "environmentId" in target ? "PUT" : "POST",
+      body: JSON.stringify({ setup, ...("repo" in target ? { repo: target.repo } : {}) }),
+      signal,
+    }
+  );
 export const getEnvironmentSecretSettings = (
   orgId: string,
   environmentId: string | null,

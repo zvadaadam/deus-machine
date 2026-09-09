@@ -12,7 +12,14 @@ export interface CloudEnvironmentSettings {
   accountId: string;
   organizationId: string;
   canManageShared: boolean;
-  environments: Array<{ id: string; name: string; repo: string | null; ownerType: "ORG" | "USER" }>;
+  selectedEnvironment: { id: string; setup: SetupStep[]; canEdit: boolean } | null;
+  environments: Array<{
+    id: string;
+    name: string;
+    repo: string | null;
+    ownerType: "ORG" | "USER";
+    isRepositoryDefault: boolean;
+  }>;
   secrets: EnvironmentSecret[];
   required: Array<{
     name: string;
@@ -33,3 +40,4 @@ export interface CloudSettingsOrganizations {
   currentOrganizationId?: string | null;
   items: Array<{ id: string; name: string; role: string }>;
 }
+import type { SetupStep } from "@deus-hq/api";

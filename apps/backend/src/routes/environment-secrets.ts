@@ -17,6 +17,34 @@ app.use(`${prefix}/*`, async (c, next) => {
   await next();
 });
 app.get(`${prefix}/orgs`, async (c) => c.json(await getCloudSettingsOrganizations()));
+for (const action of ["accessible-repos", "install-url"] as const) {
+  app.get(`${prefix}/orgs/:orgId/github/${action}`, async (c) =>
+    c.json(
+      await requestCloudEnvironmentSettings(
+        `/orgs/${encodeURIComponent(c.req.param("orgId"))}/github/${action}`,
+        { signal: c.req.raw.signal },
+        "product"
+      )
+    )
+  );
+}
+app.post(`${prefix}/orgs/:orgId/environments`, async (c) =>
+  c.json(
+    await requestCloudEnvironmentSettings(
+      `/orgs/${encodeURIComponent(c.req.param("orgId"))}/environment-settings/environments`,
+      { method: "POST", body: JSON.stringify(await c.req.json()), signal: c.req.raw.signal }
+    ),
+    201
+  )
+);
+app.put(`${prefix}/orgs/:orgId/environments/:id`, async (c) =>
+  c.json(
+    await requestCloudEnvironmentSettings(
+      `/orgs/${encodeURIComponent(c.req.param("orgId"))}/environment-settings/environments/${encodeURIComponent(c.req.param("id"))}`,
+      { method: "PUT", body: JSON.stringify(await c.req.json()), signal: c.req.raw.signal }
+    )
+  )
+);
 app.get(`${prefix}/orgs/:orgId`, async (c) => {
   const environmentId = c.req.query("environment_id");
   const query = environmentId ? `?environment_id=${encodeURIComponent(environmentId)}` : "";

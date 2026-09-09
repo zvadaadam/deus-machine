@@ -197,13 +197,19 @@ Board `13` includes the cloud autosave warning from
 `components/ui/sonner.tsx` toaster. It shows a live failed-save diagnostic for ten
 seconds or until dismissed; it is not a persistent chat component.
 
-Board `56` now shows the Environment settings application-secret section from
-`features/settings/ui/sections/CloudApplicationSecrets.tsx`: organization and
-environment selection, required-value status, and personal/shared secret metadata.
+Board `56` shows the repository list in `EnvironmentSection.tsx`, with GitHub owner
+avatars and cloud/local availability. `56a` is the repository's cloud setup and
+secrets; `56b` is its local `deus.json` editor; `56c` manages default secrets across
+repositories; `56d` is the mobile list. The breadcrumb returns to repositories.
+Cloud setup preserves saved command boundaries, phases and parallel steps.
+Local setup keeps advanced tasks, requirements and public variables in a disclosure.
 Board `66a` shows add, replace and delete states of `EnvironmentSecretDialog.tsx`.
 Values are write-only; existing values are never drawn into a replacement form.
-The forms reuse the input and button components. Repository setup remains below
-the cloud-secret section; public variables belong to the committed `deus.json`.
+The page determines a new secret's repository scope; the dialog only asks whether
+it is personal or shared. Defaults are inherited and managed on their own page.
+The forms reuse the input and button components. `assets/github-acme.png` is the
+public GitHub owner avatar used in these examples, fetched from GitHub's profile
+image endpoint. Production loads owner avatars directly and uses a folder fallback.
 
 ### The scales are bound, not typed
 
@@ -315,7 +321,8 @@ in step with it:
 - Tool rows are `px-2 py-1.5` with a 14px icon box — `TurnStatsHeader` matches it exactly
 - Composer is `rounded-2xl`, `bg-bg-muted/75`, hairline `ring-border-subtle`; controls are 32px
 - Diff lines are 12px mono on an 18px line box, 22 % / 20 % tints over the background
-- Settings body is `max-w-2xl` (672px) with `px-8 py-8`; the nav rail reuses the 256px sidebar
+- Settings body is `max-w-2xl` (672px), or `max-w-4xl` (896px) for Environment, with
+  `px-4 py-8 sm:px-8`; the nav rail reuses the 256px sidebar
 - Mobile is 390×844; the sidebar sheet is `100vw − 3.5rem` = 334px
 - Sidebar header is 48px (`px-1.5 py-1.5` around a 36px account button); footer is 46px (`p-3.5`)
 - Chat gutters are `px-6 pt-6` on desktop, `px-3 pt-4` on mobile. Turn rhythm is not a
