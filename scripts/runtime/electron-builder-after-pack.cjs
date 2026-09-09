@@ -9,10 +9,6 @@ const ARCH_BY_BUILDER_VALUE = new Map([
   ["x64", "x64"],
   ["arm64", "arm64"],
 ]);
-const FILE_ARCH_BY_TARGET_ARCH = new Map([
-  ["x64", "x86_64"],
-  ["arm64", "arm64"],
-]);
 const FILE_ARCH_BY_RUNTIME_KEY = new Map([
   ["darwin-x64", "x86_64"],
   ["darwin-arm64", "arm64"],
@@ -34,30 +30,13 @@ const PACKAGED_VERSION_TIMEOUT_MS = 20_000;
 const PACKAGED_VERSION_STOP_TIMEOUT_MS = 5_000;
 const PACKAGE_RECOVERY_TIMEOUT_MS = 60_000;
 const NODE_PTY_REBUILD_TIMEOUT_MS = 120_000;
-const PROJECT_ROOT = path.resolve(__dirname, "..");
+const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const PACKAGED_VERSION_ENV_ALLOWLIST = ["LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"];
-
-function platformSegment(electronPlatformName) {
-  if (electronPlatformName === "darwin") return "darwin";
-  if (electronPlatformName === "linux") return "linux";
-  if (electronPlatformName === "win32") return "windows";
-  return null;
-}
 
 function runtimeKeyForContext(context) {
   const arch = ARCH_BY_BUILDER_VALUE.get(context.arch);
   if (!context.electronPlatformName || !arch) return null;
   return `${context.electronPlatformName}-${arch}`;
-}
-
-function binaryNamesForTarget(electronPlatformName, archValue) {
-  const platform = platformSegment(electronPlatformName);
-  if (!platform) return new Set();
-
-  const arch = ARCH_BY_BUILDER_VALUE.get(archValue);
-  const arches = arch ? [arch] : ["arm64", "x64"];
-  const ext = platform === "windows" ? ".exe" : "";
-  return new Set(arches.map((item) => `mcp-server-${platform}-${item}${ext}`));
 }
 
 function resourcesDirForContext(context) {
@@ -66,70 +45,6 @@ function resourcesDirForContext(context) {
     return path.join(context.appOutDir, `${productName}.app`, "Contents", "Resources");
   }
   return path.join(context.appOutDir, "resources");
-}
-
-function candidateOutDirs(resourcesDir) {
-  return [
-    path.join(
-      resourcesDir,
-      "app.asar.unpacked",
-      "node_modules",
-      "@pencil.dev",
-      "cli",
-      "dist",
-      "out"
-    ),
-    path.join(resourcesDir, "node_modules", "@pencil.dev", "cli", "dist", "out"),
-    path.join(resourcesDir, "app", "node_modules", "@pencil.dev", "cli", "dist", "out"),
-    path.join(
-      resourcesDir,
-      "agentic-apps",
-      "pencil",
-      "node_modules",
-      "@pencil.dev",
-      "cli",
-      "dist",
-      "out"
-    ),
-  ];
-}
-
-function pruneOutDir(outDir, keepNames) {
-  if (!fs.existsSync(outDir)) return { removed: 0, kept: 0 };
-
-  let removed = 0;
-  let kept = 0;
-  for (const entry of fs.readdirSync(outDir, { withFileTypes: true })) {
-    if (!entry.name.startsWith("mcp-server-")) continue;
-    const entryPath = path.join(outDir, entry.name);
-    if (keepNames.has(entry.name)) {
-      kept++;
-      continue;
-    }
-    fs.rmSync(entryPath, { recursive: true, force: true });
-    removed++;
-  }
-  return { removed, kept };
-}
-
-function prunePencilCliBinaries(context) {
-  const keepNames = binaryNamesForTarget(context.electronPlatformName, context.arch);
-  if (keepNames.size === 0) return { removed: 0, kept: 0 };
-
-  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const totals = { removed: 0, kept: 0 };
-  for (const outDir of candidateOutDirs(resourcesDir)) {
-    const result = pruneOutDir(outDir, keepNames);
-    totals.removed += result.removed;
-    totals.kept += result.kept;
-  }
-
-  if (totals.removed > 0 || totals.kept > 0) {
-    console.log(
-      `[prune-pencil-cli] kept ${[...keepNames].join(", ")}; removed ${totals.removed} unused MCP binaries`
-    );
-  }
-  return totals;
 }
 
 function pruneNodePtyRuntimeBinaries(context) {
@@ -318,40 +233,6 @@ function assertExecutable(filePath, label) {
   if ((stat.mode & 0o111) === 0) {
     throw new Error(`Packaged ${label} is not executable: ${filePath}`);
   }
-}
-
-function verifyMachOArch(filePath, label, expectedFileArch) {
-  const fileOutput = require("node:child_process")
-    .execFileSync("file", [filePath], {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    .trim();
-  if (
-    !fileOutput.includes("Mach-O 64-bit executable") ||
-    (expectedFileArch && !fileOutput.includes(expectedFileArch))
-  ) {
-    throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
-  }
-  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
-}
-
-function verifyMachO64Arch(filePath, label, expectedFileArch) {
-  const fileOutput = require("node:child_process")
-    .execFileSync("file", [filePath], {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    .trim();
-  if (
-    !fileOutput.includes("Mach-O 64-bit") ||
-    (expectedFileArch && !fileOutput.includes(expectedFileArch))
-  ) {
-    throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
-  }
-  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
 }
 
 function verifyExecutableFileFormat(filePath, label, expectedFileFormat, expectedFileArch) {
@@ -1085,7 +966,6 @@ async function verifyPackagedAgentClis(context, options = {}) {
 }
 
 module.exports = async function afterPack(context) {
-  prunePencilCliBinaries(context);
   ensureCanvasRuntimePackage(context);
   ensureLinuxNodePtyRuntimePrebuild(context);
   pruneNodePtyRuntimeBinaries(context);
@@ -1099,13 +979,11 @@ module.exports = async function afterPack(context) {
   });
 };
 
-module.exports.prunePencilCliBinaries = prunePencilCliBinaries;
 module.exports.ensureCanvasRuntimePackage = ensureCanvasRuntimePackage;
 module.exports.ensureLinuxNodePtyRuntimePrebuild = ensureLinuxNodePtyRuntimePrebuild;
 module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
 module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
-module.exports.binaryNamesForTarget = binaryNamesForTarget;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
 module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;

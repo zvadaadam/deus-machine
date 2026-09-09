@@ -91,9 +91,7 @@ jobs:
         run: bun run smoke:runtime-resources
 
       - name: Build Electron desktop outputs
-        run: |
-          bun run build:pencil
-          bun run build
+        run: bun run build
 
       - name: Select macOS package architecture
         run: |

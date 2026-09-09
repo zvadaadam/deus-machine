@@ -7,16 +7,7 @@
  * is one entry here + the component in its feature folder.
  */
 
-import {
-  GitBranch,
-  FolderOpen,
-  Bot,
-  Terminal,
-  PenTool,
-  Globe,
-  Smartphone,
-  LayoutGrid,
-} from "lucide-react";
+import { GitBranch, FolderOpen, Bot, Terminal, Globe, Smartphone, LayoutGrid } from "lucide-react";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
@@ -46,7 +37,6 @@ export const CONTENT_TABS: ContentTabItem[] = [
   { id: "changes", label: "Changes", icon: GitBranch },
   { id: "files", label: "Files", icon: FolderOpen },
   { id: "terminal", label: "Terminal", icon: Terminal, capabilityGate: "nativeTerminal" },
-  { id: "design", label: "Design", icon: PenTool, visibilityKey: "experimental_design" },
   {
     id: "browser",
     label: "Browser",

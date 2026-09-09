@@ -14,7 +14,6 @@ import healthRoutes from "./routes/health";
 import workspaceRoutes from "./routes/workspaces";
 import workspaceDiffRoutes from "./routes/workspaces.diff";
 import workspacePrRoutes from "./routes/workspaces.pr";
-import workspaceDesignRoutes from "./routes/workspaces.design";
 import sessionRoutes from "./routes/sessions";
 import repoRoutes from "./routes/repos";
 import agentConfigRoutes from "./routes/agent-config";
@@ -43,7 +42,6 @@ export function createApp() {
   app.route("/api", workspaceRoutes);
   app.route("/api", workspaceDiffRoutes);
   app.route("/api", workspacePrRoutes);
-  app.route("/api", workspaceDesignRoutes);
   app.route("/api", sessionRoutes);
   app.route("/api", repoRoutes);
   app.route("/api", agentConfigRoutes);

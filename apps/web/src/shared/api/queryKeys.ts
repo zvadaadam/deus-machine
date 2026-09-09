@@ -19,7 +19,6 @@ export const queryKeys = {
     diffFiles: (id: string) => ["workspaces", "diff-files", id] as const,
     diffFile: (id: string, file: string) => ["workspaces", "diff-file", id, file] as const,
     prStatus: (id: string) => ["workspaces", "pr-status", id] as const,
-    penFiles: (id: string) => ["workspaces", "pen-files", id] as const,
     systemPrompt: (id: string) => ["workspaces", "system-prompt", id] as const,
     manifest: (id: string) => ["workspaces", "manifest", id] as const,
   },

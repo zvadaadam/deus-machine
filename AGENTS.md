@@ -137,8 +137,10 @@ Detailed conventions for Tailwind v4, components, animations, and performance li
 
 The app UI is designed in `design/deus.pen` (Pencil). The file is encrypted — read and
 edit it only through the Pencil MCP tools (`get_app_state`, `execute`), never with `Read`
-or `Grep`. Pencil also ships inside Deus as an agentic app (`packages/pencil`), so the
-same file opens in the Design tab.
+or `Grep`. Pencil is an external design tool; it is not bundled into Deus. The
+`design/` folder and its documents are independent of product integrations.
+The retained Design-tab and Pencil mockups are historical after the embedded
+integration's removal; preserve those documents rather than restoring the feature.
 
 `deus.pen` is a reconstruction of `apps/web` as it exists today, not a moodboard:
 

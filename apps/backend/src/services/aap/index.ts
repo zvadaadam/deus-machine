@@ -10,7 +10,6 @@ export {
   stopAllApps,
   sweepOrphanApps,
   readAppSkill,
-  prefetchInstalledAppAssets,
 } from "./apps.service";
 
 // Re-export the public view + contract types from shared so backend-internal

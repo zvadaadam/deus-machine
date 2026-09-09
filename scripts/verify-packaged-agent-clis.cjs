@@ -1,4 +1,4 @@
-const { verifyPackagedAgentClis } = require("./prune-pencil-cli-binaries.cjs");
+const { verifyPackagedAgentClis } = require("./runtime/electron-builder-after-pack.cjs");
 
 module.exports = async function afterSign(context) {
   await verifyPackagedAgentClis(context, {

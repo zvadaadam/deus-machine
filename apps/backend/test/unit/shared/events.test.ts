@@ -209,7 +209,6 @@ describe("shared/events", () => {
       // New commands
       expect(COMMAND_NAMES).toContain("createWorkspace");
       expect(COMMAND_NAMES).toContain("retrySetup");
-      expect(COMMAND_NAMES).toContain("openPenFile");
       // Simulator commands
       expect(COMMAND_NAMES).toContain("sim:listDevices");
       expect(COMMAND_NAMES).toContain("sim:start");
@@ -229,7 +228,7 @@ describe("shared/events", () => {
       // Cloud simulator (hosted device)
       expect(COMMAND_NAMES).toContain("cloudSim:start");
       expect(COMMAND_NAMES).toContain("cloudSim:stop");
-      expect(COMMAND_NAMES).toHaveLength(35);
+      expect(COMMAND_NAMES).toHaveLength(34);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -247,7 +246,6 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("diffStats");
       expect(REQUEST_RESOURCES).toContain("diffFiles");
       expect(REQUEST_RESOURCES).toContain("diffFile");
-      expect(REQUEST_RESOURCES).toContain("penFiles");
       expect(REQUEST_RESOURCES).toContain("workspaceFiles");
       expect(REQUEST_RESOURCES).toContain("fileContent");
       expect(REQUEST_RESOURCES).toContain("fileSearch");
@@ -264,7 +262,7 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("cloudSimExec");
       expect(REQUEST_RESOURCES).toContain("cloudSimulator");
       expect(REQUEST_RESOURCES).toContain("cloudPreview");
-      expect(REQUEST_RESOURCES).toHaveLength(31);
+      expect(REQUEST_RESOURCES).toHaveLength(30);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

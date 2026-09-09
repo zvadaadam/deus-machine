@@ -2,7 +2,7 @@
  * Content View — thin router for the active content tab.
  *
  * Each tab is either:
- *   - Lazy: mounted/unmounted on tab switch (Changes, Files, Config, Design)
+ *   - Lazy: mounted/unmounted on tab switch (Changes, Files, Config, Apps)
  *   - Persistent: always mounted, hidden when inactive (Terminal, Browser, Simulator)
  *     These preserve native state (PTY sessions, WebView instances).
  *
@@ -19,7 +19,6 @@ import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUna
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
-import { DesignPanel } from "@/features/workspace/ui/DesignPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
 import { CloudSimulatorPanel } from "@/features/simulator/cloud";
@@ -147,8 +146,6 @@ export function ContentView({
       {activeTab === "files" && <FilesView workspace={workspace} isWatched={isWatched} />}
 
       {activeTab === "config" && <AgentConfigPanel workspace={workspace} />}
-
-      {activeTab === "design" && <DesignPanel workspaceId={workspace.id} />}
 
       {activeTab === "apps" && <AppsLauncher workspaceId={workspace.id} />}
 

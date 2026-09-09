@@ -62,8 +62,14 @@ agent CLI discovery. It is based on the source paths below, not on generated
   state. It creates temporary repos/workspaces through the packaged backend HTTP
   API so SQLite stays inside the runtime under test and does not depend on
   whether `better-sqlite3` was last rebuilt for Node or Electron.
-- `scripts/prune-pencil-cli-binaries.cjs` is a packaging verifier/pruner for
+- `scripts/runtime/electron-builder-after-pack.cjs` is a packaging verifier/pruner for
   Electron app contents and native runtime payloads.
+
+Frontend libraries belong in `devDependencies`: Vite bundles them into
+`out/renderer` or device-use's `dist/frontend` during the build. Keep packages
+loaded by the desktop, backend, or agent runtime in `dependencies`, which
+electron-builder copies into the app. This avoids shipping a second, unused
+copy of each frontend library and its dependencies.
 
 ## Cleanup Boundaries
 
@@ -109,7 +115,7 @@ agent CLI discovery. It is based on the source paths below, not on generated
 | `scripts/runtime/smoke/run-version-check.cjs`       | smoke helper          | Isolated executable version probe used by native runtime validation and packaged app smoke.                                               |
 | `scripts/prepare-device-use.mjs`                    | build/stage           | Builds and stages `packages/device-use` bundles, frontend payload, skill, and native helpers.                                             |
 | `scripts/prepare-gh-cli.mjs`                        | stage                 | Stages GitHub CLI binaries and manifest for packaged runtime bins.                                                                        |
-| `scripts/prune-pencil-cli-binaries.cjs`             | package/validate      | Prunes duplicate package payloads and verifies packaged app/native runtime contents after pack.                                           |
+| `scripts/runtime/electron-builder-after-pack.cjs`   | package/validate      | Prunes duplicate package payloads and verifies packaged app/native runtime contents after pack.                                           |
 
 ## Structural Deferrals
 
@@ -143,8 +149,6 @@ agent CLI discovery. It is based on the source paths below, not on generated
   instead of carrying a production-local copy.
 - Packaged `device-use` runtime invocations force bundled helper paths, while
   source runtime invocations may still honor explicit helper overrides.
-- AAP prefetch skips missing path-form entrypoints as optional prefetch work
-  instead of logging an alarming startup failure for unbuilt optional apps.
 - Packaged runtime smoke seeds AAP state through backend HTTP routes instead of
   host `better-sqlite3`, removing Node/Electron native ABI ordering from the
   smoke harness.
