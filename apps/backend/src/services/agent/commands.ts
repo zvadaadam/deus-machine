@@ -382,6 +382,10 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   const content = requireParam(params, "content", "sendMessage");
   const model = requireParam(params, "model", "sendMessage");
   const agentHarness = requireParam(params, "agentHarness", "sendMessage") as AgentHarness;
+  const permissionMode = readPermissionMode(params.permissionMode);
+  if (params.permissionMode !== undefined && permissionMode === undefined) {
+    throw new Error("Unsupported permission mode");
+  }
 
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
@@ -613,7 +617,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
         cwd,
         model,
         thinkingLevel: readThinkingLevel(params.thinkingLevel),
-        permissionMode: readPermissionMode(params.permissionMode),
+        permissionMode,
         maxTurns: readNumber(params, "maxTurns"),
         additionalDirectories: Array.isArray(params.additionalDirectories)
           ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")

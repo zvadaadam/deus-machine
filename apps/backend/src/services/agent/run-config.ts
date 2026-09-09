@@ -99,10 +99,9 @@ export function buildTurnStartParams(
       model: options.model,
       thinkingLevel: options.thinkingLevel,
       systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd),
-      // Verbatim — deus and the engine speak the same permission vocabulary
-      // (dont_ask = never prompt, without the dangerous bypass that also
-      // disables Claude extended thinking).
-      permissionMode: options.permissionMode,
+      // Deus runs with full access by default, like its cloud runtime.
+      // Explicit modes (including the composer's plan mode) stay unchanged.
+      permissionMode: options.permissionMode ?? "bypass_permissions",
       maxTurns: options.maxTurns ?? 1000,
       additionalDirectories: options.additionalDirectories,
       resumeSessionId: options.resume,
