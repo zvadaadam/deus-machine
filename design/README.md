@@ -378,4 +378,5 @@ events lift the gate. A failed HTTP refresh preserves an existing serving connec
 active, and a pending plan alongside the composer. `DS/Composer` has a hidden Stop
 slot that those active-state instances enable. Stop stays available in `working`,
 `needs_response`, and `needs_plan_response`; an unconfirmed cancellation leaves the
-request answerable until the native turn ends.
+request answerable until the native turn ends. The alert stays visible in all
+three active states, without replacing a waiting status with `working`.

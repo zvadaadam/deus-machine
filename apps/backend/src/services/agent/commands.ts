@@ -741,25 +741,19 @@ function scheduleUnconfirmedCancelWatchdog(
       if (live !== undefined && live !== cancelledTurnId) return;
 
       const db = getDatabase();
-      // Only if turn.ended never arrived: any status change means it did (or
-      // the user started something else), and this must not stomp on it.
-      //
-      // Matching 'working' alone was too narrow. A stop is legal from every
-      // ACTIVE_TURN_STATUS — cancelling a plan-approval or question overlay is
-      // the common case — and an unconfirmed cancel from one of those left the
-      // session parked on needs_plan_response / needs_response with no agent
-      // behind it and no overlay the user could dismiss. Same set the send
-      // path calls active, so "there is a turn to give up on" means one thing.
+      // Keep a live turn's working/question/plan status and add the warning.
+      // Missing native ownership marks an active session as error; a turn
+      // that already settled is excluded by the status guard.
       const result = db
         .prepare(
           `UPDATE sessions
-             SET status = ?,
+             SET status = COALESCE(?, status),
                  error_message = COALESCE(error_message, 'The agent never confirmed the stop request.'),
                  error_category = COALESCE(error_category, 'internal'),
                  updated_at = datetime('now')
            WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
         )
-        .run(live === undefined ? "error" : "working", sessionId, ...ACTIVE_TURN_STATUSES);
+        .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });

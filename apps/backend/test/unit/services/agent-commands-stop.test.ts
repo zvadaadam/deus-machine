@@ -130,7 +130,7 @@ describeWithDb("stopSession", () => {
   });
 
   it.each(["needs_plan_response", "needs_response"])(
-    "the watchdog keeps Stop available after an unconfirmed cancel from %s",
+    "the watchdog preserves a live turn's waiting status after an unconfirmed cancel from %s",
     async (startingStatus) => {
       // A stop is legal from every status that means "a turn is running", and
       // the overlay statuses are where users hit it most — cancelling a plan
@@ -147,7 +147,10 @@ describeWithDb("stopSession", () => {
 
       await vi.advanceTimersByTimeAsync(20_000);
 
-      expect(status()).toBe("working");
+      expect(status()).toBe(startingStatus);
+      expect(
+        db.prepare(`SELECT error_message FROM sessions WHERE id = ?`).get(SESSION)
+      ).toMatchObject({ error_message: expect.stringContaining("never confirmed") });
     }
   );
 
@@ -165,28 +168,31 @@ describeWithDb("stopSession", () => {
     expect(status()).toBe("idle");
   });
 
-  it("the watchdog leaves a turn that STARTED AFTER the cancelled one alone", async () => {
-    // The whole cycle fits inside the 15s grace window: cancel goes
-    // unconfirmed, the turn ends anyway, the user sends again. Status alone
-    // cannot tell the new turn from the old one — both are "working" — so a
-    // status-only watchdog fails a healthy run 15 seconds into it.
-    vi.spyOn(agentService, "stopSession").mockResolvedValue({
-      outcome: "unconfirmed",
-      turnId: "turn-1",
-    });
-    const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
+  it.each(["working", "needs_response", "needs_plan_response"])(
+    "the watchdog leaves a successor in %s alone",
+    async (successorStatus) => {
+      // The whole cycle fits inside the 15s grace window: cancel goes
+      // unconfirmed, the turn ends anyway, the user sends again. Status alone
+      // cannot tell the new turn from the old one — both are "working" — so a
+      // status-only watchdog fails a healthy run 15 seconds into it.
+      vi.spyOn(agentService, "stopSession").mockResolvedValue({
+        outcome: "unconfirmed",
+        turnId: "turn-1",
+      });
+      const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
 
-    await runCommand("stopSession", { sessionId: SESSION });
+      await runCommand("stopSession", { sessionId: SESSION });
 
-    // turn-1 ends, turn-2 is admitted, and the session is working again.
-    liveTurn.mockReturnValue("turn-2");
-    db.prepare(`UPDATE sessions SET status = 'working' WHERE id = ?`).run(SESSION);
+      // turn-1 ends, turn-2 is admitted, and the session is working again.
+      liveTurn.mockReturnValue("turn-2");
+      db.prepare(`UPDATE sessions SET status = ? WHERE id = ?`).run(successorStatus, SESSION);
 
-    await vi.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(status()).toBe("working");
-    expect(mockInvalidate).not.toHaveBeenCalled();
-  });
+      expect(status()).toBe(successorStatus);
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    }
+  );
 
   it("the watchdog shows a warning and keeps Stop available for the still-live turn", async () => {
     vi.spyOn(agentService, "stopSession").mockResolvedValue({
