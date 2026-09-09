@@ -130,9 +130,7 @@ export async function connect(serverId?: string): Promise<void> {
     }
     return;
   }
-  // Detect stale socket: `connected` flag says yes but the actual WebSocket is dead.
-  // This happens after Vite HMR reloads — module state is preserved but the socket
-  // reference is stale (readyState !== OPEN). Force reconnect in this case.
+  // Reconnect if the connection flag outlives its underlying socket.
   if (connected && (!ws || ws.readyState !== WebSocket.OPEN)) {
     connected = false;
     connecting = false;
@@ -814,4 +812,10 @@ function scheduleReconnect(): void {
       // onclose handler will schedule another reconnect
     });
   }, delay);
+}
+
+if (import.meta.hot) {
+  // Replacing this singleton splits callers between connected and disconnected clients.
+  // Reload the renderer when its transport changes; component-only edits still use HMR.
+  import.meta.hot.accept(() => window.location.reload());
 }
