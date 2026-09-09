@@ -28,7 +28,7 @@ const {
 const DEFAULT_APP_PATH = resolveDefaultAppPath();
 const REQUIRED_BINARIES = RUNTIME_BINARIES;
 const REQUIRED_MANIFESTS = RUNTIME_MANIFESTS;
-const ALLOWED_BIN_ENTRIES = new Set([...REQUIRED_BINARIES, ...REQUIRED_MANIFESTS]);
+const ALLOWED_BIN_ENTRIES = new Set([...REQUIRED_BINARIES, ...REQUIRED_MANIFESTS, "codex-runtime"]);
 const FORBIDDEN_RUNTIME_PACKAGE_PREFIXES = [
   "/node_modules/@anthropic-ai/claude-agent-sdk-darwin-",
   "/node_modules/@anthropic-ai/claude-agent-sdk-linux-",

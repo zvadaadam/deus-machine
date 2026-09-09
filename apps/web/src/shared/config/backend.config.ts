@@ -7,7 +7,8 @@
  * - Web-standalone: same-origin proxy (CLI server / self-hosted)
  * - Web-production (relay): WS through relay.deusmachine.ai, HTTP tunneled over WS
  *
- * The resolved endpoints are cached after first call.
+ * Relay and same-origin endpoints are cached. Local endpoints use the current
+ * cached backend port so a restart can move the connection to a new port.
  */
 
 import { capabilities } from "@/platform/capabilities";
@@ -103,20 +104,12 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
     return cachedEndpoints;
   }
 
-  // Electron or web-dev: resolve local port
-  if (cachedEndpoints) return cachedEndpoints;
-
+  // The port already has a cache, updated when the backend restarts.
   const port = await getBackendPort();
-  cachedEndpoints = {
+  return {
     wsUrl: `ws://localhost:${port}/ws`,
     apiBase: `http://localhost:${port}/api`,
   };
-  return cachedEndpoints;
-}
-
-function invalidateEndpointCache(): void {
-  cachedEndpoints = null;
-  cachedRelayServerId = null;
 }
 
 /** Extract serverId from the current URL pathname (/s/{serverId}/...). */
