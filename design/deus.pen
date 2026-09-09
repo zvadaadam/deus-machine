@@ -80588,7 +80588,7 @@
                   "fill": "$text-primary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Stop was not confirmed. The agent may still be running. Try stopping again.",
+                  "content": "The agent never confirmed the stop request.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
