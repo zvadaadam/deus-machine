@@ -5,7 +5,7 @@ const asar = require("@electron/asar");
 const {
   verifyCodeSignaturePageSize,
   verifyPackagedAgentClis,
-} = require("../../prune-pencil-cli-binaries.cjs");
+} = require("../electron-builder-after-pack.cjs");
 const { assertPackagedMainRuntimeContents } = require("../electron-builder-before-pack.cjs");
 const {
   PROJECT_ROOT,

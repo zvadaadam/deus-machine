@@ -44,6 +44,4 @@ function resolvePackagedManifest(relPath: string): string | null {
 export const INSTALLED_APP_MANIFESTS: readonly string[] = uniqueExisting([
   resolvePackagedManifest("agentic-apps/device-use/agentic-app.json"),
   resolveDevManifest("packages/device-use/agentic-app.json"),
-  resolvePackagedManifest("agentic-apps/pencil/agentic-app.json"),
-  resolveDevManifest("packages/pencil/agentic-app.json"),
 ]);

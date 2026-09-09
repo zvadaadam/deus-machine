@@ -187,16 +187,6 @@ export async function runCommand(
         await delegateToRoute("POST", `/api/workspaces/${workspaceId}/retry-setup`);
         return {};
       })
-      .with("openPenFile", async () => {
-        const workspaceId = readString(params, "workspaceId");
-        const filePath = readString(params, "filePath");
-        if (!workspaceId || !filePath)
-          throw new Error("openPenFile requires workspaceId and filePath");
-        await delegateToRoute("POST", `/api/workspaces/${workspaceId}/open-pen-file`, {
-          filePath,
-        });
-        return {};
-      })
       // ---- Simulator commands ----
       .with("sim:listDevices", async () => {
         const devices = await simulator.listDevices();

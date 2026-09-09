@@ -16,7 +16,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run native:electron && bun scripts/runtime/prepare-dev-agent-clis.ts && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && ([ -f packages/pencil/dist/serve.js ] || bun run build:pencil) && electron-vite dev",
+    "dev": "bun run native:electron && bun scripts/runtime/prepare-dev-agent-clis.ts && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
     "dev:cloud-local": "DEUS_CLOUD_ENV=local bun run dev",
     "dev:web": "bun run native:node && bun scripts/runtime/prepare-dev-agent-clis.ts && bun scripts/runtime/dev.ts",
     "dev:frontend": "vite --config apps/web/vite.config.ts",
@@ -24,13 +24,12 @@
     "build": "node node_modules/electron-vite/bin/electron-vite.js build",
     "build:agent-server": "bun apps/agent-server/build.ts",
     "build:backend": "bun apps/backend/build.ts",
-    "build:pencil": "cd packages/pencil && bun run build",
     "dev:relay": "cd apps/cloud-relay && wrangler dev",
     "build:relay": "cd apps/cloud-relay && wrangler deploy --dry-run --outdir dist",
     "deploy:relay": "cd apps/cloud-relay && wrangler deploy",
     "build:web": "vite build --config apps/web/vite.config.ts --outDir dist/web",
     "build:cli": "bun run build:runtime && bun apps/cli/build.ts",
-    "build:all": "bun run prepare:device-use --force && bun run build:runtime && bun run build:pencil && bun run build",
+    "build:all": "bun run prepare:device-use --force && bun run build:runtime && bun run build",
     "package:mac": "bun run build:all && electron-builder --mac",
     "package:mac:dir": "node scripts/runtime/package-mac-dir.cjs",
     "package:win": "node scripts/runtime/unsupported-packaged-platform.cjs Windows",

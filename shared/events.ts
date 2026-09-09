@@ -92,7 +92,6 @@ export const REQUEST_RESOURCES = [
   "diffStats",
   "diffFiles",
   "diffFile",
-  "penFiles",
   "workspaceFiles",
   "fileContent",
   "fileSearch",
@@ -165,7 +164,6 @@ export const COMMAND_NAMES = [
   // New commands
   "createWorkspace",
   "retrySetup",
-  "openPenFile",
   // Simulator commands
   "sim:listDevices",
   "sim:start",

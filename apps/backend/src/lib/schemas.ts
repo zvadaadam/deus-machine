@@ -109,10 +109,6 @@ export const CreateWorkspaceBody = z.object({
     .optional(), // PR's base branch (for diff target)
 });
 
-export const OpenPenFileBody = z.object({
-  filePath: z.string().min(1, "filePath is required"),
-});
-
 // ============================================================================
 // Config File Schemas (disk reads — used with safeParse for graceful fallback)
 // ============================================================================
@@ -168,7 +164,6 @@ export const PreferencesFile = z
     default_thinking_level: z.string().optional(),
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
-    experimental_design: z.boolean().optional(),
     experimental_apps: z.boolean().optional(),
   })
   .passthrough();

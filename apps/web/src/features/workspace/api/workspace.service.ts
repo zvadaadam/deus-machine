@@ -151,23 +151,6 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch .pen design files in a workspace
-   */
-  fetchPenFiles: async (
-    id: string
-  ): Promise<{ files: Array<{ name: string; path: string }>; count: number }> => {
-    return sendRequest("penFiles", { workspaceId: id });
-  },
-
-  /**
-   * Open a .pen file in the Pencil desktop app
-   */
-  openPenFile: async (id: string, filePath: string): Promise<{ success: boolean }> => {
-    const result = await sendCommand("openPenFile", { workspaceId: id, filePath });
-    return { success: result.accepted };
-  },
-
-  /**
    * Update system prompt for a workspace
    */
   updateSystemPrompt: async (id: string, systemPrompt: string): Promise<void> => {

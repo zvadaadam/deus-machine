@@ -76,7 +76,6 @@ export async function runRequest(
           `/api/workspaces/${encodeURIComponent(wsId)}/diff-file?file=${encodeURIComponent(file)}`
         );
       })
-      .with("penFiles", () => wsGet("/pen-files"))
       .with("workspaceFiles", () => wsGet("/files"))
       .with("fileContent", () => {
         const wsId = requireParam(params, "workspaceId", "fileContent");

@@ -6,7 +6,7 @@ directories:
 electronLanguages: [en]
 npmRebuild: false
 beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
-afterPack: "scripts/prune-pencil-cli-binaries.cjs"
+afterPack: "scripts/runtime/electron-builder-after-pack.cjs"
 afterSign: "scripts/verify-packaged-agent-clis.cjs"
 files:
   - "out/**/*"
@@ -33,21 +33,6 @@ asarUnpack:
   - "node_modules/node-pty/**"
   - "node_modules/@napi-rs/canvas/**"
   - "node_modules/@napi-rs/canvas-*/**"
-  - "node_modules/@pencil.dev/cli/dist/out/**"
-extraResources:
-  - from: "packages/pencil"
-    to: "agentic-apps/pencil"
-    filter:
-      - "agentic-app.json"
-      - "package.json"
-      - "dist/**/*"
-      - "skills/**/*"
-  - from: "node_modules/@pencil.dev/cli"
-    to: "agentic-apps/pencil/node_modules/@pencil.dev/cli"
-    filter:
-      - "package.json"
-      - "dist/**/*"
-      - "SKILL.md"
 mac:
   category: public.app-category.developer-tools
   binaries:

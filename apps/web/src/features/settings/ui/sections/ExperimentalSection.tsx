@@ -78,25 +78,6 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
           onCheckedChange={(checked) => saveSetting("experimental_apps", checked)}
         />
       </div>
-
-      <Separator />
-
-      {/* Design */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="experimental-design" className="text-sm">
-            Design
-          </Label>
-          <p className="text-muted-foreground text-base">
-            Let the AI agent create and edit visual designs directly in the workspace.
-          </p>
-        </div>
-        <Switch
-          id="experimental-design"
-          checked={settings.experimental_design === true}
-          onCheckedChange={(checked) => saveSetting("experimental_design", checked)}
-        />
-      </div>
     </div>
   );
 }

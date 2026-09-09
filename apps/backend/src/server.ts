@@ -12,7 +12,7 @@ import {
   reconcile as reconcileSimulators,
   destroyAll as destroyAllSimulators,
 } from "./services/simulator-context";
-import { prefetchInstalledAppAssets, stopAllApps, sweepOrphanApps } from "./services/aap";
+import { stopAllApps, sweepOrphanApps } from "./services/aap";
 import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
 import {
@@ -47,7 +47,6 @@ const db = initDatabase();
 // remembers their pids across restarts; we kill any still alive before
 // accepting new commands so a re-launch allocates a fresh instance cleanly.
 sweepOrphanApps();
-prefetchInstalledAppAssets();
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
 // Runs once at startup (fire-and-forget) so WS subscribers get the data
