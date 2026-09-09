@@ -371,3 +371,11 @@ normal sleep, and a workspace error. `13` includes the corresponding header chip
 `features/workspace/lib/cloudPresence.ts`: a ready row with a wake error is
 **Unavailable** with retry; a workspace error remains **Failed**. Successful running
 events lift the gate. A failed HTTP refresh preserves an existing serving connection.
+
+### Unconfirmed Stop
+
+`30b · States — Unconfirmed Stop` shows the existing Chat alert while a turn remains
+active, and a pending plan alongside the composer. `DS/Composer` has a hidden Stop
+slot that those active-state instances enable. Stop stays available in `working`,
+`needs_response`, and `needs_plan_response`; an unconfirmed cancellation leaves the
+request answerable until the native turn ends.

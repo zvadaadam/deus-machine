@@ -47,7 +47,7 @@ import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { runAutomationNow, refreshAutomations, openAutomationRun } from "../automations";
 import { broadcast as wsBroadcast } from "../ws.service";
-import type { AgentHarness } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
 import {
   type QueryParams,
@@ -358,22 +358,6 @@ export async function runCommand(
       .exhaustive()
   );
 }
-
-/**
- * The statuses that mean "a turn is running" — the RUNNING turn is the thing
- * both sends and stops key off, so the two must read the same list or they
- * disagree about whether one exists.
- *
- * "Needs input" belongs here: plan approval and questions park the running
- * turn behind an overlay, they do not end it. A send is refused from these
- * (the wire would reject it with turnActive), and a stop IS legal from them —
- * which is why the unconfirmed-cancel watchdog matches this same set.
- */
-const ACTIVE_TURN_STATUSES: readonly string[] = [
-  "working",
-  "needs_plan_response",
-  "needs_response",
-];
 
 // ---- sendMessage ----
 

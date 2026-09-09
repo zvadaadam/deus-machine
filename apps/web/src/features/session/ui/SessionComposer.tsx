@@ -56,7 +56,6 @@ interface SessionComposerProps {
   /** Show the Compact button (modal layout wants it). */
   showCompactButton?: boolean;
   /** SessionPanel owns the RPC handler; it feeds the boolean in. */
-  hasPendingPlan?: boolean;
   /** Called when user picks a model from a locked agent group. */
   onOpenNewTab?: (initialModel?: string) => void;
   /** Reports the current agent harness to parents that gate on it. */
@@ -97,7 +96,6 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       targetBranch,
       initialModel,
       showCompactButton = false,
-      hasPendingPlan = false,
       onOpenNewTab,
       onAgentHarnessChange,
       onSendComplete,
@@ -185,7 +183,6 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         hasMessages={messages.length > 0}
         hasManifest={hasManifest}
         showCompactButton={showCompactButton}
-        hasPendingPlan={hasPendingPlan}
         onSend={(content) => sendMessage(content)}
         onCompact={compactConversation}
         onStop={stopSession}

@@ -20,6 +20,7 @@
  */
 
 import type { SessionStatus } from "@/shared/types";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
@@ -89,7 +90,6 @@ interface MessageInputProps {
   /** Whether a deus.json manifest exists for this workspace. */
   hasManifest?: boolean;
   showCompactButton?: boolean;
-  hasPendingPlan?: boolean;
 
   onSend: (content: string) => void;
   onCompact?: () => void;
@@ -215,7 +215,6 @@ export function MessageInput({
   hasMessages = false,
   hasManifest = true,
   showCompactButton = false,
-  hasPendingPlan = false,
   onSend,
   onCompact,
   onStop,
@@ -529,7 +528,7 @@ export function MessageInput({
               onCompact={onCompact}
             />
 
-            {sessionStatus === "working" && !hasPendingPlan && (
+            {sessionStatus && ACTIVE_TURN_STATUSES.includes(sessionStatus) && (
               <InputGroupButton
                 onClick={onStop}
                 variant="default"
