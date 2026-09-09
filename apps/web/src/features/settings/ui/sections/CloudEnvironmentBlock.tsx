@@ -17,18 +17,7 @@ interface CloudEnvironmentInfo {
   configured: boolean;
   name: string | null;
   requiredEnv?: string[];
-}
-
-interface CloudEnvironmentSummary {
-  id: string;
-  name: string;
-  repo: string | null;
-  updatedAt: string;
-}
-
-function repoLabel(repo: string | null): string {
-  if (!repo) return "—";
-  return repo.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "");
+  lookupFailed?: true;
 }
 
 export function CloudEnvironmentBlock({
@@ -49,13 +38,6 @@ export function CloudEnvironmentBlock({
     retry: false,
   });
 
-  const all = useQuery({
-    queryKey: ["settings", "cloud-environments"],
-    queryFn: () => apiClient.get<CloudEnvironmentSummary[]>("/settings/cloud/environments"),
-    staleTime: 30_000,
-    retry: false,
-  });
-
   const configured = info.data?.configured ?? false;
 
   return (
@@ -72,18 +54,20 @@ export function CloudEnvironmentBlock({
             Cloud environment
             {configured && (
               <span className="text-accent-green flex items-center gap-1 text-xs font-normal">
-                <Check className="h-3 w-3" /> Configured
+                <Check className="h-3 w-3" /> Recipe saved
               </span>
             )}
           </p>
           <p className="text-muted-foreground text-base">
-            {configured
-              ? `Cloud workspaces on this repo provision from the saved recipe${
-                  info.data?.requiredEnv?.length
-                    ? ` — needs ${info.data.requiredEnv.join(", ")}`
-                    : ""
-                }.`
-              : "An agent onboards the codebase on a cloud computer — installs dependencies, verifies the setup, and saves the recipe so future cloud workspaces start ready. Take over in the workspace anytime."}
+            {info.isError || info.data?.lookupFailed
+              ? "Couldn't check the saved cloud recipe. Try again shortly."
+              : configured
+                ? `Cloud workspaces on this repo provision from the saved recipe${
+                    info.data?.requiredEnv?.length
+                      ? " — check required values in Application secrets above"
+                      : ""
+                  }.`
+                : "An agent onboards the codebase on a cloud computer — installs dependencies, verifies the setup, and saves the recipe so future cloud workspaces start ready. Take over in the workspace anytime."}
           </p>
           {cloudBlockedReason && (
             <p className="text-text-muted mt-1 text-xs">{cloudBlockedReason}</p>
@@ -106,23 +90,6 @@ export function CloudEnvironmentBlock({
           </Button>
         )}
       </div>
-
-      {(all.data?.length ?? 0) > 0 && (
-        <div>
-          <p className="text-text-muted mb-1 text-xs">Cloud environments on your org</p>
-          {all.data!.map((env) => (
-            <div
-              key={env.id}
-              className="border-border-subtle flex items-center justify-between border-b py-2 text-sm last:border-b-0"
-            >
-              <span className="text-text-secondary truncate">{repoLabel(env.repo)}</span>
-              <span className="text-text-muted ml-3 shrink-0 text-xs">
-                {new Date(env.updatedAt).toLocaleDateString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

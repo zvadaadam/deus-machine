@@ -35,8 +35,25 @@ import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
 import { useProviderAccounts } from "../../api/provider-accounts.queries";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { CloudApplicationSecrets } from "./CloudApplicationSecrets";
 
 export function EnvironmentSection() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-base font-semibold">Environment</h3>
+        <p className="text-muted-foreground mt-1 text-base">
+          Manage cloud secrets and repository setup.
+        </p>
+      </div>
+      <CloudApplicationSecrets />
+      <Separator />
+      <RepositoryEnvironmentSettings />
+    </div>
+  );
+}
+
+function RepositoryEnvironmentSettings() {
   const { data: repos, isLoading: reposLoading } = useRepos();
   // Agent-driven environment setup provisions a real cloud workspace, so it
   // needs the lane up: signed in AND holding this device's platform key.
@@ -148,7 +165,7 @@ export function EnvironmentSection() {
     return (
       <div className="space-y-5">
         <div>
-          <h3 className="text-base font-semibold">Environment</h3>
+          <h4 className="text-sm font-medium">Repository setup</h4>
           <p className="text-muted-foreground mt-1 text-base">
             No repositories found. Add a project first.
           </p>
@@ -160,9 +177,9 @@ export function EnvironmentSection() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-base font-semibold">Environment</h3>
+        <h4 className="text-sm font-medium">Repository setup</h4>
         <p className="text-muted-foreground mt-1 text-base">
-          Configure workspace setup, tasks, and environment for each repository.
+          Setup scripts, tasks, and public configuration saved in your repository's deus.json.
         </p>
       </div>
 
@@ -360,7 +377,7 @@ export function EnvironmentSection() {
           {/* Environment Variables */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm">Environment variables</Label>
+              <Label className="text-sm">Public environment variables</Label>
               <Button
                 type="button"
                 variant="ghost"
@@ -377,6 +394,10 @@ export function EnvironmentSection() {
                 Add
               </Button>
             </div>
+            <p className="text-muted-foreground text-xs">
+              Saved in deus.json and committed with your code. Put private API keys in Application
+              secrets above.
+            </p>
             {draft.env.length === 0 && (
               <p className="text-muted-foreground text-base">
                 No environment variables configured.

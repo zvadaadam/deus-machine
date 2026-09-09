@@ -27,7 +27,8 @@ import { getDatabase } from "../lib/database";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
-import { getCloudConfig, setCloudConnectHook } from "./agent/cloud/config";
+import { getCloudConfig, getCloudIdentitySignal, setCloudConnectHook } from "./agent/cloud/config";
+import { getCloudWorkspaceUserId } from "./cloud-environment-settings.service";
 import {
   ensureCloudSession,
   announceCloudEnv,
@@ -777,17 +778,21 @@ async function provisionInBackground(
   apiKey: string
 ): Promise<void> {
   const db = getDatabase();
+  const identity = getCloudIdentitySignal();
   try {
+    const userId = await getCloudWorkspaceUserId();
+    identity.throwIfAborted();
     // A specialized environment (agent-authored via agnt_configure_environment,
     // resolved by the derived repo name) wins; absence of one IS the default —
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
+    identity.throwIfAborted();
     let environment: string | ReturnType<typeof Environment.from>;
     let inlineMintStampAtCreate: number | null = null;
     // Named lane: whether the environment-scoped token landed before create —
     // then the connect that follows provisioning has nothing to re-mint.
     let repositoryAuth: RepositoryAuth | undefined;
-    if (envInfo.configured) {
+    if (envInfo.environmentId) {
       // Named environments resolve their secrets FROM THE PLATFORM — the create
       // API rejects inline secrets alongside an environmentId — so the App
       // token cannot ride the request here. Without this, a repo that has been
@@ -795,24 +800,24 @@ async function provisionInBackground(
       // (inline) workspace clones fine, every later one clones anonymously and
       // fails on a private repo. So write the mint as an environment-scoped
       // secret just before create; agnt resolves it by environment id.
-      if (envInfo.environmentId) {
-        repositoryAuth =
-          (await refreshEnvironmentGithubTokenOnce(
-            originUrl,
-            envInfo.environmentId,
-            baseUrl,
-            apiKey
-          )) ?? undefined;
-        // Every cloud workspace shows a Simulator tab; an environment saved
-        // before devices existed cannot honour it, and the recipe is captured
-        // at create — so upgrade the environment FIRST (enabling is free:
-        // billing starts with a device). Best-effort: the workspace still
-        // provisions without it, and Start then says so.
-        if (envInfo.simulator === false) {
-          await enableEnvironmentSimulator(envInfo.environmentId);
-        }
+      repositoryAuth =
+        (await refreshEnvironmentGithubTokenOnce(
+          originUrl,
+          envInfo.environmentId,
+          baseUrl,
+          apiKey
+        )) ?? undefined;
+      identity.throwIfAborted();
+      // Every cloud workspace shows a Simulator tab; an environment saved
+      // before devices existed cannot honour it, and the recipe is captured
+      // at create — so upgrade the environment FIRST (enabling is free:
+      // billing starts with a device). Best-effort: the workspace still
+      // provisions without it, and Start then says so.
+      if (envInfo.simulator === false) {
+        await enableEnvironmentSimulator(envInfo.environmentId);
       }
-      environment = envInfo.name;
+      // Adding a personal secret scope must not select a same-name personal recipe.
+      environment = envInfo.environmentId;
     } else {
       // Every inline cloud workspace can host a device (the Simulator tab):
       // `.simulator()` only ENABLES it — billing starts when a device starts,
@@ -824,6 +829,7 @@ async function provisionInBackground(
       // DO refreshes secrets on every ensure, so each provision gets a
       // fresh mint instead of replaying a stale one.
       const mint = await mintRepoInstallationToken(originUrl);
+      identity.throwIfAborted();
       repositoryAuth = mint.token
         ? { type: "github_app" }
         : mint.definitive
@@ -858,9 +864,11 @@ async function provisionInBackground(
       }
       environment = recipe;
     }
+    identity.throwIfAborted();
     const provider = await agntCreateWorkspace({
       baseUrl,
       apiKey,
+      userId,
       environment,
       repositoryAuth,
       // New branch off the source — the sandbox's whole life happens here.

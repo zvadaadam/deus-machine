@@ -10,7 +10,6 @@
 
 import {
   getEnvironment as agntGetEnvironment,
-  listEnvironments as agntListEnvironments,
   updateEnvironment as agntUpdateEnvironment,
 } from "@deus-hq/sdk";
 import { getCloudConfig } from "./agent/cloud/config";
@@ -57,42 +56,6 @@ export interface CloudEnvironmentInfo {
   /** Lookup ERRORED (non-404): configured:false here means UNKNOWN, not
    *  absent — state-rewriting callers must not act on it. */
   lookupFailed?: true;
-}
-
-export interface CloudEnvironmentSummary {
-  id: string;
-  name: string;
-  /** Repo origin the environment is bound to (from its config), if any. */
-  repo: string | null;
-  updatedAt: string;
-}
-
-/**
- * All cloud environments on the org — the Settings list. Empty when the
- * cloud lane is unconfigured; capped defensively (a solo org has a handful).
- */
-export async function listCloudEnvironments(): Promise<CloudEnvironmentSummary[]> {
-  const config = getCloudConfig();
-  if (!config) return [];
-  const out: CloudEnvironmentSummary[] = [];
-  try {
-    for await (const env of agntListEnvironments({
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    })) {
-      const envConfig = (env.config ?? {}) as { repo?: unknown };
-      out.push({
-        id: env.id,
-        name: env.name,
-        repo: typeof envConfig.repo === "string" ? envConfig.repo : null,
-        updatedAt: env.updatedAt,
-      });
-      if (out.length >= 100) break;
-    }
-  } catch (err) {
-    console.warn(`[CloudEnv] environment list failed: ${err}`);
-  }
-  return out;
 }
 
 /** Platform lookup of the repo's specialized environment (by derived name). */

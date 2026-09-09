@@ -197,6 +197,14 @@ Board `13` includes the cloud autosave warning from
 `components/ui/sonner.tsx` toaster. It shows a live failed-save diagnostic for ten
 seconds or until dismissed; it is not a persistent chat component.
 
+Board `56` now shows the Environment settings application-secret section from
+`features/settings/ui/sections/CloudApplicationSecrets.tsx`: organization and
+environment selection, required-value status, and personal/shared secret metadata.
+Board `66a` shows add, replace and delete states of `EnvironmentSecretDialog.tsx`.
+Values are write-only; existing values are never drawn into a replacement form.
+The forms reuse the input and button components. Repository setup remains below
+the cloud-secret section; public variables belong to the committed `deus.json`.
+
 ### The scales are bound, not typed
 
 Every `fontSize` and every `cornerRadius` in the file is a **variable reference**
@@ -211,7 +219,7 @@ Seven colour variables are defined but never referenced — `sidebar-border`,
 on the Foundations board as literal light/dark swatch pairs so both halves are visible at
 once. Keep them in step with `global.css` even though nothing binds to them.
 
-`DS/Badge`, `DS/Kbd`, `DS/StatusDot`, `DS/Input` and `DS/MenuItem` have no instances —
+`DS/Badge`, `DS/Kbd`, `DS/StatusDot` and `DS/MenuItem` have no instances —
 they appear once, on their own board, as the reference for a component that exists in
 code. Everything else that appears more than once **is** instanced; if you find yourself
 pasting a component's markup into a second place, instance it instead.
