@@ -2,6 +2,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  constants,
   cpSync,
   existsSync,
   linkSync,
@@ -10,6 +11,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { get } from "node:https";
@@ -45,7 +47,28 @@ const VERSION_CHECK_ENV_DENYLIST = [
 ] as const;
 
 type AgentCliName = "codex" | "claude";
-type BundledAgentToolName = AgentCliName | "rg" | "agent-browser";
+const CODEX_HELPERS = [
+  "codex-runtime/bin/codex-code-mode-host",
+  "codex-runtime/codex-resources/zsh/bin/zsh",
+] as const;
+const CODEX_LINUX_HELPER = "codex-runtime/codex-resources/bwrap";
+type BundledAgentToolName =
+  | AgentCliName
+  | "rg"
+  | "agent-browser"
+  | (typeof CODEX_HELPERS)[number]
+  | typeof CODEX_LINUX_HELPER;
+
+function bundledTools(runtimeKey: string): BundledAgentToolName[] {
+  return [
+    "codex",
+    "claude",
+    "rg",
+    "agent-browser",
+    ...CODEX_HELPERS,
+    ...(runtimeKey.startsWith("linux-") ? ([CODEX_LINUX_HELPER] as const) : []),
+  ];
+}
 
 interface AgentCliTarget {
   runtimeKey: "darwin-arm64" | "darwin-x64" | "linux-x64";
@@ -304,17 +327,6 @@ async function resolvePackageRoot(
   }
 
   return extractPackageArtifact(lockedPackage, log);
-}
-
-/** Pick the first entry that exists under the package root (layouts vary by version). */
-function resolvePackageEntry(packageRoot: string, candidates: string[]): string {
-  for (const candidate of candidates) {
-    const absolute = path.join(packageRoot, candidate);
-    if (existsSync(absolute)) return absolute;
-  }
-  throw new Error(
-    `Missing source executable: tried ${candidates.map((c) => path.join(packageRoot, c)).join(", ")}`
-  );
 }
 
 function copyExecutable(source: string, destination: string): void {
@@ -653,74 +665,64 @@ export async function prepareAgentClis(
 
     const lockedCodex = readLockedPackage(projectRoot, target.codexAliasPackage);
     assertCodexAppServerCompatible(lockedCodex.version, target.runtimeKey);
-    // @openai/codex moved its vendor layout in 0.146: bin/codex + codex-path/rg
-    // (previously codex/codex + path/rg). Support both so pin bumps in either
-    // direction keep staging.
-    const codexEntries = [
-      path.join("vendor", target.codexTriple, "bin", "codex"),
-      path.join("vendor", target.codexTriple, "codex", "codex"),
-    ];
-    const rgEntries = [
-      path.join("vendor", target.codexTriple, "codex-path", "rg"),
-      path.join("vendor", target.codexTriple, "path", "rg"),
-    ];
-    const codexPackage = await resolvePackageRoot(projectRoot, lockedCodex, codexEntries, log);
+    const vendorEntry = path.join("vendor", target.codexTriple);
+    const codexPackage = await resolvePackageRoot(
+      projectRoot,
+      lockedCodex,
+      path.join(vendorEntry, "bin", "codex"),
+      log
+    );
     try {
-      const stagedCodex = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "codex");
-      const stagedRg = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "rg");
-      const codexSource = resolvePackageEntry(codexPackage.packageRoot, codexEntries);
-      const rgSource = resolvePackageEntry(codexPackage.packageRoot, rgEntries);
-      copyExecutable(codexSource, stagedCodex);
-      copyExecutable(rgSource, stagedRg);
-      const codexEntry = path.relative(codexPackage.packageRoot, codexSource);
-      const rgEntry = path.relative(codexPackage.packageRoot, rgSource);
-      const codexInspection = inspectStaticExecutable(
-        projectRoot,
-        stagedCodex,
-        `${target.runtimeKey}/codex`,
-        target.fileFormat,
-        target.fileArch
-      );
-      const rgInspection = inspectStaticExecutable(
-        projectRoot,
-        stagedRg,
-        `${target.runtimeKey}/rg`,
-        target.fileFormat,
-        target.fileArch
-      );
-
-      const codexRecord: StagedAgentCli = {
-        tool: "codex",
-        runtimeKey: target.runtimeKey,
-        path: relativeFromProjectRoot(projectRoot, stagedCodex),
-        ...codexInspection,
-        source: {
-          package: lockedCodex.packageName,
-          version: lockedCodex.version,
-          integrity: lockedCodex.integrity,
-          entry: codexEntry.split(path.sep).join("/"),
-        },
-      };
-
-      if (verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
-        codexRecord.versionOutput = await verifyStagedAgentCliVersionBounded("codex", stagedCodex);
-        log(`✓ ${target.runtimeKey}/codex ${codexRecord.versionOutput}`);
-      } else {
-        log(`✓ ${target.runtimeKey}/codex staged from ${codexPackage.sourceDescription}`);
-      }
-      manifestTargets.push(codexRecord);
-      manifestTargets.push({
-        tool: "rg",
-        runtimeKey: target.runtimeKey,
-        path: relativeFromProjectRoot(projectRoot, stagedRg),
-        ...rgInspection,
-        source: {
-          package: lockedCodex.packageName,
-          version: lockedCodex.version,
-          integrity: lockedCodex.integrity,
-          entry: rgEntry.split(path.sep).join("/"),
-        },
+      // Codex discovers its helper, shell and resources relative to the real
+      // executable. Keep the upstream package intact; flat CLI aliases are for PATH.
+      const payloadDir = path.join(targetDir, "codex-runtime");
+      rmSync(payloadDir, { recursive: true, force: true });
+      cpSync(path.join(codexPackage.packageRoot, vendorEntry), payloadDir, {
+        recursive: true,
+        mode: constants.COPYFILE_FICLONE,
       });
+      for (const [alias, entry] of [
+        ["codex", "bin/codex"],
+        ["rg", "codex-path/rg"],
+      ]) {
+        const aliasPath = path.join(targetDir, alias);
+        rmSync(aliasPath, { force: true });
+        symlinkSync(`codex-runtime/${entry}`, aliasPath);
+      }
+      for (const tool of bundledTools(target.runtimeKey).filter(
+        (tool) => tool !== "claude" && tool !== "agent-browser"
+      )) {
+        const stagedPath = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, tool);
+        const entry =
+          tool === "codex"
+            ? "bin/codex"
+            : tool === "rg"
+              ? "codex-path/rg"
+              : tool.slice("codex-runtime/".length);
+        const record: StagedAgentCli = {
+          tool,
+          runtimeKey: target.runtimeKey,
+          path: relativeFromProjectRoot(projectRoot, stagedPath),
+          ...inspectStaticExecutable(
+            projectRoot,
+            stagedPath,
+            `${target.runtimeKey}/${tool}`,
+            target.fileFormat,
+            target.fileArch
+          ),
+          source: {
+            package: lockedCodex.packageName,
+            version: lockedCodex.version,
+            integrity: lockedCodex.integrity,
+            entry: path.join(vendorEntry, entry).split(path.sep).join("/"),
+          },
+        };
+        if (tool === "codex" && verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
+          record.versionOutput = await verifyStagedAgentCliVersionBounded("codex", stagedPath);
+        }
+        manifestTargets.push(record);
+      }
+      log(`✓ ${target.runtimeKey}/codex package staged from ${codexPackage.sourceDescription}`);
     } finally {
       codexPackage.cleanup();
     }
@@ -850,7 +852,7 @@ function getExecutableFileOutput(
   fileFormat: string,
   fileArch: string
 ): string {
-  const fileOutput = execFileSync("file", [relativeFromProjectRoot(projectRoot, filePath)], {
+  const fileOutput = execFileSync("file", ["-L", relativeFromProjectRoot(projectRoot, filePath)], {
     cwd: projectRoot,
     encoding: "utf8",
     timeout: VERIFY_TIMEOUT_MS,
@@ -889,7 +891,8 @@ export function validateStagedAgentClis(options: ValidateAgentCliOptions = {}): 
     }
     assertCodexAppServerCompatible(codexEntry.source.version, `${runtimeKey}/codex`);
 
-    for (const tool of ["codex", "claude", "rg", "agent-browser"] as const) {
+    const tools = bundledTools(runtimeKey);
+    for (const tool of tools) {
       const executablePath = resolveStagedAgentCliPath(projectRoot, runtimeKey, tool);
       const inspection = inspectStaticExecutable(
         projectRoot,
@@ -908,10 +911,22 @@ export function validateStagedAgentClis(options: ValidateAgentCliOptions = {}): 
       );
     }
 
-    if (manifestEntries.length !== 4) {
+    if (manifestEntries.length !== tools.length) {
       throw new Error(
-        `Agent CLI manifest expected 4 entries for ${runtimeKey}, found ${manifestEntries.length}`
+        `Agent CLI manifest expected ${tools.length} entries for ${runtimeKey}, found ${manifestEntries.length}`
       );
+    }
+
+    if (
+      !existsSync(
+        path.join(
+          path.dirname(resolveStagedAgentCliPath(projectRoot, runtimeKey, "codex")),
+          "codex-runtime",
+          "codex-package.json"
+        )
+      )
+    ) {
+      throw new Error(`Missing Codex package metadata for ${runtimeKey}`);
     }
 
     if (options.verifyRunnable === true && shouldVerifyRuntimeKey(runtimeKey)) {

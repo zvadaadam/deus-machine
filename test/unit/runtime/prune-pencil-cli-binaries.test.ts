@@ -1,4 +1,12 @@
-import { chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -92,13 +100,28 @@ function writePackagedRuntimeFixture(binDir: string): void {
     ["rg", "rg"],
     ["gh", "gh"],
     ["agent-browser", "agent-browser"],
+    ["codex-runtime/bin/codex-code-mode-host", "code-mode-host"],
+    ["codex-runtime/codex-resources/zsh/bin/zsh", "zsh"],
   ]);
 
   for (const [name, contents] of files) {
     const filePath = path.join(binDir, name);
+    mkdirSync(path.dirname(filePath), { recursive: true });
     writeFileSync(filePath, contents);
     chmodSync(filePath, 0o755);
   }
+  for (const [alias, entry] of [
+    ["codex", "bin/codex"],
+    ["rg", "codex-path/rg"],
+  ]) {
+    const destination = path.join(binDir, "codex-runtime", entry);
+    mkdirSync(path.dirname(destination), { recursive: true });
+    writeFileSync(destination, files.get(alias)!);
+    chmodSync(destination, 0o755);
+    rmSync(path.join(binDir, alias));
+    symlinkSync(`codex-runtime/${entry}`, path.join(binDir, alias));
+  }
+  writeFileSync(path.join(binDir, "codex-runtime/codex-package.json"), "{}");
 
   writeFileSync(
     path.join(binDir, "deus-runtime.json"),
@@ -122,12 +145,14 @@ function writePackagedRuntimeFixture(binDir: string): void {
     JSON.stringify(
       {
         version: 1,
-        targets: ["codex", "claude", "rg", "agent-browser"].map((tool) => ({
-          runtimeKey: "darwin-arm64",
-          tool,
-          sha256: sha256(files.get(tool)!),
-          size: files.get(tool)!.length,
-        })),
+        targets: [...files.keys()]
+          .filter((tool) => tool !== "deus-runtime" && tool !== "gh")
+          .map((tool) => ({
+            runtimeKey: "darwin-arm64",
+            tool,
+            sha256: sha256(files.get(tool)!),
+            size: files.get(tool)!.length,
+          })),
       },
       null,
       2

@@ -9,6 +9,10 @@ import {
   resolveDeusCloudUrl,
 } from "@/features/session/cloud/webCloudDirectConfig";
 
+// Cache projection has its own suite; these URL/session tests do not boot
+// the browser data adapter (and its analytics module) in the Node environment.
+vi.mock("@/shared/api/cloudAuthCache", () => ({ applyDeusCloudAuthChange: vi.fn() }));
+
 // Minimal Map-backed Web Storage stand-ins (the suite runs node-env, no DOM).
 function makeStorage(): Storage {
   const m = new Map<string, string>();
@@ -43,7 +47,10 @@ beforeEach(() => {
   });
   vi.stubEnv("VITE_CLOUD_DIRECT", "1");
 });
-afterEach(() => {
+afterEach(async () => {
+  // Session expiry resets the auth cache via a dynamic import. Let it finish
+  // before removing browser globals or shutting down the Vitest worker.
+  await vi.dynamicImportSettled();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
