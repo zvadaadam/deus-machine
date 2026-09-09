@@ -35,7 +35,9 @@ export async function requestCloudEnvironmentSettings(
       response.status,
       typeof data?.message === "string"
         ? data.message
-        : "Couldn't update cloud environment settings."
+        : !init.method || init.method === "GET"
+          ? "Couldn't load cloud environment settings."
+          : "Couldn't update cloud environment settings."
     );
   return toCamelCaseKeys(data);
 }

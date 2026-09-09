@@ -47,7 +47,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         ? body.message
         : typeof body?.error === "string"
           ? body.error
-          : "Couldn't update cloud environment settings."
+          : !init.method || init.method === "GET"
+            ? "Couldn't load cloud environment settings."
+            : "Couldn't update cloud environment settings."
     );
   }
   return toCamelCaseKeys(await response.json());

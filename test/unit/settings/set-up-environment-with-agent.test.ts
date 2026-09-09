@@ -1,12 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EnvironmentSection } from "@/features/settings/ui/sections/EnvironmentSection";
+import { SetUpEnvironmentWithAgent } from "@/features/settings/ui/sections/SetUpEnvironmentWithAgent";
 import type { ProviderAccounts } from "@shared/types/provider-account";
 
 const state = vi.hoisted(() => ({
   data: undefined as ProviderAccounts | undefined,
   isError: false,
+  isPending: false,
 }));
 vi.mock("@/features/settings/api/provider-accounts.queries", () => ({
   useProviderAccounts: () => state,
@@ -14,22 +15,13 @@ vi.mock("@/features/settings/api/provider-accounts.queries", () => ({
 vi.mock("@/shared/hooks/useDeusCloudSession", () => ({
   useDeusCloudSession: () => ({ data: { signedIn: true, hasPlatformKey: true } }),
 }));
-vi.mock("@/features/repository", () => ({
-  useRepos: () => ({ data: [{ id: "repo-a", name: "Repo" }] }),
-  useRepoManifest: () => ({ data: null }),
-  useSaveRepoManifest: () => ({ mutate: vi.fn() }),
-}));
-vi.mock("@/features/repository/api/repository.service", () => ({ RepoService: {} }));
-vi.mock("@/features/settings/ui/sections/WorkspaceStatusDashboard", () => ({
-  WorkspaceStatusDashboard: () => null,
-}));
-vi.mock("@/features/settings/ui/sections/CloudEnvironmentBlock", () => ({
-  CloudEnvironmentBlock: ({ cloudBlockedReason }: { cloudBlockedReason: string | null }) =>
-    createElement("p", null, cloudBlockedReason ?? "Setup ready"),
+vi.mock("@/shared/stores/uiStore", () => ({
+  useUIStore: () => vi.fn(),
 }));
 
 beforeEach(() => {
   state.isError = false;
+  state.isPending = false;
   state.data = {
     providers: [],
     defaultAccountIds: { claude: "claude-a" },
@@ -48,11 +40,13 @@ beforeEach(() => {
   };
 });
 
-const render = () => renderToStaticMarkup(createElement(EnvironmentSection));
+const render = () =>
+  renderToStaticMarkup(createElement(SetUpEnvironmentWithAgent, { repoId: "repo-a" }));
 
 describe("environment setup provider readiness", () => {
   it("uses the connected personal Claude default", () => {
-    expect(render()).toContain("Setup ready");
+    expect(render()).toContain("Set up with agent");
+    expect(render()).not.toContain('disabled=""');
   });
   it.each(["codex only", "deleted default", "reconnect required"])(
     "keeps Claude setup disabled with %s",
@@ -63,14 +57,18 @@ describe("environment setup provider readiness", () => {
       }
       if (scenario === "deleted default") state.data!.defaultAccountIds.claude = "deleted-id";
       if (scenario === "reconnect required") state.data!.accounts[0].status = "reconnect_required";
-      expect(render()).toContain("Choose a connected Claude account");
-      expect(render()).not.toContain("Setup ready");
+      expect(render()).toContain("Connect a Claude account");
+      expect(render()).toContain('disabled=""');
     }
   );
   it("waits for personal metadata and reports lookup failures", () => {
     state.data = undefined;
-    expect(render()).toContain("Checking provider accounts");
+    state.isPending = true;
+    expect(render()).toContain("Checking your AI accounts");
+    expect(render()).toContain('disabled=""');
+    state.isPending = false;
     state.isError = true;
-    expect(render()).toContain("check your provider accounts");
+    expect(render()).toContain("check your AI accounts");
+    expect(render()).toContain('disabled=""');
   });
 });

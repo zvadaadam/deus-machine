@@ -92,7 +92,7 @@ describe("application secret forwarding", () => {
     );
     const response = await app.request("/api/settings/environment-secrets/orgs");
     expect(response.status).toBe(status);
-    expect((await response.json()).error).toBe("Couldn't update cloud environment settings.");
+    expect((await response.json()).error).toBe("Couldn't load cloud environment settings.");
   });
   it("does not lend the desktop owner's session to paired clients or the relay", async () => {
     const paired = new Hono<{ Variables: { device?: unknown } }>()

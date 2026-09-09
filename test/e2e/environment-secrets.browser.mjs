@@ -334,6 +334,24 @@ try {
     await page.getByRole("button", { name: "Delete", exact: true }).click();
     await page.getByRole("button", { name: "Delete secret", exact: true }).click();
     await page.getByText("No secrets added yet.", { exact: true }).waitFor();
+    if (!direct) {
+      // A missing settings endpoint must not turn a signed-in account into a login prompt.
+      const orgsUrl = /\/api\/settings\/environment-secrets\/orgs$/;
+      await page.route(orgsUrl, (route) =>
+        route.fulfill({ status: 404, contentType: "text/plain", body: "Not Found" })
+      );
+      await page.reload();
+      await page.getByText("Couldn't load cloud environment settings.", { exact: true }).waitFor();
+      await page.getByRole("button", { name: /octocat\/Hello-World/ }).click();
+      await page.getByRole("tab", { name: "Cloud", exact: true }).click();
+      await page.getByText("Cloud settings are unavailable right now.", { exact: true }).waitFor();
+      assert.equal(await page.getByRole("button", { name: "Sign in to Deus Cloud" }).count(), 0);
+      await shot("organization-unavailable");
+      await page.unroute(orgsUrl);
+      await page.getByRole("button", { name: "Try again", exact: true }).click();
+      await page.getByRole("button", { name: "Default secrets", exact: true }).waitFor();
+      assert.equal(await page.getByText("Couldn't load cloud environment settings.").count(), 0);
+    }
     assert.deepEqual(errors, []);
     await page.close();
     await vite.close();

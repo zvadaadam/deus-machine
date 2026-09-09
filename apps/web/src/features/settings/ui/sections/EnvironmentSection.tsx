@@ -235,8 +235,14 @@ function RepositoryEnvironments({
                     onDirtyChange={setDirty}
                     onDefaults={() => navigate("defaults")}
                   />
-                ) : (
+                ) : !accountId ? (
                   <CloudSignIn onSignIn={() => signIn.mutate()} pending={signIn.isPending} />
+                ) : (
+                  <p role="status" className="text-text-muted text-sm">
+                    {cloudLoading
+                      ? "Loading cloud settings…"
+                      : "Cloud settings are unavailable right now."}
+                  </p>
                 )}
               </TabsContent>
               <TabsContent value="local">
