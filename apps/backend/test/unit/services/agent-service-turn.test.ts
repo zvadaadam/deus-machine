@@ -47,6 +47,8 @@ vi.mock("../../../src/services/agent/event-handler", () => ({
   createAgentEventHandler: () => ({
     beginTurn: mockBeginTurn,
     abortTurn: mockAbortTurn,
+    confirmTurn: vi.fn(),
+    settleEventGap: vi.fn(),
     handle: vi.fn(),
     handleTitle: vi.fn(),
   }),

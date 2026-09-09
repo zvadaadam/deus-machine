@@ -1,6 +1,6 @@
 import { match } from "ts-pattern";
 import type { Compaction, Message, SessionStatus } from "@/shared/types";
-import type { WorkspaceKind } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
 import { CompactionChip } from "./CompactionChip";
@@ -222,6 +222,8 @@ export function Chat({
   // The working indicator sits tighter under a user message than under a
   // finished assistant turn.
   const indicatorMarginClass = lastRole === "user" ? "mt-0" : "mt-1";
+  const showSessionError =
+    sessionStatus === "error" || ACTIVE_TURN_STATUSES.includes(sessionStatus);
 
   return (
     <div className={cn("relative min-h-0 flex-1", className)}>
@@ -392,7 +394,7 @@ export function Chat({
 
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
-                {sessionStatus === "error" && errorMessage && (
+                {showSessionError && errorMessage && (
                   <m.div
                     key="session-error"
                     initial={{ opacity: 0 }}

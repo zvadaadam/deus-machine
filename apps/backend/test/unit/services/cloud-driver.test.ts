@@ -153,7 +153,10 @@ function makeHandler() {
     handle: vi.fn(),
     hydrateCloudSnapshot: vi.fn(),
     beginTurn: vi.fn(() => true),
-    abortTurn: vi.fn(),
+    abortTurn: vi.fn(() => true),
+    confirmTurn: vi.fn(),
+    handleEventGap: vi.fn(),
+    settleEventGap: vi.fn(),
     liveTurnId: vi.fn(() => undefined as string | undefined),
     handleTitle: vi.fn(),
   };
@@ -408,6 +411,25 @@ describe("cloud driver frame → fold contract", () => {
     handler.liveTurnId.mockReturnValue(undefined);
     capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
     expect(handler.handle).not.toHaveBeenCalled();
+  });
+
+  it("keeps a live turn during Workspace-owned recovery, without changing the source frame", () => {
+    vi.useFakeTimers();
+    try {
+      handler.liveTurnId.mockReturnValue("turn-x");
+      capturedOnFrame!({ type: "workspace.state", data: { status: "stopped" } });
+      const data = Object.freeze({
+        status: "error",
+        recovering: true,
+        reason: "heartbeat_timeout",
+      });
+      capturedOnFrame!({ type: "workspace.state", data });
+      vi.advanceTimersByTime(60_000);
+      expect(handler.handle).not.toHaveBeenCalled();
+      expect(data.status).toBe("error");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ignores a snapshot while our live turn is still current server-side", () => {
@@ -1257,6 +1279,8 @@ describe("cloud driver simulator channel", () => {
     expect(mockBroadcast.mock.calls.map((c) => JSON.parse(c[0] as string))).not.toContainEqual(
       expect.objectContaining({ event: "cloud:simulator" })
     );
+    await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({ status: "ready" });
+    capturedOnFrame!({ type: "workspace.state", data: { status: "error", recovering: true } });
     await expect(getCloudSimulatorStatus("deus-ws-1")).resolves.toMatchObject({ status: "ready" });
   });
 

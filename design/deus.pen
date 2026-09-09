@@ -21324,6 +21324,32 @@
                     },
                     {
                       "type": "frame",
+                      "id": "jnavX",
+                      "x": 88,
+                      "y": 0,
+                      "name": "Stop execution",
+                      "enabled": false,
+                      "width": 32,
+                      "height": 32,
+                      "fill": "$text-primary",
+                      "cornerRadius": "$radius-full",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "bfaO6",
+                          "name": "i",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square",
+                          "library": "lucide",
+                          "fill": "$bg-base"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
                       "id": "Bskju",
                       "name": "Send",
                       "width": 32,
@@ -22902,7 +22928,9 @@
           "y": 764,
           "name": "send (has content) · send (empty, outline) ·",
           "fill": "$text-disabled",
-          "content": "send (has content) · send (empty, outline) · stop (inverted)",
+          "textGrowth": "fixed-width",
+          "width": 720,
+          "content": "Stop stays available while working or waiting for a plan / question response.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -80444,6 +80472,275 @@
               "fontWeight": "normal"
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "zZC9O",
+      "x": 13840,
+      "y": 2880,
+      "name": "30b · States — Unconfirmed Stop",
+      "theme": {
+        "mode": "dark"
+      },
+      "width": 584,
+      "fill": "$bg-base",
+      "cornerRadius": "$radius-2xl",
+      "layout": "vertical",
+      "gap": 20,
+      "padding": 32,
+      "children": [
+        {
+          "type": "text",
+          "id": "a9NZRc",
+          "name": "Title",
+          "fill": "$text-primary",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "An unconfirmed Stop is still an active turn",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-lg",
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "xVHQK",
+          "name": "State contract",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Chat.tsx + MessageInput.tsx · keep the transcript, warning and Stop together until native execution confirms it ended.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "NImn1",
+          "name": "Working with an unconfirmed Stop",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "children": [
+            {
+              "id": "EHzuh",
+              "type": "ref",
+              "ref": "byUAJ",
+              "name": "Working turn",
+              "width": "fill_container"
+            },
+            {
+              "type": "frame",
+              "id": "drUPc",
+              "name": "Session alert while working",
+              "width": 312,
+              "fill": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "opacity": 0.05,
+                "rotation": 0,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "$destructive",
+                    "position": 0
+                  },
+                  {
+                    "color": "$destructive",
+                    "position": 1
+                  }
+                ]
+              },
+              "cornerRadius": "$radius-lg",
+              "stroke": "$destructive",
+              "strokeWidth": {
+                "left": 2
+              },
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 2,
+              "padding": [
+                10,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ZNlpA",
+                  "name": "Alert category",
+                  "opacity": 0.8,
+                  "fill": "$destructive",
+                  "content": "Error",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "KYQ38",
+                  "name": "Unconfirmed Stop message",
+                  "opacity": 0.8,
+                  "fill": "$text-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "The agent never confirmed the stop request.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "id": "m7s3mI",
+              "type": "ref",
+              "ref": "tXCMT",
+              "name": "Composer — active with Stop",
+              "width": "fill_container",
+              "descendants": {
+                "jnavX": {
+                  "enabled": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "YSOYd",
+          "name": "Pending approval label",
+          "fill": "$text-primary",
+          "content": "A pending approval does not hide Stop",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "HLrk1",
+          "name": "Pending plan with Stop",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "children": [
+            {
+              "type": "frame",
+              "id": "fJ8pH",
+              "name": "Pending plan request",
+              "width": "fill_container",
+              "fill": "#2A2A2A4D",
+              "cornerRadius": "$radius-xl",
+              "stroke": "$border-default",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "gap": 12,
+              "padding": [
+                12,
+                16
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "o05Zl",
+                  "name": "claude-code.svg",
+                  "geometry": "M39.0623 55.9433l7.0836-3.9744 0.1191-0.3451-0.1191-0.192-0.3452-0.0001-1.1838-0.073-4.0473-0.1094-3.5101-0.1458-3.4008-0.1824-0.8556-0.1822-0.8021-1.0574 0.0826-0.5274 0.7196-0.4838 1.0307 0.09 2.2776 0.1555 3.4177 0.2358 2.4795 0.1459 3.6731 0.3816h0.5832l0.0827-0.2357-0.1994-0.1459-0.1556-0.1459-3.5368-2.3968-3.8286-2.533-2.0054-1.4585-1.0842-0.7389-0.5469-0.6929-0.2357-1.5119 0.9845-1.0841 1.3224 0.0899 0.3378 0.09 1.3395 1.0306 2.861 2.2145 3.7361 2.7517 0.5469 0.4546 0.2188-0.1555 0.0268-0.1094-0.2456-0.4108-2.0321-3.6731-2.1683-3.7361-0.965-1.5484-0.2553-0.9286c-0.0899-0.3816-0.1555-0.7024-0.1555-1.0938l1.1206-1.5218 0.6198-0.1993 1.495 0.1993 0.6297 0.547 0.9285 2.1246 1.5047 3.3449 2.3336 4.548 0.6831 1.3491 0.3646 1.2495 0.1362 0.3816 0.2355-0.0001v-0.2188l0.1921-2.5621 0.3549-3.1455 0.3451-4.0473 0.1192-1.14 0.5638-1.3663 1.1206-0.7388 0.8751 0.4181 0.7196 1.0306-0.0997 0.6661-0.4278 2.7808-0.8387 4.356-0.5469 2.917h0.3186l0.3647-0.3646 1.4755-1.9592 2.4795-3.0993 1.0939-1.23 1.2762-1.3588 0.819-0.6467h1.5484l1.14 1.6942-0.5103 1.7503-1.5947 2.0224-1.3223 1.7136-1.8962 2.5525-1.1837 2.0418 0.1094 0.1629 0.282-0.0267 4.2831-0.9117 2.3141-0.418 2.7615-0.474 1.2494 0.5834 0.1362 0.5931-0.491 1.213-2.9535 0.7293-3.4639 0.6928-5.1583 1.2204-0.0632 0.0461 0.0729 0.0899 2.3239 0.2188 0.9942 0.0535h2.4332l4.5311 0.338 1.1837 0.7827 0.7099 0.9578-0.1191 0.7293-1.8231 0.9285-2.46-0.5834-5.7417-1.3661-1.969-0.4911-0.2722-0.0001v0.163l1.6408 1.6043 3.0069 2.7152 3.7654 3.5004 0.192 0.8655-0.4837 0.683-0.5104-0.0729-3.3084-2.4893-1.2762-1.1205-2.8903-2.4333-0.1919-0.0001v0.2552l0.6661 0.9748 3.5174 5.2871 0.1822 1.6214-0.2551 0.5275-0.9117 0.3184-1.0015-0.1822-2.0588-2.8904-2.1247-3.2549-1.7137-2.9169-0.209 0.119-1.0112 10.8926-0.474 0.5566-1.0939 0.4182-0.9115-0.6929-0.4838-1.1206 0.4838-2.2145 0.5834-2.8902 0.4739-2.2971 0.4279-2.8539 0.2552-0.948-0.017-0.0632-0.209 0.0267-2.1514 2.9535-3.2718 4.4217-2.5889 2.7712-0.6198 0.2455-1.0745-0.5567 0.0997-0.9942 0.6004-0.8847 3.5831-4.5578 2.161-2.8247 1.3952-1.6312-0.0097-0.2357h-0.0826l-9.5166 6.1792-1.6944 0.2187-0.7293-0.6831 0.0901-1.1206 0.3451-0.3645 2.8611-1.9691-0.0098 0.0098z",
+                  "viewBox": [
+                    29,
+                    29,
+                    42,
+                    42
+                  ],
+                  "fill": "$primary",
+                  "width": 20,
+                  "height": 20
+                },
+                {
+                  "type": "text",
+                  "id": "c3VU5",
+                  "name": "Agent is ready to execute the plan",
+                  "fill": "$text-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Agent is ready to execute the plan",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "h1LU0",
+                  "name": "Buttons",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "f63vN",
+                      "type": "ref",
+                      "ref": "Rcfnv",
+                      "name": "Reject",
+                      "height": 32,
+                      "theme": {
+                        "mode": "dark"
+                      },
+                      "descendants": {
+                        "kB8v8": {
+                          "content": "Reject",
+                          "fontSize": 11
+                        }
+                      }
+                    },
+                    {
+                      "id": "VGbfJ",
+                      "type": "ref",
+                      "ref": "rg2x2",
+                      "name": "Approve",
+                      "height": 32,
+                      "theme": {
+                        "mode": "dark"
+                      },
+                      "descendants": {
+                        "z4bI4": {
+                          "content": "Approve",
+                          "fontSize": 11
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "Vs7BM",
+              "type": "ref",
+              "ref": "tXCMT",
+              "name": "Composer — waiting for plan response",
+              "width": "fill_container",
+              "descendants": {
+                "jnavX": {
+                  "enabled": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "I95a3F",
+          "name": "Confirmed cancellation contract",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "The request remains answerable while Stop is unconfirmed. Once the turn ends, the request and Stop disappear.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
         }
       ]
     }

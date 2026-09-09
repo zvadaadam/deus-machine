@@ -37,8 +37,12 @@ import {
 export interface SessionFacts {
   /** The live turn — cleared at its turn.ended. */
   turnId?: string;
+  /** Latest locally accepted turn, retained so historical replay cannot own the session. */
+  acceptedTurnId?: string;
   /** One terminal error per turn: turn.ended(error) must not double-report. */
   errorReported: boolean;
+  /** A native terminal can be successful even when its transcript is incomplete. */
+  deliveryFailure?: { turnId: string; message: string };
 }
 
 /** A session-column write `applySessionFacts` performed. */
@@ -76,8 +80,21 @@ function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutc
  * outcome and advancing the dedupe flag stay in step whichever event ended the
  * turn.
  */
-export function turnOutcomeFor(facts: SessionFacts, turn: ConversationTurn): TurnOutcomeWrite {
-  const outcome = turnOutcome(turn, facts.errorReported);
+export function turnOutcomeFor(
+  facts: SessionFacts,
+  turn: ConversationTurn
+): TurnOutcomeWrite | undefined {
+  const owner = facts.turnId ?? facts.acceptedTurnId;
+  if (owner !== undefined && owner !== turn.turnId) return;
+  const failure = facts.deliveryFailure?.turnId === turn.turnId ? facts.deliveryFailure : undefined;
+  const outcome: TurnOutcomeWrite = failure
+    ? {
+        status: "error",
+        cancelled: false,
+        error: { category: "network", message: failure.message },
+      }
+    : turnOutcome(turn, facts.errorReported);
+  if (failure) facts.deliveryFailure = undefined;
   if (facts.turnId === turn.turnId) facts.turnId = undefined;
   if (outcome.status === "error") facts.errorReported = true;
   return outcome;
@@ -98,6 +115,17 @@ export function applySessionFacts(
   conversation: ConversationState
 ): SessionFactWrite[] {
   if (isUnknownEvent(event)) return [];
+  const owner = facts.turnId ?? facts.acceptedTurnId;
+  const rejectedSend =
+    event.type === "error" && event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED";
+  if (
+    owner !== undefined &&
+    "turnId" in event &&
+    event.turnId !== undefined &&
+    event.turnId !== owner &&
+    !rejectedSend
+  )
+    return [];
 
   return match(event)
     .with({ type: "session.created" }, (e): SessionFactWrite[] => {

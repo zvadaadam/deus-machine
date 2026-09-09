@@ -64,14 +64,15 @@ function stubPersistChanges(
   _sessionId: string,
   state: ConversationState,
   changes: ConversationChange[],
-  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite
+  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
     if (change.kind === "turn-updated") {
       const turn = state.turns.find((t) => t.turnId === change.turnId);
       if (!turn || turn.status !== "ended") continue;
-      outcomes.push({ turn, outcome: outcomeFor(turn) });
+      const outcome = outcomeFor(turn);
+      if (outcome) outcomes.push({ turn, outcome });
     }
     if (change.kind === "usage-updated" && !state.usage) continue;
     writes.push({ change, result: { ok: true, value: null } });
@@ -732,6 +733,59 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("turn admission mirror", () => {
+    it("adopts a cloud turn started by another client after our turn ends", () => {
+      handler.beginTurn(SESSION, TURN);
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      handler.handle(envelope(turnEnded()));
+
+      handler.handle(
+        envelope({
+          type: "turn.started",
+          sessionId: SESSION,
+          turnId: "browser-turn",
+          timestamp: T + 1,
+        })
+      );
+      expect(handler.liveTurnId(SESSION)).toBe("browser-turn");
+      handler.handle(
+        envelope(
+          turnEnded({
+            turnId: "browser-turn",
+            stopReason: "error",
+            error: { category: "auth", message: "Expired" },
+          })
+        )
+      );
+      expect(lastOutcome("browser-turn")).toMatchObject({
+        status: "error",
+        error: { message: "Expired" },
+      });
+    });
+
+    it("records a native ACK that returns after an instant terminal", () => {
+      handler.beginTurn(SESSION, TURN);
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      handler.handle(envelope(turnEnded()));
+      handler.confirmTurn(SESSION, TURN);
+
+      handler.handle(
+        envelope({
+          type: "turn.started",
+          sessionId: SESSION,
+          turnId: "historical",
+          timestamp: T - 2,
+        })
+      );
+      handler.handle(envelope(turnEnded({ turnId: "historical", stopReason: "error" })));
+      expect(handler.liveTurnId(SESSION)).toBeUndefined();
+      expect(lastOutcome("historical")).toBeUndefined();
+      expect(handler.beginTurn(SESSION, "next")).toBe(true);
+    });
+
     it("refuses a second turn while one is live, and frees it at turn.ended", () => {
       expect(handler.beginTurn(SESSION, TURN)).toBe(true);
       expect(handler.beginTurn(SESSION, "turn-2")).toBe(false);

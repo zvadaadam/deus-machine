@@ -4,6 +4,11 @@ import { SessionErrorEventSchema, SessionSnapshotEventSchema } from "@deus-hq/ap
 import { useCloudDirectSession } from "@/features/session/hooks/useCloudDirectSession";
 import { emitLocalEvent } from "@/platform/ws";
 import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
+import { messagesKey } from "@/features/session/lib/agentEventFold";
+import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
+import { toast } from "sonner";
+import { queryKeys } from "@/shared/api/queryKeys";
+import type { PaginatedMessages } from "@/features/session/api/session.service";
 import { CloudSimulatorEventSchema } from "@shared/events";
 import {
   cloudSimulatorActions,
@@ -31,6 +36,7 @@ vi.mock("@/platform/ws", () => ({
   emitLocalEvent: vi.fn(),
   setToolResponseInterceptor: vi.fn(),
 }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 let onFrame: (frame: Record<string, unknown>) => void;
 vi.mock("@/features/session/cloud/cloudSessionSocket", () => ({
@@ -93,6 +99,144 @@ function snapshot(status: "ready" | "stopped") {
 }
 
 describe("direct cloud session published frames", () => {
+  it("removes only the rejected optimistic send and leaves unrelated errors alone", () => {
+    const sessionId = "deus-direct-1";
+    queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
+      messages: [createOptimisticUserMessage({ sessionId, turnId: "pending", content: "Hello" })],
+      has_older: false,
+      has_newer: false,
+    });
+    getDirectSession(sessionId)!.sendMessage("Hello", "pending", {});
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "old",
+      message: "Old refusal",
+    });
+    expect(
+      queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages
+    ).toHaveLength(1);
+    expect(setState).not.toHaveBeenCalled();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "pending",
+      message: "Account unavailable",
+    });
+    expect(queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages).toEqual(
+      []
+    );
+    expect(setState).toHaveBeenCalledWith("MESSAGE_SEND_FAILED: Account unavailable");
+    getDirectSession(sessionId)!.sendMessage("Retry", "retry", {});
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "pending",
+      message: "Late refusal",
+    });
+    expect(setState).not.toHaveBeenCalled();
+  });
+
+  it("ignores a delayed send refusal after native admission", () => {
+    getDirectSession("deus-direct-1")!.sendMessage("Hello", "accepted", {});
+    onFrame({ type: "turn.started", turnId: "accepted", timestamp: 1 });
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "accepted",
+      message: "Late refusal",
+    });
+    expect(setState).not.toHaveBeenCalled();
+  });
+
+  it("rejects our pending send without hiding another client's admitted turn", () => {
+    const sessionId = "deus-direct-1";
+    queryClient.setQueryData(queryKeys.sessions.detail(sessionId), {
+      id: sessionId,
+      status: "idle",
+    });
+    queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
+      messages: [createOptimisticUserMessage({ sessionId, turnId: "ours", content: "Hello" })],
+      has_older: false,
+      has_newer: false,
+    });
+    getDirectSession(sessionId)!.sendMessage("Hello", "ours", {});
+    onFrame({ type: "turn.started", turnId: "other-client", timestamp: 1 });
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "ours",
+      message: "Account unavailable",
+    });
+    expect(queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages).toEqual(
+      []
+    );
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Account unavailable");
+    expect(setState).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toMatchObject({
+      status: "working",
+    });
+    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", {})).toThrow(
+      "The agent is still working"
+    );
+    onFrame({
+      type: "message.started",
+      turnId: "other-client",
+      messageId: "reply",
+      role: "assistant",
+      outputIndex: 1,
+      timestamp: 2,
+    });
+    onFrame({
+      type: "message.part",
+      turnId: "other-client",
+      messageId: "reply",
+      outputIndex: 1,
+      partIndex: 0,
+      part: {
+        id: "text",
+        sessionId,
+        messageId: "reply",
+        type: "text",
+        text: "Other turn continued",
+        state: "complete",
+      },
+      timestamp: 3,
+    });
+    onFrame({ type: "turn.ended", turnId: "other-client", stopReason: "end_turn", timestamp: 4 });
+    expect(
+      JSON.stringify(queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages)
+    ).toContain("Other turn continued");
+    expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toMatchObject({
+      status: "idle",
+    });
+    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", {})).not.toThrow();
+  });
+
+  it("accepts our send from a snapshot and releases its pending marker when it ends", () => {
+    const sessionId = "deus-direct-1";
+    getDirectSession(sessionId)!.sendMessage("Hello", "accepted", {});
+    onFrame({
+      type: "session.snapshot",
+      state: { sessionId: "agnt-direct-1", status: "running", currentTurnId: "accepted" },
+      messages: [],
+    });
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "accepted",
+      message: "Late refusal",
+    });
+    expect(setState).not.toHaveBeenCalled();
+    onFrame({ type: "turn.ended", turnId: "accepted", stopReason: "end_turn", timestamp: 2 });
+    expect(() => getDirectSession(sessionId)!.sendMessage("Next", "next", {})).not.toThrow();
+  });
+
   it("restores the device and refreshes it when reconnect reports it stopped", () => {
     onFrame(snapshot("ready"));
     expect(emitLocalEvent).toHaveBeenCalledWith("cloud:simulator", {

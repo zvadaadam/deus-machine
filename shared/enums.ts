@@ -20,6 +20,13 @@ export const SessionStatusSchema = z.enum([
 ]);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
+/** Waiting for a user decision still owns a live turn: Stop remains available. */
+export const ACTIVE_TURN_STATUSES: readonly string[] = [
+  "working",
+  "needs_plan_response",
+  "needs_response",
+] satisfies SessionStatus[];
+
 const MessageRoleSchema = z.enum(["user", "assistant"]);
 export type MessageRole = z.infer<typeof MessageRoleSchema>;
 

@@ -47,7 +47,7 @@ import * as simulator from "../simulator-context";
 import { launchApp, stopApp } from "../aap";
 import { runAutomationNow, refreshAutomations, openAutomationRun } from "../automations";
 import { broadcast as wsBroadcast } from "../ws.service";
-import type { AgentHarness } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
 import {
   type QueryParams,
@@ -359,22 +359,6 @@ export async function runCommand(
   );
 }
 
-/**
- * The statuses that mean "a turn is running" — the RUNNING turn is the thing
- * both sends and stops key off, so the two must read the same list or they
- * disagree about whether one exists.
- *
- * "Needs input" belongs here: plan approval and questions park the running
- * turn behind an overlay, they do not end it. A send is refused from these
- * (the wire would reject it with turnActive), and a stop IS legal from them —
- * which is why the unconfirmed-cancel watchdog matches this same set.
- */
-const ACTIVE_TURN_STATUSES: readonly string[] = [
-  "working",
-  "needs_plan_response",
-  "needs_response",
-];
-
 // ---- sendMessage ----
 
 async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
@@ -666,12 +650,8 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
 // ---- stopSession ----
 
 /**
- * How long to let an UNCONFIRMED cancel settle itself before giving up.
- *
- * The turn is still nominally running, so `turn.ended` is expected within a
- * few seconds. If it never comes, the session would sit on "working" forever
- * with no agent behind it — the watchdog converts that into an error the user
- * can act on, and only if the status is still exactly where we left it.
+ * Warn if an unconfirmed cancel has not settled within this grace period.
+ * Keep Stop available while the handler still owns the live turn.
  */
 const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
 
@@ -685,8 +665,8 @@ const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
  *                                here would show a finished session while work
  *                                continues and then flip back when the real
  *                                turn.ended lands. Leave the status alone and
- *                                let turn.ended settle it, with a bounded
- *                                fallback so it cannot hang forever.
+ *                                let turn.ended settle it. The watchdog
+ *                                warns if confirmation never arrives.
  */
 async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "stopSession");
@@ -695,29 +675,35 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
 
-  let confirmed = true;
+  const targetTurnId = agentService.liveTurnId(sessionId);
+  let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   if (isCloudSession(sessionId)) {
     try {
-      const result = await cancelCloudTurn(sessionId);
-      confirmed = result.outcome !== "unconfirmed";
+      result = await cancelCloudTurn(sessionId, targetTurnId);
     } catch (err) {
       console.error("[CommandHandler] Failed to cancel cloud turn:", err);
-      // The channel itself failed; nothing is going to deliver a turn.ended.
     }
   } else if (agentService.isConnected()) {
     try {
-      const result = await agentService.stopSession({ sessionId });
-      confirmed = result.outcome !== "unconfirmed";
+      result = await agentService.stopSession({ sessionId, turnId: targetTurnId });
     } catch (err) {
       console.error("[CommandHandler] Failed to stop on agent-server:", err);
-      // The wire itself failed; nothing is going to deliver a turn.ended.
     }
   }
 
-  if (confirmed) {
+  // The requested turn may have ended and a successor started during the RPC.
+  const live = agentService.liveTurnId(sessionId);
+  if (
+    (live !== undefined && live !== targetTurnId) ||
+    (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
+  )
+    return {};
+
+  if (result && result.outcome !== "unconfirmed") {
     db.prepare(
-      "UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?"
-    ).run(sessionId);
+      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+    ).run(sessionId, ...ACTIVE_TURN_STATUSES);
     invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
     return {};
   }
@@ -726,7 +712,7 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
     `[CommandHandler] stopSession unconfirmed: session=${sessionId} — waiting for turn.ended`
   );
   // Armed for the turn being cancelled, not for the session — see below.
-  scheduleUnconfirmedCancelWatchdog(sessionId, agentService.liveTurnId(sessionId));
+  scheduleUnconfirmedCancelWatchdog(sessionId, targetTurnId);
   return { unconfirmed: true };
 }
 
@@ -755,25 +741,19 @@ function scheduleUnconfirmedCancelWatchdog(
       if (live !== undefined && live !== cancelledTurnId) return;
 
       const db = getDatabase();
-      // Only if turn.ended never arrived: any status change means it did (or
-      // the user started something else), and this must not stomp on it.
-      //
-      // Matching 'working' alone was too narrow. A stop is legal from every
-      // ACTIVE_TURN_STATUS — cancelling a plan-approval or question overlay is
-      // the common case — and an unconfirmed cancel from one of those left the
-      // session parked on needs_plan_response / needs_response with no agent
-      // behind it and no overlay the user could dismiss. Same set the send
-      // path calls active, so "there is a turn to give up on" means one thing.
+      // Keep a live turn's working/question/plan status and add the warning.
+      // Missing native ownership marks an active session as error; a turn
+      // that already settled is excluded by the status guard.
       const result = db
         .prepare(
           `UPDATE sessions
-             SET status = 'error',
-                 error_message = 'The agent never confirmed the stop request.',
-                 error_category = 'internal',
+             SET status = COALESCE(?, status),
+                 error_message = COALESCE(error_message, 'The agent never confirmed the stop request.'),
+                 error_category = COALESCE(error_category, 'internal'),
                  updated_at = datetime('now')
            WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
         )
-        .run(sessionId, ...ACTIVE_TURN_STATUSES);
+        .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });

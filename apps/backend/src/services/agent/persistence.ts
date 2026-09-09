@@ -461,18 +461,19 @@ export function persistSessionUsage(
   }
 }
 
-/** Update session status to "error" with error details. */
+/** Persist an error; keep the session working when native execution is still unconfirmed. */
 export function persistSessionError(
   sessionId: string,
   message: string,
-  category: string
+  category: string,
+  status: "error" | "working" = "error"
 ): WriteResult<void> {
   const db = getDatabase();
   try {
     db.prepare(
-      `UPDATE sessions SET status = 'error', error_message = ?, error_category = ?, updated_at = datetime('now')
+      `UPDATE sessions SET status = ?, error_message = ?, error_category = ?, updated_at = datetime('now')
        WHERE id = ?`
-    ).run(message, category, sessionId);
+    ).run(status, message, category, sessionId);
     return { ok: true, value: undefined };
   } catch (error) {
     return failed("session error", error);
@@ -595,7 +596,7 @@ export function persistChanges(
   sessionId: string,
   state: ConversationState,
   changes: ConversationChange[],
-  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite
+  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
