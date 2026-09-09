@@ -261,7 +261,12 @@ function pushToFold(session: CloudSession, event: Record<string, unknown>): void
 }
 
 /** Channel command rejection → the engine's error plumbing. */
-function pushCloudError(session: CloudSession, code: unknown, message: unknown): void {
+function pushCloudError(
+  session: CloudSession,
+  code: unknown,
+  message: unknown,
+  turnId?: string
+): void {
   pushToFold(session, {
     type: "error",
     category: "internal",
@@ -269,6 +274,8 @@ function pushCloudError(session: CloudSession, code: unknown, message: unknown):
       typeof message === "string" ? message : "Cloud session error"
     }`,
     recoverable: false,
+    turnId,
+    _meta: { cloudErrorCode: code },
     timestamp: Date.now(),
   });
 }
@@ -478,12 +485,16 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "workspace.state": {
-      const data = (frame.data ?? {}) as {
+      const raw = (frame.data ?? {}) as {
         status?: string;
         step?: string;
         reason?: string;
+        recovering?: boolean;
         sandboxUrlTemplate?: string | null;
       };
+      // Workspace owns recovery; its intermediate error is wake progress,
+      // not evidence that the turn or its hosted device stopped.
+      const data = raw.status === "error" && raw.recovering ? { ...raw, status: "resuming" } : raw;
       updateCloudWorkspace(session.deusWorkspaceId, data);
       // The public host template rides the running state: a new sandbox
       // (reprovision) brings a new one, a platform-reported `null` means no
@@ -571,15 +582,30 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       return;
     }
 
-    case "error":
+    case "error": {
       // Channel-level command rejection (e.g. MESSAGE_SEND_FAILED). Engine-
       // shaped error events (with `category`) never reach here — the
       // passthrough above claims them.
       console.warn(
         `[CloudDriver] channel error session=${session.deusSessionId} ${String(frame.code ?? "")}`
       );
-      pushCloudError(session, frame.code, frame.message);
+      // messageId is our turnId on this channel. The handler already owns
+      // admission truth, including reconnect snapshots; no second pending map.
+      const rejectedTurnId = frame.code === "MESSAGE_SEND_FAILED" ? frame.messageId : undefined;
+      if (
+        frame.code === "MESSAGE_SEND_FAILED" &&
+        (typeof rejectedTurnId !== "string" ||
+          !handler.abortTurn(session.deusSessionId, rejectedTurnId))
+      )
+        return;
+      pushCloudError(
+        session,
+        frame.code,
+        frame.message,
+        typeof rejectedTurnId === "string" ? rejectedTurnId : undefined
+      );
       return;
+    }
 
     case "mcp.question": {
       const data = (frame.data ?? {}) as {
@@ -1072,7 +1098,9 @@ export async function startCloudTurn(
   }
 
   const session = await ensureCloudSession(deusSessionId);
-  const registered = handler.beginTurn(deusSessionId, turnId);
+  if (!handler.beginTurn(deusSessionId, turnId)) {
+    throw new Error("The agent is still working — wait for the current turn to finish.");
+  }
   try {
     const wsOptions: Record<string, unknown> = {};
     // The platform selects the signed-in user's provider account at admission.
@@ -1082,20 +1110,22 @@ export async function startCloudTurn(
     session.socket.send({
       type: "message.send",
       text: prompt,
-      messageId: crypto.randomUUID(),
+      messageId: turnId,
       turnId,
       idempotencyKey: turnId,
       ...(Object.keys(wsOptions).length > 0 ? { options: wsOptions } : {}),
     });
   } catch (err) {
-    if (registered) handler.abortTurn(deusSessionId, turnId);
+    handler.abortTurn(deusSessionId, turnId);
     throw err;
   }
-  if (!registered) handler.beginTurn(deusSessionId, turnId, { force: true });
 }
 
-export async function cancelCloudTurn(deusSessionId: string): Promise<TurnCancelResult> {
-  const live = handler?.liveTurnId(deusSessionId);
+export async function cancelCloudTurn(
+  deusSessionId: string,
+  turnId?: string
+): Promise<TurnCancelResult> {
+  const live = turnId ?? handler?.liveTurnId(deusSessionId);
   if (!live) return { outcome: "no_active_turn" };
   const session = await ensureCloudSession(deusSessionId);
   session.socket.send({ type: "agent.cancel", turnId: live });

@@ -4,6 +4,9 @@ import { SessionErrorEventSchema, SessionSnapshotEventSchema } from "@deus-hq/ap
 import { useCloudDirectSession } from "@/features/session/hooks/useCloudDirectSession";
 import { emitLocalEvent } from "@/platform/ws";
 import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
+import { messagesKey } from "@/features/session/lib/agentEventFold";
+import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
+import type { PaginatedMessages } from "@/features/session/api/session.service";
 import { CloudSimulatorEventSchema } from "@shared/events";
 import {
   cloudSimulatorActions,
@@ -93,6 +96,59 @@ function snapshot(status: "ready" | "stopped") {
 }
 
 describe("direct cloud session published frames", () => {
+  it("removes only the rejected optimistic send and leaves unrelated errors alone", () => {
+    const sessionId = "deus-direct-1";
+    queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
+      messages: [createOptimisticUserMessage({ sessionId, turnId: "pending", content: "Hello" })],
+      has_older: false,
+      has_newer: false,
+    });
+    getDirectSession(sessionId)!.sendMessage("Hello", "pending", {});
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "old",
+      message: "Old refusal",
+    });
+    expect(
+      queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages
+    ).toHaveLength(1);
+    expect(setState).not.toHaveBeenCalled();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "pending",
+      message: "Account unavailable",
+    });
+    expect(queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages).toEqual(
+      []
+    );
+    expect(setState).toHaveBeenCalledWith("MESSAGE_SEND_FAILED: Account unavailable");
+    getDirectSession(sessionId)!.sendMessage("Retry", "retry", {});
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "pending",
+      message: "Late refusal",
+    });
+    expect(setState).not.toHaveBeenCalled();
+  });
+
+  it("ignores a delayed send refusal after native admission", () => {
+    getDirectSession("deus-direct-1")!.sendMessage("Hello", "accepted", {});
+    onFrame({ type: "turn.started", turnId: "accepted", timestamp: 1 });
+    setState.mockClear();
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: "accepted",
+      message: "Late refusal",
+    });
+    expect(setState).not.toHaveBeenCalled();
+  });
+
   it("restores the device and refreshes it when reconnect reports it stopped", () => {
     onFrame(snapshot("ready"));
     expect(emitLocalEvent).toHaveBeenCalledWith("cloud:simulator", {

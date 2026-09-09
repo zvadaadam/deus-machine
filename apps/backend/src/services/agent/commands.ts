@@ -666,12 +666,8 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
 // ---- stopSession ----
 
 /**
- * How long to let an UNCONFIRMED cancel settle itself before giving up.
- *
- * The turn is still nominally running, so `turn.ended` is expected within a
- * few seconds. If it never comes, the session would sit on "working" forever
- * with no agent behind it — the watchdog converts that into an error the user
- * can act on, and only if the status is still exactly where we left it.
+ * Warn if an unconfirmed cancel has not settled within this grace period.
+ * Keep Stop available while the handler still owns the live turn.
  */
 const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
 
@@ -685,8 +681,8 @@ const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
  *                                here would show a finished session while work
  *                                continues and then flip back when the real
  *                                turn.ended lands. Leave the status alone and
- *                                let turn.ended settle it, with a bounded
- *                                fallback so it cannot hang forever.
+ *                                let turn.ended settle it. The watchdog
+ *                                warns if confirmation never arrives.
  */
 async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "stopSession");
@@ -695,29 +691,35 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
 
-  let confirmed = true;
+  const targetTurnId = agentService.liveTurnId(sessionId);
+  let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   if (isCloudSession(sessionId)) {
     try {
-      const result = await cancelCloudTurn(sessionId);
-      confirmed = result.outcome !== "unconfirmed";
+      result = await cancelCloudTurn(sessionId, targetTurnId);
     } catch (err) {
       console.error("[CommandHandler] Failed to cancel cloud turn:", err);
-      // The channel itself failed; nothing is going to deliver a turn.ended.
     }
   } else if (agentService.isConnected()) {
     try {
-      const result = await agentService.stopSession({ sessionId });
-      confirmed = result.outcome !== "unconfirmed";
+      result = await agentService.stopSession({ sessionId, turnId: targetTurnId });
     } catch (err) {
       console.error("[CommandHandler] Failed to stop on agent-server:", err);
-      // The wire itself failed; nothing is going to deliver a turn.ended.
     }
   }
 
-  if (confirmed) {
+  // The requested turn may have ended and a successor started during the RPC.
+  const live = agentService.liveTurnId(sessionId);
+  if (
+    (live !== undefined && live !== targetTurnId) ||
+    (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
+  )
+    return {};
+
+  if (result && result.outcome !== "unconfirmed") {
     db.prepare(
-      "UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?"
-    ).run(sessionId);
+      `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
+       WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
+    ).run(sessionId, ...ACTIVE_TURN_STATUSES);
     invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
     return {};
   }
@@ -726,7 +728,7 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
     `[CommandHandler] stopSession unconfirmed: session=${sessionId} — waiting for turn.ended`
   );
   // Armed for the turn being cancelled, not for the session — see below.
-  scheduleUnconfirmedCancelWatchdog(sessionId, agentService.liveTurnId(sessionId));
+  scheduleUnconfirmedCancelWatchdog(sessionId, targetTurnId);
   return { unconfirmed: true };
 }
 
@@ -767,13 +769,13 @@ function scheduleUnconfirmedCancelWatchdog(
       const result = db
         .prepare(
           `UPDATE sessions
-             SET status = 'error',
-                 error_message = 'The agent never confirmed the stop request.',
-                 error_category = 'internal',
+             SET status = ?,
+                 error_message = COALESCE(error_message, 'The agent never confirmed the stop request.'),
+                 error_category = COALESCE(error_category, 'internal'),
                  updated_at = datetime('now')
            WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
         )
-        .run(sessionId, ...ACTIVE_TURN_STATUSES);
+        .run(live === undefined ? "error" : "working", sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
         invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });

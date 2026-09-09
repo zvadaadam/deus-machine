@@ -855,7 +855,7 @@ describe("q:command → q:command_ack", () => {
     }
   });
 
-  it("stops a session via q:command", async () => {
+  it("acknowledges Stop as unconfirmed when no agent link can confirm it", async () => {
     const { ws } = await connectAndAuth();
     try {
       // First set session to working
@@ -875,11 +875,12 @@ describe("q:command → q:command_ack", () => {
       expect(res.id).toBe("cmd-stop-1");
       expect(res.accepted).toBe(true);
 
-      // Verify session status changed to idle
+      // This fixture has no native agent link; accepting the command is not
+      // evidence that its execution stopped.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
         .get(SESS_ID) as { status: string };
-      expect(sessionRow.status).toBe("idle");
+      expect(sessionRow.status).toBe("working");
     } finally {
       ws.close();
     }

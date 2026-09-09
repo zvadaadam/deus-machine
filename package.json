@@ -92,7 +92,7 @@
     "@napi-rs/canvas": "^0.1.97",
     "@openai/codex-sdk": "0.153.4",
     "@sentry/node": "^10.40.0",
-    "@zvada/agent-server": "0.3.6",
+    "@zvada/agent-server": "0.3.7-replay.1",
     "agent-browser": "^0.21.4",
     "better-sqlite3": "^12.4.1",
     "chokidar": "^4.0.0",

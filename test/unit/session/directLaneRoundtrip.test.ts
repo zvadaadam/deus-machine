@@ -143,6 +143,7 @@ describe("direct lane round-trip (connect → render → send → reply)", () =>
       type: "message.send",
       text: "what is 2+2?",
       turnId: "turn-live",
+      messageId: "turn-live",
       idempotencyKey: "turn-live",
       options: { harness: "claude-code", model: "claude-opus-4-8" },
     });

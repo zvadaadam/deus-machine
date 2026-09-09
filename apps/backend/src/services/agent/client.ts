@@ -7,7 +7,7 @@
 // shared/agent-side-channel.ts).
 
 import { WebSocket } from "ws";
-import { AgentServerClient } from "@zvada/agent-server/client";
+import { AgentServerClient, type SessionEventGap } from "@zvada/agent-server/client";
 import type {
   InitializeResult,
   TurnCancelResult,
@@ -38,6 +38,7 @@ export interface AgentLinkOptions {
    * preserved, not dropped, so the sink decides what to do with it.
    */
   onEnvelope: (envelope: DecodedWireEventEnvelope) => void;
+  onEventGap?: (gap: SessionEventGap) => void;
   onConnected?: (agents: AgentInfo[]) => void;
   onDisconnected?: () => void;
   /** Tool round-trips from the agent's in-process deus MCP suite. The method
@@ -92,6 +93,7 @@ export class AgentLink {
     link.client = client;
     try {
       client.onEvent(options.onEnvelope);
+      if (options.onEventGap) client.onEventGap(options.onEventGap);
       const init = await client.initialize();
       link.agents = toAgentInfos(init);
     } catch (err) {
@@ -161,8 +163,8 @@ export class AgentLink {
    * outcome: `cancelled` (the harness confirmed), `unconfirmed` (dispatched
    * best-effort — turn.ended stays the source of truth) or `no_active_turn`.
    */
-  async cancelTurn(sessionId: string): Promise<TurnCancelResult> {
-    return this.requireClient().cancelTurn(sessionId);
+  async cancelTurn(sessionId: string, turnId?: string): Promise<TurnCancelResult> {
+    return this.requireClient().cancelTurn(sessionId, turnId);
   }
 
   // ---- Side channel (backend → agent-server) ----

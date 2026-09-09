@@ -17,11 +17,12 @@ import {
 import type { PaginatedMessages } from "@/features/session/api/session.service";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
 
-const { database, broadcast, invalidate, refreshPr } = vi.hoisted(() => ({
+const { database, broadcast, invalidate, refreshPr, send } = vi.hoisted(() => ({
   database: vi.fn(),
   broadcast: vi.fn(),
   invalidate: vi.fn(),
   refreshPr: vi.fn(),
+  send: vi.fn(),
 }));
 vi.mock("../../../apps/backend/src/lib/database", () => ({ getDatabase: database }));
 vi.mock("../../../apps/backend/src/services/ws.service", () => ({ broadcast }));
@@ -51,7 +52,7 @@ let onFrame: (frame: Record<string, unknown>) => void;
 vi.mock("../../../apps/backend/src/services/agent/cloud/session-socket", () => ({
   connectSessionSocket: (options: { onFrame: typeof onFrame }) => {
     onFrame = options.onFrame;
-    return { ready: async () => {}, send: vi.fn(), close: vi.fn(), isOpen: () => true };
+    return { ready: async () => {}, send, close: vi.fn(), isOpen: () => true };
   },
 }));
 
@@ -60,6 +61,7 @@ import {
   ensureCloudSession,
   initCloudDriver,
   shutdownCloudDriver,
+  startCloudTurn,
 } from "../../../apps/backend/src/services/agent/cloud/driver";
 import {
   persistSessionWorking,
@@ -186,6 +188,79 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     broadcast.mock.calls
       .map(([raw]) => JSON.parse(raw))
       .filter((frame) => frame.event === "agent:snapshot");
+
+  it("releases a rejected send and its optimistic prompt so retry works after reconnect", async () => {
+    ui.queryClient.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
+      messages: [
+        createOptimisticUserMessage({ sessionId: SESSION, turnId: "rejected", content: "Hello" }),
+      ],
+      has_older: false,
+      has_newer: false,
+    });
+    persistSessionWorking(SESSION);
+    await startCloudTurn(SESSION, "rejected", "Hello");
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: send.mock.calls.at(-1)![0].messageId,
+      message: "Provider account unavailable",
+    });
+
+    expect(handler.liveTurnId(SESSION)).toBeUndefined();
+    expect(sessionRow()).toMatchObject({
+      status: "error",
+      error_message: expect.stringContaining("Provider account unavailable"),
+    });
+    expect(rows()).toEqual([]);
+    expect(page().messages).toEqual([]);
+    onFrame(snapshot([]));
+    await expect(startCloudTurn(SESSION, "retry", "Hello")).resolves.toBeUndefined();
+    expect(handler.liveTurnId(SESSION)).toBe("retry");
+  });
+
+  it.each(["turn.started", "snapshot"])(
+    "ignores a delayed rejection after %s proves admission",
+    async (admission) => {
+      await startCloudTurn(SESSION, "accepted", "Hello");
+      const messageId = send.mock.calls.at(-1)![0].messageId;
+      const prompt = message("echo-accepted", 0, "accepted", "user");
+      if (admission === "turn.started") {
+        persistSessionWorking(SESSION);
+        onFrame({ type: "turn.started", turnId: "accepted", sessionId: PROVIDER, timestamp: T });
+        onFrame({
+          type: "message.started",
+          sessionId: PROVIDER,
+          turnId: "accepted",
+          messageId: prompt.id,
+          role: "user",
+          outputIndex: 0,
+          timestamp: T,
+        });
+      } else {
+        onFrame(snapshot([prompt], { status: "running", currentTurnId: "accepted" }));
+      }
+      onFrame({ type: "error", code: "MESSAGE_SEND_FAILED", messageId, message: "Late refusal" });
+      expect(handler.liveTurnId(SESSION)).toBe("accepted");
+      expect(sessionRow()).toMatchObject({ status: "working", error_message: null });
+      expect(page().messages.map((row) => row.id)).toEqual(["echo-accepted"]);
+    }
+  );
+
+  it("ignores a previous send's rejection while another send awaits admission", async () => {
+    await startCloudTurn(SESSION, "first", "First");
+    const firstMessageId = send.mock.calls.at(-1)![0].messageId;
+    onFrame(snapshot([], { turns: [ended("first")] }));
+    await startCloudTurn(SESSION, "second", "Second");
+    persistSessionWorking(SESSION);
+    onFrame({
+      type: "error",
+      code: "MESSAGE_SEND_FAILED",
+      messageId: firstMessageId,
+      message: "Late refusal",
+    });
+    expect(handler.liveTurnId(SESSION)).toBe("second");
+    expect(sessionRow()).toMatchObject({ status: "working", error_message: null });
+  });
 
   it("restores missed messages, parts, ordering, compactions and accounting without live completion effects", () => {
     const newer = message("newer", 2);

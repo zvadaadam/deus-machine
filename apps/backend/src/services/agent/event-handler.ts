@@ -18,6 +18,7 @@
 // Ordering matters: persist first, then invalidate, then push.
 
 import { match } from "ts-pattern";
+import type { SessionEventGap } from "@zvada/agent-server/client";
 import type { SessionSnapshotEvent } from "@deus-hq/api";
 import type { RestoredCloudConversation } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
@@ -26,7 +27,12 @@ import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-
 import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
-import { persistChanges, persistSessionTitle, type WriteResult } from "./persistence";
+import {
+  persistChanges,
+  persistSessionTitle,
+  persistSessionError,
+  type WriteResult,
+} from "./persistence";
 import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
@@ -52,8 +58,8 @@ export interface AgentEventHandler {
    * (stale local state, e.g. after a backend restart).
    */
   beginTurn(sessionId: string, turnId: string, opts?: { force?: boolean }): boolean;
-  /** Roll back a beginTurn whose start was rejected (only if still ours). */
-  abortTurn(sessionId: string, turnId: string): void;
+  /** Release a rejected local claim, only while this turn is still unadmitted. */
+  abortTurn(sessionId: string, turnId: string): boolean;
   /**
    * The turn this handler currently believes is running, if any — set at
    * admission (or at `turn.started` on the replay path) and cleared at its
@@ -61,6 +67,12 @@ export interface AgentEventHandler {
    * which a session STATUS cannot do: two consecutive turns are both "working".
    */
   liveTurnId(sessionId: string): string | undefined;
+  /** Records the quick ACK, including turns with no first event yet. */
+  confirmTurn(sessionId: string, turnId: string): void;
+  /** Mark delivery loss synchronously, before any replay suffix is folded. */
+  handleEventGap(gap: SessionEventGap): string | undefined;
+  /** Settle only that damaged turn after targeted native reconciliation. */
+  settleEventGap(sessionId: string, turnId: string, confirmed: boolean): void;
   /** Side-channel title notification (deus/*, not a lifecycle event). */
   handleTitle(sessionId: string, title: string): void;
 }
@@ -197,6 +209,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       if (existing?.turnId !== undefined && !opts.force) return false;
       sessions.set(sessionId, {
         turnId,
+        acceptedTurnId: existing?.acceptedTurnId,
         errorReported: false,
         // The transcript outlives the turn: a new send continues the session's
         // conversation, it does not start a second one.
@@ -207,11 +220,71 @@ export function createAgentEventHandler(): AgentEventHandler {
 
     abortTurn(sessionId, turnId) {
       const state = sessions.get(sessionId);
-      if (state?.turnId === turnId) state.turnId = undefined;
+      if (
+        state?.turnId !== turnId ||
+        state.acceptedTurnId === turnId ||
+        state.conversation.turns.some((turn) => turn.turnId === turnId)
+      ) {
+        return false;
+      }
+      state.turnId = undefined;
+      return true;
     },
 
     liveTurnId(sessionId) {
       return sessions.get(sessionId)?.turnId;
+    },
+
+    confirmTurn(sessionId, turnId) {
+      const state = sessions.get(sessionId);
+      if (!state) return;
+      // An instant native turn can finish before its quick ACK returns.
+      if (
+        state.turnId === turnId ||
+        (!state.turnId && state.conversation.turns.at(-1)?.turnId === turnId)
+      )
+        state.acceptedTurnId = turnId;
+    },
+
+    handleEventGap(gap) {
+      const state = sessions.get(gap.sessionId);
+      if (!state?.turnId) return;
+      // A new send waiting for the reconnect handshake is not an old native
+      // turn. Its quick ACK or rejection still owns that admission.
+      if (
+        state.acceptedTurnId !== state.turnId &&
+        !state.conversation.turns.some((turn) => turn.turnId === state.turnId)
+      )
+        return;
+      const turnId = state.turnId;
+      state.deliveryFailure ??= {
+        turnId,
+        message:
+          "Some agent output could not be recovered. This turn's transcript is incomplete; inspect partial work before retrying.",
+      };
+      console.warn(
+        `[AgentEvent] Incomplete delivery: session=${gap.sessionId} turn=${turnId} reason=${gap.reason}`
+      );
+      if (gap.reason === "server_restarted" || gap.reason === "session_missing") {
+        this.settleEventGap(gap.sessionId, turnId, true);
+        return;
+      }
+      return turnId;
+    },
+
+    settleEventGap(sessionId, turnId, confirmed) {
+      const state = sessions.get(sessionId);
+      if (state?.turnId !== turnId || state.deliveryFailure?.turnId !== turnId) return;
+      const message =
+        state.deliveryFailure.message +
+        (confirmed ? "" : " The agent has not confirmed it stopped.");
+      if (confirmed) state.turnId = undefined;
+      state.errorReported = true;
+      persistAndInvalidate(
+        persistSessionError(sessionId, message, "network", confirmed ? "error" : "working"),
+        TURN_END_RESOURCES,
+        sessionId
+      );
     },
 
     handleTitle(sessionId, title) {

@@ -512,16 +512,19 @@ export function useCloudDirectSession(
       // it can no longer be answered meaningfully — drop it so a stale overlay
       // can't flip the finished session back to "working".
       if (frame.type === "turn.ended") dropDirectQuestions(sessionId);
-      // A rejected client command (agnt's `{type:"error"}` channel frame, e.g.
-      // MESSAGE_SEND_FAILED) — the send was fire-and-forget, so this frame is
-      // the only rollback signal: surface it AND drop the optimistic bubble of
-      // the pending turn (the frame carries no turnId; one-live-turn means the
-      // pending send is the only candidate). The socket itself is still fine.
+      // A rejected send carries our turnId as its messageId. Only retire that
+      // pending attempt; delayed rejections cannot affect an admitted turn.
       // CATEGORY-bearing error frames are the ENGINE's error events, not command
       // rejections — they fall through to the fold (which records them on the
       // turn), exactly as the Mac driver splits them.
       if (frame.type === "error" && typeof frame.category !== "string") {
-        if (pendingTurn) {
+        if (frame.code === "MESSAGE_SEND_FAILED") {
+          if (
+            !pendingTurn ||
+            frame.messageId !== pendingTurn.turnId ||
+            folds.get(sessionId)?.state.turns.some((turn) => turn.turnId === pendingTurn?.turnId)
+          )
+            return;
           dropOptimisticMessage(queryClient, sessionId, pendingTurn.turnId);
           pendingTurn = null;
         }

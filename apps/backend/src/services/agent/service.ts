@@ -72,6 +72,24 @@ async function establishLink(url: string, handler: AgentEventHandler): Promise<v
       const connected = await AgentLink.connect({
         url,
         onEnvelope: (envelope) => handler.handle(envelope),
+        onEventGap: (gap) => {
+          const turnId = handler.handleEventGap(gap);
+          if (!turnId || gap.reason !== "replay_failed") return;
+          // Replay exhaustion can hide the native terminal entirely. One
+          // targeted cancel reconciles it; a late reply cannot settle a successor.
+          void (async () => {
+            let confirmed = false;
+            try {
+              const result = await link?.cancelTurn(gap.sessionId, turnId);
+              confirmed =
+                result?.outcome === "cancelled" ||
+                (result?.outcome === "no_active_turn" && !result.activeTurnId);
+            } catch (error) {
+              console.warn("[AgentService] Replay recovery cancel failed:", error);
+            }
+            handler.settleEventGap(gap.sessionId, turnId, confirmed);
+          })();
+        },
         onConnected: (agents) => {
           console.log(
             `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
@@ -146,6 +164,7 @@ export async function startTurn(
   // Server accepted a turn our local state thought was concurrent — the local
   // view was stale (e.g. backend restart); register for real now.
   if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
+  events?.confirmTurn(sessionId, turnId);
 }
 
 /**
@@ -157,9 +176,20 @@ export async function startTurn(
  * to decide what the session's status becomes — `turn.ended` stays the source
  * of truth.
  */
-export async function stopSession(params: { sessionId: string }): Promise<TurnCancelResult> {
+export async function stopSession(params: {
+  sessionId: string;
+  turnId?: string;
+}): Promise<TurnCancelResult> {
   if (!link) throw new Error("Agent service not initialized");
-  const result = await link.cancelTurn(params.sessionId);
+  const result = await link.cancelTurn(params.sessionId, params.turnId);
+  if (params.turnId) {
+    events?.settleEventGap(
+      params.sessionId,
+      params.turnId,
+      result.outcome === "cancelled" ||
+        (result.outcome === "no_active_turn" && !result.activeTurnId)
+    );
+  }
   if (result.outcome === "unconfirmed") {
     console.warn(`[AgentService] cancel unconfirmed for session=${params.sessionId}`);
   }

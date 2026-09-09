@@ -392,7 +392,7 @@ export function Chat({
 
               {/* Session-level error — rendered inline in the chat flow (law of locality) */}
               <AnimatePresence>
-                {sessionStatus === "error" && errorMessage && (
+                {(sessionStatus === "error" || sessionStatus === "working") && errorMessage && (
                   <m.div
                     key="session-error"
                     initial={{ opacity: 0 }}

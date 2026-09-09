@@ -94,6 +94,7 @@ export function buildMessageSendFrame(
   return {
     type: "message.send",
     text: prompt,
+    messageId: turnId,
     turnId,
     idempotencyKey: turnId,
     ...(Object.keys(wsOptions).length > 0 ? { options: wsOptions } : {}),

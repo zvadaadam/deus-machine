@@ -65,6 +65,7 @@ import {
   type DecodedWireEventEnvelope,
 } from "@shared/protocol-types";
 import type { PaginatedMessages } from "../api/session.service";
+import { dropOptimisticMessage } from "./optimisticMessage";
 
 // ---- Per-session fold ----
 
@@ -288,6 +289,15 @@ function applyEvent(
   live: boolean
 ): void {
   const fold = foldFor(ctx, sessionId);
+  if (
+    !isUnknownEvent(event) &&
+    event.type === "error" &&
+    event._meta?.cloudErrorCode === "MESSAGE_SEND_FAILED" &&
+    event.turnId &&
+    !fold.state.turns.some((turn) => turn.turnId === event.turnId)
+  ) {
+    dropOptimisticMessage(ctx.queryClient, sessionId, event.turnId);
+  }
   const { state, changes } = reduceConversationWithChanges(fold.state, event);
   fold.state = state;
   if (changes.length === 0) return;

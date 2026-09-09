@@ -48,6 +48,7 @@ describe("buildMessageSendFrame", () => {
       type: "message.send",
       text: "hello",
       turnId: "turn-1",
+      messageId: "turn-1",
       idempotencyKey: "turn-1", // == turnId, so a socket redelivery replays, not duplicates
     });
     // A bare claude send carries no options object at all.
