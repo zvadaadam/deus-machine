@@ -106,6 +106,7 @@ function escapeRegExp(value) {
 function pathPattern(filePath) {
   const paths = [filePath];
   try {
+    paths.push(path.join(fs.realpathSync.native(path.dirname(filePath)), path.basename(filePath)));
     paths.push(fs.realpathSync.native(filePath));
   } catch {
     // Keep the original spelling when the path is not present.
