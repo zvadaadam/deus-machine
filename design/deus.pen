@@ -32887,18 +32887,17 @@
                                   "id": "iTyvf",
                                   "name": "ONLINE",
                                   "fill": "$text-muted",
-                                  "content": "ONLINE",
+                                  "content": "Connected",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-xs",
-                                  "fontWeight": "500",
-                                  "letterSpacing": 0.5
+                                  "fontWeight": "500"
                                 },
                                 {
                                   "type": "text",
                                   "id": "YEkJK",
                                   "name": "expires in 3h 42m",
                                   "fill": "$text-disabled",
-                                  "content": "expires in 3h 42m",
+                                  "content": "· 2 devices online",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-xs",
                                   "fontWeight": "normal"
@@ -32910,46 +32909,31 @@
                               "id": "fcBSa",
                               "name": "url",
                               "width": "fill_container",
-                              "gap": 8,
+                              "layout": "vertical",
+                              "gap": 4,
                               "justifyContent": "space_between",
-                              "alignItems": "center",
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "ODEb3",
-                                  "name": "https://sao-tome-v1.remote.deusmachine.ai",
-                                  "fill": "$text-primary",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "https://sao-tome-v1.remote.deusmachine.ai",
-                                  "fontFamily": "$font-mono",
-                                  "fontSize": "$text-sm",
+                                  "id": "a5u823",
+                                  "name": "Access URL",
+                                  "fill": "$text-muted",
+                                  "content": "Access URL",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
                                   "fontWeight": "normal"
                                 },
                                 {
-                                  "type": "frame",
-                                  "id": "p42r51",
-                                  "name": "Copy",
-                                  "width": 28,
-                                  "height": 28,
-                                  "cornerRadius": "$radius-md",
-                                  "stroke": "$border-default",
-                                  "strokeWidth": 1,
-                                  "strokeAlignment": "inner",
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "y9oyiS",
-                                      "name": "i",
-                                      "width": 14,
-                                      "height": 14,
-                                      "icon": "copy",
-                                      "library": "lucide",
-                                      "fill": "$text-muted"
-                                    }
-                                  ]
+                                  "type": "text",
+                                  "id": "ODEb3",
+                                  "name": "Access URL value",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "https://deusmachine.ai/connect/abcdef12",
+                                  "fontFamily": "$font-mono",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -33001,7 +32985,7 @@
                                   },
                                   "descendants": {
                                     "z4bI4": {
-                                      "content": "Pair a device",
+                                      "content": "Connect a Device",
                                       "fontSize": 11
                                     }
                                   }

@@ -82,25 +82,9 @@ function PortalCard({
         )}
       </div>
 
-      {/* URL + actions */}
-      <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 truncate font-mono text-sm leading-relaxed">{url}</p>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(url);
-              toast.success("URL copied");
-            } catch {
-              toast.error("Couldn't copy the URL");
-            }
-          }}
-          title="Copy URL"
-        >
-          <Copy className="size-3.5" />
-        </Button>
+      <div className="space-y-1">
+        <p className="text-muted-foreground text-xs">Access URL</p>
+        <p className="truncate font-mono text-sm leading-relaxed">{url}</p>
       </div>
     </div>
   );

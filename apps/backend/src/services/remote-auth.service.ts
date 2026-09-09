@@ -4,6 +4,7 @@
 
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
+import { closeDeviceConnections } from "./ws.service";
 import { getSetting, saveSetting } from "./settings.service";
 
 // ---- Types ----
@@ -412,7 +413,6 @@ export function validatePairCode(code: string): boolean {
   const normalized = normalizePairCode(code);
   const entry = activeCodes.get(normalized);
   if (!entry) {
-    console.log(`[Auth] Code "${normalized}" not found. Active codes: ${activeCodes.size}`);
     return false;
   }
   if (entry.expiresAt <= Date.now()) {
@@ -497,10 +497,25 @@ export function listDevices(): Omit<PairedDevice, "token_hash">[] {
 export function revokeDevice(id: string): boolean {
   const db = getDatabase();
   const result = db.prepare("DELETE FROM paired_devices WHERE id = ?").run(id);
+  closeDeviceConnections(id);
   return result.changes > 0;
 }
 
-// ---- Rate Limiting (per IP) ----
+// ---- Pairing admission (HTTP client IP or the Mac's shared relay budget) ----
+
+/** Both transports must check the attempt budget before accepting a code. */
+export function authorizePairing(
+  code: string,
+  source: string
+): "invalid_code" | "rate_limited" | null {
+  if (checkRateLimit(source) > 0) return "rate_limited";
+  if (!validatePairCode(code)) {
+    recordFailure(source);
+    return "invalid_code";
+  }
+  resetRateLimit(source);
+  return null;
+}
 
 /** Check if an IP is rate-limited. Returns lockout remaining ms or 0. */
 export function checkRateLimit(ip: string): number {
@@ -508,6 +523,7 @@ export function checkRateLimit(ip: string): number {
   if (!entry) return 0;
   const now = Date.now();
   if (entry.lockedUntil > now) return entry.lockedUntil - now;
+  if (entry.lockedUntil > 0) rateLimits.delete(ip);
   return 0;
 }
 

@@ -183,6 +183,32 @@ describe("client auth flow", () => {
     expect(clientWs.close).toHaveBeenCalledWith(4003, "Bad token");
   });
 
+  it("auth_response can revoke an already authenticated client", async () => {
+    const clientId = "revoked-phone";
+    const clientWs = createMockWebSocket(["client", clientId]);
+    state._websockets.set(clientWs, ["client", clientId]);
+    await storage.put(`pending:${clientId}`, Date.now() + 5000);
+    await relay.webSocketMessage(
+      tunnelWs,
+      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+    );
+    expect(getLastSent(clientWs)).toEqual({ type: "authenticated" });
+    await relay.webSocketMessage(
+      tunnelWs,
+      JSON.stringify({
+        type: "auth_response",
+        clientId,
+        allowed: false,
+        reason: "Device access revoked",
+      })
+    );
+    expect(getLastSent(clientWs)).toEqual({
+      type: "auth_failed",
+      message: "Device access revoked",
+    });
+    expect(clientWs.close).toHaveBeenCalledWith(4003, "Device access revoked");
+  });
+
   it("auth_response is ignored when tunnel is not registered", async () => {
     // Reset tunnelRegistered
     await storage.put("tunnelRegistered", false);

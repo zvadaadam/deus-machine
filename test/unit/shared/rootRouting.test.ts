@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   decideRootRequest,
   hasReturningUserMarker,
@@ -37,6 +38,23 @@ describe("decideRootRequest (the deusmachine.ai edge split)", () => {
 
   it("favicon.png collides on both sides — the landing's wins by rule", () => {
     expect(decideRootRequest("/favicon.png", "deus_user=1")).toBe("landing");
+  });
+
+  it("serves iOS pairing associations from Pages instead of the landing shell", () => {
+    expect(decideRootRequest("/.well-known/apple-app-site-association", null)).toBe("app");
+    const publicDir = new URL("../../../apps/web/public/", import.meta.url);
+    const association = JSON.parse(
+      readFileSync(new URL(".well-known/apple-app-site-association", publicDir), "utf8")
+    );
+    expect(association.applinks.details).toEqual([
+      {
+        appIDs: ["98Y9HY82MU.ai.deus.machine"],
+        components: [{ "/": "/connect/*", "?": { pair: "?*" } }],
+      },
+    ]);
+    expect(readFileSync(new URL("_headers", publicDir), "utf8")).toContain(
+      "/.well-known/apple-app-site-association\n  Content-Type: application/json"
+    );
   });
 });
 

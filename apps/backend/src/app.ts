@@ -6,7 +6,6 @@ import { remoteGateMiddleware } from "./middleware/remote-gate";
 import { authMiddleware } from "./middleware/remote-auth";
 import { validateDeviceToken } from "./services/remote-auth.service";
 import { addConnection, removeConnection, handleProtocolMessage } from "./services/ws.service";
-import { removeSubs as removeQuerySubs } from "./services/query-engine";
 import { getRelayStatus } from "./services/relay.service";
 // Simulator context is accessed via q:command handlers in commands.ts
 import { isLocalhost, getClientIp } from "./lib/network";
@@ -117,7 +116,6 @@ export function createApp() {
 
         onClose() {
           if (connectionId) {
-            removeQuerySubs(connectionId);
             removeConnection(connectionId);
             connectionId = null;
           }

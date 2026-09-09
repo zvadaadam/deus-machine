@@ -13,6 +13,9 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { serve } from "@hono/node-server";
+import { once } from "node:events";
+import { WebSocket as RemoteWebSocket } from "ws";
+import * as network from "../../src/lib/network";
 
 // ---- Hoisted setup: create DB before vi.mock factories run ----
 
@@ -52,7 +55,7 @@ import {
   createDeviceToken,
 } from "../../src/services/remote-auth.service";
 import { invalidateRemoteGateCache } from "../../src/middleware/remote-gate";
-import { closeAll as closeAllWs } from "../../src/services/ws.service";
+import { closeAll as closeAllWs, getConnection } from "../../src/services/ws.service";
 import { saveSetting, PREFS_PATH } from "../../src/services/settings.service";
 
 let server: ReturnType<typeof serve>;
@@ -220,6 +223,57 @@ describe("WebSocket: protocol messages", () => {
 });
 
 describe("WebSocket: connection lifecycle", () => {
+  it("revokes a paired device through HTTP while its real socket is subscribed", async () => {
+    // Keep the real server bound to loopback; emulate only the connection's remote address.
+    const getClientIp = network.getClientIp;
+    vi.spyOn(network, "getClientIp").mockImplementation((c) =>
+      c.req.header("x-test-remote") ? "203.0.113.50" : getClientIp(c)
+    );
+    const { token, device } = createDeviceToken("Phone", null, null);
+    const remote = new RemoteWebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-test-remote": "1" },
+    });
+    try {
+      await once(remote, "open");
+      const initialized = once(remote, "message");
+      remote.send(JSON.stringify({ type: "initialize", token }));
+      const connected = JSON.parse(String((await initialized)[0]));
+      expect(getConnection(connected.connectionId)?.deviceId).toBe(device.id);
+
+      const snapshot = once(remote, "message");
+      remote.send(
+        JSON.stringify({
+          type: "q:subscribe",
+          id: "workspaces",
+          resource: "workspaces",
+          params: {},
+        })
+      );
+      expect(JSON.parse(String((await snapshot)[0]))).toMatchObject({
+        type: "q:snapshot",
+        id: "workspaces",
+      });
+
+      const closed = once(remote, "close");
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/remote-auth/devices/${device.id}`,
+        { method: "DELETE" }
+      );
+      expect(response.status).toBe(200);
+      const [code, reason] = await closed;
+      expect(code).toBe(4001);
+      expect(String(reason)).toBe("Device access revoked");
+      expect(getConnection(connected.connectionId)).toBeUndefined();
+
+      const revokedRequest = await app.request("/api/settings", {
+        headers: { "x-test-remote": "1", authorization: `Bearer ${token}` },
+      });
+      expect(revokedRequest.status).toBe(401);
+    } finally {
+      remote.terminate();
+    }
+  });
+
   it("cleans up on client disconnect", async () => {
     const { ws, firstMessage } = connectWs();
     const connected = await firstMessage;

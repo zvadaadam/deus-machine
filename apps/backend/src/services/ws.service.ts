@@ -3,7 +3,6 @@
 // Manages connected clients, heartbeat pings, message routing, and protocol dispatch.
 
 import { match } from "ts-pattern";
-import type { WSContext } from "hono/ws";
 
 /** Minimal interface for sending/closing WebSocket-like connections.
  *  WSContext already satisfies this — used to also accept virtual relay connections. */
@@ -48,8 +47,26 @@ export function addConnection(ws: WsSendable, deviceId: string | null, isVirtual
 
 /** Remove a connection by ID. */
 export function removeConnection(id: string): void {
-  connections.delete(id);
+  if (!connections.delete(id)) return;
   if (connections.size === 0) stopHeartbeat();
+  extendedHandlers.onDisconnect?.(id);
+}
+
+function closeConnection(conn: WsConnection, code: number, reason: string): void {
+  // Stop dispatch and subscriptions before the transport's close event arrives.
+  removeConnection(conn.id);
+  try {
+    conn.ws.close(code, reason);
+  } catch {
+    // The connection is already removed even if its transport has gone away.
+  }
+}
+
+/** Revoke every live connection belonging to a paired device. */
+export function closeDeviceConnections(deviceId: string): void {
+  for (const conn of connections.values()) {
+    if (conn.deviceId === deviceId) closeConnection(conn, 4001, "Device access revoked");
+  }
 }
 
 /** Get a connection by ID. */
@@ -78,13 +95,8 @@ export function broadcast(message: string): void {
 export function closeAll(): void {
   stopHeartbeat();
   for (const conn of connections.values()) {
-    try {
-      conn.ws.close(1001, "Server shutting down");
-    } catch {
-      // Best-effort
-    }
+    closeConnection(conn, 1001, "Server shutting down");
   }
-  connections.clear();
 }
 
 // ---- Heartbeat ----
@@ -110,12 +122,7 @@ function checkHeartbeats(): void {
     if (now - conn.lastPong > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
       // Client hasn't responded to pings — close
       console.log(`[WS] Closing stale connection: ${id}`);
-      try {
-        conn.ws.close(1001, "Heartbeat timeout");
-      } catch {
-        // Already closed
-      }
-      connections.delete(id);
+      closeConnection(conn, 1001, "Heartbeat timeout");
       continue;
     }
 
@@ -123,7 +130,7 @@ function checkHeartbeats(): void {
     try {
       conn.ws.send(JSON.stringify({ type: "ping" }));
     } catch {
-      connections.delete(id);
+      closeConnection(conn, 1001, "Connection lost");
     }
   }
 
@@ -132,9 +139,10 @@ function checkHeartbeats(): void {
 
 // ---- Protocol Dispatch ----
 
-/** Handlers for protocol frames beyond the core pong. */
+/** Query protocol dispatch and subscription cleanup. */
 export interface WsProtocolHandlers {
   onQueryFrame?: (connectionId: string, msg: Record<string, unknown>) => void;
+  onDisconnect?: (connectionId: string) => void;
 }
 
 let extendedHandlers: WsProtocolHandlers = {};
@@ -152,6 +160,7 @@ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
  * Query protocol: q:* frames routed to query engine
  */
 export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
+  if (!connections.has(connectionId)) return;
   match(msg.type as string)
     .with("pong", () => {
       recordPong(connectionId);
