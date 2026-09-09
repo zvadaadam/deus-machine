@@ -2,8 +2,8 @@
 
 `deus.pen` — the Deus Machine product, designed exactly as it is built.
 
-Open it with Pencil (`open -a Pen design/deus.pen`) or in Deus itself via the Design tab
-(`packages/pencil`). The file is encrypted: agents read and edit it through the Pencil MCP
+Open it with the external Pencil app (`open -a Pen design/deus.pen`).
+The file is encrypted: agents read and edit it through the Pencil MCP
 tools only, never with plain file reads.
 
 `sidebar-redesign.pen` is the exploration that produced the single-line sidebar rows
@@ -60,6 +60,10 @@ the canvas — read left to right, top to bottom.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environment · `57` Experimental · `58` Remote Access
+- `58` labels the portal address **Access URL** without a copy button. **Connect a Device**
+  opens the existing pairing dialog (`66`); its Copy Link and QR code include the pairing
+  code. The link keeps that code through the browser redirect and targets the signed-in
+  iOS pairing flow when the native app is installed and associated with the domain.
 - `54a`–`54c` and `59`/`59a` are a **proposal, not built** — the settings revamp. `54a` is
   the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
   local status matrix. Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.

@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["98Y9HY82MU.ai.deus.machine"],
+        "components": [{ "/": "/connect/*", "?": { "pair": "?*" } }]
+      }
+    ]
+  }
+}

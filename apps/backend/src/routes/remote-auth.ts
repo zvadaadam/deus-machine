@@ -10,13 +10,10 @@ import { createMiddleware } from "hono/factory";
 import { parseBody, PairBody } from "../lib/schemas";
 import {
   generatePairCode,
-  validatePairCode,
+  authorizePairing,
   createDeviceToken,
   listDevices,
   revokeDevice,
-  checkRateLimit,
-  recordFailure,
-  resetRateLimit,
 } from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
@@ -38,23 +35,16 @@ const localhostOnly = createMiddleware(async (c, next) => {
 app.post("/remote-auth/pair", async (c) => {
   const clientIp = getClientIp(c);
 
-  // Rate limit check
-  if (clientIp) {
-    const lockout = checkRateLimit(clientIp);
-    if (lockout > 0) {
-      return c.json({ error: "Too many failed attempts. Try again later." }, 429);
-    }
-  }
-
   const { code, deviceName } = parseBody(PairBody, await c.req.json());
-
-  if (!validatePairCode(code)) {
-    if (clientIp) recordFailure(clientIp);
+  const error = authorizePairing(code, clientIp ?? "unknown-http");
+  if (error === "rate_limited") {
+    return c.json({ error: "Too many failed attempts. Try again later." }, 429);
+  }
+  if (error === "invalid_code") {
     return c.json({ error: "Invalid or expired connection code" }, 401);
   }
 
   // Successful pairing — create device token
-  if (clientIp) resetRateLimit(clientIp);
   const userAgent = c.req.header("user-agent") ?? null;
   const { token, device } = createDeviceToken(
     deviceName ?? "Unknown Device",

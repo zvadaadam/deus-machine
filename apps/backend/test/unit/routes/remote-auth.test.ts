@@ -5,7 +5,7 @@ const mockGeneratePairCode = vi.fn<(...args: any[]) => any>(() => ({
   code: "SOFT TIGER",
   expiresAt: Date.now() + 900_000,
 }));
-const mockValidatePairCode = vi.fn<(...args: any[]) => any>(() => true);
+const mockAuthorizePairing = vi.fn<(...args: any[]) => any>(() => null);
 const mockCreateDeviceToken = vi.fn<(...args: any[]) => any>(() => ({
   token: "raw-token-hex",
   device: {
@@ -29,28 +29,21 @@ const mockListDevices = vi.fn<(...args: any[]) => any>(() => [
   },
 ]);
 const mockRevokeDevice = vi.fn<(...args: any[]) => any>(() => true);
-const mockCheckRateLimit = vi.fn<(...args: any[]) => any>(() => 0);
-const mockRecordFailure = vi.fn<(...args: any[]) => any>();
-const mockResetRateLimit = vi.fn<(...args: any[]) => any>();
 
 vi.mock("../../../src/services/remote-auth.service", () => ({
   generatePairCode: (...args: unknown[]) => mockGeneratePairCode(...args),
-  validatePairCode: (...args: unknown[]) => mockValidatePairCode(...args),
+  authorizePairing: (...args: unknown[]) => mockAuthorizePairing(...args),
   createDeviceToken: (...args: unknown[]) => mockCreateDeviceToken(...args),
   listDevices: (...args: unknown[]) => mockListDevices(...args),
   revokeDevice: (...args: unknown[]) => mockRevokeDevice(...args),
-  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
-  recordFailure: (...args: unknown[]) => mockRecordFailure(...args),
-  resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
 }));
 
 import authRoutes from "../../../src/routes/remote-auth";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockValidatePairCode.mockReturnValue(true);
+  mockAuthorizePairing.mockReturnValue(null);
   mockRevokeDevice.mockReturnValue(true);
-  mockCheckRateLimit.mockReturnValue(0);
 });
 
 describe("POST /remote-auth/pair", () => {
@@ -66,13 +59,14 @@ describe("POST /remote-auth/pair", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.token).toBe("raw-token-hex");
+    expect(mockAuthorizePairing).toHaveBeenCalledWith("SOFT TIGER", "192.168.1.50");
     expect(body.device.id).toBe("dev1");
     // token_hash should NOT be exposed
     expect(body.device).not.toHaveProperty("token_hash");
   });
 
   it("returns 401 on invalid code", async () => {
-    mockValidatePairCode.mockReturnValue(false);
+    mockAuthorizePairing.mockReturnValue("invalid_code");
     const res = await authRoutes.request("/remote-auth/pair", {
       method: "POST",
       headers: {
@@ -82,11 +76,11 @@ describe("POST /remote-auth/pair", () => {
       body: JSON.stringify({ code: "BAD-0000" }),
     });
     expect(res.status).toBe(401);
-    expect(mockRecordFailure).toHaveBeenCalled();
+    expect(mockCreateDeviceToken).not.toHaveBeenCalled();
   });
 
   it("returns 429 when rate-limited", async () => {
-    mockCheckRateLimit.mockReturnValue(60_000);
+    mockAuthorizePairing.mockReturnValue("rate_limited");
     const res = await authRoutes.request("/remote-auth/pair", {
       method: "POST",
       headers: {

@@ -13,8 +13,9 @@ import {
   getRelayCredentials,
   generateRelayCredentials,
   validateDeviceToken,
-  validatePairCode,
+  authorizePairing,
   createDeviceToken,
+  updateLastSeen,
 } from "./remote-auth.service";
 import { DEFAULT_RELAY_URL } from "../lib/network";
 import {
@@ -36,28 +37,14 @@ let relayToken: string | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 
-// ---- Bidirectional Client Map ----
-// Maps relay clientId <-> ws.service connectionId. Both directions O(1).
-// The invariant: every key in clientToConn exists exactly once in connToClient.
+// ---- Relay clients ----
 
 const clientToConn = new Map<string, string>();
-const connToClient = new Map<string, string>();
-
-function linkClient(clientId: string, connectionId: string): void {
-  clientToConn.set(clientId, connectionId);
-  connToClient.set(connectionId, clientId);
-}
 
 function unlinkClient(clientId: string): string | undefined {
   const connectionId = clientToConn.get(clientId);
-  if (connectionId) connToClient.delete(connectionId);
   clientToConn.delete(clientId);
   return connectionId;
-}
-
-function unlinkAll(): void {
-  clientToConn.clear();
-  connToClient.clear();
 }
 
 const MAX_RECONNECT_DELAY = 30_000;
@@ -96,6 +83,7 @@ function getServerName(): string {
 
 setProtocolHandlers({
   onQueryFrame: handleQueryFrame,
+  onDisconnect: removeQuerySubs,
 });
 
 // ---- Public API ----
@@ -141,10 +129,9 @@ export function disconnectFromRelay(): void {
     tunnelWs = null;
   }
   for (const [, connId] of clientToConn) {
-    removeQuerySubs(connId);
     removeConnection(connId);
   }
-  unlinkAll();
+  clientToConn.clear();
 }
 
 export function getRelayStatus(): {
@@ -205,10 +192,9 @@ function openTunnel(): void {
     console.log(`[Relay] Tunnel closed: ${code} ${reason}`);
     tunnelWs = null;
     for (const [, connId] of clientToConn) {
-      removeQuerySubs(connId);
       removeConnection(connId);
     }
-    unlinkAll();
+    clientToConn.clear();
     if (relayUrl) scheduleReconnect();
   });
 
@@ -228,7 +214,6 @@ function handleRelayFrame(frame: RelayFrame): void {
         // Clean up existing connection (idempotent on tunnel reconnect)
         const existingConnId = clientToConn.get(f.clientId);
         if (existingConnId) {
-          removeQuerySubs(existingConnId);
           removeConnection(existingConnId);
         }
 
@@ -239,12 +224,19 @@ function handleRelayFrame(frame: RelayFrame): void {
               typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);
             sendToRelay({ type: "data", clientId: f.clientId, payload });
           },
-          close() {
-            // No-op — relay manages client disconnect
+          close(_code, reason) {
+            unlinkClient(f.clientId);
+            sendToRelay({
+              type: "auth_response",
+              clientId: f.clientId,
+              allowed: false,
+              reason,
+            });
           },
         };
         const connId = addConnection(virtualWs, device.id, true);
-        linkClient(f.clientId, connId);
+        clientToConn.set(f.clientId, connId);
+        updateLastSeen(device.token_hash);
         sendToRelay({ type: "auth_response", clientId: f.clientId, allowed: true });
         console.log(`[Relay] Client ${f.clientId} authenticated as device ${device.name}`);
       } else {
@@ -260,7 +252,6 @@ function handleRelayFrame(frame: RelayFrame): void {
     .with({ type: "client_disconnected" }, (f) => {
       const connId = unlinkClient(f.clientId);
       if (connId) {
-        removeQuerySubs(connId);
         removeConnection(connId);
         console.log(`[Relay] Client ${f.clientId} disconnected`);
       }
@@ -293,14 +284,19 @@ function handleRelayFrame(frame: RelayFrame): void {
 // ---- Pairing ----
 
 function handlePairRequest(pairId: string, code: string, deviceName: string): void {
-  if (!validatePairCode(code)) {
+  // The relay supplies no trustworthy client IP; redialing must not reset this budget.
+  const error = authorizePairing(code, "relay");
+  if (error) {
     sendToRelay({
       type: "pair_response",
       pairId,
       success: false,
-      reason: "Invalid or expired pairing code",
+      reason:
+        error === "rate_limited"
+          ? "Too many failed attempts. Try again later."
+          : "Invalid or expired pairing code",
     });
-    console.log(`[Relay] Pair request ${pairId} rejected: invalid code`);
+    console.log(`[Relay] Pair request ${pairId} rejected: ${error}`);
     return;
   }
 
