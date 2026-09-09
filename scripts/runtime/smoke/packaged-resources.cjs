@@ -22,6 +22,10 @@ function copyFile(src, dest) {
     throw new Error(`Missing source file for packaged resources smoke: ${src}`);
   }
   fs.mkdirSync(path.dirname(dest), { recursive: true });
+  if (fs.lstatSync(src).isSymbolicLink()) {
+    fs.symlinkSync(fs.readlinkSync(src), dest);
+    return;
+  }
   fs.copyFileSync(src, dest);
   fs.chmodSync(dest, fs.statSync(src).mode);
 }
@@ -38,6 +42,9 @@ function copyRuntimeBin(resourcesDir, arch) {
   for (const name of RUNTIME_BINARIES) {
     copyFile(path.join(stagedArchDir, name), path.join(binDir, name));
   }
+  fs.cpSync(path.join(stagedArchDir, "codex-runtime"), path.join(binDir, "codex-runtime"), {
+    recursive: true,
+  });
   for (const name of RUNTIME_MANIFESTS) {
     copyFile(path.join(STAGED_BIN_ROOT, name), path.join(binDir, name));
   }
@@ -199,6 +206,8 @@ function signPackagedPayloads(resourcesDir, arch) {
 
   const payloads = [
     path.join(resourcesDir, "bin", "codex"),
+    path.join(resourcesDir, "bin", "codex-runtime", "bin", "codex-code-mode-host"),
+    path.join(resourcesDir, "bin", "codex-runtime", "codex-resources", "zsh", "bin", "zsh"),
     path.join(resourcesDir, "bin", "claude"),
     path.join(resourcesDir, "bin", "gh"),
     path.join(resourcesDir, "bin", "rg"),
