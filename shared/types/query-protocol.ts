@@ -33,7 +33,13 @@ export interface QRequestFrame {
   params?: Record<string, unknown>;
 }
 
-/** Client subscribes to live updates for a resource. */
+/** Client subscribes to live updates for a resource.
+ *
+ * Most resources send an initial `q:snapshot` with current data, then `q:delta`s.
+ * Delta-only resources (currently: `messages`) skip the initial snapshot and send
+ * only a `q:subscribed` ack — clients are expected to load history via a separate
+ * `q:request` for the same resource (or, on web, via HTTP). This keeps the subscribe
+ * path cheap when history is large and the client may have already cached it. */
 export interface QSubscribeFrame {
   type: "q:subscribe";
   id: string;
@@ -106,6 +112,15 @@ export interface QSnapshotFrame {
   cursor?: number;
 }
 
+/** Server acks a subscribe when the resource is delta-only (no initial snapshot).
+ *  Sent instead of `q:snapshot` for resources where the client loads history
+ *  separately (see doc on QSubscribeFrame). Deltas follow via `q:delta`. */
+export interface QSubscribedFrame {
+  type: "q:subscribed";
+  id: string;
+  cursor?: number;
+}
+
 /** Server pushes incremental update (keyed by subscription ID). */
 export interface QDeltaFrame {
   type: "q:delta";
@@ -158,6 +173,7 @@ export interface QErrorFrame {
 export type QServerFrame =
   | QResponseFrame
   | QSnapshotFrame
+  | QSubscribedFrame
   | QDeltaFrame
   | QMutateResultFrame
   | QCommandAckFrame
