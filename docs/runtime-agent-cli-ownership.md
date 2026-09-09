@@ -65,6 +65,12 @@ agent CLI discovery. It is based on the source paths below, not on generated
 - `scripts/runtime/electron-builder-after-pack.cjs` is a packaging verifier/pruner for
   Electron app contents and native runtime payloads.
 
+Frontend libraries belong in `devDependencies`: Vite bundles them into
+`out/renderer` or device-use's `dist/frontend` during the build. Keep packages
+loaded by the desktop, backend, or agent runtime in `dependencies`, which
+electron-builder copies into the app. This avoids shipping a second, unused
+copy of each frontend library and its dependencies.
+
 ## Cleanup Boundaries
 
 - Keep production payload staging under `scripts/runtime/`. Agent-server should

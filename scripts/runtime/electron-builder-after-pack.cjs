@@ -9,10 +9,6 @@ const ARCH_BY_BUILDER_VALUE = new Map([
   ["x64", "x64"],
   ["arm64", "arm64"],
 ]);
-const FILE_ARCH_BY_TARGET_ARCH = new Map([
-  ["x64", "x86_64"],
-  ["arm64", "arm64"],
-]);
 const FILE_ARCH_BY_RUNTIME_KEY = new Map([
   ["darwin-x64", "x86_64"],
   ["darwin-arm64", "arm64"],
@@ -237,40 +233,6 @@ function assertExecutable(filePath, label) {
   if ((stat.mode & 0o111) === 0) {
     throw new Error(`Packaged ${label} is not executable: ${filePath}`);
   }
-}
-
-function verifyMachOArch(filePath, label, expectedFileArch) {
-  const fileOutput = require("node:child_process")
-    .execFileSync("file", [filePath], {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    .trim();
-  if (
-    !fileOutput.includes("Mach-O 64-bit executable") ||
-    (expectedFileArch && !fileOutput.includes(expectedFileArch))
-  ) {
-    throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
-  }
-  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
-}
-
-function verifyMachO64Arch(filePath, label, expectedFileArch) {
-  const fileOutput = require("node:child_process")
-    .execFileSync("file", [filePath], {
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    .trim();
-  if (
-    !fileOutput.includes("Mach-O 64-bit") ||
-    (expectedFileArch && !fileOutput.includes(expectedFileArch))
-  ) {
-    throw new Error(`Packaged ${label} has unexpected architecture: ${fileOutput}`);
-  }
-  console.log(`[runtime] packaged ${label}: ${fileOutput}`);
 }
 
 function verifyExecutableFileFormat(filePath, label, expectedFileFormat, expectedFileArch) {
