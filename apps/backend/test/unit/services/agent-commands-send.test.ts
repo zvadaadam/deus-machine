@@ -113,6 +113,28 @@ describeWithDb("sendMessage", () => {
     expect(row(SESSION).status).toBe("working");
   });
 
+  it.each(["read-only", "bypassPermissions", "", null, 123])(
+    "rejects an unsupported permission mode %s before changing session state",
+    async (permissionMode) => {
+      const startTurn = vi.spyOn(agentService, "startTurn");
+      const before = db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION);
+
+      await expect(
+        runCommand("sendMessage", {
+          sessionId: SESSION,
+          content: "hello",
+          model: "gpt-6-astra",
+          agentHarness: "codex-app-server",
+          permissionMode,
+        })
+      ).rejects.toThrow("Unsupported permission mode");
+
+      expect(startTurn).not.toHaveBeenCalled();
+      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION)).toEqual(before);
+    }
+  );
+
   it("REJECTS the send when the agent server is disconnected", async () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(false);
     const startTurn = vi.spyOn(agentService, "startTurn");
