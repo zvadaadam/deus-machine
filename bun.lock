@@ -8,8 +8,8 @@
         "@agentclientprotocol/sdk": "^1.3.0",
         "@anthropic-ai/claude-agent-sdk": "0.3.220",
         "@anthropic-ai/sdk": "^0.93.0",
-        "@deus-hq/api": "file:vendor/deus-hq-api-4a0cc369.tgz",
-        "@deus-hq/sdk": "file:vendor/deus-hq-sdk-4a0cc369.tgz",
+        "@deus-hq/api": "file:vendor/deus-hq-api-a5f08829.tgz",
+        "@deus-hq/sdk": "file:vendor/deus-hq-sdk-a5f08829.tgz",
         "@hono/node-server": "^1.19.9",
         "@hono/node-ws": "^1.3.0",
         "@napi-rs/canvas": "^0.1.97",
@@ -185,7 +185,7 @@
     },
   },
   "overrides": {
-    "@deus-hq/api": "file:vendor/deus-hq-api-4a0cc369.tgz",
+    "@deus-hq/api": "file:vendor/deus-hq-api-a5f08829.tgz",
   },
   "packages": {
     "7zip-bin": ["7zip-bin@5.2.0", "", {}, "sha512-ukTPVhqG4jNzMro2qA9HSCSSVJN3aN7tlb+hfqYCt3ER0yWroeA2VR38MNrOHLQ/cVj+DaIMad0kFCtWWowh/A=="],
@@ -270,9 +270,9 @@
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
-    "@deus-hq/api": ["@deus-hq/api@vendor/deus-hq-api-4a0cc369.tgz", { "dependencies": { "@zvada/agent-server": "0.3.6", "zod": "^4.4.3" } }, "sha512-M57ueGQ1qtiRykwPFoVHZR6hA8HXa0DUGKcrJ73/1fnyuUkiPWw0TLjzNgqQNooPb7//I6ykLWX2nYhH+O1Nzw=="],
+    "@deus-hq/api": ["@deus-hq/api@vendor/deus-hq-api-a5f08829.tgz", { "dependencies": { "@zvada/agent-server": "0.3.6", "zod": "^4.4.3" } }, "sha512-PFb+HJRY/MlGTVxZH206Yj2+ffU3otQSMISsQRxMMzPVaJYClbpQzsRimiFMM+ABoqtVZCMuD4LTKv8G3Fmiwg=="],
 
-    "@deus-hq/sdk": ["@deus-hq/sdk@vendor/deus-hq-sdk-4a0cc369.tgz", { "dependencies": { "@deus-hq/api": "2.1.0-environment.4a0cc369", "@zvada/agent-server": "0.3.6", "ws": "^8", "zod": "^4.4.3" } }, "sha512-D6bSlO78S2GLnig5fQwjyf3lIUYkI7fWi35BgXomnFMT4aYjwgexNnivkdhaEdBjmdbfIL9Zq+33Uc1GHOfWOg=="],
+    "@deus-hq/sdk": ["@deus-hq/sdk@vendor/deus-hq-sdk-a5f08829.tgz", { "dependencies": { "@deus-hq/api": "2.1.0-environment.a5f08829", "@zvada/agent-server": "0.3.6", "ws": "^8", "zod": "^4.4.3" } }, "sha512-RrettEe7P6BFiTlpXygLkVMw/v0hx1+BBW83HGFrJSAWJiKtQnTvaQBnMf9cKSRJH0Zwxt3oPERHNqpBhe/nbg=="],
 
     "@deus/screen-studio": ["@deus/screen-studio@workspace:packages/screen-studio"],
 

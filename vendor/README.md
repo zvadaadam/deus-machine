@@ -1,8 +1,8 @@
 # Project environment SDK preview
 
 These API/SDK packages are packed from AGNT commit
-[`4a0cc369262f5519016cbbb0771fdb172ba6373b`](https://github.com/zvadaadam/AGNT/commit/4a0cc369262f5519016cbbb0771fdb172ba6373b)
-after its normal build, with version `2.1.0-environment.4a0cc369` and `gitHead` stamped in each
+[`a5f088298992919c85e61055f93517866459a507`](https://github.com/zvadaadam/AGNT/commit/a5f088298992919c85e61055f93517866459a507)
+after its normal build, with version `2.1.0-environment.a5f08829` and `gitHead` stamped in each
 manifest. The SDK depends on that same API version; the root override resolves it
 to the checked-in archive. There are no links to another developer's worktree.
 
