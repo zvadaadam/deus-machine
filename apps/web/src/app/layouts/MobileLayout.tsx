@@ -22,7 +22,7 @@ import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
-import type { NormalizedTask } from "@/features/workspace/api/workspace.service";
+import type { ProjectTask } from "@/features/workspace/api/workspace.service";
 import { cn } from "@/shared/lib/utils";
 import { ChatArea } from "./ChatArea";
 import { MobileTabBar } from "./MobileTabBar";
@@ -42,8 +42,8 @@ interface MobileLayoutProps {
   setCreatePRHandler: (handler: (() => void) | null) => void;
   setSendAgentMessageHandler: Dispatch<SetStateAction<((text: string) => Promise<void>) | null>>;
   isWatched: boolean;
-  manifestTasks?: NormalizedTask[];
-  hasManifest?: boolean;
+  environmentTasks?: ProjectTask[];
+  hasEnvironment?: boolean;
   onRunTask?: (taskName: string) => void;
   onStatusChange?: (status: WorkspaceStatus) => void;
   /** Cloud presence, derived once by MainContent (same values as the desktop header). */
@@ -68,8 +68,8 @@ export function MobileLayout({
   setCreatePRHandler,
   setSendAgentMessageHandler,
   isWatched,
-  manifestTasks,
-  hasManifest,
+  environmentTasks,
+  hasEnvironment,
   onRunTask,
   onStatusChange,
   cloudPresence,
@@ -152,8 +152,8 @@ export function MobileLayout({
           onViewSetupLogs={onViewSetupLogs}
           workspaceStatus={workspace.status}
           onStatusChange={onStatusChange}
-          tasks={manifestTasks}
-          hasManifest={hasManifest}
+          tasks={environmentTasks}
+          hasEnvironment={hasEnvironment}
           onRunTask={onRunTask}
           mobile
         />

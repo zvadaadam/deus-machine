@@ -12,7 +12,7 @@ export interface CloudEnvironmentSettings {
   accountId: string;
   organizationId: string;
   canManageShared: boolean;
-  selectedEnvironment: { id: string; setup: SetupStep[]; run: string; canEdit: boolean } | null;
+  selectedEnvironment: { id: string; project: ProjectEnvironment | null; canEdit: boolean } | null;
   environments: Array<{
     id: string;
     name: string;
@@ -44,4 +44,4 @@ export interface CloudSettingsOrganizations {
   currentOrganizationId?: string | null;
   items: Array<{ id: string; name: string; role: string }>;
 }
-import type { SetupStep } from "@deus-hq/api";
+import type { ProjectEnvironment } from "@deus-hq/api";

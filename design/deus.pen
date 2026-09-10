@@ -79719,7 +79719,7 @@
       "id": "P5EMhf",
       "x": 19000,
       "y": 7600,
-      "name": "56a · Settings — Repository cloud setup",
+      "name": "56a · Settings — Shared project environment",
       "theme": {
         "mode": "dark"
       },
@@ -80268,6 +80268,29 @@
                               "fontWeight": "600"
                             },
                             {
+                              "type": "frame",
+                              "id": "w0NmKQ",
+                              "name": "Setup workspace location",
+                              "cornerRadius": "$radius-md",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": 1,
+                              "padding": [
+                                7,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "yp6Zc",
+                                  "fill": "$text-primary",
+                                  "content": "Cloud  ▾",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
                               "id": "u0qkxX",
                               "type": "ref",
                               "ref": "Rcfnv",
@@ -80282,148 +80305,58 @@
                         },
                         {
                           "type": "frame",
-                          "id": "Dowbk",
-                          "name": "Cloud and local tabs",
-                          "width": "fill_container",
-                          "height": 40,
-                          "stroke": "$border-subtle",
-                          "strokeWidth": {
-                            "bottom": 1
-                          },
-                          "gap": 28,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "qcJqu",
-                              "name": "Selected cloud tab",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": 72,
-                              "content": "Cloud",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "iHuzv",
-                              "name": "Local tab",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": 70,
-                              "content": "Local",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
                           "id": "s4hDL7",
-                          "name": "CloudSetupEditor",
+                          "name": "DS/ProjectEnvironmentEditor · features/settings/ui/sections/ProjectEnvironmentEditor.tsx",
+                          "reusable": true,
                           "width": "fill_container",
                           "layout": "vertical",
-                          "gap": 12,
+                          "gap": 16,
                           "children": [
                             {
                               "type": "text",
-                              "id": "Osce7",
-                              "name": "Setup script heading",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "Setup script",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            },
-                            {
-                              "type": "text",
-                              "id": "E3mmD",
-                              "name": "Setup purpose",
+                              "id": "A7iLF7",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Installs dependencies and prepares new cloud workspaces. Each command runs in its own shell.",
+                              "content": "Saved project settings · Shared across future local and cloud workspaces.",
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-xs",
                               "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
-                              "id": "T2Ol8",
-                              "name": "Setup command textarea",
-                              "width": "fill_container",
-                              "height": 96,
-                              "fill": "$bg-muted",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-subtle",
-                              "strokeWidth": 1,
-                              "layout": "vertical",
-                              "gap": 12,
-                              "padding": 12,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "HO5zO",
-                                  "name": "Setup command content",
-                                  "fill": "$text-primary",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "bun install --frozen-lockfile\nbun run prepare",
-                                  "fontFamily": "$font-mono",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "smWQE",
-                              "type": "ref",
-                              "ref": "Rcfnv",
-                              "name": "+  Add command",
-                              "descendants": {
-                                "kB8v8": {
-                                  "content": "+  Add command"
-                                }
-                              }
-                            },
-                            {
-                              "type": "frame",
-                              "id": "E3DTSD",
-                              "name": "Run script",
+                              "id": "eu8cH",
+                              "name": "Setup script",
                               "width": "fill_container",
                               "layout": "vertical",
                               "gap": 8,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "e8Qtu",
-                                  "name": "Run script label",
+                                  "id": "FQw70",
                                   "fill": "$text-primary",
-                                  "content": "Run script",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Setup script",
                                   "fontFamily": "$font-sans",
-                                  "fontSize": "$text-sm",
-                                  "fontWeight": "500"
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "text",
-                                  "id": "oI64A",
-                                  "name": "Run purpose",
+                                  "id": "g4jTzw",
                                   "fill": "$text-muted",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Starts your app after setup. Use a foreground command such as bun run dev; AGNT runs it in the background.",
+                                  "content": "Prepare new workspaces. Runs once after checkout, in your repository.",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-xs",
                                   "fontWeight": "normal"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "e8GTU",
-                                  "name": "Run command textarea",
+                                  "id": "q7Zvj",
+                                  "name": "Setup script input",
                                   "width": "fill_container",
                                   "height": 96,
                                   "fill": "$bg-muted",
@@ -80435,7 +80368,63 @@
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "i3piU",
+                                      "id": "x40RAY",
+                                      "fill": "$text-primary",
+                                      "content": "bun install --frozen-lockfile",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "TkeDg",
+                              "name": "Run script",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "bC19x",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Run script",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "m8rnGY",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Start your app. Runs automatically in cloud workspaces; use Run on your computer.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "ZLtz3",
+                                  "name": "Run script input",
+                                  "width": "fill_container",
+                                  "height": 96,
+                                  "fill": "$bg-muted",
+                                  "cornerRadius": "$radius-lg",
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": 1,
+                                  "layout": "vertical",
+                                  "padding": 12,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "xYAgY",
                                       "fill": "$text-primary",
                                       "content": "bun run dev",
                                       "fontFamily": "$font-mono",
@@ -80447,24 +80436,201 @@
                               ]
                             },
                             {
-                              "id": "b1imW",
-                              "type": "ref",
-                              "ref": "rg2x2",
-                              "name": "Save cloud setup",
-                              "descendants": {
-                                "z4bI4": {
-                                  "content": "Save cloud setup"
-                                }
-                              }
-                            },
-                            {
                               "type": "text",
-                              "id": "v3UKmY",
-                              "name": "Setup applies to new workspaces",
+                              "id": "xRTYj",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Changes apply to new cloud workspaces. Saving does not run the script.",
+                              "content": "▸ Customize for local or cloud",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-xs",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "K0PepF",
+                              "name": "Public environment variables",
+                              "width": "fill_container",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": {
+                                "top": 1
+                              },
+                              "layout": "vertical",
+                              "gap": 10,
+                              "padding": [
+                                16,
+                                0,
+                                0,
+                                0
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "glx8W",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Public environment variables",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "IFsd6",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Non-secret defaults shared by local and cloud. Add API keys in Secrets below.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "aUEgL",
+                                  "name": "Public variable",
+                                  "width": "fill_container",
+                                  "gap": 8,
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "T7HUX",
+                                      "width": "fill_container",
+                                      "fill": "$bg-muted",
+                                      "cornerRadius": "$radius-md",
+                                      "stroke": "$border-subtle",
+                                      "strokeWidth": 1,
+                                      "padding": 10,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "pGUZv",
+                                          "fill": "$text-primary",
+                                          "content": "PUBLIC_MODE",
+                                          "fontFamily": "$font-mono",
+                                          "fontSize": "$text-xs",
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "py1GH",
+                                      "width": "fill_container",
+                                      "fill": "$bg-muted",
+                                      "cornerRadius": "$radius-md",
+                                      "stroke": "$border-subtle",
+                                      "strokeWidth": 1,
+                                      "padding": 10,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "u2uzL",
+                                          "fill": "$text-primary",
+                                          "content": "development",
+                                          "fontFamily": "$font-mono",
+                                          "fontSize": "$text-xs",
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "ojfgm",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "+ Add variable",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "QHoFH",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Required variable names",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "dGEnQ",
+                                  "name": "Required names input",
+                                  "width": "fill_container",
+                                  "fill": "$bg-muted",
+                                  "cornerRadius": "$radius-md",
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": 1,
+                                  "padding": 10,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "jlo66",
+                                      "fill": "$text-primary",
+                                      "content": "DATABASE_URL, OPENAI_API_KEY",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "omz9L",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "▸ Additional commands",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-xs",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "JASgx",
+                              "name": "Save actions",
+                              "gap": 12,
+                              "children": [
+                                {
+                                  "id": "t3dQpg",
+                                  "type": "ref",
+                                  "ref": "rg2x2",
+                                  "name": "Save setup",
+                                  "descendants": {
+                                    "z4bI4": {
+                                      "content": "Save setup"
+                                    }
+                                  }
+                                },
+                                {
+                                  "id": "c3yBnX",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Save to repository",
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Save to repository"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "I9n41w",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Changes apply when preparing a workspace. Saving does not restart a running or paused app.",
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-xs",
                               "fontWeight": "normal"
@@ -80504,7 +80670,7 @@
                                   "fill": "$text-primary",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Environment variables",
+                                  "content": "Cloud secrets",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
@@ -80706,7 +80872,7 @@
       "id": "o52o35",
       "x": 20560,
       "y": 7600,
-      "name": "56b · Settings — Repository local setup",
+      "name": "56b · Settings — Repository environment file",
       "theme": {
         "mode": "dark"
       },
@@ -81268,270 +81434,209 @@
                           ]
                         },
                         {
-                          "type": "frame",
-                          "id": "EF5H8",
-                          "name": "Cloud and local tabs",
+                          "id": "eHtdI",
+                          "type": "ref",
+                          "ref": "s4hDL7",
+                          "name": "ProjectEnvironmentEditor · repository file",
                           "width": "fill_container",
-                          "height": 40,
+                          "descendants": {
+                            "A7iLF7": {
+                              "content": ".deus/environment.json · feature/setup · Local checkout; publish changes through Git."
+                            },
+                            "c3yBnX": {
+                              "enabled": false
+                            }
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U4zLw4",
+                          "name": "CloudApplicationSecrets",
+                          "width": "fill_container",
                           "stroke": "$border-subtle",
                           "strokeWidth": {
-                            "bottom": 1
+                            "top": 1
                           },
-                          "gap": 28,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "wFNsN",
-                              "name": "Cloud tab",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": 72,
-                              "content": "Cloud",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "fA9N2",
-                              "name": "Selected local tab",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": 70,
-                              "content": "Local",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "Gfp3x",
-                          "name": "Setup script",
-                          "width": "fill_container",
                           "layout": "vertical",
-                          "gap": 8,
+                          "gap": 12,
+                          "padding": [
+                            20,
+                            0,
+                            0,
+                            0
+                          ],
                           "children": [
-                            {
-                              "type": "text",
-                              "id": "lFVH2",
-                              "name": "Setup script label",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "Setup script",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            },
-                            {
-                              "type": "text",
-                              "id": "pv7NC",
-                              "name": "Setup script purpose",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "Runs when a local workspace is created.",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            },
                             {
                               "type": "frame",
-                              "id": "T5VrIi",
-                              "name": "Setup script textarea",
+                              "id": "xPBGh",
+                              "name": "Secret heading row",
                               "width": "fill_container",
-                              "height": 112,
-                              "fill": "$bg-muted",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-subtle",
-                              "strokeWidth": 1,
-                              "layout": "vertical",
-                              "padding": 12,
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "ONtzE",
-                                  "name": "Setup script content",
+                                  "id": "AbRJs",
+                                  "name": "Secrets heading",
                                   "fill": "$text-primary",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "./scripts/setup.sh",
-                                  "fontFamily": "$font-mono",
+                                  "content": "Environment variables",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "id": "PQVvn",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "+  Add secret",
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "+  Add secret"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "NtY56",
+                              "name": "Environment file import",
+                              "width": "fill_container",
+                              "height": 56,
+                              "cornerRadius": "$radius-lg",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": 1,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "A9XpA",
+                                  "fill": "$text-muted",
+                                  "content": "Drop a .env or .dev.vars file, or click to import",
+                                  "fontFamily": "$font-sans",
                                   "fontSize": "$text-xs",
                                   "fontWeight": "normal"
                                 }
                               ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "Rwhl1",
-                          "name": "Run script",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 8,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "P839u",
-                              "name": "Run script label",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "Run script",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            },
-                            {
-                              "type": "text",
-                              "id": "vfOtV",
-                              "name": "Run script purpose",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "Starts the development server in a local workspace.",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
                             },
                             {
                               "type": "frame",
-                              "id": "zMQS1",
-                              "name": "Run script textarea",
+                              "id": "d41hMF",
+                              "name": "Secret ELEVENLABS_API_KEY",
                               "width": "fill_container",
-                              "height": 80,
-                              "fill": "$bg-muted",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-subtle",
-                              "strokeWidth": 1,
-                              "layout": "vertical",
-                              "padding": 12,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "yjx7j",
-                                  "name": "Run script content",
-                                  "fill": "$text-primary",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "bun run dev",
-                                  "fontFamily": "$font-mono",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "DVHVX",
-                          "name": "Public variables and advanced setup",
-                          "width": "fill_container",
-                          "layout": "vertical",
-                          "gap": 20,
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "GYLcP",
-                              "name": "Public environment variables",
-                              "width": "fill_container",
-                              "stroke": "$border-subtle",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "layout": "vertical",
-                              "gap": 10,
+                              "gap": 16,
                               "padding": [
-                                20,
-                                0,
-                                0,
+                                8,
                                 0
                               ],
+                              "alignItems": "center",
                               "children": [
                                 {
                                   "type": "frame",
-                                  "id": "VwGqt",
+                                  "id": "aHLUd",
+                                  "name": "Secret name and scope",
                                   "width": "fill_container",
-                                  "justifyContent": "space_between",
-                                  "alignItems": "center",
+                                  "layout": "vertical",
+                                  "gap": 4,
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "S4nI0",
+                                      "id": "AAjo5",
+                                      "name": "Secret key name",
                                       "fill": "$text-primary",
-                                      "content": "Public environment variables",
-                                      "fontFamily": "$font-sans",
-                                      "fontSize": "$text-sm",
-                                      "fontWeight": "500"
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "ELEVENLABS_API_KEY",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
                                     },
                                     {
-                                      "id": "D11Qn",
-                                      "type": "ref",
-                                      "ref": "WNY4N",
-                                      "name": "Add variable",
-                                      "descendants": {
-                                        "XQbnF": {
-                                          "content": "+  Add variable"
-                                        }
-                                      }
+                                      "type": "text",
+                                      "id": "U6lFK",
+                                      "name": "Availability",
+                                      "fill": "$text-muted",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Personal · This repository",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
                                     }
                                   ]
                                 },
                                 {
                                   "type": "text",
-                                  "id": "jiZld",
+                                  "id": "CU6mr",
+                                  "name": "Replace action",
                                   "fill": "$text-muted",
                                   "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "Shared with your code. Keep API keys and other private values in local environment files.\nCloud secrets are managed on the Cloud tab.",
+                                  "width": 50,
+                                  "content": "Replace",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-xs",
                                   "fontWeight": "normal"
                                 },
                                 {
+                                  "type": "text",
+                                  "id": "N41cT2",
+                                  "name": "Delete action",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": 42,
+                                  "content": "Delete",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "zvQfM",
+                              "name": "Secret OPENAI_API_KEY",
+                              "width": "fill_container",
+                              "gap": 16,
+                              "padding": [
+                                8,
+                                0
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
                                   "type": "frame",
-                                  "id": "FEbVy",
+                                  "id": "ZZPis",
+                                  "name": "Secret name and scope",
                                   "width": "fill_container",
-                                  "gap": 8,
+                                  "layout": "vertical",
+                                  "gap": 4,
                                   "children": [
                                     {
-                                      "id": "mNpm1",
-                                      "type": "ref",
-                                      "ref": "YqG8t",
+                                      "type": "text",
+                                      "id": "I3WxN1",
+                                      "name": "Secret key name",
+                                      "fill": "$text-primary",
+                                      "textGrowth": "fixed-width",
                                       "width": "fill_container",
-                                      "name": "Variable name",
-                                      "descendants": {
-                                        "E8yhJ5": {
-                                          "content": "PUBLIC_MODE"
-                                        }
-                                      }
+                                      "content": "OPENAI_API_KEY",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
                                     },
                                     {
-                                      "id": "dQzlL",
-                                      "type": "ref",
-                                      "ref": "YqG8t",
+                                      "type": "text",
+                                      "id": "R2loE",
+                                      "name": "Availability",
+                                      "fill": "$text-muted",
+                                      "textGrowth": "fixed-width",
                                       "width": "fill_container",
-                                      "name": "Variable value",
-                                      "descendants": {
-                                        "E8yhJ5": {
-                                          "content": "development"
-                                        }
-                                      }
-                                    },
-                                    {
-                                      "type": "icon",
-                                      "id": "UF7AI",
-                                      "width": 16,
-                                      "height": 16,
-                                      "icon": "trash-2",
-                                      "library": "lucide",
-                                      "fill": "$text-muted"
+                                      "content": "Shared · All repositories",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
                                     }
                                   ]
                                 }
@@ -81539,43 +81644,27 @@
                             },
                             {
                               "type": "text",
-                              "id": "d0ExDr",
-                              "name": "Advanced setup disclosure",
-                              "fill": "$text-secondary",
-                              "content": "›  Advanced setup",
+                              "id": "U2xqr",
+                              "name": "Write-only values",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Saved values are never shown again. Changes apply to new cloud workspaces.",
                               "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
+                              "fontSize": "$text-xs",
                               "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "NawBv",
-                          "name": "Local setup actions",
-                          "gap": 8,
-                          "children": [
-                            {
-                              "id": "xgEas",
-                              "type": "ref",
-                              "ref": "rg2x2",
-                              "name": "Save local setup",
-                              "descendants": {
-                                "z4bI4": {
-                                  "content": "Save local setup"
-                                }
-                              }
                             },
                             {
-                              "id": "D5oP7L",
-                              "type": "ref",
-                              "ref": "Rcfnv",
-                              "name": "Reset",
-                              "descendants": {
-                                "kB8v8": {
-                                  "content": "Reset"
-                                }
-                              }
+                              "type": "text",
+                              "id": "J8KqSi",
+                              "name": "Default secrets link",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Manage secrets for all repositories",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-xs",
+                              "fontWeight": "normal"
                             }
                           ]
                         }

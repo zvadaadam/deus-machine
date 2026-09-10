@@ -14,6 +14,7 @@ import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
 /**
  * Fetch workspaces grouped by repository.
@@ -91,8 +92,7 @@ export function useDiffStats(
  *
  * Guard: state === "ready" — initializing worktrees have incomplete git state
  * (missing HEAD, partial index → garbage diffs like +500K/-1M). Setup script
- * diffs are fine — .gitignore handles them, and `git checkout -- .` in the
- * init pipeline resets any tracked-file mutations from bun install.
+ * diffs remain visible: setup changes are ordinary working-tree changes.
  */
 export function useBulkDiffStats(repoGroups: RepoGroup[]) {
   const queryClient = useQueryClient();
@@ -572,14 +572,15 @@ export function useUpdateSystemPrompt() {
 }
 
 /**
- * Fetch deus.json manifest + normalized tasks for a workspace.
- * Manifest doesn't change during a session — staleTime: Infinity.
+ * Fetch effective project environment and Run commands for a workspace.
+ * File changes invalidate this query. The direct cloud chat has no backend
+ * command runner; its environment settings use the cloud settings API.
  */
-export function useManifestTasks(workspaceId: string | null) {
+export function useProjectEnvironment(workspaceId: string | null) {
   return useQuery({
-    queryKey: queryKeys.workspaces.manifest(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchManifest(workspaceId!),
-    enabled: !!workspaceId,
+    queryKey: queryKeys.workspaces.environment(workspaceId || ""),
+    queryFn: () => WorkspaceService.fetchEnvironment(workspaceId!),
+    enabled: !!workspaceId && !isCloudDirectWebMode(),
     staleTime: Infinity,
   });
 }

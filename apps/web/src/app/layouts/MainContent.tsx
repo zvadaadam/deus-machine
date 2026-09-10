@@ -152,8 +152,8 @@ export function MainContent({
     handleArchive,
     handleRetrySetup,
     handleViewSetupLogs,
-    manifestTasks,
-    hasManifest,
+    environmentTasks,
+    hasEnvironment,
     handleRunTask,
   } = useWorkspaceActions({
     selectedWorkspace,
@@ -370,8 +370,8 @@ export function MainContent({
               setCreatePRHandler={setCreatePRHandler}
               setSendAgentMessageHandler={setSendAgentMessageHandler}
               isWatched={isWatched}
-              manifestTasks={manifestTasks}
-              hasManifest={hasManifest}
+              environmentTasks={environmentTasks}
+              hasEnvironment={hasEnvironment}
               onRunTask={handleRunTask}
               onStatusChange={
                 webDirect
@@ -451,8 +451,8 @@ export function MainContent({
                             : (status) =>
                                 statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
                         }
-                        tasks={manifestTasks}
-                        hasManifest={hasManifest}
+                        tasks={environmentTasks}
+                        hasEnvironment={hasEnvironment}
                         onRunTask={handleRunTask}
                       />
 

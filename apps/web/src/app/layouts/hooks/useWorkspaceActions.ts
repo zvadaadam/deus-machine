@@ -1,11 +1,11 @@
 /**
- * Workspace Actions Hook — PR bridge, archive, retry, and manifest tasks.
+ * Workspace Actions Hook — PR bridge, archive, retry, and project commands.
  *
  * Extracts all workspace-level action handlers from MainContent, keeping
  * the layout component focused on panel geometry. This hook manages:
  * - PR handler bridge (ChatArea sets handlers, WorkspaceHeader consumes them)
  * - Archive, retry setup, view setup logs
- * - Manifest task discovery and execution
+ * - Project command discovery and execution
  * - Target branch selection for PR creation
  */
 
@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import {
   useArchiveWorkspace,
   useRetrySetup,
-  useManifestTasks,
+  useProjectEnvironment,
 } from "@/features/workspace/api/workspace.queries";
 import { WorkspaceService } from "@/features/workspace/api/workspace.service";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
@@ -118,12 +118,14 @@ export function useWorkspaceActions({
       });
   }, [selectedWorkspace]);
 
-  // --- Manifest tasks (deus.json) ---
+  // --- Project environment commands ---
 
   const isWorkspaceReady = selectedWorkspace?.state === "ready";
-  const { data: manifestData } = useManifestTasks(isWorkspaceReady ? selectedWorkspaceId : null);
-  const manifestTasks = manifestData?.tasks;
-  const hasManifest = manifestData?.manifest != null;
+  const { data: environmentData } = useProjectEnvironment(
+    isWorkspaceReady ? selectedWorkspaceId : null
+  );
+  const environmentTasks = environmentData?.tasks;
+  const hasEnvironment = environmentData?.project != null;
 
   const handleRunTask = useCallback(
     (taskName: string) => {
@@ -160,9 +162,9 @@ export function useWorkspaceActions({
     handleArchive,
     handleRetrySetup,
     handleViewSetupLogs,
-    // Manifest
-    manifestTasks,
-    hasManifest,
+    // Project environment
+    environmentTasks,
+    hasEnvironment,
     handleRunTask,
   };
 }

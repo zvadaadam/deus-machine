@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Cloud, FolderGit2, KeyRound, Laptop, Search } from "lucide-react";
+import { ChevronRight, FolderGit2, KeyRound, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { native } from "@/platform";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
@@ -22,6 +21,8 @@ import { githubRepoSlug } from "@shared/git-origin";
 import type { CloudEnvironmentSettings } from "@shared/types/environment-secrets";
 import {
   getEnvironmentInstallUrl,
+  getRepositoryEnvironmentFile,
+  saveCloudEnvironmentSetup,
   getEnvironmentSecretSettings,
   listEnvironmentRepositories,
   listSecretOrganizations,
@@ -31,8 +32,7 @@ import {
   type EnvironmentRepository,
 } from "../../lib/environment-repositories";
 import { CloudApplicationSecrets, ENVIRONMENT_SECRETS_QUERY_KEY } from "./CloudApplicationSecrets";
-import { CloudSetupEditor } from "./CloudSetupEditor";
-import { LocalEnvironmentSettings } from "./LocalEnvironmentSettings";
+import { ProjectEnvironmentEditor } from "./ProjectEnvironmentEditor";
 import { SetUpEnvironmentWithAgent } from "./SetUpEnvironmentWithAgent";
 
 export function EnvironmentSection() {
@@ -203,66 +203,42 @@ function RepositoryEnvironments({
                 <RepositoryAvatar repo={selection.repo} />
                 <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
               </div>
-              <SetUpEnvironmentWithAgent
-                repoId={selection.local?.id}
-                location={tab === "local" ? "local" : "cloud"}
-                activeOrganization={activeOrganization}
-                onBeforeStart={() => {
-                  if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
-                  setDirty(false);
-                  return true;
-                }}
-              />
+              <div className="flex items-center gap-2">
+                <Select value={tab} onValueChange={setTab}>
+                  <SelectTrigger aria-label="Setup workspace location" className="w-auto">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cloud" disabled={!orgId}>
+                      Cloud
+                    </SelectItem>
+                    <SelectItem value="local" disabled={!selection.local?.root_path}>
+                      Local
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <SetUpEnvironmentWithAgent
+                  repoId={selection.local?.id}
+                  location={tab === "local" ? "local" : "cloud"}
+                  activeOrganization={activeOrganization}
+                  onBeforeStart={() => {
+                    if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
+                    setDirty(false);
+                    return true;
+                  }}
+                />
+              </div>
             </div>
-            <Tabs
-              value={tab}
-              onValueChange={(next) => {
-                if (dirty && !window.confirm("Discard unsaved setup changes?")) return;
-                setDirty(false);
-                setTab(next);
-              }}
-            >
-              <TabsList className="border-border-subtle mb-6 h-10 border-b">
-                <TabsTrigger value="cloud" className="border-r-0 px-4">
-                  <Cloud className="size-3.5" />
-                  Cloud
-                </TabsTrigger>
-                <TabsTrigger value="local" className="border-r-0 px-4" disabled={!selection.local}>
-                  <Laptop className="size-3.5" />
-                  Local
-                  {!selection.local && (
-                    <span className="text-text-muted text-xs">· Not on this computer</span>
-                  )}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="cloud" className="space-y-6">
-                {orgId ? (
-                  <CloudRepositorySettings
-                    key={selection.key}
-                    accountId={accountId!}
-                    orgId={orgId}
-                    repository={selection}
-                    access={canAccess(selection)}
-                    accessUnknown={!github.data}
-                    onDirtyChange={setDirty}
-                    onDefaults={() => navigate("defaults")}
-                  />
-                ) : !accountId ? (
-                  <CloudSignIn onSignIn={() => signIn.mutate()} pending={signIn.isPending} />
-                ) : (
-                  <p role="status" className="text-text-muted text-sm">
-                    {cloudLoading
-                      ? "Loading cloud settings…"
-                      : "Cloud settings are unavailable right now."}
-                  </p>
-                )}
-              </TabsContent>
-              <TabsContent value="local">
-                {selection.local && (
-                  <LocalEnvironmentSettings repoId={selection.local.id} onDirtyChange={setDirty} />
-                )}
-              </TabsContent>
-            </Tabs>
+            <RepositoryEnvironmentSettings
+              key={selection.key}
+              accountId={accountId}
+              orgId={orgId}
+              repository={selection}
+              access={canAccess(selection)}
+              accessUnknown={!github.data}
+              onDirtyChange={setDirty}
+              onDefaults={() => navigate("defaults")}
+            />
           </>
         )}
       </div>
@@ -400,7 +376,7 @@ function RepositoryAvatar({ repo }: { repo: string | null }) {
     </Avatar>
   );
 }
-function CloudRepositorySettings({
+function RepositoryEnvironmentSettings({
   accountId,
   orgId,
   repository,
@@ -409,8 +385,8 @@ function CloudRepositorySettings({
   onDirtyChange,
   onDefaults,
 }: {
-  accountId: string;
-  orgId: string;
+  accountId: string | null;
+  orgId: string | null;
   repository: EnvironmentRepository;
   access: boolean;
   accessUnknown: boolean;
@@ -419,76 +395,119 @@ function CloudRepositorySettings({
 }) {
   const queryClient = useQueryClient();
   const environmentId = repository.environment?.id ?? null;
+  const local = repository.local?.root_path ? repository.local : null;
+  const slug = repository.repo ? githubRepoSlug(repository.repo) : null;
   const settings = useQuery({
     queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, environmentId],
-    queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, environmentId, signal),
-    // Creating the repository record while adding a secret must not unmount script drafts.
+    queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId!, environmentId, signal),
+    enabled: !!orgId,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     retry: false,
   });
+  const file = useQuery({
+    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, "file", repository.key],
+    queryFn: ({ signal }) =>
+      local
+        ? RepoService.fetchEnvironmentFile(local.id)
+        : getRepositoryEnvironmentFile(orgId!, slug!, signal),
+    enabled: !!local || (!!orgId && !!slug && access),
+    staleTime: 0,
+    retry: false,
+  });
   if (settings.isError)
     return <LoadError error={settings.error} retry={() => void settings.refetch()} />;
-  if (!settings.data)
+  if (file.isError) return <LoadError error={file.error} retry={() => void file.refetch()} />;
+  if (settings.isLoading || file.isLoading)
     return (
       <p role="status" className="text-text-muted text-sm">
-        Loading cloud setup…
+        Loading project environment…
       </p>
     );
-  if (!environmentId && !repository.repo)
-    return (
-      <div className="space-y-3">
-        <p className="text-text-muted text-sm">
-          Add a Git remote to this local repository to configure cloud setup.
-        </p>
-      </div>
-    );
-  const selected = settings.data.selectedEnvironment;
+  const selected = settings.data?.selectedEnvironment;
+  const project = file.data?.project ?? selected?.project ?? { version: 1 };
+  const fromFile = !!file.data?.project;
+  const canEdit = fromFile
+    ? !!local
+    : settings.data
+      ? (selected?.canEdit ?? settings.data.canManageShared)
+      : !!local;
+  const fileKnown = !!file.data || !repository.repo;
+  const sourceLabel = fromFile
+    ? `.deus/environment.json · ${file.data?.branch ?? "current branch"}${local ? " · Local checkout; publish changes through Git." : " · Add this repository to Deus, then open a setup workspace to edit and publish this file."}`
+    : !orgId
+      ? "Local repository file · Publish through Git to share with your team."
+      : "Saved project settings · Shared across future local and cloud workspaces.";
   return (
-    <>
-      {!access && repository.repo && githubRepoSlug(repository.repo) && (
+    <div className="space-y-5">
+      {!access && orgId && !local && (
         <div className="bg-bg-muted flex flex-wrap items-center justify-between gap-3 rounded-lg p-3">
-          <p className="text-text-muted flex-1 text-xs">
+          <p className="text-text-muted text-xs">
             {accessUnknown
-              ? "GitHub access hasn't been confirmed."
-              : "Connect the Deus GitHub App for private repository access."}{" "}
-            You can save setup now.
+              ? "Checking repository access…"
+              : "Connect GitHub to read this repository's environment."}
           </p>
-          <ConnectRepositories orgId={orgId} accountId={accountId} />
+          <ConnectRepositories orgId={orgId} accountId={accountId!} />
         </div>
       )}
-      <CloudSetupEditor
-        orgId={orgId}
-        environmentId={environmentId}
-        repo={repository.repo}
-        setup={selected?.setup ?? []}
-        run={selected?.run ?? ""}
-        canEdit={selected?.canEdit ?? settings.data.canManageShared}
-        onDirtyChange={onDirtyChange}
-        onSaved={(id, scripts) => {
-          queryClient.setQueryData<CloudEnvironmentSettings>(
-            [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, id],
-            (previous) =>
-              previous?.selectedEnvironment
-                ? {
-                    ...previous,
-                    selectedEnvironment: { ...previous.selectedEnvironment, ...scripts },
-                  }
-                : previous
-          );
-          void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
-        }}
-      />
-      <div className="border-border-subtle border-t pt-5">
-        <CloudApplicationSecrets
-          orgId={orgId}
-          environmentId={environmentId}
-          repo={repository.repo ?? undefined}
-          settings={settings.data}
-          onDefaults={onDefaults}
+      {selected && !selected.project && (
+        <p className="text-text-muted text-sm">
+          This environment is configured through the SDK. Its secrets can be managed below.
+        </p>
+      )}
+      {fileKnown && (!selected || !!selected.project || fromFile) && (
+        <ProjectEnvironmentEditor
+          project={project}
+          sourceLabel={sourceLabel}
+          canEdit={canEdit}
+          canExport={!!local && !fromFile && !!orgId}
+          onDirtyChange={onDirtyChange}
+          onSave={async (next, exportFile, signal) => {
+            if ((fromFile || exportFile || !orgId || !repository.repo) && local) {
+              await RepoService.saveEnvironmentFile(local.id, next);
+              if (signal.aborted) return;
+              await file.refetch();
+            } else if (orgId && (repository.repo || environmentId)) {
+              const result = await saveCloudEnvironmentSetup(
+                orgId,
+                environmentId ? { environmentId } : { repo: repository.repo! },
+                next,
+                signal
+              );
+              if (signal.aborted) return;
+              queryClient.setQueryData<CloudEnvironmentSettings>(
+                [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, result.id],
+                (previous) =>
+                  previous?.selectedEnvironment
+                    ? {
+                        ...previous,
+                        selectedEnvironment: { ...previous.selectedEnvironment, project: next },
+                      }
+                    : previous
+              );
+            }
+            await queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
+            await queryClient.invalidateQueries({ queryKey: ["workspaces", "environment"] });
+          }}
         />
+      )}
+      <div className="border-border-subtle border-t pt-5">
+        {orgId && settings.data ? (
+          <CloudApplicationSecrets
+            orgId={orgId}
+            environmentId={environmentId}
+            repo={repository.repo ?? undefined}
+            settings={settings.data}
+            project={project}
+            onDefaults={onDefaults}
+          />
+        ) : (
+          <p className="text-text-muted text-sm">
+            Sign in to manage cloud secrets. Local workspaces use your .env and .env.local files.
+          </p>
+        )}
       </div>
-    </>
+    </div>
   );
 }
 function ConnectRepositories({ orgId, accountId }: { orgId: string; accountId: string }) {

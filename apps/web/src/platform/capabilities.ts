@@ -5,15 +5,15 @@
  * runtime environment. Components check capabilities, not platform identity.
  *
  * WHY capabilities instead of `isElectron` checks:
- *   - Decouples features from platform. Adding WebSocket terminals for web
- *     mode? Flip `nativeTerminal` to `true` here, not in 20 components.
+ *   - Decouples features from platform. Features using the backend WebSocket
+ *     (including terminals) work in every mode with a connected backend.
  *   - Self-documenting. This file is the inventory of what works where.
  *   - Testable. Mock `capabilities` in tests to simulate any platform.
  *   - No more 5 different ways to check platform scattered across the codebase.
  *
  * RULES:
  *   - Name capabilities after the FEATURE, not the platform.
- *     ✅ `nativeTerminal`  ❌ `isElectron`
+ *     ✅ `nativeBrowser`  ❌ `isElectron`
  *   - If a feature works in both modes (with different transports), it's `true`.
  *     File mention works via HTTP in both Electron and web → always `true`.
  *   - If a feature is fundamentally impossible in web (folder picker), it's `false`.
@@ -23,9 +23,6 @@ const isElectron = typeof window !== "undefined" && "electronAPI" in window;
 const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 
 export const capabilities = {
-  /** Native PTY terminal (requires Electron IPC for shell spawning) */
-  nativeTerminal: isElectron,
-
   /** Import cookies from local Chromium profiles into the in-app browser.
    *  Reads the macOS Keychain + macOS profile paths, so it's desktop + macOS
    *  only — the backend returns nothing off Darwin. */

@@ -44,8 +44,12 @@ export type {
 // API types
 export type { ApiError } from "./api";
 
-// Manifest types (shared between frontend and backend)
-export type { NormalizedTask, ManifestResponse, TaskRunResponse } from "./manifest";
+// Project environment types (shared between frontend and backend)
+export type {
+  ProjectTask,
+  ProjectEnvironmentResponse,
+  TaskRunResponse,
+} from "./project-environment";
 
 // Onboarding types (shared between frontend and backend)
 export type { RecentProject } from "./onboarding";

@@ -20,7 +20,7 @@ export const queryKeys = {
     diffFile: (id: string, file: string) => ["workspaces", "diff-file", id, file] as const,
     prStatus: (id: string) => ["workspaces", "pr-status", id] as const,
     systemPrompt: (id: string) => ["workspaces", "system-prompt", id] as const,
-    manifest: (id: string) => ["workspaces", "manifest", id] as const,
+    environment: (id: string) => ["workspaces", "environment", id] as const,
   },
 
   // Sessions
@@ -35,7 +35,7 @@ export const queryKeys = {
   repos: {
     all: ["repos"] as const,
     detail: (id: string) => ["repos", "detail", id] as const,
-    manifest: (id: string) => ["repos", "manifest", id] as const,
+    environment: (id: string) => ["repos", "environment", id] as const,
     prs: (repoId: string) => ["repos", repoId, "prs"] as const,
     branches: (repoId: string) => ["repos", repoId, "branches"] as const,
   },

@@ -261,7 +261,7 @@ export function useGlobalSessionNotifications() {
           }
 
           if (prevSetup === "running" && ws.setup_status === "completed") {
-            queryClient.invalidateQueries({ queryKey: ["workspaces", "manifest", ws.id] });
+            queryClient.invalidateQueries({ queryKey: ["workspaces", "environment", ws.id] });
             if (canNotify && !isWindowFocused()) {
               sendNotification({
                 title: "Setup complete",

@@ -10,9 +10,13 @@ import { sendRequest, sendMutate, sendCommand } from "@/platform/ws";
 import type { Workspace, RepoGroup, DiffStats, FileChange } from "../types";
 import type { WorkspaceStatus } from "@shared/enums";
 import type { PRStatus, GhCliStatus, PRSummary, BranchSummary } from "@/shared/types";
-import type { NormalizedTask, ManifestResponse, TaskRunResponse } from "@shared/types/manifest";
+import type {
+  ProjectTask,
+  ProjectEnvironmentResponse,
+  TaskRunResponse,
+} from "@shared/types/project-environment";
 
-export type { NormalizedTask, ManifestResponse, TaskRunResponse };
+export type { ProjectTask, ProjectEnvironmentResponse, TaskRunResponse };
 
 export const WorkspaceService = {
   /**
@@ -162,10 +166,10 @@ export const WorkspaceService = {
   },
 
   /**
-   * Fetch parsed deus.json manifest + normalized tasks for a workspace
+   * Fetch parsed effective project environment and Run commands for a workspace
    */
-  fetchManifest: async (id: string): Promise<ManifestResponse> => {
-    return sendRequest<ManifestResponse>("workspaceManifest", { workspaceId: id });
+  fetchEnvironment: async (id: string): Promise<ProjectEnvironmentResponse> => {
+    return sendRequest<ProjectEnvironmentResponse>("workspaceEnvironment", { workspaceId: id });
   },
 
   /**

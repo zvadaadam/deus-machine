@@ -26,7 +26,11 @@ export async function watchWorkspace(workspacePath: string): Promise<void> {
   const watcher = chokidar.watch(".", {
     cwd: workspacePath,
     ignored: [
-      /(^|[/\\])\../, // dotfiles/dirs (relative: .git, .env, .context)
+      (entry: string) => {
+        const relative = entry.replaceAll("\\", "/").replace(/^\.\//, "");
+        if (relative === ".deus" || relative === ".deus/environment.json") return false;
+        return /(^|\/)\.[^/]/.test(relative);
+      },
       "**/node_modules/**",
       "**/target/**",
       "**/dist/**",

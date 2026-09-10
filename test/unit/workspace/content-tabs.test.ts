@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach, vi } from "vitest";
 import { anyContentTabVisible, isTabVisible } from "@/app/layouts/content-tabs";
 import type { Settings } from "@shared/types/settings";
 
@@ -7,6 +7,18 @@ const simulatorOn: Settings = {
 };
 
 describe("content tab visibility", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("makes the backend terminal available in a browser, including Run commands", () => {
+    expect(isTabVisible("terminal")).toBe(true);
+  });
+
+  it("hides backend panels for direct cloud chat without a connected backend", () => {
+    vi.stubEnv("VITE_CLOUD_DIRECT", "1");
+    expect(isTabVisible("terminal")).toBe(false);
+    expect(anyContentTabVisible()).toBe(false);
+  });
+
   it("hides the simulator when the backend capability is unavailable", () => {
     expect(isTabVisible("simulator", simulatorOn, { simulatorAvailable: false })).toBe(false);
   });

@@ -8,15 +8,13 @@ This directory contains all test files for the Deus application.
 
 Runs the real Environment settings components through both the desktop backend
 proxy and direct web API against AGNT's authenticated routes and encrypted
-Postgres store. Native sign-in, provider metadata, GitHub discovery and local manifests are fixtures;
-cloud setup/secret writes and ownership checks are real. It covers repository
-navigation, setup save/readback, retained local manifest fields, unsaved-edit guards,
-repository/default secrets, organization/account switching, replacement/deletion,
-mobile overflow and absence of secret values from query/mutation caches. The agent
-setup action is checked through its Local/Cloud request and selected Codex model;
-the harness does not create workspaces or run an agent turn.
-The same secret name is also saved at all four ownership/scope levels, then checked
-across accounts and repositories before removing overrides and defaults.
+Postgres store. Native sign-in, provider metadata and GitHub discovery are fixtures;
+public recipe and secret writes, ownership checks, and local repository files are real.
+It checks file-versus-saved precedence, local/cloud overrides, file publication without
+secrets, malformed-file errors, unsaved-edit guards, all four secret scopes,
+organization/account switching, replacement/deletion, mobile layout, and absence of
+secret values from query/mutation caches. The agent setup action is checked through
+its Local/Cloud request and selected model; this harness does not run an agent turn.
 
 Create and migrate a disposable Postgres database using the linked AGNT checkout,
 then run from the Deus worktree:
@@ -30,7 +28,37 @@ bun test/e2e/environment-secrets.browser.mjs
 The test starts isolated HTTP/Vite servers and removes its database rows and
 temporary session tokens on exit. Screenshots go to `.context/environment-secrets-ui`.
 It does not start or restart the user's Electron app. AGNT also provides an opt-in
-`tests/integration/environment-secrets.vm.ts` test for real E2B process injection.
+`tests/integration/environment-secrets.vm.ts` test for real E2B checkout, preparation,
+secret injection, an HTTP app, pause/resume, and VM cleanup.
+
+### `project-environment.runtime.mjs`
+
+Runs the full app against a disposable local backend database. It saves the recipe
+through Settings, commits it in a temporary Git repository, creates a real worktree,
+verifies dotenv copying and the Setup log, then clicks Run and verifies the real
+terminal process received the local variable. No provider login or inference is needed.
+
+Start the app from this worktree with Node 22 and isolated state:
+
+```bash
+mkdir -p .context/project-environment-app
+DATABASE_PATH="$PWD/.context/project-environment-app/deus.db" \
+DEUS_AAP_PID_JOURNAL="$PWD/.context/project-environment-app/aap-pids.txt" \
+AGNT_API_KEY= DEUS_CLOUD_AGNT_API_KEY= bun run dev:web
+```
+
+Then use the URLs printed by that dev process:
+
+```bash
+DEUS_TEST_BACKEND_URL=http://127.0.0.1:BACKEND_PORT \
+DEUS_TEST_WEB_URL=http://localhost:VITE_PORT \
+bun test/e2e/project-environment.runtime.mjs
+```
+
+The test closes its browser and retains the disposable repository, database and
+screenshots in `.context/project-environment-app` for inspection. Stop that isolated
+dev process after testing to release its terminals. Do not point this harness at the
+user's desktop backend or normal database.
 
 ### `e2e-flow.test.cjs`
 

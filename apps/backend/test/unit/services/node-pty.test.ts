@@ -13,7 +13,7 @@ const {
   mockResizeCloudPty,
   mockKillCloudPty,
 } = vi.hoisted(() => ({
-  mockGetDatabase: vi.fn(() => ({})),
+  mockGetDatabase: vi.fn(() => ({ prepare: () => ({ get: () => undefined }) })),
   mockGetWorkspaceRaw: vi.fn<(...a: unknown[]) => unknown>(),
   mockSpawnPty: vi.fn(() => "local-pty-id"),
   mockWriteToPty: vi.fn(),
@@ -42,6 +42,11 @@ vi.mock("../../../src/services/agent/cloud/driver", () => ({
   killCloudPty: mockKillCloudPty,
 }));
 
+vi.mock("../../../src/services/project-environment.service", () => ({
+  readLocalProjectEnvironment: vi.fn(async () => ({ project: { version: 1 } })),
+  localProjectEnv: vi.fn(() => ({ APP_TEST: "local" })),
+}));
+import { readLocalProjectEnvironment } from "../../../src/services/project-environment.service";
 import { ptyRouter } from "../../../src/services/node/pty";
 
 const base = { id: "t1", command: "bash", args: [] as string[], cols: 80, rows: 24 };
@@ -50,6 +55,19 @@ describe("ptyRouter — terminal node routing", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("open", () => {
+    it("keeps a repair terminal available when project configuration is invalid", async () => {
+      vi.mocked(readLocalProjectEnvironment).mockRejectedValueOnce(
+        new Error("Invalid .deus/environment.json")
+      );
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(ptyRouter.open({ ...base, cwd: "/tmp" })).resolves.toBe("local-pty-id");
+        expect(mockSpawnPty).toHaveBeenCalled();
+        expect(warning).toHaveBeenCalled();
+      } finally {
+        warning.mockRestore();
+      }
+    });
     it("local (no cloudWorkspaceId) → node-pty spawn, returns its id", async () => {
       const out = await ptyRouter.open({ ...base, cwd: "/tmp" });
       expect(mockSpawnPty).toHaveBeenCalledWith({
@@ -59,6 +77,7 @@ describe("ptyRouter — terminal node routing", () => {
         cols: 80,
         rows: 24,
         cwd: "/tmp",
+        env: { APP_TEST: "local" },
       });
       expect(mockOpenCloudPty).not.toHaveBeenCalled();
       expect(out).toBe("local-pty-id");

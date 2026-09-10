@@ -228,8 +228,10 @@ Board `13` includes the cloud autosave warning from
 seconds or until dismissed; it is not a persistent chat component.
 
 Board `56` shows the repository list in `EnvironmentSection.tsx`, with GitHub owner
-avatars and cloud/local availability. `56a` is the repository's cloud setup and
-secrets; `56b` is its local setup editor; `56c` manages secrets across
+avatars and cloud/local availability. `56a` shows shared Setup/Run and public
+variables through `ProjectEnvironmentEditor.tsx`; `56b` shows the same form editing
+`.deus/environment.json` with branch/publication context. Cloud/local is a setup
+workspace destination selector, not a second recipe editor; `56c` manages secrets across
 repositories; `74` is the mobile list; `56e` shows a signed-in account when cloud
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
 to repositories.

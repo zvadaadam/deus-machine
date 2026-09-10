@@ -1,3 +1,4 @@
+import { resolveProjectEnvironment, type ProjectEnvironment } from "@deus-hq/api";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus } from "lucide-react";
@@ -14,12 +15,14 @@ export function CloudApplicationSecrets({
   environmentId,
   repo,
   settings: data,
+  project,
   onDefaults,
 }: {
   orgId: string;
   environmentId: string | null;
   repo?: string;
   settings: CloudEnvironmentSettings;
+  project?: ProjectEnvironment;
   onDefaults: () => void;
 }) {
   const [action, setAction] = useState<SecretAction | null>(null);
@@ -34,7 +37,18 @@ export function CloudApplicationSecrets({
     (secret) =>
       secret.appliesToAll || (environmentId && secret.environmentIds.includes(environmentId))
   );
-  const missing = data.required.filter((item) => !item.source);
+  const resolved = project && resolveProjectEnvironment(project, "cloud");
+  const required = resolved
+    ? resolved.requiredEnv.map((name) => ({
+        name,
+        source: visible.some((secret) => secret.name === name)
+          ? "secret"
+          : resolved.env[name]
+            ? "configuration"
+            : null,
+      }))
+    : data.required;
+  const missing = required.filter((item) => !item.source);
   function readFile(files: FileList | null) {
     if (!files?.length) return;
     setImportError(null);
@@ -66,7 +80,7 @@ export function CloudApplicationSecrets({
   }
   return (
     <div className="space-y-4">
-      {environmentId && data.required.length > 0 && (
+      {isRepository && required.length > 0 && (
         <div className="border-border-subtle space-y-2 border-b pb-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">Required values</p>
@@ -74,7 +88,7 @@ export function CloudApplicationSecrets({
               {missing.length ? `${missing.length} missing` : "All values set"}
             </span>
           </div>
-          {data.required.map((item) => (
+          {required.map((item) => (
             <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
               <span className="font-mono">{item.name}</span>
               {item.source ? (
@@ -97,7 +111,7 @@ export function CloudApplicationSecrets({
         </div>
       )}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">Environment variables</p>
+        <p className="text-sm font-medium">Cloud secrets</p>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" onClick={() => setAction({ type: "add" })}>
             <Plus className="mr-1.5 size-3.5" />

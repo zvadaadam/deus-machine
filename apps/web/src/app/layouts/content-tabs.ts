@@ -36,7 +36,7 @@ export interface ContentTabItem {
 export const CONTENT_TABS: ContentTabItem[] = [
   { id: "changes", label: "Changes", icon: GitBranch },
   { id: "files", label: "Files", icon: FolderOpen },
-  { id: "terminal", label: "Terminal", icon: Terminal, capabilityGate: "nativeTerminal" },
+  { id: "terminal", label: "Terminal", icon: Terminal },
   {
     id: "browser",
     label: "Browser",

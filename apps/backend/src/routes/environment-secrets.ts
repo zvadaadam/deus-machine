@@ -28,6 +28,15 @@ for (const action of ["accessible-repos", "install-url"] as const) {
     )
   );
 }
+app.get(`${prefix}/orgs/:orgId/github/environment`, async (c) =>
+  c.json(
+    await requestCloudEnvironmentSettings(
+      `/orgs/${encodeURIComponent(c.req.param("orgId"))}/github/environment?repository=${encodeURIComponent(c.req.query("repository") ?? "")}`,
+      { signal: c.req.raw.signal },
+      "product"
+    )
+  )
+);
 app.post(`${prefix}/orgs/:orgId/environments`, async (c) =>
   c.json(
     await requestCloudEnvironmentSettings(

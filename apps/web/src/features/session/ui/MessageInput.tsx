@@ -87,8 +87,8 @@ interface MessageInputProps {
   contextUsedPercent?: number;
   /** Whether the session already has messages (gates model-switch behaviour). */
   hasMessages?: boolean;
-  /** Whether a deus.json manifest exists for this workspace. */
-  hasManifest?: boolean;
+  /** Whether this workspace has a configured project environment. */
+  hasEnvironment?: boolean;
   showCompactButton?: boolean;
 
   onSend: (content: string) => void;
@@ -213,7 +213,7 @@ export function MessageInput({
   contextTokenCount = 0,
   contextUsedPercent = 0,
   hasMessages = false,
-  hasManifest = true,
+  hasEnvironment = true,
   showCompactButton = false,
   onSend,
   onCompact,
@@ -359,10 +359,10 @@ export function MessageInput({
     composer.setThinkingLevel(next);
   };
 
-  // "Set up your environment" nudge — visible when no deus.json + no history yet.
+  // "Set up your environment" nudge — visible when no project environment and no history yet.
   const setupLocation =
     workspaceKind === "cloud" || workspaceKind === "local" ? workspaceKind : null;
-  const showSetupNudge = setupLocation !== null && !hasManifest && !hasMessages;
+  const showSetupNudge = setupLocation !== null && !hasEnvironment && !hasMessages;
   const handleSetupEnvironment = () => {
     if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
   };

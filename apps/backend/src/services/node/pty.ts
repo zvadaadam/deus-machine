@@ -12,6 +12,7 @@
  * dispatch until then. Behavior is a byte-identical extraction of the previous
  * command handlers.
  */
+import { localProjectEnv, readLocalProjectEnvironment } from "../project-environment.service";
 import { getDatabase } from "../../lib/database";
 import { getWorkspaceRaw } from "../../db/queries";
 import { spawnPty, writeToPty, resizePty, killPty } from "../pty.service";
@@ -55,6 +56,23 @@ export const ptyRouter = {
       });
       return params.id;
     }
+    const repo = params.cwd
+      ? (getDatabase()
+          .prepare(
+            "SELECT r.git_origin_url FROM workspaces w JOIN repositories r ON r.id = w.repository_id WHERE r.root_path || '/.deus/' || w.slug = ? AND w.kind != 'cloud'"
+          )
+          .get(params.cwd) as { git_origin_url: string | null } | undefined)
+      : undefined;
+    // Interactive terminals must stay usable to repair an invalid recipe. Starting a
+    // configured task validates the recipe separately in the task endpoint.
+    const environment = params.cwd
+      ? await readLocalProjectEnvironment(params.cwd, repo?.git_origin_url).catch(
+          (error: unknown) => {
+            console.warn("[PTY] Project defaults unavailable; opening a repair shell", error);
+            return null;
+          }
+        )
+      : null;
     return spawnPty({
       id: params.id,
       command: params.command,
@@ -62,6 +80,9 @@ export const ptyRouter = {
       cols: params.cols,
       rows: params.rows,
       cwd: params.cwd,
+      env: params.cwd
+        ? localProjectEnv(environment?.project ?? { version: 1 }, params.cwd)
+        : undefined,
     });
   },
 

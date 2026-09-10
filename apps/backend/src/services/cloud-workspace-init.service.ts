@@ -801,6 +801,10 @@ async function provisionInBackground(
     // the inline recipe below, exactly as before.
     const envInfo = await getCloudEnvironmentInfo(originUrl);
     identity.throwIfAborted();
+    if (envInfo.lookupFailed)
+      throw new Error(
+        "Could not load project settings. Try again when the cloud connection is available."
+      );
     let environment: string | ReturnType<typeof Environment.from>;
     let inlineMintStampAtCreate: number | null = null;
     // Named lane: whether the environment-scoped token landed before create —
@@ -837,7 +841,10 @@ async function provisionInBackground(
       // `.simulator()` only ENABLES it — billing starts when a device starts,
       // so the flag is free until the tab is used. Named environments (above)
       // are the agent's own config and are left alone.
-      let recipe = Environment.from("agnt-base").repo(originUrl, branch.source).simulator();
+      let recipe = Environment.from("agnt-base")
+        .project()
+        .repo(originUrl, branch.source)
+        .simulator();
       // Per-repo App token (short-lived, this repo only) rides as a request
       // secret: it drives agnt's git-auth step and NEVER lands in pg — the
       // DO refreshes secrets on every ensure, so each provision gets a

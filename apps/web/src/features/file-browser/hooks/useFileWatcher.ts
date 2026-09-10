@@ -71,6 +71,7 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
       }
 
       queryClient.invalidateQueries({ queryKey: ["files", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.environment(workspaceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffFiles(workspaceId) });
       // Invalidate individual file diffs — prefix match covers all files in the workspace.

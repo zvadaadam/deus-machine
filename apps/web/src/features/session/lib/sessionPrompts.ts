@@ -70,16 +70,14 @@ Never write secret values into committed configuration, scripts, logs or chat. R
 
   return `${workflow}
 
+The public recipe is .deus/environment.json with version: 1, setup and run command strings, optional local/cloud command overrides, env for PUBLIC defaults, requiredEnv for secret NAMES, and tasks as name-to-command strings. Shared scripts apply to local and cloud; add an override only for an actual platform difference. Run must stay in the foreground; cloud starts it after setup, local uses the Run button.
+Read the file in THIS checkout first. If it exists, edit it and use normal Git publication. Never copy another branch's recipe or secret values. Changes to this file affect this checkout; an unpushed edit is not shared.
 ${
   location === "cloud"
-    ? `This workspace runs on AGNT's managed E2B base template. Configure the repository bootstrap; do not build or promote a platform template.
-Use agnt_configure_environment to save verified setup commands, the run command, needed apt packages and requiredEnv names. The run field is a foreground app command (such as bun run dev) that AGNT starts in the background after setup; do not add shell backgrounding. Each setup command runs in its own shell with the repository as its working directory; keep dependent commands together in a script. Preserve unrelated setup entries, their phases, parallel branches and shell boundaries when saving a replacement setup or packages list. Save only after verification and report the tool's result. If the tool is unavailable or fails, explain that setup was not saved.
-Saving affects future cloud workspaces, not the running sandbox. Ask the user to supply missing values in Environment → this repository → Cloud.`
-    : `Configure deus.json in this workspace using the existing manifest when present. Preserve unrelated fields.
-Use version: 1, lifecycle.setup for installation, scripts.run for the development server, requires for tool requirements, and tasks for useful project commands. Mark long-running tasks persistent: true. The env field is only for public configuration.
-Local lifecycle commands must be a single executable command. Put multiline logic, shell chaining and exports in a script file, then point lifecycle.setup at that script. Keep scripts portable for the current machine and the repository's supported platforms.
-Verify the saved commands, then summarize the changes for review. Local setup is versioned with the repository: changes in this workspace must be merged into the branch used for future workspaces. Do not write into another checkout, commit, push or merge automatically.`
-}`;
+    ? "When the file is absent, use agnt_configure_environment with the verified project recipe to save shared defaults. If the tool fails, say the settings were not saved. Do not build a platform template."
+    : "When the file is absent, prepare .deus/environment.json in this checkout and explain that it must be committed and pushed to share it. Local .env and .env.local files remain local; cloud secrets are configured separately in Environment settings."
+}
+Saving does not restart an existing workspace. Test your commands here explicitly and report the result.`;
 }
 
 /**
@@ -87,5 +85,5 @@ Verify the saved commands, then summarize the changes for review. Local setup is
  * @param setupError - The error output from the failed setup command
  */
 export function fixSetupErrorPrompt(setupError: string | null): string {
-  return `The workspace setup script failed.\n\nError: ${setupError ?? "Unknown error"}\n\nPlease look at the deus.json manifest and the setup script, diagnose the issue, fix it, and then I'll retry the setup.`;
+  return `The workspace setup script failed.\n\nError: ${setupError ?? "Unknown error"}\n\nPlease look at the .deus/environment.json recipe and the setup script, diagnose the issue, fix it, and then I'll retry the setup.`;
 }

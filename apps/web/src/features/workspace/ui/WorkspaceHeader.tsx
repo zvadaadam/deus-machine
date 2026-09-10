@@ -31,7 +31,7 @@ import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
-import type { NormalizedTask } from "../api/workspace.service";
+import type { ProjectTask } from "../api/workspace.service";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
@@ -51,8 +51,8 @@ interface WorkspaceHeaderProps {
   onViewSetupLogs?: () => void;
   workspaceStatus?: WorkspaceStatus;
   onStatusChange?: (status: WorkspaceStatus) => void;
-  tasks?: NormalizedTask[];
-  hasManifest?: boolean;
+  tasks?: ProjectTask[];
+  hasEnvironment?: boolean;
   onRunTask?: (taskName: string) => void;
   /** Where the files live — 'cloud' renders the sandbox chip. */
   kind?: WorkspaceKind;
@@ -86,7 +86,7 @@ export function WorkspaceHeader({
   workspaceStatus,
   onStatusChange,
   tasks,
-  hasManifest,
+  hasEnvironment,
   onRunTask,
   kind,
   cloudPresence = "awake",
@@ -332,7 +332,7 @@ export function WorkspaceHeader({
           {onRunTask && (
             <HeaderRunButton
               tasks={tasks ?? []}
-              hasManifest={hasManifest ?? false}
+              hasEnvironment={hasEnvironment ?? false}
               disabled={setupStatus === "running"}
               onRunTask={onRunTask}
               onSetupEnvironment={

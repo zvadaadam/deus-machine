@@ -1,11 +1,11 @@
 /**
- * HeaderRunButton — split button for running manifest tasks from the workspace header.
+ * HeaderRunButton — split button for running project commands from the workspace header.
  *
  * Left side: runs the last-used task (or first task) on click.
  * Right side: dropdown chevron listing all tasks + environment settings.
  *
  * Same split-button pattern as HeaderOpenButton (Open with editor).
- * When no manifest exists, shows a ghost "Set up environment" button.
+ * When no project environment exists, shows a ghost "Set up environment" button.
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -20,28 +20,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
 import { uiActions } from "@/shared/stores/uiStore";
-import { TASK_ICON_MAP } from "@/shared/lib/taskIcons";
 import { useLastRun } from "@/shared/hooks/useLastRun";
-import type { NormalizedTask } from "../api/workspace.service";
+import type { ProjectTask } from "../api/workspace.service";
 
 interface HeaderRunButtonProps {
-  tasks: NormalizedTask[];
-  hasManifest: boolean;
+  tasks: ProjectTask[];
+  hasEnvironment: boolean;
   disabled?: boolean;
   onRunTask: (taskName: string) => void;
-  /** Called when user clicks the ghost icon (no manifest). Sends the local setup workflow to chat. */
+  /** Called when user clicks the ghost icon (no project environment). Sends the local setup workflow to chat. */
   onSetupEnvironment?: () => void;
 }
 
 export function HeaderRunButton({
   tasks,
-  hasManifest,
+  hasEnvironment,
   disabled,
   onRunTask,
   onSetupEnvironment,
 }: HeaderRunButtonProps) {
-  // No manifest — show wrench icon (with setup handler) or fall back to settings
-  if (!hasManifest) {
+  // No project environment — show wrench icon (with setup handler) or fall back to settings
+  if (!hasEnvironment) {
     if (!onSetupEnvironment) return <SettingsButton />;
 
     return (
@@ -79,7 +78,7 @@ function TaskSplitButton({
   disabled,
   onRunTask,
 }: {
-  tasks: NormalizedTask[];
+  tasks: ProjectTask[];
   disabled?: boolean;
   onRunTask: (taskName: string) => void;
 }) {
@@ -91,7 +90,7 @@ function TaskSplitButton({
   // Default task: last-run, or first in the list
   const lastTask = lastTaskName ? (tasks.find((t) => t.name === lastTaskName) ?? null) : null;
   const defaultTask = lastTask ?? tasks[0];
-  const DefaultIcon = TASK_ICON_MAP[defaultTask.icon] ?? Terminal;
+  const DefaultIcon = Terminal;
 
   function handleRunTask(taskName: string) {
     setOpen(false);
@@ -122,9 +121,7 @@ function TaskSplitButton({
     };
   }, []);
 
-  const tooltipText = defaultTask.description
-    ? `${defaultTask.name}: ${defaultTask.description}`
-    : defaultTask.name;
+  const tooltipText = defaultTask.command;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
@@ -181,7 +178,7 @@ function TaskSplitButton({
         onPointerLeave={handleClose}
       >
         {tasks.map((task) => {
-          const Icon = TASK_ICON_MAP[task.icon] ?? Terminal;
+          const Icon = Terminal;
           const isDefault = task.name === defaultTask.name;
 
           return (
@@ -194,9 +191,6 @@ function TaskSplitButton({
               <Icon className="h-3.5 w-3.5 shrink-0" />
               <div className="flex min-w-0 flex-col">
                 <span className={cn("truncate", isDefault && "font-medium")}>{task.name}</span>
-                {task.description && (
-                  <span className="text-text-muted truncate text-[10px]">{task.description}</span>
-                )}
               </div>
               {isDefault && <Check className="text-text-muted ml-auto h-3 w-3 shrink-0" />}
             </DropdownMenuItem>

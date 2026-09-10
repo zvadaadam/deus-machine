@@ -87,7 +87,7 @@ describe("fs-watcher.service", () => {
       const options = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1];
       expect(options.ignored).toEqual(
         expect.arrayContaining([
-          expect.any(RegExp),
+          expect.any(Function),
           "**/node_modules/**",
           "**/target/**",
           "**/dist/**",
@@ -125,38 +125,39 @@ describe("fs-watcher.service", () => {
       await watchWorkspace("/tmp/workspace");
 
       const options = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1];
-      const dotfileRegex = options.ignored.find((p: unknown) => p instanceof RegExp) as RegExp;
+      const ignores = options.ignored.find((p: unknown) => typeof p === "function") as (
+        path: string
+      ) => boolean;
 
       // Normal source files should NOT be ignored
-      expect(dotfileRegex.test("apps/web/src/App.tsx")).toBe(false);
-      expect(dotfileRegex.test("src/index.ts")).toBe(false);
-      expect(dotfileRegex.test("package.json")).toBe(false);
-      expect(dotfileRegex.test("README.md")).toBe(false);
+      expect(ignores("apps/web/src/App.tsx")).toBe(false);
+      expect(ignores("src/index.ts")).toBe(false);
+      expect(ignores("package.json")).toBe(false);
+      expect(ignores("README.md")).toBe(false);
     });
 
     it("the dotfile regex matches dotfiles and dotdirs in relative paths", async () => {
       await watchWorkspace("/tmp/workspace");
 
       const options = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1];
-      const dotfileRegex = options.ignored.find((p: unknown) => p instanceof RegExp) as RegExp;
+      const ignores = options.ignored.find((p: unknown) => typeof p === "function") as (
+        path: string
+      ) => boolean;
 
       // Dotfiles/dirs should be ignored
-      expect(dotfileRegex.test(".git")).toBe(true);
-      expect(dotfileRegex.test(".env")).toBe(true);
-      expect(dotfileRegex.test(".context/reviews")).toBe(true);
-      expect(dotfileRegex.test("src/.hidden")).toBe(true);
+      expect(ignores(".git")).toBe(true);
+      expect(ignores(".env")).toBe(true);
+      expect(ignores(".context/reviews")).toBe(true);
+      expect(ignores("src/.hidden")).toBe(true);
     });
 
-    it("the dotfile regex WOULD match .deus in absolute paths (the bug this fix prevents)", () => {
-      const dotfileRegex = /(^|[/\\])\../;
-
-      // This is why cwd is needed — absolute paths contain .deus
-      expect(dotfileRegex.test("/Users/dev/project/.deus/workspace/src/App.tsx")).toBe(true);
-      expect(dotfileRegex.test("/Users/dev/project/.conductor/ws/src/App.tsx")).toBe(true);
-
-      // But relative paths from inside the workspace are fine
-      expect(dotfileRegex.test("src/App.tsx")).toBe(false);
-      expect(dotfileRegex.test("apps/web/src/App.tsx")).toBe(false);
+    it("watches the environment file without descending into sibling worktrees", async () => {
+      await watchWorkspace("/tmp/workspace");
+      const ignores = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1].ignored[0];
+      expect(ignores(".deus")).toBe(false);
+      expect(ignores(".deus/environment.json")).toBe(false);
+      expect(ignores(".deus/another-workspace")).toBe(true);
+      expect(ignores("src/.deus/environment.json")).toBe(true);
     });
   });
 

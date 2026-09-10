@@ -15,27 +15,17 @@ through the Deus GitHub App, and saved cloud recipes. GitHub owner avatars use a
 folder fallback. Multiple local clones and additional recipes remain distinguishable.
 An unconfirmed GitHub lookup is not presented as missing access.
 
-Open a repository to edit its Cloud or Local setup; breadcrumbs return to the list.
-Cloud setup edits the existing recipe's commands while preserving phases, parallel
-steps and unrelated configuration. Both tabs group Setup and Run above a divider
-and environment variables. Local archive scripts, tasks and requirements remain
-under Advanced setup; workspace status is no longer shown in this settings page.
-Tab, repository and organization navigation warn before discarding unsaved scripts.
-GitHub App access is required for private repositories, not for saving a recipe.
+Open a repository to edit one shared Setup and Run recipe, with optional local/cloud
+command overrides. The effective source is the checkout's `.deus/environment.json`,
+then saved project settings. Secrets remain below the form and retain their existing
+scopes. See [Project environments](project-environments.md) for source selection,
+publication, setup execution and the SDK boundary.
 
-The repository header has one **Set up with agent** action. It uses the selected
-Local/Cloud tab and the model last chosen in the workspace composer. The action
-uses the normal workspace creation and first-message path; Cloud checks the selected
-provider's connected default account. Starting a setup workspace currently requires
-a repository added to Deus on the desktop. GitHub-only rows can save cloud setup and
-secrets, but do not yet have a workspace creation path here.
-
-The setup instructions share one workflow across settings, the workspace header and
-the composer: inspect existing configuration, separate installation from app startup,
-verify setup and app readiness, and report missing secret names. Cloud saves verified
-commands through `agnt_configure_environment` for future sandboxes. Local edits the
-workspace's versioned `deus.json`; those changes must reach the branch used for future
-workspaces. Setup commands requiring shared shell state belong in a script file.
+**Set up with agent** starts a normal workspace with the selected local/cloud target
+and composer model. It currently requires a repository added to Deus. The agent
+edits the repository file when present; otherwise its configuration tool can save
+public commands and required names for future cloud workspaces. That tool cannot
+persist secret values.
 
 Secrets added on a repository page apply to that recipe automatically. Default
 secrets have their own page and cannot be edited accidentally from a repository.
@@ -73,7 +63,7 @@ admins can create that shared record; members can add personal values once it ex
 - Required values are counted as set when the selected recipe has an effective secret
   or a nonempty public configuration value. This does not validate the key with its
   provider or prove that an app builds successfully.
-- Public repository variables remain in committed `deus.json`. Application secrets
+- Public variables live in the selected project recipe. Application secrets
   use AGNT's existing encrypted store and are not copied into that file.
 - New workspace creation receives the verified account ID and resolved recipe ID.
   A cloud account change during preparation stops creation. Refresh uses the
@@ -95,9 +85,8 @@ AGNT owns secret persistence, encryption, scope resolution and sandbox injection
 The existing resolver supplies both readiness metadata and provisioning selection.
 The SDK already offers environment and secret APIs for organization-key clients.
 The dashboard API enforces signed-in human ownership while reusing the same store;
-substituting a privileged SDK key would lose that distinction. AGNT publishes the
-Run field through its API/SDK changeset. No database migration, Agent Server change
-or additional encryption key is needed.
+substituting a privileged SDK key would lose that distinction. Project configuration uses the shared API/SDK schema. Secret persistence needs no
+Agent Server change or additional encryption key.
 
 ## Qualification and rollout
 
