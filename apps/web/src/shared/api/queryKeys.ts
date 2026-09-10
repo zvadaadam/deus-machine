@@ -20,7 +20,7 @@ export const queryKeys = {
     diffFile: (id: string, file: string) => ["workspaces", "diff-file", id, file] as const,
     prStatus: (id: string) => ["workspaces", "pr-status", id] as const,
     systemPrompt: (id: string) => ["workspaces", "system-prompt", id] as const,
-    manifest: (id: string) => ["workspaces", "manifest", id] as const,
+    environment: (id: string) => ["workspaces", "environment", id] as const,
   },
 
   // Sessions
@@ -35,7 +35,7 @@ export const queryKeys = {
   repos: {
     all: ["repos"] as const,
     detail: (id: string) => ["repos", "detail", id] as const,
-    manifest: (id: string) => ["repos", "manifest", id] as const,
+    environment: (id: string) => ["repos", "environment", id] as const,
     prs: (repoId: string) => ["repos", repoId, "prs"] as const,
     branches: (repoId: string) => ["repos", repoId, "branches"] as const,
   },
@@ -68,6 +68,19 @@ export const queryKeys = {
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
     agentAuth: ["settings", "agent-auth"] as const,
+    environments: {
+      all: ["settings", "environment-secrets"] as const,
+      organizations: (accountId: string | null) =>
+        ["settings", "environment-secrets", accountId, "orgs"] as const,
+      detail: (accountId: string | null, orgId: string | null, environmentId: string | null) =>
+        ["settings", "environment-secrets", accountId, orgId, environmentId] as const,
+      repositories: (accountId: string | null, orgId: string | null) =>
+        ["settings", "environment-secrets", accountId, orgId, "github-repos"] as const,
+      repositoryFile: (accountId: string | null, orgId: string | null, repositoryKey: string) =>
+        ["settings", "environment-secrets", accountId, orgId, "file", repositoryKey] as const,
+      installation: (accountId: string, orgId: string) =>
+        ["settings", "environment-secrets", accountId, orgId, "github-install"] as const,
+    },
   },
 
   // Agent Config (scope-aware config management)

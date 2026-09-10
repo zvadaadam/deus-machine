@@ -67,13 +67,13 @@ Settings is the largest district in the file, so it has its own lane rather than
 the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
 (1,440 board + 120 gutter), four baselines:
 
-| Band | y     | Frames                                   |
-| ---- | ----- | ---------------------------------------- |
-| 1    | 6400  | `50`…`58` — shipped sections             |
-| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g`      |
-| 3    | 8800  | `66a` `66b` — settings overlays          |
-| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule |
-| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`       |
+| Band | y     | Frames                                          |
+| ---- | ----- | ----------------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections                    |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i` |
+| 3    | 8800  | `66a` `66b` — settings overlays                 |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule        |
+| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`              |
 
 Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
 board, so nothing unshipped reads as a tenth section. A board that is not built says so on
@@ -151,7 +151,9 @@ Boards `21` and `22` hold the surfaces that only ever appear as one state and so
 components: every content tab's idle state (Files select/scanning/empty, Terminal with no
 tabs, Browser scanning / local-server list / nothing found, the Simulator device well, the
 Apps launcher cards, the Agent config rail), plus the FileViewer, `WorkspaceStatusDashboard`,
-`TaskRow`, the palette's workspace page, the AI-provider popover and the four update states.
+the palette's workspace page, the AI-provider popover and the four update states.
+Board `22` also holds the Run app / environment settings controls and the cloud
+Computer ready row. The retired `TaskRow` editor has been removed.
 
 ## Variables → CSS custom properties
 
@@ -213,6 +215,8 @@ line heights and tracking are the real values; only the outlines differ.
 | `DS/TurnStatsHeader`                                                 | `session/ui/TurnStatsHeader.tsx`                                  |
 | `DS/UserBubble`                                                      | `session/ui/MessageItem.tsx` (`UserMessage`)                      |
 | `DS/Composer`                                                        | `session/ui/MessageInput.tsx` — the glass pill + toolbar          |
+| `DS/HeaderRunButton`                                                 | `features/workspace/ui/HeaderRunButton.tsx`                       |
+| `DS/CloudEnvProgress`                                                | `features/session/ui/CloudEnvProgress.tsx`                        |
 | `DS/DiffFileHeader`                                                  | `features/workspace/ui/ChangesDiffSection.tsx`                    |
 | `DS/DiffLine-Add` / `-Del` / `-Ctx`                                  | the `diffs-theme` block in `global.css`                           |
 | `DS/FileTreeRow`                                                     | `features/workspace/ui/ChangesFilesPanel.tsx`                     |
@@ -228,11 +232,25 @@ Board `13` includes the cloud autosave warning from
 seconds or until dismissed; it is not a persistent chat component.
 
 Board `56` shows the repository list in `EnvironmentSection.tsx`, with GitHub owner
-avatars and cloud/local availability. `56a` is the repository's cloud setup and
-secrets; `56b` is its local setup editor; `56c` manages secrets across
+avatars and cloud/local availability. `56a` shows shared Setup/Run and public
+variables through `ProjectEnvironmentEditor.tsx`; `56b` shows the same form editing
+`.deus/environment.json` with branch/publication context. The repository header includes
+a clickable GitHub URL. Horizontal Local / Cloud tabs sit below it and choose where
+the agent sets up a workspace; both use the same recipe form. The workspace
+header opens its repository directly with its location selected. `56c` manages secrets across
 repositories; `74` is the mobile list; `56e` shows a signed-in account when cloud
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
-to repositories.
+to repositories. `56h` shows the account-switch loading state: repository editing
+waits until the new account's organization context is loaded, preserving navigation.
+`56i` shows the local-file editor scrolled to a cloud settings error: the loaded
+recipe stays editable while cloud secret actions give way to retry.
+Both save actions reveal collapsed sections containing invalid required fields,
+show validation feedback and focus the field before any write.
+
+Board `13` shows the single Set up this project suggestion: only an empty, idle chat
+whose recipe lookup confirms it is unconfigured. Board `22` distinguishes Run app
+(the local recipe's Run command, opened in a terminal) from Computer ready (cloud
+provisioning completed). Cloud app startup remains owned by AGNT.
 
 ### The settings header
 

@@ -83,7 +83,7 @@ export interface WorkspaceWithDetailsRow {
   init_stage: string | null;
   updated_at: string;
 
-  // Setup tracking (deus.json manifest)
+  // Project preparation status
   setup_status: string;
   error_message: string | null;
 

@@ -20,13 +20,8 @@ import {
   getRepositoryById,
   getMaxRepositorySortOrder,
 } from "../db";
-import {
-  readManifest,
-  getNormalizedTasks,
-  writeManifest,
-  detectManifestFromProject,
-} from "../services/manifest.service";
-import { DeusManifestSchema } from "../lib/deus-manifest";
+import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
+import { ProjectEnvironmentSchema } from "@deus-hq/api";
 import { invalidate } from "../services/query-engine";
 import { runGh, parseGitHubRepo } from "../services/gh.service";
 import { broadcast } from "../services/ws.service";
@@ -393,31 +388,23 @@ app.post("/repos/init", async (c) => {
   return c.json({ success: true, path: resolvedPath, githubUrl });
 });
 
-// ─── Manifest Endpoints (per-repo, settings UI) ─────────────
+// ─── Project environment file (per-repo, settings UI) ───────
 
-// Read manifest from repo root
-app.get("/repos/:id/manifest", (c) => {
+// The selected local checkout is the only file source; never borrow another branch's file.
+app.get("/repos/:id/environment-file", async (c) => {
   const repo = requireRepo(c.req.param("id"));
-  const manifest = readManifest(repo.root_path);
-  if (!manifest) return c.json({ manifest: null, tasks: [] });
-  const tasks = getNormalizedTasks(manifest);
-  return c.json({ manifest, tasks });
+  const project = readProjectFile(repo.root_path);
+  const { stdout } = await execFileAsync("git", ["branch", "--show-current"], {
+    cwd: repo.root_path,
+  });
+  return c.json({ project, branch: stdout.trim() || "detached HEAD" });
 });
 
-// Write manifest to repo root
-app.post("/repos/:id/manifest", async (c) => {
+app.post("/repos/:id/environment-file", async (c) => {
   const repo = requireRepo(c.req.param("id"));
-  const manifest = parseBody(DeusManifestSchema, await c.req.json());
-  const success = writeManifest(repo.root_path, manifest);
-  if (!success) return c.json({ error: "Failed to write manifest" }, 500);
+  const project = parseBody(ProjectEnvironmentSchema, await c.req.json());
+  writeProjectFile(repo.root_path, project);
   return c.json({ success: true });
-});
-
-// Auto-detect manifest from project files (package.json, Cargo.toml, etc.)
-app.get("/repos/:id/detect-manifest", (c) => {
-  const repo = requireRepo(c.req.param("id"));
-  const manifest = detectManifestFromProject(repo.root_path, repo.name);
-  return c.json({ manifest });
 });
 
 // ─── PR and Branch List Endpoints ─────────────────────────────

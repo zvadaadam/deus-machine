@@ -181,7 +181,7 @@ describe("shared/events", () => {
       expect(MUTATION_NAMES).toContain("updateWorkspace");
       expect(MUTATION_NAMES).toContain("createSession");
       expect(MUTATION_NAMES).toContain("addRepo");
-      expect(MUTATION_NAMES).toContain("saveRepoManifest");
+      expect(MUTATION_NAMES).toContain("saveRepoEnvironmentFile");
       expect(MUTATION_NAMES).toContain("saveAgentConfig");
       expect(MUTATION_NAMES).toContain("deleteAgentConfig");
       expect(MUTATION_NAMES).toContain("saveSetting");
@@ -234,14 +234,13 @@ describe("shared/events", () => {
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
       expect(REQUEST_RESOURCES).toContain("settings");
       expect(REQUEST_RESOURCES).toContain("repos");
-      expect(REQUEST_RESOURCES).toContain("repoManifest");
-      expect(REQUEST_RESOURCES).toContain("detectManifest");
+      expect(REQUEST_RESOURCES).toContain("repoEnvironmentFile");
       expect(REQUEST_RESOURCES).toContain("agentConfig");
       expect(REQUEST_RESOURCES).toContain("ghStatus");
       expect(REQUEST_RESOURCES).toContain("prStatus");
       expect(REQUEST_RESOURCES).toContain("workspace");
       expect(REQUEST_RESOURCES).toContain("allWorkspaces");
-      expect(REQUEST_RESOURCES).toContain("workspaceManifest");
+      expect(REQUEST_RESOURCES).toContain("workspaceEnvironment");
       expect(REQUEST_RESOURCES).toContain("setupLogs");
       expect(REQUEST_RESOURCES).toContain("diffStats");
       expect(REQUEST_RESOURCES).toContain("diffFiles");
@@ -262,7 +261,7 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("cloudSimExec");
       expect(REQUEST_RESOURCES).toContain("cloudSimulator");
       expect(REQUEST_RESOURCES).toContain("cloudPreview");
-      expect(REQUEST_RESOURCES).toHaveLength(30);
+      expect(REQUEST_RESOURCES).toHaveLength(29);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

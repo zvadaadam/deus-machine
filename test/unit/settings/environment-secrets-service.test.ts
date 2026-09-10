@@ -59,22 +59,25 @@ it("rejects an installation link to a different host", async () => {
   );
 });
 
-it("saves script content unchanged to the platform's setup-only route", async () => {
+it("saves script content unchanged to the platform's project settings route", async () => {
   const fetch = vi.fn(async () => Response.json({ id: "env" }));
   vi.stubGlobal("fetch", fetch);
-  const setup = [
-    { commands: ["export SOME_KEY=value\nbun run prepare"], phase: "pre-clone" as const },
-    { parallel: [["bun install"], ["echo done"]] },
-  ];
+  const project = {
+    version: 1 as const,
+    setup: "export SOME_KEY=value\nbun run prepare",
+    run: "bun run dev",
+    cloud: { run: "bun run web" },
+    env: { PUBLIC_VALUE: "unchanged" },
+  };
   await saveCloudEnvironmentSetup(
     "org",
     { environmentId: "env" },
-    { setup, run: "bun run dev" },
+    project,
     new AbortController().signal
   );
   expect(fetch.mock.calls[0]).toEqual([
     "https://platform.test/dashboard/orgs/org/environment-settings/environments/env",
-    expect.objectContaining({ method: "PUT", body: JSON.stringify({ setup, run: "bun run dev" }) }),
+    expect.objectContaining({ method: "PUT", body: JSON.stringify({ project }) }),
   ]);
 });
 

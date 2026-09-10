@@ -1,35 +1,11 @@
-/**
- * Workspace Initialization Pipeline
- *
- * Orchestrates the multi-step process of creating a workspace:
- *   1. git worktree add (fatal — cleanup on failure)
- *   2. Session creation + state transition to 'ready' (fatal)
- *      → invalidates immediately so frontend renders chat input
- *   3. Dependency installation via lockfile-detected PM (non-fatal, background)
- *   4. Post-create hooks: .env / .env.local copy (non-fatal, background)
- *   5. Git clean: restore tracked files so diff starts at zero (non-fatal, background)
- *
- * Session is created early (stage 2) so the user can start chatting within
- * seconds of workspace creation. Dependencies install in the background.
- *
- * Each step updates the workspace's `init_stage` column in DB and emits
- * a structured stdout line that Electron main process parses and relays as an IPC event:
- *   DEUS_WORKSPACE_PROGRESS:{"workspaceId":"...","step":"...","label":"..."}
- *
- * Design decisions:
- * - Pipeline runs in-process (async), not as spawned child — proper try/catch
- * - Non-fatal steps (deps, hooks) log warnings but don't block workspace creation
- * - Reverse-order cleanup on fatal failure: rm dir → prune worktree → delete branch
- */
-
+/** Create the checkout, prepare its environment, then make the session available. */
 import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
-import { detectInstallCommand } from "../lib/package-manager";
-import { createBackendChildEnv } from "../runtime/child-env";
+import { prepareLocalEnvironment } from "./project-environment.service";
 import { invalidate } from "./query-engine";
 
 const execFileAsync = promisify(execFile);
@@ -44,6 +20,7 @@ export interface InitContext {
   branchName: string;
   worktreeBase: string;
   parentBranch: string;
+  repoOriginUrl?: string | null;
 }
 
 interface InitStage {
@@ -127,48 +104,6 @@ const STAGES: InitStage[] = [
     },
   },
   {
-    name: "session",
-    label: "Preparing workspace...",
-    fatal: true,
-    async run(ctx) {
-      // Create session early so the frontend can render the chat input immediately.
-      // The workspace transitions to 'ready' here; remaining stages (deps, hooks,
-      // git-clean) continue in the background while the user is already chatting.
-      const db = getDatabase();
-      const sessionId = uuidv7();
-
-      db.transaction(() => {
-        db.prepare(
-          "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
-        ).run(sessionId, ctx.workspaceId);
-        db.prepare(
-          "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
-        ).run(sessionId, ctx.workspaceId);
-      })();
-
-      // Push state change immediately so frontend picks up session + ready state
-      invalidate(["workspaces", "stats", "sessions"]);
-    },
-  },
-  {
-    name: "dependencies",
-    label: "Installing dependencies...",
-    fatal: false,
-    async run(ctx) {
-      const pm = detectInstallCommand(ctx.workspacePath);
-      if (!pm) {
-        console.log("[WORKSPACE] No package.json found, skipping dependency install");
-        return;
-      }
-      console.log(`[WORKSPACE] Installing dependencies with ${pm.command}...`);
-      await execFileAsync(pm.command, pm.args, {
-        cwd: ctx.workspacePath,
-        timeout: 120_000, // 2 min max for large installs
-        env: createBackendChildEnv({ CI: "1" }), // Suppress interactive prompts
-      });
-    },
-  },
-  {
     name: "hooks",
     label: "Setting up environment...",
     fatal: false,
@@ -190,33 +125,33 @@ const STAGES: InitStage[] = [
     },
   },
   {
-    name: "git-clean",
-    label: "Verifying workspace...",
+    name: "setup",
+    label: "Running setup…",
     fatal: false,
     async run(ctx) {
-      // After deps install and .env copy, the working directory may have
-      // tracked-file modifications (e.g., lockfile normalization by the
-      // package manager, generated build cache files). Reset tracked files
-      // to match the index so the diff pipeline sees zero changes on a
-      // fresh workspace branched from origin/main.
-      //
-      // Skip if the agent is already working — user may have sent a message
-      // while deps were installing, and git checkout would wipe agent changes.
+      await prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl);
+    },
+  },
+  {
+    name: "session",
+    label: "Preparing workspace...",
+    fatal: true,
+    async run(ctx) {
+      // Setup has finished or reported its error; the agent can now work or repair it.
       const db = getDatabase();
-      const session = db
-        .prepare(
-          "SELECT s.last_user_message_at FROM sessions s JOIN workspaces w ON w.current_session_id = s.id WHERE w.id = ? LIMIT 1"
-        )
-        .get(ctx.workspaceId) as { last_user_message_at: string | null } | undefined;
-      if (session?.last_user_message_at) {
-        console.log("[WORKSPACE] Skipping git-clean: agent already working");
-        return;
-      }
+      const sessionId = uuidv7();
 
-      await execFileAsync("git", ["checkout", "--", "."], {
-        cwd: ctx.workspacePath,
-        timeout: 10_000,
-      });
+      db.transaction(() => {
+        db.prepare(
+          "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
+        ).run(sessionId, ctx.workspaceId);
+        db.prepare(
+          "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
+        ).run(sessionId, ctx.workspaceId);
+      })();
+
+      // Push state change immediately so frontend picks up session + ready state
+      invalidate(["workspaces", "stats", "sessions"]);
     },
   },
 ];
@@ -268,7 +203,7 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     }
   }
 
-  // Mark init pipeline as fully complete (deps, hooks, git-clean all done).
+  // Mark preparation complete. A failed setup remains visible and can be retried.
   // Wrapped in try/catch so a DB lock can't block final progress signaling.
   try {
     updateInitStage(ctx.workspaceId, "done");

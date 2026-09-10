@@ -16,6 +16,7 @@ vi.mock("fs", () => ({
     readdirSync: mockReaddirSync,
     statSync: mockStatSync,
     readFileSync: mockReadFileSync,
+    existsSync: vi.fn(() => false),
   },
   readdirSync: mockReaddirSync,
   statSync: mockStatSync,

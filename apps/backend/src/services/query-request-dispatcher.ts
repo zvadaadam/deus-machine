@@ -47,8 +47,7 @@ export async function runRequest(
     match(resource)
       .with("settings", () => delegateToRoute("GET", "/api/settings"))
       .with("repos", () => delegateToRoute("GET", "/api/repos"))
-      .with("repoManifest", () => repoGet("/manifest"))
-      .with("detectManifest", () => repoGet("/detect-manifest"))
+      .with("repoEnvironmentFile", () => repoGet("/environment-file"))
       .with("agentConfig", () => {
         const section = readStringParam(params, "section") ?? "agents";
         const scope = readStringParam(params, "scope") ?? "global";
@@ -64,7 +63,7 @@ export async function runRequest(
       .with("prStatus", () => wsGet("/pr-status"))
       .with("workspace", () => wsGet())
       .with("allWorkspaces", () => delegateToRoute("GET", "/api/workspaces"))
-      .with("workspaceManifest", () => wsGet("/manifest"))
+      .with("workspaceEnvironment", () => wsGet("/environment"))
       .with("setupLogs", () => wsGet("/setup-logs"))
       .with("diffStats", () => wsGet("/diff-stats"))
       .with("diffFiles", () => wsGet("/diff-files"))

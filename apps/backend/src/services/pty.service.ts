@@ -42,6 +42,7 @@ export function spawnPty(args: {
   cols: number;
   rows: number;
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
 }): string {
   const { id, command, args: cmdArgs, cols, rows, cwd } = args;
 
@@ -54,7 +55,8 @@ export function spawnPty(args: {
     cols,
     rows,
     cwd: cwd || process.env.HOME || "/",
-    env: process.env as Record<string, string>,
+    env:
+      (args.env as Record<string, string> | undefined) ?? (process.env as Record<string, string>),
   });
 
   // Forward PTY output as q:event "pty-data"

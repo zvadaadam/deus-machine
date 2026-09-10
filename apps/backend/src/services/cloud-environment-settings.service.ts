@@ -39,7 +39,7 @@ export async function requestCloudEnvironmentSettings(
           ? "Couldn't load cloud environment settings."
           : "Couldn't update cloud environment settings."
     );
-  return toCamelCaseKeys(data);
+  return toCamelCaseKeys(data, { opaqueKeys: ["project"] });
 }
 
 export async function getCloudSettingsOrganizations(): Promise<CloudSettingsOrganizations> {

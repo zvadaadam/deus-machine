@@ -2,25 +2,19 @@ import { Hono } from "hono";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { spawn, execFile, execSync } from "child_process";
+import { execFile, execSync } from "child_process";
 import { promisify } from "util";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
-import { createBackendChildEnv } from "../runtime/child-env";
 import { withWorkspace, computeWorkspacePath } from "../middleware/workspace-loader";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import { getCloudConfig } from "../services/agent/cloud/config";
 import { parseBody, PatchWorkspaceBody, CreateWorkspaceBody } from "../lib/schemas";
 import { generateUniqueName } from "../services/workspace.service";
 import {
-  readManifestWithFallback,
-  getSetupCommand,
-  getArchiveCommand,
-  getDeusEnv,
-  getNormalizedTasks,
-  runSetupScript,
-  isManifestCommandSafe,
-} from "../services/manifest.service";
+  readWorkspaceEnvironment,
+  prepareLocalEnvironment,
+} from "../services/project-environment.service";
 import { initializeWorkspace } from "../services/workspace-init.service";
 import {
   archiveWorkspace,
@@ -114,43 +108,6 @@ app.patch("/workspaces/:id", async (c) => {
     if (state === "archived") await archiveWorkspace(id);
     else if (state === "ready") await unarchiveWorkspace(id);
     else db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, id);
-
-    if (state === "archived") {
-      // Run archive lifecycle hook (best-effort)
-      try {
-        const ws = getWorkspaceById(db, id);
-        if (ws && ws.root_path) {
-          const wsPath = computeWorkspacePath(ws);
-          const manifest = readManifestWithFallback(wsPath, ws.root_path);
-          const archiveCmd = manifest ? getArchiveCommand(manifest) : null;
-          if (archiveCmd) {
-            if (!isManifestCommandSafe(archiveCmd)) {
-              console.warn(
-                `[MANIFEST] Rejected unsafe archive command for workspace ${id}: ${archiveCmd}`
-              );
-            } else {
-              const archiveEnv = getDeusEnv(manifest!, {
-                id: ws.id,
-                rootPath: ws.root_path,
-                workspacePath: wsPath,
-              });
-              const archiveProc = spawn("sh", ["-c", archiveCmd], {
-                cwd: wsPath,
-                env: createBackendChildEnv(archiveEnv),
-                stdio: "ignore",
-                detached: false,
-              });
-              archiveProc.on("error", (err) => {
-                console.error(`Archive hook error for workspace ${id}:`, err.message);
-              });
-              archiveProc.unref();
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("[WORKSPACE] Archive lifecycle hook failed (continuing):", err);
-      }
-    }
 
     // Unarchive: restore done → in-progress
     if (state === "ready") {
@@ -277,7 +234,7 @@ app.post("/workspaces", async (c) => {
   const workspacePath = path.join(repo.root_path!, ".deus", workspace_name);
 
   // Fire-and-forget: run the init pipeline async (don't await).
-  // Pipeline handles: worktree creation → deps install → .env copy → session creation.
+  // Pipeline handles: checkout → local env files → configured setup → session.
   // Progress events flow: stdout → Electron main process → IPC events → Frontend.
   // On fatal failure: reverse cleanup (rm dir, prune worktree, delete branch).
   initializeWorkspace({
@@ -288,32 +245,18 @@ app.post("/workspaces", async (c) => {
     branchName: placeholderBranchName,
     worktreeBase,
     parentBranch: parent_branch,
-  })
-    .then(() => {
-      // Workspace is ready — check for manifest setup script
-      const manifest = readManifestWithFallback(workspacePath, repo.root_path!);
-      const setupCmd = manifest ? getSetupCommand(manifest) : null;
-      if (setupCmd && manifest) {
-        db.prepare("UPDATE workspaces SET setup_status = 'running' WHERE id = ?").run(workspaceId);
-        const setupEnv = getDeusEnv(manifest, {
-          id: workspaceId,
-          rootPath: repo.root_path!,
-          workspacePath,
-        });
-        runSetupScript(db, workspaceId, setupCmd, setupEnv, workspacePath);
-      }
-    })
-    .catch((err) => {
-      // Belt-and-suspenders: initializeWorkspace handles its own errors,
-      // but if something truly unexpected escapes, don't leave workspace stuck.
-      console.error("[WORKSPACE] Unhandled init pipeline error:", err);
-      try {
-        db.prepare(
-          "UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'"
-        ).run(workspaceId);
-        invalidate(["workspaces", "stats"]);
-      } catch {}
-    });
+    repoOriginUrl: repo.git_origin_url,
+  }).catch((err) => {
+    // Belt-and-suspenders: initializeWorkspace handles its own errors,
+    // but if something truly unexpected escapes, don't leave workspace stuck.
+    console.error("[WORKSPACE] Unhandled init pipeline error:", err);
+    try {
+      db.prepare(
+        "UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'"
+      ).run(workspaceId);
+      invalidate(["workspaces", "stats"]);
+    } catch {}
+  });
 
   const workspace = getWorkspaceForMiddleware(db, workspaceId);
   if (!workspace) throw new NotFoundError("Workspace not found after creation");
@@ -363,56 +306,18 @@ app.post("/workspaces/:id/sessions", (c) => {
   return c.json(session);
 });
 
-// ─── Manifest & Task Endpoints ──────────────────────────────
+// Read the public recipe on the node that owns this workspace.
+app.get("/workspaces/:id/environment", withWorkspace, async (c) =>
+  c.json(await readWorkspaceEnvironment(c.get("workspace"), c.get("workspacePath")))
+);
 
-// Get parsed manifest + normalized tasks for a workspace
-app.get("/workspaces/:id/manifest", withWorkspace, (c) => {
-  const workspace = c.get("workspace");
-  const workspacePath = c.get("workspacePath");
-  if (!workspace.root_path) {
-    return c.json({ manifest: null, tasks: [] });
-  }
-  const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
-  if (!manifest) return c.json({ manifest: null, tasks: [] });
-  const tasks = getNormalizedTasks(manifest);
-  return c.json({ manifest, tasks });
-});
-
-// Retry failed setup
 app.post("/workspaces/:id/retry-setup", withWorkspace, (c) => {
-  const db = getDatabase();
   const workspace = c.get("workspace");
-  const workspacePath = c.get("workspacePath");
-
-  if (workspace.setup_status !== "failed") {
-    throw new ValidationError("Can only retry when setup_status is failed");
-  }
-
-  if (!workspace.root_path) {
-    throw new ValidationError("Repository path not found");
-  }
-
-  // Re-read manifest (AI agent may have fixed it, or it was added to repo root via settings)
-  const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
-  const setupCmd = manifest ? getSetupCommand(manifest) : null;
-  if (!setupCmd || !manifest) {
-    db.prepare(
-      "UPDATE workspaces SET setup_status = 'none', error_message = NULL, updated_at = datetime('now') WHERE id = ?"
-    ).run(workspace.id);
-    return c.json({ setup_status: "none" });
-  }
-
-  db.prepare(
-    "UPDATE workspaces SET setup_status = 'running', error_message = NULL, updated_at = datetime('now') WHERE id = ?"
-  ).run(workspace.id);
-
-  const setupEnv = getDeusEnv(manifest, {
-    id: workspace.id,
-    rootPath: workspace.root_path,
-    workspacePath,
-  });
-  runSetupScript(db, workspace.id, setupCmd, setupEnv, workspacePath);
-
+  if (workspace.kind === "cloud")
+    throw new ValidationError("Prepare the cloud environment in a new workspace.");
+  if (workspace.setup_status !== "failed")
+    throw new ValidationError("Setup is not in a failed state.");
+  void prepareLocalEnvironment(workspace.id, c.get("workspacePath"), workspace.git_origin_url);
   return c.json({ setup_status: "running" });
 });
 
@@ -429,40 +334,16 @@ app.get("/workspaces/:id/setup-logs", withWorkspace, (c) => {
   }
 });
 
-// Run a task — validates task exists, returns info for frontend PTY spawn
-app.post("/workspaces/:id/tasks/:name/run", withWorkspace, (c) => {
+// Resolve on the backend so a stale menu never runs a removed command.
+app.post("/workspaces/:id/tasks/:name/run", withWorkspace, async (c) => {
   const workspace = c.get("workspace");
-  const workspacePath = c.get("workspacePath");
-  const taskName = c.req.param("name");
-
-  if (!workspace.root_path) {
-    throw new ValidationError("Repository path not found");
-  }
-
-  const manifest = readManifestWithFallback(workspacePath, workspace.root_path);
-  if (!manifest) throw new NotFoundError("No deus.json manifest found");
-
-  const tasks = getNormalizedTasks(manifest);
-  const task = tasks.find((t) => t.name === taskName);
-  if (!task) throw new NotFoundError(`Task "${taskName}" not found in manifest`);
-
-  const ptyId = `task-${workspace.id}-${taskName}-${Date.now()}`;
-  const env = {
-    ...(manifest.env ?? {}),
-    ...task.env,
-    DEUS_ROOT_PATH: workspace.root_path,
-    DEUS_WORKSPACE_PATH: workspacePath,
-    DEUS_WORKSPACE_ID: workspace.id,
-  };
-
-  return c.json({
-    ptyId,
-    command: task.command,
-    cwd: workspacePath,
-    env,
-    persistent: task.persistent,
-    mode: task.mode,
-  });
+  const environment = await readWorkspaceEnvironment(workspace, c.get("workspacePath"));
+  const task = environment.tasks.find((task) => task.name === c.req.param("name"));
+  if (!task || !environment.project)
+    throw new NotFoundError("This command is no longer configured.");
+  const quote = (value: string) => "'" + value.replace(/'/g, "'\"'\"'") + "'";
+  // The terminal's owning node supplies its environment, including local dotenv or cloud secrets.
+  return c.json({ command: `/bin/sh -ec ${quote(task.command)}` });
 });
 
 export default app;

@@ -536,13 +536,13 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         const rootPath = requireParam(params, "root_path", "addRepo");
         return delegateToRoute("POST", "/api/repos", { root_path: rootPath });
       })
-      .with("saveRepoManifest", () => {
-        const repoId = requireParam(params, "repoId", "saveRepoManifest");
-        const { repoId: _, ...manifest } = params;
+      .with("saveRepoEnvironmentFile", () => {
+        const repoId = requireParam(params, "repoId", "saveRepoEnvironmentFile");
+        const { project } = params;
         return delegateToRoute(
           "POST",
-          `/api/repos/${encodeURIComponent(repoId)}/manifest`,
-          manifest
+          `/api/repos/${encodeURIComponent(repoId)}/environment-file`,
+          project
         );
       })
       .with("saveAgentConfig", () => {

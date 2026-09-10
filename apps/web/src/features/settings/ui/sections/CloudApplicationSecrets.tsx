@@ -1,25 +1,32 @@
+import {
+  missingEnvironmentVariables,
+  resolveProjectEnvironment,
+  type ProjectEnvironment,
+} from "@deus-hq/api";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { queryKeys } from "@/shared/api/queryKeys";
 import type { CloudEnvironmentSettings } from "@shared/types/environment-secrets";
 import { EnvironmentSecretDialog, type SecretAction } from "./EnvironmentSecretDialog";
 import { ImportEnvironmentSecretsDialog } from "./ImportEnvironmentSecretsDialog";
 import { parseEnvFile, type EnvFileEntry } from "../../lib/parse-env-file";
-
-export const ENVIRONMENT_SECRETS_QUERY_KEY = ["settings", "environment-secrets"] as const;
 
 export function CloudApplicationSecrets({
   orgId,
   environmentId,
   repo,
   settings: data,
+  project,
   onDefaults,
 }: {
   orgId: string;
   environmentId: string | null;
   repo?: string;
   settings: CloudEnvironmentSettings;
+  /** A supplied recipe is authoritative, including an empty requiredEnv list. */
+  project?: ProjectEnvironment;
   onDefaults: () => void;
 }) {
   const [action, setAction] = useState<SecretAction | null>(null);
@@ -34,7 +41,18 @@ export function CloudApplicationSecrets({
     (secret) =>
       secret.appliesToAll || (environmentId && secret.environmentIds.includes(environmentId))
   );
-  const missing = data.required.filter((item) => !item.source);
+  const resolved = project && resolveProjectEnvironment(project, "cloud");
+  const required = resolved
+    ? resolved.requiredEnv.map((name) => ({
+        name,
+        source: visible.some((secret) => secret.name === name)
+          ? "secret"
+          : missingEnvironmentVariables([name], resolved.env).length === 0
+            ? "configuration"
+            : null,
+      }))
+    : data.required;
+  const missing = required.filter((item) => !item.source);
   function readFile(files: FileList | null) {
     if (!files?.length) return;
     setImportError(null);
@@ -62,11 +80,11 @@ export function CloudApplicationSecrets({
   function saved() {
     setAction(null);
     setImportEntries(null);
-    void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all });
   }
   return (
     <div className="space-y-4">
-      {environmentId && data.required.length > 0 && (
+      {isRepository && required.length > 0 && (
         <div className="border-border-subtle space-y-2 border-b pb-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">Required values</p>
@@ -74,7 +92,7 @@ export function CloudApplicationSecrets({
               {missing.length ? `${missing.length} missing` : "All values set"}
             </span>
           </div>
-          {data.required.map((item) => (
+          {required.map((item) => (
             <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
               <span className="font-mono">{item.name}</span>
               {item.source ? (
@@ -97,7 +115,7 @@ export function CloudApplicationSecrets({
         </div>
       )}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">Environment variables</p>
+        <p className="text-sm font-medium">Cloud secrets</p>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" onClick={() => setAction({ type: "add" })}>
             <Plus className="mr-1.5 size-3.5" />

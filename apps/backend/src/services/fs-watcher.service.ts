@@ -6,6 +6,7 @@
  */
 
 import chokidar, { type FSWatcher } from "chokidar";
+import path from "node:path";
 import { broadcast } from "./ws.service";
 
 // Active watchers keyed by workspace path
@@ -20,17 +21,20 @@ function pushEvent(event: string, data: unknown): void {
 export async function watchWorkspace(workspacePath: string): Promise<void> {
   if (watchers.has(workspacePath)) return; // Already watching
 
-  // Use cwd so chokidar tests ignore patterns against RELATIVE paths.
-  // Without this, the dotfile regex matches ".deus" in the absolute workspace
-  // path ({repo}/.deus/{slug}), silently ignoring every file.
+  // cwd makes emitted paths relative; ignore callbacks still receive absolute paths.
   const watcher = chokidar.watch(".", {
     cwd: workspacePath,
     ignored: [
-      /(^|[/\\])\../, // dotfiles/dirs (relative: .git, .env, .context)
-      "**/node_modules/**",
-      "**/target/**",
-      "**/dist/**",
-      "**/build/**",
+      (entry: string) => {
+        const relative = (path.isAbsolute(entry) ? path.relative(workspacePath, entry) : entry)
+          .replaceAll("\\", "/")
+          .replace(/^\.\//, "");
+        if (relative === ".deus" || relative === ".deus/environment.json") return false;
+        return (
+          /(^|\/)\.[^/]/.test(relative) ||
+          /(^|\/)(node_modules|target|dist|build)(\/|$)/.test(relative)
+        );
+      },
     ],
     persistent: true,
     ignoreInitial: true,

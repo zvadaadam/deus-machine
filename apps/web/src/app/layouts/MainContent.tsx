@@ -152,8 +152,7 @@ export function MainContent({
     handleArchive,
     handleRetrySetup,
     handleViewSetupLogs,
-    manifestTasks,
-    hasManifest,
+    environmentTasks,
     handleRunTask,
   } = useWorkspaceActions({
     selectedWorkspace,
@@ -370,8 +369,7 @@ export function MainContent({
               setCreatePRHandler={setCreatePRHandler}
               setSendAgentMessageHandler={setSendAgentMessageHandler}
               isWatched={isWatched}
-              manifestTasks={manifestTasks}
-              hasManifest={hasManifest}
+              environmentTasks={environmentTasks}
               onRunTask={handleRunTask}
               onStatusChange={
                 webDirect
@@ -418,6 +416,7 @@ export function MainContent({
                     <div className="flex h-full min-w-0 flex-col">
                       {/* Title header — workspace name + repo/branch + Open */}
                       <WorkspaceHeader
+                        repositoryId={selectedWorkspace.repository_id}
                         title={selectedWorkspace.title ?? undefined}
                         repositoryName={selectedWorkspace.repo_name}
                         branch={selectedWorkspace.git_branch ?? undefined}
@@ -451,8 +450,7 @@ export function MainContent({
                             : (status) =>
                                 statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
                         }
-                        tasks={manifestTasks}
-                        hasManifest={hasManifest}
+                        tasks={environmentTasks}
                         onRunTask={handleRunTask}
                       />
 

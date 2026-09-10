@@ -20,7 +20,7 @@
  */
 
 import type { SessionStatus } from "@/shared/types";
-import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
@@ -76,7 +76,7 @@ interface MessageInputProps {
   workspacePath?: string | null;
   /** "cloud" disables plan mode — neither cloud lane carries a permission
    *  mode (the sandbox sidecar runs bypass), so the toggle would be a lie. */
-  workspaceKind?: string | null;
+  workspaceKind?: WorkspaceKind | null;
   /** Seed initial model on first mount if the store doesn't have this
    *  session yet. Ignored afterwards. */
   initialModel?: string;
@@ -87,8 +87,8 @@ interface MessageInputProps {
   contextUsedPercent?: number;
   /** Whether the session already has messages (gates model-switch behaviour). */
   hasMessages?: boolean;
-  /** Whether a deus.json manifest exists for this workspace. */
-  hasManifest?: boolean;
+  /** True only after a successful lookup confirms there is no project recipe. */
+  environmentUnconfigured?: boolean;
   showCompactButton?: boolean;
 
   onSend: (content: string) => void;
@@ -213,7 +213,7 @@ export function MessageInput({
   contextTokenCount = 0,
   contextUsedPercent = 0,
   hasMessages = false,
-  hasManifest = true,
+  environmentUnconfigured = false,
   showCompactButton = false,
   onSend,
   onCompact,
@@ -359,10 +359,15 @@ export function MessageInput({
     composer.setThinkingLevel(next);
   };
 
-  // "Set up your environment" nudge — visible when no deus.json + no history yet.
+  // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation =
-    workspaceKind === "cloud" || workspaceKind === "local" ? workspaceKind : null;
-  const showSetupNudge = setupLocation !== null && !hasManifest && !hasMessages;
+    workspaceKind === "cloud" ? "cloud" : workspaceKind === "worktree" ? "local" : null;
+  const showSetupNudge =
+    setupLocation !== null &&
+    environmentUnconfigured &&
+    !hasMessages &&
+    !sending &&
+    (!sessionStatus || !ACTIVE_TURN_STATUSES.includes(sessionStatus));
   const handleSetupEnvironment = () => {
     if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
   };
@@ -392,8 +397,10 @@ export function MessageInput({
               className="text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-bg-muted flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-xs transition-[color,background-color,border-color,scale] duration-200 active:scale-[0.97]"
             >
               <Wrench className="h-3 w-3 shrink-0" />
-              <span>Set up your environment</span>
-              <span className="text-text-disabled">&rarr;</span>
+              <span>Set up this project</span>
+              <span aria-hidden="true" className="text-text-disabled">
+                &rarr;
+              </span>
             </button>
           </motion.div>
         )}

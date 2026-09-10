@@ -1,4 +1,4 @@
-import { toCamelCaseKeys, toSnakeCaseKeys, type SetupStep } from "@deus-hq/api";
+import { toCamelCaseKeys, toSnakeCaseKeys, type ProjectEnvironment } from "@deus-hq/api";
 import type {
   CloudEnvironmentSettings,
   CloudSecretInput,
@@ -53,7 +53,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
             : "Couldn't update cloud environment settings."
     );
   }
-  return toCamelCaseKeys(await response.json());
+  return toCamelCaseKeys(await response.json(), { opaqueKeys: ["project"] });
 }
 
 export const listSecretOrganizations = (signal: AbortSignal) =>
@@ -75,14 +75,14 @@ export async function getEnvironmentInstallUrl(orgId: string, signal: AbortSigna
 export const saveCloudEnvironmentSetup = (
   orgId: string,
   target: { environmentId: string } | { repo: string },
-  scripts: { setup: SetupStep[]; run: string },
+  project: ProjectEnvironment,
   signal: AbortSignal
 ) =>
   request<{ id: string }>(
     `/orgs/${encodeURIComponent(orgId)}/environments${"environmentId" in target ? `/${encodeURIComponent(target.environmentId)}` : ""}`,
     {
       method: "environmentId" in target ? "PUT" : "POST",
-      body: JSON.stringify({ ...scripts, ...("repo" in target ? { repo: target.repo } : {}) }),
+      body: JSON.stringify({ project, ...("repo" in target ? { repo: target.repo } : {}) }),
       signal,
     }
   );
@@ -123,3 +123,13 @@ export const importEnvironmentSecrets = (
     body: JSON.stringify(toSnakeCaseKeys({ ...scope, secrets })),
     signal,
   });
+
+export const getRepositoryEnvironmentFile = (
+  orgId: string,
+  repository: string,
+  signal: AbortSignal
+) =>
+  request<{ project: ProjectEnvironment | null; branch: string }>(
+    `/orgs/${encodeURIComponent(orgId)}/github/environment?repository=${encodeURIComponent(repository)}`,
+    { signal }
+  );

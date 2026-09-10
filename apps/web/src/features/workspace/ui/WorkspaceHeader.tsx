@@ -31,15 +31,17 @@ import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
-import type { NormalizedTask } from "../api/workspace.service";
+import type { ProjectTask } from "../api/workspace.service";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 import { useLastOpenInApp } from "@/shared/hooks/useLastOpenInApp";
-import { fixSetupErrorPrompt, setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
+import { fixSetupErrorPrompt } from "@/features/session/lib/sessionPrompts";
+import { uiActions } from "@/shared/stores/uiStore";
 
 interface WorkspaceHeaderProps {
+  repositoryId: string;
   title?: string;
   repositoryName?: string;
   branch?: string;
@@ -51,8 +53,7 @@ interface WorkspaceHeaderProps {
   onViewSetupLogs?: () => void;
   workspaceStatus?: WorkspaceStatus;
   onStatusChange?: (status: WorkspaceStatus) => void;
-  tasks?: NormalizedTask[];
-  hasManifest?: boolean;
+  tasks?: ProjectTask[];
   onRunTask?: (taskName: string) => void;
   /** Where the files live — 'cloud' renders the sandbox chip. */
   kind?: WorkspaceKind;
@@ -74,6 +75,7 @@ interface WorkspaceHeaderProps {
  * PR actions have moved to the right panel's ContentPanelHeader.
  */
 export function WorkspaceHeader({
+  repositoryId,
   title,
   repositoryName,
   branch,
@@ -86,7 +88,6 @@ export function WorkspaceHeader({
   workspaceStatus,
   onStatusChange,
   tasks,
-  hasManifest,
   onRunTask,
   kind,
   cloudPresence = "awake",
@@ -332,16 +333,13 @@ export function WorkspaceHeader({
           {onRunTask && (
             <HeaderRunButton
               tasks={tasks ?? []}
-              hasManifest={hasManifest ?? false}
               disabled={setupStatus === "running"}
               onRunTask={onRunTask}
-              onSetupEnvironment={
-                onSendAgentMessage
-                  ? () =>
-                      onSendAgentMessage(
-                        setupEnvironmentPrompt(kind === "cloud" ? "cloud" : "local")
-                      )
-                  : undefined
+              onOpenSettings={() =>
+                uiActions.openEnvironmentSettings(
+                  repositoryId,
+                  kind === "cloud" ? "cloud" : "local"
+                )
               }
             />
           )}

@@ -1,410 +1,271 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { Writable } from "node:stream";
+import Database from "better-sqlite3";
+import type { ProjectEnvironment } from "@deus-hq/api";
 
-// ─── Hoisted mocks (vi.mock factories run before imports) ─────────
-
-const { mockStmt, mockDb, mockExecFileAsync, mockFs } = vi.hoisted(() => {
-  const mockStmt = {
-    run: vi.fn<(...args: any[]) => any>(() => ({ changes: 1 })),
-    get: vi.fn<(...args: any[]) => any>(),
-    all: vi.fn<(...args: any[]) => any>(() => []),
-  };
-  const mockDb = {
-    prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
-    transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
-  };
-  const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
-    Promise.resolve({ stdout: "", stderr: "" })
-  );
-  const mockFs = {
-    existsSync: vi.fn<(...args: any[]) => any>(() => false),
-    rmSync: vi.fn<(...args: any[]) => any>(),
-    copyFileSync: vi.fn<(...args: any[]) => any>(),
-  };
-  return { mockStmt, mockDb, mockExecFileAsync, mockFs };
-});
-
-vi.mock("../../../src/lib/database", () => ({
-  getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
+const mocks = vi.hoisted(() => ({
+  db: undefined as Database.Database | undefined,
+  cloud: vi.fn(),
+  saved: vi.fn(),
 }));
-
-vi.mock("child_process", () => ({
-  execFile: vi.fn<(...args: any[]) => any>(),
+vi.mock("../../../src/lib/database", () => ({ getDatabase: () => mocks.db }));
+vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
+vi.mock("../../../src/services/agent/cloud/config", () => ({ getCloudConfig: mocks.cloud }));
+vi.mock("../../../src/services/cloud-environment.service", () => ({
+  getCloudEnvironmentInfo: mocks.saved,
 }));
-
-vi.mock("util", () => ({
-  promisify: () => mockExecFileAsync,
-}));
-
-vi.mock("@shared/lib/uuid", () => ({
-  uuidv7: vi.fn<(...args: any[]) => any>(() => "test-session-uuid"),
-}));
-
-vi.mock("fs", () => ({
-  default: mockFs,
-  ...mockFs,
-}));
-
-vi.mock("../../../src/services/query-engine", () => ({
-  invalidate: vi.fn<(...args: any[]) => any>(),
-}));
-
+import { initializeWorkspace } from "../../../src/services/workspace-init.service";
 import {
-  initializeWorkspace,
-  type InitContext,
-} from "../../../src/services/workspace-init.service";
-import { detectInstallCommand, detectPackageManager } from "../../../src/lib/package-manager";
+  readLocalProjectEnvironment,
+  prepareLocalEnvironment,
+  writeProjectFile,
+  readProjectFile,
+  localProjectEnv,
+  projectEnvironmentResponse,
+  runSetupCommand,
+} from "../../../src/services/project-environment.service";
 
-// ─── Helpers ──────────────────────────────────────────────────────
-
-function createInitContext(overrides: Partial<InitContext> = {}): InitContext {
-  return {
-    workspaceId: "ws-001",
-    repositoryId: "repo-001",
-    repoRootPath: "/repos/my-project",
-    workspacePath: "/repos/my-project/.deus/europa",
-    branchName: "zvada/europa",
-    worktreeBase: "origin/main",
+let root: string;
+const git = (...args: string[]) =>
+  execFileSync("git", args, { cwd: root, stdio: "pipe" }).toString().trim();
+const workspaceId = "environment-test";
+function project(recipe: ProjectEnvironment) {
+  writeProjectFile(root, recipe);
+}
+function row() {
+  return mocks.db!.prepare("SELECT * FROM workspaces WHERE id = ?").get(workspaceId) as Record<
+    string,
+    unknown
+  >;
+}
+async function initialize() {
+  git("add", ".");
+  git(
+    "-c",
+    "user.name=Environment Test",
+    "-c",
+    "user.email=test@example.test",
+    "commit",
+    "-qm",
+    "fixture"
+  );
+  const directory = path.join(root, ".deus", "workspace");
+  await initializeWorkspace({
+    workspaceId,
+    repositoryId: "repo",
+    repoRootPath: root,
+    workspacePath: directory,
+    branchName: "test-workspace",
+    worktreeBase: "main",
     parentBranch: "main",
-    ...overrides,
-  };
-}
-
-/** Capture stdout writes for verifying DEUS_WORKSPACE_PROGRESS emissions */
-function captureStdout(): string[] {
-  const lines: string[] = [];
-  vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-    lines.push(String(chunk));
-    return true;
+    repoOriginUrl: "https://github.com/test/app",
   });
-  return lines;
+  return directory;
 }
-
 beforeEach(() => {
-  vi.clearAllMocks();
-  vi.restoreAllMocks();
-  mockDb.prepare.mockReturnValue(mockStmt);
-  mockDb.transaction.mockImplementation((fn: Function) => fn);
-  mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
-  mockFs.existsSync.mockReturnValue(false);
+  fs.mkdirSync(".context", { recursive: true });
+  root = fs.mkdtempSync(path.resolve(".context/environment-test-"));
+  git("init", "-b", "main");
+  fs.writeFileSync(path.join(root, "tracked.txt"), "original\n");
+  fs.writeFileSync(
+    path.join(root, ".gitignore"),
+    ".env\n.env.local\n.deus/*\n!.deus/environment.json\n"
+  );
+  mocks.cloud.mockReturnValue(null);
+  mocks.saved.mockReset();
+  mocks.db = new Database(":memory:");
+  mocks.db.exec(
+    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, init_stage TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
+  );
+  mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
+});
+afterEach(() => {
+  mocks.db?.close();
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-// ─── detectPackageManager ─────────────────────────────────────────
-
-describe("detectPackageManager", () => {
-  it("returns null when only a lockfile exists without package.json", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("bun.lock"));
-    expect(detectPackageManager("/workspace")).toBeNull();
-  });
-
-  it("returns null when no package.json exists", () => {
-    mockFs.existsSync.mockReturnValue(false);
-    expect(detectPackageManager("/workspace")).toBeNull();
-  });
-});
-
-// ─── detectInstallCommand ─────────────────────────────────────────
-
-describe("detectInstallCommand", () => {
-  it.each([
-    ["bun.lock", { command: "bun", args: ["install", "--frozen-lockfile"] }],
-    ["bun.lockb", { command: "bun", args: ["install", "--frozen-lockfile"] }],
-    ["yarn.lock", { command: "yarn", args: ["install", "--frozen-lockfile"] }],
-    ["pnpm-lock.yaml", { command: "pnpm", args: ["install", "--frozen-lockfile"] }],
-    ["package-lock.json", { command: "npm", args: ["ci"] }],
-  ] as const)("returns correct command for %s", (lockfile, expected) => {
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      return s.endsWith(lockfile) || s.endsWith("package.json");
+describe("local project environment journey", () => {
+  it("checks out a real branch, copies local secrets before setup, runs one local script and preserves tracked changes", async () => {
+    project({
+      version: 1,
+      setup: "exit 99",
+      local: {
+        setup: 'printf "%s" "$APP_SECRET" > proof.txt\nprintf "setup edit\\n" >> tracked.txt',
+      },
+      requiredEnv: ["APP_SECRET"],
     });
-    expect(detectInstallCommand("/workspace")).toEqual(expected);
-  });
-
-  it("returns npm install for package.json without lockfile", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("package.json"));
-    expect(detectInstallCommand("/workspace")).toEqual({ command: "npm", args: ["install"] });
-  });
-
-  it("returns null when no package.json exists", () => {
-    mockFs.existsSync.mockReturnValue(false);
-    expect(detectInstallCommand("/workspace")).toBeNull();
-  });
-
-  it("returns null when only a lockfile exists without package.json", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => String(p).endsWith("bun.lock"));
-    expect(detectInstallCommand("/workspace")).toBeNull();
-  });
-
-  it("prioritizes bun over yarn when both lockfiles exist", () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      return s.endsWith("bun.lock") || s.endsWith("yarn.lock") || s.endsWith("package.json");
-    });
-    expect(detectInstallCommand("/workspace")!.command).toBe("bun");
-  });
-});
-
-// ─── initializeWorkspace — happy path ─────────────────────────────
-
-describe("initializeWorkspace", () => {
-  it("runs all 4 stages in order", async () => {
-    mockFs.existsSync.mockReturnValue(false);
-
-    const ctx = createInitContext();
-    await initializeWorkspace(ctx);
-
-    // Worktree stage: git worktree add
-    expect(mockExecFileAsync).toHaveBeenCalledWith(
-      "git",
-      ["worktree", "add", "-b", "zvada/europa", ctx.workspacePath, "origin/main"],
-      expect.objectContaining({ cwd: ctx.repoRootPath })
+    fs.writeFileSync(path.join(root, ".env"), "APP_SECRET=local-test-value\n");
+    const directory = await initialize();
+    expect(row()).toMatchObject({ state: "ready", setup_status: "completed", init_stage: "done" });
+    expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("local-test-value");
+    expect(fs.readFileSync(path.join(directory, "tracked.txt"), "utf8")).toBe(
+      "original\nsetup edit\n"
     );
-
-    // Session stage: INSERT session + UPDATE workspace to ready
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
-    expect(prepareCalls.some((q: string) => q.includes("INSERT INTO sessions"))).toBe(true);
-    expect(prepareCalls.some((q: string) => q.includes("state = 'ready'"))).toBe(true);
+    expect(git("status", "--short")).toBe("");
+    expect((await readLocalProjectEnvironment(directory)).source).toBe("repository");
   });
-
-  it("emits DEUS_WORKSPACE_PROGRESS for each stage", async () => {
-    mockFs.existsSync.mockReturnValue(false);
-    const lines = captureStdout();
-
-    await initializeWorkspace(createInitContext());
-
-    const progressLines = lines.filter((l) => l.startsWith("DEUS_WORKSPACE_PROGRESS:"));
-    // worktree, session, dependencies, hooks, git-clean, done = 6 progress lines
-    expect(progressLines.length).toBeGreaterThanOrEqual(6);
-
-    const payloads = progressLines.map((l) =>
-      JSON.parse(l.replace("DEUS_WORKSPACE_PROGRESS:", "").trim())
-    );
-    const steps = payloads.map((p: { step: string }) => p.step);
-    expect(steps).toContain("worktree");
-    expect(steps).toContain("dependencies");
-    expect(steps).toContain("hooks");
-    expect(steps).toContain("session");
-    expect(steps).toContain("done");
-  });
-
-  it("updates init_stage in DB for each stage", async () => {
-    mockFs.existsSync.mockReturnValue(false);
-
-    await initializeWorkspace(createInitContext());
-
-    const initStageUpdates = mockDb.prepare.mock.calls
-      .filter((c: string[]) => c[0].includes("init_stage = ?"))
-      .map((c: string[]) => c[0]);
-
-    // Should update init_stage for worktree, session, dependencies, hooks, git-clean, done = 6
-    expect(initStageUpdates.length).toBeGreaterThanOrEqual(6);
-  });
-
-  it("uses correct worktreeBase for branching", async () => {
-    mockFs.existsSync.mockReturnValue(false);
-    const ctx = createInitContext({ worktreeBase: "origin/develop" });
-
-    await initializeWorkspace(ctx);
-
-    expect(mockExecFileAsync).toHaveBeenCalledWith(
-      "git",
-      expect.arrayContaining(["origin/develop"]),
-      expect.any(Object)
-    );
-  });
-
-  // ─── Non-fatal stage failure ──────────────────────────────────
-
-  it("workspace becomes ready even when dependencies stage fails", async () => {
-    mockExecFileAsync
-      .mockResolvedValueOnce({ stdout: "", stderr: "" }) // worktree succeeds
-      .mockRejectedValueOnce(new Error("bun install failed")); // deps fails
-
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      return s.endsWith("bun.lock") || s.endsWith("package.json");
+  it("uses saved defaults only when this checkout has no file, never another branch's file", async () => {
+    const directory = await initialize();
+    project({ version: 1, setup: "exit 89" }); // Main checkout edited after the workspace branched.
+    mocks.cloud.mockReturnValue({});
+    mocks.saved.mockResolvedValue({
+      configured: true,
+      project: { version: 1, setup: "printf saved > saved.txt" },
     });
-
-    await initializeWorkspace(createInitContext());
-
-    // Should still reach session stage → workspace becomes ready
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
-    expect(prepareCalls.some((q: string) => q.includes("state = 'ready'"))).toBe(true);
-  });
-
-  it("continues when hooks stage fails (non-fatal)", async () => {
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.copyFileSync.mockImplementation(() => {
-      throw new Error("permission denied");
-    });
-
-    await initializeWorkspace(createInitContext());
-
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
-    expect(prepareCalls.some((q: string) => q.includes("state = 'ready'"))).toBe(true);
-  });
-
-  // ─── Fatal stage failure ──────────────────────────────────────
-
-  it("sets state to error when worktree stage fails", async () => {
-    mockExecFileAsync.mockRejectedValueOnce(new Error("worktree already exists"));
-
-    await initializeWorkspace(createInitContext());
-
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
+    await prepareLocalEnvironment(workspaceId, directory, "https://github.com/test/app");
+    expect(fs.readFileSync(path.join(directory, "saved.txt"), "utf8")).toBe("saved");
+    writeProjectFile(directory, { version: 1 });
     expect(
-      prepareCalls.some(
-        (q: string) =>
-          q.includes("state = 'error'") && q.includes("init_stage") && q.includes("error_message")
-      )
-    ).toBe(true);
-
-    // init_stage should be the stage name, error_message should be the error text
-    // The error UPDATE call has 3 args: (init_stage, error_message, workspaceId)
-    const runCalls = mockStmt.run.mock.calls;
-    const errorCall = runCalls.find((c: unknown[]) => c.length === 3 && c[0] === "worktree");
-    expect(errorCall).toBeTruthy();
-    expect(errorCall![0]).toBe("worktree");
-    expect(errorCall![1]).toBe("worktree already exists");
-    expect(errorCall![2]).toBe("ws-001");
+      (await readLocalProjectEnvironment(directory, "https://github.com/test/app")).project
+    ).toEqual({ version: 1 });
   });
-
-  it("does not reach session stage when worktree fails", async () => {
-    mockExecFileAsync.mockRejectedValueOnce(new Error("worktree failed"));
-
-    await initializeWorkspace(createInitContext());
-
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
-    expect(prepareCalls.some((q: string) => q.includes("INSERT INTO sessions"))).toBe(false);
-    expect(prepareCalls.some((q: string) => q.includes("state = 'ready'"))).toBe(false);
+  it("reports invalid files, allows repair and an explicit retry, and never falls back on an error", async () => {
+    fs.mkdirSync(path.join(root, ".deus"));
+    fs.writeFileSync(path.join(root, ".deus/environment.json"), "broken");
+    const directory = await initialize();
+    expect(row()).toMatchObject({ state: "ready", setup_status: "failed" });
+    expect(row().error_message).toContain("invalid JSON");
+    expect(mocks.saved).not.toHaveBeenCalled();
+    writeProjectFile(directory, { version: 1, setup: "printf repaired > proof.txt" });
+    await prepareLocalEnvironment(workspaceId, directory);
+    expect(row().setup_status).toBe("completed");
+    expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("repaired");
   });
-
-  it("emits error progress when fatal stage fails", async () => {
-    mockExecFileAsync.mockRejectedValueOnce(new Error("git error"));
-    const lines = captureStdout();
-
-    await initializeWorkspace(createInitContext());
-
-    const progressLines = lines.filter((l) => l.startsWith("DEUS_WORKSPACE_PROGRESS:"));
-    const payloads = progressLines.map((l) =>
-      JSON.parse(l.replace("DEUS_WORKSPACE_PROGRESS:", "").trim())
+  it("reports a missing checkout without falling back or recreating it", async () => {
+    mocks.cloud.mockReturnValue({});
+    fs.rmSync(root, { recursive: true });
+    await expect(readLocalProjectEnvironment(root, "https://github.com/test/app")).rejects.toThrow(
+      "Local repository folder not found"
     );
-    expect(payloads.some((p: { step: string }) => p.step === "error")).toBe(true);
+    expect(mocks.saved).not.toHaveBeenCalled();
+    expect(() => project({ version: 1 })).toThrow("Local repository folder not found");
+    expect(fs.existsSync(root)).toBe(false);
   });
-
-  // ─── Dependency installation ──────────────────────────────────
-
-  it("installs dependencies when bun.lock exists in worktree", async () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      return s.endsWith("bun.lock") || s.endsWith("package.json");
+  it("fails on unavailable saved settings and missing required names without exposing values", async () => {
+    mocks.cloud.mockReturnValue({});
+    mocks.saved.mockResolvedValue({ configured: false, lookupFailed: true });
+    const directory = await initialize();
+    expect(row().setup_status).toBe("failed");
+    expect(row().error_message).toContain("cloud connection");
+    writeProjectFile(directory, {
+      version: 1,
+      requiredEnv: ["MISSING_TEST_KEY"],
+      env: { APP_SECRET: "never-print-me" },
     });
-
-    await initializeWorkspace(createInitContext());
-
-    const bunCall = mockExecFileAsync.mock.calls.find(
-      (c: unknown[]) => c[0] === "bun" && (c[1] as string[])?.includes("install")
-    );
-    expect(bunCall).toBeTruthy();
-    expect(bunCall![1]).toEqual(["install", "--frozen-lockfile"]);
+    await prepareLocalEnvironment(workspaceId, directory);
+    expect(row().error_message).toContain("MISSING_TEST_KEY");
+    expect(JSON.stringify(row())).not.toContain("never-print-me");
   });
-
-  it("sets CI=1 during dependency installation", async () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      return s.endsWith("bun.lock") || s.endsWith("package.json");
+  it("runs multiline shell scripts with shared state and stops on a failing command", async () => {
+    project({
+      version: 1,
+      setup: "mkdir nested\ncd nested\nprintf done > proof.txt\nfalse\nprintf bad > unexpected.txt",
     });
-
-    await initializeWorkspace(createInitContext());
-
-    const bunCall = mockExecFileAsync.mock.calls.find(
-      (c: unknown[]) => c[0] === "bun" && (c[1] as string[])?.includes("install")
-    );
-    expect((bunCall![2] as { env: Record<string, string> }).env.CI).toBe("1");
+    const directory = await initialize();
+    expect(row().setup_status).toBe("failed");
+    expect(fs.readFileSync(path.join(directory, "nested/proof.txt"), "utf8")).toBe("done");
+    expect(fs.existsSync(path.join(directory, "nested/unexpected.txt"))).toBe(false);
   });
-
-  // ─── .env copy ────────────────────────────────────────────────
-
-  it("copies .env from repo root to worktree when it exists", async () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      if (s === "/repos/my-project/.env") return true;
-      if (s === "/repos/my-project/.deus/europa/.env") return false;
-      return false;
+  it("stops the setup shell and its descendant when the log stream fails", async () => {
+    let shellPid: number | undefined;
+    let childPid: number | undefined;
+    let output = "";
+    const log = new Writable({
+      write(chunk, _encoding, callback) {
+        output += chunk.toString();
+        if (!output.includes("\n")) return callback();
+        [shellPid, childPid] = output.trim().split(" ").map(Number);
+        callback(new Error("setup log failed"));
+      },
     });
-
-    await initializeWorkspace(createInitContext());
-
-    expect(mockFs.copyFileSync).toHaveBeenCalledWith(
-      "/repos/my-project/.env",
-      "/repos/my-project/.deus/europa/.env"
+    vi.spyOn(fs, "createWriteStream").mockReturnValue(log as fs.WriteStream);
+    const running = (pid: number) => {
+      try {
+        const state = execFileSync("ps", ["-o", "stat=", "-p", String(pid)], {
+          encoding: "utf8",
+        }).trim();
+        return state !== "" && !state.startsWith("Z");
+      } catch (error) {
+        if ((error as { status?: number }).status === 1) return false;
+        throw error;
+      }
+    };
+    const stop = (pid: number | undefined) => {
+      if (!pid || !running(pid)) return;
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    };
+    try {
+      await expect(
+        runSetupCommand(
+          workspaceId,
+          'sleep 30 &\nprintf "%s %s\\n" "$$" "$!"\nwait',
+          root,
+          process.env
+        )
+      ).rejects.toThrow("setup log failed");
+      expect(shellPid).toBeGreaterThan(1);
+      expect(childPid).toBeGreaterThan(1);
+      await vi.waitFor(() => expect(running(childPid!)).toBe(false), { timeout: 1000 });
+      expect(running(shellPid!)).toBe(false);
+    } finally {
+      stop(childPid);
+      stop(shellPid);
+    }
+  });
+  it("makes a saved recipe publishable while retaining ignored workspace data", () => {
+    fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");
+    project({ version: 1, setup: "echo setup" });
+    fs.mkdirSync(path.join(root, ".deus/other-workspace"));
+    fs.writeFileSync(path.join(root, ".deus/other-workspace/private"), "private");
+    const files = git("ls-files", "--others", "--exclude-standard");
+    expect(files).toContain(".deus/environment.json");
+    expect(files).not.toContain("other-workspace");
+  });
+  it("rejects symlinks when reading or saving repository configuration", () => {
+    const outside = path.join(root, "outside.json");
+    fs.writeFileSync(outside, '{"version":1}');
+    fs.mkdirSync(path.join(root, ".deus"));
+    fs.symlinkSync(outside, path.join(root, ".deus/environment.json"));
+    expect(() => readProjectFile(root)).toThrow("symbolic link");
+    expect(() => project({ version: 1, setup: "echo wrong" })).toThrow("symbolic link");
+    expect(fs.readFileSync(outside, "utf8")).toBe('{"version":1}');
+  });
+  it("merges public defaults with local dotenv for setup and terminal processes without changing parent env", () => {
+    fs.writeFileSync(path.join(root, ".env"), "APP_LOCAL_TEST=dotenv\n");
+    const env = localProjectEnv(
+      {
+        version: 1,
+        env: { APP_LOCAL_TEST: "public", COMMON_TEST: "base" },
+        local: { env: { COMMON_TEST: "local" } },
+      },
+      root
     );
+    expect(env).toMatchObject({ APP_LOCAL_TEST: "dotenv", COMMON_TEST: "local" });
+    expect(process.env.APP_LOCAL_TEST).toBeUndefined();
   });
+});
 
-  it("skips .env copy when worktree already has one", async () => {
-    mockFs.existsSync.mockImplementation((p: unknown) => {
-      const s = String(p);
-      if (s === "/repos/my-project/.env") return true;
-      if (s === "/repos/my-project/.deus/europa/.env") return true;
-      return false;
-    });
-
-    await initializeWorkspace(createInitContext());
-
-    expect(mockFs.copyFileSync).not.toHaveBeenCalled();
-  });
-
-  // ─── Session creation ─────────────────────────────────────────
-
-  it("creates session with idle status on success", async () => {
-    mockFs.existsSync.mockReturnValue(false);
-
-    await initializeWorkspace(createInitContext());
-
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
-    const insertSession = prepareCalls.find((q: string) => q.includes("INSERT INTO sessions"));
-    expect(insertSession).toBeTruthy();
-    expect(insertSession).toContain("'idle'");
-  });
-
-  it("transitions workspace to ready with current_session_id", async () => {
-    mockFs.existsSync.mockReturnValue(false);
-
-    await initializeWorkspace(createInitContext());
-
-    const prepareCalls = mockDb.prepare.mock.calls.map((c: string[]) => c[0]);
-    const updateWorkspace = prepareCalls.find(
-      (q: string) => q.includes("state = 'ready'") && q.includes("current_session_id")
-    );
-    expect(updateWorkspace).toBeTruthy();
-  });
-
-  // ─── Git-clean skip ──────────────────────────────────────────
-
-  it("skips git-clean when agent already has user messages", async () => {
-    // Make the session query return a last_user_message_at (agent is working)
-    mockStmt.get.mockReturnValue({ last_user_message_at: "2026-01-01T00:00:00Z" });
-    mockFs.existsSync.mockReturnValue(false);
-
-    await initializeWorkspace(createInitContext());
-
-    // git checkout -- . should NOT be called (only worktree add is called)
-    const gitCheckoutCalls = mockExecFileAsync.mock.calls.filter(
-      (c: unknown[]) => c[0] === "git" && (c[1] as string[])?.includes("checkout")
-    );
-    expect(gitCheckoutCalls).toHaveLength(0);
-  });
-
-  it("runs git-clean when no user messages exist yet", async () => {
-    // Session query returns null last_user_message_at
-    mockStmt.get.mockReturnValue({ last_user_message_at: null });
-    mockFs.existsSync.mockReturnValue(false);
-
-    await initializeWorkspace(createInitContext());
-
-    // git checkout -- . should be called
-    const gitCheckoutCalls = mockExecFileAsync.mock.calls.filter(
-      (c: unknown[]) => c[0] === "git" && (c[1] as string[])?.includes("checkout")
-    );
-    expect(gitCheckoutCalls).toHaveLength(1);
+describe("workspace Run commands", () => {
+  it("offers local Run and shared tasks, leaving the cloud app to AGNT supervision", () => {
+    const recipe: ProjectEnvironment = {
+      version: 1,
+      run: "bun run dev",
+      cloud: { run: "bun run dev --host 0.0.0.0" },
+      tasks: { test: "bun test" },
+    };
+    expect(projectEnvironmentResponse(recipe, "repository", "local").tasks).toEqual([
+      { name: "run", command: "bun run dev" },
+      { name: "test", command: "bun test" },
+    ]);
+    expect(projectEnvironmentResponse(recipe, "repository", "cloud").tasks).toEqual([
+      { name: "test", command: "bun test" },
+    ]);
   });
 });

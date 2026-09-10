@@ -7,7 +7,7 @@
 
 import { sendRequest, sendMutate } from "@/platform/ws";
 import type { Repository, Stats } from "../types";
-import type { ManifestResponse } from "@shared/types/manifest";
+import type { ProjectEnvironment } from "@deus-hq/api";
 
 export const RepoService = {
   /**
@@ -45,25 +45,13 @@ export const RepoService = {
     return result.data!;
   },
 
-  /**
-   * Read deus.json manifest for a repo
-   */
-  fetchManifest: async (repoId: string): Promise<ManifestResponse> => {
-    return sendRequest<ManifestResponse>("repoManifest", { repoId });
-  },
+  fetchEnvironmentFile: async (
+    repoId: string
+  ): Promise<{ project: ProjectEnvironment | null; branch: string }> =>
+    sendRequest("repoEnvironmentFile", { repoId }),
 
-  /**
-   * Write deus.json manifest for a repo
-   */
-  saveManifest: async (repoId: string, manifest: Record<string, unknown>): Promise<void> => {
-    const result = await sendMutate("saveRepoManifest", { repoId, ...manifest });
-    if (!result.success) throw new Error(result.error || "Failed to save manifest");
-  },
-
-  /**
-   * Auto-detect manifest from project files (package.json, Cargo.toml, etc.)
-   */
-  detectManifest: async (repoId: string): Promise<{ manifest: Record<string, unknown> }> => {
-    return sendRequest<{ manifest: Record<string, unknown> }>("detectManifest", { repoId });
+  saveEnvironmentFile: async (repoId: string, project: ProjectEnvironment): Promise<void> => {
+    const result = await sendMutate("saveRepoEnvironmentFile", { repoId, project });
+    if (!result.success) throw new Error(result.error || "Couldn't save environment file.");
   },
 };

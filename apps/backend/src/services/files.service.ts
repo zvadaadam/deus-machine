@@ -1,6 +1,7 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import { PROJECT_ENVIRONMENT_PATH } from "@deus-hq/api";
 
 interface FileTreeNode {
   name: string;
@@ -64,6 +65,12 @@ export function scanWorkspaceFiles(workspacePath: string): FileTreeResponse {
     filePaths = scanWithReaddir(workspacePath);
   }
 
+  // The recipe must remain editable even in projects that ignore the .deus folder.
+  if (
+    !filePaths.includes(PROJECT_ENVIRONMENT_PATH) &&
+    fs.existsSync(path.join(workspacePath, PROJECT_ENVIRONMENT_PATH))
+  )
+    filePaths.push(PROJECT_ENVIRONMENT_PATH);
   const result = buildTree(workspacePath, filePaths);
 
   // Evict oldest if cache is full

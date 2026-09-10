@@ -29,6 +29,7 @@ interface UIState {
   // Settings view (full-page, not a modal)
   settingsOpen: boolean;
   activeSettingsSection: SettingsSection;
+  environmentSettingsTarget: { repoId: string; location: "local" | "cloud" } | null;
 
   // Automations view (full-page, keeps the app sidebar)
   automationsOpen: boolean;
@@ -53,6 +54,7 @@ interface UIState {
 
   // Actions - Settings view
   openSettings: () => void;
+  openEnvironmentSettings: (repoId: string, location: "local" | "cloud") => void;
   closeSettings: () => void;
   setActiveSettingsSection: (section: SettingsSection) => void;
   requestEnvSetup: (request: EnvironmentSetupRequest) => void;
@@ -68,7 +70,7 @@ interface UIState {
 
 export const useUIStore = create<UIState>()(
   devtools(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       showNewWorkspaceModal: false,
       newWorkspaceMode: "default" as NewWorkspaceMode,
@@ -77,6 +79,7 @@ export const useUIStore = create<UIState>()(
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
+      environmentSettingsTarget: null,
       automationsOpen: false,
       automationsFocusId: null,
       pendingEnvSetup: null,
@@ -132,7 +135,20 @@ export const useUIStore = create<UIState>()(
       openSettings: () =>
         set({ settingsOpen: true, automationsOpen: false }, false, "ui/openSettings"),
 
-      closeSettings: () => set({ settingsOpen: false }, false, "ui/closeSettings"),
+      openEnvironmentSettings: (repoId, location) =>
+        set(
+          {
+            settingsOpen: true,
+            automationsOpen: false,
+            activeSettingsSection: "environment",
+            environmentSettingsTarget: { repoId, location },
+          },
+          false,
+          "ui/openEnvironmentSettings"
+        ),
+
+      closeSettings: () =>
+        set({ settingsOpen: false, environmentSettingsTarget: null }, false, "ui/closeSettings"),
 
       // Automations view actions
       openAutomations: (automationId) =>
@@ -155,7 +171,11 @@ export const useUIStore = create<UIState>()(
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
 
       requestEnvSetup: (request) =>
-        set({ pendingEnvSetup: request, settingsOpen: false }, false, "ui/requestEnvSetup"),
+        set(
+          { pendingEnvSetup: request, settingsOpen: false, environmentSettingsTarget: null },
+          false,
+          "ui/requestEnvSetup"
+        ),
 
       clearEnvSetupRequest: () => set({ pendingEnvSetup: null }, false, "ui/clearEnvSetupRequest"),
 
@@ -167,6 +187,7 @@ export const useUIStore = create<UIState>()(
             showSystemPromptModal: false,
             commandPaletteOpen: false,
             settingsOpen: false,
+            environmentSettingsTarget: null,
             automationsOpen: false,
           },
           false,
@@ -198,6 +219,8 @@ export const uiActions = {
   openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
   closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
   openSettings: () => useUIStore.getState().openSettings(),
+  openEnvironmentSettings: (repoId: string, location: "local" | "cloud") =>
+    useUIStore.getState().openEnvironmentSettings(repoId, location),
   closeSettings: () => useUIStore.getState().closeSettings(),
   openAutomations: (automationId?: string) => useUIStore.getState().openAutomations(automationId),
   closeAutomations: () => useUIStore.getState().closeAutomations(),

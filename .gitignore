@@ -95,7 +95,8 @@ apps/web/public/device-chrome/
 .mcp.json
 
 # Local cloned workspaces (nested repos, not tracked in this repo)
-.deus/
+.deus/*
+!.deus/environment.json
 
 *storybook.log
 storybook-static

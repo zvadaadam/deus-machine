@@ -21,7 +21,7 @@ import { forwardRef, useEffect, useImperativeHandle } from "react";
 import { MessageInput } from "./MessageInput";
 import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
-import { useManifestTasks } from "@/features/workspace/api/workspace.queries";
+import { useProjectEnvironment } from "@/features/workspace/api/workspace.queries";
 import { useSettings } from "@/features/settings/api";
 import {
   DEFAULT_MODEL,
@@ -113,8 +113,9 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // Composer state itself (draft/model/etc.) lives in the store;
     // MessageInput reads it directly. We don't subscribe here.
     const { session, messages, sessionStatus } = useSessionWithMessages(sessionId);
-    const { data: manifestData } = useManifestTasks(workspaceId);
-    const hasManifest = manifestData === undefined ? true : manifestData?.manifest != null;
+    const environment = useProjectEnvironment(workspaceId);
+    const environmentUnconfigured =
+      environment.isSuccess && environment.data.source === "unconfigured";
 
     // Notify parent when the selected model's agent harness changes.
     // We subscribe to just `model` (a string) to avoid re-renders on
@@ -181,7 +182,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
         hasMessages={messages.length > 0}
-        hasManifest={hasManifest}
+        environmentUnconfigured={environmentUnconfigured}
         showCompactButton={showCompactButton}
         onSend={(content) => sendMessage(content)}
         onCompact={compactConversation}

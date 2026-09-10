@@ -3,7 +3,7 @@
 /* global Bun, window, document, DataTransfer */
 import assert from "node:assert/strict";
 import path from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { chromium } from "playwright";
@@ -40,10 +40,11 @@ const script = `
   const fixture = await createSecretFixture();
   // External GitHub discovery is synthetic; settings and secret writes use real auth + Postgres.
   fixture.app.get("/orgs/:org/github/:action", c => {
+    if (c.req.param("action") === "environment") return c.json({ project: null, branch: "main" });
     if (!Object.values(fixture.tokens).some(token => c.req.header("authorization") === "Bearer " + token)) return c.json({}, 401);
     return c.json(c.req.param("action") === "install-url"
       ? { url: "https://github.com/apps/deus-bot/installations/new" }
-      : { repos: c.req.param("org") === fixture.ids.org ? ["acme/mobile-app", "acme/new-app", "acme/web-app"] : [] });
+      : { repos: c.req.param("org") === fixture.ids.org ? ["acme/mobile-app", "acme/new-app", "acme/web-app", "acme/desktop-recipe", "acme/web-recipe"] : [] });
   });
   fixture.app.get("/me/provider-accounts", c => c.json(${JSON.stringify(providerAccounts)}));
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: req => fixture.app.fetch(req, fixture.env) });
@@ -78,7 +79,32 @@ try {
   const { default: routes } = await import("../../apps/backend/src/routes/environment-secrets.ts");
   const { setCloudRuntimeCredentials, resetCloudConfigForTests } =
     await import("../../apps/backend/src/services/agent/cloud/config.ts");
+  const { readProjectFile, writeProjectFile } =
+    await import("../../apps/backend/src/services/project-environment.service.ts");
+  const repositoryRoot = path.join(directory, "repositories");
+  await rm(repositoryRoot, { recursive: true, force: true });
+  const repositoryDirectories = new Map(
+    ["local", "local-only", "public"].map((id) => [id, path.join(repositoryRoot, id)])
+  );
+  for (const repoDirectory of repositoryDirectories.values())
+    await mkdir(repoDirectory, { recursive: true });
+  const localDirectory = repositoryDirectories.get("local");
+  writeProjectFile(repositoryDirectories.get("local-only"), {
+    version: 1,
+    setup: "./local-only-setup.sh",
+  });
   const app = new Hono().use("*", cors()).route("/api", routes);
+  app.get("/api/test-environment-file/:id", (c) => {
+    const repoDirectory = repositoryDirectories.get(c.req.param("id"));
+    if (!repoDirectory) return c.json({ error: "Unknown repository" }, 404);
+    return c.json({ project: readProjectFile(repoDirectory), branch: "test-branch" });
+  });
+  app.post("/api/test-environment-file/:id", async (c) => {
+    const repoDirectory = repositoryDirectories.get(c.req.param("id"));
+    if (!repoDirectory) return c.json({ error: "Unknown repository" }, 404);
+    writeProjectFile(repoDirectory, await c.req.json());
+    return c.json({ ok: true });
+  });
   app.get("/api/settings/provider-accounts", (c) => c.json(providerAccounts));
   setCloudRuntimeCredentials({
     baseUrl: fixture.baseUrl,
@@ -99,10 +125,12 @@ try {
     import { useUIStore } from "@/shared/stores/uiStore";
     import { EnvironmentSection } from "@/features/settings/ui/sections/EnvironmentSection";
     import "@/global.css";
+    const repository = new URL(window.location.href).searchParams.get("repo");
+    if (repository) useUIStore.getState().openEnvironmentSettings(repository, "cloud");
     window.secretTestSetupRequest = () => useUIStore.getState().pendingEnvSetup;
     window.secretTestClearSetupRequest = () => useUIStore.getState().clearEnvSetupRequest();
     window.secretCacheContains = value => JSON.stringify([queryClient.getQueryCache().getAll().map(q => q.state.data), queryClient.getMutationCache().getAll().map(m => m.state)]).includes(value);
-    createRoot(document.getElementById("root")).render(<React.StrictMode><QueryClientProvider client={queryClient}><TooltipProvider><main className="mx-auto max-w-4xl p-4 sm:p-8"><EnvironmentSection /></main></TooltipProvider></QueryClientProvider></React.StrictMode>);
+    createRoot(document.getElementById("root")).render(<React.StrictMode><QueryClientProvider client={queryClient}><TooltipProvider><main className="mx-auto h-screen max-w-4xl overflow-y-auto p-4 sm:p-8"><EnvironmentSection /></main></TooltipProvider></QueryClientProvider></React.StrictMode>);
   `
   );
   browser = await chromium.launch({ headless: true });
@@ -136,14 +164,13 @@ try {
               return `
               const repos = [
                 { id: "local", name: "mobile-app", root_path: "/projects/mobile-app", git_origin_url: "git@github.com:acme/mobile-app.git", git_default_branch: "main" },
+                { id: "local-only", name: "local-only", root_path: "/projects/local-only", git_origin_url: null, git_default_branch: "main" },
                 { id: "public", name: "public-app", root_path: "/projects/public-app", git_origin_url: "https://github.com/octocat/Hello-World", git_default_branch: "main" }
               ];
-              let manifest = { version: 1, lifecycle: { setup: "bun install", archive: "./cleanup.sh" }, scripts: { run: "bun run dev" }, env: { PUBLIC_MODE: "development" }, tasks: { test: "bun test" } };
-              window.secretTestManifest = () => manifest;
               export const RepoService = {
                 fetchAll: async () => repos,
-                fetchManifest: async () => ({ manifest: structuredClone(manifest) }),
-                saveManifest: async (_id, next) => { manifest = structuredClone(next); }
+                fetchEnvironmentFile: async (id) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id)); if (!r.ok) throw new Error("Invalid repository environment"); return r.json(); },
+                saveEnvironmentFile: async (id, project) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(project) }); if (!r.ok) throw new Error("Couldn't save environment"); }
               };`;
             if (id !== "\0native-secret-fixture") return;
             return `export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/native/deus-cloud.ts"))};
@@ -155,7 +182,7 @@ try {
           },
           configureServer(server) {
             server.middlewares.use((req, res, next) => {
-              if (req.url !== "/") return next();
+              if (req.url?.split("?")[0] !== "/") return next();
               res.setHeader("content-type", "text/html");
               res.end(
                 '<!doctype html><html class="dark"><body><div id="root"></div><script type="module" src="/.context/environment-secrets-ui/entry.tsx"></script></body></html>'
@@ -164,7 +191,8 @@ try {
           },
         },
       ],
-      server: { host: "127.0.0.1", port: 0 },
+      // Fixture file writes must not reload the page during a settings journey.
+      server: { host: "127.0.0.1", port: 0, hmr: false, watch: null },
     });
     await vite.listen();
     const page = await browser.newPage({ viewport: { width: 1000, height: 1000 } });
@@ -195,7 +223,47 @@ try {
     await chooseOrg("Secret test organization");
     await page.getByText("Setup saved", { exact: true }).first().waitFor();
     await shot("repositories");
+    // First save creates the environment; a second save edits that same environment.
+    // Keep the draft visible while the repository list picks up the new ID.
+    const newRepo = `acme/${direct ? "web-recipe" : "desktop-recipe"}`;
+    await page.getByRole("button", { name: new RegExp(newRepo) }).click();
+    await page.getByLabel("Setup script", { exact: true }).fill("./scripts/bootstrap.sh");
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
+    assert.equal(
+      await page.getByLabel("Setup script", { exact: true }).inputValue(),
+      "./scripts/bootstrap.sh"
+    );
+    await page.getByLabel("Run script", { exact: true }).fill("./scripts/start.sh");
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Repositories", exact: true }).click();
+    await page.getByRole("button", { name: new RegExp(newRepo) }).click();
+    assert.equal(
+      await page.getByLabel("Run script", { exact: true }).inputValue(),
+      "./scripts/start.sh"
+    );
+    await page.getByRole("button", { name: "Repositories", exact: true }).click();
     await openRepository();
+    const repositoryLink = page.getByRole("link", {
+      name: "https://github.com/acme/mobile-app",
+      exact: true,
+    });
+    assert.equal(await repositoryLink.getAttribute("href"), "https://github.com/acme/mobile-app");
+    assert.equal(await repositoryLink.getAttribute("target"), "_blank");
+    assert.equal(
+      await page
+        .getByRole("tablist", { name: "Setup workspace location" })
+        .getAttribute("aria-orientation"),
+      "horizontal"
+    );
+    const localTab = await page.getByRole("tab", { name: "Local", exact: true }).boundingBox();
+    const cloudTab = await page.getByRole("tab", { name: "Cloud", exact: true }).boundingBox();
+    const linkBox = await repositoryLink.boundingBox();
+    assert(localTab && cloudTab && linkBox);
+    assert.equal(localTab.y, cloudTab.y);
+    assert(localTab.y >= linkBox.y + linkBox.height);
+    await shot("repository-header");
     assert.equal(
       await page.getByRole("button", { name: "Set up with agent", exact: true }).count(),
       1
@@ -214,29 +282,39 @@ try {
         true
       );
     }
-    await page.getByLabel("Setup step 1, command 1", { exact: true }).fill(setupScript);
+    await page.getByLabel("Setup script", { exact: true }).fill(setupScript);
     await page.getByLabel("Run script", { exact: true }).fill("bun run dev");
+    if (!direct) {
+      await page.getByRole("tab", { name: "Cloud", exact: true }).focus();
+      await page.keyboard.press("ArrowLeft");
+      await page.getByRole("tab", { name: "Local", selected: true }).waitFor();
+      assert.equal(
+        await page.getByLabel("Setup script", { exact: true }).inputValue(),
+        setupScript
+      );
+      await page.keyboard.press("ArrowRight");
+      await page.getByRole("tab", { name: "Cloud", selected: true }).waitFor();
+      page.once("dialog", (dialog) => dialog.dismiss());
+      await page.getByRole("button", { name: "Set up with agent", exact: true }).click();
+      assert.equal(await page.evaluate(() => window.secretTestSetupRequest()), null);
+      assert.equal(
+        await page.getByLabel("Setup script", { exact: true }).inputValue(),
+        setupScript
+      );
+    }
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.getByRole("button", { name: "Repositories", exact: true }).click();
-    assert.equal(
-      await page.getByLabel("Setup step 1, command 1", { exact: true }).inputValue(),
-      setupScript
-    );
+    assert.equal(await page.getByLabel("Setup script", { exact: true }).inputValue(), setupScript);
     page.once("dialog", (dialog) => dialog.dismiss());
     await chooseOrg("Another organization");
-    await page.getByRole("form", { name: "Cloud setup", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Save cloud setup", exact: true }).click();
-    await page.getByRole("button", { name: "Save cloud setup", exact: true }).waitFor();
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll("button")].some(
-        (button) => button.textContent === "Save cloud setup" && button.disabled
-      )
-    );
+    await page.getByRole("form", { name: "Project environment", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
     const metadata = await fetch(
       `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings?environment_id=${fixture.ids.env}`,
       { headers: { authorization: `Bearer ${fixture.tokens.alice}` } }
     ).then((r) => r.json());
-    assert.deepEqual(metadata.selected_environment.setup, [{ commands: [setupScript] }]);
+    assert.equal(metadata.selected_environment.project.setup, setupScript);
     assert.equal(
       metadata.environments.find((env) => env.id === fixture.ids.env).is_repository_default,
       true
@@ -250,25 +328,7 @@ try {
     assert.equal(await page.locator('input[type="password"]').count(), 0);
     await shot("cloud-setup");
     if (!direct) {
-      await page
-        .getByLabel("Setup step 1, command 1", { exact: true })
-        .fill("unsaved cloud script");
-      page.once("dialog", (dialog) => dialog.dismiss());
       await page.getByRole("tab", { name: "Local", exact: true }).click();
-      assert.equal(
-        await page.getByLabel("Setup step 1, command 1", { exact: true }).inputValue(),
-        "unsaved cloud script"
-      );
-      page.once("dialog", (dialog) => dialog.accept());
-      await page.getByRole("tab", { name: "Local", exact: true }).click();
-      await page.getByLabel("Setup script", { exact: true }).waitFor();
-      assert.equal(await page.getByRole("button", { name: "Generate", exact: true }).count(), 0);
-      assert.equal(await page.getByRole("button", { name: "Auto-detect", exact: true }).count(), 0);
-      assert.equal(
-        await page.getByText("Public environment variables", { exact: true }).isVisible(),
-        true
-      );
-      assert.equal(await page.getByLabel("Variable 1 value", { exact: true }).isVisible(), true);
       await page.getByRole("button", { name: "Set up with agent", exact: true }).click();
       assert.deepEqual(await page.evaluate(() => window.secretTestSetupRequest()), {
         repoId: "local",
@@ -276,29 +336,73 @@ try {
         model: selectedModel,
       });
       await page.evaluate(() => window.secretTestClearSetupRequest());
+      // One shared recipe, with only the cloud command changed. File publication is explicit.
+      await page.getByText("Customize for local or cloud", { exact: true }).click();
+      await page.getByLabel("cloud run behavior").selectOption("custom");
+      await page.getByLabel("cloud run script").fill("bun run dev --host 0.0.0.0");
+      await page.getByLabel("Variable 1 name").fill("PUBLIC_MODE");
+      await page.getByLabel("Variable 1 value").fill("development");
+      await page.getByRole("button", { name: "Save to repository", exact: true }).click();
+      await page.getByText(/Local checkout; publish changes through Git/).waitFor();
+      const project = readProjectFile(localDirectory);
+      assert.equal(project.setup, setupScript);
+      assert.equal(project.cloud.run, "bun run dev --host 0.0.0.0");
+      assert.equal(project.env.PUBLIC_MODE, "development");
+      assert(!JSON.stringify(project).includes(value));
+      assert.equal(
+        readProjectFile(repositoryDirectories.get("local-only")).setup,
+        "./local-only-setup.sh"
+      );
+      assert.equal(readProjectFile(repositoryDirectories.get("public")), null);
       await page.getByLabel("Setup script", { exact: true }).fill("./scripts/setup.sh");
-      page.once("dialog", (dialog) => dialog.dismiss());
-      await page.getByRole("button", { name: "Set up with agent", exact: true }).click();
-      assert.equal(await page.evaluate(() => window.secretTestSetupRequest()), null);
-      await page.getByLabel("Run script", { exact: true }).fill("bun run dev --port 3000");
-      await page.getByText("Advanced setup", { exact: true }).click();
-      assert.equal(
-        await page.getByLabel("Archive script", { exact: true }).inputValue(),
-        "./cleanup.sh"
+      await page.getByRole("button", { name: "Save setup", exact: true }).click();
+      await page.getByText("Saved", { exact: true }).waitFor();
+      assert.equal(readProjectFile(localDirectory).setup, "./scripts/setup.sh");
+      const unchanged = await fetch(
+        `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings?environment_id=${fixture.ids.env}`,
+        { headers: { authorization: `Bearer ${fixture.tokens.alice}` } }
+      ).then((r) => r.json());
+      assert.equal(unchanged.selected_environment.project.setup, setupScript);
+      await shot("repository-file");
+      // Loaded local files remain editable when the cloud settings service is unavailable.
+      const cloudSettingsUrl = (url) =>
+        url.pathname === `/api/settings/environment-secrets/orgs/${fixture.ids.org}` &&
+        url.searchParams.get("environment_id") === fixture.ids.env;
+      await page.route(cloudSettingsUrl, (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Cloud settings unavailable" }),
+        })
       );
-      await page.getByRole("button", { name: "Save local setup", exact: true }).click();
-      await page.waitForFunction(
-        () => window.secretTestManifest().lifecycle.setup === "./scripts/setup.sh"
-      );
+      try {
+        await page.reload();
+        await chooseOrg("Secret test organization");
+        await openRepository();
+        await page.getByText("Cloud settings unavailable", { exact: true }).waitFor();
+        await page.getByLabel("Setup script", { exact: true }).fill("./scripts/local-offline.sh");
+        await page.getByRole("button", { name: "Save setup", exact: true }).click();
+        await page.getByText("Saved", { exact: true }).waitFor();
+        assert.equal(readProjectFile(localDirectory).setup, "./scripts/local-offline.sh");
+        assert.equal(
+          await page.getByRole("button", { name: "Add secret", exact: true }).count(),
+          0
+        );
+        await shot("local-file-cloud-unavailable");
+      } finally {
+        await page.unroute(cloudSettingsUrl);
+      }
+      // A broken file surfaces an error; deleting it returns to saved settings.
+      await writeFile(path.join(localDirectory, ".deus/environment.json"), "{broken");
+      await page.reload();
+      await chooseOrg("Secret test organization");
+      await openRepository();
+      await page.getByText("Invalid repository environment", { exact: true }).waitFor();
+      assert.equal(await page.getByRole("button", { name: "Save setup", exact: true }).count(), 0);
+      await rm(path.join(localDirectory, ".deus/environment.json"));
+      await page.getByRole("button", { name: "Try again", exact: true }).click();
       assert.equal(
-        await page.evaluate(() => window.secretTestManifest().env.PUBLIC_MODE),
-        "development"
-      );
-      await page.getByText("Advanced setup", { exact: true }).click();
-      await shot("local-setup");
-      await page.getByRole("tab", { name: "Cloud", exact: true }).click();
-      assert.equal(
-        await page.getByLabel("Setup step 1, command 1", { exact: true }).inputValue(),
+        await page.getByLabel("Setup script", { exact: true }).inputValue(),
         setupScript
       );
     }
@@ -311,6 +415,23 @@ try {
     await page.getByRole("button", { name: "Replace", exact: true }).click();
     await page.getByLabel("New value", { exact: true }).fill("unsaved-value");
     for (const actor of ["bob", "alice"]) {
+      let releaseOrganizations;
+      const organizationsUrl = "**/settings/environment-secrets/orgs";
+      const heldRequests = [];
+      const holdOrganizations = (route) => {
+        const handled = organizationsGate.then(() => route.continue());
+        heldRequests.push(handled);
+        return handled;
+      };
+      let organizationsGate;
+      let requestStarted;
+      if (!direct && actor === "bob") {
+        organizationsGate = new Promise((resolve) => {
+          releaseOrganizations = resolve;
+        });
+        requestStarted = page.waitForRequest(organizationsUrl);
+        await page.route(organizationsUrl, holdOrganizations);
+      }
       setCloudRuntimeCredentials({ deusCloudSessionToken: fixture.tokens[actor] });
       await page.evaluate(
         ({ token, id }) => {
@@ -320,7 +441,33 @@ try {
         { token: fixture.tokens[actor], id: fixture.ids[actor] }
       );
       await page.getByRole("dialog").waitFor({ state: "hidden" });
+      if (requestStarted) {
+        try {
+          await requestStarted;
+          assert.equal(
+            await page.getByRole("button", { name: /local-only/ }).count(),
+            0,
+            "Repository editing must wait for the new account's organization context"
+          );
+        } finally {
+          releaseOrganizations();
+          await Promise.all(heldRequests);
+          await page.unroute(organizationsUrl, holdOrganizations);
+        }
+      }
       if (actor === "alice") await chooseOrg("Secret test organization");
+      if (!direct && actor === "bob") {
+        // Organization roles must not restrict edits to a local-only repository file.
+        await page.getByRole("button", { name: /local-only/ }).click();
+        await page.getByText(/Local checkout; publish changes through Git/).waitFor();
+        assert.equal(await page.getByLabel("Setup script", { exact: true }).isEditable(), true);
+        assert.equal(
+          await page.getByLabel("Setup script", { exact: true }).inputValue(),
+          "./local-only-setup.sh"
+        );
+        assert.equal(await page.getByRole("button", { name: "Save to repository" }).count(), 0);
+        await page.getByRole("button", { name: "Repositories", exact: true }).click();
+      }
       await openRepository();
       await page
         .getByText(actor === "bob" ? "1 missing" : "All values set", { exact: true })
@@ -364,8 +511,7 @@ try {
     await page
       .getByRole("button", { name: new RegExp(direct ? "acme/web-app" : "acme/new-app") })
       .click();
-    await page.getByRole("button", { name: "Add command", exact: true }).click();
-    await page.getByLabel("Setup step 1, command 1", { exact: true }).fill("bun install");
+    await page.getByLabel("Setup script", { exact: true }).fill("bun install");
     await page.getByLabel("Run script", { exact: true }).fill("bun run dev --host 0.0.0.0");
     // Import before saving scripts: creating the environment must preserve both drafts.
     assert.equal(await page.getByRole("button", { name: "Replace", exact: true }).count(), 0);
@@ -404,7 +550,7 @@ try {
     await page.getByRole("dialog").waitFor({ state: "hidden" });
     await page.getByText("E2B_API_KEY", { exact: true }).waitFor();
     assert.equal(
-      await page.getByLabel("Setup step 1, command 1", { exact: true }).inputValue(),
+      await page.getByLabel("Setup script", { exact: true }).inputValue(),
       "bun install"
     );
     assert.equal(
@@ -412,12 +558,8 @@ try {
       "bun run dev --host 0.0.0.0"
     );
     assert.equal(await page.evaluate((v) => window.secretCacheContains(v), value), false);
-    await page.getByRole("button", { name: "Save cloud setup", exact: true }).click();
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll("button")].some(
-        (button) => button.textContent === "Save cloud setup" && button.disabled
-      )
-    );
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
     if (direct) {
       const settings = await fetch(
         `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings`,
@@ -482,12 +624,8 @@ try {
     );
     if (!direct) {
       await page.getByRole("button", { name: /octocat\/Hello-World/ }).click();
-      await page.getByRole("tab", { name: "Cloud", exact: true }).click();
-      await page.getByText(/Connect the Deus GitHub App for private repository access/).waitFor();
-      assert.equal(
-        await page.getByRole("button", { name: "Save cloud setup", exact: true }).isEnabled(),
-        true
-      );
+      await page.getByText(/Saved project settings/).waitFor();
+      assert.equal(await page.getByLabel("Setup script", { exact: true }).isEditable(), true);
       await page.locator('[data-slot="avatar-image"]').waitFor();
       await page.getByRole("button", { name: "Repositories", exact: true }).click();
     }
@@ -596,8 +734,7 @@ try {
       await page.reload();
       await page.getByText("Couldn't load cloud environment settings.", { exact: true }).waitFor();
       await page.getByRole("button", { name: /octocat\/Hello-World/ }).click();
-      await page.getByRole("tab", { name: "Cloud", exact: true }).click();
-      await page.getByText("Cloud settings are unavailable right now.", { exact: true }).waitFor();
+      await page.getByText(/Sign in to manage cloud secrets/).waitFor();
       assert.equal(await page.getByRole("button", { name: "Sign in to Deus Cloud" }).count(), 0);
       await shot("organization-unavailable");
       await page.unroute(orgsUrl);
@@ -605,6 +742,16 @@ try {
       await page.getByRole("button", { name: "Default secrets", exact: true }).waitFor();
       assert.equal(await page.getByText("Couldn't load cloud environment settings.").count(), 0);
     }
+    // Workspace shortcuts accept local repository IDs and cloud Git remote identities.
+    const targetRepository = direct ? "https://github.com/Acme/mobile-app.git" : "local";
+    await page.goto(`${vite.resolvedUrls.local[0]}?repo=${encodeURIComponent(targetRepository)}`);
+    await chooseOrg("Secret test organization");
+    await page.getByRole("form", { name: "Project environment", exact: true }).waitFor();
+    assert.match(
+      await page.getByRole("navigation", { name: "Environment breadcrumb" }).innerText(),
+      /acme\/mobile-app/
+    );
+    await page.getByRole("tab", { name: "Cloud", selected: true }).waitFor();
     assert.deepEqual(errors, []);
     await page.close();
     await vite.close();

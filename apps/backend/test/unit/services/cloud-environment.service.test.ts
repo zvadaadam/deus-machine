@@ -43,6 +43,30 @@ describe("getCloudEnvironmentInfo — hosted device support of a saved environme
   });
 });
 
+describe("getCloudEnvironmentInfo — saved project validation", () => {
+  it("returns the shared schema's validated project", async () => {
+    mockGetEnvironment.mockResolvedValueOnce({
+      id: "env-1",
+      config: { project: { version: 1, setup: " bun install\n", local: { setup: null } } },
+    });
+    await expect(getCloudEnvironmentInfo(ORIGIN)).resolves.toMatchObject({
+      configured: true,
+      project: { version: 1, setup: "bun install", local: { setup: null } },
+    });
+  });
+
+  it.each([null, { version: 2 }, { version: 1, setup: ["bun install"] }])(
+    "fails the lookup instead of exposing malformed project %j",
+    async (project) => {
+      mockGetEnvironment.mockResolvedValueOnce({ id: "env-1", config: { project } });
+      const result = await getCloudEnvironmentInfo(ORIGIN);
+      expect(result).toMatchObject({ configured: false, lookupFailed: true });
+      expect(result).not.toHaveProperty("project");
+      expect(result).not.toHaveProperty("environmentId");
+    }
+  );
+});
+
 describe("enableCloudEnvironmentSimulator", () => {
   it("merges `simulator: true` into the saved environment's config on the platform", async () => {
     await enableCloudEnvironmentSimulator("env-1");
