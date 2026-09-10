@@ -68,6 +68,19 @@ export const queryKeys = {
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
     agentAuth: ["settings", "agent-auth"] as const,
+    environments: {
+      all: ["settings", "environment-secrets"] as const,
+      organizations: (accountId: string | null) =>
+        ["settings", "environment-secrets", accountId, "orgs"] as const,
+      detail: (accountId: string | null, orgId: string | null, environmentId: string | null) =>
+        ["settings", "environment-secrets", accountId, orgId, environmentId] as const,
+      repositories: (accountId: string | null, orgId: string | null) =>
+        ["settings", "environment-secrets", accountId, orgId, "github-repos"] as const,
+      repositoryFile: (accountId: string | null, orgId: string | null, repositoryKey: string) =>
+        ["settings", "environment-secrets", accountId, orgId, "file", repositoryKey] as const,
+      installation: (accountId: string, orgId: string) =>
+        ["settings", "environment-secrets", accountId, orgId, "github-install"] as const,
+    },
   },
 
   // Agent Config (scope-aware config management)

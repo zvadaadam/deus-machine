@@ -44,7 +44,7 @@ const script = `
     if (!Object.values(fixture.tokens).some(token => c.req.header("authorization") === "Bearer " + token)) return c.json({}, 401);
     return c.json(c.req.param("action") === "install-url"
       ? { url: "https://github.com/apps/deus-bot/installations/new" }
-      : { repos: c.req.param("org") === fixture.ids.org ? ["acme/mobile-app", "acme/new-app", "acme/web-app"] : [] });
+      : { repos: c.req.param("org") === fixture.ids.org ? ["acme/mobile-app", "acme/new-app", "acme/web-app", "acme/desktop-recipe", "acme/web-recipe"] : [] });
   });
   fixture.app.get("/me/provider-accounts", c => c.json(${JSON.stringify(providerAccounts)}));
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: req => fixture.app.fetch(req, fixture.env) });
@@ -149,6 +149,7 @@ try {
               return `
               const repos = [
                 { id: "local", name: "mobile-app", root_path: "/projects/mobile-app", git_origin_url: "git@github.com:acme/mobile-app.git", git_default_branch: "main" },
+                { id: "local-only", name: "local-only", root_path: "/projects/local-only", git_origin_url: null, git_default_branch: "main" },
                 { id: "public", name: "public-app", root_path: "/projects/public-app", git_origin_url: "https://github.com/octocat/Hello-World", git_default_branch: "main" }
               ];
               export const RepoService = {
@@ -206,6 +207,27 @@ try {
     await chooseOrg("Secret test organization");
     await page.getByText("Setup saved", { exact: true }).first().waitFor();
     await shot("repositories");
+    // First save creates the environment; a second save edits that same environment.
+    // Keep the draft visible while the repository list picks up the new ID.
+    const newRepo = `acme/${direct ? "web-recipe" : "desktop-recipe"}`;
+    await page.getByRole("button", { name: new RegExp(newRepo) }).click();
+    await page.getByLabel("Setup script", { exact: true }).fill("./scripts/bootstrap.sh");
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
+    assert.equal(
+      await page.getByLabel("Setup script", { exact: true }).inputValue(),
+      "./scripts/bootstrap.sh"
+    );
+    await page.getByLabel("Run script", { exact: true }).fill("./scripts/start.sh");
+    await page.getByRole("button", { name: "Save setup", exact: true }).click();
+    await page.getByText("Saved", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Repositories", exact: true }).click();
+    await page.getByRole("button", { name: new RegExp(newRepo) }).click();
+    assert.equal(
+      await page.getByLabel("Run script", { exact: true }).inputValue(),
+      "./scripts/start.sh"
+    );
+    await page.getByRole("button", { name: "Repositories", exact: true }).click();
     await openRepository();
     assert.equal(
       await page.getByRole("button", { name: "Set up with agent", exact: true }).count(),
@@ -227,6 +249,15 @@ try {
     }
     await page.getByLabel("Setup script", { exact: true }).fill(setupScript);
     await page.getByLabel("Run script", { exact: true }).fill("bun run dev");
+    if (!direct) {
+      page.once("dialog", (dialog) => dialog.dismiss());
+      await page.getByRole("button", { name: "Set up with agent", exact: true }).click();
+      assert.equal(await page.evaluate(() => window.secretTestSetupRequest()), null);
+      assert.equal(
+        await page.getByLabel("Setup script", { exact: true }).inputValue(),
+        setupScript
+      );
+    }
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.getByRole("button", { name: "Repositories", exact: true }).click();
     assert.equal(await page.getByLabel("Setup script", { exact: true }).inputValue(), setupScript);
@@ -234,12 +265,7 @@ try {
     await chooseOrg("Another organization");
     await page.getByRole("form", { name: "Project environment", exact: true }).waitFor();
     await page.getByRole("button", { name: "Save setup", exact: true }).click();
-    await page.getByRole("button", { name: "Save setup", exact: true }).waitFor();
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll("button")].some(
-        (button) => button.textContent === "Save setup" && button.disabled
-      )
-    );
+    await page.getByText("Saved", { exact: true }).waitFor();
     const metadata = await fetch(
       `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings?environment_id=${fixture.ids.env}`,
       { headers: { authorization: `Bearer ${fixture.tokens.alice}` } }
@@ -282,11 +308,7 @@ try {
       assert(!JSON.stringify(project).includes(value));
       await page.getByLabel("Setup script", { exact: true }).fill("./scripts/setup.sh");
       await page.getByRole("button", { name: "Save setup", exact: true }).click();
-      await page.waitForFunction(() =>
-        [...document.querySelectorAll("button")].some(
-          (b) => b.textContent === "Save setup" && b.disabled
-        )
-      );
+      await page.getByText("Saved", { exact: true }).waitFor();
       assert.equal(readProjectFile(localDirectory).setup, "./scripts/setup.sh");
       const unchanged = await fetch(
         `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings?environment_id=${fixture.ids.env}`,
@@ -327,6 +349,14 @@ try {
       );
       await page.getByRole("dialog").waitFor({ state: "hidden" });
       if (actor === "alice") await chooseOrg("Secret test organization");
+      if (!direct && actor === "bob") {
+        // Organization roles must not restrict edits to a local-only repository file.
+        await page.getByRole("button", { name: /local-only/ }).click();
+        await page.getByText(/Local repository file/).waitFor();
+        assert.equal(await page.getByLabel("Setup script", { exact: true }).isEditable(), true);
+        assert.equal(await page.getByRole("button", { name: "Save to repository" }).count(), 0);
+        await page.getByRole("button", { name: "Repositories", exact: true }).click();
+      }
       await openRepository();
       await page
         .getByText(actor === "bob" ? "1 missing" : "All values set", { exact: true })
@@ -418,11 +448,7 @@ try {
     );
     assert.equal(await page.evaluate((v) => window.secretCacheContains(v), value), false);
     await page.getByRole("button", { name: "Save setup", exact: true }).click();
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll("button")].some(
-        (button) => button.textContent === "Save setup" && button.disabled
-      )
-    );
+    await page.getByText("Saved", { exact: true }).waitFor();
     if (direct) {
       const settings = await fetch(
         `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings`,

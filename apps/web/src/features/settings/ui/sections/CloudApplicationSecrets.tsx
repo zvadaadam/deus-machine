@@ -3,12 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { queryKeys } from "@/shared/api/queryKeys";
 import type { CloudEnvironmentSettings } from "@shared/types/environment-secrets";
 import { EnvironmentSecretDialog, type SecretAction } from "./EnvironmentSecretDialog";
 import { ImportEnvironmentSecretsDialog } from "./ImportEnvironmentSecretsDialog";
 import { parseEnvFile, type EnvFileEntry } from "../../lib/parse-env-file";
-
-export const ENVIRONMENT_SECRETS_QUERY_KEY = ["settings", "environment-secrets"] as const;
 
 export function CloudApplicationSecrets({
   orgId,
@@ -76,7 +75,7 @@ export function CloudApplicationSecrets({
   function saved() {
     setAction(null);
     setImportEntries(null);
-    void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all });
   }
   return (
     <div className="space-y-4">

@@ -80307,6 +80307,7 @@
                           "type": "frame",
                           "id": "s4hDL7",
                           "name": "DS/ProjectEnvironmentEditor · features/settings/ui/sections/ProjectEnvironmentEditor.tsx",
+                          "context": "RepositoryEnvironmentSettings selects the source and save destination. Local repository files stay editable regardless of organization role. A local repository with no remote shows the Local repository file source and only Save setup; Save to repository is offered only when exporting saved settings. Remote-only files stay read-only. A successful save retains the submitted draft while queries refresh.",
                           "reusable": true,
                           "width": "fill_container",
                           "layout": "vertical",
@@ -80873,6 +80874,7 @@
       "x": 20560,
       "y": 7600,
       "name": "56b · Settings — Repository environment file",
+      "context": "File destination state. Also applies to a local-only repository before its first environment.json exists: use the Local repository file label, allow local edits for signed-in organization members, and omit the duplicate export action.",
       "theme": {
         "mode": "dark"
       },

@@ -17,10 +17,15 @@ export function ProjectEnvironmentEditor({
   sourceLabel: string;
   canEdit: boolean;
   canExport: boolean;
-  onSave: (project: ProjectEnvironment, repository: boolean, signal: AbortSignal) => Promise<void>;
+  onSave: (
+    project: ProjectEnvironment,
+    destination: "current" | "repository",
+    signal: AbortSignal
+  ) => Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const [draft, setDraft] = useState(project);
+  const [previousProject, setPreviousProject] = useState(project);
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +33,11 @@ export function ProjectEnvironmentEditor({
   const request = useRef<AbortController | null>(null);
   const id = useId();
   const form = useRef<HTMLFormElement>(null);
+  if (project !== previousProject) {
+    setPreviousProject(project);
+    if (!dirty && !pending) setDraft(project);
+  }
   useEffect(() => () => request.current?.abort(), []);
-  useEffect(() => {
-    if (!dirty && !pending) {
-      setDraft(project);
-    }
-  }, [project, dirty, pending]);
   useEffect(() => {
     onDirtyChange(dirty);
     return () => onDirtyChange(false);
@@ -43,7 +47,7 @@ export function ProjectEnvironmentEditor({
     setDirty(true);
     setSaved(false);
   }
-  async function save(repository = false) {
+  async function save(destination: "current" | "repository" = "current") {
     if (!form.current?.reportValidity()) return;
     const parsed = ProjectEnvironmentSchema.safeParse(draft);
     if (!parsed.success) {
@@ -57,8 +61,9 @@ export function ProjectEnvironmentEditor({
     setPending(true);
     setError(null);
     try {
-      await onSave(parsed.data, repository, controller.signal);
+      await onSave(parsed.data, destination, controller.signal);
       if (!controller.signal.aborted) {
+        setDraft(parsed.data);
         setDirty(false);
         setSaved(true);
       }
@@ -222,7 +227,7 @@ export function ProjectEnvironmentEditor({
               type="button"
               variant="ghost"
               disabled={pending}
-              onClick={() => void save(true)}
+              onClick={() => void save("repository")}
             >
               Save to repository
             </Button>

@@ -78,6 +78,11 @@ execution. AGNT owns cloud checkout and preparation. Agent Server is unchanged.
 SDK repository discovery is opt-in with `Environment.project()`; explicit
 `setup()`/`run()` configurations retain their contract.
 
+In settings, `EnvironmentSection` owns organization and repository navigation.
+`RepositoryEnvironmentSettings` selects the file or saved recipe and writes it;
+`ProjectEnvironmentEditor` owns draft input and validation. Secret management is
+independent of that draft, so adding a secret does not discard unsaved scripts.
+
 The automated qualification covers real local Git worktrees and shell execution,
 authenticated settings/secret routes with isolated Postgres, both browser transports,
 the full local app Settings → Git checkout → Setup → Run terminal journey,

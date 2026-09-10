@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import type { EnvironmentTarget } from "@deus-hq/api";
 import { ChevronRight, FolderGit2, KeyRound, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,18 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { native } from "@/platform";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { RepoService } from "@/features/repository/api/repository.service";
 import { githubRepoSlug } from "@shared/git-origin";
-import type { CloudEnvironmentSettings } from "@shared/types/environment-secrets";
 import {
-  getEnvironmentInstallUrl,
-  getRepositoryEnvironmentFile,
-  saveCloudEnvironmentSetup,
   getEnvironmentSecretSettings,
   listEnvironmentRepositories,
   listSecretOrganizations,
@@ -31,8 +27,10 @@ import {
   environmentRepositories,
   type EnvironmentRepository,
 } from "../../lib/environment-repositories";
-import { CloudApplicationSecrets, ENVIRONMENT_SECRETS_QUERY_KEY } from "./CloudApplicationSecrets";
-import { ProjectEnvironmentEditor } from "./ProjectEnvironmentEditor";
+import { CloudApplicationSecrets } from "./CloudApplicationSecrets";
+import { RepositoryEnvironmentSettings } from "./RepositoryEnvironmentSettings";
+import { ConnectEnvironmentRepositories } from "./ConnectEnvironmentRepositories";
+import { EnvironmentSettingsError } from "./EnvironmentSettingsError";
 import { SetUpEnvironmentWithAgent } from "./SetUpEnvironmentWithAgent";
 
 export function EnvironmentSection() {
@@ -44,7 +42,7 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
   const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const organizations = useQuery({
-    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, "orgs"],
+    queryKey: queryKeys.settings.environments.organizations(accountId),
     queryFn: ({ signal }) => listSecretOrganizations(signal),
     enabled: !!accountId,
     staleTime: 30_000,
@@ -55,6 +53,11 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
     organizations.data?.currentOrganizationId ??
     organizations.data?.items[0]?.id ??
     null;
+  function confirmNavigation() {
+    if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
+    setDirty(false);
+    return true;
+  }
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -66,9 +69,7 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
           <Select
             value={orgId ?? ""}
             onValueChange={(id) => {
-              if (dirty && !window.confirm("Discard unsaved setup changes?")) return;
-              setDirty(false);
-              setSelectedOrg(id);
+              if (confirmNavigation()) setSelectedOrg(id);
             }}
           >
             <SelectTrigger aria-label="Organization" className="w-auto max-w-full">
@@ -85,15 +86,18 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
         )}
       </div>
       {organizations.isError && (
-        <LoadError error={organizations.error} retry={() => void organizations.refetch()} />
+        <EnvironmentSettingsError
+          error={organizations.error}
+          retry={() => void organizations.refetch()}
+        />
       )}
       <RepositoryEnvironments
         key={orgId ?? "local"}
         accountId={accountId}
         orgId={orgId}
         cloudLoading={!!accountId && organizations.isPending}
-        dirty={dirty}
-        setDirty={setDirty}
+        onBeforeNavigate={confirmNavigation}
+        onDirtyChange={setDirty}
         activeOrganization={orgId === organizations.data?.currentOrganizationId}
       />
     </div>
@@ -103,20 +107,20 @@ function RepositoryEnvironments({
   accountId,
   orgId,
   cloudLoading,
-  dirty,
-  setDirty,
+  onBeforeNavigate,
+  onDirtyChange,
   activeOrganization,
 }: {
   accountId: string | null;
   orgId: string | null;
   cloudLoading: boolean;
-  dirty: boolean;
-  setDirty: (dirty: boolean) => void;
+  onBeforeNavigate: () => boolean;
+  onDirtyChange: (dirty: boolean) => void;
   activeOrganization: boolean;
 }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState("cloud");
+  const [setupLocation, setSetupLocation] = useState<EnvironmentTarget>("cloud");
   const signIn = useDeusCloudSignIn();
   const repos = useQuery({
     queryKey: queryKeys.repos.all,
@@ -125,14 +129,14 @@ function RepositoryEnvironments({
     staleTime: 10_000,
   });
   const settings = useQuery({
-    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, null],
+    queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId!, null, signal),
     enabled: !!orgId,
     staleTime: 30_000,
     retry: false,
   });
   const github = useQuery({
-    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, "github-repos"],
+    queryKey: queryKeys.settings.environments.repositories(accountId, orgId),
     queryFn: ({ signal }) => listEnvironmentRepositories(orgId!, signal),
     enabled: !!orgId,
     staleTime: 0,
@@ -140,13 +144,12 @@ function RepositoryEnvironments({
     retry: false,
   });
   function navigate(next: EnvironmentRepository | "defaults" | null) {
-    if (dirty && !window.confirm("Discard unsaved setup changes?")) return;
-    setDirty(false);
+    if (!onBeforeNavigate()) return;
     setSelectedKey(typeof next === "object" ? (next?.key ?? null) : next);
-    if (next && next !== "defaults")
-      setTab(
-        orgId && (next.environment || canAccess(next)) ? "cloud" : next.local ? "local" : "cloud"
-      );
+    if (next && next !== "defaults") {
+      const cloudAvailable = orgId && (next.environment || canAccess(next));
+      setSetupLocation(cloudAvailable || !next.local ? "cloud" : "local");
+    }
   }
   const rows = environmentRepositories(
     repos.data ?? [],
@@ -159,6 +162,15 @@ function RepositoryEnvironments({
     const slug = row.repo && githubRepoSlug(row.repo)?.toLowerCase();
     return !!slug && !!github.data?.repos.some((name) => name.toLowerCase() === slug);
   };
+  function cloudStatus(row: EnvironmentRepository) {
+    if (row.environment) return "Setup saved";
+    if (!accountId) return "Sign in";
+    if (cloudLoading || github.isLoading) return "Checking…";
+    if (!orgId || github.isError) return "Unavailable";
+    if (canAccess(row)) return "Set up";
+    return row.repo ? "Connect GitHub" : "No remote";
+  }
+  const filteredRows = rows.filter((row) => row.name.toLowerCase().includes(search.toLowerCase()));
   if (selection)
     return (
       <div className="space-y-6">
@@ -204,7 +216,10 @@ function RepositoryEnvironments({
                 <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
               </div>
               <div className="flex items-center gap-2">
-                <Select value={tab} onValueChange={setTab}>
+                <Select
+                  value={setupLocation}
+                  onValueChange={(value) => setSetupLocation(value === "local" ? "local" : "cloud")}
+                >
                   <SelectTrigger aria-label="Setup workspace location" className="w-auto">
                     <SelectValue />
                   </SelectTrigger>
@@ -219,13 +234,9 @@ function RepositoryEnvironments({
                 </Select>
                 <SetUpEnvironmentWithAgent
                   repoId={selection.local?.id}
-                  location={tab === "local" ? "local" : "cloud"}
+                  location={setupLocation}
                   activeOrganization={activeOrganization}
-                  onBeforeStart={() => {
-                    if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
-                    setDirty(false);
-                    return true;
-                  }}
+                  onBeforeStart={onBeforeNavigate}
                 />
               </div>
             </div>
@@ -236,7 +247,7 @@ function RepositoryEnvironments({
               repository={selection}
               access={canAccess(selection)}
               accessUnknown={!github.data}
-              onDirtyChange={setDirty}
+              onDirtyChange={onDirtyChange}
               onDefaults={() => navigate("defaults")}
             />
           </>
@@ -247,9 +258,11 @@ function RepositoryEnvironments({
     <div className="space-y-4">
       {!accountId && <CloudSignIn onSignIn={() => signIn.mutate()} pending={signIn.isPending} />}
       {settings.isError && (
-        <LoadError error={settings.error} retry={() => void settings.refetch()} />
+        <EnvironmentSettingsError error={settings.error} retry={() => void settings.refetch()} />
       )}
-      {github.isError && <LoadError error={github.error} retry={() => void github.refetch()} />}
+      {github.isError && (
+        <EnvironmentSettingsError error={github.error} retry={() => void github.refetch()} />
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="text-text-muted pointer-events-none absolute top-3 left-3 size-4" />
@@ -272,7 +285,7 @@ function RepositoryEnvironments({
               <KeyRound className="mr-1.5 size-3.5" />
               Default secrets
             </Button>
-            <ConnectRepositories orgId={orgId} accountId={accountId!} />
+            <ConnectEnvironmentRepositories orgId={orgId} accountId={accountId!} />
           </>
         )}
       </div>
@@ -283,60 +296,44 @@ function RepositoryEnvironments({
           <span className="hidden sm:block">Local</span>
         </div>
         <div className="divide-border-subtle divide-y">
-          {rows
-            .filter((row) => row.name.toLowerCase().includes(search.toLowerCase()))
-            .map((row) => (
-              <button
-                key={row.key}
-                type="button"
-                className="hover:bg-bg-muted focus-visible:bg-bg-muted grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-4 text-left transition-colors outline-none sm:grid-cols-[minmax(0,1fr)_140px_80px]"
-                onClick={() => navigate(row)}
+          {filteredRows.map((row) => (
+            <button
+              key={row.key}
+              type="button"
+              className="hover:bg-bg-muted focus-visible:bg-bg-muted grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-4 text-left transition-colors outline-none sm:grid-cols-[minmax(0,1fr)_140px_80px]"
+              onClick={() => navigate(row)}
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                <RepositoryAvatar repo={row.repo} />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{row.name}</span>
+                  {row.environment && !row.environment.isRepositoryDefault && (
+                    <span className="text-text-muted text-xs">
+                      {row.environment.ownerType === "USER" ? "Personal setup" : "Additional setup"}{" "}
+                      · {row.environment.name}
+                    </span>
+                  )}
+                  {row.local && (
+                    <span
+                      className="text-text-muted block truncate text-xs"
+                      title={row.local.root_path}
+                    >
+                      {row.local.root_path}
+                    </span>
+                  )}
+                </span>
+              </span>
+              <span
+                className={`flex items-center gap-1.5 text-xs ${row.environment ? "text-text-secondary" : "text-text-muted"}`}
               >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <RepositoryAvatar repo={row.repo} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{row.name}</span>
-                    {row.environment && !row.environment.isRepositoryDefault && (
-                      <span className="text-text-muted text-xs">
-                        {row.environment.ownerType === "USER"
-                          ? "Personal setup"
-                          : "Additional setup"}{" "}
-                        · {row.environment.name}
-                      </span>
-                    )}
-                    {row.local && (
-                      <span
-                        className="text-text-muted block truncate text-xs"
-                        title={row.local.root_path}
-                      >
-                        {row.local.root_path}
-                      </span>
-                    )}
-                  </span>
-                </span>
-                <span
-                  className={`flex items-center gap-1.5 text-xs ${row.environment ? "text-text-secondary" : "text-text-muted"}`}
-                >
-                  {row.environment
-                    ? "Setup saved"
-                    : !accountId
-                      ? "Sign in"
-                      : cloudLoading || github.isLoading
-                        ? "Checking…"
-                        : !orgId || github.isError
-                          ? "Unavailable"
-                          : canAccess(row)
-                            ? "Set up"
-                            : row.repo
-                              ? "Connect GitHub"
-                              : "No remote"}
-                  <ChevronRight className="size-3" />
-                </span>
-                <span className="text-text-muted hidden text-xs sm:block">
-                  {row.local ? "Available" : "—"}
-                </span>
-              </button>
-            ))}
+                {cloudStatus(row)}
+                <ChevronRight className="size-3" />
+              </span>
+              <span className="text-text-muted hidden text-xs sm:block">
+                {row.local ? "Available" : "—"}
+              </span>
+            </button>
+          ))}
         </div>
         {!rows.length && (
           <p role="status" className="text-text-muted px-4 py-10 text-center text-sm">
@@ -345,12 +342,11 @@ function RepositoryEnvironments({
               : "Connect GitHub or add a local project to get started."}
           </p>
         )}
-        {!!rows.length &&
-          !rows.some((row) => row.name.toLowerCase().includes(search.toLowerCase())) && (
-            <p className="text-text-muted px-4 py-8 text-center text-sm">
-              No repositories match your search.
-            </p>
-          )}
+        {!!rows.length && !filteredRows.length && (
+          <p className="text-text-muted px-4 py-8 text-center text-sm">
+            No repositories match your search.
+          </p>
+        )}
       </div>
       <p className="text-text-muted text-xs">
         Cloud access comes from the Deus GitHub App. Local setup is available for repositories on
@@ -376,167 +372,6 @@ function RepositoryAvatar({ repo }: { repo: string | null }) {
     </Avatar>
   );
 }
-function RepositoryEnvironmentSettings({
-  accountId,
-  orgId,
-  repository,
-  access,
-  accessUnknown,
-  onDirtyChange,
-  onDefaults,
-}: {
-  accountId: string | null;
-  orgId: string | null;
-  repository: EnvironmentRepository;
-  access: boolean;
-  accessUnknown: boolean;
-  onDirtyChange: (dirty: boolean) => void;
-  onDefaults: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const environmentId = repository.environment?.id ?? null;
-  const local = repository.local?.root_path ? repository.local : null;
-  const slug = repository.repo ? githubRepoSlug(repository.repo) : null;
-  const settings = useQuery({
-    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, environmentId],
-    queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId!, environmentId, signal),
-    enabled: !!orgId,
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const file = useQuery({
-    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, "file", repository.key],
-    queryFn: ({ signal }) =>
-      local
-        ? RepoService.fetchEnvironmentFile(local.id)
-        : getRepositoryEnvironmentFile(orgId!, slug!, signal),
-    enabled: !!local || (!!orgId && !!slug && access),
-    staleTime: 0,
-    retry: false,
-  });
-  if (settings.isError)
-    return <LoadError error={settings.error} retry={() => void settings.refetch()} />;
-  if (file.isError) return <LoadError error={file.error} retry={() => void file.refetch()} />;
-  if (settings.isLoading || file.isLoading)
-    return (
-      <p role="status" className="text-text-muted text-sm">
-        Loading project environment…
-      </p>
-    );
-  const selected = settings.data?.selectedEnvironment;
-  const project = file.data?.project ?? selected?.project ?? { version: 1 };
-  const fromFile = !!file.data?.project;
-  const canEdit = fromFile
-    ? !!local
-    : settings.data
-      ? (selected?.canEdit ?? settings.data.canManageShared)
-      : !!local;
-  const fileKnown = !!file.data || !repository.repo;
-  const sourceLabel = fromFile
-    ? `.deus/environment.json · ${file.data?.branch ?? "current branch"}${local ? " · Local checkout; publish changes through Git." : " · Add this repository to Deus, then open a setup workspace to edit and publish this file."}`
-    : !orgId
-      ? "Local repository file · Publish through Git to share with your team."
-      : "Saved project settings · Shared across future local and cloud workspaces.";
-  return (
-    <div className="space-y-5">
-      {!access && orgId && !local && (
-        <div className="bg-bg-muted flex flex-wrap items-center justify-between gap-3 rounded-lg p-3">
-          <p className="text-text-muted text-xs">
-            {accessUnknown
-              ? "Checking repository access…"
-              : "Connect GitHub to read this repository's environment."}
-          </p>
-          <ConnectRepositories orgId={orgId} accountId={accountId!} />
-        </div>
-      )}
-      {selected && !selected.project && (
-        <p className="text-text-muted text-sm">
-          This environment is configured through the SDK. Its secrets can be managed below.
-        </p>
-      )}
-      {fileKnown && (!selected || !!selected.project || fromFile) && (
-        <ProjectEnvironmentEditor
-          project={project}
-          sourceLabel={sourceLabel}
-          canEdit={canEdit}
-          canExport={!!local && !fromFile && !!orgId}
-          onDirtyChange={onDirtyChange}
-          onSave={async (next, exportFile, signal) => {
-            if ((fromFile || exportFile || !orgId || !repository.repo) && local) {
-              await RepoService.saveEnvironmentFile(local.id, next);
-              if (signal.aborted) return;
-              await file.refetch();
-            } else if (orgId && (repository.repo || environmentId)) {
-              const result = await saveCloudEnvironmentSetup(
-                orgId,
-                environmentId ? { environmentId } : { repo: repository.repo! },
-                next,
-                signal
-              );
-              if (signal.aborted) return;
-              queryClient.setQueryData<CloudEnvironmentSettings>(
-                [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, result.id],
-                (previous) =>
-                  previous?.selectedEnvironment
-                    ? {
-                        ...previous,
-                        selectedEnvironment: { ...previous.selectedEnvironment, project: next },
-                      }
-                    : previous
-              );
-            }
-            await queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
-            await queryClient.invalidateQueries({ queryKey: ["workspaces", "environment"] });
-          }}
-        />
-      )}
-      <div className="border-border-subtle border-t pt-5">
-        {orgId && settings.data ? (
-          <CloudApplicationSecrets
-            orgId={orgId}
-            environmentId={environmentId}
-            repo={repository.repo ?? undefined}
-            settings={settings.data}
-            project={project}
-            onDefaults={onDefaults}
-          />
-        ) : (
-          <p className="text-text-muted text-sm">
-            Sign in to manage cloud secrets. Local workspaces use your .env and .env.local files.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-function ConnectRepositories({ orgId, accountId }: { orgId: string; accountId: string }) {
-  const install = useQuery({
-    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, "github-install"],
-    queryFn: ({ signal }) => getEnvironmentInstallUrl(orgId, signal),
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: true,
-    retry: false,
-  });
-  if (install.isError)
-    return (
-      <Button size="sm" variant="outline" onClick={() => void install.refetch()}>
-        Retry GitHub connection
-      </Button>
-    );
-  return (
-    <Button
-      size="sm"
-      variant="outline"
-      disabled={!install.data}
-      onClick={() => {
-        if (install.data) void native.window.openExternal(install.data.url);
-      }}
-    >
-      Install GitHub App
-    </Button>
-  );
-}
 function CloudSignIn({ onSignIn, pending }: { onSignIn: () => void; pending: boolean }) {
   return (
     <div className="border-border-subtle flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
@@ -545,16 +380,6 @@ function CloudSignIn({ onSignIn, pending }: { onSignIn: () => void; pending: boo
       </p>
       <Button size="sm" onClick={onSignIn} disabled={pending}>
         Sign in to Deus Cloud
-      </Button>
-    </div>
-  );
-}
-function LoadError({ error, retry }: { error: Error; retry: () => void }) {
-  return (
-    <div role="alert" className="space-y-2">
-      <p className="text-destructive text-sm">{error.message}</p>
-      <Button size="sm" variant="outline" onClick={retry}>
-        Try again
       </Button>
     </div>
   );
