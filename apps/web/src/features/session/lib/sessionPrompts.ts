@@ -19,16 +19,6 @@ export const COMPACT_CONVERSATION = "/compact";
 // Pull request actions
 // ---------------------------------------------------------------------------
 
-/** Cloud quick action: agent explores, VERIFIES setup by running it, then
- *  persists it with the agnt_configure_environment tool (platform-side). */
-export const CONFIGURE_CLOUD_ENV = [
-  "Set up this repository's cloud environment so future cloud workspaces start ready to work:",
-  "1. Explore the repo (lockfiles, manifests, README/AGENTS.md) and work out how to install dependencies and prepare it.",
-  "2. RUN the setup here in this sandbox and verify it succeeds — fix your commands until they do.",
-  "3. Persist the verified configuration with the agnt_configure_environment tool: setup commands, any apt packages, and the NAMES of env vars the repo needs (never values).",
-  "4. Tell me what you configured and which env var values I still need to provide.",
-].join("\n");
-
 /** Instructs the agent to create a PR targeting the given branch */
 export function createPRPrompt(targetBranch = "main"): string {
   return `Create a PR onto ${targetBranch}`;
@@ -66,54 +56,31 @@ Provide a concise summary of findings with specific file and line references.`;
 // Workspace setup
 // ---------------------------------------------------------------------------
 
-/**
- * Instructs the agent to analyze the project and generate a deus.json manifest.
- * Sent when user clicks "Set up your environment" in a fresh workspace.
- * Keep in sync with .claude/skills/generate-deus-json/SKILL.md
- */
-export const GENERATE_HIVE_JSON = `Analyze this project and generate a \`deus.json\` manifest file at the project root. This manifest tells the IDE how to set up workspaces, run dev servers, and execute common tasks.
+/** Shared setup workflow for settings, the workspace header and composer. */
+export function setupEnvironmentPrompt(location: "local" | "cloud"): string {
+  const workflow = `Set up this repository's ${location} development environment.
 
-**Steps:**
-1. Detect the tech stack from lockfiles and project files (package.json, Cargo.toml, pyproject.toml, etc.)
-2. Detect the package manager (bun, npm, yarn, pnpm, cargo, uv, pip, etc.)
-3. Check for existing configs to import from: \`deus.json\`, \`.codex/environments/environment.toml\`
-4. Extract scripts from package.json (or equivalent) and map them to tasks
-5. Detect runtime requirements (.nvmrc, engines field, rust-toolchain.toml, etc.)
-6. Write the \`deus.json\` file
+Inspect the repository instructions, lockfiles, existing configuration and scripts first. Preserve working behavior and use the project's pinned package manager and tool versions. Explain the setup strategy briefly, then implement it.
 
-**Schema:**
-\`\`\`json
-{
-  "$schema": "https://deus.dev/schemas/deus.json",
-  "version": 1,
-  "name": "<project name>",
-  "scripts": { "setup": "<install command>", "run": "<main dev command>" },
-  "requires": { "<runtime>": ">= <version>" },
-  "env": {},
-  "lifecycle": { "setup": "<setup script>" },
-  "tasks": {
-    "<name>": "<command>",
-    "<name>": { "command": "<cmd>", "icon": "<lucide-icon>", "persistent": true, "description": "..." }
-  }
+Separate installation from running the app: setup must be non-interactive, finish successfully and be safe to rerun. Keep development servers and watchers out of setup. Prefer existing scripts; use a small script file when several commands need shared shell state. Do not rewrite lockfiles or upgrade dependencies just to set up the environment.
+
+Run the proposed setup, rerun it to check idempotence, then start the app and check an actual readiness signal. Run relevant existing checks. Stop the temporary processes you started after validation. Report what passed, what failed and which checks you could not run. Do not claim a fresh-workspace test unless you performed one.
+
+Never write secret values into committed configuration, scripts, logs or chat. Report only the names of missing values. Do not deploy, publish or change shared infrastructure as part of setup.`;
+
+  return `${workflow}
+
+${
+  location === "cloud"
+    ? `This workspace runs on AGNT's managed E2B base template. Configure the repository bootstrap; do not build or promote a platform template.
+Use agnt_configure_environment to save verified setup commands, needed apt packages and requiredEnv names. Each command runs in its own shell with the repository as its working directory; keep dependent commands together in a script. Preserve needed existing configuration when replacing a setup or packages list. Save only after verification and report the tool's result. If the tool is unavailable or fails, explain that setup was not saved.
+Saving affects future cloud workspaces, not the running sandbox. Ask the user to supply missing values in Environment → this repository → Cloud.`
+    : `Configure deus.json in this workspace using the existing manifest when present. Preserve unrelated fields.
+Use version: 1, lifecycle.setup for installation, scripts.run for the development server, requires for tool requirements, and tasks for useful project commands. Mark long-running tasks persistent: true. The env field is only for public configuration.
+Local lifecycle commands must be a single executable command. Put multiline logic, shell chaining and exports in a script file, then point lifecycle.setup at that script. Keep scripts portable for the current machine and the repository's supported platforms.
+Verify the saved commands, then summarize the changes for review. Local setup is versioned with the repository: changes in this workspace must be merged into the branch used for future workspaces. Do not write into another checkout, commit, push or merge automatically.`
+}`;
 }
-\`\`\`
-
-**Script-to-task mapping:**
-- dev/start/serve → task "dev" (icon: "play", persistent: true)
-- build/compile → task "build" (icon: "hammer")
-- test → task "test" (icon: "check-circle")
-- lint → task "lint" (icon: "search-code")
-- format/fmt → task "format" (icon: "paintbrush")
-- typecheck/tsc → task "typecheck" (icon: "search-code")
-- deploy/release → task "deploy" (icon: "rocket")
-- storybook → task "storybook" (icon: "book-open", persistent: true)
-
-**Rules:**
-- Use string shorthand for simple tasks: \`"test": "bun run test"\`
-- Use object form only when task needs icon, depends, persistent, or mode
-- Always include backwards-compatible \`scripts.setup\` and \`scripts.run\` fields
-- Dev tasks with long-running servers must have \`persistent: true\`
-- Write the file, then show a brief summary of what was generated`;
 
 /**
  * Instructs the agent to fix a failed setup script.

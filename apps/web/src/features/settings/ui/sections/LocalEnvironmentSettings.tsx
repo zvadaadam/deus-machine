@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2, FileJson, ChevronDown, ChevronRight, Wand2 } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useRepoManifest, useSaveRepoManifest } from "@/features/repository";
-import { RepoService } from "@/features/repository/api/repository.service";
 import {
   EMPTY_TASK,
   EMPTY_DRAFT,
@@ -37,8 +36,6 @@ export function LocalEnvironmentSettings({
 
   const [draft, setDraft] = useState<ManifestDraft>(EMPTY_DRAFT);
   const [isDirty, setIsDirty] = useState(false);
-  const [rawJsonOpen, setRawJsonOpen] = useState(false);
-  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     onDirtyChange(isDirty);
@@ -67,7 +64,7 @@ export function LocalEnvironmentSettings({
       { repoId, manifest },
       {
         onSuccess: () => {
-          toast.success("deus.json saved");
+          toast.success("Local setup saved");
           setIsDirty(false);
         },
         onError: (err) => {
@@ -84,63 +81,17 @@ export function LocalEnvironmentSettings({
     }
   }, [manifestData]);
 
-  const handleDetect = useCallback(async () => {
-    setDetecting(true);
-    try {
-      const { manifest } = await RepoService.detectManifest(repoId);
-      setDraft(manifestToDraft(manifest));
-      setIsDirty(true);
-      toast.success("Detected project configuration");
-    } catch (err) {
-      toast.error(`Detection failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-    } finally {
-      setDetecting(false);
-    }
-  }, [repoId]);
-
-  const rawJson = useMemo(() => JSON.stringify(draftToManifest(draft), null, 2), [draft]);
-
   // Collect task names for dependency picker
   const taskNames = useMemo(() => draft.tasks.map((t) => t.name).filter(Boolean), [draft.tasks]);
 
   return (
     <div className="space-y-5">
-      <p className="text-text-muted text-sm">
-        Scripts and public variables are saved in this repository’s deus.json.
-      </p>
       {manifestLoading ? (
         <div className="flex h-20 items-center justify-center">
           <Loader2 className="text-muted-foreground size-4 animate-spin motion-reduce:animate-none" />
         </div>
       ) : (
         <>
-          {/* Auto-detect button — shown when manifest is empty or doesn't exist */}
-          {(!manifestData?.manifest || Object.keys(manifestData.manifest).length <= 1) && (
-            <div className="border-border-subtle flex items-center gap-3 rounded-lg border border-dashed p-4">
-              <Wand2 className="text-muted-foreground size-5 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">No deus.json found</p>
-                <p className="text-muted-foreground text-base">
-                  Auto-detect tasks from your project files (package.json, Cargo.toml, etc.)
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDetect}
-                disabled={detecting}
-                className="shrink-0"
-              >
-                {detecting && (
-                  <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
-                )}
-                Generate
-              </Button>
-            </div>
-          )}
-
-          <Separator />
-
           {/* Setup script */}
           <div className="space-y-2">
             <Label htmlFor="setup-script" className="text-sm">
@@ -175,6 +126,78 @@ export function LocalEnvironmentSettings({
               onChange={(e) => updateDraft("runScript", e.target.value)}
               placeholder="e.g. bun run dev"
             />
+          </div>
+
+          {/* Environment Variables */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Public environment variables</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  updateDraft("env", [
+                    ...draft.env,
+                    { id: crypto.randomUUID(), key: "", value: "" },
+                  ])
+                }
+                className="h-7 gap-1 px-2 text-xs"
+              >
+                <Plus className="size-3" />
+                Add variable
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Shared with your code. Keep API keys and other private values in local environment
+              files. Cloud secrets are managed on the Cloud tab.
+            </p>
+            {draft.env.length === 0 && (
+              <p className="text-muted-foreground text-base">
+                No environment variables configured.
+              </p>
+            )}
+            {draft.env.map((envVar, i) => (
+              <div key={envVar.id} className="flex items-center gap-2">
+                <Input
+                  aria-label={`Variable ${i + 1} name`}
+                  value={envVar.key}
+                  onChange={(e) => {
+                    const next = [...draft.env];
+                    next[i] = { ...next[i], key: e.target.value };
+                    updateDraft("env", next);
+                  }}
+                  placeholder="KEY"
+                  className="flex-1 font-mono text-xs"
+                />
+                <Input
+                  aria-label={`Variable ${i + 1} value`}
+                  value={envVar.value}
+                  onChange={(e) => {
+                    const next = [...draft.env];
+                    next[i] = { ...next[i], value: e.target.value };
+                    updateDraft("env", next);
+                  }}
+                  placeholder="value"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove variable ${i + 1}`}
+                  onClick={() =>
+                    updateDraft(
+                      "env",
+                      draft.env.filter((_, j) => j !== i)
+                    )
+                  }
+                  className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
           </div>
 
           <details className="border-border-subtle border-t pt-4">
@@ -288,77 +311,6 @@ export function LocalEnvironmentSettings({
 
               <Separator />
 
-              {/* Environment Variables */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Public environment variables</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      updateDraft("env", [
-                        ...draft.env,
-                        { id: crypto.randomUUID(), key: "", value: "" },
-                      ])
-                    }
-                    className="h-7 gap-1 px-2 text-xs"
-                  >
-                    <Plus className="size-3" />
-                    Add
-                  </Button>
-                </div>
-                <p className="text-muted-foreground text-xs">
-                  Saved in deus.json and committed with your code. Keep private keys in your local
-                  environment; cloud secrets are managed on the Cloud tab.
-                </p>
-                {draft.env.length === 0 && (
-                  <p className="text-muted-foreground text-base">
-                    No environment variables configured.
-                  </p>
-                )}
-                {draft.env.map((envVar, i) => (
-                  <div key={envVar.id} className="flex items-center gap-2">
-                    <Input
-                      value={envVar.key}
-                      onChange={(e) => {
-                        const next = [...draft.env];
-                        next[i] = { ...next[i], key: e.target.value };
-                        updateDraft("env", next);
-                      }}
-                      placeholder="KEY"
-                      className="flex-1 font-mono text-xs"
-                    />
-                    <Input
-                      value={envVar.value}
-                      onChange={(e) => {
-                        const next = [...draft.env];
-                        next[i] = { ...next[i], value: e.target.value };
-                        updateDraft("env", next);
-                      }}
-                      placeholder="value"
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        updateDraft(
-                          "env",
-                          draft.env.filter((_, j) => j !== i)
-                        )
-                      }
-                      className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              <Separator />
-
               {/* Tasks */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -403,35 +355,9 @@ export function LocalEnvironmentSettings({
                   />
                 ))}
               </div>
-
-              <Separator />
-
-              {/* Raw JSON preview */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setRawJsonOpen(!rawJsonOpen)}
-                  className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 text-sm transition-colors duration-200"
-                >
-                  {rawJsonOpen ? (
-                    <ChevronDown className="size-3.5" />
-                  ) : (
-                    <ChevronRight className="size-3.5" />
-                  )}
-                  <FileJson className="size-3.5" />
-                  <span>Raw JSON preview</span>
-                </button>
-                {rawJsonOpen && (
-                  <pre className="bg-bg-muted text-text-secondary max-h-80 overflow-auto rounded-md p-3 text-xs">
-                    {rawJson}
-                  </pre>
-                )}
-              </div>
-
-              <Separator />
             </div>
           </details>
-          {/* Save / Reset / Generate */}
+          {/* Save / Reset */}
           <div className="flex items-center gap-2">
             <Button onClick={handleSave} disabled={!isDirty || saveMutation.isPending} size="sm">
               {saveMutation.isPending && (
@@ -441,14 +367,6 @@ export function LocalEnvironmentSettings({
             </Button>
             <Button variant="outline" size="sm" onClick={handleReset} disabled={!isDirty}>
               Reset
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleDetect} disabled={detecting}>
-              {detecting ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Wand2 className="mr-1.5 size-3.5" />
-              )}
-              Auto-detect
             </Button>
             {isDirty && <span className="text-muted-foreground text-xs">Unsaved changes</span>}
           </div>

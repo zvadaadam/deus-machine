@@ -198,9 +198,21 @@ function RepositoryEnvironments({
           </>
         ) : (
           <>
-            <div className="flex items-center gap-3">
-              <RepositoryAvatar repo={selection.repo} />
-              <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <RepositoryAvatar repo={selection.repo} />
+                <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
+              </div>
+              <SetUpEnvironmentWithAgent
+                repoId={selection.local?.id}
+                location={tab === "local" ? "local" : "cloud"}
+                activeOrganization={activeOrganization}
+                onBeforeStart={() => {
+                  if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
+                  setDirty(false);
+                  return true;
+                }}
+              />
             </div>
             <Tabs
               value={tab}
@@ -231,7 +243,6 @@ function RepositoryEnvironments({
                     repository={selection}
                     access={canAccess(selection)}
                     accessUnknown={!github.data}
-                    activeOrganization={activeOrganization}
                     onDirtyChange={setDirty}
                     onDefaults={() => navigate("defaults")}
                   />
@@ -394,7 +405,6 @@ function CloudRepositorySettings({
   repository,
   access,
   accessUnknown,
-  activeOrganization,
   onDirtyChange,
   onDefaults,
 }: {
@@ -403,7 +413,6 @@ function CloudRepositorySettings({
   repository: EnvironmentRepository;
   access: boolean;
   accessUnknown: boolean;
-  activeOrganization: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onDefaults: () => void;
 }) {
@@ -444,9 +453,6 @@ function CloudRepositorySettings({
           </p>
           <ConnectRepositories orgId={orgId} accountId={accountId} />
         </div>
-      )}
-      {repository.local && activeOrganization && (
-        <SetUpEnvironmentWithAgent repoId={repository.local.id} />
       )}
       <CloudSetupEditor
         key={environmentId ?? "new"}

@@ -199,12 +199,15 @@ seconds or until dismissed; it is not a persistent chat component.
 
 Board `56` shows the repository list in `EnvironmentSection.tsx`, with GitHub owner
 avatars and cloud/local availability. `56a` is the repository's cloud setup and
-secrets; `56b` is its local `deus.json` editor; `56c` manages default secrets across
+secrets; `56b` is its local setup editor; `56c` manages default secrets across
 repositories; `56d` is the mobile list; `56e` shows a signed-in account when cloud
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
 to repositories.
 Cloud setup preserves saved command boundaries, phases and parallel steps.
-Local setup keeps advanced tasks, requirements and public variables in a disclosure.
+Both repository detail boards have one **Set up with agent** action in the repository
+header, targeting the selected Local/Cloud tab. Local setup shows public variables
+after setup/run scripts; archive scripts, tasks and requirements stay in Advanced.
+The Generate, Auto-detect and JSON-preview controls are removed.
 Board `66a` shows add, replace and delete states of `EnvironmentSecretDialog.tsx`.
 Values are write-only; existing values are never drawn into a replacement form.
 The page determines a new secret's repository scope; the dialog only asks whether

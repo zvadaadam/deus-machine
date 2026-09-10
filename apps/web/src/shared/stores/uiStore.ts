@@ -9,6 +9,12 @@ import type { SettingsSection } from "@shared/types/settings";
 
 export type NewWorkspaceMode = "default" | "from-github";
 
+export interface EnvironmentSetupRequest {
+  repoId: string;
+  location: "local" | "cloud";
+  model: string;
+}
+
 interface UIState {
   // Modals
   showNewWorkspaceModal: boolean;
@@ -29,12 +35,8 @@ interface UIState {
   /** Deep-link: open straight onto this automation's detail (consumed once). */
   automationsFocusId: string | null;
 
-  /**
-   * Pending "set up cloud environment with an agent" request from Settings.
-   * MainLayout consumes it: closes settings, creates a cloud workspace on the
-   * repo, and sends the onboarding prompt as turn one.
-   */
-  pendingEnvSetupRepoId: string | null;
+  /** MainLayout creates a workspace and sends the setup instructions as turn one. */
+  pendingEnvSetup: EnvironmentSetupRequest | null;
 
   // Actions - Modals
   openNewWorkspaceModal: (mode?: NewWorkspaceMode) => void;
@@ -53,7 +55,7 @@ interface UIState {
   openSettings: () => void;
   closeSettings: () => void;
   setActiveSettingsSection: (section: SettingsSection) => void;
-  requestEnvSetup: (repoId: string) => void;
+  requestEnvSetup: (request: EnvironmentSetupRequest) => void;
   clearEnvSetupRequest: () => void;
 
   // Actions - Automations view
@@ -77,7 +79,7 @@ export const useUIStore = create<UIState>()(
       activeSettingsSection: "general" as SettingsSection,
       automationsOpen: false,
       automationsFocusId: null,
-      pendingEnvSetupRepoId: null,
+      pendingEnvSetup: null,
 
       // Modal actions
       openNewWorkspaceModal: (mode: NewWorkspaceMode = "default") =>
@@ -152,11 +154,10 @@ export const useUIStore = create<UIState>()(
       setActiveSettingsSection: (section) =>
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
 
-      requestEnvSetup: (repoId) =>
-        set({ pendingEnvSetupRepoId: repoId, settingsOpen: false }, false, "ui/requestEnvSetup"),
+      requestEnvSetup: (request) =>
+        set({ pendingEnvSetup: request, settingsOpen: false }, false, "ui/requestEnvSetup"),
 
-      clearEnvSetupRequest: () =>
-        set({ pendingEnvSetupRepoId: null }, false, "ui/clearEnvSetupRequest"),
+      clearEnvSetupRequest: () => set({ pendingEnvSetup: null }, false, "ui/clearEnvSetupRequest"),
 
       closeAllModals: () =>
         set(

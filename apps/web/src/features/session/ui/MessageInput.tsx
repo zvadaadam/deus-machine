@@ -30,7 +30,7 @@ import { useSlashCommand } from "../hooks/useSlashCommand";
 import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
 import { SlashCommandPopover } from "./SlashCommandPopover";
-import { GENERATE_HIVE_JSON } from "../lib/sessionPrompts";
+import { setupEnvironmentPrompt } from "../lib/sessionPrompts";
 import {
   extractImagesFromClipboard,
   processImageFiles,
@@ -361,7 +361,8 @@ export function MessageInput({
 
   // "Set up your environment" nudge — visible when no deus.json + no history yet.
   const showSetupNudge = !hasManifest && !hasMessages;
-  const handleSetupEnvironment = () => onSend(GENERATE_HIVE_JSON);
+  const handleSetupEnvironment = () =>
+    onSend(setupEnvironmentPrompt(workspaceKind === "cloud" ? "cloud" : "local"));
 
   // Codex has no plan mode; cloud has no permission-mode transport on either
   // lane (Mac relay and direct both send none; the sidecar runs bypass) — an

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/shared/lib/utils";
 import { ModelPicker, CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
-import { getStoredModel, setStoredModel } from "./HomeView";
+import { getStoredModel, setStoredModel } from "@/features/session/lib/modelPreference";
 
 interface NewWorkspacePromptModalProps {
   show: boolean;

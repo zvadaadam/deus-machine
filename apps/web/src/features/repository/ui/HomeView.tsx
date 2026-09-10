@@ -15,7 +15,7 @@ import {
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
-import { DEFAULT_MODEL, resolveModelSelection } from "@/shared/agents";
+import { getStoredModel, setStoredModel } from "@/features/session/lib/modelPreference";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import {
@@ -34,7 +34,6 @@ import { ModelPicker, CloudToggle, BranchPickerButton } from "./composer/Compose
 
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";
-const LAST_MODEL_KEY = "deus:welcome-last-model";
 
 function getStoredRepoId(): string | null {
   try {
@@ -47,28 +46,6 @@ function getStoredRepoId(): string | null {
 function setStoredRepoId(id: string) {
   try {
     localStorage.setItem(LAST_REPO_KEY, id);
-  } catch {
-    /* localStorage unavailable */
-  }
-}
-
-export function getStoredModel(): string {
-  // Validate against the catalog — stale localStorage (old aliases like
-  // "claude:sonnet", removed models, renamed formats) falls back to the
-  // current default instead of silently sending an unknown model.
-  try {
-    const stored = localStorage.getItem(LAST_MODEL_KEY);
-    const resolved = stored ? resolveModelSelection(stored) : undefined;
-    if (resolved) return resolved;
-  } catch {
-    /* localStorage unavailable */
-  }
-  return DEFAULT_MODEL;
-}
-
-export function setStoredModel(model: string) {
-  try {
-    localStorage.setItem(LAST_MODEL_KEY, model);
   } catch {
     /* localStorage unavailable */
   }

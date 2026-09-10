@@ -17,10 +17,25 @@ An unconfirmed GitHub lookup is not presented as missing access.
 
 Open a repository to edit its Cloud or Local setup; breadcrumbs return to the list.
 Cloud setup edits the existing recipe's commands while preserving phases, parallel
-steps and unrelated configuration. Local setup keeps setup/run scripts together,
-with tasks, requirements, public variables and raw JSON under Advanced setup.
+steps and unrelated configuration. Setup/run scripts and public environment variables
+are visible together in Local; archive scripts, tasks and requirements remain under
+Advanced setup. Cloud application secrets sit directly below the setup commands.
 Tab, repository and organization navigation warn before discarding unsaved scripts.
 GitHub App access is required for private repositories, not for saving a recipe.
+
+The repository header has one **Set up with agent** action. It uses the selected
+Local/Cloud tab and the model last chosen in the workspace composer. The action
+uses the normal workspace creation and first-message path; Cloud checks the selected
+provider's connected default account. Starting a setup workspace currently requires
+a repository added to Deus on the desktop. GitHub-only rows can save cloud setup and
+secrets, but do not yet have a workspace creation path here.
+
+The setup instructions share one workflow across settings, the workspace header and
+the composer: inspect existing configuration, separate installation from app startup,
+verify setup and app readiness, and report missing secret names. Cloud saves verified
+commands through `agnt_configure_environment` for future sandboxes. Local edits the
+workspace's versioned `deus.json`; those changes must reach the branch used for future
+workspaces. Setup commands requiring shared shell state belong in a script file.
 
 Secrets added on a repository page apply to that recipe automatically. Default
 secrets have their own page and cannot be edited accidentally from a repository.

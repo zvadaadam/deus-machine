@@ -37,7 +37,7 @@ import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";
 import { AppIcon, groupAppsByCategory } from "@/shared/lib/appIcons";
 import { useLastOpenInApp } from "@/shared/hooks/useLastOpenInApp";
-import { fixSetupErrorPrompt, GENERATE_HIVE_JSON } from "@/features/session/lib/sessionPrompts";
+import { fixSetupErrorPrompt, setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
 
 interface WorkspaceHeaderProps {
   title?: string;
@@ -336,7 +336,12 @@ export function WorkspaceHeader({
               disabled={setupStatus === "running"}
               onRunTask={onRunTask}
               onSetupEnvironment={
-                onSendAgentMessage ? () => onSendAgentMessage(GENERATE_HIVE_JSON) : undefined
+                onSendAgentMessage
+                  ? () =>
+                      onSendAgentMessage(
+                        setupEnvironmentPrompt(kind === "cloud" ? "cloud" : "local")
+                      )
+                  : undefined
               }
             />
           )}

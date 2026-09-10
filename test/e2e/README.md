@@ -8,11 +8,13 @@ This directory contains all test files for the Deus application.
 
 Runs the real Environment settings components through both the desktop backend
 proxy and direct web API against AGNT's authenticated routes and encrypted
-Postgres store. Native sign-in, GitHub discovery and local manifests are fixtures;
+Postgres store. Native sign-in, provider metadata, GitHub discovery and local manifests are fixtures;
 cloud setup/secret writes and ownership checks are real. It covers repository
 navigation, setup save/readback, retained local manifest fields, unsaved-edit guards,
 repository/default secrets, organization/account switching, replacement/deletion,
-mobile overflow and absence of secret values from query/mutation caches.
+mobile overflow and absence of secret values from query/mutation caches. The agent
+setup action is checked through its Local/Cloud request and selected Codex model;
+the harness does not create workspaces or run an agent turn.
 
 Create and migrate a disposable Postgres database using the linked AGNT checkout,
 then run from the Deus worktree:

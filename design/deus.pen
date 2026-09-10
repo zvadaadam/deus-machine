@@ -81505,10 +81505,23 @@
                               "id": "ERn8z",
                               "name": "Repository title",
                               "fill": "$text-primary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
                               "content": "acme/mobile-app",
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
                               "fontWeight": "500"
+                            },
+                            {
+                              "id": "u0qkxX",
+                              "type": "ref",
+                              "ref": "Rcfnv",
+                              "name": "Set up with agent — selected Cloud target",
+                              "descendants": {
+                                "kB8v8": {
+                                  "content": "Set up with agent"
+                                }
+                              }
                             }
                           ]
                         },
@@ -82469,10 +82482,23 @@
                               "id": "Sgv0g",
                               "name": "Repository title",
                               "fill": "$text-primary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
                               "content": "acme/mobile-app",
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
                               "fontWeight": "500"
+                            },
+                            {
+                              "id": "hUtHW",
+                              "type": "ref",
+                              "ref": "Rcfnv",
+                              "name": "Set up with agent — selected Local target",
+                              "descendants": {
+                                "kB8v8": {
+                                  "content": "Set up with agent"
+                                }
+                              }
                             }
                           ]
                         },
@@ -82514,18 +82540,6 @@
                               "fontWeight": "normal"
                             }
                           ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "stt6Y",
-                          "name": "Local file explanation",
-                          "fill": "$text-muted",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Scripts and public variables are saved in this repository’s deus.json.",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "normal"
                         },
                         {
                           "type": "frame",
@@ -82579,7 +82593,7 @@
                                   "fill": "$text-primary",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "bun install\nbun run generate",
+                                  "content": "./scripts/setup.sh",
                                   "fontFamily": "$font-mono",
                                   "fontSize": "$text-xs",
                                   "fontWeight": "normal"
@@ -82650,16 +82664,115 @@
                           ]
                         },
                         {
-                          "type": "text",
-                          "id": "DBrII",
-                          "name": "Advanced setup disclosure",
-                          "fill": "$text-secondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "DVHVX",
+                          "name": "Public variables and advanced setup",
                           "width": "fill_container",
-                          "content": "›  Advanced setup",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 20,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "GYLcP",
+                              "name": "Public environment variables",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 10,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "VwGqt",
+                                  "width": "fill_container",
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "S4nI0",
+                                      "fill": "$text-primary",
+                                      "content": "Public environment variables",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "id": "D11Qn",
+                                      "type": "ref",
+                                      "ref": "WNY4N",
+                                      "name": "Add variable",
+                                      "descendants": {
+                                        "XQbnF": {
+                                          "content": "+  Add variable"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "jiZld",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Shared with your code. Keep API keys and other private values in local environment files.\nCloud secrets are managed on the Cloud tab.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "FEbVy",
+                                  "width": "fill_container",
+                                  "gap": 8,
+                                  "children": [
+                                    {
+                                      "id": "mNpm1",
+                                      "type": "ref",
+                                      "ref": "YqG8t",
+                                      "width": "fill_container",
+                                      "name": "Variable name",
+                                      "descendants": {
+                                        "E8yhJ5": {
+                                          "content": "PUBLIC_MODE"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "id": "dQzlL",
+                                      "type": "ref",
+                                      "ref": "YqG8t",
+                                      "width": "fill_container",
+                                      "name": "Variable value",
+                                      "descendants": {
+                                        "E8yhJ5": {
+                                          "content": "development"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "icon",
+                                      "id": "UF7AI",
+                                      "width": 16,
+                                      "height": 16,
+                                      "icon": "trash-2",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "d0ExDr",
+                              "name": "Advanced setup disclosure",
+                              "fill": "$text-secondary",
+                              "content": "›  Advanced setup",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-sm",
+                              "fontWeight": "normal"
+                            }
+                          ]
                         },
                         {
                           "type": "frame",
@@ -82686,17 +82799,6 @@
                               "descendants": {
                                 "kB8v8": {
                                   "content": "Reset"
-                                }
-                              }
-                            },
-                            {
-                              "id": "Ozqub",
-                              "type": "ref",
-                              "ref": "WNY4N",
-                              "name": "Auto-detect",
-                              "descendants": {
-                                "XQbnF": {
-                                  "content": "Auto-detect"
                                 }
                               }
                             }
