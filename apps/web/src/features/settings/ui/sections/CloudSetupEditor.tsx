@@ -11,6 +11,7 @@ export function CloudSetupEditor({
   environmentId,
   repo,
   setup,
+  run,
   canEdit,
   onSaved,
   onDirtyChange,
@@ -19,19 +20,24 @@ export function CloudSetupEditor({
   environmentId: string | null;
   repo: string | null;
   setup: SetupStep[];
+  run: string;
   canEdit: boolean;
-  onSaved: (id: string, setup: SetupStep[]) => void;
+  onSaved: (id: string, scripts: { setup: SetupStep[]; run: string }) => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const [draft, setDraft] = useState(setup);
+  const [runDraft, setRunDraft] = useState(run);
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   useEffect(() => {
-    if (!dirty && !pending) setDraft(setup);
-  }, [setup, dirty, pending]);
+    if (!dirty && !pending) {
+      setDraft(setup);
+      setRunDraft(run);
+    }
+  }, [setup, run, dirty, pending]);
   useEffect(() => {
     onDirtyChange(dirty);
     return () => onDirtyChange(false);
@@ -52,12 +58,12 @@ export function CloudSetupEditor({
       const result = await saveCloudEnvironmentSetup(
         orgId,
         environmentId ? { environmentId } : { repo: repo! },
-        draft,
+        { setup: draft, run: runDraft },
         controller.signal
       );
       if (!controller.signal.aborted) {
         setDirty(false);
-        onSaved(result.id, draft);
+        onSaved(result.id, { setup: draft, run: runDraft });
       }
     } catch (err) {
       if (!controller.signal.aborted)
@@ -142,6 +148,27 @@ export function CloudSetupEditor({
             Add command
           </Button>
         )}
+        <div className="space-y-2 pt-2">
+          <label htmlFor="cloud-run-script" className="text-sm font-medium">
+            Run script
+          </label>
+          <p className="text-text-muted text-sm">
+            Starts your app after setup. Use a foreground command such as bun run dev; AGNT runs it
+            in the background.
+          </p>
+          <Textarea
+            id="cloud-run-script"
+            className="min-h-24 font-mono text-xs"
+            placeholder="bun run dev"
+            value={runDraft}
+            maxLength={16384}
+            spellCheck={false}
+            onChange={(event) => {
+              setRunDraft(event.target.value);
+              setDirty(true);
+            }}
+          />
+        </div>
       </fieldset>
       {!canEdit && (
         <p className="text-text-muted text-xs">

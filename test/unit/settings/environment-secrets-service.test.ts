@@ -69,12 +69,12 @@ it("saves script content unchanged to the platform's setup-only route", async ()
   await saveCloudEnvironmentSetup(
     "org",
     { environmentId: "env" },
-    setup,
+    { setup, run: "bun run dev" },
     new AbortController().signal
   );
   expect(fetch.mock.calls[0]).toEqual([
     "https://platform.test/dashboard/orgs/org/environment-settings/environments/env",
-    expect.objectContaining({ method: "PUT", body: JSON.stringify({ setup }) }),
+    expect.objectContaining({ method: "PUT", body: JSON.stringify({ setup, run: "bun run dev" }) }),
   ]);
 });
 

@@ -21,7 +21,6 @@ import {
   type ManifestDraft,
 } from "./manifest-draft";
 import { TaskRow } from "./TaskRow";
-import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
 import { Textarea } from "@/components/ui/textarea";
 
 export function LocalEnvironmentSettings({
@@ -129,7 +128,7 @@ export function LocalEnvironmentSettings({
           </div>
 
           {/* Environment Variables */}
-          <div className="space-y-3">
+          <div className="border-border-subtle space-y-3 border-t pt-5">
             <div className="flex items-center justify-between">
               <Label className="text-sm">Public environment variables</Label>
               <Button
@@ -370,11 +369,6 @@ export function LocalEnvironmentSettings({
             </Button>
             {isDirty && <span className="text-muted-foreground text-xs">Unsaved changes</span>}
           </div>
-
-          <Separator />
-
-          {/* Workspace Status */}
-          <WorkspaceStatusDashboard repoId={repoId} />
         </>
       )}
     </div>

@@ -1,6 +1,6 @@
 // Real settings components → desktop proxy / direct product API → encrypted Postgres store.
 // Requires the linked AGNT workspace and a migrated SECRET_TEST_DATABASE_URL (see README).
-/* global Bun, window, document */
+/* global Bun, window, document, DataTransfer */
 import assert from "node:assert/strict";
 import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -130,11 +130,8 @@ try {
           resolveId(id) {
             if (id.endsWith("platform/native/deus-cloud")) return "\0native-secret-fixture";
             if (id.endsWith("repository.service")) return "\0repository-fixture";
-            if (id.endsWith("/WorkspaceStatusDashboard")) return "\0workspace-status-fixture";
           },
           load(id) {
-            if (id === "\0workspace-status-fixture")
-              return "export const WorkspaceStatusDashboard = () => null;";
             if (id === "\0repository-fixture")
               return `
               const repos = [
@@ -186,6 +183,7 @@ try {
       page.screenshot({
         path: path.join(directory, `${direct ? "web" : "desktop"}-${name}.png`),
         fullPage: true,
+        animations: "disabled",
       });
     const chooseOrg = async (name) => {
       await page.getByLabel("Organization", { exact: true }).click();
@@ -217,6 +215,7 @@ try {
       );
     }
     await page.getByLabel("Setup step 1, command 1", { exact: true }).fill(setupScript);
+    await page.getByLabel("Run script", { exact: true }).fill("bun run dev");
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.getByRole("button", { name: "Repositories", exact: true }).click();
     assert.equal(
@@ -367,8 +366,67 @@ try {
       .click();
     await page.getByRole("button", { name: "Add command", exact: true }).click();
     await page.getByLabel("Setup step 1, command 1", { exact: true }).fill("bun install");
+    await page.getByLabel("Run script", { exact: true }).fill("bun run dev --host 0.0.0.0");
+    // Import before saving scripts: creating the environment must preserve both drafts.
+    assert.equal(await page.getByRole("button", { name: "Replace", exact: true }).count(), 0);
+    const envFile = `E2B_API_KEY="${value}"\nAPP_MODE=preview\nOPTIONAL=\n`;
+    if (direct) {
+      const dataTransfer = await page.evaluateHandle((text) => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([text], ".env", { type: "text/plain" }));
+        return transfer;
+      }, envFile);
+      await page
+        .getByRole("button", {
+          name: "Drop a .env or .dev.vars file, or click to import",
+          exact: true,
+        })
+        .dispatchEvent("drop", { dataTransfer });
+      await dataTransfer.dispose();
+    } else {
+      await page.getByLabel("Import environment file", { exact: true }).setInputFiles({
+        name: ".dev.vars",
+        mimeType: "text/plain",
+        buffer: Buffer.from(envFile),
+      });
+    }
+    await page.getByRole("dialog").waitFor();
+    await page.getByText("Empty · skipped", { exact: true }).waitFor();
+    assert.equal(
+      await page
+        .getByRole("dialog")
+        .textContent()
+        .then((text) => text.includes(value)),
+      false
+    );
+    await shot("import-review");
+    await page.getByRole("button", { name: "Import 2 secrets", exact: true }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.getByText("E2B_API_KEY", { exact: true }).waitFor();
+    assert.equal(
+      await page.getByLabel("Setup step 1, command 1", { exact: true }).inputValue(),
+      "bun install"
+    );
+    assert.equal(
+      await page.getByLabel("Run script", { exact: true }).inputValue(),
+      "bun run dev --host 0.0.0.0"
+    );
+    assert.equal(await page.evaluate((v) => window.secretCacheContains(v), value), false);
     await page.getByRole("button", { name: "Save cloud setup", exact: true }).click();
-    await page.getByRole("button", { name: "Add secret", exact: true }).waitFor();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("button")].some(
+        (button) => button.textContent === "Save cloud setup" && button.disabled
+      )
+    );
+    await page.reload();
+    await chooseOrg("Secret test organization");
+    await page
+      .getByRole("button", { name: new RegExp(direct ? "acme/web-app" : "acme/new-app") })
+      .click();
+    assert.equal(
+      await page.getByLabel("Run script", { exact: true }).inputValue(),
+      "bun run dev --host 0.0.0.0"
+    );
     await page.getByRole("button", { name: "Repositories", exact: true }).click();
     await shot("mobile-list");
     assert.equal(

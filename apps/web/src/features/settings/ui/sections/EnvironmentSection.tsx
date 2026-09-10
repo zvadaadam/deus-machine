@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Cloud, FolderGit2, KeyRound, Laptop, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -238,6 +238,7 @@ function RepositoryEnvironments({
               <TabsContent value="cloud" className="space-y-6">
                 {orgId ? (
                   <CloudRepositorySettings
+                    key={selection.key}
                     accountId={accountId!}
                     orgId={orgId}
                     repository={selection}
@@ -421,6 +422,8 @@ function CloudRepositorySettings({
   const settings = useQuery({
     queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, environmentId],
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, environmentId, signal),
+    // Creating the repository record while adding a secret must not unmount script drafts.
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
     retry: false,
   });
@@ -455,37 +458,35 @@ function CloudRepositorySettings({
         </div>
       )}
       <CloudSetupEditor
-        key={environmentId ?? "new"}
         orgId={orgId}
         environmentId={environmentId}
         repo={repository.repo}
         setup={selected?.setup ?? []}
+        run={selected?.run ?? ""}
         canEdit={selected?.canEdit ?? settings.data.canManageShared}
         onDirtyChange={onDirtyChange}
-        onSaved={(id, setup) => {
+        onSaved={(id, scripts) => {
           queryClient.setQueryData<CloudEnvironmentSettings>(
             [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, id],
             (previous) =>
               previous?.selectedEnvironment
-                ? { ...previous, selectedEnvironment: { ...previous.selectedEnvironment, setup } }
+                ? {
+                    ...previous,
+                    selectedEnvironment: { ...previous.selectedEnvironment, ...scripts },
+                  }
                 : previous
           );
           void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
         }}
       />
       <div className="border-border-subtle border-t pt-5">
-        {environmentId ? (
-          <CloudApplicationSecrets
-            orgId={orgId}
-            environmentId={environmentId}
-            settings={settings.data}
-            onDefaults={onDefaults}
-          />
-        ) : (
-          <p className="text-text-muted text-sm">
-            Save the cloud setup to add secrets for this repository.
-          </p>
-        )}
+        <CloudApplicationSecrets
+          orgId={orgId}
+          environmentId={environmentId}
+          repo={repository.repo ?? undefined}
+          settings={settings.data}
+          onDefaults={onDefaults}
+        />
       </div>
     </>
   );

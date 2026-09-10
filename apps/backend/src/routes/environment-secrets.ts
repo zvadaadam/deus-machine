@@ -67,6 +67,14 @@ app.put(`${prefix}/orgs/:orgId/secrets/:name`, async (c) =>
     )
   )
 );
+app.post(`${prefix}/orgs/:orgId/secrets/import`, async (c) =>
+  c.json(
+    await requestCloudEnvironmentSettings(
+      `/orgs/${encodeURIComponent(c.req.param("orgId"))}/environment-settings/secrets/import`,
+      { method: "POST", body: JSON.stringify(await c.req.json()), signal: c.req.raw.signal }
+    )
+  )
+);
 app.delete(`${prefix}/orgs/:orgId/secrets/:id`, async (c) =>
   c.json(
     await requestCloudEnvironmentSettings(

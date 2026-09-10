@@ -12,7 +12,7 @@ export interface CloudEnvironmentSettings {
   accountId: string;
   organizationId: string;
   canManageShared: boolean;
-  selectedEnvironment: { id: string; setup: SetupStep[]; canEdit: boolean } | null;
+  selectedEnvironment: { id: string; setup: SetupStep[]; run: string; canEdit: boolean } | null;
   environments: Array<{
     id: string;
     name: string;
@@ -28,11 +28,15 @@ export interface CloudEnvironmentSettings {
   }>;
 }
 
-export interface CloudSecretInput {
-  value: string;
+export interface CloudSecretScope {
   ownerType: "ORG" | "USER";
   appliesToAll: boolean;
   environmentIds: string[];
+  repo?: string;
+}
+
+export interface CloudSecretInput extends CloudSecretScope {
+  value: string;
 }
 
 export interface CloudSettingsOrganizations {

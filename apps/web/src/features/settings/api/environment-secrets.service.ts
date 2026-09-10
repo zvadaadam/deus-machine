@@ -2,6 +2,7 @@ import { toCamelCaseKeys, toSnakeCaseKeys, type SetupStep } from "@deus-hq/api";
 import type {
   CloudEnvironmentSettings,
   CloudSecretInput,
+  CloudSecretScope,
   CloudSettingsOrganizations,
 } from "@shared/types/environment-secrets";
 import { getBaseURL } from "@/shared/config/api.config";
@@ -74,14 +75,14 @@ export async function getEnvironmentInstallUrl(orgId: string, signal: AbortSigna
 export const saveCloudEnvironmentSetup = (
   orgId: string,
   target: { environmentId: string } | { repo: string },
-  setup: SetupStep[],
+  scripts: { setup: SetupStep[]; run: string },
   signal: AbortSignal
 ) =>
   request<{ id: string }>(
     `/orgs/${encodeURIComponent(orgId)}/environments${"environmentId" in target ? `/${encodeURIComponent(target.environmentId)}` : ""}`,
     {
       method: "environmentId" in target ? "PUT" : "POST",
-      body: JSON.stringify({ setup, ...("repo" in target ? { repo: target.repo } : {}) }),
+      body: JSON.stringify({ ...scripts, ...("repo" in target ? { repo: target.repo } : {}) }),
       signal,
     }
   );
@@ -108,5 +109,17 @@ export const saveEnvironmentSecret = (
 export const deleteEnvironmentSecret = (orgId: string, id: string, signal: AbortSignal) =>
   request(`/orgs/${encodeURIComponent(orgId)}/secrets/${encodeURIComponent(id)}`, {
     method: "DELETE",
+    signal,
+  });
+
+export const importEnvironmentSecrets = (
+  orgId: string,
+  scope: CloudSecretScope,
+  secrets: Array<{ name: string; value: string }>,
+  signal: AbortSignal
+) =>
+  request(`/orgs/${encodeURIComponent(orgId)}/secrets/import`, {
+    method: "POST",
+    body: JSON.stringify(toSnakeCaseKeys({ ...scope, secrets })),
     signal,
   });

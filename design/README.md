@@ -204,11 +204,18 @@ repositories; `56d` is the mobile list; `56e` shows a signed-in account when clo
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
 to repositories.
 Cloud setup preserves saved command boundaries, phases and parallel steps.
+Cloud Run script starts the app after setup in each new VM. Both script fields
+sit above a divider and environment variables; the Local workspace-status block
+is removed. Cloud values can be added before saving scripts. Dropping an `.env`
+or `.dev.vars` file opens a name-only import review; selected non-empty values
+are saved as personal or shared secrets in one transaction.
 Both repository detail boards have one **Set up with agent** action in the repository
 header, targeting the selected Local/Cloud tab. Local setup shows public variables
 after setup/run scripts; archive scripts, tasks and requirements stay in Advanced.
 The Generate, Auto-detect and JSON-preview controls are removed.
 Board `66a` shows add, replace and delete states of `EnvironmentSecretDialog.tsx`.
+Board `66b` shows `ImportEnvironmentSecretsDialog.tsx`, including replacement and
+empty-value states. Local public variables remain separate from Cloud secrets.
 Values are write-only; existing values are never drawn into a replacement form.
 The page determines a new secret's repository scope; the dialog only asks whether
 it is personal or shared. Defaults are inherited and managed on their own page.

@@ -35,6 +35,7 @@ export function EnvironmentSecretDialog({
   action,
   orgId,
   environmentId,
+  repo,
   settings,
   onClose,
   onSaved,
@@ -42,6 +43,7 @@ export function EnvironmentSecretDialog({
   action: SecretAction;
   orgId: string;
   environmentId: string | null;
+  repo?: string;
   settings: CloudEnvironmentSettings;
   onClose: () => void;
   onSaved: () => void;
@@ -84,9 +86,10 @@ export function EnvironmentSecretDialog({
           {
             value,
             ownerType,
-            appliesToAll: existing?.appliesToAll ?? environmentId === null,
+            appliesToAll: existing?.appliesToAll ?? (!environmentId && !repo),
             environmentIds:
               existing?.environmentIds ?? (environmentId === null ? [] : [environmentId!]),
+            ...(!existing && !environmentId && repo ? { repo } : {}),
           },
           controller.signal
         );
@@ -116,7 +119,7 @@ export function EnvironmentSecretDialog({
             <DialogDescription>
               {existing
                 ? `${name} · ${ownerType === "USER" ? "Personal" : "Shared"} · ${scopeLabel}`
-                : `For ${environmentId ? "this repository" : "all repositories"}. Stored securely and supplied to new cloud workspaces.`}
+                : `For ${environmentId || repo ? "this repository" : "all repositories"}. Stored securely and supplied to new cloud workspaces.`}
             </DialogDescription>
           </DialogHeader>
           {removing ? (

@@ -1,30 +1,69 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { CloudEnvironmentSettings } from "@shared/types/environment-secrets";
 import { EnvironmentSecretDialog, type SecretAction } from "./EnvironmentSecretDialog";
+import { ImportEnvironmentSecretsDialog } from "./ImportEnvironmentSecretsDialog";
+import { parseEnvFile, type EnvFileEntry } from "../../lib/parse-env-file";
 
 export const ENVIRONMENT_SECRETS_QUERY_KEY = ["settings", "environment-secrets"] as const;
 
 export function CloudApplicationSecrets({
   orgId,
   environmentId,
+  repo,
   settings: data,
   onDefaults,
 }: {
   orgId: string;
   environmentId: string | null;
+  repo?: string;
   settings: CloudEnvironmentSettings;
   onDefaults: () => void;
 }) {
   const [action, setAction] = useState<SecretAction | null>(null);
+  const [importEntries, setImportEntries] = useState<EnvFileEntry[] | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const reader = useRef<FileReader | null>(null);
+  useEffect(() => () => reader.current?.abort(), []);
   const queryClient = useQueryClient();
+  const isRepository = Boolean(environmentId || repo);
   const visible = data.secrets.filter(
     (secret) =>
       secret.appliesToAll || (environmentId && secret.environmentIds.includes(environmentId))
   );
   const missing = data.required.filter((item) => !item.source);
+  function readFile(files: FileList | null) {
+    if (!files?.length) return;
+    setImportError(null);
+    if (files.length !== 1 || files[0].size > 1_048_576) {
+      setImportError("Choose one environment file smaller than 1 MB.");
+      return;
+    }
+    reader.current?.abort();
+    const next = new FileReader();
+    reader.current = next;
+    next.onload = () => {
+      reader.current = null;
+      try {
+        setImportEntries(parseEnvFile(String(next.result)));
+      } catch (err) {
+        setImportError(err instanceof Error ? err.message : "Couldn't read environment file.");
+      }
+    };
+    next.onerror = () => {
+      reader.current = null;
+      setImportError("Couldn't read the environment file.");
+    };
+    next.readAsText(files[0]);
+  }
+  function saved() {
+    setAction(null);
+    setImportEntries(null);
+    void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
+  }
   return (
     <div className="space-y-4">
       {environmentId && data.required.length > 0 && (
@@ -58,7 +97,7 @@ export function CloudApplicationSecrets({
         </div>
       )}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium">Secrets</p>
+        <p className="text-sm font-medium">Environment variables</p>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" onClick={() => setAction({ type: "add" })}>
             <Plus className="mr-1.5 size-3.5" />
@@ -66,6 +105,36 @@ export function CloudApplicationSecrets({
           </Button>
         </div>
       </div>
+      <input
+        ref={fileInput}
+        type="file"
+        className="hidden"
+        aria-label="Import environment file"
+        onChange={(event) => {
+          readFile(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        className="border-border-subtle text-text-muted hover:bg-bg-muted focus-visible:ring-ring w-full rounded-lg border border-dashed p-4 text-center text-xs focus-visible:ring-2"
+        onClick={() => fileInput.current?.click()}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          readFile(event.dataTransfer.files);
+        }}
+      >
+        Drop a .env or .dev.vars file, or click to import
+      </button>
+      {importError && (
+        <p role="alert" className="text-destructive text-sm">
+          {importError}
+        </p>
+      )}
       {visible.length === 0 ? (
         <p className="text-text-muted text-sm">No secrets added yet.</p>
       ) : (
@@ -86,7 +155,7 @@ export function CloudApplicationSecrets({
                       : "This repository"}
                 </p>
               </div>
-              {(!environmentId || !secret.appliesToAll) &&
+              {(!isRepository || !secret.appliesToAll) &&
                 (secret.ownerType === "USER" || data.canManageShared) && (
                   <div className="flex shrink-0 items-center">
                     <Button
@@ -113,7 +182,7 @@ export function CloudApplicationSecrets({
       <p className="text-text-muted text-xs">
         Saved values are never shown again. Changes apply to new cloud workspaces.
       </p>
-      {environmentId && (
+      {isRepository && (
         <button
           type="button"
           className="text-text-muted hover:text-text-primary text-xs underline underline-offset-4"
@@ -129,11 +198,20 @@ export function CloudApplicationSecrets({
           settings={data}
           orgId={orgId}
           environmentId={environmentId}
+          repo={repo}
           onClose={() => setAction(null)}
-          onSaved={() => {
-            setAction(null);
-            void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
-          }}
+          onSaved={saved}
+        />
+      )}
+      {importEntries && (
+        <ImportEnvironmentSecretsDialog
+          entries={importEntries}
+          orgId={orgId}
+          environmentId={environmentId}
+          repo={repo}
+          settings={data}
+          onClose={() => setImportEntries(null)}
+          onSaved={saved}
         />
       )}
     </div>

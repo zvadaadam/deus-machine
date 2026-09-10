@@ -81636,6 +81636,62 @@
                               }
                             },
                             {
+                              "type": "frame",
+                              "id": "E3DTSD",
+                              "name": "Run script",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "e8Qtu",
+                                  "name": "Run script label",
+                                  "fill": "$text-primary",
+                                  "content": "Run script",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "oI64A",
+                                  "name": "Run purpose",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Starts your app after setup. Use a foreground command such as bun run dev; AGNT runs it in the background.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "e8GTU",
+                                  "name": "Run command textarea",
+                                  "width": "fill_container",
+                                  "height": 96,
+                                  "fill": "$bg-muted",
+                                  "cornerRadius": "$radius-lg",
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": 1,
+                                  "layout": "vertical",
+                                  "padding": 12,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "i3piU",
+                                      "fill": "$text-primary",
+                                      "content": "bun run dev",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
                               "id": "b1imW",
                               "type": "ref",
                               "ref": "rg2x2",
@@ -81693,7 +81749,7 @@
                                   "fill": "$text-primary",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Secrets",
+                                  "content": "Environment variables",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
@@ -81708,6 +81764,29 @@
                                       "content": "+  Add secret"
                                     }
                                   }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "oFdoq",
+                              "name": "Environment file import",
+                              "width": "fill_container",
+                              "height": 56,
+                              "cornerRadius": "$radius-lg",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": 1,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Y5B2sT",
+                                  "fill": "$text-muted",
+                                  "content": "Drop a .env or .dev.vars file, or click to import",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -82676,8 +82755,18 @@
                               "id": "GYLcP",
                               "name": "Public environment variables",
                               "width": "fill_container",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": {
+                                "top": 1
+                              },
                               "layout": "vertical",
                               "gap": 10,
+                              "padding": [
+                                20,
+                                0,
+                                0,
+                                0
+                              ],
                               "children": [
                                 {
                                   "type": "frame",
@@ -83450,7 +83539,7 @@
                                   "fill": "$text-primary",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "Secrets",
+                                  "content": "Environment variables",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
@@ -83465,6 +83554,29 @@
                                       "content": "+  Add secret"
                                     }
                                   }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "CuuQG",
+                              "name": "Environment file import",
+                              "width": "fill_container",
+                              "height": 56,
+                              "cornerRadius": "$radius-lg",
+                              "stroke": "$border-subtle",
+                              "strokeWidth": 1,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ThYBz",
+                                  "fill": "$text-muted",
+                                  "content": "Drop a .env or .dev.vars file, or click to import",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -84838,6 +84950,262 @@
                       ]
                     }
                   ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "zQT4j",
+      "x": 13800,
+      "y": 7420,
+      "name": "66b · Import environment variables",
+      "theme": {
+        "mode": "dark"
+      },
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-base",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 32,
+      "children": [
+        {
+          "type": "text",
+          "id": "A5xgM",
+          "fill": "$text-primary",
+          "content": "Cloud secrets · file import review",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-lg",
+          "fontWeight": "500"
+        },
+        {
+          "type": "frame",
+          "id": "keYdS",
+          "name": "ImportEnvironmentSecretsDialog",
+          "width": 448,
+          "fill": "$bg-base",
+          "cornerRadius": "$radius-xl",
+          "stroke": "$border-default",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 24,
+          "children": [
+            {
+              "type": "text",
+              "id": "L02Zjb",
+              "fill": "$text-primary",
+              "content": "Import environment variables",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-lg",
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "FRMtY",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Save selected values as secrets for this repository. Nothing is written to your code. Empty values are left out.",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-sm",
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "ROBdC",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "cM5P9",
+                  "fill": "$text-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Available to",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "500"
+                },
+                {
+                  "id": "p54HM",
+                  "type": "ref",
+                  "ref": "YqG8t",
+                  "width": "fill_container",
+                  "descendants": {
+                    "E8yhJ5": {
+                      "content": "Only me   ⌄"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "lymQH",
+              "name": "Names only — values are never shown",
+              "width": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "jbQ7E",
+                  "name": "E2B_API_KEY",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "padding": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "u69aKD",
+                      "fill": "$text-secondary",
+                      "content": "☑",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "NXk4W",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "E2B_API_KEY",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "A7ZvfQ",
+                      "fill": "$text-muted",
+                      "content": "Add",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WM8cA",
+                  "name": "APP_MODE",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "padding": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "y7Tkf5",
+                      "fill": "$text-secondary",
+                      "content": "☑",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "O8i56",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "APP_MODE",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "BTULH",
+                      "fill": "$text-muted",
+                      "content": "Replace value",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZqM3j",
+                  "name": "OPTIONAL",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "padding": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "u19JL",
+                      "fill": "$text-secondary",
+                      "content": "☐",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "llOc6",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "OPTIONAL",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Sofhw",
+                      "fill": "$text-muted",
+                      "content": "Empty · skipped",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "u4kQ7",
+              "width": "fill_container",
+              "gap": 8,
+              "justifyContent": "end",
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "n56J4",
+                  "type": "ref",
+                  "ref": "Rcfnv",
+                  "descendants": {
+                    "kB8v8": {
+                      "content": "Cancel"
+                    }
+                  }
+                },
+                {
+                  "id": "Q1Kb3",
+                  "type": "ref",
+                  "ref": "rg2x2",
+                  "descendants": {
+                    "z4bI4": {
+                      "content": "Import 2 secrets"
+                    }
+                  }
                 }
               ]
             }
