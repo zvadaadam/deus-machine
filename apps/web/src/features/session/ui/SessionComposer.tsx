@@ -113,8 +113,9 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // Composer state itself (draft/model/etc.) lives in the store;
     // MessageInput reads it directly. We don't subscribe here.
     const { session, messages, sessionStatus } = useSessionWithMessages(sessionId);
-    const { data: environmentData } = useProjectEnvironment(workspaceId);
-    const hasEnvironment = environmentData === undefined ? true : environmentData?.project != null;
+    const environment = useProjectEnvironment(workspaceId);
+    const environmentUnconfigured =
+      environment.isSuccess && environment.data.source === "unconfigured";
 
     // Notify parent when the selected model's agent harness changes.
     // We subscribe to just `model` (a string) to avoid re-renders on
@@ -181,7 +182,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         contextTokenCount={session?.context_token_count ?? 0}
         contextUsedPercent={session?.context_used_percent ?? 0}
         hasMessages={messages.length > 0}
-        hasEnvironment={hasEnvironment}
+        environmentUnconfigured={environmentUnconfigured}
         showCompactButton={showCompactButton}
         onSend={(content) => sendMessage(content)}
         onCompact={compactConversation}

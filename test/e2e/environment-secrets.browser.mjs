@@ -112,6 +112,8 @@ try {
     import { useUIStore } from "@/shared/stores/uiStore";
     import { EnvironmentSection } from "@/features/settings/ui/sections/EnvironmentSection";
     import "@/global.css";
+    const repository = new URL(window.location.href).searchParams.get("repo");
+    if (repository) useUIStore.getState().openEnvironmentSettings(repository, "cloud");
     window.secretTestSetupRequest = () => useUIStore.getState().pendingEnvSetup;
     window.secretTestClearSetupRequest = () => useUIStore.getState().clearEnvSetupRequest();
     window.secretCacheContains = value => JSON.stringify([queryClient.getQueryCache().getAll().map(q => q.state.data), queryClient.getMutationCache().getAll().map(m => m.state)]).includes(value);
@@ -167,7 +169,7 @@ try {
           },
           configureServer(server) {
             server.middlewares.use((req, res, next) => {
-              if (req.url !== "/") return next();
+              if (req.url?.split("?")[0] !== "/") return next();
               res.setHeader("content-type", "text/html");
               res.end(
                 '<!doctype html><html class="dark"><body><div id="root"></div><script type="module" src="/.context/environment-secrets-ui/entry.tsx"></script></body></html>'
@@ -250,6 +252,15 @@ try {
     await page.getByLabel("Setup script", { exact: true }).fill(setupScript);
     await page.getByLabel("Run script", { exact: true }).fill("bun run dev");
     if (!direct) {
+      await page.getByRole("tab", { name: "Cloud", exact: true }).focus();
+      await page.keyboard.press("ArrowUp");
+      await page.getByRole("tab", { name: "Local", selected: true }).waitFor();
+      assert.equal(
+        await page.getByLabel("Setup script", { exact: true }).inputValue(),
+        setupScript
+      );
+      await page.keyboard.press("ArrowDown");
+      await page.getByRole("tab", { name: "Cloud", selected: true }).waitFor();
       page.once("dialog", (dialog) => dialog.dismiss());
       await page.getByRole("button", { name: "Set up with agent", exact: true }).click();
       assert.equal(await page.evaluate(() => window.secretTestSetupRequest()), null);
@@ -284,8 +295,7 @@ try {
     assert.equal(await page.locator('input[type="password"]').count(), 0);
     await shot("cloud-setup");
     if (!direct) {
-      await page.getByLabel("Setup workspace location", { exact: true }).click();
-      await page.getByRole("option", { name: "Local", exact: true }).click();
+      await page.getByRole("tab", { name: "Local", exact: true }).click();
       await page.getByRole("button", { name: "Set up with agent", exact: true }).click();
       assert.deepEqual(await page.evaluate(() => window.secretTestSetupRequest()), {
         repoId: "local",
@@ -631,6 +641,16 @@ try {
       await page.getByRole("button", { name: "Default secrets", exact: true }).waitFor();
       assert.equal(await page.getByText("Couldn't load cloud environment settings.").count(), 0);
     }
+    // Workspace shortcuts accept local repository IDs and cloud Git remote identities.
+    const targetRepository = direct ? "https://github.com/Acme/mobile-app.git" : "local";
+    await page.goto(`${vite.resolvedUrls.local[0]}?repo=${encodeURIComponent(targetRepository)}`);
+    await chooseOrg("Secret test organization");
+    await page.getByRole("form", { name: "Project environment", exact: true }).waitFor();
+    assert.match(
+      await page.getByRole("navigation", { name: "Environment breadcrumb" }).innerText(),
+      /acme\/mobile-app/
+    );
+    await page.getByRole("tab", { name: "Cloud", selected: true }).waitFor();
     assert.deepEqual(errors, []);
     await page.close();
     await vite.close();

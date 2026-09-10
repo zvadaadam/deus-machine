@@ -3,6 +3,8 @@
 Settings → Environments lists repositories. Open one to edit Setup, Run, public
 variables and required variable names. Setup and Run are shared between local and
 cloud; expand **Customize for local or cloud** when the commands differ.
+The Local / Cloud tabs choose where **Set up with agent** creates its validation
+workspace. They do not create separate copies of the shared recipe.
 
 Deus selects one complete recipe:
 
@@ -48,6 +50,19 @@ For GitHub-only repositories, settings reads the default branch with the Deus Ap
 existing access. A remote file is read-only here. Add the repository to Deus and use
 a setup workspace to edit and publish it. Explicit SDK environments remain managed
 through the SDK; the simplified form cannot silently replace their configuration.
+
+## Workspace controls
+
+An empty, idle chat offers **Set up this project** only when the workspace lookup
+has confirmed that no recipe is configured. Loading and failed lookups do not
+trigger a setup suggestion. The prompt disappears after conversation starts.
+
+The header runs configured commands and opens environment settings directly for
+that workspace's repository. With no commands, only the settings button remains.
+**Run app** starts the local Run script in a terminal; other entries run the named
+additional commands. Cloud omits Run app because its main process starts during
+preparation. A **Computer ready** entry records cloud provisioning, not an app
+health check or proof that a custom project setup has been saved.
 
 ## Execution
 

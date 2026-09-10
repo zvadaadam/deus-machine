@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import * as Tabs from "@radix-ui/react-tabs";
 import type { EnvironmentTarget } from "@deus-hq/api";
 import { ChevronRight, FolderGit2, KeyRound, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,9 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { useUIStore } from "@/shared/stores/uiStore";
 import { RepoService } from "@/features/repository/api/repository.service";
-import { githubRepoSlug } from "@shared/git-origin";
+import { githubRepoSlug, httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
 import {
   getEnvironmentSecretSettings,
   listEnvironmentRepositories,
@@ -118,9 +120,12 @@ function RepositoryEnvironments({
   onDirtyChange: (dirty: boolean) => void;
   activeOrganization: boolean;
 }) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const target = useUIStore((s) => s.environmentSettingsTarget);
+  const [selectedKey, setSelectedKey] = useState<string | null>(target?.repoId ?? null);
   const [search, setSearch] = useState("");
-  const [setupLocation, setSetupLocation] = useState<EnvironmentTarget>("cloud");
+  const [setupLocation, setSetupLocation] = useState<EnvironmentTarget>(
+    target?.location ?? "cloud"
+  );
   const signIn = useDeusCloudSignIn();
   const repos = useQuery({
     queryKey: queryKeys.repos.all,
@@ -156,8 +161,11 @@ function RepositoryEnvironments({
     github.data?.repos ?? [],
     settings.data?.environments ?? []
   );
+  const selectedRepoKey = selectedKey && normalizeRepoRef(httpsOrigin(selectedKey));
   const selection =
-    selectedKey === "defaults" ? "defaults" : rows.find((row) => row.key === selectedKey);
+    selectedKey === "defaults"
+      ? "defaults"
+      : rows.find((row) => row.local?.id === selectedKey || row.key === selectedRepoKey);
   const canAccess = (row: EnvironmentRepository) => {
     const slug = row.repo && githubRepoSlug(row.repo)?.toLowerCase();
     return !!slug && !!github.data?.repos.some((name) => name.toLowerCase() === slug);
@@ -215,30 +223,39 @@ function RepositoryEnvironments({
                 <RepositoryAvatar repo={selection.repo} />
                 <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
               </div>
-              <div className="flex items-center gap-2">
-                <Select
-                  value={setupLocation}
-                  onValueChange={(value) => setSetupLocation(value === "local" ? "local" : "cloud")}
+              <Tabs.Root
+                orientation="vertical"
+                className="flex items-center gap-3"
+                value={setupLocation}
+                onValueChange={(value) => setSetupLocation(value === "local" ? "local" : "cloud")}
+              >
+                <Tabs.List
+                  aria-label="Setup workspace location"
+                  className="border-border-subtle flex flex-col border-l"
                 >
-                  <SelectTrigger aria-label="Setup workspace location" className="w-auto">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cloud" disabled={!orgId}>
-                      Cloud
-                    </SelectItem>
-                    <SelectItem value="local" disabled={!selection.local?.root_path}>
-                      Local
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <SetUpEnvironmentWithAgent
-                  repoId={selection.local?.id}
-                  location={setupLocation}
-                  activeOrganization={activeOrganization}
-                  onBeforeStart={onBeforeNavigate}
-                />
-              </div>
+                  {(["local", "cloud"] as const).map((location) => (
+                    <Tabs.Trigger
+                      key={location}
+                      value={location}
+                      disabled={location === "local" ? !selection.local?.root_path : !orgId}
+                      className="text-text-muted data-[state=active]:border-text-primary data-[state=active]:text-text-primary hover:text-text-secondary focus-visible:ring-ring -ml-px min-h-11 border-l-2 border-transparent px-3 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 sm:min-h-8"
+                    >
+                      {location === "local" ? "Local" : "Cloud"}
+                    </Tabs.Trigger>
+                  ))}
+                </Tabs.List>
+                <Tabs.Content
+                  value={setupLocation}
+                  className="focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <SetUpEnvironmentWithAgent
+                    repoId={selection.local?.id}
+                    location={setupLocation}
+                    activeOrganization={activeOrganization}
+                    onBeforeStart={onBeforeNavigate}
+                  />
+                </Tabs.Content>
+              </Tabs.Root>
             </div>
             <RepositoryEnvironmentSettings
               key={selection.key}

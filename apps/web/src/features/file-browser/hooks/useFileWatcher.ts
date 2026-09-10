@@ -45,7 +45,13 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
 
       sendCommand("fs:watch", { workspacePath })
         .then(() => {
-          if (isActive) setIsWatching(true);
+          if (isActive) {
+            setIsWatching(true);
+            // The recipe may have changed while this workspace wasn't being watched.
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.workspaces.environment(workspaceId),
+            });
+          }
         })
         .catch((err: unknown) => {
           console.warn("[FileWatcher] Failed to start watching:", err);

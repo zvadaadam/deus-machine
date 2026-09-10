@@ -121,11 +121,8 @@ export function useWorkspaceActions({
   // --- Project environment commands ---
 
   const isWorkspaceReady = selectedWorkspace?.state === "ready";
-  const { data: environmentData } = useProjectEnvironment(
-    isWorkspaceReady ? selectedWorkspaceId : null
-  );
-  const environmentTasks = environmentData?.tasks;
-  const hasEnvironment = environmentData?.project != null;
+  const environment = useProjectEnvironment(isWorkspaceReady ? selectedWorkspaceId : null);
+  const environmentTasks = environment.isSuccess ? environment.data.tasks : undefined;
 
   const handleRunTask = useCallback(
     (taskName: string) => {
@@ -164,7 +161,6 @@ export function useWorkspaceActions({
     handleViewSetupLogs,
     // Project environment
     environmentTasks,
-    hasEnvironment,
     handleRunTask,
   };
 }

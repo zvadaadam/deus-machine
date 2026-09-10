@@ -14826,6 +14826,7 @@
           "x": 32,
           "y": 340,
           "name": "Setup nudge",
+          "context": "Only for an empty idle local/cloud chat after successful workspace lookup confirms no recipe. Hidden while loading, failed, sending or active, and once history exists. This is the only chat setup suggestion; the header opens repository settings.",
           "width": 300,
           "cornerRadius": "$radius-lg",
           "stroke": "$border-subtle",
@@ -14851,11 +14852,11 @@
             {
               "type": "text",
               "id": "z8rX8",
-              "name": "Set up your environment",
+              "name": "Set up this project",
               "fill": "$text-muted",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Set up your environment",
+              "content": "Set up this project",
               "fontFamily": "$font-sans",
               "fontSize": "$text-xs",
               "fontWeight": "normal"
@@ -57410,7 +57411,7 @@
         {
           "type": "frame",
           "id": "n5g2Bz",
-          "name": "SETTINGS — TASK ROW",
+          "name": "WORKSPACE — COMMANDS AND STARTUP",
           "width": "fill_container",
           "layout": "vertical",
           "gap": 10,
@@ -57426,9 +57427,9 @@
                 {
                   "type": "text",
                   "id": "SyLoK",
-                  "name": "SETTINGS — TASK ROW",
+                  "name": "WORKSPACE — COMMANDS AND STARTUP",
                   "fill": "$text-disabled",
-                  "content": "SETTINGS — TASK ROW",
+                  "content": "WORKSPACE — COMMANDS AND STARTUP",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-2xs",
                   "fontWeight": "600",
@@ -57441,7 +57442,7 @@
                   "fill": "$text-muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "TaskRow, one per deus.json task — collapsed is name + command, expanded adds description, icon and mode",
+                  "content": "HeaderRunButton · Local Run starts a terminal. Cloud starts Run automatically and offers only additional commands. Settings opens this repository. Computer ready records provisioning, not application health.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": 10,
@@ -57459,123 +57460,80 @@
               "children": [
                 {
                   "type": "frame",
-                  "id": "grpDl",
-                  "name": "dev",
-                  "width": "fill_container",
-                  "cornerRadius": "$radius-lg",
-                  "stroke": "$border-subtle",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "layout": "vertical",
-                  "padding": 12,
+                  "id": "Q6bb7",
+                  "name": "DS/HeaderRunButton · features/workspace/ui/HeaderRunButton.tsx",
+                  "reusable": true,
+                  "gap": 16,
+                  "alignItems": "center",
                   "children": [
                     {
                       "type": "frame",
-                      "id": "Wgst4",
-                      "name": "top",
-                      "width": "fill_container",
-                      "gap": 8,
+                      "id": "LShlX",
+                      "name": "Local Run app",
+                      "height": 28,
+                      "cornerRadius": "$radius-lg",
+                      "stroke": "$border-strong",
+                      "strokeWidth": 1,
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        8
+                      ],
                       "alignItems": "center",
                       "children": [
                         {
                           "type": "icon",
-                          "id": "esd8a",
-                          "name": "chevron-right",
-                          "width": 14,
-                          "height": 14,
-                          "icon": "chevron-right",
-                          "library": "lucide",
-                          "fill": "$text-muted"
-                        },
-                        {
-                          "type": "icon",
-                          "id": "j3pcC",
-                          "name": "play",
+                          "id": "h2e6L",
+                          "name": "Play icon",
                           "width": 14,
                           "height": 14,
                           "icon": "play",
                           "library": "lucide",
+                          "fill": "$text-secondary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "W3yER",
+                          "name": "Run app label",
+                          "fill": "$text-secondary",
+                          "content": "Run app",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "Bac8h",
+                          "name": "Choose command",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "chevron-down",
+                          "library": "lucide",
                           "fill": "$text-muted"
-                        },
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XQcaH",
+                      "name": "No commands — repository environment settings",
+                      "width": 28,
+                      "height": 28,
+                      "cornerRadius": "$radius-lg",
+                      "stroke": "$border-strong",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
                         {
-                          "type": "frame",
-                          "id": "QxiaQ",
-                          "name": "Name",
-                          "width": 140,
-                          "height": 32,
-                          "fill": "$bg-elevated",
-                          "cornerRadius": "$radius-lg",
-                          "stroke": "$border-default",
-                          "strokeWidth": 1,
-                          "strokeAlignment": "inner",
-                          "padding": [
-                            0,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "vw6n3",
-                              "name": "dev",
-                              "fill": "$text-secondary",
-                              "content": "dev",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "KL0Jw",
-                          "name": "Command",
-                          "width": "fill_container",
-                          "height": 32,
-                          "fill": "$bg-elevated",
-                          "cornerRadius": "$radius-lg",
-                          "stroke": "$border-default",
-                          "strokeWidth": 1,
-                          "strokeAlignment": "inner",
-                          "padding": [
-                            0,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "PGOcw",
-                              "name": "bun run dev:web",
-                              "fill": "$text-secondary",
-                              "content": "bun run dev:web",
-                              "fontFamily": "$font-mono",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "bL5Bw",
-                          "name": "Delete",
-                          "width": 32,
-                          "height": 32,
-                          "cornerRadius": "$radius-lg",
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "n5tet",
-                              "name": "trash-2",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "trash-2",
-                              "library": "lucide",
-                              "fill": "$text-muted"
-                            }
-                          ]
+                          "type": "icon",
+                          "id": "k2Qsr",
+                          "name": "Repository settings icon",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "settings",
+                          "library": "lucide",
+                          "fill": "$text-muted"
                         }
                       ]
                     }
@@ -57583,320 +57541,45 @@
                 },
                 {
                   "type": "frame",
-                  "id": "FGcVl",
-                  "name": "typecheck",
-                  "width": "fill_container",
-                  "cornerRadius": "$radius-lg",
-                  "stroke": "$border-subtle",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "layout": "vertical",
-                  "padding": 12,
+                  "id": "ST5r7",
+                  "name": "DS/CloudEnvProgress · Computer ready",
+                  "reusable": true,
+                  "gap": 8,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "alignItems": "center",
                   "children": [
                     {
-                      "type": "frame",
-                      "id": "U6eE3",
-                      "name": "top",
-                      "width": "fill_container",
-                      "gap": 8,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "k7fWGM",
-                          "name": "chevron-down",
-                          "width": 14,
-                          "height": 14,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$text-muted"
-                        },
-                        {
-                          "type": "icon",
-                          "id": "pbFKE",
-                          "name": "play",
-                          "width": 14,
-                          "height": 14,
-                          "icon": "play",
-                          "library": "lucide",
-                          "fill": "$text-muted"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "e7awoP",
-                          "name": "Name",
-                          "width": 140,
-                          "height": 32,
-                          "fill": "$bg-elevated",
-                          "cornerRadius": "$radius-lg",
-                          "stroke": "$border-default",
-                          "strokeWidth": 1,
-                          "strokeAlignment": "inner",
-                          "padding": [
-                            0,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "dvCz6",
-                              "name": "typecheck",
-                              "fill": "$text-secondary",
-                              "content": "typecheck",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "qG9ss",
-                          "name": "Command",
-                          "width": "fill_container",
-                          "height": 32,
-                          "fill": "$bg-elevated",
-                          "cornerRadius": "$radius-lg",
-                          "stroke": "$border-default",
-                          "strokeWidth": 1,
-                          "strokeAlignment": "inner",
-                          "padding": [
-                            0,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "O6Nrd5",
-                              "name": "bun run typecheck",
-                              "fill": "$text-secondary",
-                              "content": "bun run typecheck",
-                              "fontFamily": "$font-mono",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "KFmAf",
-                          "name": "Delete",
-                          "width": 32,
-                          "height": 32,
-                          "cornerRadius": "$radius-lg",
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "dbFjy",
-                              "name": "trash-2",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "trash-2",
-                              "library": "lucide",
-                              "fill": "$text-muted"
-                            }
-                          ]
-                        }
-                      ]
+                      "type": "icon",
+                      "id": "A8Xw8",
+                      "name": "Ready check",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "check",
+                      "library": "lucide",
+                      "fill": "$accent-green"
                     },
                     {
-                      "type": "frame",
-                      "id": "iWbbk",
-                      "name": "Expanded",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 8,
-                      "padding": [
-                        12,
-                        0,
-                        0,
-                        24
-                      ],
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "vo1O0",
-                          "name": "Description",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "rvRCZ",
-                              "name": "Description",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": 80,
-                              "content": "Description",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "KcYoF",
-                              "name": "field",
-                              "width": "fill_container",
-                              "height": 32,
-                              "fill": "$bg-elevated",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-default",
-                              "strokeWidth": 1,
-                              "strokeAlignment": "inner",
-                              "gap": 8,
-                              "padding": [
-                                0,
-                                10
-                              ],
-                              "justifyContent": "space_between",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "iOlbK",
-                                  "name": "Start the web dev server",
-                                  "fill": "$text-secondary",
-                                  "content": "Start the web dev server",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "qnAGl",
-                          "name": "Icon",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "Hn8KB",
-                              "name": "Icon",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": 80,
-                              "content": "Icon",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "FAhel",
-                              "name": "field",
-                              "width": 192,
-                              "height": 32,
-                              "fill": "$bg-elevated",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-default",
-                              "strokeWidth": 1,
-                              "strokeAlignment": "inner",
-                              "gap": 8,
-                              "padding": [
-                                0,
-                                10
-                              ],
-                              "justifyContent": "space_between",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "XBkEh",
-                                  "name": "play",
-                                  "fill": "$text-secondary",
-                                  "content": "play",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "icon",
-                                  "id": "NLaKk",
-                                  "name": "chevron-down",
-                                  "width": 12,
-                                  "height": 12,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "YEhHE",
-                          "name": "Mode",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "Pj34m",
-                              "name": "Mode",
-                              "fill": "$text-muted",
-                              "textGrowth": "fixed-width",
-                              "width": 80,
-                              "content": "Mode",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-xs",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "bPfWX",
-                              "name": "field",
-                              "width": 192,
-                              "height": 32,
-                              "fill": "$bg-elevated",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-default",
-                              "strokeWidth": 1,
-                              "strokeAlignment": "inner",
-                              "gap": 8,
-                              "padding": [
-                                0,
-                                10
-                              ],
-                              "justifyContent": "space_between",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "t0TyVA",
-                                  "name": "Terminal tab",
-                                  "fill": "$text-secondary",
-                                  "content": "Terminal tab",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "icon",
-                                  "id": "cZaee",
-                                  "name": "chevron-down",
-                                  "width": 12,
-                                  "height": 12,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
+                      "type": "text",
+                      "id": "Oot82",
+                      "name": "Computer ready",
+                      "fill": "$text-secondary",
+                      "content": "Computer ready",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Lcwhc",
+                      "name": "Completed steps",
+                      "fill": "$text-muted",
+                      "content": "· 6 steps",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -79720,6 +79403,7 @@
       "x": 19000,
       "y": 7600,
       "name": "56a · Settings — Shared project environment",
+      "context": "Vertical Local / Cloud tabs choose the location for Set up with agent. The shared recipe remains one form. Arrow Up/Down switches targets without discarding unsaved recipe changes.",
       "theme": {
         "mode": "dark"
       },
@@ -80269,24 +79953,70 @@
                             },
                             {
                               "type": "frame",
-                              "id": "w0NmKQ",
-                              "name": "Setup workspace location",
-                              "cornerRadius": "$radius-md",
+                              "id": "ZIy7h",
+                              "name": "Setup workspace location — vertical tabs",
+                              "width": 72,
                               "stroke": "$border-subtle",
-                              "strokeWidth": 1,
-                              "padding": [
-                                7,
-                                12
-                              ],
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "layout": "vertical",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "yp6Zc",
-                                  "fill": "$text-primary",
-                                  "content": "Cloud  ▾",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
+                                  "type": "frame",
+                                  "id": "gYXgD",
+                                  "name": "Local tab",
+                                  "width": "fill_container",
+                                  "height": 32,
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": {
+                                    "left": 1
+                                  },
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "CYoum",
+                                      "name": "Local label",
+                                      "fill": "$text-muted",
+                                      "content": "Local",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "ZXv2l",
+                                  "name": "Cloud tab",
+                                  "width": "fill_container",
+                                  "height": 32,
+                                  "stroke": "$text-primary",
+                                  "strokeWidth": {
+                                    "left": 2
+                                  },
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "QGpYx",
+                                      "name": "Cloud label",
+                                      "fill": "$text-primary",
+                                      "content": "Cloud",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    }
+                                  ]
                                 }
                               ]
                             },
@@ -80874,7 +80604,7 @@
       "x": 20560,
       "y": 7600,
       "name": "56b · Settings — Repository environment file",
-      "context": "File destination state. Also applies to a local-only repository before its first environment.json exists: use the Local repository file label, allow local edits for signed-in organization members, and omit the duplicate export action.",
+      "context": "Repository-specific settings. Workspace header settings and command-menu settings link directly here using repository identity and the workspace Local/Cloud target. Preserve shared recipe form. Local-only repositories allow edits and omit redundant export.",
       "theme": {
         "mode": "dark"
       },
@@ -81421,6 +81151,75 @@
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-lg",
                               "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ohWIm",
+                              "name": "Setup workspace location — vertical tabs",
+                              "width": 72,
+                              "stroke": "$border-subtle",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "layout": "vertical",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "J36W2",
+                                  "name": "Local tab",
+                                  "width": "fill_container",
+                                  "height": 32,
+                                  "stroke": "$text-primary",
+                                  "strokeWidth": {
+                                    "left": 2
+                                  },
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "zYY5O",
+                                      "name": "Local label",
+                                      "fill": "$text-primary",
+                                      "content": "Local",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "s1xa6p",
+                                  "name": "Cloud tab",
+                                  "width": "fill_container",
+                                  "height": 32,
+                                  "stroke": "$border-subtle",
+                                  "strokeWidth": {
+                                    "left": 1
+                                  },
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "KZiX3",
+                                      "name": "Cloud label",
+                                      "fill": "$text-muted",
+                                      "content": "Cloud",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "id": "hUtHW",

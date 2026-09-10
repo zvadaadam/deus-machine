@@ -4,7 +4,7 @@
  * Renders the ephemeral q:event "cloud:env" stream (agnt workspace.state
  * passthrough) as a COLLAPSED one-liner in the transcript, matching the
  * tool-call group pattern: the summary line is the live truth (active step
- * spinning while in flight, "Environment ready" when done, "Sandbox paused"
+ * spinning while in flight, "Computer ready" when done, "Sandbox paused"
  * when asleep), and the chevron expands the full step list. Groups are
  * spliced into the timeline chronologically (chatTimeline.insertCloudEnv),
  * so a wake reads: your message → setup lines → the reply. Nothing is
@@ -91,7 +91,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
     return [
       {
         key: `error-${latest.id}`,
-        label: latest.reason ? `Environment error — ${latest.reason}` : "Environment error",
+        label: latest.reason ? `Computer error — ${latest.reason}` : "Computer error",
         icon: "error",
         tone: "error",
       },
@@ -111,7 +111,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
   if (latest.status === "running") {
     lines.push({
       key: `ready-${latest.id}`,
-      label: latest.snapshotRestored ? "Environment ready — session restored" : "Environment ready",
+      label: latest.snapshotRestored ? "Computer ready — session restored" : "Computer ready",
       icon: "done",
       tone: "ready",
     });

@@ -43,7 +43,6 @@ interface MobileLayoutProps {
   setSendAgentMessageHandler: Dispatch<SetStateAction<((text: string) => Promise<void>) | null>>;
   isWatched: boolean;
   environmentTasks?: ProjectTask[];
-  hasEnvironment?: boolean;
   onRunTask?: (taskName: string) => void;
   onStatusChange?: (status: WorkspaceStatus) => void;
   /** Cloud presence, derived once by MainContent (same values as the desktop header). */
@@ -69,7 +68,6 @@ export function MobileLayout({
   setSendAgentMessageHandler,
   isWatched,
   environmentTasks,
-  hasEnvironment,
   onRunTask,
   onStatusChange,
   cloudPresence,
@@ -138,6 +136,7 @@ export function MobileLayout({
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
       <div className="flex min-w-0 flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
+          repositoryId={workspace.repository_id}
           title={workspace.title ?? undefined}
           repositoryName={workspace.repo_name}
           branch={workspace.git_branch ?? undefined}
@@ -153,7 +152,6 @@ export function MobileLayout({
           workspaceStatus={workspace.status}
           onStatusChange={onStatusChange}
           tasks={environmentTasks}
-          hasEnvironment={hasEnvironment}
           onRunTask={onRunTask}
           mobile
         />

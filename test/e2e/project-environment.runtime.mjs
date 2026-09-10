@@ -2,7 +2,7 @@
 // Start dev:web with a disposable DATABASE_PATH and DEUS_AAP_PID_JOURNAL; set these URLs.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
@@ -80,7 +80,7 @@ try {
   );
   assert((await request(`/workspaces/${workspace.id}/setup-logs`)).logs.includes("Setup complete"));
   await page.goto(`${web}/s/local/w/${workspace.id}`);
-  await page.getByRole("button", { name: "Run task: run", exact: true }).click();
+  await page.getByRole("button", { name: "Run app", exact: true }).click();
   for (let attempt = 0; attempt < 80; attempt++) {
     if (
       (await readFile(path.join(checkout, "run-proof.txt"), "utf8").catch(() => null)) ===
@@ -94,6 +94,48 @@ try {
     "local-synthetic-value"
   );
   await page.screenshot({ path: path.join(output, "workspace-run.png"), fullPage: true });
+  assert.equal(
+    await page.getByRole("button", { name: "Set up this project", exact: true }).count(),
+    0
+  );
+  await page.getByRole("button", { name: "Choose task to run", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Environment settings", exact: true }).click();
+  // The header opens this exact repository, with Local selected and no list click.
+  await page.getByRole("form", { name: "Project environment", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("tab", { name: "Local", exact: true }).getAttribute("aria-selected"),
+    "true"
+  );
+  assert.equal(await page.getByLabel("Run script", { exact: true }).inputValue(), project.run);
+  assert(
+    (await page.getByRole("navigation", { name: "Environment breadcrumb" }).innerText()).includes(
+      path.basename(repo)
+    )
+  );
+  await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  // Changes in the actual checkout control the suggestion and command menu.
+  const workspaceRecipe = path.join(checkout, ".deus/environment.json");
+  await unlink(workspaceRecipe);
+  await page.getByRole("button", { name: "Set up this project", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Set up this project", exact: true }).count(),
+    1
+  );
+  assert.equal(await page.getByRole("button", { name: "Run app", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Open environment settings", exact: true }).click();
+  await page.getByRole("form", { name: "Project environment", exact: true }).waitFor();
+  assert(
+    (await page.getByRole("navigation", { name: "Environment breadcrumb" }).innerText()).includes(
+      path.basename(repo)
+    )
+  );
+  await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  await writeFile(workspaceRecipe, JSON.stringify(project));
+  await page.getByRole("button", { name: "Run app", exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Set up this project", exact: true }).count(),
+    0
+  );
   console.log(
     "PASS: full local app Settings → public recipe saved through backend → Git checkout → copied local dotenv → Setup log → Run button → real terminal process"
   );

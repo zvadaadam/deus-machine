@@ -12,7 +12,6 @@ import { Chat } from "./Chat";
 import { conversationView } from "../lib/conversationView";
 import type { Message } from "../types";
 import { SessionComposer, type SessionComposerRef } from "./SessionComposer";
-import { CloudEnvSetupChip } from "./CloudEnvSetupChip";
 import { useCloudDirect } from "../hooks/useCloudDirect";
 import { useIsDirectSession } from "../cloud/useIsDirectSession";
 import { useAgentRpcHandler } from "../hooks/useAgentRpcHandler";
@@ -37,8 +36,6 @@ interface SessionPanelProps {
   workspaceId?: string;
   /** Discriminates the cloud lane (sandbox copy + env progress) from worktree. */
   workspaceKind?: WorkspaceKind;
-  /** Repository id — drives the cloud environment quick action. */
-  workspaceRepositoryId?: string | null;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
   /** Default branch of the repo (e.g. "main"). Used for getDiff RPC auto-response. */
@@ -75,7 +72,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       workspacePath,
       workspaceId,
       workspaceKind,
-      workspaceRepositoryId,
       workspaceRepoName,
       workspaceParentBranch,
       workspaceDefaultBranch,
@@ -416,12 +412,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               </>
             )}
 
-            {workspaceKind === "cloud" && (
-              <CloudEnvSetupChip
-                repositoryId={workspaceRepositoryId}
-                onSend={(content) => void composerRef.current?.sendMessage(content)}
-              />
-            )}
             <SessionComposer
               ref={composerRef}
               sessionId={sessionId}
@@ -524,12 +514,6 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     </>
                   )}
 
-                  {workspaceKind === "cloud" && (
-                    <CloudEnvSetupChip
-                      repositoryId={workspaceRepositoryId}
-                      onSend={(content) => void composerRef.current?.sendMessage(content)}
-                    />
-                  )}
                   <SessionComposer
                     ref={composerRef}
                     sessionId={sessionId}
