@@ -22,8 +22,8 @@ git("config", "user.email", "test@example.test");
 await writeFile(path.join(repo, "README.md"), "Disposable environment qualification\n");
 await writeFile(path.join(repo, ".gitignore"), ".env*\n.deus/\n");
 await writeFile(path.join(repo, ".env"), "APP_TEST_KEY=local-synthetic-value\n");
-git("add", ".");
-git("commit", "-qm", "fixture");
+// Settings must also work before a new repository has its first commit.
+assert.throws(() => git("rev-parse", "--verify", "HEAD"));
 const request = async (route, body) => {
   const response = await fetch(
     `${backend}/api${route}`,

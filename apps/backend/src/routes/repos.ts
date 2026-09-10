@@ -394,10 +394,10 @@ app.post("/repos/init", async (c) => {
 app.get("/repos/:id/environment-file", async (c) => {
   const repo = requireRepo(c.req.param("id"));
   const project = readProjectFile(repo.root_path);
-  const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+  const { stdout } = await execFileAsync("git", ["branch", "--show-current"], {
     cwd: repo.root_path,
   });
-  return c.json({ project, branch: stdout.trim() });
+  return c.json({ project, branch: stdout.trim() || "detached HEAD" });
 });
 
 app.post("/repos/:id/environment-file", async (c) => {
