@@ -89,7 +89,9 @@ export function useWorkspaceActions({
       });
       simulatorStoreActions.clearWorkspaceSession(selectedWorkspace.id);
     }
-    archiveWorkspace(selectedWorkspace.id);
+    archiveWorkspace(selectedWorkspace.id, {
+      onError: (error) => toast.error(error.message),
+    });
   }, [selectedWorkspace, archiveWorkspace]);
 
   const { mutate: retrySetup } = useRetrySetup();

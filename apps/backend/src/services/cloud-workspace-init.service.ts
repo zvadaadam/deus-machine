@@ -18,12 +18,14 @@ import {
   createSecret as agntCreateSecret,
   listSecrets as agntListSecrets,
   deleteSecret as agntDeleteSecret,
+  isDeusError,
   Environment,
 } from "@deus-hq/sdk";
 import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
+import { ConflictError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
@@ -109,7 +111,19 @@ export async function pauseCloudWorkspace(providerWorkspaceId: string): Promise<
   if (!config) throw new Error("Cloud workspaces are not configured");
   // Let the lifecycle owner decide: a disconnected VM may report stopped
   // while its processes are still running.
-  await agntPauseWorkspace(providerWorkspaceId, { baseUrl: config.baseUrl, apiKey: config.apiKey });
+  try {
+    await agntPauseWorkspace(providerWorkspaceId, {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+    });
+  } catch (err) {
+    if (isDeusError(err) && err.code === "WORKSPACE_STARTING") {
+      throw new ConflictError(
+        "The cloud computer is still starting. Try archiving it once it is ready."
+      );
+    }
+    throw err;
+  }
 }
 
 /** Platform-truth status of the sandbox ("paused" | "stopped" | "running" | ...), null if unreachable. */
