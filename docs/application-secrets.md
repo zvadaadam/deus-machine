@@ -66,6 +66,10 @@ admins can create that shared record; members can add personal values once it ex
 - Settings returns names, ownership, scope and required-value status. Saved values
   are never returned. Replacement requires a new value; deletion can reveal a lower
   priority value with the same name.
+- AGNT's secret store makes writes and scope changes atomic, and serializes writes
+  within an organization. Simultaneous saves converge on one value for the same
+  owner and scope; conflicting scopes are rejected. SDK calls and dashboard imports
+  use this same boundary, including when they already have an outer transaction.
 - Required values are counted as set when the selected recipe has an effective secret
   or a nonempty public configuration value. This does not validate the key with its
   provider or prove that an app builds successfully.
@@ -99,7 +103,11 @@ or additional encryption key is needed.
 
 Tests cover real Postgres authentication/authorization, scope precedence, immutable
 workspace ownership on refresh, account-change cancellation, and both UI transport
-paths. The opt-in E2B test verifies setup commands, sourced `.env`, and the running
+paths. Concurrent-write tests cover shared/personal defaults and repository values,
+overlapping scopes, SDK/import writes and inline environment creation. Browser tests
+switch accounts with the same name at all four precedence levels; database tests
+verify the selected value after each override is deleted.
+The opt-in E2B test verifies setup commands, sourced `.env`, and the running
 sidecar and Run-script HTTP app, including multiline values, same-process
 pause/resume, replacement, deletion, recreation and VM cleanup. Browser tests cover
 both file selection and dropping, draft preservation during environment creation,

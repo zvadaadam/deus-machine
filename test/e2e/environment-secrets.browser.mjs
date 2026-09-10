@@ -454,13 +454,11 @@ try {
       "bun run dev --host 0.0.0.0"
     );
     if (direct) {
-      await page
-        .getByLabel("Import environment file", { exact: true })
-        .setInputFiles({
-          name: ".env",
-          mimeType: "text/plain",
-          buffer: Buffer.from("MULTI_SCOPE_KEY=must-not-send\nNEW_IMPORT_KEY=synthetic-value"),
-        });
+      await page.getByLabel("Import environment file", { exact: true }).setInputFiles({
+        name: ".env",
+        mimeType: "text/plain",
+        buffer: Buffer.from("MULTI_SCOPE_KEY=must-not-send\nNEW_IMPORT_KEY=synthetic-value"),
+      });
       const conflict = page.getByRole("dialog").getByRole("checkbox", { name: /MULTI_SCOPE_KEY/ });
       assert.equal(await conflict.isDisabled(), true);
       assert.equal(await conflict.isChecked(), false);
@@ -498,6 +496,97 @@ try {
     await page.getByRole("button", { name: "Delete", exact: true }).click();
     await page.getByRole("button", { name: "Delete secret", exact: true }).click();
     await page.getByText("No secrets added yet.", { exact: true }).waitFor();
+
+    // One name at all four precedence levels. Check both transports and both accounts.
+    const scopeName = "APP_KEY";
+    const secretRow = (label) =>
+      page
+        .getByText(scopeName, { exact: true })
+        .locator("..")
+        .filter({ hasText: label })
+        .locator("..");
+    const addScopedValue = async (shared) => {
+      await page.getByRole("button", { name: "Add secret", exact: true }).click();
+      await page.getByLabel("Name", { exact: true }).fill(scopeName);
+      await page
+        .getByLabel("Value", { exact: true })
+        .fill(`${value}-${shared ? "shared" : "personal"}`);
+      if (shared) {
+        await page.getByLabel("Available to", { exact: true }).click();
+        await page
+          .getByRole("option", { name: "Everyone in the organization", exact: true })
+          .click();
+      }
+      await page.getByRole("button", { name: "Save secret", exact: true }).click();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+    };
+    await addScopedValue(true);
+    await addScopedValue(false);
+    await page.getByRole("button", { name: "Repositories", exact: true }).click();
+    await openRepository();
+    await addScopedValue(true);
+    await addScopedValue(false);
+    for (const label of [
+      "Shared · All repositories",
+      "Personal · All repositories",
+      "Shared · This repository",
+      "Personal · This repository",
+    ])
+      await secretRow(label).waitFor();
+    await shot("secret-precedence");
+    for (const actor of ["bob", "alice"]) {
+      setCloudRuntimeCredentials({ deusCloudSessionToken: fixture.tokens[actor] });
+      await page.evaluate(
+        ({ token, id }) => {
+          sessionStorage.setItem("deus_cloud_session", token);
+          window.secretTestSignIn(id);
+        },
+        { token: fixture.tokens[actor], id: fixture.ids[actor] }
+      );
+      if (actor === "alice") await chooseOrg("Secret test organization");
+      await openRepository();
+      await page.getByText("All values set", { exact: true }).waitFor();
+      await secretRow("Shared · This repository").waitFor();
+      assert.equal(
+        await secretRow("Personal · This repository").count(),
+        actor === "alice" ? 1 : 0
+      );
+      assert.equal(
+        await secretRow("Personal · All repositories").count(),
+        actor === "alice" ? 1 : 0
+      );
+      if (actor === "bob") {
+        assert.equal(
+          await secretRow("Shared · This repository")
+            .getByRole("button", { name: "Delete", exact: true })
+            .count(),
+          0
+        );
+        await page.getByRole("button", { name: "Repositories", exact: true }).click();
+        await page
+          .getByRole("button", { name: new RegExp(direct ? "acme/web-app" : "acme/new-app") })
+          .click();
+        await secretRow("Shared · All repositories").waitFor();
+        assert.equal(await secretRow("Shared · This repository").count(), 0);
+        assert.equal(await secretRow("Personal · All repositories").count(), 0);
+      }
+    }
+    for (const label of ["Personal · This repository", "Shared · This repository"]) {
+      await secretRow(label).getByRole("button", { name: "Delete", exact: true }).click();
+      await page.getByRole("button", { name: "Delete secret", exact: true }).click();
+      await secretRow(label).waitFor({ state: "hidden" });
+      await page.getByText("All values set", { exact: true }).waitFor();
+    }
+    await page
+      .getByRole("button", { name: "Manage secrets for all repositories", exact: true })
+      .click();
+    for (const label of ["Personal · All repositories", "Shared · All repositories"]) {
+      await secretRow(label).getByRole("button", { name: "Delete", exact: true }).click();
+      await page.getByRole("button", { name: "Delete secret", exact: true }).click();
+      await secretRow(label).waitFor({ state: "hidden" });
+    }
+    await page.getByText("No secrets added yet.", { exact: true }).waitFor();
+    assert.equal(await page.evaluate((v) => window.secretCacheContains(v), value), false);
     if (!direct) {
       // A missing settings endpoint must not turn a signed-in account into a login prompt.
       const orgsUrl = /\/api\/settings\/environment-secrets\/orgs$/;

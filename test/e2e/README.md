@@ -15,6 +15,8 @@ repository/default secrets, organization/account switching, replacement/deletion
 mobile overflow and absence of secret values from query/mutation caches. The agent
 setup action is checked through its Local/Cloud request and selected Codex model;
 the harness does not create workspaces or run an agent turn.
+The same secret name is also saved at all four ownership/scope levels, then checked
+across accounts and repositories before removing overrides and defaults.
 
 Create and migrate a disposable Postgres database using the linked AGNT checkout,
 then run from the Deus worktree:
