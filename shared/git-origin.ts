@@ -24,6 +24,15 @@ export function httpsOrigin(url: string): string {
   return url;
 }
 
+/** Matches AGNT's persisted repository identity; ordering is part of the lookup. */
+export function normalizeRepoRef(ref: string): string {
+  return ref
+    .trim()
+    .toLowerCase()
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
+}
+
 /**
  * `owner/name` when the origin really is GitHub, else null.
  *

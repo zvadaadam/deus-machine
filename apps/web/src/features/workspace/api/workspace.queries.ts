@@ -391,6 +391,7 @@ export function useArchiveWorkspace() {
 
   return useMutation({
     mutationFn: (workspaceId: string) => WorkspaceService.archive(workspaceId),
+    retry: false,
 
     // Optimistic update: Remove workspace from UI immediately
     onMutate: async (workspaceId: string) => {

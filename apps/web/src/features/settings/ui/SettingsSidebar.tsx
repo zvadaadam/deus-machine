@@ -49,7 +49,13 @@ const NAV_ITEMS: NavItem[] = [
 
 const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability])
   // Cloud accounts work without the Mac settings store.
-  .filter((item) => !isCloudDirectWebMode() || item.id === "account" || item.id === "ai");
+  .filter(
+    (item) =>
+      !isCloudDirectWebMode() ||
+      item.id === "account" ||
+      item.id === "ai" ||
+      item.id === "environment"
+  );
 
 export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);

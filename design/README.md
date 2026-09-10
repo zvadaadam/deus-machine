@@ -14,17 +14,17 @@ tools only, never with plain file reads.
 Top-level frames are numbered so the layer list reads in order, and laid out in bands on
 the canvas — read left to right, top to bottom.
 
-| Band                     | Frames     | What's there                                                                                                                                                                                       |
-| ------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **00 — Overview**        | `00`       | The design ↔ code contract, on canvas                                                                                                                                                              |
-| **01–05 — Foundations**  | `01`…`05`  | Colour / type / radius · motion & easing · elevation & materials · iconography · interaction states                                                                                                |
-| **10–24 — Components**   | `10`…`24`  | The `DS/*` library, grouped: buttons, inputs, overlays, display, sidebar, chat, composer, tools, changes, tool anatomy, shell, content-panel states, remaining surfaces, markdown, transient flows |
-| **30 — States**          | `30`       | Every workspace-row state side by side                                                                                                                                                             |
-| **40–49 — Screens**      | `40`…`49`  | Workspace × each content tab, Home, Onboarding, light theme                                                                                                                                        |
-| **50–58 — Settings**     | `50`…`58`  | All nine settings sections, full screen                                                                                                                                                            |
-| **60–66 — Overlays**     | `60`…`66`  | ⌘K palette and every dialog                                                                                                                                                                        |
-| **70–73 — Mobile**       | `70`…`73`  | Chat, Code, sidebar drawer, PR-bar states                                                                                                                                                          |
-| **80 · 90 — Other apps** | `80`, `90` | The `/connect` web route, and the landing site (its own token set)                                                                                                                                 |
+| Band                    | Frames           | What's there                                                                                                                                                                                                                |
+| ----------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **00 — Overview**       | `00`             | The design ↔ code contract, on canvas                                                                                                                                                                                       |
+| **01–05 — Foundations** | `01`…`05`        | Colour / type / radius · motion & easing · elevation & materials · iconography · interaction states                                                                                                                         |
+| **10–25 — Components**  | `10`…`25`        | The `DS/*` library, grouped: buttons, inputs, overlays, display, sidebar, chat, composer, tools, changes, tool anatomy, shell, content-panel states, remaining surfaces, markdown, transient flows, provider & access parts |
+| **30 — States**         | `30`             | Every workspace-row state side by side                                                                                                                                                                                      |
+| **40–49 — Screens**     | `40`…`49`        | Workspace × each content tab, Home, Onboarding, light theme                                                                                                                                                                 |
+| **50–59 — Settings**    | `50`…`59a`       | Its own lane at x 19,000. Four bands: shipped sections · sub-pages · overlays · explorations                                                                                                                                |
+| **60–67 — Overlays**    | `60`…`67`        | ⌘K palette, every dialog, and Grant repository access                                                                                                                                                                       |
+| **70–75 — Mobile**      | `70`…`75`        | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
+| **80 · 85 · 90**        | `80`, `85`, `90` | The `/connect` web route, the web-direct surfaces, and the landing site (its own token set)                                                                                                                                 |
 
 ### Screens
 
@@ -59,12 +59,39 @@ the canvas — read left to right, top to bottom.
   `w-1.5 bg-white/50`, and the ones still ahead `w-1.5 bg-white/20` — three states, not two.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
-  `56` Environment · `57` Experimental · `58` Remote Access
+  `56` Environments · `57` Experimental · `58` Remote Access
+
+### The settings lane
+
+Settings is the largest district in the file, so it has its own lane rather than sharing
+the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
+(1,440 board + 120 gutter), four baselines:
+
+| Band | y     | Frames                                   |
+| ---- | ----- | ---------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections             |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g`      |
+| 3    | 8800  | `66a` `66b` — settings overlays          |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule |
+| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`       |
+
+Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
+board, so nothing unshipped reads as a tenth section. A board that is not built says so on
+the board. Mobile boards live in `70`–`79` whatever they show, which is why the mobile
+repository-environments board is `74` and not `56d`. A number means one board: `42`, `43`,
+`62` and `72` were each used twice, so the web-direct district moved to `85`/`85a`–`85e`,
+Grant repository access to `67`, and the web-direct mobile chat to `75`.
+
 - `58` labels the portal address **Access URL** without a copy button. **Connect a Device**
   opens the existing pairing dialog (`66`); its Copy Link and QR code include the pairing
   code. The link keeps that code through the browser redirect and targets the signed-in
   iOS pairing flow when the native app is installed and associated with the domain.
-- `54a`–`54c` and `59`/`59a` are a **proposal, not built** — the settings revamp. `54a` is
+- `54a`–`54d` and `59`/`59a` are a **proposal, not built** — the settings revamp, parked in
+  band 4. `54d` is the exception that had to be untangled first: it housed
+  `DS/ProviderAccounts — connected`, `DS/ProviderDeviceLogin — waiting` and
+  `DS/AuthBadge — unavailable`, and shipped board `54` instances the first of them. All
+  three now live on board `25`, and `54d` renders them as instances, so the exploration can
+  be moved or archived without breaking a shipped screen. `54a` is
   the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
   local status matrix. Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.
   `59` carries the system behind it — the `cell` row primitive
@@ -173,6 +200,9 @@ line heights and tracking are the real values; only the outlines differ.
 | `DS/IconButton`                                                      | the 28px icon buttons in `SidebarHeader` / `SessionTabBar`        |
 | `DS/Badge` `DS/Kbd` `DS/Input` `DS/Switch` `DS/Avatar` `DS/MenuItem` | the matching `components/ui/*.tsx`                                |
 | `DS/Chip`                                                            | `QUICK_PROMPTS` chips in `features/repository/ui/HomeView.tsx`    |
+| `DS/Breadcrumbs`                                                     | the settings sub-page trail (no component in code yet)            |
+| `DS/ProviderAccounts` `DS/ProviderDeviceLogin` `DS/AuthBadge`        | `features/settings/ui/sections/ProviderAccounts.tsx` — board `25` |
+| `DS/GrantRepositoryAccessModal`                                      | the repository-access modal — board `25`                          |
 | `DS/SidebarRow-Repo`                                                 | `features/sidebar/ui/RepositoryItem.tsx`                          |
 | `DS/SidebarRow-Workspace` / `-Active`                                | `features/sidebar/ui/WorkspaceItem.tsx` + `SidebarRow.tsx`        |
 | `DS/StatusIcon-*`                                                    | `features/sidebar/ui/WorkflowStatusIcon.tsx`                      |
@@ -197,6 +227,64 @@ Board `13` includes the cloud autosave warning from
 `components/ui/sonner.tsx` toaster. It shows a live failed-save diagnostic for ten
 seconds or until dismissed; it is not a persistent chat component.
 
+Board `56` shows the repository list in `EnvironmentSection.tsx`, with GitHub owner
+avatars and cloud/local availability. `56a` is the repository's cloud setup and
+secrets; `56b` is its local setup editor; `56c` manages secrets across
+repositories; `74` is the mobile list; `56e` shows a signed-in account when cloud
+settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
+to repositories.
+
+### The settings header
+
+The settings `TopBar` is the breadcrumb bar. On a root section it holds the section
+name; on a sub-page it holds a `DS/Breadcrumbs` instance — back arrow, parent crumb,
+`›`, current crumb — and nothing else. The sidebar-collapse toggle is gone from every
+settings board: settings is a full-screen surface, so there is no panel to collapse.
+
+Sub-pages carry no second section title. `Environments` / "Set up how your repositories
+run." belongs to root board `56` only. Repeating it on `56a`–`56g` pushed the real page
+title down and made the crumb read `Repositories › acme/mobile-app` under a heading that
+said `Environments`. The trail now names the section it returns to, the page title sits
+directly below it at `text-lg`/600, and the nav item, the crumb and the root heading all
+say **Environments**. The back arrow is the part Cursor omits and Deus keeps.
+
+The organization selector stays on the boards where it scopes what you see — root `56`
+and the `56c`/`56f`/`56g` secrets boards, on the title row. It is gone from `56a`/`56b`:
+a repository already fixes its organization.
+
+Every settings `Body` is **1048px** wide with `[0, 32]` padding — 984px of content, 96px
+clear of the card edge on both sides. Before, form sections ran 672px inside an 1176px
+card, which left 252px of dead surface on each side.
+
+`56c` uses that full width for the table. Shared and Personal are tabs with
+counts, and the secrets themselves sit in the same bordered table as `56`
+(`bg-muted` heading band, `border-subtle` row rules) with Name, Applies to, Value
+and the Replace/Delete actions. Values are always masked because
+`EnvironmentSecret` carries metadata only. `56f` is the empty table and `56g` opens
+the new-secret side panel over it: scope segmented control, name, value, applies-to,
+and the write-only note. The panel replaces the centred `EnvironmentSecretDialog`
+(`66a`) for the add case; replace and delete stay dialogs.
+Cloud setup preserves saved command boundaries, phases and parallel steps.
+Cloud Run script starts the app after setup in each new VM. Both script fields
+sit above a divider and environment variables; the Local workspace-status block
+is removed. Cloud values can be added before saving scripts. Dropping an `.env`
+or `.dev.vars` file opens a name-only import review; selected non-empty values
+are saved as personal or shared secrets in one transaction.
+Both repository detail boards have one **Set up with agent** action in the repository
+header, targeting the selected Local/Cloud tab. Local setup shows public variables
+after setup/run scripts; archive scripts, tasks and requirements stay in Advanced.
+The Generate, Auto-detect and JSON-preview controls are removed.
+Board `66a` shows add, replace and delete states of `EnvironmentSecretDialog.tsx`.
+Board `66b` shows `ImportEnvironmentSecretsDialog.tsx`, including replacement,
+empty values and multi-environment scope conflicts. Local public variables remain
+separate from Cloud secrets.
+Values are write-only; existing values are never drawn into a replacement form.
+The page determines a new secret's repository scope; the dialog only asks whether
+it is personal or shared. Defaults are inherited and managed on their own page.
+The forms reuse the input and button components. `assets/github-acme.png` is the
+public GitHub owner avatar used in these examples, fetched from GitHub's profile
+image endpoint. Production loads owner avatars directly and uses a folder fallback.
+
 ### The scales are bound, not typed
 
 Every `fontSize` and every `cornerRadius` in the file is a **variable reference**
@@ -211,7 +299,7 @@ Seven colour variables are defined but never referenced — `sidebar-border`,
 on the Foundations board as literal light/dark swatch pairs so both halves are visible at
 once. Keep them in step with `global.css` even though nothing binds to them.
 
-`DS/Badge`, `DS/Kbd`, `DS/StatusDot`, `DS/Input` and `DS/MenuItem` have no instances —
+`DS/Badge`, `DS/Kbd`, `DS/StatusDot` and `DS/MenuItem` have no instances —
 they appear once, on their own board, as the reference for a component that exists in
 code. Everything else that appears more than once **is** instanced; if you find yourself
 pasting a component's markup into a second place, instance it instead.
@@ -307,7 +395,8 @@ in step with it:
 - Tool rows are `px-2 py-1.5` with a 14px icon box — `TurnStatsHeader` matches it exactly
 - Composer is `rounded-2xl`, `bg-bg-muted/75`, hairline `ring-border-subtle`; controls are 32px
 - Diff lines are 12px mono on an 18px line box, 22 % / 20 % tints over the background
-- Settings body is `max-w-2xl` (672px) with `px-8 py-8`; the nav rail reuses the 256px sidebar
+- Settings body is 1048px across every section (`max-w-5xl`, was `max-w-2xl`/`max-w-4xl`)
+  with `px-4 py-8 sm:px-8`; the nav rail reuses the 256px sidebar
 - Mobile is 390×844; the sidebar sheet is `100vw − 3.5rem` = 334px
 - Sidebar header is 48px (`px-1.5 py-1.5` around a 36px account button); footer is 46px (`p-3.5`)
 - Chat gutters are `px-6 pt-6` on desktop, `px-3 pt-4` on mobile. Turn rhythm is not a

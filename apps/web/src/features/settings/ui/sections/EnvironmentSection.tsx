@@ -1,17 +1,9 @@
-/**
- * EnvironmentSection — per-repository deus.json manifest editor.
- *
- * Lets users select a repo, view/edit its deus.json configuration
- * (setup script, run script, archive script, requirements, env vars, tasks),
- * auto-detect from project files, and save.
- */
-
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { toast } from "sonner";
-import { Plus, Trash2, Loader2, FileJson, ChevronDown, ChevronRight, Wand2 } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronRight, Cloud, FolderGit2, KeyRound, Laptop, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -19,507 +11,532 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { useRepos, useRepoManifest, useSaveRepoManifest } from "@/features/repository";
-import { RepoService } from "@/features/repository/api/repository.service";
-import {
-  EMPTY_TASK,
-  EMPTY_DRAFT,
-  manifestToDraft,
-  draftToManifest,
-  type ManifestDraft,
-} from "./manifest-draft";
-import { TaskRow } from "./TaskRow";
-import { WorkspaceStatusDashboard } from "./WorkspaceStatusDashboard";
-import { CloudEnvironmentBlock } from "./CloudEnvironmentBlock";
-import { useProviderAccounts } from "../../api/provider-accounts.queries";
-import { defaultProviderAccount } from "@shared/types/provider-account";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { native } from "@/platform";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { RepoService } from "@/features/repository/api/repository.service";
+import { githubRepoSlug } from "@shared/git-origin";
+import type { CloudEnvironmentSettings } from "@shared/types/environment-secrets";
+import {
+  getEnvironmentInstallUrl,
+  getEnvironmentSecretSettings,
+  listEnvironmentRepositories,
+  listSecretOrganizations,
+} from "../../api/environment-secrets.service";
+import {
+  environmentRepositories,
+  type EnvironmentRepository,
+} from "../../lib/environment-repositories";
+import { CloudApplicationSecrets, ENVIRONMENT_SECRETS_QUERY_KEY } from "./CloudApplicationSecrets";
+import { CloudSetupEditor } from "./CloudSetupEditor";
+import { LocalEnvironmentSettings } from "./LocalEnvironmentSettings";
+import { SetUpEnvironmentWithAgent } from "./SetUpEnvironmentWithAgent";
 
 export function EnvironmentSection() {
-  const { data: repos, isLoading: reposLoading } = useRepos();
-  // Agent-driven environment setup provisions a real cloud workspace, so it
-  // needs the lane up: signed in AND holding this device's platform key.
-  const cloudSession = useDeusCloudSession();
-  const providerAccounts = useProviderAccounts();
-  // A reason, not a boolean — distinct states need distinct next steps.
-  // vaultLocked FIRST: with the keyring locked hasPlatformKey reads false
-  // too, and "finish device setup" would send the user to redo a setup
-  // that finished fine.
-  const cloudBlockedReason = cloudSession.data?.vaultLocked
-    ? "Unlock your keyring, then reopen Deus"
-    : !cloudSession.data?.signedIn
-      ? "Sign in to Deus Cloud first"
-      : !cloudSession.data?.hasPlatformKey
-        ? "Finish device setup in Settings → Cloud"
-        : providerAccounts.isError
-          ? "Couldn't check your provider accounts — retry in Settings → AI Providers"
-          : !providerAccounts.data
-            ? "Checking provider accounts…"
-            : defaultProviderAccount(providerAccounts.data, "claude")?.status !== "connected"
-              ? "Choose a connected Claude account in Settings → AI Providers — setup runs a real agent turn"
-              : null;
-  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
-
-  // Auto-select first repo
-  useEffect(() => {
-    if (!selectedRepoId && repos && repos.length > 0) {
-      setSelectedRepoId(repos[0].id);
-    }
-  }, [repos, selectedRepoId]);
-
-  const { data: manifestData, isLoading: manifestLoading } = useRepoManifest(selectedRepoId);
-  const saveMutation = useSaveRepoManifest();
-
-  const [draft, setDraft] = useState<ManifestDraft>(EMPTY_DRAFT);
-  const [isDirty, setIsDirty] = useState(false);
-  const [rawJsonOpen, setRawJsonOpen] = useState(false);
-  const [detecting, setDetecting] = useState(false);
-
-  // Sync draft from fetched manifest
-  useEffect(() => {
-    if (manifestData) {
-      setDraft(manifestToDraft(manifestData.manifest));
-      setIsDirty(false);
-    }
-  }, [manifestData]);
-
-  const updateDraft = useCallback(
-    <K extends keyof ManifestDraft>(key: K, value: ManifestDraft[K]) => {
-      setDraft((prev) => ({ ...prev, [key]: value }));
-      setIsDirty(true);
-    },
-    []
-  );
-
-  const handleSave = useCallback(() => {
-    if (!selectedRepoId) return;
-    const manifest = draftToManifest(draft);
-    saveMutation.mutate(
-      { repoId: selectedRepoId, manifest },
-      {
-        onSuccess: () => {
-          toast.success("deus.json saved");
-          setIsDirty(false);
-        },
-        onError: (err) => {
-          toast.error(`Failed to save: ${err instanceof Error ? err.message : "Unknown error"}`);
-        },
-      }
-    );
-  }, [selectedRepoId, draft, saveMutation]);
-
-  const handleReset = useCallback(() => {
-    if (manifestData) {
-      setDraft(manifestToDraft(manifestData.manifest));
-      setIsDirty(false);
-    }
-  }, [manifestData]);
-
-  const handleDetect = useCallback(async () => {
-    if (!selectedRepoId) return;
-    setDetecting(true);
-    try {
-      const { manifest } = await RepoService.detectManifest(selectedRepoId);
-      setDraft(manifestToDraft(manifest));
-      setIsDirty(true);
-      toast.success("Detected project configuration");
-    } catch (err) {
-      toast.error(`Detection failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-    } finally {
-      setDetecting(false);
-    }
-  }, [selectedRepoId]);
-
-  const rawJson = useMemo(() => JSON.stringify(draftToManifest(draft), null, 2), [draft]);
-
-  // Collect task names for dependency picker
-  const taskNames = useMemo(() => draft.tasks.map((t) => t.name).filter(Boolean), [draft.tasks]);
-
-  if (reposLoading) {
-    return (
-      <div className="flex h-40 items-center justify-center">
-        <Loader2 className="text-muted-foreground size-5 animate-spin motion-reduce:animate-none" />
-      </div>
-    );
-  }
-
-  if (!repos || repos.length === 0) {
-    return (
-      <div className="space-y-5">
-        <div>
-          <h3 className="text-base font-semibold">Environment</h3>
-          <p className="text-muted-foreground mt-1 text-base">
-            No repositories found. Add a project first.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  const session = useDeusCloudSession();
+  const accountId = session.data?.signedIn ? session.data.accountId : null;
+  return <EnvironmentSettings key={accountId ?? "signed-out"} accountId={accountId} />;
+}
+function EnvironmentSettings({ accountId }: { accountId: string | null }) {
+  const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const organizations = useQuery({
+    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, "orgs"],
+    queryFn: ({ signal }) => listSecretOrganizations(signal),
+    enabled: !!accountId,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const orgId =
+    selectedOrg ??
+    organizations.data?.currentOrganizationId ??
+    organizations.data?.items[0]?.id ??
+    null;
   return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="text-base font-semibold">Environment</h3>
-        <p className="text-muted-foreground mt-1 text-base">
-          Configure workspace setup, tasks, and environment for each repository.
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold">Environments</h3>
+          <p className="text-text-muted mt-1 text-sm">Set up how your repositories run.</p>
+        </div>
+        {(organizations.data?.items.length ?? 0) > 1 && (
+          <Select
+            value={orgId ?? ""}
+            onValueChange={(id) => {
+              if (dirty && !window.confirm("Discard unsaved setup changes?")) return;
+              setDirty(false);
+              setSelectedOrg(id);
+            }}
+          >
+            <SelectTrigger aria-label="Organization" className="w-auto max-w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {organizations.data!.items.map((org) => (
+                <SelectItem key={org.id} value={org.id}>
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      {organizations.isError && (
+        <LoadError error={organizations.error} retry={() => void organizations.refetch()} />
+      )}
+      <RepositoryEnvironments
+        key={orgId ?? "local"}
+        accountId={accountId}
+        orgId={orgId}
+        cloudLoading={!!accountId && organizations.isPending}
+        dirty={dirty}
+        setDirty={setDirty}
+        activeOrganization={orgId === organizations.data?.currentOrganizationId}
+      />
+    </div>
+  );
+}
+function RepositoryEnvironments({
+  accountId,
+  orgId,
+  cloudLoading,
+  dirty,
+  setDirty,
+  activeOrganization,
+}: {
+  accountId: string | null;
+  orgId: string | null;
+  cloudLoading: boolean;
+  dirty: boolean;
+  setDirty: (dirty: boolean) => void;
+  activeOrganization: boolean;
+}) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("cloud");
+  const signIn = useDeusCloudSignIn();
+  const repos = useQuery({
+    queryKey: queryKeys.repos.all,
+    queryFn: () => RepoService.fetchAll(),
+    enabled: !isCloudDirectWebMode(),
+    staleTime: 10_000,
+  });
+  const settings = useQuery({
+    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, null],
+    queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId!, null, signal),
+    enabled: !!orgId,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const github = useQuery({
+    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, "github-repos"],
+    queryFn: ({ signal }) => listEnvironmentRepositories(orgId!, signal),
+    enabled: !!orgId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  function navigate(next: EnvironmentRepository | "defaults" | null) {
+    if (dirty && !window.confirm("Discard unsaved setup changes?")) return;
+    setDirty(false);
+    setSelectedKey(typeof next === "object" ? (next?.key ?? null) : next);
+    if (next && next !== "defaults")
+      setTab(
+        orgId && (next.environment || canAccess(next)) ? "cloud" : next.local ? "local" : "cloud"
+      );
+  }
+  const rows = environmentRepositories(
+    repos.data ?? [],
+    github.data?.repos ?? [],
+    settings.data?.environments ?? []
+  );
+  const selection =
+    selectedKey === "defaults" ? "defaults" : rows.find((row) => row.key === selectedKey);
+  const canAccess = (row: EnvironmentRepository) => {
+    const slug = row.repo && githubRepoSlug(row.repo)?.toLowerCase();
+    return !!slug && !!github.data?.repos.some((name) => name.toLowerCase() === slug);
+  };
+  if (selection)
+    return (
+      <div className="space-y-6">
+        <nav
+          aria-label="Environment breadcrumb"
+          className="text-text-muted flex min-w-0 items-center gap-2 text-sm"
+        >
+          <button
+            type="button"
+            className="hover:text-text-primary shrink-0 py-1"
+            onClick={() => navigate(null)}
+          >
+            Repositories
+          </button>
+          <ChevronRight className="size-3.5 shrink-0" />
+          <span aria-current="page" className="text-text-primary truncate">
+            {selection === "defaults" ? "Default secrets" : selection.name}
+          </span>
+        </nav>
+        {selection === "defaults" ? (
+          <>
+            <div>
+              <h4 className="font-medium">Default secrets</h4>
+              <p className="text-text-muted mt-1 text-sm">
+                Available across repositories in this organization. A repository’s own value takes
+                priority.
+              </p>
+            </div>
+            {orgId && settings.data && (
+              <CloudApplicationSecrets
+                orgId={orgId}
+                environmentId={null}
+                settings={settings.data}
+                onDefaults={() => {}}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <RepositoryAvatar repo={selection.repo} />
+                <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
+              </div>
+              <SetUpEnvironmentWithAgent
+                repoId={selection.local?.id}
+                location={tab === "local" ? "local" : "cloud"}
+                activeOrganization={activeOrganization}
+                onBeforeStart={() => {
+                  if (dirty && !window.confirm("Discard unsaved setup changes?")) return false;
+                  setDirty(false);
+                  return true;
+                }}
+              />
+            </div>
+            <Tabs
+              value={tab}
+              onValueChange={(next) => {
+                if (dirty && !window.confirm("Discard unsaved setup changes?")) return;
+                setDirty(false);
+                setTab(next);
+              }}
+            >
+              <TabsList className="border-border-subtle mb-6 h-10 border-b">
+                <TabsTrigger value="cloud" className="border-r-0 px-4">
+                  <Cloud className="size-3.5" />
+                  Cloud
+                </TabsTrigger>
+                <TabsTrigger value="local" className="border-r-0 px-4" disabled={!selection.local}>
+                  <Laptop className="size-3.5" />
+                  Local
+                  {!selection.local && (
+                    <span className="text-text-muted text-xs">· Not on this computer</span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="cloud" className="space-y-6">
+                {orgId ? (
+                  <CloudRepositorySettings
+                    key={selection.key}
+                    accountId={accountId!}
+                    orgId={orgId}
+                    repository={selection}
+                    access={canAccess(selection)}
+                    accessUnknown={!github.data}
+                    onDirtyChange={setDirty}
+                    onDefaults={() => navigate("defaults")}
+                  />
+                ) : !accountId ? (
+                  <CloudSignIn onSignIn={() => signIn.mutate()} pending={signIn.isPending} />
+                ) : (
+                  <p role="status" className="text-text-muted text-sm">
+                    {cloudLoading
+                      ? "Loading cloud settings…"
+                      : "Cloud settings are unavailable right now."}
+                  </p>
+                )}
+              </TabsContent>
+              <TabsContent value="local">
+                {selection.local && (
+                  <LocalEnvironmentSettings repoId={selection.local.id} onDirtyChange={setDirty} />
+                )}
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
+      </div>
+    );
+  return (
+    <div className="space-y-4">
+      {!accountId && <CloudSignIn onSignIn={() => signIn.mutate()} pending={signIn.isPending} />}
+      {settings.isError && (
+        <LoadError error={settings.error} retry={() => void settings.refetch()} />
+      )}
+      {github.isError && <LoadError error={github.error} retry={() => void github.refetch()} />}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-48 flex-1">
+          <Search className="text-text-muted pointer-events-none absolute top-3 left-3 size-4" />
+          <Input
+            aria-label="Search repositories"
+            className="pl-9"
+            placeholder="Search repositories…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        {orgId && (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => navigate("defaults")}
+              disabled={!settings.data}
+            >
+              <KeyRound className="mr-1.5 size-3.5" />
+              Default secrets
+            </Button>
+            <ConnectRepositories orgId={orgId} accountId={accountId!} />
+          </>
+        )}
+      </div>
+      <div className="border-border-subtle overflow-hidden rounded-lg border">
+        <div className="bg-bg-muted text-text-muted grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-4 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_140px_80px]">
+          <span>Repository</span>
+          <span>Cloud</span>
+          <span className="hidden sm:block">Local</span>
+        </div>
+        <div className="divide-border-subtle divide-y">
+          {rows
+            .filter((row) => row.name.toLowerCase().includes(search.toLowerCase()))
+            .map((row) => (
+              <button
+                key={row.key}
+                type="button"
+                className="hover:bg-bg-muted focus-visible:bg-bg-muted grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-4 text-left transition-colors outline-none sm:grid-cols-[minmax(0,1fr)_140px_80px]"
+                onClick={() => navigate(row)}
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <RepositoryAvatar repo={row.repo} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{row.name}</span>
+                    {row.environment && !row.environment.isRepositoryDefault && (
+                      <span className="text-text-muted text-xs">
+                        {row.environment.ownerType === "USER"
+                          ? "Personal setup"
+                          : "Additional setup"}{" "}
+                        · {row.environment.name}
+                      </span>
+                    )}
+                    {row.local && (
+                      <span
+                        className="text-text-muted block truncate text-xs"
+                        title={row.local.root_path}
+                      >
+                        {row.local.root_path}
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <span
+                  className={`flex items-center gap-1.5 text-xs ${row.environment ? "text-text-secondary" : "text-text-muted"}`}
+                >
+                  {row.environment
+                    ? "Setup saved"
+                    : !accountId
+                      ? "Sign in"
+                      : cloudLoading || github.isLoading
+                        ? "Checking…"
+                        : !orgId || github.isError
+                          ? "Unavailable"
+                          : canAccess(row)
+                            ? "Set up"
+                            : row.repo
+                              ? "Connect GitHub"
+                              : "No remote"}
+                  <ChevronRight className="size-3" />
+                </span>
+                <span className="text-text-muted hidden text-xs sm:block">
+                  {row.local ? "Available" : "—"}
+                </span>
+              </button>
+            ))}
+        </div>
+        {!rows.length && (
+          <p role="status" className="text-text-muted px-4 py-10 text-center text-sm">
+            {cloudLoading || settings.isLoading || repos.isLoading
+              ? "Loading repositories…"
+              : "Connect GitHub or add a local project to get started."}
+          </p>
+        )}
+        {!!rows.length &&
+          !rows.some((row) => row.name.toLowerCase().includes(search.toLowerCase())) && (
+            <p className="text-text-muted px-4 py-8 text-center text-sm">
+              No repositories match your search.
+            </p>
+          )}
+      </div>
+      <p className="text-text-muted text-xs">
+        Cloud access comes from the Deus GitHub App. Local setup is available for repositories on
+        this computer.
+      </p>
+    </div>
+  );
+}
+function RepositoryAvatar({ repo }: { repo: string | null }) {
+  const owner = repo ? githubRepoSlug(repo)?.split("/")[0] : null;
+  return (
+    <Avatar className="size-6 rounded-md" aria-hidden="true">
+      {owner && (
+        <AvatarImage
+          src={`https://github.com/${encodeURIComponent(owner)}.png?size=48`}
+          alt=""
+          referrerPolicy="no-referrer"
+        />
+      )}
+      <AvatarFallback className="text-text-muted rounded-md">
+        <FolderGit2 className="size-4" />
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+function CloudRepositorySettings({
+  accountId,
+  orgId,
+  repository,
+  access,
+  accessUnknown,
+  onDirtyChange,
+  onDefaults,
+}: {
+  accountId: string;
+  orgId: string;
+  repository: EnvironmentRepository;
+  access: boolean;
+  accessUnknown: boolean;
+  onDirtyChange: (dirty: boolean) => void;
+  onDefaults: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const environmentId = repository.environment?.id ?? null;
+  const settings = useQuery({
+    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, environmentId],
+    queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, environmentId, signal),
+    // Creating the repository record while adding a secret must not unmount script drafts.
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    retry: false,
+  });
+  if (settings.isError)
+    return <LoadError error={settings.error} retry={() => void settings.refetch()} />;
+  if (!settings.data)
+    return (
+      <p role="status" className="text-text-muted text-sm">
+        Loading cloud setup…
+      </p>
+    );
+  if (!environmentId && !repository.repo)
+    return (
+      <div className="space-y-3">
+        <p className="text-text-muted text-sm">
+          Add a Git remote to this local repository to configure cloud setup.
         </p>
       </div>
-
-      {/* Repo selector */}
-      <div className="space-y-2">
-        <Label htmlFor="repo-select" className="text-sm">
-          Repository
-        </Label>
-        <Select value={selectedRepoId ?? ""} onValueChange={setSelectedRepoId}>
-          <SelectTrigger id="repo-select" className="w-full">
-            <SelectValue placeholder="Select a repository" />
-          </SelectTrigger>
-          <SelectContent>
-            {repos.map((repo) => (
-              <SelectItem key={repo.id} value={repo.id}>
-                {repo.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Cloud environment — the platform-side recipe for this repo. */}
-      <CloudEnvironmentBlock repoId={selectedRepoId} cloudBlockedReason={cloudBlockedReason} />
-
-      {manifestLoading ? (
-        <div className="flex h-20 items-center justify-center">
-          <Loader2 className="text-muted-foreground size-4 animate-spin motion-reduce:animate-none" />
+    );
+  const selected = settings.data.selectedEnvironment;
+  return (
+    <>
+      {!access && repository.repo && githubRepoSlug(repository.repo) && (
+        <div className="bg-bg-muted flex flex-wrap items-center justify-between gap-3 rounded-lg p-3">
+          <p className="text-text-muted flex-1 text-xs">
+            {accessUnknown
+              ? "GitHub access hasn't been confirmed."
+              : "Connect the Deus GitHub App for private repository access."}{" "}
+            You can save setup now.
+          </p>
+          <ConnectRepositories orgId={orgId} accountId={accountId} />
         </div>
-      ) : (
-        <>
-          {/* Auto-detect button — shown when manifest is empty or doesn't exist */}
-          {(!manifestData?.manifest || Object.keys(manifestData.manifest).length <= 1) && (
-            <div className="border-border-subtle flex items-center gap-3 rounded-lg border border-dashed p-4">
-              <Wand2 className="text-muted-foreground size-5 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">No deus.json found</p>
-                <p className="text-muted-foreground text-base">
-                  Auto-detect tasks from your project files (package.json, Cargo.toml, etc.)
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDetect}
-                disabled={detecting}
-                className="shrink-0"
-              >
-                {detecting && (
-                  <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
-                )}
-                Generate
-              </Button>
-            </div>
-          )}
-
-          <Separator />
-
-          {/* Setup script */}
-          <div className="space-y-2">
-            <Label htmlFor="setup-script" className="text-sm">
-              Setup script
-            </Label>
-            <p className="text-muted-foreground text-base">
-              Runs automatically when a new workspace is created.
-            </p>
-            <Input
-              id="setup-script"
-              value={draft.setupScript}
-              onChange={(e) => updateDraft("setupScript", e.target.value)}
-              placeholder="e.g. bun install"
-            />
-          </div>
-
-          {/* Run script */}
-          <div className="space-y-2">
-            <Label htmlFor="run-script" className="text-sm">
-              Run script
-            </Label>
-            <p className="text-muted-foreground text-base">
-              Default dev server command for workspaces.
-            </p>
-            <Input
-              id="run-script"
-              value={draft.runScript}
-              onChange={(e) => updateDraft("runScript", e.target.value)}
-              placeholder="e.g. bun run dev"
-            />
-          </div>
-
-          {/* Archive script */}
-          <div className="space-y-2">
-            <Label htmlFor="archive-script" className="text-sm">
-              Archive script
-            </Label>
-            <p className="text-muted-foreground text-base">
-              Runs when a workspace is archived (cleanup, webhooks, etc.)
-            </p>
-            <Input
-              id="archive-script"
-              value={draft.archiveScript}
-              onChange={(e) => updateDraft("archiveScript", e.target.value)}
-              placeholder="e.g. ./scripts/cleanup.sh"
-            />
-          </div>
-
-          {/* Run mode */}
-          <div className="space-y-2">
-            <Label htmlFor="run-mode" className="text-sm">
-              Run script mode
-            </Label>
-            <Select
-              value={draft.runScriptMode}
-              onValueChange={(v) =>
-                updateDraft("runScriptMode", v as "concurrent" | "nonconcurrent")
-              }
-            >
-              <SelectTrigger id="run-mode" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="nonconcurrent">Non-concurrent (one at a time)</SelectItem>
-                <SelectItem value="concurrent">Concurrent (allow multiple)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Separator />
-
-          {/* Requirements */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Requirements</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  updateDraft("requires", [
-                    ...draft.requires,
-                    { id: crypto.randomUUID(), tool: "", version: "" },
-                  ])
-                }
-                className="h-7 gap-1 px-2 text-xs"
-              >
-                <Plus className="size-3" />
-                Add
-              </Button>
-            </div>
-            {draft.requires.length === 0 && (
-              <p className="text-muted-foreground text-base">No tool requirements configured.</p>
-            )}
-            {draft.requires.map((req, i) => (
-              <div key={req.id} className="flex items-center gap-2">
-                <Input
-                  value={req.tool}
-                  onChange={(e) => {
-                    const next = [...draft.requires];
-                    next[i] = { ...next[i], tool: e.target.value };
-                    updateDraft("requires", next);
-                  }}
-                  placeholder="Tool (e.g. node)"
-                  className="flex-1"
-                />
-                <Input
-                  value={req.version}
-                  onChange={(e) => {
-                    const next = [...draft.requires];
-                    next[i] = { ...next[i], version: e.target.value };
-                    updateDraft("requires", next);
-                  }}
-                  placeholder="Version (e.g. >= 22)"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    updateDraft(
-                      "requires",
-                      draft.requires.filter((_, j) => j !== i)
-                    )
-                  }
-                  className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          <Separator />
-
-          {/* Environment Variables */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Environment variables</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  updateDraft("env", [
-                    ...draft.env,
-                    { id: crypto.randomUUID(), key: "", value: "" },
-                  ])
-                }
-                className="h-7 gap-1 px-2 text-xs"
-              >
-                <Plus className="size-3" />
-                Add
-              </Button>
-            </div>
-            {draft.env.length === 0 && (
-              <p className="text-muted-foreground text-base">
-                No environment variables configured.
-              </p>
-            )}
-            {draft.env.map((envVar, i) => (
-              <div key={envVar.id} className="flex items-center gap-2">
-                <Input
-                  value={envVar.key}
-                  onChange={(e) => {
-                    const next = [...draft.env];
-                    next[i] = { ...next[i], key: e.target.value };
-                    updateDraft("env", next);
-                  }}
-                  placeholder="KEY"
-                  className="flex-1 font-mono text-xs"
-                />
-                <Input
-                  value={envVar.value}
-                  onChange={(e) => {
-                    const next = [...draft.env];
-                    next[i] = { ...next[i], value: e.target.value };
-                    updateDraft("env", next);
-                  }}
-                  placeholder="value"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    updateDraft(
-                      "env",
-                      draft.env.filter((_, j) => j !== i)
-                    )
-                  }
-                  className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          <Separator />
-
-          {/* Tasks */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Tasks</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  updateDraft("tasks", [...draft.tasks, { ...EMPTY_TASK, id: crypto.randomUUID() }])
-                }
-                className="h-7 gap-1 px-2 text-xs"
-              >
-                <Plus className="size-3" />
-                Add task
-              </Button>
-            </div>
-            {draft.tasks.length === 0 && (
-              <p className="text-muted-foreground text-base">
-                No tasks configured. Tasks appear as buttons in the workspace header.
-              </p>
-            )}
-            {draft.tasks.map((task, i) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                allTaskNames={taskNames}
-                onChange={(updated) => {
-                  const next = [...draft.tasks];
-                  next[i] = updated;
-                  updateDraft("tasks", next);
-                }}
-                onRemove={() =>
-                  updateDraft(
-                    "tasks",
-                    draft.tasks.filter((_, j) => j !== i)
-                  )
-                }
-              />
-            ))}
-          </div>
-
-          <Separator />
-
-          {/* Raw JSON preview */}
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setRawJsonOpen(!rawJsonOpen)}
-              className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 text-sm transition-colors duration-200"
-            >
-              {rawJsonOpen ? (
-                <ChevronDown className="size-3.5" />
-              ) : (
-                <ChevronRight className="size-3.5" />
-              )}
-              <FileJson className="size-3.5" />
-              <span>Raw JSON preview</span>
-            </button>
-            {rawJsonOpen && (
-              <pre className="bg-bg-muted text-text-secondary max-h-80 overflow-auto rounded-md p-3 text-xs">
-                {rawJson}
-              </pre>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Save / Reset / Generate */}
-          <div className="flex items-center gap-2">
-            <Button onClick={handleSave} disabled={!isDirty || saveMutation.isPending} size="sm">
-              {saveMutation.isPending && (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
-              )}
-              Save
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleReset} disabled={!isDirty}>
-              Reset
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleDetect} disabled={detecting}>
-              {detecting ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Wand2 className="mr-1.5 size-3.5" />
-              )}
-              Auto-detect
-            </Button>
-            {isDirty && <span className="text-muted-foreground text-xs">Unsaved changes</span>}
-          </div>
-
-          <Separator />
-
-          {/* Workspace Status */}
-          <WorkspaceStatusDashboard repoId={selectedRepoId} />
-        </>
       )}
+      <CloudSetupEditor
+        orgId={orgId}
+        environmentId={environmentId}
+        repo={repository.repo}
+        setup={selected?.setup ?? []}
+        run={selected?.run ?? ""}
+        canEdit={selected?.canEdit ?? settings.data.canManageShared}
+        onDirtyChange={onDirtyChange}
+        onSaved={(id, scripts) => {
+          queryClient.setQueryData<CloudEnvironmentSettings>(
+            [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, id],
+            (previous) =>
+              previous?.selectedEnvironment
+                ? {
+                    ...previous,
+                    selectedEnvironment: { ...previous.selectedEnvironment, ...scripts },
+                  }
+                : previous
+          );
+          void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_SECRETS_QUERY_KEY });
+        }}
+      />
+      <div className="border-border-subtle border-t pt-5">
+        <CloudApplicationSecrets
+          orgId={orgId}
+          environmentId={environmentId}
+          repo={repository.repo ?? undefined}
+          settings={settings.data}
+          onDefaults={onDefaults}
+        />
+      </div>
+    </>
+  );
+}
+function ConnectRepositories({ orgId, accountId }: { orgId: string; accountId: string }) {
+  const install = useQuery({
+    queryKey: [...ENVIRONMENT_SECRETS_QUERY_KEY, accountId, orgId, "github-install"],
+    queryFn: ({ signal }) => getEnvironmentInstallUrl(orgId, signal),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  if (install.isError)
+    return (
+      <Button size="sm" variant="outline" onClick={() => void install.refetch()}>
+        Retry GitHub connection
+      </Button>
+    );
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={!install.data}
+      onClick={() => {
+        if (install.data) void native.window.openExternal(install.data.url);
+      }}
+    >
+      Install GitHub App
+    </Button>
+  );
+}
+function CloudSignIn({ onSignIn, pending }: { onSignIn: () => void; pending: boolean }) {
+  return (
+    <div className="border-border-subtle flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+      <p className="text-text-muted text-sm">
+        Sign in to configure cloud environments and secrets.
+      </p>
+      <Button size="sm" onClick={onSignIn} disabled={pending}>
+        Sign in to Deus Cloud
+      </Button>
+    </div>
+  );
+}
+function LoadError({ error, retry }: { error: Error; retry: () => void }) {
+  return (
+    <div role="alert" className="space-y-2">
+      <p className="text-destructive text-sm">{error.message}</p>
+      <Button size="sm" variant="outline" onClick={retry}>
+        Try again
+      </Button>
     </div>
   );
 }

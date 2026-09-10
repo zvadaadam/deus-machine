@@ -37,7 +37,10 @@ const SECTION_LABELS: Record<string, string> = {
 export function SettingsPage() {
   const storedSection = useUIStore((s) => s.activeSettingsSection);
   const cloudOnly = isCloudDirectWebMode();
-  const activeSection = cloudOnly && storedSection !== "ai" ? "account" : storedSection;
+  const activeSection =
+    cloudOnly && storedSection !== "ai" && storedSection !== "environment"
+      ? "account"
+      : storedSection;
   const closeSettings = useUIStore((s) => s.closeSettings);
   const { theme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
@@ -130,7 +133,9 @@ export function SettingsPage() {
         {/* min-h-0: without it the flex item refuses to shrink below its
             content, the viewport never overflows, and the page can't scroll. */}
         <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto max-w-2xl px-8 py-8">
+          <div
+            className={`mx-auto px-4 py-8 sm:px-8 ${activeSection === "environment" ? "max-w-4xl" : "max-w-2xl"}`}
+          >
             {/* Saving indicator */}
             {saving && (
               <div className="text-muted-foreground mb-4 flex items-center gap-2 text-sm">

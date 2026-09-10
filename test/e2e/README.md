@@ -4,6 +4,34 @@ This directory contains all test files for the Deus application.
 
 ## Test Files
 
+### `environment-secrets.browser.mjs`
+
+Runs the real Environment settings components through both the desktop backend
+proxy and direct web API against AGNT's authenticated routes and encrypted
+Postgres store. Native sign-in, provider metadata, GitHub discovery and local manifests are fixtures;
+cloud setup/secret writes and ownership checks are real. It covers repository
+navigation, setup save/readback, retained local manifest fields, unsaved-edit guards,
+repository/default secrets, organization/account switching, replacement/deletion,
+mobile overflow and absence of secret values from query/mutation caches. The agent
+setup action is checked through its Local/Cloud request and selected Codex model;
+the harness does not create workspaces or run an agent turn.
+The same secret name is also saved at all four ownership/scope levels, then checked
+across accounts and repositories before removing overrides and defaults.
+
+Create and migrate a disposable Postgres database using the linked AGNT checkout,
+then run from the Deus worktree:
+
+```bash
+AGNT_WORKSPACE=/path/to/agnt \
+SECRET_TEST_DATABASE_URL=postgres://agnt:agnt@localhost:5432/secrets_test \
+bun test/e2e/environment-secrets.browser.mjs
+```
+
+The test starts isolated HTTP/Vite servers and removes its database rows and
+temporary session tokens on exit. Screenshots go to `.context/environment-secrets-ui`.
+It does not start or restart the user's Electron app. AGNT also provides an opt-in
+`tests/integration/environment-secrets.vm.ts` test for real E2B process injection.
+
 ### `e2e-flow.test.cjs`
 
 Comprehensive end-to-end test suite that verifies:

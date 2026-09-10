@@ -29,7 +29,7 @@ interface HeaderRunButtonProps {
   hasManifest: boolean;
   disabled?: boolean;
   onRunTask: (taskName: string) => void;
-  /** Called when user clicks the ghost icon (no manifest). Sends /generate-deus-json to chat. */
+  /** Called when user clicks the ghost icon (no manifest). Sends the local setup workflow to chat. */
   onSetupEnvironment?: () => void;
 }
 

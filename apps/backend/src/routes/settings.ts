@@ -8,10 +8,8 @@ import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
 } from "../services/cloud-workspace-init.service";
-import { listCloudEnvironments } from "../services/cloud-environment.service";
 import { initAutomations } from "../services/automations";
 import { ValidationError } from "../lib/errors";
-import type { AgentHarness } from "@shared/enums";
 
 const app = new Hono();
 
@@ -96,11 +94,6 @@ app.post("/settings/cloud/credentials", async (c) => {
   // freshly) mirror the platform — kick a background sync.
   initAutomations();
   return c.json({ ok: true, configured: getCloudConfig() !== null });
-});
-
-// Org-wide cloud environments (agent-authored recipes on the platform).
-app.get("/settings/cloud/environments", async (c) => {
-  return c.json(await listCloudEnvironments());
 });
 
 export default app;

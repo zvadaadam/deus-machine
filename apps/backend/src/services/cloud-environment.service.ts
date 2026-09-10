@@ -1,20 +1,18 @@
 // backend/src/services/cloud-environment.service.ts
 // The repo→environment link and its platform lookup.
 //
-// Cloud environments are agent-authored: the sandbox agent explores a repo,
-// verifies its setup by running it, and persists the config via agnt's
-// configure_environment tool. This service is deus's half of the link — it
+// Cloud recipes are saved by the sandbox agent's configure_environment tool
+// or the repository settings editor. This service is deus's half of the link — it
 // derives the same deterministic name the platform derives, so both sides
 // resolve the same environment with no mapping table anywhere (and nothing
 // machine-local to lose when switching computers).
 
 import {
   getEnvironment as agntGetEnvironment,
-  listEnvironments as agntListEnvironments,
   updateEnvironment as agntUpdateEnvironment,
 } from "@deus-hq/sdk";
 import { getCloudConfig } from "./agent/cloud/config";
-import { httpsOrigin } from "@shared/git-origin";
+import { httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
 
 /**
  * Deterministic org-unique environment name for a repository — MUST match
@@ -23,11 +21,7 @@ import { httpsOrigin } from "@shared/git-origin";
  * Shape: repo-<slug>-<hash8> over the https-normalized origin.
  */
 export async function environmentNameForRepo(repoRef: string): Promise<string> {
-  const normalized = repoRef
-    .trim()
-    .toLowerCase()
-    .replace(/\.git$/, "")
-    .replace(/\/+$/, "");
+  const normalized = normalizeRepoRef(repoRef);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
   const hash8 = [...new Uint8Array(digest)]
     .slice(0, 4)
@@ -57,42 +51,6 @@ export interface CloudEnvironmentInfo {
   /** Lookup ERRORED (non-404): configured:false here means UNKNOWN, not
    *  absent — state-rewriting callers must not act on it. */
   lookupFailed?: true;
-}
-
-export interface CloudEnvironmentSummary {
-  id: string;
-  name: string;
-  /** Repo origin the environment is bound to (from its config), if any. */
-  repo: string | null;
-  updatedAt: string;
-}
-
-/**
- * All cloud environments on the org — the Settings list. Empty when the
- * cloud lane is unconfigured; capped defensively (a solo org has a handful).
- */
-export async function listCloudEnvironments(): Promise<CloudEnvironmentSummary[]> {
-  const config = getCloudConfig();
-  if (!config) return [];
-  const out: CloudEnvironmentSummary[] = [];
-  try {
-    for await (const env of agntListEnvironments({
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-    })) {
-      const envConfig = (env.config ?? {}) as { repo?: unknown };
-      out.push({
-        id: env.id,
-        name: env.name,
-        repo: typeof envConfig.repo === "string" ? envConfig.repo : null,
-        updatedAt: env.updatedAt,
-      });
-      if (out.length >= 100) break;
-    }
-  } catch (err) {
-    console.warn(`[CloudEnv] environment list failed: ${err}`);
-  }
-  return out;
 }
 
 /** Platform lookup of the repo's specialized environment (by derived name). */

@@ -61,6 +61,22 @@ export function getDeusCloudSessionConfig() {
   };
 }
 
+/** Product settings use a session even when device-key provisioning is unfinished. */
+export function getCloudSettingsConfig() {
+  const baseUrl = (
+    runtime.baseUrl ??
+    process.env.DEUS_CLOUD_AGNT_URL ??
+    process.env.AGNT_BASE_URL ??
+    (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
+  ).replace(/\/$/, "");
+  assertSecureCloudUrl(baseUrl);
+  return {
+    baseUrl,
+    ...getDeusCloudSessionConfig(),
+    orgId: runtime.orgId ?? null,
+  };
+}
+
 /** Read the cloud config (memoized until credentials change). `null` = lane disabled. */
 export function getCloudConfig(): CloudConfig | null {
   if (cached !== undefined) return cached;
@@ -70,19 +86,7 @@ export function getCloudConfig(): CloudConfig | null {
     cached = null;
     return cached;
   }
-  const baseUrl = (
-    runtime.baseUrl ??
-    process.env.DEUS_CLOUD_AGNT_URL ??
-    process.env.AGNT_BASE_URL ??
-    (isLocalCloudEnv() ? LOCAL_AGNT_URL : "https://api.deusmachine.ai")
-  ).replace(/\/$/, "");
-  assertSecureCloudUrl(baseUrl);
-  cached = {
-    baseUrl,
-    apiKey,
-    ...getDeusCloudSessionConfig(),
-    orgId: runtime.orgId ?? null,
-  };
+  cached = { ...getCloudSettingsConfig(), apiKey };
   return cached;
 }
 

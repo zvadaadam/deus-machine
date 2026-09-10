@@ -43,9 +43,7 @@ import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
 import { AutomationsPage, useAutomations } from "@/features/automations";
-import { CONFIGURE_CLOUD_ENV } from "@/features/session/lib/sessionPrompts";
-import { getStoredModel } from "@/features/repository/ui/HomeView";
-import { DEFAULT_MODEL } from "@/shared/agents";
+import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
 import { MainContent } from "./MainContent";
@@ -216,9 +214,7 @@ export function MainLayout() {
     ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
-          branch || location === "cloud"
-            ? { repositoryId: repoId, source_branch: branch, location }
-            : repoId
+          branch || location ? { repositoryId: repoId, source_branch: branch, location } : repoId
         );
         // Store pending message — will be sent when workspace gets a session
         pendingWelcomeMessagesRef.current.set(workspace.id, { message, model });
@@ -232,27 +228,19 @@ export function MainLayout() {
     [welcomeCreateMutation, selectWorkspace, expandRepo]
   );
 
-  // Settings → "Set up with agent": consume the pending request — spin up a
-  // cloud workspace on that repo with the environment-onboarding prompt as
-  // turn one (the agent persists the recipe via agnt_configure_environment).
-  const pendingEnvSetupRepoId = useUIStore((s) => s.pendingEnvSetupRepoId);
+  // Settings uses the same creation/send path as the home composer.
+  const pendingEnvSetup = useUIStore((s) => s.pendingEnvSetup);
   useEffect(() => {
-    if (!pendingEnvSetupRepoId) return;
+    if (!pendingEnvSetup) return;
     useUIStore.getState().clearEnvSetupRequest();
-    // The setup turn is pinned to Claude regardless of the stored pick — not
-    // because the cloud can't run Codex (it can), but because the
-    // environment-onboarding prompt is tuned and tested against one agent
-    // and this flow must be deterministic.
-    const stored = getStoredModel();
-    const model = stored.startsWith("claude-code:") ? stored : DEFAULT_MODEL;
     void handleStartWorkspace(
-      pendingEnvSetupRepoId,
-      CONFIGURE_CLOUD_ENV,
-      model,
+      pendingEnvSetup.repoId,
+      setupEnvironmentPrompt(pendingEnvSetup.location),
+      pendingEnvSetup.model,
       undefined,
-      "cloud"
+      pendingEnvSetup.location
     );
-  }, [pendingEnvSetupRepoId, handleStartWorkspace]);
+  }, [pendingEnvSetup, handleStartWorkspace]);
 
   // Effect: when the pending workspace becomes ready with a session, send the queued message.
   // Uses the SessionPanel ref so the message goes through useSendMessage() → optimistic UI.

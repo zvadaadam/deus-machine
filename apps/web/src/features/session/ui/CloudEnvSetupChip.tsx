@@ -9,7 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Wrench, ArrowRight } from "lucide-react";
 import { apiClient } from "@/shared/api/client";
-import { CONFIGURE_CLOUD_ENV } from "../lib/sessionPrompts";
+import { setupEnvironmentPrompt } from "../lib/sessionPrompts";
 
 interface CloudEnvironmentInfo {
   configured: boolean;
@@ -41,7 +41,7 @@ export function CloudEnvSetupChip({
   return (
     <button
       type="button"
-      onClick={() => onSend(CONFIGURE_CLOUD_ENV)}
+      onClick={() => onSend(setupEnvironmentPrompt("cloud"))}
       className="border-border-secondary text-text-muted hover:text-text-secondary hover:border-border mb-2 flex w-fit items-center gap-1.5 rounded-full border border-dashed px-3 py-1.5 text-xs transition-colors duration-150"
     >
       <Wrench className="h-3 w-3" />
