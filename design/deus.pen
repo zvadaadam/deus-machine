@@ -79403,7 +79403,7 @@
       "x": 19000,
       "y": 7600,
       "name": "56a · Settings — Shared project environment",
-      "context": "Vertical Local / Cloud tabs choose the location for Set up with agent. The shared recipe remains one form. Arrow Up/Down switches targets without discarding unsaved recipe changes.",
+      "context": "Repository environment settings. Repository name and clickable GitHub URL appear above horizontal Local / Cloud tabs. Left/Right arrows select where Set up with agent creates a workspace. The shared recipe draft is preserved while switching. Missing local checkouts remain explicit errors until restored or re-added.",
       "theme": {
         "mode": "dark"
       },
@@ -79911,7 +79911,7 @@
                       "name": "Body",
                       "width": 1048,
                       "layout": "vertical",
-                      "gap": 24,
+                      "gap": 20,
                       "padding": [
                         0,
                         32
@@ -79922,7 +79922,7 @@
                           "id": "qhhJ1",
                           "name": "Repository identity",
                           "width": "fill_container",
-                          "gap": 10,
+                          "gap": 12,
                           "alignItems": "center",
                           "children": [
                             {
@@ -79940,81 +79940,52 @@
                               "height": 28
                             },
                             {
-                              "type": "text",
-                              "id": "ERn8z",
-                              "name": "Repository title",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "acme/mobile-app",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-lg",
-                              "fontWeight": "600"
-                            },
-                            {
                               "type": "frame",
-                              "id": "ZIy7h",
-                              "name": "Setup workspace location — vertical tabs",
-                              "width": 72,
-                              "stroke": "$border-subtle",
-                              "strokeWidth": {
-                                "left": 1
-                              },
+                              "id": "pFcvd",
+                              "name": "Repository name and GitHub URL",
+                              "width": "fill_container",
                               "layout": "vertical",
+                              "gap": 4,
                               "children": [
                                 {
-                                  "type": "frame",
-                                  "id": "gYXgD",
-                                  "name": "Local tab",
+                                  "type": "text",
+                                  "id": "ERn8z",
+                                  "name": "Repository title",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "height": 32,
-                                  "stroke": "$border-subtle",
-                                  "strokeWidth": {
-                                    "left": 1
-                                  },
-                                  "padding": [
-                                    0,
-                                    12
-                                  ],
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "CYoum",
-                                      "name": "Local label",
-                                      "fill": "$text-muted",
-                                      "content": "Local",
-                                      "fontFamily": "$font-sans",
-                                      "fontSize": "$text-sm",
-                                      "fontWeight": "500"
-                                    }
-                                  ]
+                                  "content": "acme/mobile-app",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-base",
+                                  "fontWeight": "500"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "ZXv2l",
-                                  "name": "Cloud tab",
-                                  "width": "fill_container",
-                                  "height": 32,
-                                  "stroke": "$text-primary",
-                                  "strokeWidth": {
-                                    "left": 2
-                                  },
-                                  "padding": [
-                                    0,
-                                    12
-                                  ],
+                                  "id": "LZnXC",
+                                  "name": "GitHub repository link",
+                                  "context": "https://github.com/acme/mobile-app · opens the repository in the system browser",
+                                  "gap": 6,
                                   "alignItems": "center",
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "QGpYx",
-                                      "name": "Cloud label",
-                                      "fill": "$text-primary",
-                                      "content": "Cloud",
+                                      "id": "tDwem",
+                                      "name": "Repository URL",
+                                      "fill": "$text-muted",
+                                      "content": "https://github.com/acme/mobile-app",
                                       "fontFamily": "$font-sans",
                                       "fontSize": "$text-sm",
-                                      "fontWeight": "500"
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "icon",
+                                      "id": "kyPez",
+                                      "name": "External link",
+                                      "width": 12,
+                                      "height": 12,
+                                      "icon": "external-link",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
                                     }
                                   ]
                                 }
@@ -80030,6 +80001,74 @@
                                   "content": "Set up with agent"
                                 }
                               }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZIy7h",
+                          "name": "Setup workspace location — horizontal tabs",
+                          "width": "fill_container",
+                          "height": 44,
+                          "stroke": "$border-subtle",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "gap": 24,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "gYXgD",
+                              "name": "Local tab",
+                              "width": 48,
+                              "height": 44,
+                              "stroke": "$border-subtle",
+                              "padding": [
+                                0,
+                                4
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "CYoum",
+                                  "name": "Local label",
+                                  "fill": "$text-muted",
+                                  "content": "Local",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ZXv2l",
+                              "name": "Cloud tab",
+                              "width": 48,
+                              "height": 44,
+                              "stroke": "$text-primary",
+                              "strokeWidth": {
+                                "bottom": 2
+                              },
+                              "padding": [
+                                0,
+                                4
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "QGpYx",
+                                  "name": "Cloud label",
+                                  "fill": "$text-primary",
+                                  "content": "Cloud",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
                             }
                           ]
                         },
@@ -80604,7 +80643,7 @@
       "x": 20560,
       "y": 7600,
       "name": "56b · Settings — Repository environment file",
-      "context": "Repository-specific settings. Workspace header settings and command-menu settings link directly here using repository identity and the workspace Local/Cloud target. Preserve shared recipe form. Local-only repositories allow edits and omit redundant export.",
+      "context": "Repository environment settings. Repository name and clickable GitHub URL appear above horizontal Local / Cloud tabs. Left/Right arrows select where Set up with agent creates a workspace. The shared recipe draft is preserved while switching. Missing local checkouts remain explicit errors until restored or re-added.",
       "theme": {
         "mode": "dark"
       },
@@ -81112,7 +81151,7 @@
                       "name": "Body",
                       "width": 1048,
                       "layout": "vertical",
-                      "gap": 24,
+                      "gap": 20,
                       "padding": [
                         0,
                         32
@@ -81123,7 +81162,7 @@
                           "id": "tjsYl",
                           "name": "Repository identity",
                           "width": "fill_container",
-                          "gap": 10,
+                          "gap": 12,
                           "alignItems": "center",
                           "children": [
                             {
@@ -81141,81 +81180,52 @@
                               "height": 28
                             },
                             {
-                              "type": "text",
-                              "id": "Sgv0g",
-                              "name": "Repository title",
-                              "fill": "$text-primary",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "acme/mobile-app",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-lg",
-                              "fontWeight": "600"
-                            },
-                            {
                               "type": "frame",
-                              "id": "ohWIm",
-                              "name": "Setup workspace location — vertical tabs",
-                              "width": 72,
-                              "stroke": "$border-subtle",
-                              "strokeWidth": {
-                                "left": 1
-                              },
+                              "id": "JsDLv",
+                              "name": "Repository name and GitHub URL",
+                              "width": "fill_container",
                               "layout": "vertical",
+                              "gap": 4,
                               "children": [
                                 {
-                                  "type": "frame",
-                                  "id": "J36W2",
-                                  "name": "Local tab",
+                                  "type": "text",
+                                  "id": "Sgv0g",
+                                  "name": "Repository title",
+                                  "fill": "$text-primary",
+                                  "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "height": 32,
-                                  "stroke": "$text-primary",
-                                  "strokeWidth": {
-                                    "left": 2
-                                  },
-                                  "padding": [
-                                    0,
-                                    12
-                                  ],
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "zYY5O",
-                                      "name": "Local label",
-                                      "fill": "$text-primary",
-                                      "content": "Local",
-                                      "fontFamily": "$font-sans",
-                                      "fontSize": "$text-sm",
-                                      "fontWeight": "500"
-                                    }
-                                  ]
+                                  "content": "acme/mobile-app",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-base",
+                                  "fontWeight": "500"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "s1xa6p",
-                                  "name": "Cloud tab",
-                                  "width": "fill_container",
-                                  "height": 32,
-                                  "stroke": "$border-subtle",
-                                  "strokeWidth": {
-                                    "left": 1
-                                  },
-                                  "padding": [
-                                    0,
-                                    12
-                                  ],
+                                  "id": "oXzv8",
+                                  "name": "GitHub repository link",
+                                  "context": "https://github.com/acme/mobile-app · opens the repository in the system browser",
+                                  "gap": 6,
                                   "alignItems": "center",
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "KZiX3",
-                                      "name": "Cloud label",
+                                      "id": "FaM6z",
+                                      "name": "Repository URL",
                                       "fill": "$text-muted",
-                                      "content": "Cloud",
+                                      "content": "https://github.com/acme/mobile-app",
                                       "fontFamily": "$font-sans",
                                       "fontSize": "$text-sm",
-                                      "fontWeight": "500"
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "icon",
+                                      "id": "S7Apd",
+                                      "name": "External link",
+                                      "width": 12,
+                                      "height": 12,
+                                      "icon": "external-link",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
                                     }
                                   ]
                                 }
@@ -81231,6 +81241,74 @@
                                   "content": "Set up with agent"
                                 }
                               }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ohWIm",
+                          "name": "Setup workspace location — horizontal tabs",
+                          "width": "fill_container",
+                          "height": 44,
+                          "stroke": "$border-subtle",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "gap": 24,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "J36W2",
+                              "name": "Local tab",
+                              "width": 48,
+                              "height": 44,
+                              "stroke": "$text-primary",
+                              "strokeWidth": {
+                                "bottom": 2
+                              },
+                              "padding": [
+                                0,
+                                4
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "zYY5O",
+                                  "name": "Local label",
+                                  "fill": "$text-primary",
+                                  "content": "Local",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "s1xa6p",
+                              "name": "Cloud tab",
+                              "width": 48,
+                              "height": 44,
+                              "stroke": "$border-subtle",
+                              "padding": [
+                                0,
+                                4
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "KZiX3",
+                                  "name": "Cloud label",
+                                  "fill": "$text-muted",
+                                  "content": "Cloud",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
                             }
                           ]
                         },

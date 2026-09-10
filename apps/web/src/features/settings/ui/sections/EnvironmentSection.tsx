@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { EnvironmentTarget } from "@deus-hq/api";
-import { ChevronRight, FolderGit2, KeyRound, Search } from "lucide-react";
+import { ChevronRight, ExternalLink, FolderGit2, KeyRound, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -181,6 +181,9 @@ function RepositoryEnvironments({
     return row.repo ? "Connect GitHub" : "No remote";
   }
   const filteredRows = rows.filter((row) => row.name.toLowerCase().includes(search.toLowerCase()));
+  const repositorySlug =
+    selection && selection !== "defaults" && selection.repo ? githubRepoSlug(selection.repo) : null;
+  const repositoryUrl = repositorySlug ? `https://github.com/${repositorySlug}` : null;
   if (selection)
     return (
       <div className="space-y-6">
@@ -219,57 +222,72 @@ function RepositoryEnvironments({
             )}
           </>
         ) : (
-          <>
+          <Tabs.Root
+            orientation="horizontal"
+            className="space-y-5"
+            value={setupLocation}
+            onValueChange={(value) => setSetupLocation(value === "local" ? "local" : "cloud")}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <RepositoryAvatar repo={selection.repo} />
-                <h4 className="min-w-0 text-base font-medium break-all">{selection.name}</h4>
-              </div>
-              <Tabs.Root
-                orientation="vertical"
-                className="flex items-center gap-3"
-                value={setupLocation}
-                onValueChange={(value) => setSetupLocation(value === "local" ? "local" : "cloud")}
-              >
-                <Tabs.List
-                  aria-label="Setup workspace location"
-                  className="border-border-subtle flex flex-col border-l"
-                >
-                  {(["local", "cloud"] as const).map((location) => (
-                    <Tabs.Trigger
-                      key={location}
-                      value={location}
-                      disabled={location === "local" ? !selection.local?.root_path : !orgId}
-                      className="text-text-muted data-[state=active]:border-text-primary data-[state=active]:text-text-primary hover:text-text-secondary focus-visible:ring-ring -ml-px min-h-11 border-l-2 border-transparent px-3 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 sm:min-h-8"
+                <div className="min-w-0">
+                  <h4 className="text-base font-medium break-all">{selection.name}</h4>
+                  {repositoryUrl && (
+                    <a
+                      href={repositoryUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-text-muted hover:text-text-primary focus-visible:ring-ring mt-1 inline-flex max-w-full items-center gap-1.5 rounded-sm text-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
                     >
-                      {location === "local" ? "Local" : "Cloud"}
-                    </Tabs.Trigger>
-                  ))}
-                </Tabs.List>
-                <Tabs.Content
-                  value={setupLocation}
-                  className="focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <SetUpEnvironmentWithAgent
-                    repoId={selection.local?.id}
-                    location={setupLocation}
-                    activeOrganization={activeOrganization}
-                    onBeforeStart={onBeforeNavigate}
-                  />
-                </Tabs.Content>
-              </Tabs.Root>
+                      <span className="break-all">{repositoryUrl}</span>
+                      <ExternalLink aria-hidden="true" className="size-3 shrink-0" />
+                    </a>
+                  )}
+                </div>
+              </div>
+              <SetUpEnvironmentWithAgent
+                repoId={selection.local?.id}
+                location={setupLocation}
+                activeOrganization={activeOrganization}
+                onBeforeStart={onBeforeNavigate}
+              />
             </div>
-            <RepositoryEnvironmentSettings
-              key={selection.key}
-              accountId={accountId}
-              orgId={orgId}
-              repository={selection}
-              access={canAccess(selection)}
-              accessUnknown={!github.data}
-              onDirtyChange={onDirtyChange}
-              onDefaults={() => navigate("defaults")}
-            />
-          </>
+            <Tabs.List
+              aria-label="Setup workspace location"
+              className="border-border-subtle flex gap-6 border-b"
+            >
+              {(["local", "cloud"] as const).map((location) => (
+                <Tabs.Trigger
+                  key={location}
+                  value={location}
+                  disabled={location === "local" ? !selection.local?.root_path : !orgId}
+                  className="group text-text-muted data-[state=active]:text-text-primary hover:text-text-secondary focus-visible:ring-ring relative -mb-px min-h-11 min-w-12 px-1 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
+                >
+                  {location === "local" ? "Local" : "Cloud"}
+                  <span
+                    aria-hidden="true"
+                    className="bg-text-primary absolute inset-x-0 bottom-0 h-0.5 opacity-0 group-data-[state=active]:opacity-100"
+                  />
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+            <Tabs.Content
+              value={setupLocation}
+              className="focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <RepositoryEnvironmentSettings
+                key={selection.key}
+                accountId={accountId}
+                orgId={orgId}
+                repository={selection}
+                access={canAccess(selection)}
+                accessUnknown={!github.data}
+                onDirtyChange={onDirtyChange}
+                onDefaults={() => navigate("defaults")}
+              />
+            </Tabs.Content>
+          </Tabs.Root>
         )}
       </div>
     );

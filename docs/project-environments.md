@@ -3,8 +3,9 @@
 Settings → Environments lists repositories. Open one to edit Setup, Run, public
 variables and required variable names. Setup and Run are shared between local and
 cloud; expand **Customize for local or cloud** when the commands differ.
-The Local / Cloud tabs choose where **Set up with agent** creates its validation
-workspace. They do not create separate copies of the shared recipe.
+Horizontal Local / Cloud tabs below the repository name and GitHub link choose
+where **Set up with agent** creates its validation workspace. They do not create
+separate copies of the shared recipe.
 
 Deus selects one complete recipe:
 

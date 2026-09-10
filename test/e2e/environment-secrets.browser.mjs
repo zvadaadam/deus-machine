@@ -231,6 +231,25 @@ try {
     );
     await page.getByRole("button", { name: "Repositories", exact: true }).click();
     await openRepository();
+    const repositoryLink = page.getByRole("link", {
+      name: "https://github.com/acme/mobile-app",
+      exact: true,
+    });
+    assert.equal(await repositoryLink.getAttribute("href"), "https://github.com/acme/mobile-app");
+    assert.equal(await repositoryLink.getAttribute("target"), "_blank");
+    assert.equal(
+      await page
+        .getByRole("tablist", { name: "Setup workspace location" })
+        .getAttribute("aria-orientation"),
+      "horizontal"
+    );
+    const localTab = await page.getByRole("tab", { name: "Local", exact: true }).boundingBox();
+    const cloudTab = await page.getByRole("tab", { name: "Cloud", exact: true }).boundingBox();
+    const linkBox = await repositoryLink.boundingBox();
+    assert(localTab && cloudTab && linkBox);
+    assert.equal(localTab.y, cloudTab.y);
+    assert(localTab.y >= linkBox.y + linkBox.height);
+    await shot("repository-header");
     assert.equal(
       await page.getByRole("button", { name: "Set up with agent", exact: true }).count(),
       1
@@ -253,13 +272,13 @@ try {
     await page.getByLabel("Run script", { exact: true }).fill("bun run dev");
     if (!direct) {
       await page.getByRole("tab", { name: "Cloud", exact: true }).focus();
-      await page.keyboard.press("ArrowUp");
+      await page.keyboard.press("ArrowLeft");
       await page.getByRole("tab", { name: "Local", selected: true }).waitFor();
       assert.equal(
         await page.getByLabel("Setup script", { exact: true }).inputValue(),
         setupScript
       );
-      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowRight");
       await page.getByRole("tab", { name: "Cloud", selected: true }).waitFor();
       page.once("dialog", (dialog) => dialog.dismiss());
       await page.getByRole("button", { name: "Set up with agent", exact: true }).click();

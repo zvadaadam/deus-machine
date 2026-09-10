@@ -234,8 +234,9 @@ seconds or until dismissed; it is not a persistent chat component.
 Board `56` shows the repository list in `EnvironmentSection.tsx`, with GitHub owner
 avatars and cloud/local availability. `56a` shows shared Setup/Run and public
 variables through `ProjectEnvironmentEditor.tsx`; `56b` shows the same form editing
-`.deus/environment.json` with branch/publication context. Vertical Local / Cloud tabs
-choose where the agent sets up a workspace; both use the same recipe form. The workspace
+`.deus/environment.json` with branch/publication context. The repository header includes
+a clickable GitHub URL. Horizontal Local / Cloud tabs sit below it and choose where
+the agent sets up a workspace; both use the same recipe form. The workspace
 header opens its repository directly with its location selected. `56c` manages secrets across
 repositories; `74` is the mobile list; `56e` shows a signed-in account when cloud
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
