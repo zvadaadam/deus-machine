@@ -214,8 +214,9 @@ header, targeting the selected Local/Cloud tab. Local setup shows public variabl
 after setup/run scripts; archive scripts, tasks and requirements stay in Advanced.
 The Generate, Auto-detect and JSON-preview controls are removed.
 Board `66a` shows add, replace and delete states of `EnvironmentSecretDialog.tsx`.
-Board `66b` shows `ImportEnvironmentSecretsDialog.tsx`, including replacement and
-empty-value states. Local public variables remain separate from Cloud secrets.
+Board `66b` shows `ImportEnvironmentSecretsDialog.tsx`, including replacement,
+empty values and multi-environment scope conflicts. Local public variables remain
+separate from Cloud secrets.
 Values are write-only; existing values are never drawn into a replacement form.
 The page determines a new secret's repository scope; the dialog only asks whether
 it is personal or shared. Defaults are inherited and managed on their own page.

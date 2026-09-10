@@ -45,17 +45,20 @@ export function ImportEnvironmentSecretsDialog({
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const repository = Boolean(environmentId || repo);
-  const replacements = new Set(
-    settings.secrets
-      .filter(
-        (secret) =>
-          secret.ownerType === ownerType &&
-          (repository
-            ? !secret.appliesToAll && environmentId && secret.environmentIds.includes(environmentId)
-            : secret.appliesToAll)
-      )
+  const scopedSecrets = settings.secrets.filter(
+    (secret) =>
+      secret.ownerType === ownerType &&
+      (repository
+        ? !secret.appliesToAll && environmentId && secret.environmentIds.includes(environmentId)
+        : secret.appliesToAll)
+  );
+  const conflicts = new Set(
+    scopedSecrets
+      .filter((secret) => !secret.appliesToAll && secret.environmentIds.length > 1)
       .map((secret) => secret.name)
   );
+  const replacements = new Set(scopedSecrets.map((secret) => secret.name));
+  const selectedEntries = entries.filter(({ name }) => selected.has(name) && !conflicts.has(name));
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -72,7 +75,7 @@ export function ImportEnvironmentSecretsDialog({
           environmentIds: environmentId ? [environmentId] : [],
           ...(!environmentId && repo ? { repo } : {}),
         },
-        entries.filter(({ name }) => selected.has(name)),
+        selectedEntries,
         controller.signal
       );
       if (!controller.signal.aborted) onSaved();
@@ -127,8 +130,8 @@ export function ImportEnvironmentSecretsDialog({
                   <input
                     type="checkbox"
                     className="accent-primary size-4"
-                    checked={selected.has(name)}
-                    disabled={!value}
+                    checked={selected.has(name) && !conflicts.has(name)}
+                    disabled={!value || conflicts.has(name)}
                     onChange={(event) =>
                       setSelected((previous) => {
                         const next = new Set(previous);
@@ -140,11 +143,23 @@ export function ImportEnvironmentSecretsDialog({
                   />
                   <span className="min-w-0 flex-1 font-mono break-all">{name}</span>
                   <span className="text-text-muted">
-                    {!value ? "Empty · skipped" : replacements.has(name) ? "Replace value" : "Add"}
+                    {!value
+                      ? "Empty · skipped"
+                      : conflicts.has(name)
+                        ? "Multiple environments"
+                        : replacements.has(name)
+                          ? "Replace value"
+                          : "Add"}
                   </span>
                 </label>
               ))}
             </div>
+            {entries.some(({ name }) => conflicts.has(name)) && (
+              <p className="text-text-muted text-xs">
+                Values used by multiple environments are skipped. Use Replace on the existing secret
+                to update them together.
+              </p>
+            )}
           </fieldset>
           {error && (
             <p role="alert" className="text-destructive text-sm">
@@ -155,10 +170,10 @@ export function ImportEnvironmentSecretsDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || !selected.size}>
+            <Button type="submit" disabled={pending || !selectedEntries.length}>
               {pending
                 ? "Importing…"
-                : `Import ${selected.size} ${selected.size === 1 ? "secret" : "secrets"}`}
+                : `Import ${selectedEntries.length} ${selectedEntries.length === 1 ? "secret" : "secrets"}`}
             </Button>
           </DialogFooter>
         </form>

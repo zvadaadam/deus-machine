@@ -85176,8 +85176,60 @@
                       "fontWeight": "normal"
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "s46WE",
+                  "name": "MULTI_SCOPE_KEY · cannot replace one environment",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "padding": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "HRRvk",
+                      "fill": "$text-muted",
+                      "content": "☐",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "gnCHv",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "MULTI_SCOPE_KEY",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "z965jW",
+                      "fill": "$text-muted",
+                      "content": "Multiple environments",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
                 }
               ]
+            },
+            {
+              "type": "text",
+              "id": "KfJlZ",
+              "name": "Multi-environment value guidance",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Values used by multiple environments are skipped. Use Replace on the existing secret to update them together.",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "normal"
             },
             {
               "type": "frame",

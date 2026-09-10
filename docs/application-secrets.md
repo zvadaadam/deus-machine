@@ -17,9 +17,9 @@ An unconfirmed GitHub lookup is not presented as missing access.
 
 Open a repository to edit its Cloud or Local setup; breadcrumbs return to the list.
 Cloud setup edits the existing recipe's commands while preserving phases, parallel
-steps and unrelated configuration. Setup/run scripts and public environment variables
-are visible together in Local; archive scripts, tasks and requirements remain under
-Advanced setup. Cloud application secrets sit directly below the setup commands.
+steps and unrelated configuration. Both tabs group Setup and Run above a divider
+and environment variables. Local archive scripts, tasks and requirements remain
+under Advanced setup; workspace status is no longer shown in this settings page.
 Tab, repository and organization navigation warn before discarding unsaved scripts.
 GitHub App access is required for private repositories, not for saving a recipe.
 
@@ -40,6 +40,22 @@ workspaces. Setup commands requiring shared shell state belong in a script file.
 Secrets added on a repository page apply to that recipe automatically. Default
 secrets have their own page and cannot be edited accidentally from a repository.
 Cloud secrets are not injected into local processes by this feature.
+
+Cloud Run is a foreground app command that AGNT starts in the background after
+setup in a new VM. Pause/resume preserves it; VM recreation starts it again. Saving
+scripts does not restart an existing app. AGNT's `config.run`, `Environment.run()`
+SDK builder and the agent configuration tool use the same runtime path.
+
+Drop an `.env` or `.dev.vars` file into Cloud environment variables, or click to
+choose a file. The review lists names and whether each value will be added or
+replaced. Empty values are visibly skipped; duplicates and malformed lines must be
+corrected before import. Shell expansion syntax stays literal. Values used by
+multiple environments cannot be replaced by a one-repository import; use the
+existing Replace action to retain that scope.
+
+Selected values are written in one transaction. Adding the first secret can create
+the repository environment without saving script drafts. Organization owners and
+admins can create that shared record; members can add personal values once it exists.
 
 ## Behavior
 
@@ -73,15 +89,21 @@ application values available to those processes.
 
 AGNT owns secret persistence, encryption, scope resolution and sandbox injection.
 The existing resolver supplies both readiness metadata and provisioning selection.
-No database migration, SDK version bump, Agent Server change or additional
-encryption key is needed for this feature.
+The SDK already offers environment and secret APIs for organization-key clients.
+The dashboard API enforces signed-in human ownership while reusing the same store;
+substituting a privileged SDK key would lose that distinction. AGNT publishes the
+Run field through its API/SDK changeset. No database migration, Agent Server change
+or additional encryption key is needed.
 
 ## Qualification and rollout
 
 Tests cover real Postgres authentication/authorization, scope precedence, immutable
 workspace ownership on refresh, account-change cancellation, and both UI transport
 paths. The opt-in E2B test verifies setup commands, sourced `.env`, and the running
-sidecar process, including multiline values, replacement, deletion and VM cleanup.
+sidecar and Run-script HTTP app, including multiline values, same-process
+pause/resume, replacement, deletion, recreation and VM cleanup. Browser tests cover
+both file selection and dropping, draft preservation during environment creation,
+and excluding conflicting scopes from imports.
 It uses local authenticated platform routes and real E2B steps; production deployment
 and the complete Queue/Durable Object lifecycle are outside that test.
 

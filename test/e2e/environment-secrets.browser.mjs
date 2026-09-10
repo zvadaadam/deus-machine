@@ -418,6 +418,32 @@ try {
         (button) => button.textContent === "Save cloud setup" && button.disabled
       )
     );
+    if (direct) {
+      const settings = await fetch(
+        `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings`,
+        { headers: { authorization: `Bearer ${fixture.tokens.alice}` } }
+      ).then((response) => response.json());
+      const importedEnv = settings.environments.find(
+        (environment) => environment.repo === "https://github.com/acme/web-app"
+      );
+      assert(importedEnv);
+      const sharedScope = await fetch(
+        `${fixture.baseUrl}/dashboard/orgs/${fixture.ids.org}/environment-settings/secrets/MULTI_SCOPE_KEY`,
+        {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${fixture.tokens.alice}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            owner_type: "USER",
+            environment_ids: [importedEnv.id, fixture.ids.env],
+            value: "unchanged-synthetic-value",
+          }),
+        }
+      );
+      assert.equal(sharedScope.status, 200);
+    }
     await page.reload();
     await chooseOrg("Secret test organization");
     await page
@@ -427,6 +453,29 @@ try {
       await page.getByLabel("Run script", { exact: true }).inputValue(),
       "bun run dev --host 0.0.0.0"
     );
+    if (direct) {
+      await page
+        .getByLabel("Import environment file", { exact: true })
+        .setInputFiles({
+          name: ".env",
+          mimeType: "text/plain",
+          buffer: Buffer.from("MULTI_SCOPE_KEY=must-not-send\nNEW_IMPORT_KEY=synthetic-value"),
+        });
+      const conflict = page.getByRole("dialog").getByRole("checkbox", { name: /MULTI_SCOPE_KEY/ });
+      assert.equal(await conflict.isDisabled(), true);
+      assert.equal(await conflict.isChecked(), false);
+      await shot("import-scope-conflict");
+      const request = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().endsWith("/secrets/import")
+      );
+      await page.getByRole("button", { name: "Import 1 secret", exact: true }).click();
+      assert.deepEqual(
+        (await request).postDataJSON().secrets.map((secret) => secret.name),
+        ["NEW_IMPORT_KEY"]
+      );
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      await page.getByText("NEW_IMPORT_KEY", { exact: true }).waitFor();
+    }
     await page.getByRole("button", { name: "Repositories", exact: true }).click();
     await shot("mobile-list");
     assert.equal(

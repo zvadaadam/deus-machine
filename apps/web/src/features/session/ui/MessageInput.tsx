@@ -360,9 +360,12 @@ export function MessageInput({
   };
 
   // "Set up your environment" nudge — visible when no deus.json + no history yet.
-  const showSetupNudge = !hasManifest && !hasMessages;
-  const handleSetupEnvironment = () =>
-    onSend(setupEnvironmentPrompt(workspaceKind === "cloud" ? "cloud" : "local"));
+  const setupLocation =
+    workspaceKind === "cloud" || workspaceKind === "local" ? workspaceKind : null;
+  const showSetupNudge = setupLocation !== null && !hasManifest && !hasMessages;
+  const handleSetupEnvironment = () => {
+    if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
+  };
 
   // Codex has no plan mode; cloud has no permission-mode transport on either
   // lane (Mac relay and direct both send none; the sidecar runs bypass) — an
