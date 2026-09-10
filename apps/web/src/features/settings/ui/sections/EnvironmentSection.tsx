@@ -121,7 +121,10 @@ function RepositoryEnvironments({
   activeOrganization: boolean;
 }) {
   const target = useUIStore((s) => s.environmentSettingsTarget);
-  const [selectedKey, setSelectedKey] = useState<string | null>(target?.repoId ?? null);
+  // Cloud shortcuts carry a Git remote; normalize it once, as the repository list does.
+  const [selectedKey, setSelectedKey] = useState<string | null>(() =>
+    target ? normalizeRepoRef(httpsOrigin(target.repoId)) : null
+  );
   const [search, setSearch] = useState("");
   const [setupLocation, setSetupLocation] = useState<EnvironmentTarget>(
     target?.location ?? "cloud"
@@ -161,11 +164,10 @@ function RepositoryEnvironments({
     github.data?.repos ?? [],
     settings.data?.environments ?? []
   );
-  const selectedRepoKey = selectedKey && normalizeRepoRef(httpsOrigin(selectedKey));
   const selection =
     selectedKey === "defaults"
       ? "defaults"
-      : rows.find((row) => row.local?.id === selectedKey || row.key === selectedRepoKey);
+      : rows.find((row) => row.local?.id === selectedKey || row.key === selectedKey);
   const canAccess = (row: EnvironmentRepository) => {
     const slug = row.repo && githubRepoSlug(row.repo)?.toLowerCase();
     return !!slug && !!github.data?.repos.some((name) => name.toLowerCase() === slug);
