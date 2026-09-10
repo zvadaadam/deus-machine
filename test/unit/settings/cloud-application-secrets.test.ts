@@ -13,7 +13,11 @@ vi.mock("@/features/settings/ui/sections/ImportEnvironmentSecretsDialog", () => 
   ImportEnvironmentSecretsDialog: () => null,
 }));
 
-function render(project: ProjectEnvironment, secrets: CloudEnvironmentSettings["secrets"] = []) {
+function render(
+  project: ProjectEnvironment | undefined,
+  secrets: CloudEnvironmentSettings["secrets"] = [],
+  required: CloudEnvironmentSettings["required"] = []
+) {
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
@@ -28,7 +32,7 @@ function render(project: ProjectEnvironment, secrets: CloudEnvironmentSettings["
           selectedEnvironment: null,
           environments: [],
           secrets,
-          required: [],
+          required,
         },
         project,
         onDefaults: () => {},
@@ -38,6 +42,20 @@ function render(project: ProjectEnvironment, secrets: CloudEnvironmentSettings["
 }
 
 describe("cloud required-variable status", () => {
+  it("uses SDK requirements only when no project recipe is supplied", () => {
+    const required: CloudEnvironmentSettings["required"] = [
+      { name: "SDK_REQUIRED", source: null, secretId: null },
+    ];
+    const sdk = render(undefined, [], required);
+    expect(sdk).toContain("SDK_REQUIRED");
+    expect(sdk).toContain("1 missing");
+    expect(sdk).toContain("Set value");
+
+    const emptyProject = render({ version: 1, requiredEnv: [] }, [], required);
+    expect(emptyProject).not.toContain("Required values");
+    expect(emptyProject).not.toContain("SDK_REQUIRED");
+  });
+
   it.each(["constructor", "toString", "__proto__"])(
     "requires an actual value for %s instead of inheriting Object.prototype",
     (name) => {

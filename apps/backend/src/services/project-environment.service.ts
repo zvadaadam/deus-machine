@@ -198,9 +198,7 @@ export function runSetupCommand(
     });
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const killProcessGroup = () => {
       if (child.pid) {
         try {
           process.kill(-child.pid, "SIGKILL");
@@ -208,6 +206,11 @@ export function runSetupCommand(
           // The process group may already have exited.
         }
       }
+    };
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killProcessGroup();
     }, 300_000);
     let finished = false;
     const finish = (error?: Error) => {
@@ -221,7 +224,7 @@ export function runSetupCommand(
     };
     child.once("error", finish);
     log.once("error", (error) => {
-      child.kill("SIGKILL");
+      killProcessGroup();
       finish(error);
     });
     child.once("close", (code) =>

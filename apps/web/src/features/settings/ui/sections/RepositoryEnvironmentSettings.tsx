@@ -55,21 +55,21 @@ export function RepositoryEnvironmentSettings({
     staleTime: 0,
     retry: false,
   });
-  if (settings.isError)
+  const fromFile = !!file.data?.project;
+  if (file.isError)
+    return <EnvironmentSettingsError error={file.error} retry={() => void file.refetch()} />;
+  if (settings.isError && !(local && fromFile))
     return (
       <EnvironmentSettingsError error={settings.error} retry={() => void settings.refetch()} />
     );
-  if (file.isError)
-    return <EnvironmentSettingsError error={file.error} retry={() => void file.refetch()} />;
-  if (settings.isLoading || file.isLoading)
+  if (file.isLoading || (settings.isLoading && !(local && fromFile)))
     return (
       <p role="status" className="text-text-muted text-sm">
         Loading project environment…
       </p>
     );
-  const selected = settings.data?.selectedEnvironment;
-  const project = file.data?.project ?? selected?.project ?? EMPTY_PROJECT;
-  const fromFile = !!file.data?.project;
+  const selected = settings.isError ? null : settings.data?.selectedEnvironment;
+  const project = file.data?.project ?? selected?.project ?? undefined;
   const savesToFile = !!local && (fromFile || !orgId || !repository.repo);
   let canEdit = savesToFile;
   if (!fromFile && !savesToFile && settings.data) {
@@ -125,7 +125,7 @@ export function RepositoryEnvironmentSettings({
       )}
       {fileKnown && (!selected || !!selected.project || fromFile) && (
         <ProjectEnvironmentEditor
-          project={project}
+          project={project ?? EMPTY_PROJECT}
           sourceLabel={sourceLabel}
           canEdit={canEdit}
           canExport={!!local && !savesToFile}
@@ -134,7 +134,13 @@ export function RepositoryEnvironmentSettings({
         />
       )}
       <div className="border-border-subtle border-t pt-5">
-        {orgId && settings.data ? (
+        {settings.isError ? (
+          <EnvironmentSettingsError error={settings.error} retry={() => void settings.refetch()} />
+        ) : settings.isLoading ? (
+          <p role="status" className="text-text-muted text-sm">
+            Loading cloud secrets…
+          </p>
+        ) : orgId && settings.data ? (
           <CloudApplicationSecrets
             orgId={orgId}
             environmentId={environmentId}

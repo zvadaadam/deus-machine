@@ -259,10 +259,8 @@ export async function refreshWorkspaceGithubToken(workspace: {
   }
   await agntCreateWorkspace({
     workspaceId: workspace.provider_workspace_id,
-    // `.simulator()` on BOTH inline recipes (this re-create and the create in
-    // createCloudWorkspace): agnt converges the DO's environment config on
-    // re-create, so a token refresh without it would silently drop the
-    // hosted-device support the workspace was born with.
+    // AGNT restores the existing workspace's saved recipe, including project,
+    // repository and simulator settings. This call only refreshes credentials.
     environment: mint.token
       ? Environment.from("agnt-base").simulator().secrets({ github_token: mint.token })
       : Environment.from("agnt-base").simulator(),

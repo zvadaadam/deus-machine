@@ -25,6 +25,7 @@ export function CloudApplicationSecrets({
   environmentId: string | null;
   repo?: string;
   settings: CloudEnvironmentSettings;
+  /** A supplied recipe is authoritative, including an empty requiredEnv list. */
   project?: ProjectEnvironment;
   onDefaults: () => void;
 }) {

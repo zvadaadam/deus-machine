@@ -79,6 +79,12 @@ export function ProjectEnvironmentEditor({
       ref={form}
       className="space-y-5"
       aria-label="Project environment"
+      onInvalid={(event) => {
+        for (const section of event.currentTarget.querySelectorAll("details")) {
+          if (section.querySelector(":invalid")) section.open = true;
+        }
+        setError("Fix the highlighted fields before saving.");
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         void save();

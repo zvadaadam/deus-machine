@@ -104,7 +104,11 @@ authenticated settings/secret routes with isolated Postgres, both browser transp
 the full local app Settings → Git checkout → Setup → Run terminal journey,
 and real E2B checkout → Setup → sidecar → Run HTTP app → pause/resume → cleanup.
 The VM test uses a disposable Git origin and synthetic application credentials.
-It does not deploy production or exercise the complete Durable Object lifecycle.
+Separate deployed qualification also passed through Cloudflare Queue and Durable
+Objects: a dropped event and brief outage kept the existing VM, pause/resume kept
+the Run process, and a deliberately lost VM was recreated with Git work, native
+Codex history, recipe and secrets restored. Normal Stop and resource cleanup
+passed. Those were isolated deployed resources, not production user workspaces.
 
 Roll out AGNT's migration, backend and sidecar, then its API/SDK package release,
 before releasing Deus. Migration 0013 converts previous repository settings once,
@@ -112,7 +116,5 @@ retaining their cloud-only meaning; explicit SDK configurations are left alone.
 A custom pre-clone/parallel repository recipe must be intentionally converted before
 that migration rather than silently losing its execution semantics.
 
-The Deus review branch pins API/SDK preview archives from the upstream commit
-(see [vendor/README.md](../vendor/README.md)) so a fresh checkout can run the new
-contract. Replace those pins with the normal published package versions before
-releasing Deus.
+Deus consumes the published `@deus-hq/api` and `@deus-hq/sdk` 2.1.0 packages.
+No preview archive, dependency override or linked AGNT checkout is required.

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { Writable } from "node:stream";
 import Database from "better-sqlite3";
 import type { ProjectEnvironment } from "@deus-hq/api";
 
@@ -24,6 +25,7 @@ import {
   readProjectFile,
   localProjectEnv,
   projectEnvironmentResponse,
+  runSetupCommand,
 } from "../../../src/services/project-environment.service";
 
 let root: string;
@@ -166,6 +168,56 @@ describe("local project environment journey", () => {
     expect(row().setup_status).toBe("failed");
     expect(fs.readFileSync(path.join(directory, "nested/proof.txt"), "utf8")).toBe("done");
     expect(fs.existsSync(path.join(directory, "nested/unexpected.txt"))).toBe(false);
+  });
+  it("stops the setup shell and its descendant when the log stream fails", async () => {
+    let shellPid: number | undefined;
+    let childPid: number | undefined;
+    let output = "";
+    const log = new Writable({
+      write(chunk, _encoding, callback) {
+        output += chunk.toString();
+        if (!output.includes("\n")) return callback();
+        [shellPid, childPid] = output.trim().split(" ").map(Number);
+        callback(new Error("setup log failed"));
+      },
+    });
+    vi.spyOn(fs, "createWriteStream").mockReturnValue(log as fs.WriteStream);
+    const running = (pid: number) => {
+      try {
+        const state = execFileSync("ps", ["-o", "stat=", "-p", String(pid)], {
+          encoding: "utf8",
+        }).trim();
+        return state !== "" && !state.startsWith("Z");
+      } catch (error) {
+        if ((error as { status?: number }).status === 1) return false;
+        throw error;
+      }
+    };
+    const stop = (pid: number | undefined) => {
+      if (!pid || !running(pid)) return;
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    };
+    try {
+      await expect(
+        runSetupCommand(
+          workspaceId,
+          'sleep 30 &\nprintf "%s %s\\n" "$$" "$!"\nwait',
+          root,
+          process.env
+        )
+      ).rejects.toThrow("setup log failed");
+      expect(shellPid).toBeGreaterThan(1);
+      expect(childPid).toBeGreaterThan(1);
+      await vi.waitFor(() => expect(running(childPid!)).toBe(false), { timeout: 1000 });
+      expect(running(shellPid!)).toBe(false);
+    } finally {
+      stop(childPid);
+      stop(shellPid);
+    }
   });
   it("makes a saved recipe publishable while retaining ignored workspace data", () => {
     fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");

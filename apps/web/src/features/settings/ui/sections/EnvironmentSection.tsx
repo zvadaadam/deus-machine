@@ -132,7 +132,9 @@ function RepositoryEnvironments({
   const target = useUIStore((s) => s.environmentSettingsTarget);
   // Cloud shortcuts carry a Git remote; normalize it once, as the repository list does.
   const [selectedKey, setSelectedKey] = useState<string | null>(() =>
-    target ? normalizeRepoRef(httpsOrigin(target.repoId)) : null
+    target?.location === "cloud"
+      ? normalizeRepoRef(httpsOrigin(target.repoId))
+      : (target?.repoId ?? null)
   );
   const [search, setSearch] = useState("");
   const [setupLocation, setSetupLocation] = useState<EnvironmentTarget>(
@@ -383,7 +385,7 @@ function RepositoryEnvironments({
         </div>
         {!rows.length && (
           <p role="status" className="text-text-muted px-4 py-10 text-center text-sm">
-            {settings.isLoading || repos.isLoading
+            {settings.isLoading || repos.isLoading || github.isLoading
               ? "Loading repositories…"
               : "Connect GitHub or add a local project to get started."}
           </p>

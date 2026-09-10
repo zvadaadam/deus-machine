@@ -81,15 +81,28 @@ try {
     await import("../../apps/backend/src/services/agent/cloud/config.ts");
   const { readProjectFile, writeProjectFile } =
     await import("../../apps/backend/src/services/project-environment.service.ts");
-  const localDirectory = path.join(directory, "repository");
-  await rm(localDirectory, { recursive: true, force: true });
-  await mkdir(localDirectory, { recursive: true });
-  const app = new Hono().use("*", cors()).route("/api", routes);
-  app.get("/api/test-environment-file", (c) =>
-    c.json({ project: readProjectFile(localDirectory), branch: "test-branch" })
+  const repositoryRoot = path.join(directory, "repositories");
+  await rm(repositoryRoot, { recursive: true, force: true });
+  const repositoryDirectories = new Map(
+    ["local", "local-only", "public"].map((id) => [id, path.join(repositoryRoot, id)])
   );
-  app.post("/api/test-environment-file", async (c) => {
-    writeProjectFile(localDirectory, await c.req.json());
+  for (const repoDirectory of repositoryDirectories.values())
+    await mkdir(repoDirectory, { recursive: true });
+  const localDirectory = repositoryDirectories.get("local");
+  writeProjectFile(repositoryDirectories.get("local-only"), {
+    version: 1,
+    setup: "./local-only-setup.sh",
+  });
+  const app = new Hono().use("*", cors()).route("/api", routes);
+  app.get("/api/test-environment-file/:id", (c) => {
+    const repoDirectory = repositoryDirectories.get(c.req.param("id"));
+    if (!repoDirectory) return c.json({ error: "Unknown repository" }, 404);
+    return c.json({ project: readProjectFile(repoDirectory), branch: "test-branch" });
+  });
+  app.post("/api/test-environment-file/:id", async (c) => {
+    const repoDirectory = repositoryDirectories.get(c.req.param("id"));
+    if (!repoDirectory) return c.json({ error: "Unknown repository" }, 404);
+    writeProjectFile(repoDirectory, await c.req.json());
     return c.json({ ok: true });
   });
   app.get("/api/settings/provider-accounts", (c) => c.json(providerAccounts));
@@ -156,8 +169,8 @@ try {
               ];
               export const RepoService = {
                 fetchAll: async () => repos,
-                fetchEnvironmentFile: async () => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file`)}); if (!r.ok) throw new Error("Invalid repository environment"); return r.json(); },
-                saveEnvironmentFile: async (_id, project) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file`)}, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(project) }); if (!r.ok) throw new Error("Couldn't save environment"); }
+                fetchEnvironmentFile: async (id) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id)); if (!r.ok) throw new Error("Invalid repository environment"); return r.json(); },
+                saveEnvironmentFile: async (id, project) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(project) }); if (!r.ok) throw new Error("Couldn't save environment"); }
               };`;
             if (id !== "\0native-secret-fixture") return;
             return `export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/native/deus-cloud.ts"))};
@@ -336,6 +349,11 @@ try {
       assert.equal(project.cloud.run, "bun run dev --host 0.0.0.0");
       assert.equal(project.env.PUBLIC_MODE, "development");
       assert(!JSON.stringify(project).includes(value));
+      assert.equal(
+        readProjectFile(repositoryDirectories.get("local-only")).setup,
+        "./local-only-setup.sh"
+      );
+      assert.equal(readProjectFile(repositoryDirectories.get("public")), null);
       await page.getByLabel("Setup script", { exact: true }).fill("./scripts/setup.sh");
       await page.getByRole("button", { name: "Save setup", exact: true }).click();
       await page.getByText("Saved", { exact: true }).waitFor();
@@ -346,6 +364,34 @@ try {
       ).then((r) => r.json());
       assert.equal(unchanged.selected_environment.project.setup, setupScript);
       await shot("repository-file");
+      // Loaded local files remain editable when the cloud settings service is unavailable.
+      const cloudSettingsUrl = (url) =>
+        url.pathname === `/api/settings/environment-secrets/orgs/${fixture.ids.org}` &&
+        url.searchParams.get("environment_id") === fixture.ids.env;
+      await page.route(cloudSettingsUrl, (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Cloud settings unavailable" }),
+        })
+      );
+      try {
+        await page.reload();
+        await chooseOrg("Secret test organization");
+        await openRepository();
+        await page.getByText("Cloud settings unavailable", { exact: true }).waitFor();
+        await page.getByLabel("Setup script", { exact: true }).fill("./scripts/local-offline.sh");
+        await page.getByRole("button", { name: "Save setup", exact: true }).click();
+        await page.getByText("Saved", { exact: true }).waitFor();
+        assert.equal(readProjectFile(localDirectory).setup, "./scripts/local-offline.sh");
+        assert.equal(
+          await page.getByRole("button", { name: "Add secret", exact: true }).count(),
+          0
+        );
+        await shot("local-file-cloud-unavailable");
+      } finally {
+        await page.unroute(cloudSettingsUrl);
+      }
       // A broken file surfaces an error; deleting it returns to saved settings.
       await writeFile(path.join(localDirectory, ".deus/environment.json"), "{broken");
       await page.reload();
@@ -413,8 +459,12 @@ try {
       if (!direct && actor === "bob") {
         // Organization roles must not restrict edits to a local-only repository file.
         await page.getByRole("button", { name: /local-only/ }).click();
-        await page.getByText(/Local repository file/).waitFor();
+        await page.getByText(/Local checkout; publish changes through Git/).waitFor();
         assert.equal(await page.getByLabel("Setup script", { exact: true }).isEditable(), true);
+        assert.equal(
+          await page.getByLabel("Setup script", { exact: true }).inputValue(),
+          "./local-only-setup.sh"
+        );
         assert.equal(await page.getByRole("button", { name: "Save to repository" }).count(), 0);
         await page.getByRole("button", { name: "Repositories", exact: true }).click();
       }

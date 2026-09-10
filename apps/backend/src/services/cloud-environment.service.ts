@@ -1,4 +1,4 @@
-import type { ProjectEnvironment } from "@deus-hq/api";
+import { ProjectEnvironmentSchema, type ProjectEnvironment } from "@deus-hq/api";
 // backend/src/services/cloud-environment.service.ts
 // The repo→environment link and its platform lookup.
 //
@@ -64,15 +64,16 @@ export async function getCloudEnvironmentInfo(
   if (!config) return { configured: false, name };
   try {
     const env = await agntGetEnvironment(name, { baseUrl: config.baseUrl, apiKey: config.apiKey });
-    const envConfig = (env?.config ?? {}) as {
-      project?: ProjectEnvironment;
-      requiredEnv?: string[];
-      simulator?: unknown;
-    };
+    const envConfig = env?.config ?? {};
+    const project = ProjectEnvironmentSchema.optional().safeParse(envConfig.project);
+    if (!project.success) {
+      console.warn(`[CloudEnv] saved project validation failed: ${project.error.message}`);
+      return { configured: false, name, lookupFailed: true };
+    }
     return {
       configured: true,
       name,
-      project: envConfig.project,
+      project: project.data,
       environmentId: env.id,
       ...(Array.isArray(envConfig.requiredEnv) ? { requiredEnv: envConfig.requiredEnv } : {}),
       // `true` or a config object enables it; absent/false/null does not.

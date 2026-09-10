@@ -67,13 +67,13 @@ Settings is the largest district in the file, so it has its own lane rather than
 the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
 (1,440 board + 120 gutter), four baselines:
 
-| Band | y     | Frames                                    |
-| ---- | ----- | ----------------------------------------- |
-| 1    | 6400  | `50`…`58` — shipped sections              |
-| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` |
-| 3    | 8800  | `66a` `66b` — settings overlays           |
-| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule  |
-| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`        |
+| Band | y     | Frames                                          |
+| ---- | ----- | ----------------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections                    |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i` |
+| 3    | 8800  | `66a` `66b` — settings overlays                 |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule        |
+| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`              |
 
 Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
 board, so nothing unshipped reads as a tenth section. A board that is not built says so on
@@ -242,6 +242,10 @@ repositories; `74` is the mobile list; `56e` shows a signed-in account when clou
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
 to repositories. `56h` shows the account-switch loading state: repository editing
 waits until the new account's organization context is loaded, preserving navigation.
+`56i` shows the local-file editor scrolled to a cloud settings error: the loaded
+recipe stays editable while cloud secret actions give way to retry.
+Both save actions reveal collapsed sections containing invalid required fields,
+show validation feedback and focus the field before any write.
 
 Board `13` shows the single Set up this project suggestion: only an empty, idle chat
 whose recipe lookup confirms it is unconfigured. Board `22` distinguishes Run app
