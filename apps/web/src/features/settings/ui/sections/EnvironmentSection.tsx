@@ -37,6 +37,12 @@ import { SetUpEnvironmentWithAgent } from "./SetUpEnvironmentWithAgent";
 
 export function EnvironmentSection() {
   const session = useDeusCloudSession();
+  if (session.isPending)
+    return (
+      <p role="status" className="text-text-muted text-sm">
+        Loading environments…
+      </p>
+    );
   const accountId = session.data?.signedIn ? session.data.accountId : null;
   return <EnvironmentSettings key={accountId ?? "signed-out"} accountId={accountId} />;
 }
@@ -93,29 +99,32 @@ function EnvironmentSettings({ accountId }: { accountId: string | null }) {
           retry={() => void organizations.refetch()}
         />
       )}
-      <RepositoryEnvironments
-        key={orgId ?? "local"}
-        accountId={accountId}
-        orgId={orgId}
-        cloudLoading={!!accountId && organizations.isPending}
-        onBeforeNavigate={confirmNavigation}
-        onDirtyChange={setDirty}
-        activeOrganization={orgId === organizations.data?.currentOrganizationId}
-      />
+      {accountId && organizations.isPending ? (
+        <p role="status" className="text-text-muted text-sm">
+          Loading environments…
+        </p>
+      ) : (
+        <RepositoryEnvironments
+          key={orgId ?? "local"}
+          accountId={accountId}
+          orgId={orgId}
+          onBeforeNavigate={confirmNavigation}
+          onDirtyChange={setDirty}
+          activeOrganization={orgId === organizations.data?.currentOrganizationId}
+        />
+      )}
     </div>
   );
 }
 function RepositoryEnvironments({
   accountId,
   orgId,
-  cloudLoading,
   onBeforeNavigate,
   onDirtyChange,
   activeOrganization,
 }: {
   accountId: string | null;
   orgId: string | null;
-  cloudLoading: boolean;
   onBeforeNavigate: () => boolean;
   onDirtyChange: (dirty: boolean) => void;
   activeOrganization: boolean;
@@ -175,7 +184,7 @@ function RepositoryEnvironments({
   function cloudStatus(row: EnvironmentRepository) {
     if (row.environment) return "Setup saved";
     if (!accountId) return "Sign in";
-    if (cloudLoading || github.isLoading) return "Checking…";
+    if (github.isLoading) return "Checking…";
     if (!orgId || github.isError) return "Unavailable";
     if (canAccess(row)) return "Set up";
     return row.repo ? "Connect GitHub" : "No remote";
@@ -374,7 +383,7 @@ function RepositoryEnvironments({
         </div>
         {!rows.length && (
           <p role="status" className="text-text-muted px-4 py-10 text-center text-sm">
-            {cloudLoading || settings.isLoading || repos.isLoading
+            {settings.isLoading || repos.isLoading
               ? "Loading repositories…"
               : "Connect GitHub or add a local project to get started."}
           </p>

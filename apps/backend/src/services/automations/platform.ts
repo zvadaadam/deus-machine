@@ -256,8 +256,8 @@ export async function fetchSessionDetail(sessionId: string): Promise<PlatformSes
 
 /**
  * Ensure a named environment exists for the repo. When the agent-authored one
- * is missing, create a minimal recipe (base image + repo clone) under the SAME
- * derived name — the agent's richer config can replace it later through the
+ * is missing, enable repository file discovery under the SAME derived name —
+ * shared project defaults can replace the empty fallback later through the
  * normal environment-setup flow, and git auth resolves from org-scoped
  * secrets (PAT / App token) exactly like named-environment workspaces do.
  */
@@ -271,6 +271,6 @@ export async function ensurePlatformEnvironment(
   await sdkCreateEnvironment({
     ...auth,
     name,
-    environment: Environment.from("agnt-base").repo(httpsOriginUrl),
+    environment: Environment.from("agnt-base").project().repo(httpsOriginUrl),
   });
 }

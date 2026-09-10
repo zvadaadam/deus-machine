@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 // ============================================================================
 // Mocks
@@ -66,10 +68,7 @@ describe("fs-watcher.service", () => {
   // --------------------------------------------------------------------------
 
   describe("watchWorkspace", () => {
-    it("creates a chokidar watcher with cwd to avoid dotfile regex matching absolute paths", async () => {
-      // Workspaces live at {repo}/.deus/{slug} — the absolute path contains
-      // ".deus" which the dotfile regex /(^|[/\\])\./ would match if tested
-      // against absolute paths. Using cwd ensures relative path testing.
+    it("uses the workspace cwd for relative change events", async () => {
       const workspacePath = "/Users/dev/project/.deus/my-workspace";
       await watchWorkspace(workspacePath);
 
@@ -81,19 +80,13 @@ describe("fs-watcher.service", () => {
       );
     });
 
-    it("passes the dotfile regex and standard ignore globs", async () => {
+    it("ignores generated directories at any depth", async () => {
       await watchWorkspace("/tmp/test-workspace");
-
-      const options = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1];
-      expect(options.ignored).toEqual(
-        expect.arrayContaining([
-          expect.any(Function),
-          "**/node_modules/**",
-          "**/target/**",
-          "**/dist/**",
-          "**/build/**",
-        ])
-      );
+      const ignores = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1].ignored[0];
+      for (const name of ["node_modules", "target", "dist", "build"]) {
+        expect(ignores(`/tmp/test-workspace/${name}`)).toBe(true);
+        expect(ignores(`apps/web/${name}/output.js`)).toBe(true);
+      }
     });
 
     it("does not create duplicate watchers for the same path", async () => {
@@ -159,6 +152,68 @@ describe("fs-watcher.service", () => {
       expect(ignores(".deus/another-workspace")).toBe(true);
       expect(ignores("src/.deus/environment.json")).toBe(true);
     });
+
+    it("normalizes absolute callback paths inside a .deus workspace", async () => {
+      const workspacePath = "/tmp/project/.deus/workspace";
+      await watchWorkspace(workspacePath);
+      const ignores = (chokidar.watch as ReturnType<typeof vi.fn>).mock.calls[0][1].ignored[0];
+      expect(ignores(workspacePath)).toBe(false);
+      expect(ignores(`${workspacePath}/src/index.ts`)).toBe(false);
+      expect(ignores(`${workspacePath}/.deus`)).toBe(false);
+      expect(ignores(`${workspacePath}/.deus/environment.json`)).toBe(false);
+      expect(ignores(`${workspacePath}/.env`)).toBe(true);
+      expect(ignores(`${workspacePath}/.deus/other-workspace`)).toBe(true);
+    });
+  });
+
+  it("broadcasts real recipe edits inside a .deus workspace while ignoring private and generated files", async () => {
+    vi.useRealTimers();
+    const realChokidar = await vi.importActual<typeof import("chokidar")>("chokidar");
+    vi.mocked(chokidar.watch).mockImplementationOnce(realChokidar.watch);
+    const fixtureRoot = path.resolve(import.meta.dirname, "../../../../../.context");
+    await mkdir(fixtureRoot, { recursive: true });
+    const fixture = await mkdtemp(path.join(fixtureRoot, "fs-watcher-test-"));
+    const workspacePath = path.join(fixture, ".deus", "workspace");
+    const recipePath = path.join(workspacePath, ".deus", "environment.json");
+    const ignoredFiles = [
+      ".env",
+      ".git/config",
+      ".deus/other-workspace/private.txt",
+      "node_modules/package/index.js",
+      "apps/web/node_modules/package/index.js",
+      "dist/app.js",
+      "target/artifact",
+      "build/output.js",
+    ].map((file) => path.join(workspacePath, file));
+    try {
+      for (const file of [recipePath, ...ignoredFiles]) {
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, "initial\n");
+      }
+      await watchWorkspace(workspacePath);
+      const watcher = vi.mocked(chokidar.watch).mock.results.at(-1)!.value as ReturnType<
+        typeof realChokidar.watch
+      >;
+      await new Promise<void>((resolve, reject) => {
+        watcher.once("ready", resolve);
+        watcher.once("error", reject);
+      });
+
+      await Promise.all([recipePath, ...ignoredFiles].map((file) => writeFile(file, "changed\n")));
+      await vi.waitFor(() => expect(mockBroadcast).toHaveBeenCalledOnce(), { timeout: 3000 });
+      expect(JSON.parse(mockBroadcast.mock.calls[0][0])).toEqual({
+        type: "q:event",
+        event: "fs:changed",
+        data: {
+          workspace_path: workspacePath,
+          change_type: "change",
+          affected_count: 1,
+        },
+      });
+    } finally {
+      await unwatchWorkspace(workspacePath);
+      await rm(fixture, { recursive: true, force: true });
+    }
   });
 
   // --------------------------------------------------------------------------

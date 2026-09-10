@@ -67,13 +67,13 @@ Settings is the largest district in the file, so it has its own lane rather than
 the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
 (1,440 board + 120 gutter), four baselines:
 
-| Band | y     | Frames                                   |
-| ---- | ----- | ---------------------------------------- |
-| 1    | 6400  | `50`…`58` — shipped sections             |
-| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g`      |
-| 3    | 8800  | `66a` `66b` — settings overlays          |
-| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule |
-| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`       |
+| Band | y     | Frames                                    |
+| ---- | ----- | ----------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections              |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` |
+| 3    | 8800  | `66a` `66b` — settings overlays           |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule  |
+| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`        |
 
 Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
 board, so nothing unshipped reads as a tenth section. A board that is not built says so on
@@ -240,7 +240,8 @@ the agent sets up a workspace; both use the same recipe form. The workspace
 header opens its repository directly with its location selected. `56c` manages secrets across
 repositories; `74` is the mobile list; `56e` shows a signed-in account when cloud
 settings cannot be loaded, with retry and no sign-in prompt. The breadcrumb returns
-to repositories.
+to repositories. `56h` shows the account-switch loading state: repository editing
+waits until the new account's organization context is loaded, preserving navigation.
 
 Board `13` shows the single Set up this project suggestion: only an empty, idle chat
 whose recipe lookup confirms it is unconfigured. Board `22` distinguishes Run app

@@ -1,4 +1,8 @@
-import { resolveProjectEnvironment, type ProjectEnvironment } from "@deus-hq/api";
+import {
+  missingEnvironmentVariables,
+  resolveProjectEnvironment,
+  type ProjectEnvironment,
+} from "@deus-hq/api";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus } from "lucide-react";
@@ -42,7 +46,7 @@ export function CloudApplicationSecrets({
         name,
         source: visible.some((secret) => secret.name === name)
           ? "secret"
-          : resolved.env[name]
+          : missingEnvironmentVariables([name], resolved.env).length === 0
             ? "configuration"
             : null,
       }))

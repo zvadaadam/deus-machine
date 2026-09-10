@@ -178,7 +178,8 @@ try {
           },
         },
       ],
-      server: { host: "127.0.0.1", port: 0 },
+      // Fixture file writes must not reload the page during a settings journey.
+      server: { host: "127.0.0.1", port: 0, hmr: false, watch: null },
     });
     await vite.listen();
     const page = await browser.newPage({ viewport: { width: 1000, height: 1000 } });
@@ -368,6 +369,23 @@ try {
     await page.getByRole("button", { name: "Replace", exact: true }).click();
     await page.getByLabel("New value", { exact: true }).fill("unsaved-value");
     for (const actor of ["bob", "alice"]) {
+      let releaseOrganizations;
+      const organizationsUrl = "**/settings/environment-secrets/orgs";
+      const heldRequests = [];
+      const holdOrganizations = (route) => {
+        const handled = organizationsGate.then(() => route.continue());
+        heldRequests.push(handled);
+        return handled;
+      };
+      let organizationsGate;
+      let requestStarted;
+      if (!direct && actor === "bob") {
+        organizationsGate = new Promise((resolve) => {
+          releaseOrganizations = resolve;
+        });
+        requestStarted = page.waitForRequest(organizationsUrl);
+        await page.route(organizationsUrl, holdOrganizations);
+      }
       setCloudRuntimeCredentials({ deusCloudSessionToken: fixture.tokens[actor] });
       await page.evaluate(
         ({ token, id }) => {
@@ -377,6 +395,20 @@ try {
         { token: fixture.tokens[actor], id: fixture.ids[actor] }
       );
       await page.getByRole("dialog").waitFor({ state: "hidden" });
+      if (requestStarted) {
+        try {
+          await requestStarted;
+          assert.equal(
+            await page.getByRole("button", { name: /local-only/ }).count(),
+            0,
+            "Repository editing must wait for the new account's organization context"
+          );
+        } finally {
+          releaseOrganizations();
+          await Promise.all(heldRequests);
+          await page.unroute(organizationsUrl, holdOrganizations);
+        }
+      }
       if (actor === "alice") await chooseOrg("Secret test organization");
       if (!direct && actor === "bob") {
         // Organization roles must not restrict edits to a local-only repository file.

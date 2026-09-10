@@ -68,10 +68,10 @@ vi.mock("../../../src/services/agent/cloud/driver", () => ({
 vi.mock("../../../src/services/provider-accounts.service", () => ({
   getProviderAccounts: mockGetProviderAccounts,
 }));
-vi.mock("@deus-hq/sdk", () => ({
-  ...sdk,
-  Environment: { from: vi.fn(() => ({ repo: vi.fn().mockReturnThis() })) },
-}));
+vi.mock("@deus-hq/sdk", async (importOriginal) => {
+  const { Environment } = await importOriginal<typeof import("@deus-hq/sdk")>();
+  return { ...sdk, Environment };
+});
 
 import { environmentNameForRepo } from "../../../src/services/cloud-environment.service";
 import {
@@ -377,7 +377,7 @@ describeWithDb("createAutomation", () => {
     expect(created.repo_name).toBe("widgets");
   });
 
-  it("lazily creates the repo's platform environment when missing", async () => {
+  it("keeps repository file discovery enabled when an automation creates its environment", async () => {
     mockGetCloudEnvironmentInfo.mockResolvedValue({ configured: false, name: envName });
     sdk.createEnvironment.mockResolvedValue({ id: "env-1", name: envName });
     await createAutomation(
@@ -387,6 +387,12 @@ describeWithDb("createAutomation", () => {
     expect(sdk.createEnvironment).toHaveBeenCalledWith(
       expect.objectContaining({ ...AUTH, name: envName })
     );
+    const { environment } = sdk.createEnvironment.mock.calls[0][0];
+    expect(environment.toEnvironmentPayload(envName).config).toMatchObject({
+      template: "agnt-base",
+      repo: ORIGIN,
+      project: { version: 1 },
+    });
   });
 
   it.each(["codex only", "missing default", "reconnect required"])(
