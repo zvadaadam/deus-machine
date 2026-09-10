@@ -79,7 +79,8 @@ export function projectEnvironmentResponse(
     source,
     tasks: resolved
       ? [
-          ...(resolved.run ? [{ name: "run", command: resolved.run }] : []),
+          // Cloud Run is already supervised by AGNT; this menu must not start a duplicate.
+          ...(target === "local" && resolved.run ? [{ name: "run", command: resolved.run }] : []),
           ...Object.entries(resolved.tasks).map(([name, command]) => ({ name, command })),
         ]
       : [],

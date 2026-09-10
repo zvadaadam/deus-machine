@@ -23,6 +23,7 @@ import {
   writeProjectFile,
   readProjectFile,
   localProjectEnv,
+  projectEnvironmentResponse,
 } from "../../../src/services/project-environment.service";
 
 let root: string;
@@ -186,5 +187,23 @@ describe("local project environment journey", () => {
     );
     expect(env).toMatchObject({ APP_LOCAL_TEST: "dotenv", COMMON_TEST: "local" });
     expect(process.env.APP_LOCAL_TEST).toBeUndefined();
+  });
+});
+
+describe("workspace Run commands", () => {
+  it("offers local Run and shared tasks, leaving the cloud app to AGNT supervision", () => {
+    const recipe: ProjectEnvironment = {
+      version: 1,
+      run: "bun run dev",
+      cloud: { run: "bun run dev --host 0.0.0.0" },
+      tasks: { test: "bun test" },
+    };
+    expect(projectEnvironmentResponse(recipe, "repository", "local").tasks).toEqual([
+      { name: "run", command: "bun run dev" },
+      { name: "test", command: "bun test" },
+    ]);
+    expect(projectEnvironmentResponse(recipe, "repository", "cloud").tasks).toEqual([
+      { name: "test", command: "bun test" },
+    ]);
   });
 });

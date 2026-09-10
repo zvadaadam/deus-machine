@@ -31,7 +31,9 @@ never automatically copied into saved settings.
 Inside each target, an omitted command inherits the shared command and `null`
 disables it. Target public variables override common values; required names are
 combined. Additional commands are simple name/command pairs in the Run menu.
-The name `run` is reserved for the main Run command.
+The name `run` is reserved for the main Run command. The local Run menu includes
+that command; cloud menus offer only additional commands because AGNT already
+supervises the app process.
 
 ## Saving and sharing
 
