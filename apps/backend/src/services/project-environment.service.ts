@@ -22,6 +22,11 @@ import { invalidate } from "./query-engine";
 import type { WorkspaceWithDetailsRow } from "../db";
 
 function environmentFile(directory: string): string {
+  if (!fs.statSync(directory, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new ValidationError(
+      `Local repository folder not found: ${directory}. Restore it or add the repository from its new location.`
+    );
+  }
   const file = path.join(directory, PROJECT_ENVIRONMENT_PATH);
   for (const candidate of [path.dirname(file), file]) {
     try {

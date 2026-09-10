@@ -132,6 +132,16 @@ describe("local project environment journey", () => {
     expect(row().setup_status).toBe("completed");
     expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("repaired");
   });
+  it("reports a missing checkout without falling back or recreating it", async () => {
+    mocks.cloud.mockReturnValue({});
+    fs.rmSync(root, { recursive: true });
+    await expect(readLocalProjectEnvironment(root, "https://github.com/test/app")).rejects.toThrow(
+      "Local repository folder not found"
+    );
+    expect(mocks.saved).not.toHaveBeenCalled();
+    expect(() => project({ version: 1 })).toThrow("Local repository folder not found");
+    expect(fs.existsSync(root)).toBe(false);
+  });
   it("fails on unavailable saved settings and missing required names without exposing values", async () => {
     mocks.cloud.mockReturnValue({});
     mocks.saved.mockResolvedValue({ configured: false, lookupFailed: true });
