@@ -1,3 +1,4 @@
+import { turnCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
@@ -341,7 +342,13 @@ export function createAgentEventHandler(): AgentEventHandler {
       const isDelta = envelope.event.type === "message.part.delta";
       const writes = isDelta
         ? []
-        : persistChanges(sessionId, conversation, changes, (turn) => turnOutcomeFor(state, turn));
+        : persistChanges(
+            sessionId,
+            conversation,
+            changes,
+            (turn) => turnOutcomeFor(state, turn),
+            turnCredentialSource(envelope.event)
+          );
 
       const stale = new Set<QueryResource>();
       for (const write of writes) {

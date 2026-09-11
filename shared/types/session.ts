@@ -31,20 +31,15 @@ export interface Message {
   cost?: number | null;
   /** The TURN's terminal stopReason (end_turn, refusal, max_turn_requests, …). */
   turn_stop_reason?: string | null;
+  /** JSON-encoded per-turn execution and non-secret credential provenance. */
+  turn_attribution?: string | null;
   /** Engine Part snapshots in stream order (attached by the backend). */
   parts?: Array<Part | UnknownPart>;
 }
 
-/**
- * The id of the marker row a cancelled turn leaves behind when the model never
- * produced a message of its own (Stop pressed before the first token).
- *
- * Derived from the turn id on purpose: the backend writes this row and the
- * frontend mirrors it into the cache, so both are the SAME row — a replayed
- * `turn.ended` upserts it, and the q:delta carrying the persisted copy
- * deduplicates against the mirrored one instead of doubling the divider.
- */
-export function cancelledTurnMessageId(turnId: string): string {
+/** Stable outcome-marker ID shared by SQLite and the live cache.
+ * Keep its original spelling so existing interrupted turns still deduplicate. */
+export function turnOutcomeMessageId(turnId: string): string {
   return `cancelled-${turnId}`;
 }
 

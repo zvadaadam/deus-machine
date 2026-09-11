@@ -1,3 +1,4 @@
+import type { TurnCredentialSource } from "@deus-hq/api";
 // backend/src/services/agent/persistence.ts
 // Database writes for the canonical @zvada/agent-server conversation.
 //
@@ -28,11 +29,12 @@ import type {
   Part,
   UnknownPart,
 } from "@zvada/agent-server/protocol";
+import { turnOutcomeMessageId } from "@shared/types/session";
 import { isUnknownPart } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
 import {
-  cancelledTurnRow,
+  turnOutcomeRow,
   findConversationCompaction,
   findConversationMessage,
   turnAccountingRow,
@@ -223,45 +225,38 @@ export interface TurnOutcomeWrite {
   cancelled: boolean;
 }
 
-/**
- * Persist everything a finished turn leaves behind, in one transaction:
- * the turn's billing totals + terminal stopReason on its last top-level
- * assistant message, the cancellation marker, and the session's new status.
- *
- * Tokens and cost used to be computed end-to-end and then dropped on the
- * floor; they are columns now. `turn_stop_reason` is the TURN's outcome (the
- * engine's `turn.ended.stopReason`) — not the per-message stop-reason fiction
- * the old schema carried, which is why `refusal` and `max_turn_requests`
- * finally survive a reload.
- *
- * A turn cancelled before the model answered has no message to mark, so this
- * mints one — the marker `shared/conversation-rows.ts` defines, which is the
- * same row the frontend mirrors into its cache under the same derived id. The
- * accounting bindings come from there too: this file owns the SQL (which
- * columns COALESCE, which are overwritten), not what the values are.
- */
+/** Persist the turn's accounting, attribution and status atomically.
+ * An empty outcome uses the same marker and values as the frontend cache. */
 export function persistTurnEnded(
   sessionId: string,
   turn: ConversationTurn,
-  outcome?: TurnOutcomeWrite
+  outcome?: TurnOutcomeWrite,
+  credentialSource?: TurnCredentialSource
 ): WriteResult<void> {
   const db = getDatabase();
   try {
     db.transaction(() => {
-      const target = db
+      const turnMessages = db
         .prepare(
-          `SELECT id FROM messages
+          `SELECT id, turn_attribution FROM messages
            WHERE session_id = ? AND turn_id = ? AND role = 'assistant' AND parent_tool_call_id IS NULL
-           ORDER BY seq DESC LIMIT 1`
+           ORDER BY seq DESC`
         )
-        .get(sessionId, turn.turnId) as { id: string } | undefined;
+        .all(sessionId, turn.turnId) as { id: string; turn_attribution: string | null }[];
+      const target =
+        turnMessages.find((message) => message.id !== turnOutcomeMessageId(turn.turnId)) ??
+        turnMessages[0];
+      const previousAttribution = turnMessages.find(
+        (message) => message.turn_attribution
+      )?.turn_attribution;
 
       if (target) {
-        const accounting = turnAccountingRow(turn);
+        const accounting = turnAccountingRow(turn, credentialSource, previousAttribution);
         // Recovery can reveal a later assistant message. Move restated
         // accounting off the former target; retain metrics the replay omits.
         db.prepare(
           `UPDATE messages SET
+             turn_attribution = CASE WHEN ? IS NOT NULL THEN NULL ELSE turn_attribution END,
              tokens = CASE WHEN ? IS NOT NULL THEN NULL ELSE tokens END,
              cost = CASE WHEN ? IS NOT NULL THEN NULL ELSE cost END,
              cancelled_at = CASE WHEN ? IS NOT NULL THEN NULL ELSE cancelled_at END,
@@ -269,6 +264,7 @@ export function persistTurnEnded(
            WHERE session_id = ? AND turn_id = ? AND role = 'assistant'
              AND parent_tool_call_id IS NULL AND id != ?`
         ).run(
+          accounting.turn_attribution,
           accounting.tokens,
           accounting.cost,
           accounting.cancelled_at,
@@ -278,28 +274,36 @@ export function persistTurnEnded(
         );
         db.prepare(
           `UPDATE messages
-             SET tokens = COALESCE(?, tokens),
+             SET turn_attribution = COALESCE(?, turn_attribution),
+                 tokens = COALESCE(?, tokens),
                  cost = COALESCE(?, cost),
                  turn_stop_reason = ?,
                  cancelled_at = COALESCE(?, cancelled_at)
            WHERE id = ?`
         ).run(
+          accounting.turn_attribution,
           accounting.tokens,
           accounting.cost,
           accounting.turn_stop_reason,
           accounting.cancelled_at,
           target.id
         );
-      } else if (turn.stopReason === "cancelled") {
-        const marker = cancelledTurnRow(sessionId, turn);
+      } else if (
+        turn.stopReason === "cancelled" ||
+        turn.stopReason === "error" ||
+        turn.execution ||
+        credentialSource
+      ) {
+        const marker = turnOutcomeRow(sessionId, turn, credentialSource);
         db.prepare(
-          `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost, turn_attribution)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              cancelled_at = excluded.cancelled_at,
              turn_stop_reason = excluded.turn_stop_reason,
              tokens = COALESCE(excluded.tokens, messages.tokens),
-             cost = COALESCE(excluded.cost, messages.cost)`
+             cost = COALESCE(excluded.cost, messages.cost),
+             turn_attribution = COALESCE(excluded.turn_attribution, messages.turn_attribution)`
         ).run(
           marker.id,
           marker.session_id,
@@ -309,7 +313,8 @@ export function persistTurnEnded(
           marker.cancelled_at,
           marker.turn_stop_reason,
           marker.tokens,
-          marker.cost
+          marker.cost,
+          marker.turn_attribution
         );
       }
 
@@ -596,7 +601,8 @@ export function persistChanges(
   sessionId: string,
   state: ConversationState,
   changes: ConversationChange[],
-  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined
+  outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined,
+  credentialSource?: TurnCredentialSource
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
@@ -622,7 +628,10 @@ export function persistChanges(
         // `turn-updated` also reports a turn OPENING and a non-terminal error
         // attributed to one — neither leaves accounting behind.
         if (!turn || turn.status !== "ended") break;
-        writes.push({ change, result: persistTurnEnded(sessionId, turn, outcomeFor(turn)) });
+        writes.push({
+          change,
+          result: persistTurnEnded(sessionId, turn, outcomeFor(turn), credentialSource),
+        });
         break;
       }
       case "usage-updated": {

@@ -1,32 +1,17 @@
-// shared/conversation-rows.ts
-// The rows an ended turn leaves behind — one implementation, two stores.
-//
-// The backend writes them to SQLite and the frontend mirrors them into the
-// TanStack cache, and the two DEDUPLICATE against each other by a derived id
-// (`cancelledTurnMessageId`). Two hand-synced answers to "what does a turn's
-// end put on its last top-level assistant row" are therefore two writers of
-// ONE row: they have to agree field for field, and they had already drifted —
-// the cache defaulted a missing stopReason to "cancelled" and dropped
-// tokens/cost from the minted marker entirely.
-//
-// So the rule lives here, once, as pure functions over the engine's own types.
-// SQLite is the durable truth the cache must converge to, so these encode the
-// SQL side's semantics: a field is `null` when the engine sent nothing, and
-// the CALLER decides what null means for its store — the backend's
-// `COALESCE(?, col)` keeps the column, the frontend's conditional spread keeps
-// the cached value. `turn_stop_reason` is written unconditionally by both,
-// because the turn's outcome is the turn's to state.
-//
-// Nothing here touches a database or a QueryClient: the backend binds the
-// returned object to SQL placeholders, the frontend spreads it onto a row.
-
+// Shared message projections: SQLite and the live query cache write the same rows.
+import type {
+  TurnCredentialSource,
+  TurnEndedEvent as CloudTurnEndedEvent,
+  TurnExecution,
+} from "@deus-hq/api";
 import type {
   ConversationCompaction,
   ConversationMessage,
   ConversationState,
   ConversationTurn,
 } from "./protocol-types";
-import { cancelledTurnMessageId, type Compaction, type Message } from "./types/session";
+import { isUnknownEvent, type AnyLifecycleEvent } from "./protocol-types";
+import { turnOutcomeMessageId, type Compaction, type Message } from "./types/session";
 
 /**
  * The folded message a change addressed.
@@ -64,7 +49,7 @@ export function findConversationCompaction(
 }
 
 /**
- * The four columns a finished turn stamps on its last top-level assistant
+ * The columns a finished turn stamps on its last top-level assistant
  * message, in `messages`-row spelling.
  *
  * `turn_stop_reason` is the TURN's outcome (the engine's `turn.ended`), not the
@@ -73,6 +58,7 @@ export function findConversationCompaction(
  */
 export interface TurnAccountingRow {
   turn_stop_reason: string | null;
+  turn_attribution: string | null;
   /** JSON-encoded engine `TokenUsage`, or null when the turn carried none. */
   tokens: string | null;
   cost: number | null;
@@ -85,43 +71,62 @@ function endedAtIso(turn: ConversationTurn): string {
 }
 
 /** The accounting an ended turn leaves on its last top-level assistant row. */
-export function turnAccountingRow(turn: ConversationTurn): TurnAccountingRow {
+export interface TurnAttribution {
+  execution?: TurnExecution;
+  credentialSource?: TurnCredentialSource;
+}
+
+/** AGNT's additive terminal field; the canonical engine fold owns execution. */
+export function turnCredentialSource(event: AnyLifecycleEvent): TurnCredentialSource | undefined {
+  return !isUnknownEvent(event) && event.type === "turn.ended"
+    ? (event as CloudTurnEndedEvent).credentialSource
+    : undefined;
+}
+
+export function turnAccountingRow(
+  turn: ConversationTurn,
+  credentialSource?: TurnCredentialSource,
+  previousAttribution?: string | null
+): TurnAccountingRow {
+  const previous: TurnAttribution | undefined = previousAttribution
+    ? JSON.parse(previousAttribution)
+    : undefined;
+  const execution = turn.execution ?? previous?.execution;
+  const source = credentialSource ?? previous?.credentialSource;
   return {
     turn_stop_reason: turn.stopReason ?? null,
+    turn_attribution:
+      execution || source
+        ? JSON.stringify({
+            ...(execution && { execution }),
+            ...(source && { credentialSource: source }),
+          } satisfies TurnAttribution)
+        : null,
     tokens: turn.tokens ? JSON.stringify(turn.tokens) : null,
     cost: turn.cost ?? null,
     cancelled_at: turn.stopReason === "cancelled" ? endedAtIso(turn) : null,
   };
 }
 
-/**
- * The zero-part assistant row that says "this turn was interrupted".
- *
- * A turn cancelled before the model answered has no message to mark, so both
- * stores mint one. Session status alone cannot say it — `idle` after an
- * interrupt is indistinguishable from `idle` after nothing happened, and the
- * transcript would be silent about a turn the user explicitly stopped.
- *
- * The id is derived from the turn id, so a replayed `turn.ended` upserts the
- * same divider instead of stacking new ones, and the q:delta carrying the
- * persisted copy deduplicates against the mirrored one.
- *
- * `seq` is a placeholder: SQLite assigns the real one from its AFTER INSERT
- * trigger, and the cache keeps whatever the row already had.
- */
-export function cancelledTurnRow(sessionId: string, turn: ConversationTurn): Message {
-  const accounting = turnAccountingRow(turn);
+/** An ended turn without assistant output still needs a durable footer/outcome. */
+export function turnOutcomeRow(
+  sessionId: string,
+  turn: ConversationTurn,
+  credentialSource?: TurnCredentialSource
+): Message {
+  const accounting = turnAccountingRow(turn, credentialSource);
   const at = accounting.cancelled_at ?? endedAtIso(turn);
   return {
-    id: cancelledTurnMessageId(turn.turnId),
+    id: turnOutcomeMessageId(turn.turnId),
     session_id: sessionId,
     seq: 0,
     role: "assistant",
     turn_id: turn.turnId,
     model: null,
     sent_at: at,
-    cancelled_at: at,
+    cancelled_at: accounting.cancelled_at,
     turn_stop_reason: accounting.turn_stop_reason,
+    turn_attribution: accounting.turn_attribution,
     tokens: accounting.tokens,
     cost: accounting.cost,
     parts: [],
@@ -129,11 +134,11 @@ export function cancelledTurnRow(sessionId: string, turn: ConversationTurn): Mes
 }
 
 /** A recovered assistant answer replaces the marker minted before it was known. */
-export function supersededCancellationMarkers(state: ConversationState): Set<string> {
+export function supersededOutcomeMarkers(state: ConversationState): Set<string> {
   const ids = new Set<string>();
   for (const entry of state.timeline) {
     if (entry.kind === "message" && entry.role === "assistant" && !entry.parentToolCallId) {
-      ids.add(cancelledTurnMessageId(entry.turnId));
+      ids.add(turnOutcomeMessageId(entry.turnId));
     }
   }
   return ids;

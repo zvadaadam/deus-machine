@@ -8,8 +8,8 @@ import {
   projectCloudSnapshot,
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
-import { cancelledTurnMessageId } from "@shared/types/session";
-import { supersededCancellationMarkers } from "@shared/conversation-rows";
+import { turnOutcomeMessageId } from "@shared/types/session";
+import { supersededOutcomeMarkers } from "@shared/conversation-rows";
 import { getErrorMessage } from "@shared/lib/errors";
 import { getDatabase } from "../../../lib/database";
 import {
@@ -28,6 +28,11 @@ export function restoreCloudSnapshot(
   previousConversation?: ConversationState
 ): WriteResult<RestoredCloudConversation> {
   const { events, messageIds } = projectCloudSnapshot(snapshot);
+  const credentialSources = Object.fromEntries(
+    (snapshot.state.turns ?? []).flatMap((turn) =>
+      turn.credentialSource ? [[turn.turnId, turn.credentialSource]] : []
+    )
+  );
   let conversation = emptyConversation();
   for (const event of events) {
     conversation = reduceConversationWithChanges(conversation, { ...event, sessionId }).state;
@@ -71,13 +76,6 @@ export function restoreCloudSnapshot(
         }
       }
 
-      const markers = supersededCancellationMarkers(conversation);
-      if (markers.size) {
-        db.prepare(
-          "DELETE FROM messages WHERE session_id = ? AND id IN (SELECT value FROM json_each(?))"
-        ).run(sessionId, JSON.stringify([...markers]));
-      }
-
       // A missed older message must not append behind later rows already in
       // SQLite. Keep local-only rows, including a prompt awaiting admission.
       const rows = db
@@ -92,7 +90,17 @@ export function restoreCloudSnapshot(
 
       // Accounting lands on the actual last assistant message after ordering.
       for (const turn of conversation.turns) {
-        if (turn.status === "ended") requireWrite(persistTurnEnded(sessionId, turn));
+        if (turn.status === "ended")
+          requireWrite(
+            persistTurnEnded(sessionId, turn, undefined, credentialSources[turn.turnId])
+          );
+      }
+
+      const markers = supersededOutcomeMarkers(conversation);
+      if (markers.size) {
+        db.prepare(
+          "DELETE FROM messages WHERE session_id = ? AND id IN (SELECT value FROM json_each(?))"
+        ).run(sessionId, JSON.stringify([...markers]));
       }
 
       // Cancellation without assistant output creates a marker. Anchor it to
@@ -105,7 +113,7 @@ export function restoreCloudSnapshot(
         if (row.turn_id && rank.has(row.id)) lastInTurn.set(row.turn_id, rank.get(row.id)!);
       }
       for (const row of ordered) {
-        if (row.turn_id && row.id === cancelledTurnMessageId(row.turn_id)) {
+        if (row.turn_id && row.id === turnOutcomeMessageId(row.turn_id)) {
           const anchor = lastInTurn.get(row.turn_id);
           if (anchor !== undefined) rank.set(row.id, anchor + 0.5);
         }
@@ -155,7 +163,7 @@ export function restoreCloudSnapshot(
       );
       return ordered.map((row) => row.id);
     })();
-    return { ok: true, value: { conversation, messageIds: orderedIds } };
+    return { ok: true, value: { conversation, messageIds: orderedIds, credentialSources } };
   } catch (error) {
     return { ok: false, error: getErrorMessage(error) };
   }

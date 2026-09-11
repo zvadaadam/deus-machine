@@ -26,6 +26,14 @@ the canvas — read left to right, top to bottom.
 | **70–75 — Mobile**      | `70`…`75`        | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
 | **80 · 85 · 90**        | `80`, `85`, `90` | The `/connect` web route, the web-direct surfaces, and the landing site (its own token set)                                                                                                                                 |
 
+### Turn details
+
+Board `15a`, `DS/TurnDetails`, maps to the Details popover in
+`features/session/ui/TurnFooter.tsx`. The footer entry also appears on boards `15`,
+`20`, and `49`. It shows the recorded harness, selected model/thinking, reported
+model when available, and the account source for that turn. Saved account IDs and
+revisions are historical metadata; credential values never appear in the panel.
+
 ### Screens
 
 - `40` Workspace — Changes · `41` Files · `42` Terminal · `43` Browser · `44` Design

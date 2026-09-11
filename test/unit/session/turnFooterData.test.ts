@@ -18,6 +18,17 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 }
 
 describe("getTurnFooterData", () => {
+  it("shows recorded execution for an empty turn without inventing an account or default model", () => {
+    const attribution = { execution: { harness: "codex-app-server" } };
+    const result = getTurnFooterData([
+      createMessage({ parts: [], turn_attribution: JSON.stringify(attribution) }),
+    ]);
+    expect(result.attribution).toEqual(attribution);
+    expect(result.attribution?.credentialSource).toBeUndefined();
+    expect(result.attribution?.execution?.model).toBeUndefined();
+    expect(result.attribution?.execution?.thinkingLevel).toBeUndefined();
+  });
+
   it("copies the latest text-bearing assistant message and uses the latest part end time", () => {
     const messages: Message[] = [
       createMessage({

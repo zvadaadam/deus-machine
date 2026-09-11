@@ -1,7 +1,9 @@
+import type { TurnAttribution } from "@shared/conversation-rows";
 import type { Message } from "@/shared/types";
 import type { TokenUsage } from "@shared/protocol-types";
 
 export interface TurnFooterData {
+  attribution?: TurnAttribution;
   copyText: string | null;
   durationMs: number | null;
   /** Billed tokens for the turn (turn.ended), when the harness reported them. */
@@ -13,6 +15,7 @@ export interface TurnFooterData {
 export function getTurnFooterData(messages: Message[], startedAt?: string | null): TurnFooterData {
   const accounting = getTurnAccounting(messages);
   return {
+    attribution: getTurnAttribution(messages),
     copyText: getLastTextContent(messages),
     durationMs: getTurnDurationMs(messages, startedAt),
     ...accounting,
@@ -122,4 +125,14 @@ function parseTimestamp(value?: string | null): number | null {
 
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getTurnAttribution(messages: Message[]): TurnAttribution | undefined {
+  const saved = messages.findLast((message) => message.turn_attribution)?.turn_attribution;
+  if (!saved) return undefined;
+  try {
+    return JSON.parse(saved) as TurnAttribution;
+  } catch {
+    return undefined;
+  }
 }

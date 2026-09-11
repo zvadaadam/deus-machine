@@ -83,6 +83,7 @@ export const PRELAUNCH_RETIRED_COLUMNS = {
  * PRELAUNCH_REQUIRED_COLUMNS breaks. Keep in sync with SCHEMA_SQL.
  */
 export const ADDITIVE_COLUMNS = {
+  messages: { turn_attribution: "TEXT" },
   workspaces: {
     pr_state: "TEXT",
     pr_is_draft: "INTEGER NOT NULL DEFAULT 0",
@@ -189,7 +190,8 @@ export const SCHEMA_SQL = `
     parent_tool_call_id TEXT,
     tokens TEXT,
     cost REAL,
-    turn_stop_reason TEXT
+    turn_stop_reason TEXT,
+    turn_attribution TEXT
   );
 
   -- Parts: individual content units within a message.

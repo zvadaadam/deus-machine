@@ -189,6 +189,108 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       .map(([raw]) => JSON.parse(raw))
       .filter((frame) => frame.event === "agent:snapshot");
 
+  it("keeps each turn's selected account and execution in SQLite and the live desktop cache", async () => {
+    const execution = {
+      harness: "codex-app-server" as const,
+      model: "selected-alias",
+      thinkingLevel: "high" as const,
+      reportedModels: ["reported-model"],
+    };
+    const credentialSource = {
+      provider: "codex",
+      source: "personal_account" as const,
+      authMethod: "subscription" as const,
+      account: { id: "saved-A", revision: "revision-A", label: "Personal at execution" },
+    };
+    const attribution = { execution, credentialSource };
+    const history = snapshot([message("prompt", 0, "turn-1", "user"), message("answer", 1)], {
+      turns: [ended("turn-1", attribution)],
+    });
+    onFrame(history);
+    expect(JSON.parse(rows().find((row) => row.id === "answer")!.turn_attribution!)).toEqual(
+      attribution
+    );
+    expect(
+      JSON.parse(page().messages.find((row) => row.id === "answer")!.turn_attribution!)
+    ).toEqual(attribution);
+    // A thin replay must preserve facts already written; current settings are never consulted.
+    onFrame(snapshot(history.messages!, { turns: [ended("turn-1")] }));
+    expect(JSON.parse(rows().find((row) => row.id === "answer")!.turn_attribution!)).toEqual(
+      attribution
+    );
+    shutdownCloudDriver();
+    await connect();
+    onFrame(history);
+    expect(
+      JSON.parse(page().messages.find((row) => row.id === "answer")!.turn_attribution!)
+    ).toEqual(attribution);
+
+    onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-2", timestamp: T + 11000 });
+    const second = {
+      execution: { harness: "claude-code", thinkingLevel: "low" },
+      credentialSource: {
+        provider: "claude",
+        source: "personal_account",
+        authMethod: "api_key",
+        account: { id: "saved-B", revision: "revision-B", label: "Work" },
+      },
+    };
+    onFrame({
+      type: "turn.ended",
+      sessionId: PROVIDER,
+      turnId: "turn-2",
+      stopReason: "error",
+      timestamp: T + 12000,
+      ...second,
+    });
+    onFrame({
+      type: "session.error",
+      sessionId: PROVIDER,
+      turnId: "turn-2",
+      error: { code: "internal", message: "Provider failed" },
+      recoverable: false,
+    });
+    const marker = rows().find((row) => row.turn_id === "turn-2")!;
+    expect(marker.turn_stop_reason).toBe("error");
+    expect(marker.cancelled_at).toBeNull();
+    expect(JSON.parse(marker.turn_attribution!)).toEqual(second);
+    expect(
+      JSON.parse(page().messages.find((row) => row.id === marker.id)!.turn_attribution!)
+    ).toEqual(second);
+    expect(rows().filter((row) => row.turn_attribution)).toHaveLength(2);
+    expect(sessionRow()).toMatchObject({ error_message: "Provider failed" });
+    onFrame(
+      snapshot(
+        [
+          ...history.messages!,
+          message("second-prompt", 2, "turn-2", "user"),
+          message("late-answer", 3, "turn-2"),
+        ],
+        { turns: [ended("turn-1"), ended("turn-2", { stopReason: "error" })] }
+      )
+    );
+    expect(rows().some((row) => row.id === marker.id)).toBe(false);
+    expect(JSON.parse(rows().find((row) => row.id === "late-answer")!.turn_attribution!)).toEqual(
+      second
+    );
+    expect(
+      JSON.parse(page().messages.find((row) => row.id === "late-answer")!.turn_attribution!)
+    ).toEqual(second);
+    const { account: _account, ...sharedSource } = credentialSource;
+    onFrame(
+      snapshot(history.messages!, {
+        turns: [ended("turn-1", { execution, credentialSource: sharedSource })],
+      })
+    );
+    expect(
+      JSON.parse(rows().find((row) => row.id === "answer")!.turn_attribution!).credentialSource
+    ).not.toHaveProperty("account");
+    expect(
+      JSON.parse(page().messages.find((row) => row.id === "answer")!.turn_attribution!)
+        .credentialSource
+    ).not.toHaveProperty("account");
+  });
+
   it("releases a rejected send and its optimistic prompt so retry works after reconnect", async () => {
     ui.queryClient.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
       messages: [

@@ -110,7 +110,7 @@ function renderableMessages(messages: Message[]): Message[] {
     // Assistant messages with parts render.
     if (message.parts && message.parts.length > 0) return true;
     // Keep cancelled messages for the "Response stopped" badge.
-    if (message.cancelled_at) return true;
+    if (message.cancelled_at || message.turn_attribution) return true;
     // Keep a row whose TURN ended with something to say. A model can open an
     // assistant message and end on `refusal` / `max_tokens` /
     // `max_turn_requests` without emitting a single part: that row is the only
@@ -132,13 +132,14 @@ function renderableMessages(messages: Message[]): Message[] {
  * never be retained with nothing to show, or shown on a row that was dropped.
  *
  * `cancelled` is deliberately absent: it has its own "Response stopped" badge,
- * anchored on `cancelled_at`. `error` is too — the session goes to the error
- * status and the error surface owns that story. Stop reasons are an OPEN
+ * anchored on `cancelled_at`. A failure notice remains in history after the
+ * session moves on to a new turn. Stop reasons are an OPEN
  * vocabulary (protocol §3), so an unrecognized one falls through to null
  * rather than inventing copy for an outcome this build cannot interpret.
  */
 export function turnStopNotice(reason: string | null | undefined): string | null {
   return match(reason)
+    .with("error", () => "This turn failed.")
     .with("refusal", () => "The model declined to continue this response.")
     .with(
       "max_turn_requests",

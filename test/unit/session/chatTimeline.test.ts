@@ -304,21 +304,21 @@ describe("buildChatTimeline", () => {
       message({ id: "a1", turn_id: "t1", parts: [], turn_stop_reason: reason }),
     ];
 
-    it.each(["refusal", "max_tokens", "max_turn_requests"])("survives the filter: %s", (reason) => {
-      const { items, spacings, lastRole } = buildChatTimeline(endedWith(reason), [], false);
+    it.each(["refusal", "max_tokens", "max_turn_requests", "error"])(
+      "survives the filter: %s",
+      (reason) => {
+        const { items, spacings, lastRole } = buildChatTimeline(endedWith(reason), [], false);
 
-      expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
-      // AssistantTurn reads the reason off the turn's LAST message.
-      expect(assistantIds(items[1])).toEqual(["a1"]);
-      expect(spacings).toHaveLength(items.length);
-      expect(lastRole).toBe("assistant");
-    });
+        expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
+        // AssistantTurn reads the reason off the turn's LAST message.
+        expect(assistantIds(items[1])).toEqual(["a1"]);
+        expect(spacings).toHaveLength(items.length);
+        expect(lastRole).toBe("assistant");
+      }
+    );
 
-    it.each(["end_turn", "error", "_adapter_extension"])("is still dropped: %s", (reason) => {
-      // `end_turn` is the ordinary ending and has nothing to say; `error` is
-      // the error surface's story, not the transcript's; an unrecognized
-      // reason has no copy this build can honestly render. All three would
-      // leave a blank turn slot on screen.
+    it.each(["end_turn", "_adapter_extension"])("is still dropped: %s", (reason) => {
+      // Neither an ordinary end nor an unknown reason needs an empty message.
       const { items } = buildChatTimeline(endedWith(reason), [], false);
 
       expect(shape(items)).toEqual(["user:t1"]);
@@ -348,22 +348,15 @@ describe("turnStopNotice", () => {
   // purpose: a reason kept by the filter with no copy to show would render as
   // an empty turn, and copy for a reason the filter drops would never render.
   it("answers for exactly the reasons the timeline keeps a part-less row for", () => {
-    for (const reason of ["refusal", "max_tokens", "max_turn_requests"]) {
+    for (const reason of ["refusal", "max_tokens", "max_turn_requests", "error"]) {
       expect(turnStopNotice(reason)).toBeTruthy();
     }
   });
 
-  it("stays silent for the ordinary ending, the error surface's own, and unknowns", () => {
+  it("stays silent for the ordinary ending, cancellation badge, and unknowns", () => {
     // Stop reasons are an OPEN vocabulary — a newer engine's value reaches
     // this build unchanged and must not be given invented copy.
-    for (const reason of [
-      "end_turn",
-      "cancelled",
-      "error",
-      "_adapter_extension",
-      null,
-      undefined,
-    ]) {
+    for (const reason of ["end_turn", "cancelled", "_adapter_extension", null, undefined]) {
       expect(turnStopNotice(reason)).toBeNull();
     }
   });

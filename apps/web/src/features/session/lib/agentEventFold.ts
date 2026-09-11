@@ -1,3 +1,5 @@
+import type { TurnCredentialSource } from "@deus-hq/api";
+import { turnCredentialSource } from "@shared/conversation-rows";
 /**
  * The fold: one @zvada/agent-server lifecycle envelope → the `messages` cache.
  *
@@ -45,15 +47,15 @@ import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import { createSeqCursor, type SeqCursor } from "@zvada/agent-server/protocol/seq-cursor";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Message } from "@shared/types/session";
+import { turnOutcomeMessageId, type Message } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 import type { SessionStatus } from "@shared/enums";
 import {
-  cancelledTurnRow,
+  turnOutcomeRow,
   compactionRow,
   findConversationCompaction,
   findConversationMessage,
-  supersededCancellationMarkers,
+  supersededOutcomeMarkers,
   turnAccountingRow,
 } from "@shared/conversation-rows";
 import {
@@ -165,12 +167,6 @@ export function hydrateConversation(
     messagesKey(sessionId),
     (old) => old ?? { messages: [], compactions: [], has_older: false, has_newer: false }
   );
-  const markers = supersededCancellationMarkers(conversation);
-  if (markers.size) {
-    ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
-      old ? { ...old, messages: old.messages.filter((message) => !markers.has(message.id)) } : old
-    );
-  }
   for (const entry of conversation.timeline) {
     if (entry.kind === "message") {
       writeMessage(ctx.queryClient, sessionId, conversation, entry.messageId, { seed: true });
@@ -181,7 +177,19 @@ export function hydrateConversation(
   // Ordering must precede accounting, which targets each turn's last message.
   commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
   for (const turn of conversation.turns) {
-    writeTurnAccounting(ctx.queryClient, sessionId, conversation, turn.turnId);
+    writeTurnAccounting(
+      ctx.queryClient,
+      sessionId,
+      conversation,
+      turn.turnId,
+      snapshot.credentialSources?.[turn.turnId]
+    );
+  }
+  const markers = supersededOutcomeMarkers(conversation);
+  if (markers.size) {
+    ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
+      old ? { ...old, messages: old.messages.filter((message) => !markers.has(message.id)) } : old
+    );
   }
   // Accounting may have inserted cancellation markers. Restate their position
   // and SQLite's seq while leaving a new local prompt after the saved rows.
@@ -313,7 +321,7 @@ function applyEvent(
     return;
   }
 
-  applyChanges(ctx, sessionId, fold, changes, live);
+  applyChanges(ctx, sessionId, fold, changes, live, turnCredentialSource(event));
 }
 
 /** Project one event's changes onto the cached page. */
@@ -322,7 +330,8 @@ function applyChanges(
   sessionId: string,
   fold: SessionFold,
   changes: ConversationChange[],
-  live: boolean
+  live: boolean,
+  credentialSource?: TurnCredentialSource
 ): void {
   for (const change of changes) {
     switch (change.kind) {
@@ -340,7 +349,13 @@ function applyChanges(
         fold.dirtyMessages.delete(change.messageId);
         break;
       case "turn-updated":
-        writeTurnAccounting(ctx.queryClient, sessionId, fold.state, change.turnId);
+        writeTurnAccounting(
+          ctx.queryClient,
+          sessionId,
+          fold.state,
+          change.turnId,
+          credentialSource
+        );
         break;
       case "compaction-upserted":
         // Compactions live in a table of their own beside the message page.
@@ -485,42 +500,39 @@ function writeMessage(
 
 // ---- Turn accounting ----
 
-/**
- * Turn accounting, mirrored into the cache so the footer updates without
- * waiting for a refetch. It lands on the turn's last top-level assistant
- * message — the same row the backend writes, from the same `turnAccountingRow`
- * in `shared/conversation-rows.ts`. A turn cancelled before the model said
- * anything has no such row, so this mints the SAME marker the backend does,
- * under the same derived id, and the "Response stopped" divider appears live.
- *
- * The four fields are applied the way the backend's SQL applies them, which is
- * a deliberate ALIGNMENT rather than the cache's previous behaviour: null
- * tokens/cost/cancelled_at leave the cached value alone (the SQL's
- * `COALESCE(?, col)`) and `turn_stop_reason` is written whatever it is (the
- * SQL's plain `= ?`). The cache used to skip tokens/cost on a minted marker
- * and substitute "cancelled" for a missing stop reason; SQLite is the durable
- * truth these rows deduplicate against, so the cache converges to it.
- */
+/** Mirror the shared outcome row immediately, using SQLite's merge semantics.
+ * Missing accounting preserves cached values; the terminal stop reason replaces it. */
 function writeTurnAccounting(
   qc: QueryClient,
   sessionId: string,
   state: ConversationState,
-  turnId: string
+  turnId: string,
+  credentialSource?: TurnCredentialSource
 ): void {
   const turn = state.turns.find((t) => t.turnId === turnId);
   // `turn-updated` also reports a turn OPENING, and a non-terminal error
   // attributed to a turn — neither has accounting to mirror yet.
   if (!turn || turn.status !== "ended") return;
-  const accounting = turnAccountingRow(turn);
 
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) return old;
-    const index = old.messages.findLastIndex(
-      (m) => m.turn_id === turnId && m.role === "assistant" && !m.parent_tool_call_id
+    const previousAttribution = old.messages.findLast(
+      (message) => message.turn_id === turnId && message.turn_attribution
+    )?.turn_attribution;
+    const accounting = turnAccountingRow(turn, credentialSource, previousAttribution);
+    let index = old.messages.findLastIndex(
+      (m) =>
+        m.turn_id === turnId &&
+        m.role === "assistant" &&
+        !m.parent_tool_call_id &&
+        m.id !== turnOutcomeMessageId(turnId)
     );
+    if (index === -1) index = old.messages.findIndex((m) => m.id === turnOutcomeMessageId(turnId));
     if (index === -1) {
-      return turn.stopReason === "cancelled"
-        ? { ...old, messages: [...old.messages, cancelledTurnRow(sessionId, turn)] }
+      return turn.stopReason === "cancelled" ||
+        turn.stopReason === "error" ||
+        accounting.turn_attribution
+        ? { ...old, messages: [...old.messages, turnOutcomeRow(sessionId, turn, credentialSource)] }
         : old;
     }
 
@@ -532,6 +544,7 @@ function writeTurnAccounting(
         ? {
             ...message,
             turn_stop_reason: null,
+            ...(accounting.turn_attribution !== null && { turn_attribution: null }),
             ...(accounting.tokens !== null && message.tokens != null && { tokens: null }),
             ...(accounting.cost !== null && message.cost != null && { cost: null }),
             ...(accounting.cancelled_at !== null &&
@@ -542,6 +555,9 @@ function writeTurnAccounting(
     messages[index] = {
       ...messages[index],
       turn_stop_reason: accounting.turn_stop_reason,
+      ...(accounting.turn_attribution !== null && {
+        turn_attribution: accounting.turn_attribution,
+      }),
       ...(accounting.tokens !== null && { tokens: accounting.tokens }),
       ...(accounting.cost !== null && { cost: accounting.cost }),
       ...(accounting.cancelled_at !== null && { cancelled_at: accounting.cancelled_at }),
