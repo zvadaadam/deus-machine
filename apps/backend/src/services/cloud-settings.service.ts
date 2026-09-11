@@ -15,31 +15,36 @@ export async function requestCloudSettings(
   const identity = getCloudIdentitySignal();
   const base = service === "platform" ? `${config.baseUrl}/dashboard` : config.deusCloudUrl;
   if (!base) throw new AppError(503, "Deus Cloud is not configured.");
-  const response = await fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bearer ${config.deusCloudSessionToken}`,
-      "content-type": "application/json",
-    },
-    signal: AbortSignal.any([
-      identity,
-      AbortSignal.timeout(15_000),
-      ...(init.signal ? [init.signal] : []),
-    ]),
-    redirect: "manual",
-  });
-  const data = response.ok ? await response.json() : await response.json().catch(() => null);
-  if (identity.aborted) throw new AppError(409, "Your Deus account changed. Try again.");
-  if (!response.ok)
-    throw new AppError(
-      response.status,
-      typeof data?.message === "string"
-        ? data.message
-        : !init.method || init.method === "GET"
-          ? "Couldn't load cloud settings."
-          : "Couldn't update cloud settings."
-    );
-  return toCamelCaseKeys(data, { opaqueKeys: ["project"] });
+  try {
+    const response = await fetch(`${base}${path}`, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${config.deusCloudSessionToken}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.any([
+        identity,
+        AbortSignal.timeout(15_000),
+        ...(init.signal ? [init.signal] : []),
+      ]),
+      redirect: "manual",
+    });
+    const data = response.ok ? await response.json() : await response.json().catch(() => null);
+    identity.throwIfAborted();
+    if (!response.ok)
+      throw new AppError(
+        response.status,
+        typeof data?.message === "string"
+          ? data.message
+          : !init.method || init.method === "GET"
+            ? "Couldn't load cloud settings."
+            : "Couldn't update cloud settings."
+      );
+    return toCamelCaseKeys(data, { opaqueKeys: ["project"] });
+  } catch (error) {
+    if (identity.aborted) throw new AppError(409, "Your Deus account changed. Try again.");
+    throw error;
+  }
 }
 
 export async function getCloudSettingsOrganizations(): Promise<CloudSettingsOrganizations> {

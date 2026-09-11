@@ -6,10 +6,19 @@ import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
+import { requestCloudSettings } from "../../../src/services/cloud-settings.service";
 
 const fetchMock = vi.fn();
 const app = new Hono().route("/api", routes).onError(errorHandler);
 const url = "/api/settings/cloud/compute-usage?organizationId=org-a";
+
+function pendingFetch(_input: string, init?: RequestInit): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    const signal = init!.signal!;
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
 
 beforeEach(() => {
   resetCloudConfigForTests();
@@ -87,4 +96,73 @@ it("discards in-flight usage from an account that signed out", async () => {
   setCloudRuntimeCredentials({ deusCloudSessionToken: null });
   finish(Response.json({ runtime_minutes: 999 }));
   expect((await pending).status).toBe(409);
+});
+
+it("reports an account change when sign-out aborts the pending fetch", async () => {
+  fetchMock.mockImplementation(pendingFetch);
+  const pending = app.request(url);
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+
+  setCloudRuntimeCredentials({ deusCloudSessionToken: null });
+
+  const response = await pending;
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "Your Deus account changed. Try again." });
+});
+
+it.each([200, 403])(
+  "reports an account change when switching identity aborts an HTTP %s response body",
+  async (status) => {
+    const bodyRead = vi.fn();
+    fetchMock.mockImplementation(async (_input: string, init?: RequestInit) => {
+      const body = new ReadableStream({
+        start(controller) {
+          init!.signal!.addEventListener("abort", () => controller.error(init!.signal!.reason), {
+            once: true,
+          });
+        },
+      });
+      const response = new Response(body, { status });
+      const readJson = response.json.bind(response);
+      response.json = () => {
+        bodyRead();
+        return readJson();
+      };
+      return response;
+    });
+    const pending = app.request(url);
+    await vi.waitFor(() => expect(bodyRead).toHaveBeenCalledOnce());
+
+    setCloudRuntimeCredentials({ deusCloudSessionToken: "other-human-session", orgId: "org-b" });
+
+    const response = await pending;
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "Your Deus account changed. Try again." });
+  }
+);
+
+it("preserves a fetch failure when the account did not change", async () => {
+  const error = new TypeError("network unavailable");
+  fetchMock.mockRejectedValue(error);
+
+  await expect(requestCloudSettings("/orgs/org-a/compute-usage")).rejects.toBe(error);
+});
+
+it("preserves a response parsing failure when the account did not change", async () => {
+  fetchMock.mockResolvedValue(new Response("invalid JSON"));
+
+  await expect(requestCloudSettings("/orgs/org-a/compute-usage")).rejects.toBeInstanceOf(
+    SyntaxError
+  );
+});
+
+it("preserves a caller abort when the account did not change", async () => {
+  const controller = new AbortController();
+  const error = new Error("caller cancelled");
+  fetchMock.mockImplementation(pendingFetch);
+  const pending = requestCloudSettings("/orgs/org-a/compute-usage", { signal: controller.signal });
+  const rejected = expect(pending).rejects.toBe(error);
+  controller.abort(error);
+
+  await rejected;
 });

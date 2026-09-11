@@ -244,7 +244,13 @@ try {
     await usage.getByText("2 / 10", { exact: true }).waitFor();
     await usage.getByText("5 min", { exact: true }).waitFor();
     await shot("cloud-usage");
-    await page.getByRole("button", { name: "Refresh cloud usage" }).click();
+    const [refreshedUsage] = await Promise.all([
+      page.waitForResponse((response) =>
+        new URL(response.url()).pathname.endsWith("/compute-usage")
+      ),
+      page.getByRole("button", { name: "Refresh cloud usage" }).click(),
+    ]);
+    assert.equal(refreshedUsage.status(), 200);
     await usage.getByText("2 / 10", { exact: true }).waitFor();
     await chooseUsageOrg("Another organization");
     await usage.getByText("0 / 10", { exact: true }).waitFor();
@@ -267,10 +273,12 @@ try {
     );
     await usage.getByText("No cloud organization yet.", { exact: true }).waitFor();
     assert.equal(await usage.getByText("5 min", { exact: true }).count(), 0);
-    assert.equal(
-      await page.getByRole("button", { name: "Refresh cloud usage" }).isDisabled(),
-      true
-    );
+    const [refreshedOrganizations] = await Promise.all([
+      page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/orgs")),
+      page.getByRole("button", { name: "Refresh cloud usage" }).click(),
+    ]);
+    assert.equal(refreshedOrganizations.status(), 200);
+    await usage.getByText("No cloud organization yet.", { exact: true }).waitFor();
     setCloudRuntimeCredentials({ deusCloudSessionToken: fixture.tokens.alice });
     await page.evaluate(
       ({ token, account }) => {

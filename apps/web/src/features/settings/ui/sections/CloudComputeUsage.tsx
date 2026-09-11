@@ -74,10 +74,10 @@ export function CloudComputeUsage({ accountId }: { accountId: string }) {
             variant="ghost"
             size="sm"
             aria-label="Refresh cloud usage"
-            disabled={
-              usage.isFetching || organizations.isFetching || (!orgId && !organizations.isError)
+            disabled={usage.isFetching || organizations.isFetching}
+            onClick={() =>
+              void (!orgId || organizations.isError ? organizations.refetch() : usage.refetch())
             }
-            onClick={() => void (organizations.isError ? organizations.refetch() : usage.refetch())}
           >
             <RefreshCw className="size-3.5" />
           </Button>
