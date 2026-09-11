@@ -1,4 +1,4 @@
-import { turnCredentialSource } from "@shared/conversation-rows";
+import { turnProviderCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
@@ -347,7 +347,7 @@ export function createAgentEventHandler(): AgentEventHandler {
             conversation,
             changes,
             (turn) => turnOutcomeFor(state, turn),
-            turnCredentialSource(envelope.event)
+            turnProviderCredentialSource(envelope.event)
           );
 
       const stale = new Set<QueryResource>();

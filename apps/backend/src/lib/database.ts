@@ -132,6 +132,18 @@ function initDatabase(): BetterSqlite3.Database {
     }
     assertPrelaunchSchemaCurrent(dbInstance);
 
+    // Normalize the candidate's account-source field in saved turn details.
+    // Keep history intact and let readers use only the current field name.
+    dbInstance.exec(`
+      UPDATE messages
+      SET turn_attribution = json_remove(
+        json_set(turn_attribution, '$.providerCredentialSource',
+          json_extract(turn_attribution, '$.credentialSource')),
+        '$.credentialSource'
+      )
+      WHERE json_type(turn_attribution, '$.credentialSource') IS NOT NULL
+    `);
+
     console.log("Database connected");
     return dbInstance;
   } catch (error) {

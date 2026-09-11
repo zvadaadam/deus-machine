@@ -1,5 +1,5 @@
-import type { TurnCredentialSource } from "@deus-hq/api";
-import { turnCredentialSource } from "@shared/conversation-rows";
+import type { TurnProviderCredentialSource } from "@deus-hq/api";
+import { turnProviderCredentialSource } from "@shared/conversation-rows";
 /**
  * The fold: one @zvada/agent-server lifecycle envelope → the `messages` cache.
  *
@@ -183,7 +183,7 @@ export function hydrateConversation(
       sessionId,
       conversation,
       turn.turnId,
-      snapshot.credentialSources?.[turn.turnId]
+      snapshot.providerCredentialSources?.[turn.turnId]
     );
   }
   const markers = supersededOutcomeMarkers(conversation);
@@ -311,7 +311,7 @@ function applyEvent(
     return;
   }
 
-  applyChanges(ctx, sessionId, fold, changes, live, turnCredentialSource(event));
+  applyChanges(ctx, sessionId, fold, changes, live, turnProviderCredentialSource(event));
 }
 
 /** Project one event's changes onto the cached page. */
@@ -321,7 +321,7 @@ function applyChanges(
   fold: SessionFold,
   changes: ConversationChange[],
   live: boolean,
-  credentialSource?: TurnCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource
 ): void {
   for (const change of changes) {
     switch (change.kind) {
@@ -344,7 +344,7 @@ function applyChanges(
           sessionId,
           fold.state,
           change.turnId,
-          credentialSource
+          providerCredentialSource
         );
         break;
       case "compaction-upserted":
@@ -497,7 +497,7 @@ function writeTurnAccounting(
   sessionId: string,
   state: ConversationState,
   turnId: string,
-  credentialSource?: TurnCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource
 ): void {
   const turn = state.turns.find((t) => t.turnId === turnId);
   // `turn-updated` also reports a turn OPENING, and a non-terminal error
@@ -509,7 +509,7 @@ function writeTurnAccounting(
     const previousAttribution = old.messages.findLast(
       (message) => message.turn_id === turnId && message.turn_attribution
     )?.turn_attribution;
-    const accounting = turnAccountingRow(turn, credentialSource, previousAttribution);
+    const accounting = turnAccountingRow(turn, providerCredentialSource, previousAttribution);
     let index = old.messages.findLastIndex(
       (m) =>
         m.turn_id === turnId &&
@@ -522,7 +522,10 @@ function writeTurnAccounting(
       return turn.stopReason === "cancelled" ||
         turn.stopReason === "error" ||
         accounting.turn_attribution
-        ? { ...old, messages: [...old.messages, turnOutcomeRow(sessionId, turn, credentialSource)] }
+        ? {
+            ...old,
+            messages: [...old.messages, turnOutcomeRow(sessionId, turn, providerCredentialSource)],
+          }
         : old;
     }
 

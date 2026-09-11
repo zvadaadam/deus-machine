@@ -24,7 +24,7 @@ describe("getTurnFooterData", () => {
       createMessage({ parts: [], turn_attribution: JSON.stringify(attribution) }),
     ]);
     expect(result.attribution).toEqual(attribution);
-    expect(result.attribution?.credentialSource).toBeUndefined();
+    expect(result.attribution?.providerCredentialSource).toBeUndefined();
     expect(result.attribution?.execution?.model).toBeUndefined();
     expect(result.attribution?.execution?.thinkingLevel).toBeUndefined();
   });

@@ -1,6 +1,6 @@
 // Shared message projections: SQLite and the live query cache write the same rows.
 import type {
-  TurnCredentialSource,
+  TurnProviderCredentialSource,
   TurnEndedEvent as CloudTurnEndedEvent,
   TurnExecution,
 } from "@deus-hq/api";
@@ -94,33 +94,35 @@ function endedAtIso(turn: ConversationTurn): string {
 /** The accounting an ended turn leaves on its last top-level assistant row. */
 export interface TurnAttribution {
   execution?: TurnExecution;
-  credentialSource?: TurnCredentialSource;
+  providerCredentialSource?: TurnProviderCredentialSource;
 }
 
 /** AGNT's additive terminal field; the canonical engine fold owns execution. */
-export function turnCredentialSource(event: AnyLifecycleEvent): TurnCredentialSource | undefined {
+export function turnProviderCredentialSource(
+  event: AnyLifecycleEvent
+): TurnProviderCredentialSource | undefined {
   return !isUnknownEvent(event) && event.type === "turn.ended"
-    ? (event as CloudTurnEndedEvent).credentialSource
+    ? (event as CloudTurnEndedEvent).providerCredentialSource
     : undefined;
 }
 
 export function turnAccountingRow(
   turn: ConversationTurn,
-  credentialSource?: TurnCredentialSource,
+  providerCredentialSource?: TurnProviderCredentialSource,
   previousAttribution?: string | null
 ): TurnAccountingRow {
   const previous: TurnAttribution | undefined = previousAttribution
     ? JSON.parse(previousAttribution)
     : undefined;
   const execution = turn.execution ?? previous?.execution;
-  const source = credentialSource ?? previous?.credentialSource;
+  const source = providerCredentialSource ?? previous?.providerCredentialSource;
   return {
     turn_stop_reason: turn.stopReason ?? null,
     turn_attribution:
       execution || source
         ? JSON.stringify({
             ...(execution && { execution }),
-            ...(source && { credentialSource: source }),
+            ...(source && { providerCredentialSource: source }),
           } satisfies TurnAttribution)
         : null,
     tokens: turn.tokens ? JSON.stringify(turn.tokens) : null,
@@ -133,9 +135,9 @@ export function turnAccountingRow(
 export function turnOutcomeRow(
   sessionId: string,
   turn: ConversationTurn,
-  credentialSource?: TurnCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource
 ): Message {
-  const accounting = turnAccountingRow(turn, credentialSource);
+  const accounting = turnAccountingRow(turn, providerCredentialSource);
   const at = accounting.cancelled_at ?? endedAtIso(turn);
   return {
     id: turnOutcomeMessageId(turn.turnId),

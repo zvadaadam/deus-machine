@@ -249,13 +249,13 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       thinkingLevel: "high" as const,
       reportedModels: ["reported-model"],
     };
-    const credentialSource = {
+    const providerCredentialSource = {
       provider: "codex",
       source: "personal_account" as const,
       authMethod: "subscription" as const,
       account: { id: "saved-A", revision: "revision-A", label: "Personal at execution" },
     };
-    const attribution = { execution, credentialSource };
+    const attribution = { execution, providerCredentialSource };
     const history = snapshot([message("prompt", 0, "turn-1", "user"), message("answer", 1)], {
       turns: [ended("turn-1", attribution)],
     });
@@ -281,7 +281,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-2", timestamp: T + 11000 });
     const second = {
       execution: { harness: "claude-code", thinkingLevel: "low" },
-      credentialSource: {
+      providerCredentialSource: {
         provider: "claude",
         source: "personal_account",
         authMethod: "api_key",
@@ -329,18 +329,19 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(
       JSON.parse(page().messages.find((row) => row.id === "late-answer")!.turn_attribution!)
     ).toEqual(second);
-    const { account: _account, ...sharedSource } = credentialSource;
+    const { account: _account, ...sharedSource } = providerCredentialSource;
     onFrame(
       snapshot(history.messages!, {
-        turns: [ended("turn-1", { execution, credentialSource: sharedSource })],
+        turns: [ended("turn-1", { execution, providerCredentialSource: sharedSource })],
       })
     );
     expect(
-      JSON.parse(rows().find((row) => row.id === "answer")!.turn_attribution!).credentialSource
+      JSON.parse(rows().find((row) => row.id === "answer")!.turn_attribution!)
+        .providerCredentialSource
     ).not.toHaveProperty("account");
     expect(
       JSON.parse(page().messages.find((row) => row.id === "answer")!.turn_attribution!)
-        .credentialSource
+        .providerCredentialSource
     ).not.toHaveProperty("account");
   });
 

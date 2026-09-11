@@ -1,4 +1,4 @@
-import type { TurnCredentialSource } from "@deus-hq/api";
+import type { TurnProviderCredentialSource } from "@deus-hq/api";
 // backend/src/services/agent/persistence.ts
 // Database writes for the canonical @zvada/agent-server conversation.
 //
@@ -231,7 +231,7 @@ export function persistTurnEnded(
   sessionId: string,
   turn: ConversationTurn,
   outcome?: TurnOutcomeWrite,
-  credentialSource?: TurnCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource
 ): WriteResult<void> {
   const db = getDatabase();
   try {
@@ -251,7 +251,7 @@ export function persistTurnEnded(
       )?.turn_attribution;
 
       if (target) {
-        const accounting = turnAccountingRow(turn, credentialSource, previousAttribution);
+        const accounting = turnAccountingRow(turn, providerCredentialSource, previousAttribution);
         // Recovery can reveal a later assistant message. Move restated
         // accounting off the former target; retain metrics the replay omits.
         db.prepare(
@@ -292,9 +292,9 @@ export function persistTurnEnded(
         turn.stopReason === "cancelled" ||
         turn.stopReason === "error" ||
         turn.execution ||
-        credentialSource
+        providerCredentialSource
       ) {
-        const marker = turnOutcomeRow(sessionId, turn, credentialSource);
+        const marker = turnOutcomeRow(sessionId, turn, providerCredentialSource);
         db.prepare(
           `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost, turn_attribution)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -602,7 +602,7 @@ export function persistChanges(
   state: ConversationState,
   changes: ConversationChange[],
   outcomeFor: (turn: ConversationTurn) => TurnOutcomeWrite | undefined,
-  credentialSource?: TurnCredentialSource
+  providerCredentialSource?: TurnProviderCredentialSource
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
@@ -630,7 +630,7 @@ export function persistChanges(
         if (!turn || turn.status !== "ended") break;
         writes.push({
           change,
-          result: persistTurnEnded(sessionId, turn, outcomeFor(turn), credentialSource),
+          result: persistTurnEnded(sessionId, turn, outcomeFor(turn), providerCredentialSource),
         });
         break;
       }

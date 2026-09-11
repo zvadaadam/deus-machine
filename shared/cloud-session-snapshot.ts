@@ -2,7 +2,7 @@
 // Both desktop persistence and the direct browser consume this projection;
 // callers own status, ordering and live side effects.
 
-import type { SessionSnapshotEvent, TurnCredentialSource } from "@deus-hq/api";
+import type { SessionSnapshotEvent, TurnProviderCredentialSource } from "@deus-hq/api";
 import type { AnyLifecycleEvent, ConversationState } from "./protocol-types";
 
 /** Backend fold restored from cloud history, at its new stream position. */
@@ -10,14 +10,14 @@ export interface AgentConversationSnapshot {
   sessionId: string;
   seq: number;
   conversation: ConversationState;
-  credentialSources?: Record<string, TurnCredentialSource>;
+  providerCredentialSources?: Record<string, TurnProviderCredentialSource>;
   /** SQLite's complete order, including cancellation markers. */
   messageIds: string[];
 }
 
 export type RestoredCloudConversation = Pick<
   AgentConversationSnapshot,
-  "conversation" | "messageIds" | "credentialSources"
+  "conversation" | "messageIds" | "providerCredentialSources"
 >;
 
 type SnapshotMessage = NonNullable<SessionSnapshotEvent["messages"]>[number];
@@ -151,7 +151,9 @@ function turnEndedEvent(turn: SnapshotTurn): AnyLifecycleEvent {
     stopReason: turn.stopReason,
     timestamp: turn.endedAt,
     ...(turn.execution !== undefined ? { execution: turn.execution } : {}),
-    ...(turn.credentialSource !== undefined ? { credentialSource: turn.credentialSource } : {}),
+    ...(turn.providerCredentialSource !== undefined
+      ? { providerCredentialSource: turn.providerCredentialSource }
+      : {}),
     ...(turn.tokens !== undefined ? { tokens: turn.tokens } : {}),
     ...(turn.cost !== undefined ? { cost: turn.cost } : {}),
     ...(turn.error !== undefined ? { error: turn.error } : {}),

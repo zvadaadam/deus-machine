@@ -164,34 +164,34 @@ export const TurnFooter = memo(function TurnFooter({ messages, startedAt }: Turn
               )}
               <dt className="text-muted-foreground">AI account</dt>
               <dd className="break-words">
-                {attribution.credentialSource?.account?.label ??
-                  (attribution.credentialSource?.source === "sdk_api_key"
+                {attribution.providerCredentialSource?.account?.label ??
+                  (attribution.providerCredentialSource?.source === "sdk_api_key"
                     ? "SDK-supplied API key"
-                    : attribution.credentialSource
+                    : attribution.providerCredentialSource
                       ? "Personal account"
                       : "Not recorded")}
               </dd>
-              {attribution.credentialSource && (
+              {attribution.providerCredentialSource && (
                 <>
                   <dt className="text-muted-foreground">Provider</dt>
-                  <dd>{attribution.credentialSource.provider}</dd>
+                  <dd>{attribution.providerCredentialSource.provider}</dd>
                   <dt className="text-muted-foreground">Access</dt>
                   <dd>
-                    {attribution.credentialSource.authMethod === "subscription"
+                    {attribution.providerCredentialSource.authMethod === "subscription"
                       ? "Subscription"
                       : "API key"}
                   </dd>
                 </>
               )}
-              {attribution.credentialSource?.account && (
+              {attribution.providerCredentialSource?.account && (
                 <>
                   <dt className="text-muted-foreground">Account ID</dt>
                   <dd className="font-mono text-[10px] break-all select-text">
-                    {attribution.credentialSource.account.id}
+                    {attribution.providerCredentialSource.account.id}
                   </dd>
                   <dt className="text-muted-foreground">Revision</dt>
                   <dd className="font-mono text-[10px] break-all select-text">
-                    {attribution.credentialSource.account.revision}
+                    {attribution.providerCredentialSource.account.revision}
                   </dd>
                 </>
               )}

@@ -63,6 +63,60 @@ describe("database pre-launch schema bootstrap", () => {
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 
+  it("renames saved provider attribution without changing execution or accounting", async () => {
+    const dbPath = path.join(tempDir, "attribution.db");
+    const seed = new Database(dbPath);
+    seed.exec(SCHEMA_SQL);
+    seed.exec(`
+      INSERT INTO repositories (id, name, root_path) VALUES ('repo', 'repo', '/test/repo');
+      INSERT INTO workspaces (id, repository_id, slug) VALUES ('workspace', 'repo', 'workspace');
+      INSERT INTO sessions (id, workspace_id) VALUES ('session', 'workspace');
+    `);
+    const execution = { harness: "codex-app-server", model: "selected-model" };
+    const source = {
+      provider: "codex",
+      source: "personal_account",
+      authMethod: "subscription",
+      account: { id: "saved-account", revision: "revision", label: "Personal" },
+    };
+    const values = [
+      { execution, credentialSource: source },
+      { execution, providerCredentialSource: source },
+      { execution },
+      null,
+    ];
+    for (const [index, value] of values.entries()) {
+      seed
+        .prepare(
+          `INSERT INTO messages (id, session_id, seq, role, turn_attribution, cost)
+        VALUES (?, 'session', ?, 'assistant', ?, 0)`
+        )
+        .run(String(index), index, value === null ? null : JSON.stringify(value));
+    }
+    seed.close();
+    process.env.DATABASE_PATH = dbPath;
+    const { initDatabase, closeDatabase } = await import("../../../src/lib/database");
+    try {
+      for (let opening = 0; opening < 2; opening++) {
+        const rows = initDatabase()
+          .prepare("SELECT turn_attribution, cost FROM messages ORDER BY seq")
+          .all() as Array<{ turn_attribution: string | null; cost: number }>;
+        expect(rows.map((row) => row.turn_attribution && JSON.parse(row.turn_attribution))).toEqual(
+          [
+            { execution, providerCredentialSource: source },
+            { execution, providerCredentialSource: source },
+            { execution },
+            null,
+          ]
+        );
+        expect(rows.map((row) => row.cost)).toEqual([0, 0, 0, 0]);
+        closeDatabase();
+      }
+    } finally {
+      closeDatabase();
+    }
+  });
+
   // The other direction: a database old enough to still CARRY a column the
   // current schema dropped. CREATE TABLE IF NOT EXISTS never alters an existing
   // table, so only this check forces the reset.

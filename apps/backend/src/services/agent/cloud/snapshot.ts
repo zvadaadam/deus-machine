@@ -27,9 +27,9 @@ export function restoreCloudSnapshot(
   previousConversation?: ConversationState
 ): WriteResult<RestoredCloudConversation> {
   const { events, messageIds } = projectCloudSnapshot(snapshot);
-  const credentialSources = Object.fromEntries(
+  const providerCredentialSources = Object.fromEntries(
     (snapshot.state.turns ?? []).flatMap((turn) =>
-      turn.credentialSource ? [[turn.turnId, turn.credentialSource]] : []
+      turn.providerCredentialSource ? [[turn.turnId, turn.providerCredentialSource]] : []
     )
   );
   let conversation = emptyConversation();
@@ -91,7 +91,7 @@ export function restoreCloudSnapshot(
       for (const turn of conversation.turns) {
         if (turn.status === "ended")
           requireWrite(
-            persistTurnEnded(sessionId, turn, undefined, credentialSources[turn.turnId])
+            persistTurnEnded(sessionId, turn, undefined, providerCredentialSources[turn.turnId])
           );
       }
 
@@ -152,7 +152,7 @@ export function restoreCloudSnapshot(
       );
       return ordered.map((row) => row.id);
     })();
-    return { ok: true, value: { conversation, messageIds: orderedIds, credentialSources } };
+    return { ok: true, value: { conversation, messageIds: orderedIds, providerCredentialSources } };
   } catch (error) {
     return { ok: false, error: getErrorMessage(error) };
   }
