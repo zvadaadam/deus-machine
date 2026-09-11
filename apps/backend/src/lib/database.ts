@@ -137,7 +137,7 @@ function initDatabase(): BetterSqlite3.Database {
     dbInstance.exec(`
       UPDATE messages
       SET turn_attribution = json_remove(
-        json_set(turn_attribution, '$.providerCredentialSource',
+        json_insert(turn_attribution, '$.providerCredentialSource',
           json_extract(turn_attribution, '$.credentialSource')),
         '$.credentialSource'
       )

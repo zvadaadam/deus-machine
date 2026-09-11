@@ -679,23 +679,26 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   });
 
   it.each(["cancelled", "error", "end_turn"])(
-    "keeps a %s outcome beside its user prompt",
+    "keeps a %s outcome and usage beside its prompt without attribution",
     (stopReason) => {
       onFrame(
         snapshot(
           [message("cancelled-prompt", 0, "turn-1", "user"), message("later", 1, "turn-2")],
           {
-            turns: [
-              ended("turn-1", { stopReason, execution: { harness: "codex-app-server" } }),
-              ended("turn-2"),
-            ],
+            turns: [ended("turn-1", { stopReason }), ended("turn-2")],
           }
         )
       );
       for (const messages of [rows(), page().messages]) {
         expect(messages.map((row) => row.turn_id)).toEqual(["turn-1", "turn-1", "turn-2"]);
         expect(messages.map((row) => row.seq)).toEqual([1, 2, 3]);
-        expect(messages[1]).toMatchObject({ role: "assistant", turn_stop_reason: stopReason });
+        expect(messages[1]).toMatchObject({
+          role: "assistant",
+          turn_stop_reason: stopReason,
+          tokens: JSON.stringify({ input: 10, output: 2 }),
+          cost: 0.5,
+          turn_attribution: null,
+        });
       }
     }
   );

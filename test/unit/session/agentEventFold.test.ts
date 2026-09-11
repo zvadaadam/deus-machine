@@ -752,12 +752,19 @@ describe("turn.ended — accounting mirror", () => {
     expect(marker.parts).toEqual([]);
   });
 
-  it("a clean turn with no assistant message adds nothing", () => {
+  it("keeps a completed outcome without assistant output or reported accounting", () => {
     const h = harness();
     h.feed(started({ messageId: "u1", role: "user", outputIndex: 0 }));
     h.feed(turnEnded({ stopReason: "end_turn" }));
 
-    expect(h.page()!.messages).toHaveLength(1);
+    expect(h.page()!.messages).toHaveLength(2);
+    expect(h.page()!.messages[1]).toMatchObject({
+      id: `cancelled-${TURN}`,
+      turn_stop_reason: "end_turn",
+      turn_attribution: null,
+      tokens: null,
+      cost: null,
+    });
   });
 
   it("turn.started alone mirrors nothing — there is no accounting yet", () => {

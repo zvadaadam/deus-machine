@@ -82,6 +82,11 @@ describe("database pre-launch schema bootstrap", () => {
     const values = [
       { execution, credentialSource: source },
       { execution, providerCredentialSource: source },
+      {
+        execution,
+        credentialSource: { ...source, account: { ...source.account, id: "stale-account" } },
+        providerCredentialSource: source,
+      },
       { execution },
       null,
     ];
@@ -105,11 +110,12 @@ describe("database pre-launch schema bootstrap", () => {
           [
             { execution, providerCredentialSource: source },
             { execution, providerCredentialSource: source },
+            { execution, providerCredentialSource: source },
             { execution },
             null,
           ]
         );
-        expect(rows.map((row) => row.cost)).toEqual([0, 0, 0, 0]);
+        expect(rows.map((row) => row.cost)).toEqual([0, 0, 0, 0, 0]);
         closeDatabase();
       }
     } finally {

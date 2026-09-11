@@ -519,14 +519,10 @@ function writeTurnAccounting(
     );
     if (index === -1) index = old.messages.findIndex((m) => m.id === turnOutcomeMessageId(turnId));
     if (index === -1) {
-      return turn.stopReason === "cancelled" ||
-        turn.stopReason === "error" ||
-        accounting.turn_attribution
-        ? {
-            ...old,
-            messages: [...old.messages, turnOutcomeRow(sessionId, turn, providerCredentialSource)],
-          }
-        : old;
+      return {
+        ...old,
+        messages: [...old.messages, turnOutcomeRow(sessionId, turn, providerCredentialSource)],
+      };
     }
 
     const messages = old.messages.map((message, i) =>

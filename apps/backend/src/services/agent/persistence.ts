@@ -288,12 +288,7 @@ export function persistTurnEnded(
           accounting.cancelled_at,
           target.id
         );
-      } else if (
-        turn.stopReason === "cancelled" ||
-        turn.stopReason === "error" ||
-        turn.execution ||
-        providerCredentialSource
-      ) {
+      } else {
         const marker = turnOutcomeRow(sessionId, turn, providerCredentialSource);
         db.prepare(
           `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost, turn_attribution)

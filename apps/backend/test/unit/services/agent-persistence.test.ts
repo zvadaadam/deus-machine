@@ -487,14 +487,27 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       ).toEqual({ n: 1 });
     });
 
-    it("a turn that simply produced nothing leaves no marker", () => {
+    it("persists an outputless completion without inventing accounting", () => {
       db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
 
       writeTurnEnded(ended({ stopReason: "end_turn" }), { status: "idle", cancelled: false });
 
       expect(
-        db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
-      ).toEqual({ n: 0 });
+        db
+          .prepare(
+            `SELECT id, turn_stop_reason, turn_attribution, tokens, cost
+             FROM messages WHERE role = 'assistant'`
+          )
+          .all()
+      ).toEqual([
+        {
+          id: `cancelled-${TURN}`,
+          turn_stop_reason: "end_turn",
+          turn_attribution: null,
+          tokens: null,
+          cost: null,
+        },
+      ]);
     });
 
     it("writes the error status with the engine's category", () => {
