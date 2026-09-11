@@ -15,12 +15,12 @@
  *      those positions (`groupIntoTurns` preserves order, so a group is a
  *      contiguous SLICE of the array that was passed in).
  *   2. It projects only the fields the selectors read: id, turn, role, parent
- *      tool call, parts. A row's SQL-owned columns (seq, tokens, cost,
- *      cancelled_at) are not part of the question being asked.
+ *      tool call, parts. Per-turn accounting is rendered separately from
+ *      the turn records and does not affect message grouping.
  *
- * The `turns` array is synthesized, because the message page has no turn
- * entity: deus's "is the agent working" lives on `sessions.status`, and
- * `agentActivity` needs to know which turn is ACTIVE to answer at all.
+ * The selector view synthesizes active/ended state from `sessions.status`
+ * for the loaded messages. It is not the persisted turn history: empty
+ * outcomes and attribution are joined by `chatTimeline` afterward.
  */
 
 import type { ConversationMessage, ConversationState } from "@shared/protocol-types";

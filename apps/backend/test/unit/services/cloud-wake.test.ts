@@ -95,7 +95,7 @@ describe("explicit cloud wake", () => {
         provider_workspace_id: "vm",
         current_session_id: "session",
       })
-    ).toEqual({ ok: false, status: "error" });
+    ).toEqual({ ok: false, status: "error", error: "provider unavailable" });
     expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
     expect(mocks.connect).not.toHaveBeenCalled();
   });
@@ -149,7 +149,7 @@ describe("explicit cloud wake", () => {
           provider_workspace_id: "vm",
           current_session_id: "session",
         })
-      ).toEqual({ ok: false, status: expected });
+      ).toEqual({ ok: false, status: expected, error: "resume failed" });
       expect(mocks.run).toHaveBeenLastCalledWith(expected, "ws");
     }
   );
@@ -169,7 +169,7 @@ describe("explicit cloud wake", () => {
           provider_workspace_id: "vm",
           current_session_id: "session",
         })
-      ).toEqual({ ok: false, status: "error" });
+      ).toEqual({ ok: false, status: "error", error: "resume failed" });
       expect(mocks.run).toHaveBeenLastCalledWith("error", "ws");
     }
   );

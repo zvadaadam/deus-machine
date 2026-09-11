@@ -67,6 +67,8 @@ import {
   persistSessionWorking,
   persistLastUserMessageAt,
 } from "../../../apps/backend/src/services/agent/persistence";
+import { getTurn, getTurnsForMessages } from "../../../apps/backend/src/db/turns";
+import { buildChatTimeline } from "@/features/session/lib/chatTimeline";
 import { attachParts, getMessages } from "../../../apps/backend/src/db/queries";
 
 const SESSION = "deus-history";
@@ -183,17 +185,162 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   });
   const sessionRow = () => db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION);
   const rows = () => attachParts(db, getMessages(db, SESSION, { limit: 2000 }));
+  const records = () => getTurnsForMessages(db, SESSION, rows());
+  const turn = (turnId: string) => getTurn(db, SESSION, turnId)!;
   const page = () => ui.queryClient.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
   const hydrated = () =>
     broadcast.mock.calls
       .map(([raw]) => JSON.parse(raw))
       .filter((frame) => frame.event === "agent:snapshot");
 
+  it("retains reported cache usage in SQLite and the desktop cache after reconnect", async () => {
+    const tokens = {
+      input: 3,
+      output: 8,
+      reasoning: 5,
+      cache: { read: 11, write: 7, writeEphemeral5m: 3, writeEphemeral1h: 4 },
+    };
+    onFrame(snapshot([]));
+    onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-1", timestamp: T });
+    const answer = message("answer", 0);
+    onFrame({
+      type: "message.started",
+      sessionId: PROVIDER,
+      turnId: "turn-1",
+      messageId: answer.id,
+      messageIndex: 0,
+      outputIndex: 1,
+      role: "assistant",
+      timestamp: T,
+    });
+    onFrame({
+      type: "message.part",
+      sessionId: PROVIDER,
+      turnId: "turn-1",
+      messageId: answer.id,
+      outputIndex: 1,
+      partIndex: 0,
+      part: answer.parts[0],
+      timestamp: T + 1_000,
+    });
+    onFrame({
+      type: "turn.ended",
+      sessionId: PROVIDER,
+      turnId: "turn-1",
+      timestamp: T + 10_000,
+      stopReason: "end_turn",
+      tokens,
+      cost: 0,
+    });
+    for (const row of [turn("turn-1"), page().turns[0]]) {
+      expect(row.tokens).toEqual(tokens);
+      expect(row.cost).toBe(0);
+    }
+
+    shutdownCloudDriver();
+    await connect();
+    onFrame(snapshot([message("answer", 0)], { turns: [ended("turn-1", { tokens, cost: 0 })] }));
+    for (const row of [turn("turn-1"), page().turns[0]]) {
+      expect(row.tokens).toEqual(tokens);
+      expect(row.cost).toBe(0);
+    }
+  });
+
+  it("keeps each turn's selected account and execution in SQLite and the live desktop cache", async () => {
+    const execution = {
+      harness: "codex-app-server" as const,
+      model: "selected-alias",
+      thinkingLevel: "high" as const,
+      reportedModels: ["reported-model"],
+    };
+    const providerCredentialSource = {
+      provider: "codex",
+      source: "personal_account" as const,
+      authMethod: "subscription" as const,
+      account: { id: "saved-A", revision: "revision-A", label: "Personal at execution" },
+    };
+    const attribution = { execution, providerCredentialSource };
+    const history = snapshot([message("prompt", 0, "turn-1", "user"), message("answer", 1)], {
+      turns: [ended("turn-1", attribution)],
+    });
+    onFrame(history);
+    expect(turn("turn-1")).toMatchObject(attribution);
+    expect(page().turns.find((turn) => turn.turnId === "turn-1")).toMatchObject(attribution);
+    // A thin replay must preserve facts already written; current settings are never consulted.
+    onFrame(snapshot(history.messages!, { turns: [ended("turn-1")] }));
+    expect(turn("turn-1")).toMatchObject(attribution);
+    shutdownCloudDriver();
+    await connect();
+    onFrame(history);
+    expect(page().turns.find((turn) => turn.turnId === "turn-1")).toMatchObject(attribution);
+
+    onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-2", timestamp: T + 11000 });
+    const second = {
+      execution: { harness: "claude-code", thinkingLevel: "low" },
+      providerCredentialSource: {
+        provider: "claude",
+        source: "personal_account",
+        authMethod: "api_key",
+        account: { id: "saved-B", revision: "revision-B", label: "Work" },
+      },
+    };
+    onFrame({
+      type: "turn.ended",
+      sessionId: PROVIDER,
+      turnId: "turn-2",
+      stopReason: "error",
+      timestamp: T + 12000,
+      ...second,
+    });
+    onFrame({
+      type: "session.error",
+      sessionId: PROVIDER,
+      turnId: "turn-2",
+      error: { code: "internal", message: "Provider failed" },
+      recoverable: false,
+    });
+    expect(turn("turn-2")).toMatchObject({ stopReason: "error", ...second });
+    expect(page().turns.find((turn) => turn.turnId === "turn-2")).toMatchObject(second);
+    expect(records()).toHaveLength(2);
+    expect(rows().filter((row) => row.turn_id === "turn-2")).toEqual([]);
+    expect(sessionRow()).toMatchObject({ error_message: "Provider failed" });
+    onFrame(
+      snapshot(
+        [
+          ...history.messages!,
+          message("second-prompt", 2, "turn-2", "user"),
+          message("late-answer", 3, "turn-2"),
+        ],
+        { turns: [ended("turn-1"), ended("turn-2", { stopReason: "error" })] }
+      )
+    );
+    expect(rows().map((row) => row.id)).toEqual([
+      "prompt",
+      "answer",
+      "second-prompt",
+      "late-answer",
+    ]);
+    expect(turn("turn-2")).toMatchObject(second);
+    expect(page().turns.find((turn) => turn.turnId === "turn-2")).toMatchObject(second);
+    const { account: _account, ...sharedSource } = providerCredentialSource;
+    onFrame(
+      snapshot(history.messages!, {
+        turns: [ended("turn-1", { execution, providerCredentialSource: sharedSource })],
+      })
+    );
+    expect(turn("turn-1").providerCredentialSource).not.toHaveProperty("account");
+    expect(
+      page().turns.find((turn) => turn.turnId === "turn-1")!.providerCredentialSource
+    ).not.toHaveProperty("account");
+  });
+
   it("releases a rejected send and its optimistic prompt so retry works after reconnect", async () => {
     ui.queryClient.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
       messages: [
         createOptimisticUserMessage({ sessionId: SESSION, turnId: "rejected", content: "Hello" }),
       ],
+      turns: [],
+      compactions: [],
       has_older: false,
       has_newer: false,
     });
@@ -295,14 +442,14 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       ["newer", 3],
     ]);
     expect(restored.map((row) => row.parts[0].type)).toEqual(["text", "text", "text"]);
-    expect(restored[2]).toMatchObject({
+    expect(turn("turn-1")).toMatchObject({
       cost: 0.5,
-      turn_stop_reason: "end_turn",
-      tokens: JSON.stringify({ input: 10, output: 2 }),
+      stopReason: "end_turn",
+      tokens: { input: 10, output: 2 },
     });
-    expect(restored[1].cost).toBeNull();
-    expect(page().messages.map(({ id, seq, cost }) => [id, seq, cost ?? null])).toEqual(
-      restored.map(({ id, seq, cost }) => [id, seq, cost])
+    expect(page().turns).toEqual(records());
+    expect(page().messages.map(({ id, seq }) => [id, seq])).toEqual(
+      restored.map(({ id, seq }) => [id, seq])
     );
     expect(page().compactions?.[0].summary).toBe("Earlier work");
     expect(db.prepare("SELECT summary FROM compactions").all()).toEqual([
@@ -341,7 +488,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     onFrame(after);
     expect(rows().map((row) => row.id)).toEqual(["prompt", "answer", "browser-answer"]);
     expect(page().messages.map((row) => row.id)).toEqual(["prompt", "answer", "browser-answer"]);
-    expect(db.prepare("SELECT SUM(cost) AS cost FROM messages").get()).toEqual({ cost: 1 });
+    expect(db.prepare("SELECT SUM(cost) AS cost FROM turns").get()).toEqual({ cost: 1 });
     expect(sessionRow()).toMatchObject({ message_count: 3 });
     expect(refreshPr).not.toHaveBeenCalled();
   });
@@ -392,6 +539,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
         }),
       ],
       compactions: [],
+      turns: [],
       has_older: false,
       has_newer: false,
     });
@@ -522,30 +670,59 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(sessionRow()).toMatchObject({ message_count: 250 });
   });
 
-  it("keeps a cancellation marker beside its user prompt", () => {
-    onFrame(
-      snapshot([message("cancelled-prompt", 0, "turn-1", "user"), message("later", 1, "turn-2")], {
-        turns: [ended("turn-1", { stopReason: "cancelled" }), ended("turn-2")],
-      })
-    );
-    expect(rows().map((row) => row.turn_id)).toEqual(["turn-1", "turn-1", "turn-2"]);
-    expect(rows()[1]).toMatchObject({ role: "assistant", turn_stop_reason: "cancelled" });
-  });
+  it.each(["cancelled", "error", "end_turn"])(
+    "keeps a %s outcome and usage beside its prompt without attribution",
+    (stopReason) => {
+      onFrame(
+        snapshot(
+          [message("cancelled-prompt", 0, "turn-1", "user"), message("later", 1, "turn-2")],
+          {
+            turns: [ended("turn-1", { stopReason }), ended("turn-2")],
+          }
+        )
+      );
+      for (const messages of [rows(), page().messages]) {
+        expect(messages.map((row) => row.turn_id)).toEqual(["turn-1", "turn-2"]);
+        expect(messages.map((row) => row.seq)).toEqual([1, 2]);
+      }
+      for (const turns of [records(), page().turns]) {
+        expect(turns[0]).toMatchObject({
+          turnId: "turn-1",
+          stopReason,
+          tokens: { input: 10, output: 2 },
+          cost: 0.5,
+        });
+        expect(turns[0].providerCredentialSource).toBeUndefined();
+      }
+      const timeline = buildChatTimeline(page().messages, [], false, [], page().turns);
+      expect(
+        timeline.items.map((item) =>
+          item.type === "user"
+            ? item.message.id
+            : item.type === "assistant"
+              ? item.turnId
+              : item.type
+        )
+      ).toEqual(["cancelled-prompt", "turn-1", "turn-2"]);
+    }
+  );
 
-  it("replaces a temporary cancellation marker when recovery finds the real answer", () => {
+  it("keeps the same cancellation record when recovery finds the real answer", () => {
     const prompt = message("prompt", 0, "turn-1", "user");
     const turns = [ended("turn-1", { stopReason: "cancelled" })];
     onFrame(snapshot([prompt], { turns }));
-    expect(rows()).toHaveLength(2);
-    expect(page().messages).toHaveLength(2);
+    expect(rows()).toHaveLength(1);
+    expect(page().messages).toHaveLength(1);
+    const before = turn("turn-1");
 
     const recovered = snapshot([prompt, message("missed-answer", 1)], { turns });
     onFrame(recovered);
     onFrame(recovered);
     for (const messages of [rows(), page().messages]) {
       expect(messages.map((row) => row.id)).toEqual(["prompt", "missed-answer"]);
-      expect(messages[1]).toMatchObject({ turn_stop_reason: "cancelled", cost: 0.5 });
     }
+    expect(turn("turn-1")).toEqual(before);
+    expect(page().turns).toEqual([before]);
     expect(sessionRow()).toMatchObject({ message_count: 2 });
   });
 
@@ -567,17 +744,25 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
         ...ended("turn-1"),
         timestamp: T + 10_000,
       });
-      expect(rows()[0]).toMatchObject({ cost: 0.5 });
+      expect(turn("turn-1")).toMatchObject({ cost: 0.5 });
       onFrame(
         snapshot([message("earlier-answer", 0), message("missed-answer", 1)], {
           turns: [ended("turn-1", restated ? {} : { cost: undefined, tokens: undefined })],
         })
       );
+      for (const turns of [records(), page().turns]) {
+        expect(turns).toHaveLength(1);
+        expect(turns[0]).toMatchObject({
+          turnId: "turn-1",
+          cost: 0.5,
+          stopReason: "end_turn",
+          tokens: { input: 10, output: 2 },
+        });
+      }
+      expect(db.prepare("SELECT SUM(cost) AS cost FROM turns").get()).toEqual({ cost: 0.5 });
       for (const messages of [rows(), page().messages]) {
-        expect(messages.reduce((total, row) => total + (row.cost ?? 0), 0)).toBe(0.5);
-        expect(messages[0].turn_stop_reason).toBeNull();
-        expect(messages[1]).toMatchObject({ turn_stop_reason: "end_turn" });
-        expect(messages[restated ? 1 : 0].cost).toBe(0.5);
+        expect(messages.map((message) => message.id)).toEqual(["earlier-answer", "missed-answer"]);
+        for (const message of messages) expect(message).not.toHaveProperty("cost");
       }
     }
   );

@@ -90,7 +90,7 @@ it.each([401, 502])(
     );
     await expect(
       getEnvironmentSecretSettings("org", null, new AbortController().signal)
-    ).rejects.toThrow("Couldn't load cloud environment settings.");
+    ).rejects.toThrow("Couldn't load cloud settings.");
     expect(handleWebCloudSessionExpired).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
   }
 );

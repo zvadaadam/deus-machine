@@ -111,8 +111,9 @@ Resources, mutations, commands, and events are all defined in `shared/events.ts`
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 9 tables: `repositories`, `workspaces`, `sessions`, `messages`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 10 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`.
 
+- Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only. `db/migrate-turns.ts` moves existing message accounting once at startup without deleting history.
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`
 - Use `sessions.last_user_message_at` instead of correlated subqueries

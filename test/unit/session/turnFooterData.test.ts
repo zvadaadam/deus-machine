@@ -8,16 +8,49 @@ function createMessage(overrides: Partial<Message> = {}): Message {
     session_id: "session-1",
     seq: overrides.seq ?? 1,
     role: overrides.role ?? "assistant",
-    content: overrides.content ?? "",
     parts: overrides.parts,
     sent_at: overrides.sent_at ?? null,
-    cancelled_at: overrides.cancelled_at ?? null,
-    turn_stop_reason: overrides.turn_stop_reason ?? null,
     ...overrides,
   };
 }
 
 describe("getTurnFooterData", () => {
+  it("uses the recorded turn start for duration and its timestamp tooltip", () => {
+    const promptTime = "2026-04-13T10:00:00.000Z";
+    const startedAt = Date.parse("2026-04-13T10:00:05.000Z");
+    const endedAt = Date.parse("2026-04-13T10:00:08.000Z");
+    expect(getTurnFooterData([], promptTime, { turnId: "turn", startedAt, endedAt })).toMatchObject(
+      {
+        startedAt,
+        durationMs: 3000,
+      }
+    );
+    expect(
+      getTurnFooterData([createMessage({ sent_at: new Date(endedAt).toISOString() })], promptTime, {
+        turnId: "turn",
+        startedAt,
+      })
+    ).toMatchObject({ startedAt, durationMs: 3000 });
+  });
+
+  it("keeps reversed timestamps unknown while preserving a genuine zero duration", () => {
+    expect(
+      getTurnFooterData([], undefined, { turnId: "reversed", startedAt: 2000, endedAt: 1000 })
+    ).toMatchObject({ durationMs: null });
+    expect(
+      getTurnFooterData([], undefined, { turnId: "zero", startedAt: 1000, endedAt: 1000 })
+    ).toMatchObject({ durationMs: 0 });
+  });
+
+  it("shows recorded execution for an empty turn without inventing an account or default model", () => {
+    const attribution = { execution: { harness: "codex-app-server" } };
+    const result = getTurnFooterData([], undefined, { turnId: "turn", ...attribution });
+    expect(result.attribution).toEqual(attribution);
+    expect(result.attribution?.providerCredentialSource).toBeUndefined();
+    expect(result.attribution?.execution?.model).toBeUndefined();
+    expect(result.attribution?.execution?.thinkingLevel).toBeUndefined();
+  });
+
   it("copies the latest text-bearing assistant message and uses the latest part end time", () => {
     const messages: Message[] = [
       createMessage({
@@ -60,6 +93,7 @@ describe("getTurnFooterData", () => {
 
     expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
       copyText: "Done.",
+      startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 9000,
       tokens: null,
       cost: null,
@@ -86,13 +120,14 @@ describe("getTurnFooterData", () => {
 
     expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
       copyText: "Short answer",
+      startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 6000,
       tokens: null,
       cost: null,
     });
   });
 
-  it("uses cancelled_at for interrupted turns and omits invalid durations", () => {
+  it("uses the turn end time for interrupted turns and omits invalid durations", () => {
     const messages: Message[] = [
       createMessage({
         id: "message-4",
@@ -106,27 +141,27 @@ describe("getTurnFooterData", () => {
             state: "done",
           },
         ],
-        cancelled_at: "2026-04-13T10:00:08.000Z",
       }),
     ];
 
-    expect(getTurnFooterData(messages, "not-a-date")).toEqual({
+    const turn = { turnId: "turn", endedAt: Date.parse("2026-04-13T10:00:08.000Z") };
+    expect(getTurnFooterData(messages, "not-a-date", turn)).toEqual({
       copyText: "Partial response",
+      startedAt: null,
       durationMs: null,
       tokens: null,
       cost: null,
     });
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
+    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", turn)).toEqual({
       copyText: "Partial response",
+      startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 8000,
       tokens: null,
       cost: null,
     });
   });
 
-  it("reads the turn's billing totals off the last assistant message", () => {
-    // turn.ended writes tokens/cost onto the turn's last top-level assistant
-    // message — before the protocol unification they were dropped entirely.
+  it("reads billing totals from the turn independently of its messages", () => {
     const messages: Message[] = [
       createMessage({ id: "message-1", sent_at: "2026-04-13T10:00:01.000Z" }),
       createMessage({
@@ -142,21 +177,29 @@ describe("getTurnFooterData", () => {
             state: "done",
           },
         ],
-        tokens: JSON.stringify({ input: 100, output: 20, cache: { read: 5, write: 1 } }),
-        cost: 0.0123,
       }),
     ];
 
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toMatchObject({
+    expect(
+      getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", {
+        turnId: "turn",
+        tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
+        cost: 0.0123,
+      })
+    ).toMatchObject({
       copyText: "Done.",
       tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
       cost: 0.0123,
     });
   });
 
-  it("survives a malformed tokens column instead of throwing", () => {
-    const messages: Message[] = [createMessage({ id: "message-1", tokens: "not json", cost: 0.5 })];
-
-    expect(getTurnFooterData(messages)).toMatchObject({ tokens: null, cost: 0.5 });
+  it("distinguishes unknown usage from a reported zero", () => {
+    expect(getTurnFooterData([], undefined, { turnId: "unknown" })).toMatchObject({
+      tokens: null,
+      cost: null,
+    });
+    expect(
+      getTurnFooterData([], undefined, { turnId: "zero", tokens: { input: 0, output: 0 }, cost: 0 })
+    ).toMatchObject({ tokens: { input: 0, output: 0 }, cost: 0 });
   });
 });

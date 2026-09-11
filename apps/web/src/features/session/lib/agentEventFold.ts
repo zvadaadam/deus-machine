@@ -1,3 +1,5 @@
+import type { TurnProviderCredentialSource } from "@deus-hq/api";
+import { turnProviderCredentialSource } from "@shared/conversation-rows";
 /**
  * The fold: one @zvada/agent-server lifecycle envelope → the `messages` cache.
  *
@@ -29,9 +31,8 @@
  *                resolves.
  *   background — any other session that already has a cached page. Only the
  *                DURABLE events: the `messages` subscription is delta-only with
- *                its cursor jumped to MAX(seq), so an UPDATE-shaped change
- *                (tokens, cost, turn_stop_reason, cancelled_at) has no other
- *                way in. Deltas are skipped — nobody is looking, and the next
+ *                its cursor jumped to MAX(seq), so turn records and part
+ *                updates have no other way in. Deltas are skipped — nobody is looking, and the next
  *                snapshot restates them.
  */
 
@@ -49,12 +50,10 @@ import type { Message } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 import type { SessionStatus } from "@shared/enums";
 import {
-  cancelledTurnRow,
   compactionRow,
   findConversationCompaction,
   findConversationMessage,
-  supersededCancellationMarkers,
-  turnAccountingRow,
+  turnRecord,
 } from "@shared/conversation-rows";
 import {
   isUnknownEvent,
@@ -163,14 +162,8 @@ export function hydrateConversation(
   void ctx.queryClient.cancelQueries({ queryKey: messagesKey(sessionId), exact: true });
   ctx.queryClient.setQueryData<PaginatedMessages>(
     messagesKey(sessionId),
-    (old) => old ?? { messages: [], compactions: [], has_older: false, has_newer: false }
+    (old) => old ?? { messages: [], turns: [], compactions: [], has_older: false, has_newer: false }
   );
-  const markers = supersededCancellationMarkers(conversation);
-  if (markers.size) {
-    ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
-      old ? { ...old, messages: old.messages.filter((message) => !markers.has(message.id)) } : old
-    );
-  }
   for (const entry of conversation.timeline) {
     if (entry.kind === "message") {
       writeMessage(ctx.queryClient, sessionId, conversation, entry.messageId, { seed: true });
@@ -178,25 +171,16 @@ export function hydrateConversation(
       writeCompaction(ctx.queryClient, sessionId, conversation, entry.compactionId);
     }
   }
-  // Ordering must precede accounting, which targets each turn's last message.
   commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
   for (const turn of conversation.turns) {
-    writeTurnAccounting(ctx.queryClient, sessionId, conversation, turn.turnId);
+    writeTurn(
+      ctx.queryClient,
+      sessionId,
+      conversation,
+      turn.turnId,
+      snapshot.providerCredentialSources?.[turn.turnId]
+    );
   }
-  // Accounting may have inserted cancellation markers. Restate their position
-  // and SQLite's seq while leaving a new local prompt after the saved rows.
-  const rank = new Map(messageIds.map((id, index) => [id, index + 1]));
-  commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
-  ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
-    old
-      ? {
-          ...old,
-          messages: old.messages.map((message) =>
-            rank.has(message.id) ? { ...message, seq: rank.get(message.id)! } : message
-          ),
-        }
-      : old
-  );
 }
 
 /** Fold one envelope. The single entry point the hook calls per WS frame. */
@@ -300,7 +284,15 @@ function applyEvent(
   }
   const { state, changes } = reduceConversationWithChanges(fold.state, event);
   fold.state = state;
-  if (changes.length === 0) return;
+  const source = turnProviderCredentialSource(event);
+  // The engine deduplicates terminal events, but AGNT may restate a redacted
+  // account snapshot. That metadata is owned here and must still be replaced.
+  if (changes.length === 0) {
+    if (source && !isUnknownEvent(event) && event.type === "turn.ended") {
+      writeTurn(ctx.queryClient, sessionId, state, event.turnId, source);
+    }
+    return;
+  }
 
   // A delta's part write is the hot path: batched to one cache write per frame
   // for the mounted session, and skipped entirely for every other one.
@@ -313,7 +305,7 @@ function applyEvent(
     return;
   }
 
-  applyChanges(ctx, sessionId, fold, changes, live);
+  applyChanges(ctx, sessionId, fold, changes, live, source);
 }
 
 /** Project one event's changes onto the cached page. */
@@ -322,7 +314,8 @@ function applyChanges(
   sessionId: string,
   fold: SessionFold,
   changes: ConversationChange[],
-  live: boolean
+  live: boolean,
+  providerCredentialSource?: TurnProviderCredentialSource
 ): void {
   for (const change of changes) {
     switch (change.kind) {
@@ -340,7 +333,7 @@ function applyChanges(
         fold.dirtyMessages.delete(change.messageId);
         break;
       case "turn-updated":
-        writeTurnAccounting(ctx.queryClient, sessionId, fold.state, change.turnId);
+        writeTurn(ctx.queryClient, sessionId, fold.state, change.turnId, providerCredentialSource);
         break;
       case "compaction-upserted":
         // Compactions live in a table of their own beside the message page.
@@ -439,7 +432,7 @@ function toMessageRow(sessionId: string, message: ConversationMessage): Message 
  * prompt renders twice or loses its attachments in the swap.
  *
  * Columns SQLite owns and the stream knows nothing about survive the write:
- * `seq`, and the turn accounting stamped at `turn.ended`.
+ * `seq`.
  */
 function writeMessage(
   qc: QueryClient,
@@ -455,7 +448,7 @@ function writeMessage(
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) {
       return opts.seed
-        ? { messages: [row], compactions: [], has_older: false, has_newer: false }
+        ? { messages: [row], turns: [], compactions: [], has_older: false, has_newer: false }
         : old;
     }
     const index = old.messages.findIndex((m) => m.id === row.id);
@@ -485,68 +478,30 @@ function writeMessage(
 
 // ---- Turn accounting ----
 
-/**
- * Turn accounting, mirrored into the cache so the footer updates without
- * waiting for a refetch. It lands on the turn's last top-level assistant
- * message — the same row the backend writes, from the same `turnAccountingRow`
- * in `shared/conversation-rows.ts`. A turn cancelled before the model said
- * anything has no such row, so this mints the SAME marker the backend does,
- * under the same derived id, and the "Response stopped" divider appears live.
- *
- * The four fields are applied the way the backend's SQL applies them, which is
- * a deliberate ALIGNMENT rather than the cache's previous behaviour: null
- * tokens/cost/cancelled_at leave the cached value alone (the SQL's
- * `COALESCE(?, col)`) and `turn_stop_reason` is written whatever it is (the
- * SQL's plain `= ?`). The cache used to skip tokens/cost on a minted marker
- * and substitute "cancelled" for a missing stop reason; SQLite is the durable
- * truth these rows deduplicate against, so the cache converges to it.
- */
-function writeTurnAccounting(
+/** Store one turn without modifying any message or its transcript position. */
+function writeTurn(
   qc: QueryClient,
   sessionId: string,
   state: ConversationState,
-  turnId: string
+  turnId: string,
+  providerCredentialSource?: TurnProviderCredentialSource
 ): void {
   const turn = state.turns.find((t) => t.turnId === turnId);
-  // `turn-updated` also reports a turn OPENING, and a non-terminal error
-  // attributed to a turn — neither has accounting to mirror yet.
-  if (!turn || turn.status !== "ended") return;
-  const accounting = turnAccountingRow(turn);
-
+  if (!turn) return;
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
-    if (!old) return old;
-    const index = old.messages.findLastIndex(
-      (m) => m.turn_id === turnId && m.role === "assistant" && !m.parent_tool_call_id
-    );
-    if (index === -1) {
-      return turn.stopReason === "cancelled"
-        ? { ...old, messages: [...old.messages, cancelledTurnRow(sessionId, turn)] }
-        : old;
-    }
-
-    const messages = old.messages.map((message, i) =>
-      i !== index &&
-      message.turn_id === turnId &&
-      message.role === "assistant" &&
-      !message.parent_tool_call_id
-        ? {
-            ...message,
-            turn_stop_reason: null,
-            ...(accounting.tokens !== null && message.tokens != null && { tokens: null }),
-            ...(accounting.cost !== null && message.cost != null && { cost: null }),
-            ...(accounting.cancelled_at !== null &&
-              message.cancelled_at != null && { cancelled_at: null }),
-          }
-        : message
-    );
-    messages[index] = {
-      ...messages[index],
-      turn_stop_reason: accounting.turn_stop_reason,
-      ...(accounting.tokens !== null && { tokens: accounting.tokens }),
-      ...(accounting.cost !== null && { cost: accounting.cost }),
-      ...(accounting.cancelled_at !== null && { cancelled_at: accounting.cancelled_at }),
+    const page = old ?? {
+      messages: [],
+      turns: [],
+      compactions: [],
+      has_older: false,
+      has_newer: false,
     };
-    return { ...old, messages };
+    const index = page.turns.findIndex((t) => t.turnId === turnId);
+    const record = turnRecord(turn, providerCredentialSource, page.turns[index]);
+    const turns = [...page.turns];
+    if (index === -1) turns.push(record);
+    else turns[index] = record;
+    return { ...page, turns };
   });
 }
 
@@ -555,7 +510,7 @@ function writeTurnAccounting(
 /**
  * Mirror the folded compaction entity into the cache's `compactions` list — the
  * table-of-its-own the "context compacted" divider reads from. This is the
- * compaction twin of `writeTurnAccounting`: it applies the SAME upsert
+ * compaction twin of `writeTurn`: it applies the SAME upsert
  * `persistCompaction`'s SQL applies, so the row the direct lane writes and the
  * row the backend writes converge field-for-field.
  *
@@ -580,7 +535,7 @@ function writeCompaction(
       // Only reachable live before the page has loaded (a background session
       // with no cached page never gets here — see routeEnvelope's guard). The
       // real page, once it resolves, supersedes this seed.
-      return { messages: [], compactions: [row], has_older: false, has_newer: false };
+      return { messages: [], turns: [], compactions: [row], has_older: false, has_newer: false };
     }
     const index = old.compactions.findIndex((c) => c.compaction_id === row.compaction_id);
     if (index === -1) return { ...old, compactions: [...old.compactions, row] };
@@ -646,15 +601,15 @@ export function patchWorkspaceSessionStatus(
 // ---- Transcript order (snapshot backfill) ----
 
 /**
- * Reorder the cached page so `orderedIds` lead, in that order, and every row the
- * caller doesn't name trails in place. Used once, after a snapshot backfill:
+ * Reorder saved message rows; unknown local rows trail
+ * in place. Used once, after a snapshot backfill:
  * `writeMessage` APPENDS a row it hasn't seen, so an optimistic prompt sent
  * before the snapshot lands ends up ahead of the reconstructed history — this
  * repairs that. The snapshot IS the full transcript, so it also stamps
  * `has_older: false`.
  *
  * Lives here with the other `messages`-cache writers (writeMessage,
- * writeTurnAccounting, writeCompaction) so this key has exactly one writer
+ * writeTurn, writeCompaction) so this key has exactly one writer
  * module — the direct-lane handler calls it, but doesn't reach into the cache.
  */
 export function commitTranscriptOrder(
@@ -662,12 +617,13 @@ export function commitTranscriptOrder(
   sessionId: string,
   orderedIds: string[]
 ): void {
-  const rank = new Map(orderedIds.map((id, i) => [id, i]));
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) return old;
+    const rank = new Map(orderedIds.map((id, index) => [id, index]));
     const known = old.messages
       .filter((m) => rank.has(m.id))
-      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+      .map((message, index) => ({ ...message, seq: index + 1 }));
     const unknown = old.messages.filter((m) => !rank.has(m.id));
     return { ...old, messages: [...known, ...unknown], has_older: false };
   });

@@ -39,6 +39,7 @@ export function mergeMessageDelta(
   const newMessages = incoming.filter((m) => !existingIds.has(m.id));
 
   return {
+    ...paginated,
     messages: [...kept, ...newMessages],
     // Compactions are positional siblings of messages, not deltas — a message
     // delta must never drop the dividers already in the page.

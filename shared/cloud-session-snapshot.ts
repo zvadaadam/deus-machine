@@ -2,7 +2,7 @@
 // Both desktop persistence and the direct browser consume this projection;
 // callers own status, ordering and live side effects.
 
-import type { SessionSnapshotEvent } from "@deus-hq/api";
+import type { SessionSnapshotEvent, TurnProviderCredentialSource } from "@deus-hq/api";
 import type { AnyLifecycleEvent, ConversationState } from "./protocol-types";
 
 /** Backend fold restored from cloud history, at its new stream position. */
@@ -10,13 +10,14 @@ export interface AgentConversationSnapshot {
   sessionId: string;
   seq: number;
   conversation: ConversationState;
-  /** SQLite's complete order, including cancellation markers. */
+  providerCredentialSources?: Record<string, TurnProviderCredentialSource>;
+  /** SQLite's complete message order, including local-only rows. */
   messageIds: string[];
 }
 
 export type RestoredCloudConversation = Pick<
   AgentConversationSnapshot,
-  "conversation" | "messageIds"
+  "conversation" | "messageIds" | "providerCredentialSources"
 >;
 
 type SnapshotMessage = NonNullable<SessionSnapshotEvent["messages"]>[number];
@@ -43,6 +44,16 @@ export function projectCloudSnapshot(snapshot: SessionSnapshotEvent): {
   // is one live turn). Synthesize the start before the transcript; the reducer
   // no-ops on replay overlap. The stamp is connect-time — the true start rode
   // an event this client never saw, and nothing reads an active turn's clock.
+  for (const turn of snapshot.state.turns ?? []) {
+    if (turn.startedAt !== undefined)
+      route({
+        type: "turn.started",
+        sessionId: "",
+        turnId: turn.turnId,
+        timestamp: turn.startedAt,
+        ...(turn.execution && { execution: turn.execution }),
+      });
+  }
   if (currentTurnId) {
     route({
       type: "turn.started",
@@ -139,6 +150,10 @@ function turnEndedEvent(turn: SnapshotTurn): AnyLifecycleEvent {
     turnId: turn.turnId,
     stopReason: turn.stopReason,
     timestamp: turn.endedAt,
+    ...(turn.execution !== undefined ? { execution: turn.execution } : {}),
+    ...(turn.providerCredentialSource !== undefined
+      ? { providerCredentialSource: turn.providerCredentialSource }
+      : {}),
     ...(turn.tokens !== undefined ? { tokens: turn.tokens } : {}),
     ...(turn.cost !== undefined ? { cost: turn.cost } : {}),
     ...(turn.error !== undefined ? { error: turn.error } : {}),

@@ -38,6 +38,7 @@ export function applyDeusCloudAuthChange(
     ["settings", "github-app"],
     ["settings", "provider-accounts"],
     ["settings", "environment-secrets"],
+    ["settings", "compute-usage"],
     ["repo-cloud-environment"],
     ["workspaces"],
     ["sessions"],

@@ -142,13 +142,7 @@ export interface MessageRow {
   turn_id: string | null;
   model: string | null;
   sent_at: string | null;
-  cancelled_at: string | null;
   parent_tool_call_id: string | null;
-  /** JSON-encoded engine TokenUsage for the turn (last assistant message). */
-  tokens: string | null;
-  cost: number | null;
-  /** The turn's terminal stopReason (end_turn, refusal, max_turn_requests, …). */
-  turn_stop_reason: string | null;
 }
 
 export interface PartRow {

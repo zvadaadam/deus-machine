@@ -10,8 +10,8 @@
  *
  * The subscription is global (one socket, all sessions), and so is the fold:
  * envelopes for OTHER sessions still patch their cached pages, because a
- * `turn.ended` is an UPDATE — tokens, cost, turn_stop_reason, cancelled_at —
- * and the delta-only `messages` subscription can only carry INSERTs. Without
+ * turn records change when a turn starts or ends, while the delta-only
+ * `messages` subscription only carries new messages. Without
  * that, starting a turn and switching tabs left the footer permanently blank.
  */
 

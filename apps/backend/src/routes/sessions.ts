@@ -6,6 +6,7 @@ import {
   getSessionById,
   getSessionRaw,
   getCompactions,
+  getTurnsForMessages,
   getMessages,
   hasOlderMessages,
   hasNewerMessages,
@@ -72,6 +73,7 @@ app.get("/sessions/:id/messages", (c) => {
     // missing. This route is the HTTP fallback for that query — it has to
     // answer the same shape, or the fallback silently degrades the transcript.
     compactions: getCompactions(db, sessionId),
+    turns: getTurnsForMessages(db, sessionId, messages),
     has_older,
     has_newer,
   });

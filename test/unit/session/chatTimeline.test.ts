@@ -24,7 +24,6 @@ function message(overrides: Partial<Message> & { id: string; turn_id: string }):
     session_id: "session-1",
     seq: 0,
     role: "assistant",
-    content: null,
     sent_at: "2026-08-14T10:00:00.000Z",
     ...overrides,
   };
@@ -41,6 +40,7 @@ function userTurn(turnId: string, sentAt: string): Turn {
 function assistantTurn(turnId: string, sentAt: string): Turn {
   return {
     type: "assistant",
+    turnId,
     messages: [message({ id: `a-${turnId}`, turn_id: turnId, sent_at: sentAt })],
     firstMessageIndex: 0,
     isLatest: false,
@@ -65,7 +65,9 @@ function shape(items: ReturnType<typeof insertCompactions>): string[] {
       ? `compaction:${item.compaction.compaction_id}`
       : item.type === "user"
         ? `user:${item.message.turn_id}`
-        : `assistant:${item.messages[0].turn_id}`
+        : item.type === "assistant"
+          ? `assistant:${item.turnId}`
+          : "cloudEnv"
   );
 }
 
@@ -270,100 +272,107 @@ describe("buildChatTimeline", () => {
     expect(assistantIds(items[3])).toEqual(["a2"]);
   });
 
-  it("keeps a cancelled shell, spaces every slot and answers what the indicator needs", () => {
+  it("renders an empty cancelled turn and its spacing without a message row", () => {
     const { items, spacings, activity, lastRole } = buildChatTimeline(
-      [
-        withText({ id: "u1", turn_id: "t1", role: "user" }),
-        message({
-          id: "cancelled-t1",
-          turn_id: "t1",
-          parts: [],
-          cancelled_at: "2026-08-14T10:00:01.000Z",
-        }),
-      ],
+      [withText({ id: "u1", turn_id: "t1", role: "user" })],
       [],
-      false
+      false,
+      [],
+      [{ turnId: "t1", stopReason: "cancelled", endedAt: Date.parse("2026-08-14T10:00:01Z") }]
     );
-
-    // The zero-part marker survives the filter — it is the "Response stopped"
-    // divider, and dropping it would make an interrupted turn look untouched.
     expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
+    expect(assistantIds(items[1])).toEqual([]);
     expect(spacings).toHaveLength(items.length);
     expect(lastRole).toBe("assistant");
-    // Nothing is running: no turn is active, so the selector has one answer.
     expect(activity).toBe("idle");
   });
 
-  // A model can open an assistant message and end the turn without emitting a
-  // single part. The stop reason on that empty row is then the ONLY record of
-  // what happened, so the filter has to let it through — otherwise a refusal
-  // renders as a prompt followed by a silently idle session.
-  describe("a part-less row that carries a terminal stop reason", () => {
-    const endedWith = (reason: string): Message[] => [
-      withText({ id: "u1", turn_id: "t1", role: "user" }),
-      message({ id: "a1", turn_id: "t1", parts: [], turn_stop_reason: reason }),
-    ];
+  it.each([
+    "refusal",
+    "max_tokens",
+    "max_turn_requests",
+    "error",
+    "end_turn",
+    "_adapter_extension",
+  ])("preserves an empty %s outcome independently of a part-less shell", (reason) => {
+    const { items } = buildChatTimeline(
+      [
+        withText({ id: "u1", turn_id: "t1", role: "user" }),
+        message({ id: "a1", turn_id: "t1", parts: [] }),
+      ],
+      [],
+      false,
+      [],
+      [{ turnId: "t1", stopReason: reason }]
+    );
+    expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
+    expect(assistantIds(items[1])).toEqual([]);
+    expect(items[1]).toMatchObject({ record: { turnId: "t1", stopReason: reason } });
+  });
 
-    it.each(["refusal", "max_tokens", "max_turn_requests"])("survives the filter: %s", (reason) => {
-      const { items, spacings, lastRole } = buildChatTimeline(endedWith(reason), [], false);
+  it("keeps turn identity and ordering when a late response fills an empty outcome", () => {
+    const prompt = withText({ id: "u1", turn_id: "t1", role: "user" });
+    const nextPrompt = withText({ id: "u2", turn_id: "t2", role: "user" });
+    const nextAnswer = withText({ id: "a2", turn_id: "t2" });
+    const records = [{ turnId: "t1", stopReason: "refusal", cost: 0.5 }];
+    const empty = buildChatTimeline([prompt, nextPrompt, nextAnswer], [], false, [], records);
+    const recovered = buildChatTimeline(
+      [prompt, withText({ id: "a1", turn_id: "t1" }), nextPrompt, nextAnswer],
+      [],
+      false,
+      [],
+      records
+    );
+    expect(shape(empty.items)).toEqual(["user:t1", "assistant:t1", "user:t2", "assistant:t2"]);
+    expect(shape(recovered.items)).toEqual(shape(empty.items));
+    expect(assistantIds(empty.items[1])).toEqual([]);
+    expect(assistantIds(recovered.items[1])).toEqual(["a1"]);
+    expect(assistantIds(recovered.items[3])).toEqual(["a2"]);
+    expect(empty.items[1]).toMatchObject({ turnId: "t1", record: records[0], isLatest: false });
+    expect(recovered.items[1]).toMatchObject({ turnId: "t1", record: records[0], isLatest: false });
+  });
 
-      expect(shape(items)).toEqual(["user:t1", "assistant:t1"]);
-      // AssistantTurn reads the reason off the turn's LAST message.
-      expect(assistantIds(items[1])).toEqual(["a1"]);
-      expect(spacings).toHaveLength(items.length);
-      expect(lastRole).toBe("assistant");
-    });
+  it("does not turn a completed outcome back into the latest response after a new prompt", () => {
+    const { items } = buildChatTimeline(
+      [
+        withText({ id: "u1", turn_id: "t1", role: "user" }),
+        withText({ id: "u2", turn_id: "t2", role: "user" }),
+      ],
+      [],
+      true,
+      [],
+      [
+        { turnId: "t1", stopReason: "error" },
+        { turnId: "t2", startedAt: 1 },
+      ]
+    );
+    expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2"]);
+    expect(items[1]).toMatchObject({ isLatest: false });
+  });
 
-    it.each(["end_turn", "error", "_adapter_extension"])("is still dropped: %s", (reason) => {
-      // `end_turn` is the ordinary ending and has nothing to say; `error` is
-      // the error surface's story, not the transcript's; an unrecognized
-      // reason has no copy this build can honestly render. All three would
-      // leave a blank turn slot on screen.
-      const { items } = buildChatTimeline(endedWith(reason), [], false);
-
-      expect(shape(items)).toEqual(["user:t1"]);
-    });
-
-    it("does not shift the slices of the turns that follow it", () => {
-      const { items } = buildChatTimeline(
-        [
-          withText({ id: "u1", turn_id: "t1", role: "user" }),
-          message({ id: "a1", turn_id: "t1", parts: [], turn_stop_reason: "refusal" }),
-          withText({ id: "u2", turn_id: "t2", role: "user" }),
-          withText({ id: "a2", turn_id: "t2" }),
-        ],
-        [],
-        false
-      );
-
-      expect(shape(items)).toEqual(["user:t1", "assistant:t1", "user:t2", "assistant:t2"]);
-      expect(assistantIds(items[1])).toEqual(["a1"]);
-      expect(assistantIds(items[3])).toEqual(["a2"]);
-    });
+  it("anchors a truly message-less outcome and its compaction by turn identity", () => {
+    const { items } = buildChatTimeline(
+      [],
+      [compaction({ turn_id: "t1" })],
+      false,
+      [],
+      [{ turnId: "t1", stopReason: "error" }]
+    );
+    expect(shape(items)).toEqual(["assistant:t1", "compaction:c-t1"]);
   });
 });
 
 describe("turnStopNotice", () => {
-  // The retained-row rule and the rendered notice are the same predicate on
-  // purpose: a reason kept by the filter with no copy to show would render as
-  // an empty turn, and copy for a reason the filter drops would never render.
-  it("answers for exactly the reasons the timeline keeps a part-less row for", () => {
-    for (const reason of ["refusal", "max_tokens", "max_turn_requests"]) {
+  it("explains known abnormal outcomes", () => {
+    for (const reason of ["refusal", "max_tokens", "max_turn_requests", "error"]) {
       expect(turnStopNotice(reason)).toBeTruthy();
     }
   });
 
-  it("stays silent for the ordinary ending, the error surface's own, and unknowns", () => {
+  it("stays silent for the ordinary ending, cancellation badge, and unknowns", () => {
     // Stop reasons are an OPEN vocabulary — a newer engine's value reaches
     // this build unchanged and must not be given invented copy.
-    for (const reason of [
-      "end_turn",
-      "cancelled",
-      "error",
-      "_adapter_extension",
-      null,
-      undefined,
-    ]) {
+    for (const reason of ["end_turn", "cancelled", "_adapter_extension", null, undefined]) {
       expect(turnStopNotice(reason)).toBeNull();
     }
   });

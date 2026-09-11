@@ -87,6 +87,7 @@ describe("direct lane round-trip (connect → render → send → reply)", () =>
     const PROVIDER = "prov-e2e";
     const qc = new QueryClient();
     qc.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
+      turns: [],
       messages: [],
       compactions: [],
       has_older: false,

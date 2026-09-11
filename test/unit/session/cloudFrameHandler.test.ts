@@ -33,6 +33,7 @@ function makeCtx(qc: QueryClient, sessionId: string): AgentStreamContext {
  *  hook seeds this before the socket opens). */
 function seedEmptyPage(qc: QueryClient, sessionId: string) {
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
+    turns: [],
     messages: [],
     compactions: [],
     has_older: false,
@@ -50,6 +51,94 @@ const textPart = (id: string, sessionId: string, messageId: string, text: string
 });
 
 describe("makeCloudFrameHandler", () => {
+  it("keeps a recovered outcome beside its original prompt before later turns", () => {
+    const SESSION = "sess-outcome-order";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+    const frame = {
+      type: "session.snapshot",
+      state: {
+        sessionId: SESSION,
+        organizationId: "org",
+        workspaceId: "ws",
+        status: "ready",
+        turns: [
+          {
+            turnId: "first",
+            stopReason: "error",
+            endedAt: T + 1000,
+            execution: { harness: "codex-app-server", thinkingLevel: "high" },
+          },
+        ],
+      },
+      messages: [
+        { id: "first-prompt", turnId: "first", role: "user", outputIndex: 0 },
+        { id: "later-prompt", turnId: "later", role: "user", outputIndex: 0 },
+        { id: "later-answer", turnId: "later", role: "assistant", outputIndex: 1 },
+      ].map((message, messageIndex) => ({
+        ...message,
+        sessionId: SESSION,
+        messageIndex,
+        createdAt: T + messageIndex * 2000,
+        parts: [textPart(`part-${message.id}`, SESSION, message.id, message.id)],
+      })),
+    };
+    onFrame(frame);
+    const page = () => qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    expect(page().messages.map((row) => row.id)).toEqual([
+      "first-prompt",
+      "later-prompt",
+      "later-answer",
+    ]);
+    expect(page().turns.find((turn) => turn.turnId === "first")).toMatchObject({
+      execution: frame.state.turns[0].execution,
+      stopReason: "error",
+    });
+    onFrame(frame);
+    expect(page().messages.map((row) => row.id)).toEqual([
+      "first-prompt",
+      "later-prompt",
+      "later-answer",
+    ]);
+  });
+
+  it("applies account redaction even when the snapshot repeats a known terminal", () => {
+    const sessionId = "redaction";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, sessionId);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, sessionId), sessionId);
+    const source = { provider: "codex", source: "personal_account", authMethod: "subscription" };
+    const frame = (account?: { id: string; revision: string; label: string }) => ({
+      type: "session.snapshot",
+      messages: [],
+      state: {
+        sessionId,
+        organizationId: "org",
+        workspaceId: "ws",
+        status: "ready",
+        turns: [
+          {
+            turnId: "t1",
+            stopReason: "end_turn",
+            endedAt: T,
+            cost: 0.5,
+            providerCredentialSource: { ...source, ...(account && { account }) },
+          },
+        ],
+      },
+    });
+    const account = { id: "private", revision: "one", label: "owner@example.test" };
+    onFrame(frame(account));
+    const turns = () => qc.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.turns;
+    expect(turns()[0].providerCredentialSource).toHaveProperty("account", account);
+    onFrame(frame());
+    expect(turns()).toHaveLength(1);
+    expect(turns()[0].providerCredentialSource).toEqual(source);
+    expect(turns()[0].cost).toBe(0.5);
+    qc.clear();
+  });
+
   it("folds a live streamed turn into queryKeys.sessions.messages(sessionId)", () => {
     const SESSION = "sess-direct-live";
     const qc = new QueryClient();
@@ -297,6 +386,7 @@ describe("makeCloudFrameHandler", () => {
     const SESSION = "sess-order";
     const qc = new QueryClient();
     qc.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
+      turns: [],
       messages: [
         {
           id: "optimistic-1",

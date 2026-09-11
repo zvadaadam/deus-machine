@@ -103,6 +103,8 @@ describe("direct cloud session published frames", () => {
     const sessionId = "deus-direct-1";
     queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
       messages: [createOptimisticUserMessage({ sessionId, turnId: "pending", content: "Hello" })],
+      turns: [],
+      compactions: [],
       has_older: false,
       has_newer: false,
     });
@@ -160,6 +162,8 @@ describe("direct cloud session published frames", () => {
     });
     queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
       messages: [createOptimisticUserMessage({ sessionId, turnId: "ours", content: "Hello" })],
+      turns: [],
+      compactions: [],
       has_older: false,
       has_newer: false,
     });

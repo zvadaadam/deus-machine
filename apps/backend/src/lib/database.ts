@@ -11,6 +11,7 @@ import {
   SCHEMA_SQL,
 } from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
+import { migrateMessageTurns } from "../db/migrate-turns";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
@@ -130,6 +131,9 @@ function initDatabase(): BetterSqlite3.Database {
       const message = error instanceof Error ? error.message : String(error);
       throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
     }
+    // Preserve existing transcript history before checking retired columns. A
+    // failed data move rolls back and must not suggest deleting the database.
+    migrateMessageTurns(dbInstance);
     assertPrelaunchSchemaCurrent(dbInstance);
 
     console.log("Database connected");

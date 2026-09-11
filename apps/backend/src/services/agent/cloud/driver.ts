@@ -476,6 +476,10 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         sessionId: session.providerSessionId,
         turnId: outcome.turnId,
         stopReason: outcome.stopReason ?? "end_turn",
+        ...(outcome.execution !== undefined ? { execution: outcome.execution } : {}),
+        ...(outcome.providerCredentialSource !== undefined
+          ? { providerCredentialSource: outcome.providerCredentialSource }
+          : {}),
         ...(outcome.tokens !== undefined ? { tokens: outcome.tokens } : {}),
         ...(outcome.cost !== undefined ? { cost: outcome.cost } : {}),
         ...(outcome.error !== undefined ? { error: outcome.error } : {}),

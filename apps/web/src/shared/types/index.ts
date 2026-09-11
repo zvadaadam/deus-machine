@@ -12,6 +12,7 @@ export type {
   Message,
   MessageRole,
   Session,
+  SessionTurn,
   SessionStatus,
   Automation,
   AutomationRun,

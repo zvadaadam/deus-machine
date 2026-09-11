@@ -1,3 +1,4 @@
+import { turnProviderCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
 //
@@ -187,7 +188,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         !state.conversation.turns.some((turn) => turn.turnId === state.turnId) &&
         snapshot.state.currentTurnId !== state.turnId &&
         !snapshot.state.turns?.some((turn) => turn.turnId === state.turnId);
-      const result = restoreCloudSnapshot(sessionId, snapshot, pending, state.conversation);
+      const result = restoreCloudSnapshot(sessionId, snapshot, pending);
       if (!result.ok) {
         console.warn(
           `[AgentEvent] Cloud history restore failed: session=${sessionId}`,
@@ -341,7 +342,13 @@ export function createAgentEventHandler(): AgentEventHandler {
       const isDelta = envelope.event.type === "message.part.delta";
       const writes = isDelta
         ? []
-        : persistChanges(sessionId, conversation, changes, (turn) => turnOutcomeFor(state, turn));
+        : persistChanges(
+            sessionId,
+            conversation,
+            changes,
+            (turn) => turnOutcomeFor(state, turn),
+            turnProviderCredentialSource(envelope.event)
+          );
 
       const stale = new Set<QueryResource>();
       for (const write of writes) {

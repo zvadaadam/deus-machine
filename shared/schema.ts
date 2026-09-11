@@ -4,12 +4,12 @@
  * Imported by backend/src/lib/database.ts.
  * All statements are idempotent (IF NOT EXISTS).
  *
- * Tables: repositories, workspaces, sessions, messages, parts, compactions,
+ * Tables: repositories, workspaces, sessions, messages, turns, parts, compactions,
  *         paired_devices, automations, automation_runs
  * Indexes: 17
  * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
  *
- * The agent-facing tables (messages, parts, compactions) store the
+ * The agent-facing tables (messages, turns, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
  * (lowercase type, epoch-ms times), `parts.type` is the engine part type, and
  * `compactions` is the `session.compaction` entity. No deus dialect.
@@ -48,10 +48,20 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
   // predates that and must be reset.
   automations: ["environment", "synced_at"],
   automation_runs: ["provider_session_id"],
-  // Protocol unification (engine 0.3.0): messages gained turn-level accounting
-  // and the unified parent column; a database without them predates the switch
-  // to canonical protocol vocabulary and must be reset.
-  messages: ["parent_tool_call_id", "tokens", "cost", "turn_stop_reason"],
+  // The parent column identifies the canonical protocol schema. Older
+  // pre-parts databases require a reset; current history is moved to turns.
+  messages: ["parent_tool_call_id"],
+  turns: [
+    "turn_id",
+    "session_id",
+    "started_at",
+    "ended_at",
+    "execution",
+    "provider_credential_source",
+    "outcome",
+    "tokens",
+    "cost",
+  ],
   parts: ["parent_tool_call_id"],
   compactions: ["compaction_id"],
 } as const satisfies Record<string, readonly string[]>;
@@ -59,8 +69,8 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
 /**
  * Columns a current database must NOT have. The mirror image of
  * PRELAUNCH_REQUIRED_COLUMNS: that catches a database too OLD to have gained a
- * column, this catches one too old to have SHED one. SQLite cannot drop a
- * column without a table rebuild, and pre-launch we reset rather than migrate.
+ * column, this catches one too old to have SHED one. The one-time turn
+ * accounting move runs before this check so current history is preserved.
  *
  * `messages.content` was the pre-parts render path, retired when messages moved
  * to engine `parts`. Any database that still has it also predates the engine
@@ -68,7 +78,7 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
  * `codex-server`), so this one marker forces the reset that clears both.
  */
 export const PRELAUNCH_RETIRED_COLUMNS = {
-  messages: ["content"],
+  messages: ["content", "cancelled_at", "tokens", "cost", "turn_stop_reason", "turn_attribution"],
   // `workspaces.cloud_preview_template` mirrored the cloud computer's public
   // host template — a capability URL the platform replays on every connect.
   // It moved to the driver's memory (services/agent/cloud/preview.ts); a
@@ -175,8 +185,6 @@ export const SCHEMA_SQL = `
   -- source of truth for user rows. Every message renders from its parts.
   -- turn_id groups a turn; parent_tool_call_id nests a subagent's output under
   -- the tool call that spawned it (same spelling as parts.parent_tool_call_id).
-  -- tokens/cost/turn_stop_reason carry the TURN's outcome (turn.ended),
-  -- written onto the turn's last top-level assistant message.
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -185,11 +193,22 @@ export const SCHEMA_SQL = `
     turn_id TEXT,
     model TEXT,
     sent_at TEXT,
-    cancelled_at TEXT,
-    parent_tool_call_id TEXT,
+    parent_tool_call_id TEXT
+  );
+
+  -- One record per engine turn, including turns with no assistant output.
+  -- No message owns these values; replay never moves or adds accounting.
+  CREATE TABLE IF NOT EXISTS turns (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    turn_id TEXT NOT NULL,
+    started_at INTEGER,
+    ended_at INTEGER,
+    execution TEXT,
+    provider_credential_source TEXT,
+    outcome TEXT,
     tokens TEXT,
     cost REAL,
-    turn_stop_reason TEXT
+    PRIMARY KEY (session_id, turn_id)
   );
 
   -- Parts: individual content units within a message.
@@ -295,8 +314,7 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_messages_seq ON messages(session_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(session_id, sent_at);
   CREATE INDEX IF NOT EXISTS idx_messages_session_role ON messages(session_id, role, id DESC);
-  -- turn.ended resolves "the turn's last top-level assistant message" through
-  -- this index (session_id, turn_id, seq DESC) — no scan per completed turn.
+  -- Groups message pages by turn and finds turns with no message rows.
   CREATE INDEX IF NOT EXISTS idx_messages_turn_id ON messages(session_id, turn_id, seq DESC);
   CREATE INDEX IF NOT EXISTS idx_messages_parent_tool_call ON messages(parent_tool_call_id);
   CREATE INDEX IF NOT EXISTS idx_parts_message_id ON parts(message_id, seq);

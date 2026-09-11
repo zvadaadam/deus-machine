@@ -20469,6 +20469,28 @@
               "fontWeight": "normal"
             },
             {
+              "type": "frame",
+              "id": "F6fxB3",
+              "name": "View turn details",
+              "cornerRadius": "$radius-sm",
+              "padding": [
+                2,
+                6
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "d1ljhK",
+                  "name": "Details",
+                  "fill": "$text-muted",
+                  "content": "Details",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
               "type": "icon",
               "id": "y8Jnc",
               "name": "copy",
@@ -20487,7 +20509,7 @@
           "y": 788,
           "name": "TurnFooter · model · duration · tokens · cos",
           "fill": "$text-disabled",
-          "content": "TurnFooter · model · duration · tokens · cost, all tabular-nums",
+          "content": "TurnFooter · duration · tokens · cost · Details (recorded execution and account)",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -25604,6 +25626,13 @@
                               }
                             }
                           ]
+                        },
+                        {
+                          "id": "dI1s4",
+                          "type": "ref",
+                          "ref": "Fife4",
+                          "name": "Cloud usage",
+                          "width": "fill_container"
                         }
                       ]
                     }
@@ -49894,6 +49923,28 @@
                               "fontWeight": "normal"
                             },
                             {
+                              "type": "frame",
+                              "id": "EEamK",
+                              "name": "View turn details",
+                              "cornerRadius": "$radius-sm",
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Xw8n8",
+                                  "name": "Details",
+                                  "fill": "$text-muted",
+                                  "content": "Details",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
                               "type": "icon",
                               "id": "KZcgd",
                               "name": "copy",
@@ -52457,6 +52508,28 @@
                           "fontFamily": "$font-sans",
                           "fontSize": "$text-xs",
                           "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "wXCMA",
+                          "name": "View turn details",
+                          "cornerRadius": "$radius-sm",
+                          "padding": [
+                            2,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "epuTQ",
+                              "name": "Details",
+                              "fill": "$text-muted",
+                              "content": "Details",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-xs",
+                              "fontWeight": "normal"
+                            }
+                          ]
                         },
                         {
                           "type": "icon",
@@ -87833,6 +87906,156 @@
                   "fontWeight": "500"
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Fife4",
+          "x": 736,
+          "y": 800,
+          "name": "DS/CloudComputeUsage",
+          "context": "features/settings/ui/sections/CloudComputeUsage.tsx. Account settings for signed-in members. Organization-scoped capacity and settled runtime; refresh on demand. Hidden when signed out.",
+          "reusable": true,
+          "width": 672,
+          "cornerRadius": "$radius-xl",
+          "stroke": "$border-subtle",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "B3Hdua",
+              "name": "Heading",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "GmTRd",
+                  "name": "Organization",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "g3ktWT",
+                      "name": "Title",
+                      "fill": "$text-primary",
+                      "content": "Cloud usage",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "PZFay",
+                      "name": "Organization name",
+                      "fill": "$text-muted",
+                      "content": "Deus",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "vW6cK",
+                  "name": "Refresh cloud usage",
+                  "fill": "$text-primary",
+                  "content": "↻",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-lg",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "qLWtC",
+              "name": "Usage metrics",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "D2VHOJ",
+                  "name": "Machines in use",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "oA6zd",
+                      "name": "Label",
+                      "fill": "$text-muted",
+                      "content": "Machines in use",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GMSWu",
+                      "name": "Value",
+                      "fill": "$text-primary",
+                      "content": "2 / 10",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-lg",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WaaN2",
+                  "name": "Recorded runtime this month",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PY2Ym",
+                      "name": "Label",
+                      "fill": "$text-muted",
+                      "content": "Recorded runtime this month",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "t8i8v",
+                      "name": "Value",
+                      "fill": "$text-primary",
+                      "content": "5 min",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-lg",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "Q8ixKI",
+              "name": "Runtime explanation",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Starting machines and pending shutdowns use capacity. Runtime updates after machines pause or stop; paused time doesn’t count.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "normal"
             }
           ]
         }
@@ -163360,6 +163583,375 @@
                   ]
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "JZiSW",
+      "x": 16004,
+      "y": 2880,
+      "name": "15a · DS — Turn details",
+      "width": 380,
+      "fill": "$bg-elevated",
+      "layout": "vertical",
+      "gap": 16,
+      "padding": 24,
+      "children": [
+        {
+          "type": "text",
+          "id": "FojI3",
+          "name": "Component label",
+          "fill": "$text-muted",
+          "content": "TurnFooter.tsx · Details",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "vSnj0",
+          "name": "DS/TurnDetails",
+          "reusable": true,
+          "width": 320,
+          "fill": "$bg-elevated",
+          "cornerRadius": "$radius-xl",
+          "stroke": "$border-subtle",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 12,
+          "children": [
+            {
+              "type": "text",
+              "id": "S4J7m5",
+              "name": "Title",
+              "fill": "$text-primary",
+              "content": "Turn details",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "500"
+            },
+            {
+              "type": "frame",
+              "id": "IHWTC",
+              "name": "Recorded metadata",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "I0AtCA",
+                  "name": "Harness row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "y6555",
+                      "name": "Harness label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Harness",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pgCy5",
+                      "name": "Harness value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "codex-app-server",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "s6rrrM",
+                  "name": "Selected model row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "P0E6c",
+                      "name": "Selected model label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Selected model",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Y1tzl",
+                      "name": "Selected model value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Selected alias",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "uPSIH",
+                  "name": "Thinking row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "dE6Ri",
+                      "name": "Thinking label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Thinking",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "TkdJs",
+                      "name": "Thinking value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "high",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bqwJh",
+                  "name": "Reported model row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Pj8Yv",
+                      "name": "Reported model label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Reported model",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "O7fbY",
+                      "name": "Reported model value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Reported model ID",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "asgLW",
+                  "name": "AI account row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "aJZCD",
+                      "name": "AI account label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "AI account",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "b6tRRY",
+                      "name": "AI account value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Personal",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "NpXTs",
+                  "name": "Provider row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "DZLlU",
+                      "name": "Provider label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Provider",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "VKt0k",
+                      "name": "Provider value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "codex",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "cqsJG",
+                  "name": "Access row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "laeT3",
+                      "name": "Access label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Access",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "uIQhy",
+                      "name": "Access value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Subscription",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "yJbFI",
+                  "name": "Account ID row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "a06s4Q",
+                      "name": "Account ID label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Account ID",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "EPFZn",
+                      "name": "Account ID value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "91c03e93-3eab-4de3-a2bc-21b4b269ff44",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-2xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QPTtg",
+                  "name": "Revision row",
+                  "width": "fill_container",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "VDBfh",
+                      "name": "Revision label",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 100,
+                      "content": "Revision",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "s0I8p",
+                      "name": "Revision value",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "a382f2ae-1990-4820-8733-63ecdc88b148",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-2xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "STngs",
+              "name": "History note",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Recorded for this turn. Renaming or removing an account does not change this history.",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "normal"
             }
           ]
         }
