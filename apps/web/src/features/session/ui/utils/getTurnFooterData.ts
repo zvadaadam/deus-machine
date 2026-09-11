@@ -1,9 +1,8 @@
-import type { TurnAttribution } from "@shared/conversation-rows";
-import type { Message } from "@/shared/types";
+import type { Message, SessionTurn } from "@/shared/types";
 import type { TokenUsage } from "@shared/protocol-types";
 
 export interface TurnFooterData {
-  attribution?: TurnAttribution;
+  attribution?: Pick<SessionTurn, "execution" | "providerCredentialSource">;
   copyText: string | null;
   durationMs: number | null;
   /** Billed tokens for the turn (turn.ended), when the harness reported them. */
@@ -12,39 +11,28 @@ export interface TurnFooterData {
   cost: number | null;
 }
 
-export function getTurnFooterData(messages: Message[], startedAt?: string | null): TurnFooterData {
-  const accounting = getTurnAccounting(messages);
+export function getTurnFooterData(
+  messages: Message[],
+  startedAt?: string | null,
+  turn?: SessionTurn
+): TurnFooterData {
+  const start = parseTimestamp(startedAt) ?? turn?.startedAt;
   return {
-    attribution: getTurnAttribution(messages),
+    attribution:
+      turn?.execution || turn?.providerCredentialSource
+        ? {
+            execution: turn.execution,
+            providerCredentialSource: turn.providerCredentialSource,
+          }
+        : undefined,
     copyText: getLastTextContent(messages),
-    durationMs: getTurnDurationMs(messages, startedAt),
-    ...accounting,
+    durationMs:
+      start != null && turn?.endedAt != null
+        ? Math.max(0, turn.endedAt - start)
+        : getTurnDurationMs(messages, startedAt),
+    tokens: turn?.tokens ?? null,
+    cost: turn?.cost ?? null,
   };
-}
-
-/**
- * The turn's billing totals, written at turn.ended onto its last top-level
- * assistant message. Before the protocol unification these were computed
- * end-to-end and then dropped on the floor.
- */
-function getTurnAccounting(messages: Message[]): {
-  tokens: TokenUsage | null;
-  cost: number | null;
-} {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    if (message.tokens == null && message.cost == null) continue;
-    let tokens: TokenUsage | null = null;
-    if (message.tokens != null) {
-      try {
-        tokens = JSON.parse(message.tokens) as TokenUsage;
-      } catch {
-        tokens = null;
-      }
-    }
-    return { tokens, cost: message.cost ?? null };
-  }
-  return { tokens: null, cost: null };
 }
 
 function getLastTextContent(messages: Message[]): string | null {
@@ -76,7 +64,7 @@ function getTurnDurationMs(messages: Message[], startedAt?: string | null): numb
   let latestEndMs: number | null = null;
 
   for (const message of messages) {
-    latestEndMs = getLatestTimestamp(latestEndMs, message.sent_at, message.cancelled_at);
+    latestEndMs = getLatestTimestamp(latestEndMs, message.sent_at);
 
     for (const part of message.parts ?? []) {
       if ("raw" in part) continue;
@@ -125,14 +113,4 @@ function parseTimestamp(value?: string | null): number | null {
 
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-function getTurnAttribution(messages: Message[]): TurnAttribution | undefined {
-  const saved = messages.findLast((message) => message.turn_attribution)?.turn_attribution;
-  if (!saved) return undefined;
-  try {
-    return JSON.parse(saved) as TurnAttribution;
-  } catch {
-    return undefined;
-  }
 }

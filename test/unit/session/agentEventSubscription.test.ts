@@ -88,7 +88,13 @@ function flushFrame(): void {
 }
 
 function page(messages: Message[] = []): PaginatedMessages {
-  return { messages, compactions: [], has_older: false, has_newer: false };
+  return {
+    turns: [],
+    messages,
+    compactions: [],
+    has_older: false,
+    has_newer: false,
+  };
 }
 
 function cached(): PaginatedMessages {

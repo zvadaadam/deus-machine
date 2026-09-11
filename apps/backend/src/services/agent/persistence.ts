@@ -29,15 +29,14 @@ import type {
   Part,
   UnknownPart,
 } from "@zvada/agent-server/protocol";
-import { turnOutcomeMessageId } from "@shared/types/session";
+import { getTurn, saveTurn } from "../../db/turns";
 import { isUnknownPart } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
 import {
-  turnOutcomeRow,
   findConversationCompaction,
   findConversationMessage,
-  turnAccountingRow,
+  turnRecord,
 } from "@shared/conversation-rows";
 
 // ============================================================================
@@ -74,8 +73,7 @@ function iso(epochMs: number): string {
  * DELETE + INSERT, which would cascade-delete the message's parts, reassign
  * its `seq` (AFTER INSERT trigger) to the end of the transcript, inflate
  * `message_count` (the AFTER DELETE trigger does not fire under REPLACE) and
- * wipe every column written after the message started — tokens, cost,
- * turn_stop_reason, cancelled_at. Within one process the fold makes a replayed
+ * wipe columns written after the message started. Within one process the fold makes a replayed
  * `message.started` report nothing, so this rarely runs twice — but after a
  * BACKEND RESTART the fold begins empty while SQLite remembers everything, and
  * the first replayed message of a resumed session lands here as a genuine
@@ -221,13 +219,10 @@ export interface TurnOutcomeWrite {
   status: "idle" | "error";
   /** Set when status is "error". */
   error?: { message: string; category: string };
-  /** Stamp cancelled_at on the turn's last assistant message. */
-  cancelled: boolean;
 }
 
-/** Persist the turn's accounting, attribution and status atomically.
- * An empty outcome uses the same marker and values as the frontend cache. */
-export function persistTurnEnded(
+/** Persist a turn and its optional session status atomically, even without messages. */
+export function persistTurn(
   sessionId: string,
   turn: ConversationTurn,
   outcome?: TurnOutcomeWrite,
@@ -236,82 +231,11 @@ export function persistTurnEnded(
   const db = getDatabase();
   try {
     db.transaction(() => {
-      const turnMessages = db
-        .prepare(
-          `SELECT id, turn_attribution FROM messages
-           WHERE session_id = ? AND turn_id = ? AND role = 'assistant' AND parent_tool_call_id IS NULL
-           ORDER BY seq DESC`
-        )
-        .all(sessionId, turn.turnId) as { id: string; turn_attribution: string | null }[];
-      const target =
-        turnMessages.find((message) => message.id !== turnOutcomeMessageId(turn.turnId)) ??
-        turnMessages[0];
-      const previousAttribution = turnMessages.find(
-        (message) => message.turn_attribution
-      )?.turn_attribution;
-
-      if (target) {
-        const accounting = turnAccountingRow(turn, providerCredentialSource, previousAttribution);
-        // Recovery can reveal a later assistant message. Move restated
-        // accounting off the former target; retain metrics the replay omits.
-        db.prepare(
-          `UPDATE messages SET
-             turn_attribution = CASE WHEN ? IS NOT NULL THEN NULL ELSE turn_attribution END,
-             tokens = CASE WHEN ? IS NOT NULL THEN NULL ELSE tokens END,
-             cost = CASE WHEN ? IS NOT NULL THEN NULL ELSE cost END,
-             cancelled_at = CASE WHEN ? IS NOT NULL THEN NULL ELSE cancelled_at END,
-             turn_stop_reason = NULL
-           WHERE session_id = ? AND turn_id = ? AND role = 'assistant'
-             AND parent_tool_call_id IS NULL AND id != ?`
-        ).run(
-          accounting.turn_attribution,
-          accounting.tokens,
-          accounting.cost,
-          accounting.cancelled_at,
-          sessionId,
-          turn.turnId,
-          target.id
-        );
-        db.prepare(
-          `UPDATE messages
-             SET turn_attribution = COALESCE(?, turn_attribution),
-                 tokens = COALESCE(?, tokens),
-                 cost = COALESCE(?, cost),
-                 turn_stop_reason = ?,
-                 cancelled_at = COALESCE(?, cancelled_at)
-           WHERE id = ?`
-        ).run(
-          accounting.turn_attribution,
-          accounting.tokens,
-          accounting.cost,
-          accounting.turn_stop_reason,
-          accounting.cancelled_at,
-          target.id
-        );
-      } else {
-        const marker = turnOutcomeRow(sessionId, turn, providerCredentialSource);
-        db.prepare(
-          `INSERT INTO messages (id, session_id, role, turn_id, sent_at, cancelled_at, turn_stop_reason, tokens, cost, turn_attribution)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             cancelled_at = excluded.cancelled_at,
-             turn_stop_reason = excluded.turn_stop_reason,
-             tokens = COALESCE(excluded.tokens, messages.tokens),
-             cost = COALESCE(excluded.cost, messages.cost),
-             turn_attribution = COALESCE(excluded.turn_attribution, messages.turn_attribution)`
-        ).run(
-          marker.id,
-          marker.session_id,
-          marker.role,
-          marker.turn_id,
-          marker.sent_at,
-          marker.cancelled_at,
-          marker.turn_stop_reason,
-          marker.tokens,
-          marker.cost,
-          marker.turn_attribution
-        );
-      }
+      saveTurn(
+        db,
+        sessionId,
+        turnRecord(turn, providerCredentialSource, getTurn(db, sessionId, turn.turnId))
+      );
 
       // Snapshot hydration restores accounting without changing a live turn's
       // status. Only live dispatch supplies a session outcome.
@@ -337,7 +261,7 @@ export function persistTurnEnded(
     })();
     return { ok: true, value: undefined };
   } catch (error) {
-    return failed("turn.ended", error);
+    return failed("turn", error);
   }
 }
 
@@ -620,12 +544,15 @@ export function persistChanges(
       }
       case "turn-updated": {
         const turn = state.turns.find((t) => t.turnId === change.turnId);
-        // `turn-updated` also reports a turn OPENING and a non-terminal error
-        // attributed to one — neither leaves accounting behind.
-        if (!turn || turn.status !== "ended") break;
+        if (!turn) break;
         writes.push({
           change,
-          result: persistTurnEnded(sessionId, turn, outcomeFor(turn), providerCredentialSource),
+          result: persistTurn(
+            sessionId,
+            turn,
+            turn.status === "ended" ? outcomeFor(turn) : undefined,
+            providerCredentialSource
+          ),
         });
         break;
       }

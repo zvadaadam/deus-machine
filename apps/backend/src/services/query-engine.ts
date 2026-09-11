@@ -25,6 +25,7 @@ import {
   getAllRepositorySummaries,
   attachParts,
   getCompactions,
+  getTurnsForMessages,
 } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getConnection } from "./ws.service";
@@ -462,6 +463,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
           // Compactions are positional siblings of messages, not parts — the
           // transcript needs the divider IN the order after a reload.
           compactions: getCompactions(db, sessionId),
+          turns: getTurnsForMessages(db, sessionId, rows),
           has_older: hasOlder,
           has_newer: false,
         };

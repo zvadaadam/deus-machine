@@ -145,8 +145,7 @@ export function useMessages(sessionId: string | null) {
   // disconnected. The delta-only subscription resets its cursor to MAX(seq) on
   // re-subscribe and only ever carries INSERTs, so two durable changes written
   // during downtime are otherwise skipped for good: a turn.ended's accounting
-  // (tokens, cost, turn_stop_reason, cancelled_at — an UPDATE, which does not
-  // move `seq`) and compaction rows (a different table entirely, delivered
+  // and compaction rows (separate tables, delivered
   // only by the full page).
   //
   // `reconnectListener` is seeded with the socket's state AT SUBSCRIBE, which
@@ -183,12 +182,14 @@ export function useSessionWithMessages(sessionId: string | null) {
 
   const messages = messagesQuery.data?.messages ?? [];
   const compactions = messagesQuery.data?.compactions;
+  const turns = messagesQuery.data?.turns;
   const hasOlder = messagesQuery.data?.has_older ?? false;
 
   return {
     session: sessionQuery.data,
     messages,
     compactions,
+    turns,
     hasOlder,
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
@@ -217,6 +218,11 @@ export function useLoadOlderMessages() {
           // The older page carries the session's full compaction list
           // (single digits, never paginated), so it is simply the fresher one.
           compactions: olderPage.compactions,
+          turns: [
+            ...new Map(
+              [...olderPage.turns, ...old.turns].map((turn) => [turn.turnId, turn])
+            ).values(),
+          ],
           has_older: olderPage.has_older,
           has_newer: old.has_newer,
         };
@@ -346,6 +352,7 @@ export function useSendMessage() {
           return {
             messages: [optimisticMessage],
             compactions: [],
+            turns: [],
             has_older: false,
             has_newer: false,
           };

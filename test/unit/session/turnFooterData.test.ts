@@ -8,11 +8,8 @@ function createMessage(overrides: Partial<Message> = {}): Message {
     session_id: "session-1",
     seq: overrides.seq ?? 1,
     role: overrides.role ?? "assistant",
-    content: overrides.content ?? "",
     parts: overrides.parts,
     sent_at: overrides.sent_at ?? null,
-    cancelled_at: overrides.cancelled_at ?? null,
-    turn_stop_reason: overrides.turn_stop_reason ?? null,
     ...overrides,
   };
 }
@@ -20,9 +17,7 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 describe("getTurnFooterData", () => {
   it("shows recorded execution for an empty turn without inventing an account or default model", () => {
     const attribution = { execution: { harness: "codex-app-server" } };
-    const result = getTurnFooterData([
-      createMessage({ parts: [], turn_attribution: JSON.stringify(attribution) }),
-    ]);
+    const result = getTurnFooterData([], undefined, { turnId: "turn", ...attribution });
     expect(result.attribution).toEqual(attribution);
     expect(result.attribution?.providerCredentialSource).toBeUndefined();
     expect(result.attribution?.execution?.model).toBeUndefined();
@@ -103,7 +98,7 @@ describe("getTurnFooterData", () => {
     });
   });
 
-  it("uses cancelled_at for interrupted turns and omits invalid durations", () => {
+  it("uses the turn end time for interrupted turns and omits invalid durations", () => {
     const messages: Message[] = [
       createMessage({
         id: "message-4",
@@ -117,17 +112,17 @@ describe("getTurnFooterData", () => {
             state: "done",
           },
         ],
-        cancelled_at: "2026-04-13T10:00:08.000Z",
       }),
     ];
 
-    expect(getTurnFooterData(messages, "not-a-date")).toEqual({
+    const turn = { turnId: "turn", endedAt: Date.parse("2026-04-13T10:00:08.000Z") };
+    expect(getTurnFooterData(messages, "not-a-date", turn)).toEqual({
       copyText: "Partial response",
       durationMs: null,
       tokens: null,
       cost: null,
     });
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
+    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", turn)).toEqual({
       copyText: "Partial response",
       durationMs: 8000,
       tokens: null,
@@ -135,9 +130,7 @@ describe("getTurnFooterData", () => {
     });
   });
 
-  it("reads the turn's billing totals off the last assistant message", () => {
-    // turn.ended writes tokens/cost onto the turn's last top-level assistant
-    // message — before the protocol unification they were dropped entirely.
+  it("reads billing totals from the turn independently of its messages", () => {
     const messages: Message[] = [
       createMessage({ id: "message-1", sent_at: "2026-04-13T10:00:01.000Z" }),
       createMessage({
@@ -153,21 +146,29 @@ describe("getTurnFooterData", () => {
             state: "done",
           },
         ],
-        tokens: JSON.stringify({ input: 100, output: 20, cache: { read: 5, write: 1 } }),
-        cost: 0.0123,
       }),
     ];
 
-    expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toMatchObject({
+    expect(
+      getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", {
+        turnId: "turn",
+        tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
+        cost: 0.0123,
+      })
+    ).toMatchObject({
       copyText: "Done.",
       tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
       cost: 0.0123,
     });
   });
 
-  it("survives a malformed tokens column instead of throwing", () => {
-    const messages: Message[] = [createMessage({ id: "message-1", tokens: "not json", cost: 0.5 })];
-
-    expect(getTurnFooterData(messages)).toMatchObject({ tokens: null, cost: 0.5 });
+  it("distinguishes unknown usage from a reported zero", () => {
+    expect(getTurnFooterData([], undefined, { turnId: "unknown" })).toMatchObject({
+      tokens: null,
+      cost: null,
+    });
+    expect(
+      getTurnFooterData([], undefined, { turnId: "zero", tokens: { input: 0, output: 0 }, cost: 0 })
+    ).toMatchObject({ tokens: { input: 0, output: 0 }, cost: 0 });
   });
 });

@@ -31,9 +31,8 @@ import { turnProviderCredentialSource } from "@shared/conversation-rows";
  *                resolves.
  *   background — any other session that already has a cached page. Only the
  *                DURABLE events: the `messages` subscription is delta-only with
- *                its cursor jumped to MAX(seq), so an UPDATE-shaped change
- *                (tokens, cost, turn_stop_reason, cancelled_at) has no other
- *                way in. Deltas are skipped — nobody is looking, and the next
+ *                its cursor jumped to MAX(seq), so turn records and part
+ *                updates have no other way in. Deltas are skipped — nobody is looking, and the next
  *                snapshot restates them.
  */
 
@@ -47,17 +46,14 @@ import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import { createSeqCursor, type SeqCursor } from "@zvada/agent-server/protocol/seq-cursor";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { turnOutcomeMessageId, type Message } from "@shared/types/session";
+import type { Message } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
 import type { SessionStatus } from "@shared/enums";
 import {
-  turnOutcomeRow,
   compactionRow,
   findConversationCompaction,
   findConversationMessage,
-  supersededOutcomeMarkers,
-  turnAccountingRow,
-  transcriptOrderRanks,
+  turnRecord,
 } from "@shared/conversation-rows";
 import {
   isUnknownEvent,
@@ -166,7 +162,7 @@ export function hydrateConversation(
   void ctx.queryClient.cancelQueries({ queryKey: messagesKey(sessionId), exact: true });
   ctx.queryClient.setQueryData<PaginatedMessages>(
     messagesKey(sessionId),
-    (old) => old ?? { messages: [], compactions: [], has_older: false, has_newer: false }
+    (old) => old ?? { messages: [], turns: [], compactions: [], has_older: false, has_newer: false }
   );
   for (const entry of conversation.timeline) {
     if (entry.kind === "message") {
@@ -175,10 +171,9 @@ export function hydrateConversation(
       writeCompaction(ctx.queryClient, sessionId, conversation, entry.compactionId);
     }
   }
-  // Ordering must precede accounting, which targets each turn's last message.
   commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
   for (const turn of conversation.turns) {
-    writeTurnAccounting(
+    writeTurn(
       ctx.queryClient,
       sessionId,
       conversation,
@@ -186,15 +181,6 @@ export function hydrateConversation(
       snapshot.providerCredentialSources?.[turn.turnId]
     );
   }
-  const markers = supersededOutcomeMarkers(conversation);
-  if (markers.size) {
-    ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
-      old ? { ...old, messages: old.messages.filter((message) => !markers.has(message.id)) } : old
-    );
-  }
-  // Accounting may have inserted outcome markers. Restate their position
-  // and SQLite's seq while leaving a new local prompt after the saved rows.
-  commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
 }
 
 /** Fold one envelope. The single entry point the hook calls per WS frame. */
@@ -298,7 +284,15 @@ function applyEvent(
   }
   const { state, changes } = reduceConversationWithChanges(fold.state, event);
   fold.state = state;
-  if (changes.length === 0) return;
+  const source = turnProviderCredentialSource(event);
+  // The engine deduplicates terminal events, but AGNT may restate a redacted
+  // account snapshot. That metadata is owned here and must still be replaced.
+  if (changes.length === 0) {
+    if (source && !isUnknownEvent(event) && event.type === "turn.ended") {
+      writeTurn(ctx.queryClient, sessionId, state, event.turnId, source);
+    }
+    return;
+  }
 
   // A delta's part write is the hot path: batched to one cache write per frame
   // for the mounted session, and skipped entirely for every other one.
@@ -311,7 +305,7 @@ function applyEvent(
     return;
   }
 
-  applyChanges(ctx, sessionId, fold, changes, live, turnProviderCredentialSource(event));
+  applyChanges(ctx, sessionId, fold, changes, live, source);
 }
 
 /** Project one event's changes onto the cached page. */
@@ -339,13 +333,7 @@ function applyChanges(
         fold.dirtyMessages.delete(change.messageId);
         break;
       case "turn-updated":
-        writeTurnAccounting(
-          ctx.queryClient,
-          sessionId,
-          fold.state,
-          change.turnId,
-          providerCredentialSource
-        );
+        writeTurn(ctx.queryClient, sessionId, fold.state, change.turnId, providerCredentialSource);
         break;
       case "compaction-upserted":
         // Compactions live in a table of their own beside the message page.
@@ -444,7 +432,7 @@ function toMessageRow(sessionId: string, message: ConversationMessage): Message 
  * prompt renders twice or loses its attachments in the swap.
  *
  * Columns SQLite owns and the stream knows nothing about survive the write:
- * `seq`, and the turn accounting stamped at `turn.ended`.
+ * `seq`.
  */
 function writeMessage(
   qc: QueryClient,
@@ -460,7 +448,7 @@ function writeMessage(
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) {
       return opts.seed
-        ? { messages: [row], compactions: [], has_older: false, has_newer: false }
+        ? { messages: [row], turns: [], compactions: [], has_older: false, has_newer: false }
         : old;
     }
     const index = old.messages.findIndex((m) => m.id === row.id);
@@ -490,9 +478,8 @@ function writeMessage(
 
 // ---- Turn accounting ----
 
-/** Mirror the shared outcome row immediately, using SQLite's merge semantics.
- * Missing accounting preserves cached values; the terminal stop reason replaces it. */
-function writeTurnAccounting(
+/** Store one turn without modifying any message or its transcript position. */
+function writeTurn(
   qc: QueryClient,
   sessionId: string,
   state: ConversationState,
@@ -500,58 +487,21 @@ function writeTurnAccounting(
   providerCredentialSource?: TurnProviderCredentialSource
 ): void {
   const turn = state.turns.find((t) => t.turnId === turnId);
-  // `turn-updated` also reports a turn OPENING, and a non-terminal error
-  // attributed to a turn — neither has accounting to mirror yet.
-  if (!turn || turn.status !== "ended") return;
-
+  if (!turn) return;
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
-    if (!old) return old;
-    const previousAttribution = old.messages.findLast(
-      (message) => message.turn_id === turnId && message.turn_attribution
-    )?.turn_attribution;
-    const accounting = turnAccountingRow(turn, providerCredentialSource, previousAttribution);
-    let index = old.messages.findLastIndex(
-      (m) =>
-        m.turn_id === turnId &&
-        m.role === "assistant" &&
-        !m.parent_tool_call_id &&
-        m.id !== turnOutcomeMessageId(turnId)
-    );
-    if (index === -1) index = old.messages.findIndex((m) => m.id === turnOutcomeMessageId(turnId));
-    if (index === -1) {
-      return {
-        ...old,
-        messages: [...old.messages, turnOutcomeRow(sessionId, turn, providerCredentialSource)],
-      };
-    }
-
-    const messages = old.messages.map((message, i) =>
-      i !== index &&
-      message.turn_id === turnId &&
-      message.role === "assistant" &&
-      !message.parent_tool_call_id
-        ? {
-            ...message,
-            turn_stop_reason: null,
-            ...(accounting.turn_attribution !== null && { turn_attribution: null }),
-            ...(accounting.tokens !== null && message.tokens != null && { tokens: null }),
-            ...(accounting.cost !== null && message.cost != null && { cost: null }),
-            ...(accounting.cancelled_at !== null &&
-              message.cancelled_at != null && { cancelled_at: null }),
-          }
-        : message
-    );
-    messages[index] = {
-      ...messages[index],
-      turn_stop_reason: accounting.turn_stop_reason,
-      ...(accounting.turn_attribution !== null && {
-        turn_attribution: accounting.turn_attribution,
-      }),
-      ...(accounting.tokens !== null && { tokens: accounting.tokens }),
-      ...(accounting.cost !== null && { cost: accounting.cost }),
-      ...(accounting.cancelled_at !== null && { cancelled_at: accounting.cancelled_at }),
+    const page = old ?? {
+      messages: [],
+      turns: [],
+      compactions: [],
+      has_older: false,
+      has_newer: false,
     };
-    return { ...old, messages };
+    const index = page.turns.findIndex((t) => t.turnId === turnId);
+    const record = turnRecord(turn, providerCredentialSource, page.turns[index]);
+    const turns = [...page.turns];
+    if (index === -1) turns.push(record);
+    else turns[index] = record;
+    return { ...page, turns };
   });
 }
 
@@ -560,7 +510,7 @@ function writeTurnAccounting(
 /**
  * Mirror the folded compaction entity into the cache's `compactions` list — the
  * table-of-its-own the "context compacted" divider reads from. This is the
- * compaction twin of `writeTurnAccounting`: it applies the SAME upsert
+ * compaction twin of `writeTurn`: it applies the SAME upsert
  * `persistCompaction`'s SQL applies, so the row the direct lane writes and the
  * row the backend writes converge field-for-field.
  *
@@ -585,7 +535,7 @@ function writeCompaction(
       // Only reachable live before the page has loaded (a background session
       // with no cached page never gets here — see routeEnvelope's guard). The
       // real page, once it resolves, supersedes this seed.
-      return { messages: [], compactions: [row], has_older: false, has_newer: false };
+      return { messages: [], turns: [], compactions: [row], has_older: false, has_newer: false };
     }
     const index = old.compactions.findIndex((c) => c.compaction_id === row.compaction_id);
     if (index === -1) return { ...old, compactions: [...old.compactions, row] };
@@ -651,7 +601,7 @@ export function patchWorkspaceSessionStatus(
 // ---- Transcript order (snapshot backfill) ----
 
 /**
- * Reorder saved rows and their generated outcomes; unknown local rows trail
+ * Reorder saved message rows; unknown local rows trail
  * in place. Used once, after a snapshot backfill:
  * `writeMessage` APPENDS a row it hasn't seen, so an optimistic prompt sent
  * before the snapshot lands ends up ahead of the reconstructed history — this
@@ -659,7 +609,7 @@ export function patchWorkspaceSessionStatus(
  * `has_older: false`.
  *
  * Lives here with the other `messages`-cache writers (writeMessage,
- * writeTurnAccounting, writeCompaction) so this key has exactly one writer
+ * writeTurn, writeCompaction) so this key has exactly one writer
  * module — the direct-lane handler calls it, but doesn't reach into the cache.
  */
 export function commitTranscriptOrder(
@@ -669,7 +619,7 @@ export function commitTranscriptOrder(
 ): void {
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) return old;
-    const rank = transcriptOrderRanks(old.messages, orderedIds);
+    const rank = new Map(orderedIds.map((id, index) => [id, index]));
     const known = old.messages
       .filter((m) => rank.has(m.id))
       .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)

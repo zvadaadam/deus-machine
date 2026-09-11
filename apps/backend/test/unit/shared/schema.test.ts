@@ -30,8 +30,8 @@ describe("shared/schema pre-launch policy", () => {
     expect(PRELAUNCH_REQUIRED_COLUMNS.sessions).toContain("error_category");
     expect(PRELAUNCH_REQUIRED_COLUMNS.workspaces).toContain("status");
     expect(PRELAUNCH_REQUIRED_COLUMNS.messages).toContain("parent_tool_call_id");
-    expect(PRELAUNCH_REQUIRED_COLUMNS.messages).toContain("tokens");
-    expect(PRELAUNCH_REQUIRED_COLUMNS.messages).toContain("cost");
+    expect(PRELAUNCH_REQUIRED_COLUMNS.turns).toContain("tokens");
+    expect(PRELAUNCH_REQUIRED_COLUMNS.turns).toContain("cost");
     expect(PRELAUNCH_REQUIRED_COLUMNS.parts).toContain("parent_tool_call_id");
     expect(PRELAUNCH_REQUIRED_COLUMNS.compactions).toContain("compaction_id");
   });

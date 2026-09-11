@@ -142,10 +142,7 @@ function parseArgs() {
 interface MessageRow {
   id: string;
   role: string;
-  turn_stop_reason: string | null;
   seq: number;
-  cancelled_at: string | null;
-  tokens: string | null;
 }
 
 interface PartRow {
@@ -162,21 +159,33 @@ function dumpSession(sessionId: string): number {
   console.log(`\n  ${c.bold}Messages${c.reset}`);
   const messages = db
     .prepare(
-      `SELECT id, role, turn_stop_reason, seq, cancelled_at, tokens
+      `SELECT id, role, seq
          FROM messages WHERE session_id = ? ORDER BY seq`
     )
     .all(sessionId) as MessageRow[];
   if (messages.length) {
     for (const row of messages) {
-      const stop = row.turn_stop_reason ? ` ${c.yellow}stop=${row.turn_stop_reason}${c.reset}` : "";
-      const cancelled = row.cancelled_at ? ` ${c.red}cancelled${c.reset}` : "";
-      const tokens = row.tokens ? ` ${c.dim}tokens=${row.tokens}${c.reset}` : "";
-      console.log(
-        `  ${c.cyan}${row.role}${c.reset} seq=${row.seq}${stop}${cancelled}${tokens} ${c.dim}${row.id}${c.reset}`
-      );
+      console.log(`  ${c.cyan}${row.role}${c.reset} seq=${row.seq} ${c.dim}${row.id}${c.reset}`);
     }
   } else {
     console.log(`  ${c.red}No messages${c.reset}`);
+  }
+
+  console.log(`\n  ${c.bold}Turns${c.reset}`);
+  const turns = db
+    .prepare(
+      "SELECT turn_id, outcome, tokens, cost FROM turns WHERE session_id = ? ORDER BY started_at, turn_id"
+    )
+    .all(sessionId) as Array<{
+    turn_id: string;
+    outcome: string | null;
+    tokens: string | null;
+    cost: number | null;
+  }>;
+  for (const turn of turns) {
+    console.log(
+      `  ${turn.turn_id} ${turn.outcome ?? "active"} tokens=${turn.tokens ?? "unknown"} cost=${turn.cost ?? "unknown"}`
+    );
   }
 
   console.log(`\n  ${c.bold}Parts${c.reset}`);

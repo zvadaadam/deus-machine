@@ -22,7 +22,7 @@ import {
 import type { ConversationState } from "@shared/protocol-types";
 import { cn } from "@/shared/lib/utils";
 import { conversationView } from "./conversationView";
-import type { Compaction, Message, MessageRole } from "../types";
+import type { Compaction, Message, MessageRole, SessionTurn } from "../types";
 import type { CloudEnvEntry } from "../store/cloudEnvStore";
 
 export type UserTurn = {
@@ -33,6 +33,8 @@ export type UserTurn = {
 
 export type AssistantTurnData = {
   type: "assistant";
+  turnId: string;
+  record?: SessionTurn;
   messages: Message[];
   firstMessageIndex: number;
   isLatest: boolean;
@@ -82,14 +84,13 @@ export function buildChatTimeline(
   messages: Message[],
   compactions: readonly Compaction[],
   working: boolean,
-  envEntries: readonly CloudEnvEntry[] = []
+  envEntries: readonly CloudEnvEntry[] = [],
+  records: readonly SessionTurn[] = []
 ): ChatTimeline {
   const rendered = renderableMessages(messages);
   const conversation = conversationView(rendered, working);
-  const items = insertCloudEnv(
-    insertCompactions(groupTurns(conversation, rendered), compactions),
-    envEntries
-  );
+  const grouped = groupTurns(conversation, rendered, records);
+  const items = insertCloudEnv(insertCompactions(grouped, compactions), envEntries);
 
   return {
     items,
@@ -97,7 +98,7 @@ export function buildChatTimeline(
       turnSpacingClasses(item, items[i - 1] ?? null, items[i + 1] ?? null, i === 0)
     ),
     activity: agentActivity(conversation),
-    lastRole: rendered.length ? rendered[rendered.length - 1].role : null,
+    lastRole: grouped.at(-1)?.type ?? null,
   };
 }
 
@@ -109,16 +110,7 @@ function renderableMessages(messages: Message[]): Message[] {
     if (message.role === "user") return true;
     // Assistant messages with parts render.
     if (message.parts && message.parts.length > 0) return true;
-    // Keep cancelled messages for the "Response stopped" badge.
-    if (message.cancelled_at || message.turn_attribution) return true;
-    // Keep a row whose TURN ended with something to say. A model can open an
-    // assistant message and end on `refusal` / `max_tokens` /
-    // `max_turn_requests` without emitting a single part: that row is the only
-    // record of the outcome, so dropping it renders a refusal as a prompt
-    // followed by a silently idle session.
-    if (turnStopNotice(message.turn_stop_reason)) return true;
-    // Skip empty ones: `message.started` arrived but no parts yet — the row
-    // appears as soon as one does.
+    // Empty shells carry no content. Turn records render their own outcomes.
     return false;
   });
 }
@@ -127,12 +119,8 @@ function renderableMessages(messages: Message[]): Message[] {
  * The one line a terminal stop reason owes the reader, or null when the turn
  * ended the ordinary way (`end_turn`) and needs no explanation.
  *
- * This is the SAME predicate the filter above uses to keep an empty row and
- * `AssistantTurn` uses to render the notice on it — one rule, so a reason can
- * never be retained with nothing to show, or shown on a row that was dropped.
- *
  * `cancelled` is deliberately absent: it has its own "Response stopped" badge,
- * anchored on `cancelled_at`. A failure notice remains in history after the
+ * read from the turn outcome. A failure notice remains in history after the
  * session moves on to a new turn. Stop reasons are an OPEN
  * vocabulary (protocol §3), so an unrecognized one falls through to null
  * rather than inventing copy for an outcome this build cannot interpret.
@@ -161,7 +149,12 @@ export function turnStopNotice(reason: string | null | undefined): string | null
  * The groups come back in order, so each is a contiguous SLICE of `rendered`
  * and the rows themselves never round-trip through the projection.
  */
-function groupTurns(conversation: ConversationState, rendered: Message[]): Turn[] {
+function groupTurns(
+  conversation: ConversationState,
+  rendered: Message[],
+  records: readonly SessionTurn[]
+): Turn[] {
+  const byId = new Map(records.map((record) => [record.turnId, record]));
   const turns: Turn[] = [];
   let index = 0;
   let latestUserSentAt: string | null = null;
@@ -183,6 +176,8 @@ function groupTurns(conversation: ConversationState, rendered: Message[]): Turn[
 
     turns.push({
       type: "assistant",
+      turnId: group.turnId,
+      record: byId.get(group.turnId),
       messages: slice,
       firstMessageIndex: start,
       isLatest: group.isLatest,
@@ -191,6 +186,40 @@ function groupTurns(conversation: ConversationState, rendered: Message[]): Turn[
     });
   }
 
+  // A completed turn can have no assistant content. It still has one stable
+  // UI item; late messages fill that item instead of replacing a fake row.
+  const answered = new Set(
+    turns.flatMap((item) => (item.type === "assistant" ? [item.turnId] : []))
+  );
+  for (const record of records) {
+    if (answered.has(record.turnId) || (record.endedAt === undefined && !record.stopReason))
+      continue;
+    let anchor = turns.findLastIndex(
+      (item) => item.type === "user" && item.message.turn_id === record.turnId
+    );
+    const user = turns[anchor];
+    if (anchor === -1) {
+      const at = record.startedAt ?? record.endedAt;
+      if (at !== undefined) anchor = turns.findLastIndex((item) => itemEndTime(item) <= at);
+    }
+    turns.splice(anchor + 1, 0, {
+      type: "assistant",
+      turnId: record.turnId,
+      record,
+      messages: [],
+      firstMessageIndex: -1,
+      isLatest: false,
+      startedAt:
+        user?.type === "user"
+          ? (user.message.sent_at ?? null)
+          : record.startedAt !== undefined
+            ? new Date(record.startedAt).toISOString()
+            : null,
+    });
+  }
+  turns.forEach((turn, index) => {
+    if (turn.type === "assistant") turn.isLatest = index === turns.length - 1;
+  });
   return turns;
 }
 
@@ -275,6 +304,7 @@ export function insertCompactions(
   const anchorByTurnId = new Map<string, number>();
   const turnEndedAt: number[] = [];
   turns.forEach((turn, index) => {
+    if (turn.type === "assistant") anchorByTurnId.set(turn.turnId, index);
     for (const message of turn.type === "user" ? [turn.message] : turn.messages) {
       if (message.turn_id) anchorByTurnId.set(message.turn_id, index);
     }
@@ -355,7 +385,7 @@ export function insertCloudEnv(
  *  time-anchoring passes skip NaN slots. */
 function itemEndTime(item: ChatTimelineItem): number {
   if (item.type === "compaction" || item.type === "cloudEnv") return Number.NaN;
-  let endedAt = Number.NaN;
+  let endedAt = item.type === "assistant" ? (item.record?.endedAt ?? Number.NaN) : Number.NaN;
   for (const message of item.type === "user" ? [item.message] : item.messages) {
     const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;
     if (Number.isFinite(sentAt))

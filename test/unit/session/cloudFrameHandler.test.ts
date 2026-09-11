@@ -33,6 +33,7 @@ function makeCtx(qc: QueryClient, sessionId: string): AgentStreamContext {
  *  hook seeds this before the socket opens). */
 function seedEmptyPage(qc: QueryClient, sessionId: string) {
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
+    turns: [],
     messages: [],
     compactions: [],
     has_older: false,
@@ -87,20 +88,55 @@ describe("makeCloudFrameHandler", () => {
     const page = () => qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
     expect(page().messages.map((row) => row.id)).toEqual([
       "first-prompt",
-      "cancelled-first",
       "later-prompt",
       "later-answer",
     ]);
-    expect(JSON.parse(page().messages[1].turn_attribution!)).toEqual({
+    expect(page().turns.find((turn) => turn.turnId === "first")).toMatchObject({
       execution: frame.state.turns[0].execution,
+      stopReason: "error",
     });
     onFrame(frame);
     expect(page().messages.map((row) => row.id)).toEqual([
       "first-prompt",
-      "cancelled-first",
       "later-prompt",
       "later-answer",
     ]);
+  });
+
+  it("applies account redaction even when the snapshot repeats a known terminal", () => {
+    const sessionId = "redaction";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, sessionId);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, sessionId), sessionId);
+    const source = { provider: "codex", source: "personal_account", authMethod: "subscription" };
+    const frame = (account?: { id: string; revision: string; label: string }) => ({
+      type: "session.snapshot",
+      messages: [],
+      state: {
+        sessionId,
+        organizationId: "org",
+        workspaceId: "ws",
+        status: "ready",
+        turns: [
+          {
+            turnId: "t1",
+            stopReason: "end_turn",
+            endedAt: T,
+            cost: 0.5,
+            providerCredentialSource: { ...source, ...(account && { account }) },
+          },
+        ],
+      },
+    });
+    const account = { id: "private", revision: "one", label: "owner@example.test" };
+    onFrame(frame(account));
+    const turns = () => qc.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.turns;
+    expect(turns()[0].providerCredentialSource).toHaveProperty("account", account);
+    onFrame(frame());
+    expect(turns()).toHaveLength(1);
+    expect(turns()[0].providerCredentialSource).toEqual(source);
+    expect(turns()[0].cost).toBe(0.5);
+    qc.clear();
   });
 
   it("folds a live streamed turn into queryKeys.sessions.messages(sessionId)", () => {
@@ -350,6 +386,7 @@ describe("makeCloudFrameHandler", () => {
     const SESSION = "sess-order";
     const qc = new QueryClient();
     qc.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
+      turns: [],
       messages: [
         {
           id: "optimistic-1",

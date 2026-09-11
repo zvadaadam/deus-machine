@@ -53,24 +53,20 @@ export interface SessionFactWrite {
 
 /** The terminal state an ended turn leaves the session in. */
 function turnOutcome(turn: ConversationTurn, alreadyReported: boolean): TurnOutcomeWrite {
-  if (turn.stopReason === "cancelled") {
-    return { status: "idle", cancelled: true };
-  }
   if (turn.stopReason === "error") {
     // A standalone `error` event already wrote the status + message; the
     // terminal event must not overwrite it with a vaguer one.
-    if (alreadyReported) return { status: "error", cancelled: false };
+    if (alreadyReported) return { status: "error" };
     const message = turn.error?.message ?? "Agent turn failed";
     return {
       status: "error",
-      cancelled: false,
       error: { message, category: turn.error?.category ?? classifyError(new Error(message)) },
     };
   }
   // end_turn, max_tokens, refusal, max_turn_requests and any adapter
   // extension: the turn is over and the session is idle. The outcome itself
-  // survives in messages.turn_stop_reason for the UI to explain.
-  return { status: "idle", cancelled: false };
+  // survives in the turn outcome for the UI to explain.
+  return { status: "idle" };
 }
 
 /**
@@ -90,7 +86,6 @@ export function turnOutcomeFor(
   const outcome: TurnOutcomeWrite = failure
     ? {
         status: "error",
-        cancelled: false,
         error: { category: "network", message: failure.message },
       }
     : turnOutcome(turn, facts.errorReported);

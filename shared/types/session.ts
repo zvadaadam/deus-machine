@@ -6,7 +6,8 @@
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
 // imported here for local use and re-exported for backwards compat.
 import type { MessageRole, SessionStatus } from "../enums";
-import type { Part, UnknownPart } from "../protocol-types";
+import type { ConversationTurn, Part, UnknownPart } from "../protocol-types";
+import type { TurnProviderCredentialSource } from "@deus-hq/api";
 export type { MessageRole, SessionStatus };
 
 /**
@@ -21,27 +22,19 @@ export interface Message {
   role: MessageRole;
   turn_id?: string | null; // The turn this message belongs to (engine turnId)
   sent_at?: string | null; // ISO timestamp of the engine's message.started
-  cancelled_at?: string | null; // ISO timestamp when the turn was cancelled
   model?: string | null; // Model that produced the message
   /** Set when this message is a subagent's output: the toolCallId that spawned it. */
   parent_tool_call_id?: string | null;
-  /** Turn accounting, written at turn.ended onto the turn's last top-level
-   *  assistant message. `tokens` is the JSON-encoded engine TokenUsage. */
-  tokens?: string | null;
-  cost?: number | null;
-  /** The TURN's terminal stopReason (end_turn, refusal, max_turn_requests, …). */
-  turn_stop_reason?: string | null;
-  /** JSON-encoded per-turn execution and non-secret credential provenance. */
-  turn_attribution?: string | null;
   /** Engine Part snapshots in stream order (attached by the backend). */
   parts?: Array<Part | UnknownPart>;
 }
 
-/** Stable outcome-marker ID shared by SQLite and the live cache.
- * Keep its original spelling so existing interrupted turns still deduplicate. */
-export function turnOutcomeMessageId(turnId: string): string {
-  return `cancelled-${turnId}`;
-}
+/** A turn owns its outcome and accounting, independently of its messages.
+ * Older history can lack a recorded start time. */
+export type SessionTurn = Omit<ConversationTurn, "status" | "errors" | "startedAt"> & {
+  startedAt?: number;
+  providerCredentialSource?: TurnProviderCredentialSource;
+};
 
 /** One row of the `compactions` table (the engine's session.compaction entity). */
 export interface Compaction {

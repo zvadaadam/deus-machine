@@ -22,6 +22,7 @@ try {
 const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 import { SCHEMA_SQL } from "@shared/schema";
+import { getTurn } from "../../../src/db/turns";
 
 const { mockGetDatabase, mockInvalidate, mockBroadcast, mockRefreshPr } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
@@ -67,11 +68,7 @@ interface MessageRowShape {
   role: string;
   turn_id: string | null;
   seq: number;
-  cancelled_at: string | null;
   parent_tool_call_id: string | null;
-  tokens: string | null;
-  cost: number | null;
-  turn_stop_reason: string | null;
 }
 
 interface PartRowShape {
@@ -218,10 +215,11 @@ describeWithDb("engine turn → handler → SQLite", () => {
       ["a1", "text"],
     ]);
 
-    // Turn accounting lands on the last top-level assistant message.
-    expect(JSON.parse(rows[1].tokens as string)).toEqual({ input: 12, output: 3 });
-    expect(rows[1].cost).toBe(0.0004);
-    expect(rows[1].turn_stop_reason).toBe("end_turn");
+    expect(getTurn(db, SESSION, TURN)).toMatchObject({
+      tokens: { input: 12, output: 3 },
+      cost: 0.0004,
+      stopReason: "end_turn",
+    });
 
     expect(sessionRow()).toMatchObject({ status: "idle", agent_session_id: "native-1" });
   });
@@ -452,8 +450,7 @@ describeWithDb("engine turn → handler → SQLite", () => {
 
     const rows = messages();
     expect(rows).toHaveLength(2);
-    expect(rows[1].cancelled_at).toBe(new Date(T + 2).toISOString());
-    expect(rows[1].turn_stop_reason).toBe("cancelled");
+    expect(getTurn(db, SESSION, TURN)).toMatchObject({ endedAt: T + 2, stopReason: "cancelled" });
     expect(sessionRow().status).toBe("idle");
   });
 

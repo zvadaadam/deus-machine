@@ -8,11 +8,8 @@ function createMessage(overrides: Partial<Message> = {}): Message {
     session_id: "session-1",
     seq: overrides.seq ?? 1,
     role: overrides.role ?? "assistant",
-    content: overrides.content ?? "",
     parts: overrides.parts,
     sent_at: overrides.sent_at ?? null,
-    cancelled_at: overrides.cancelled_at ?? null,
-    turn_stop_reason: overrides.turn_stop_reason ?? null,
     ...overrides,
   };
 }

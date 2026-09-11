@@ -11,6 +11,7 @@ import {
   SCHEMA_SQL,
 } from "@shared/schema";
 import { openSqliteDatabase } from "./sqlite";
+import { migrateMessageTurns } from "../db/migrate-turns";
 
 const DEFAULT_DB_PATH = resolveDefaultDatabasePath({
   platform: process.platform,
@@ -130,19 +131,10 @@ function initDatabase(): BetterSqlite3.Database {
       const message = error instanceof Error ? error.message : String(error);
       throw prelaunchSchemaError(`Schema initialization failed: ${message}`);
     }
+    // Preserve existing transcript history before checking retired columns. A
+    // failed data move rolls back and must not suggest deleting the database.
+    migrateMessageTurns(dbInstance);
     assertPrelaunchSchemaCurrent(dbInstance);
-
-    // Normalize the candidate's account-source field in saved turn details.
-    // Keep history intact and let readers use only the current field name.
-    dbInstance.exec(`
-      UPDATE messages
-      SET turn_attribution = json_remove(
-        json_insert(turn_attribution, '$.providerCredentialSource',
-          json_extract(turn_attribution, '$.credentialSource')),
-        '$.credentialSource'
-      )
-      WHERE json_type(turn_attribution, '$.credentialSource') IS NOT NULL
-    `);
 
     console.log("Database connected");
     return dbInstance;

@@ -1,21 +1,17 @@
 import type { SessionSnapshotEvent } from "@deus-hq/api";
-import {
-  emptyConversation,
-  reduceConversationWithChanges,
-  type ConversationState,
-} from "@zvada/agent-server/protocol";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import {
   projectCloudSnapshot,
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
-import { supersededOutcomeMarkers, transcriptOrderRanks } from "@shared/conversation-rows";
+import { getTurn } from "../../../db/turns";
 import { getErrorMessage } from "@shared/lib/errors";
 import { getDatabase } from "../../../lib/database";
 import {
   persistCompaction,
   persistMessages,
   persistPart,
-  persistTurnEnded,
+  persistTurn,
   type WriteResult,
 } from "../persistence";
 
@@ -23,8 +19,7 @@ import {
 export function restoreCloudSnapshot(
   sessionId: string,
   snapshot: SessionSnapshotEvent,
-  preserveStatus: boolean,
-  previousConversation?: ConversationState
+  preserveStatus: boolean
 ): WriteResult<RestoredCloudConversation> {
   const { events, messageIds } = projectCloudSnapshot(snapshot);
   const providerCredentialSources = Object.fromEntries(
@@ -46,19 +41,7 @@ export function restoreCloudSnapshot(
       // A session.error can have supplied better details after this terminal.
       // Keep them when reconnecting to a failure already persisted locally.
       const knownFailure =
-        // A failed turn without assistant output has no durable message row.
-        previousConversation?.turns.some(
-          (turn) =>
-            turn.turnId === lastTurn?.turnId &&
-            turn.status === "ended" &&
-            turn.stopReason === "error"
-        ) ||
-        (lastTurn &&
-          db
-            .prepare(
-              "SELECT 1 FROM messages WHERE session_id = ? AND turn_id = ? AND turn_stop_reason = 'error' LIMIT 1"
-            )
-            .get(sessionId, lastTurn.turnId));
+        lastTurn && getTurn(db, sessionId, lastTurn.turnId)?.stopReason === "error";
       requireWrite(
         persistMessages(
           sessionId,
@@ -78,8 +61,8 @@ export function restoreCloudSnapshot(
       // A missed older message must not append behind later rows already in
       // SQLite. Keep local-only rows, including a prompt awaiting admission.
       const rows = db
-        .prepare("SELECT id, seq, turn_id FROM messages WHERE session_id = ? ORDER BY seq")
-        .all(sessionId) as { id: string; seq: number; turn_id: string | null }[];
+        .prepare("SELECT id, seq FROM messages WHERE session_id = ? ORDER BY seq")
+        .all(sessionId) as { id: string; seq: number }[];
       const rank = new Map(messageIds.map((id, index) => [id, index]));
       const updateOrder = db.prepare("UPDATE messages SET seq = ? WHERE id = ? AND session_id = ?");
       rows.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
@@ -87,30 +70,11 @@ export function restoreCloudSnapshot(
         if (row.seq !== index + 1) updateOrder.run(index + 1, row.id, sessionId);
       });
 
-      // Accounting lands on the actual last assistant message after ordering.
       for (const turn of conversation.turns) {
-        if (turn.status === "ended")
-          requireWrite(
-            persistTurnEnded(sessionId, turn, undefined, providerCredentialSources[turn.turnId])
-          );
+        requireWrite(
+          persistTurn(sessionId, turn, undefined, providerCredentialSources[turn.turnId])
+        );
       }
-
-      const markers = supersededOutcomeMarkers(conversation);
-      if (markers.size) {
-        db.prepare(
-          "DELETE FROM messages WHERE session_id = ? AND id IN (SELECT value FROM json_each(?))"
-        ).run(sessionId, JSON.stringify([...markers]));
-      }
-
-      // Outcomes without assistant output belong beside their original prompt.
-      const ordered = db
-        .prepare("SELECT id, seq, turn_id FROM messages WHERE session_id = ? ORDER BY seq")
-        .all(sessionId) as typeof rows;
-      const finalRank = transcriptOrderRanks(ordered, messageIds);
-      ordered.sort((a, b) => (finalRank.get(a.id) ?? Infinity) - (finalRank.get(b.id) ?? Infinity));
-      ordered.forEach((row, index) => {
-        if (row.seq !== index + 1) updateOrder.run(index + 1, row.id, sessionId);
-      });
 
       const currentTurnId = snapshot.state.currentTurnId;
       const status = currentTurnId
@@ -150,7 +114,7 @@ export function restoreCloudSnapshot(
           : null,
         sessionId
       );
-      return ordered.map((row) => row.id);
+      return rows.map((row) => row.id);
     })();
     return { ok: true, value: { conversation, messageIds: orderedIds, providerCredentialSources } };
   } catch (error) {

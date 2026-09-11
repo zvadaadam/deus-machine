@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SCHEMA_SQL } from "@shared/schema";
+import { getTurn } from "../../../src/db/turns";
 
 describe("database pre-launch schema bootstrap", () => {
   let originalDatabasePath: string | undefined;
@@ -63,7 +64,7 @@ describe("database pre-launch schema bootstrap", () => {
     expect(() => initDatabase()).toThrow("Reset it by deleting deus.db");
   });
 
-  it("renames saved provider attribution without changing execution or accounting", async () => {
+  it("moves saved attribution and accounting to turns without losing history", async () => {
     const dbPath = path.join(tempDir, "attribution.db");
     const seed = new Database(dbPath);
     seed.exec(SCHEMA_SQL);
@@ -71,6 +72,13 @@ describe("database pre-launch schema bootstrap", () => {
       INSERT INTO repositories (id, name, root_path) VALUES ('repo', 'repo', '/test/repo');
       INSERT INTO workspaces (id, repository_id, slug) VALUES ('workspace', 'repo', 'workspace');
       INSERT INTO sessions (id, workspace_id) VALUES ('session', 'workspace');
+    `);
+    seed.exec(`
+      ALTER TABLE messages ADD COLUMN cancelled_at TEXT;
+      ALTER TABLE messages ADD COLUMN tokens TEXT;
+      ALTER TABLE messages ADD COLUMN cost REAL;
+      ALTER TABLE messages ADD COLUMN turn_stop_reason TEXT;
+      ALTER TABLE messages ADD COLUMN turn_attribution TEXT;
     `);
     const execution = { harness: "codex-app-server", model: "selected-model" };
     const source = {
@@ -89,33 +97,45 @@ describe("database pre-launch schema bootstrap", () => {
       },
       { execution },
       null,
+      { execution, credentialSource: source, providerCredentialSource: null },
     ];
     for (const [index, value] of values.entries()) {
       seed
         .prepare(
-          `INSERT INTO messages (id, session_id, seq, role, turn_attribution, cost)
-        VALUES (?, 'session', ?, 'assistant', ?, 0)`
+          `INSERT INTO messages (id, session_id, turn_id, seq, role, turn_attribution, cost)
+        VALUES (?, 'session', ?, ?, 'assistant', ?, 0)`
         )
-        .run(String(index), index, value === null ? null : JSON.stringify(value));
+        .run(String(index), `turn-${index}`, index, value === null ? null : JSON.stringify(value));
     }
     seed.close();
     process.env.DATABASE_PATH = dbPath;
     const { initDatabase, closeDatabase } = await import("../../../src/lib/database");
     try {
       for (let opening = 0; opening < 2; opening++) {
-        const rows = initDatabase()
-          .prepare("SELECT turn_attribution, cost FROM messages ORDER BY seq")
-          .all() as Array<{ turn_attribution: string | null; cost: number }>;
-        expect(rows.map((row) => row.turn_attribution && JSON.parse(row.turn_attribution))).toEqual(
-          [
-            { execution, providerCredentialSource: source },
-            { execution, providerCredentialSource: source },
-            { execution, providerCredentialSource: source },
-            { execution },
-            null,
-          ]
+        const db = initDatabase();
+        const rows = values.map((_, index) => getTurn(db, "session", `turn-${index}`)!);
+        expect(
+          rows.map(({ execution, providerCredentialSource }) => ({
+            execution,
+            providerCredentialSource,
+          }))
+        ).toEqual([
+          { execution, providerCredentialSource: source },
+          { execution, providerCredentialSource: source },
+          { execution, providerCredentialSource: source },
+          { execution },
+          {},
+          { execution },
+        ]);
+        expect(rows.map((row) => row.cost)).toEqual([0, 0, 0, 0, 0, 0]);
+        expect(db.prepare("SELECT COUNT(*) AS n FROM messages").get()).toEqual({
+          n: values.length,
+        });
+        const columns = (db.pragma("table_info(messages)") as { name: string }[]).map(
+          (column) => column.name
         );
-        expect(rows.map((row) => row.cost)).toEqual([0, 0, 0, 0, 0]);
+        expect(columns).not.toContain("tokens");
+        expect(columns).not.toContain("turn_attribution");
         closeDatabase();
       }
     } finally {

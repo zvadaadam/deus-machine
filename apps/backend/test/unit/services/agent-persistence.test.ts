@@ -36,6 +36,7 @@ try {
 const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 import { SCHEMA_SQL } from "@shared/schema";
+import { getTurn } from "../../../src/db/turns";
 
 const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
@@ -51,7 +52,7 @@ import {
   persistSessionUsage,
   persistLastUserMessageAt,
   persistSessionWorking,
-  persistTurnEnded,
+  persistTurn,
   type TurnOutcomeWrite,
 } from "../../../src/services/agent/persistence";
 
@@ -129,7 +130,7 @@ function fold(...events: LifecycleEvent[]): ConversationState {
   return state;
 }
 
-const IDLE: TurnOutcomeWrite = { status: "idle", cancelled: false };
+const IDLE: TurnOutcomeWrite = { status: "idle" };
 
 // The writers take folded values; these adapters keep the fixtures event-shaped
 // (which is what the wire actually delivers) without re-deriving the fold.
@@ -138,7 +139,7 @@ const writeMessage = (e: MessageStartedEvent) =>
 const writePart = (e: MessagePartEvent) =>
   persistPart(e.sessionId, e.messageId, e.part, e.partIndex);
 const writeTurnEnded = (e: TurnEndedEvent, outcome: TurnOutcomeWrite) =>
-  persistTurnEnded(e.sessionId, fold(e).turns[0] as ConversationTurn, outcome);
+  persistTurn(e.sessionId, fold(e).turns[0] as ConversationTurn, outcome);
 const writeUsage = (e: SessionUsageEvent) =>
   persistSessionUsage(e.sessionId, fold(e).usage as NonNullable<ConversationState["usage"]>);
 const writeCompaction = (e: SessionCompactionEvent) =>
@@ -200,12 +201,12 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       writePart(part({ messageId: "m1" }));
       writeTurnEnded(
         ended({ tokens: { input: 10, output: 2 }, cost: 0.5, stopReason: "cancelled" }),
-        { status: "idle", cancelled: true }
+        { status: "idle" }
       );
 
       const before = db
         .prepare(
-          `SELECT id, seq, tokens, cost, turn_stop_reason, cancelled_at, model, sent_at
+          `SELECT id, seq, model, sent_at
              FROM messages WHERE id = 'm2'`
         )
         .get();
@@ -227,11 +228,17 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       expect(
         db.prepare(`SELECT id FROM messages WHERE session_id = ? ORDER BY seq`).all(SESSION)
       ).toEqual([{ id: "m1" }, { id: "m2" }]);
-      // Every update-only column written after message.started survives.
+      // Message metadata and the separate turn record both survive replay.
+      expect(getTurn(db, SESSION, TURN)).toMatchObject({
+        tokens: { input: 10, output: 2 },
+        cost: 0.5,
+        stopReason: "cancelled",
+        endedAt: T,
+      });
       expect(
         db
           .prepare(
-            `SELECT id, seq, tokens, cost, turn_stop_reason, cancelled_at, model, sent_at
+            `SELECT id, seq, model, sent_at
                FROM messages WHERE id = 'm2'`
           )
           .get()
@@ -394,7 +401,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
   // turn.ended
   // --------------------------------------------------------------------------
 
-  describe("persistTurnEnded", () => {
+  describe("persistTurn", () => {
     beforeEach(() => {
       writeMessage(started({ messageId: "u1", role: "user", outputIndex: 0 }));
       writeMessage(started({ messageId: "a1" }));
@@ -403,117 +410,85 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       writeMessage(started({ messageId: "sub", parentToolCallId: "task-1" }));
     });
 
-    it("writes tokens, cost and the stop reason onto the turn's last top-level assistant message", () => {
+    it("stores accounting once per turn regardless of assistant and subagent messages", () => {
       writeTurnEnded(
         ended({
           tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
           cost: 0.25,
           stopReason: "refusal",
         }),
-        { status: "idle", cancelled: false }
+        IDLE
       );
-
-      const row = db
-        .prepare(`SELECT tokens, cost, turn_stop_reason FROM messages WHERE id='a2'`)
-        .get() as {
-        tokens: string;
-        cost: number;
-        turn_stop_reason: string;
-      };
-      expect(JSON.parse(row.tokens)).toEqual({
-        input: 100,
-        output: 20,
-        cache: { read: 5, write: 1 },
+      expect(getTurn(db, SESSION, TURN)).toMatchObject({
+        turnId: TURN,
+        tokens: { input: 100, output: 20, cache: { read: 5, write: 1 } },
+        cost: 0.25,
+        stopReason: "refusal",
+        endedAt: T,
       });
-      expect(row.cost).toBe(0.25);
-      expect(row.turn_stop_reason).toBe("refusal");
-
-      // Nothing lands on the subagent message or the earlier assistant message.
-      const others = db.prepare(`SELECT id FROM messages WHERE tokens IS NOT NULL`).all() as Array<{
-        id: string;
-      }>;
-      expect(others.map((r) => r.id)).toEqual(["a2"]);
+      expect(db.prepare("SELECT COUNT(*) AS n, SUM(cost) AS cost FROM turns").get()).toEqual({
+        n: 1,
+        cost: 0.25,
+      });
+      for (const row of db.prepare("SELECT * FROM messages").all()) {
+        expect(row).not.toHaveProperty("tokens");
+        expect(row).not.toHaveProperty("cost");
+      }
     });
 
-    it("stamps cancelled_at instead of inserting a synthetic cancelled message", () => {
-      writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
-
-      const row = db.prepare(`SELECT cancelled_at FROM messages WHERE id = 'a2'`).get() as {
-        cancelled_at: string;
-      };
-      expect(row.cancelled_at).toBe("2026-08-14T12:00:00.000Z");
-      // No extra row, and no raw JSON envelope in `content`.
-      const count = db
-        .prepare(`SELECT count(*) as n FROM messages WHERE session_id = ?`)
-        .get(SESSION);
-      expect(count).toEqual({ n: 4 });
-      expect(db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+    it("records cancellation on the turn without adding or changing messages", () => {
+      const before = db.prepare("SELECT * FROM messages ORDER BY seq").all();
+      writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle" });
+      expect(getTurn(db, SESSION, TURN)).toMatchObject({ stopReason: "cancelled", endedAt: T });
+      expect(db.prepare("SELECT * FROM messages ORDER BY seq").all()).toEqual(before);
+      expect(db.prepare("SELECT status FROM sessions WHERE id = ?").get(SESSION)).toEqual({
         status: "idle",
       });
     });
 
-    it("mints a marker row when the turn was cancelled before the model answered", () => {
-      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
-
-      writeTurnEnded(ended({ stopReason: "cancelled", timestamp: T + 30 }), {
-        status: "idle",
-        cancelled: true,
+    it("preserves cancellation before any assistant output without inventing a message", () => {
+      db.prepare("DELETE FROM messages WHERE role = 'assistant'").run();
+      writeTurnEnded(ended({ stopReason: "cancelled", timestamp: T + 30 }), { status: "idle" });
+      expect(getTurn(db, SESSION, TURN)).toMatchObject({
+        stopReason: "cancelled",
+        endedAt: T + 30,
       });
-
-      const marker = db
-        .prepare(
-          `SELECT id, role, turn_id, cancelled_at, turn_stop_reason FROM messages WHERE role = 'assistant'`
-        )
-        .get();
-      expect(marker).toEqual({
-        id: `cancelled-${TURN}`,
-        role: "assistant",
-        turn_id: TURN,
-        cancelled_at: "2026-08-14T12:00:00.030Z",
-        turn_stop_reason: "cancelled",
+      expect(db.prepare("SELECT role FROM messages").all()).toEqual([{ role: "user" }]);
+      expect(db.prepare("SELECT message_count FROM sessions WHERE id = ?").get(SESSION)).toEqual({
+        message_count: 1,
       });
     });
 
-    it("the cancelled marker is id-addressed, so a replayed turn.ended does not stack dividers", () => {
-      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
+    it("a replayed empty turn does not stack outcomes or double cost", () => {
+      db.prepare("DELETE FROM messages WHERE role = 'assistant'").run();
       const cancel = () =>
-        writeTurnEnded(ended({ stopReason: "cancelled" }), { status: "idle", cancelled: true });
-
+        writeTurnEnded(ended({ stopReason: "cancelled", cost: 0.5 }), { status: "idle" });
       cancel();
       cancel();
-
+      expect(db.prepare("SELECT COUNT(*) AS n, SUM(cost) AS cost FROM turns").get()).toEqual({
+        n: 1,
+        cost: 0.5,
+      });
       expect(
-        db.prepare(`SELECT count(*) as n FROM messages WHERE role = 'assistant'`).get()
-      ).toEqual({ n: 1 });
+        db.prepare("SELECT COUNT(*) AS n FROM messages WHERE role = 'assistant'").get()
+      ).toEqual({ n: 0 });
     });
 
     it("persists an outputless completion without inventing accounting", () => {
-      db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
-
-      writeTurnEnded(ended({ stopReason: "end_turn" }), { status: "idle", cancelled: false });
-
+      db.prepare("DELETE FROM messages WHERE role = 'assistant'").run();
+      writeTurnEnded(ended(), IDLE);
+      const turn = getTurn(db, SESSION, TURN);
+      expect(turn).toMatchObject({ turnId: TURN, stopReason: "end_turn", endedAt: T });
+      expect(turn?.tokens).toBeUndefined();
+      expect(turn?.cost).toBeUndefined();
       expect(
-        db
-          .prepare(
-            `SELECT id, turn_stop_reason, turn_attribution, tokens, cost
-             FROM messages WHERE role = 'assistant'`
-          )
-          .all()
-      ).toEqual([
-        {
-          id: `cancelled-${TURN}`,
-          turn_stop_reason: "end_turn",
-          turn_attribution: null,
-          tokens: null,
-          cost: null,
-        },
-      ]);
+        db.prepare("SELECT COUNT(*) AS n FROM messages WHERE role = 'assistant'").get()
+      ).toEqual({ n: 0 });
     });
 
     it("writes the error status with the engine's category", () => {
       writeTurnEnded(ended({ stopReason: "error" }), {
         status: "error",
-        cancelled: false,
         error: { message: "429 slow down", category: "rate_limit" },
       });
 
@@ -526,7 +501,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
     it("clears a stale error when the next turn ends cleanly", () => {
       persistSessionError(SESSION, "boom", "internal");
-      writeTurnEnded(ended(), { status: "idle", cancelled: false });
+      writeTurnEnded(ended(), { status: "idle" });
 
       expect(
         db.prepare(`SELECT status, error_message FROM sessions WHERE id = ?`).get(SESSION)
@@ -536,7 +511,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
     it("still flips the session when the turn produced no assistant message", () => {
       db.prepare(`DELETE FROM messages WHERE role = 'assistant'`).run();
 
-      const result = writeTurnEnded(ended(), { status: "idle", cancelled: false });
+      const result = writeTurnEnded(ended(), { status: "idle" });
 
       expect(result.ok).toBe(true);
       expect(db.prepare(`SELECT status FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
@@ -725,7 +700,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       db.close();
 
       expect(persistSessionError(SESSION, "x", "internal").ok).toBe(false);
-      expect(writeTurnEnded(ended(), { status: "idle", cancelled: false }).ok).toBe(false);
+      expect(writeTurnEnded(ended(), { status: "idle" }).ok).toBe(false);
       expect(
         writeCompaction({
           type: "session.compaction",
@@ -784,12 +759,12 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
         { id: "p1", message_id: "a1" },
         { id: "up1", message_id: "u1" },
       ]);
-      expect(
-        db.prepare(`SELECT tokens, cost, turn_stop_reason FROM messages WHERE id = 'a1'`).get()
-      ).toEqual({
-        tokens: JSON.stringify({ input: 10, output: 2 }),
+      expect(getTurn(db, SESSION, TURN)).toMatchObject({
+        tokens: { input: 10, output: 2 },
         cost: 0.5,
-        turn_stop_reason: "end_turn",
+        stopReason: "end_turn",
+        startedAt: T,
+        endedAt: T,
       });
     });
 
@@ -813,9 +788,8 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
         return kinds;
       };
 
-      // turn.started reports a `turn-updated` too, but an OPEN turn has no
-      // accounting to write — only the ended one produces a row.
-      expect(run()).toEqual(["message-upserted", "part-upserted", "turn-updated"]);
+      // Start and end update the same turn; messages remain transcript content.
+      expect(run()).toEqual(["turn-updated", "message-upserted", "part-upserted", "turn-updated"]);
       const before = db.prepare(`SELECT * FROM messages ORDER BY seq`).all();
       const parts = db.prepare(`SELECT * FROM parts ORDER BY id`).all();
 
@@ -829,6 +803,10 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       expect(second).toEqual(["part-upserted"]);
       expect(db.prepare(`SELECT * FROM messages ORDER BY seq`).all()).toEqual(before);
       expect(db.prepare(`SELECT * FROM parts ORDER BY id`).all()).toEqual(parts);
+      expect(db.prepare("SELECT COUNT(*) AS n, SUM(cost) AS cost FROM turns").get()).toEqual({
+        n: 1,
+        cost: 0.5,
+      });
     });
 
     it("stores a part the reducer closed itself when the turn was cancelled", () => {
@@ -928,7 +906,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
       // turn.started and message.started are rows; the bracket marker, the
       // buffered tool input and the permission are not.
-      expect(writes.map((w) => w.change.kind)).toEqual(["message-upserted"]);
+      expect(writes.map((w) => w.change.kind)).toEqual(["turn-updated", "message-upserted"]);
     });
   });
 });

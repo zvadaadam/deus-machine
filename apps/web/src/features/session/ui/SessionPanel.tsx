@@ -125,6 +125,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       session,
       messages: dbMessages,
       compactions,
+      turns,
       hasOlder,
       sessionStatus,
       loading,
@@ -368,6 +369,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
             <Chat
               messages={messages}
               compactions={compactions}
+              turns={turns}
               loading={loading}
               sessionStatus={effectiveSessionStatus}
               errorMessage={cloudDirectState.error ?? session?.error_message}
@@ -473,6 +475,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   <Chat
                     messages={messages}
                     compactions={compactions}
+                    turns={turns}
                     loading={loading}
                     sessionStatus={effectiveSessionStatus}
                     errorMessage={cloudDirectState.error ?? session?.error_message}

@@ -1,5 +1,5 @@
 import { match } from "ts-pattern";
-import type { Compaction, Message, SessionStatus } from "@/shared/types";
+import type { Compaction, Message, SessionTurn, SessionStatus } from "@/shared/types";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { MessageItem } from "./MessageItem";
 import { AssistantTurn } from "./AssistantTurn";
@@ -22,6 +22,7 @@ import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
   messages: Message[];
+  turns?: SessionTurn[];
   /** Positional compaction markers, spliced between the turns they belong to. */
   compactions?: Compaction[];
   loading: boolean;
@@ -55,10 +56,12 @@ interface ChatProps {
   className?: string;
 }
 
+const NO_TURNS: SessionTurn[] = [];
 const NO_COMPACTIONS: Compaction[] = [];
 
 export function Chat({
   messages,
+  turns = NO_TURNS,
   compactions = NO_COMPACTIONS,
   loading,
   sessionStatus,
@@ -87,12 +90,6 @@ export function Chat({
   // "Retry in new chat" opens a fresh tab through the Mac backend; web-direct
   // has no such lane, so the offer hides rather than failing on click.
   const retryInNewChat = isCloudDirectWebMode() ? undefined : onRetryInNewChat;
-
-  const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
-    messages,
-    messagesContainerRef,
-    userSendCount,
-  });
 
   // --- Message entrance animation tracking ---
   // Counter-based: only the turn at index > maxAnimatedTurnIndex gets the
@@ -130,8 +127,9 @@ export function Chat({
     activity,
     lastRole,
   } = useMemo(
-    () => buildChatTimeline(messages, compactions, sessionStatus === "working", cloudEnvEntries),
-    [messages, compactions, sessionStatus, cloudEnvEntries]
+    () =>
+      buildChatTimeline(messages, compactions, sessionStatus === "working", cloudEnvEntries, turns),
+    [messages, compactions, sessionStatus, cloudEnvEntries, turns]
   );
 
   /**
@@ -206,10 +204,19 @@ export function Chat({
       if (!item) return index;
       if (item.type === "compaction") return `compaction:${item.compaction.compaction_id}`;
       if (item.type === "cloudEnv") return `cloudEnv:${item.entries[0]?.id ?? index}`;
-      return item.type === "user" ? item.message.id : item.messages[0].id;
+      return item.type === "user" ? item.message.id : `turn:${item.turnId}`;
     },
     [timeline]
   );
+
+  const { showScrollButton, handleScrollToBottomClick } = useAutoScroll({
+    // New messages can extend an existing turn; empty outcomes can add an
+    // item without a message. Track both, independently of stable React keys.
+    contentCount: messages.length + timeline.length,
+    lastContentId: `${messages.at(-1)?.id ?? ""}:${timeline.length ? getItemKey(timeline.length - 1) : ""}`,
+    messagesContainerRef,
+    userSendCount,
+  });
 
   const virtualizer = useVirtualizer({
     count: timeline.length,
@@ -307,7 +314,7 @@ export function Chat({
                   // Markers (compaction, env story) are not messages — no id.
                   const messageId = match(turn)
                     .with({ type: "user" }, (t) => t.message.id)
-                    .with({ type: "assistant" }, (t) => t.messages[0].id)
+                    .with({ type: "assistant" }, (t) => t.messages[0]?.id)
                     .with({ type: "compaction" }, () => undefined)
                     .with({ type: "cloudEnv" }, () => undefined)
                     .exhaustive();
@@ -340,6 +347,7 @@ export function Chat({
                           .with({ type: "assistant" }, (t) => (
                             <AssistantTurn
                               messages={t.messages}
+                              turn={t.record}
                               isLatest={t.isLatest}
                               isWorking={sessionStatus === "working"}
                               startedAt={t.startedAt}

@@ -436,14 +436,14 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         tokens: { input: 100, output: 20, cache: { read: 5, write: 0 } },
         cost: 0.0123,
       });
-      expect(lastOutcome()).toEqual({ status: "idle", cancelled: false });
+      expect(lastOutcome()).toEqual({ status: "idle" });
       expect(mockRefreshPr).toHaveBeenCalledWith(SESSION);
     });
 
     it("marks a cancelled turn instead of inserting a synthetic message", () => {
       handler.handle(envelope(turnEnded({ stopReason: "cancelled" })));
 
-      expect(lastOutcome()).toEqual({ status: "idle", cancelled: true });
+      expect(lastOutcome()).toEqual({ status: "idle" });
     });
 
     it.each(["refusal", "max_turn_requests"])(
@@ -451,7 +451,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       (stopReason) => {
         handler.handle(envelope(turnEnded({ stopReason })));
 
-        expect(lastOutcome()).toEqual({ status: "idle", cancelled: false });
+        expect(lastOutcome()).toEqual({ status: "idle" });
       }
     );
 
@@ -467,7 +467,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       expect(lastOutcome()).toEqual({
         status: "error",
-        cancelled: false,
         error: { message: "429 slow down", category: "rate_limit" },
       });
     });
@@ -477,7 +476,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       expect(lastOutcome()).toEqual({
         status: "error",
-        cancelled: false,
         error: { message: "Agent turn failed", category: "internal" },
       });
     });
@@ -500,7 +498,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       // Status still error, but the vaguer terminal message must not clobber
       // the specific one already persisted.
-      expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
+      expect(lastOutcome()).toEqual({ status: "error" });
     });
 
     it("keeps structured terminal details when the cloud's later session error is folded", () => {
@@ -529,7 +527,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       );
       // Re-folding the wrapper may update turn accounting, but neither
       // persistence path may replace the error columns it already wrote.
-      expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
+      expect(lastOutcome()).toEqual({ status: "error" });
       expect(mockPersistSessionError).not.toHaveBeenCalled();
     });
 
@@ -568,7 +566,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       expect(mockPersistSessionError.mock.calls).toEqual([
         [SESSION, "Reconnect your provider account", "provider_auth"],
       ]);
-      expect(lastOutcome()).toEqual({ status: "error", cancelled: false });
+      expect(lastOutcome()).toEqual({ status: "error" });
     });
 
     it.each(["error", "cancelled"])(
@@ -722,7 +720,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       expect(lastOutcome()).toEqual({
         status: "error",
-        cancelled: false,
         error: { message: "Agent turn failed", category: "internal" },
       });
     });

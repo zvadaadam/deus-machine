@@ -26,7 +26,13 @@ const SESSION = "sess-1";
 const TURN = "turn-1";
 
 function page(messages: Message[]): PaginatedMessages {
-  return { messages, compactions: [], has_older: false, has_newer: false };
+  return {
+    turns: [],
+    messages,
+    compactions: [],
+    has_older: false,
+    has_newer: false,
+  };
 }
 
 function bubble(turnId = TURN, content = "hello") {

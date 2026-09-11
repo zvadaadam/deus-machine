@@ -16,13 +16,13 @@
  *   Summary message is always visible (the final text response).
  *
  * Cancellation:
- *   Detected via message.cancelled_at or message.stop_reason === "cancelled".
+ *   Read from the turn's terminal outcome.
  *   The "Response stopped" badge replaces the summary slot.
  */
 
 import { useMemo, useState, memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import type { Message } from "@/shared/types";
+import type { Message, SessionTurn } from "@/shared/types";
 import { turnStopNotice } from "../lib/chatTimeline";
 import { MessageItem } from "./MessageItem";
 import { TurnFooter } from "./TurnFooter";
@@ -32,6 +32,7 @@ import { Square, TriangleAlert } from "lucide-react";
 
 interface AssistantTurnProps {
   messages: Message[];
+  turn?: SessionTurn;
   isLatest: boolean;
   isWorking: boolean;
   startedAt?: string | null;
@@ -43,6 +44,7 @@ interface AssistantTurnProps {
  */
 export const AssistantTurn = memo(function AssistantTurn({
   messages,
+  turn,
   isLatest,
   isWorking,
   startedAt,
@@ -53,45 +55,12 @@ export const AssistantTurn = memo(function AssistantTurn({
   // Simplified stats — no parseContent needed, just count parts
   const stats = useMemo(() => calculateTurnStats(messages), [messages]);
 
-  const isStreaming = isLatest && isWorking;
+  const isStreaming = isLatest && isWorking && !turn?.stopReason && turn?.endedAt === undefined;
 
-  // Cancellation is a column now: the backend stamps cancelled_at on the
-  // turn's last assistant message at turn.ended{stopReason:"cancelled"}.
-  const isCancelled = useMemo(() => {
-    const lastMsg = messages[messages.length - 1];
-    if (!lastMsg) return false;
-    if (lastMsg.cancelled_at) return true;
-    return lastMsg.turn_stop_reason === "cancelled";
-  }, [messages]);
-
-  /**
-   * Terminal stop reasons the user has to know about: a content-filter refusal
-   * and a turn that ran out of its request budget both used to end in silence,
-   * because the reason was never persisted.
-   *
-   * The copy lives beside the timeline filter that KEEPS such a row when it
-   * carries no parts — the two have to agree, or the notice renders on a row
-   * the timeline already dropped.
-   */
-  const stopNotice = useMemo(
-    () => turnStopNotice(messages[messages.length - 1]?.turn_stop_reason),
-    [messages]
-  );
-
-  // Split messages: all except the last are hidden (collapsible), last is the summary.
-  const { summaryMessage, hiddenMessages } = useMemo(() => {
-    if (isCancelled) {
-      // Keep the last real message visible (partial response) with badge below it
-      return {
-        summaryMessage: messages[messages.length - 1],
-        hiddenMessages: messages.slice(0, -1),
-      };
-    }
-    return {
-      summaryMessage: messages[messages.length - 1],
-      hiddenMessages: messages.slice(0, -1),
-    };
-  }, [messages, isCancelled]);
+  const isCancelled = turn?.stopReason === "cancelled";
+  const stopNotice = turnStopNotice(turn?.stopReason);
+  const summaryMessage = messages[messages.length - 1];
+  const hiddenMessages = messages.slice(0, -1);
 
   return (
     <div
@@ -154,7 +123,7 @@ export const AssistantTurn = memo(function AssistantTurn({
               <span className="text-warning text-sm font-medium">{stopNotice}</span>
             </div>
           )}
-          <TurnFooter messages={messages} startedAt={startedAt} />
+          <TurnFooter messages={messages} turn={turn} startedAt={startedAt} />
         </>
       )}
     </div>

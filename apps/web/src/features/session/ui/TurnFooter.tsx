@@ -2,7 +2,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { memo, useCallback, useMemo } from "react";
 import { Check, Copy } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Message } from "@/shared/types";
+import type { Message, SessionTurn } from "@/shared/types";
 import { useCopyToClipboard } from "@/shared/hooks";
 import { cn } from "@/shared/lib/utils";
 import { formatTurnDurationLabel } from "./utils/formatTurnDurationLabel";
@@ -10,14 +10,15 @@ import { getTurnFooterData } from "./utils";
 
 interface TurnFooterProps {
   messages: Message[];
+  turn?: SessionTurn;
   startedAt?: string | null;
 }
 
-export const TurnFooter = memo(function TurnFooter({ messages, startedAt }: TurnFooterProps) {
+export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }: TurnFooterProps) {
   const { copy, copied } = useCopyToClipboard({ resetDelay: 1600 });
   const { copyText, durationMs, tokens, cost, attribution } = useMemo(
-    () => getTurnFooterData(messages, startedAt),
-    [messages, startedAt]
+    () => getTurnFooterData(messages, startedAt, turn),
+    [messages, startedAt, turn]
   );
 
   // Billed tokens = non-cached input + cache reads/writes + output (the three

@@ -16,7 +16,14 @@ export type {
 } from "./workspace";
 
 // Session types
-export type { Compaction, Message, MessageRole, Session, SessionStatus } from "./session";
+export type {
+  Compaction,
+  Message,
+  MessageRole,
+  Session,
+  SessionTurn,
+  SessionStatus,
+} from "./session";
 
 // Automation types
 export type { Automation, AutomationRun } from "./automation";

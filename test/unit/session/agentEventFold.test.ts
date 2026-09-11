@@ -98,6 +98,7 @@ function sessionOf(event: LifecycleEvent): string | undefined {
 
 function seed(qc: QueryClient, sessionId: string, messages: Message[]): void {
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
+    turns: [],
     messages,
     compactions: [],
     has_older: false,
@@ -425,7 +426,7 @@ describe("message.started{role:user} — the predicted echo", () => {
 // ===========================================================================
 
 describe("restored cloud conversations", () => {
-  it("anchors generated outcomes when the supplied order only contains saved messages", () => {
+  it("restores outcomes separately from the supplied message order", () => {
     const h = harness();
     const restored = harness();
     restored.feed(started({ messageId: "prompt", role: "user", outputIndex: 0 }));
@@ -439,8 +440,7 @@ describe("restored cloud conversations", () => {
     });
     expect(h.page()?.messages.map(({ id, seq }) => ({ id, seq }))).toEqual([
       { id: "prompt", seq: 1 },
-      { id: `cancelled-${TURN}`, seq: 2 },
-      { id: "later", seq: 3 },
+      { id: "later", seq: 2 },
     ]);
   });
 
@@ -466,11 +466,24 @@ describe("restored cloud conversations", () => {
     expect(observer.getCurrentResult()).toMatchObject({
       status: "success",
       fetchStatus: "idle",
-      data: { messages: [], compactions: [], has_older: false, has_newer: false },
+      data: {
+        turns: [],
+        messages: [],
+        compactions: [],
+        has_older: false,
+        has_newer: false,
+      },
     });
-    finishPage({ messages: [], compactions: [], has_older: true, has_newer: true });
+    finishPage({
+      turns: [],
+      messages: [],
+      compactions: [],
+      has_older: true,
+      has_newer: true,
+    });
     await Promise.resolve();
     expect(h.page()).toEqual({
+      turns: [],
       messages: [],
       compactions: [],
       has_older: false,
@@ -488,15 +501,10 @@ describe("restored cloud conversations", () => {
       sessionId: SESSION,
       seq: 1,
       conversation: restored.fold().state,
-      messageIds: [`cancelled-${TURN}`],
+      messageIds: [],
     });
-    expect(h.page()?.messages).toEqual([
-      expect.objectContaining({
-        id: `cancelled-${TURN}`,
-        seq: 1,
-        turn_stop_reason: "cancelled",
-      }),
-    ]);
+    expect(h.page()?.messages).toEqual([]);
+    expect(h.page()?.turns).toMatchObject([{ turnId: TURN, stopReason: "cancelled" }]);
   });
 
   it("keeps an optimistic prompt and rejects an older HTTP page still in flight", async () => {
@@ -526,7 +534,13 @@ describe("restored cloud conversations", () => {
       conversation: restored.fold().state,
       messageIds: ["a1"],
     });
-    finishPage({ messages: [], compactions: [], has_older: false, has_newer: false });
+    finishPage({
+      turns: [],
+      messages: [],
+      compactions: [],
+      has_older: false,
+      has_newer: false,
+    });
     await loading;
     expect(h.page()?.messages.map((row) => row.id)).toEqual(["a1", prompt.id]);
     expect(h.page()?.messages[0].parts?.[0]).toMatchObject({ text: "Recovered history" });
@@ -690,43 +704,39 @@ describe("routeEnvelope — cursor policy", () => {
 });
 
 // ===========================================================================
-// turn.ended: accounting lands on the right row
+// turn.ended: one accounting record per turn
 // ===========================================================================
 
 describe("turn.ended — accounting mirror", () => {
-  it("writes tokens/cost/stopReason onto the turn's last TOP-LEVEL assistant message", () => {
+  it("keeps one accounting record across multiple assistant and subagent messages", () => {
     const h = harness();
     h.feed(started({ messageId: "u1", role: "user", outputIndex: 0 }));
     h.feed(started({ messageId: "a1" }));
     h.feed(started({ messageId: "sub", parentToolCallId: "task-1" }));
     h.feed(started({ messageId: "a2" }));
-
+    const before = h.page()!.messages;
     h.feed(turnEnded({ tokens: { input: 100, output: 20 }, cost: 0.25, stopReason: "refusal" }));
-
-    const byId = new Map(h.page()!.messages.map((m) => [m.id, m]));
-    expect(byId.get("a2")).toMatchObject({
-      tokens: JSON.stringify({ input: 100, output: 20 }),
-      cost: 0.25,
-      turn_stop_reason: "refusal",
-    });
-    expect(byId.get("sub")!.tokens).toBeUndefined();
-    expect(byId.get("a1")!.tokens).toBeUndefined();
+    expect(h.page()!.turns).toMatchObject([
+      {
+        turnId: TURN,
+        tokens: { input: 100, output: 20 },
+        cost: 0.25,
+        stopReason: "refusal",
+      },
+    ]);
+    expect(h.page()!.messages).toEqual(before);
   });
 
-  it("stamps cancelled_at on the interrupted turn", () => {
+  it("records the interrupted turn's end time", () => {
     const h = harness();
     h.feed(started({ messageId: "a1" }));
     h.feed(turnEnded({ stopReason: "cancelled", timestamp: T + 5 }));
-
-    expect(h.page()!.messages[0].cancelled_at).toBe(new Date(T + 5).toISOString());
+    expect(h.page()!.turns).toMatchObject([
+      { turnId: TURN, stopReason: "cancelled", endedAt: T + 5 },
+    ]);
   });
 
-  it("I5: a cancel before the first assistant message still leaves a marker — the backend's row", () => {
-    // The marker is minted from `shared/conversation-rows.ts`, the same
-    // function the backend INSERTs, so the mirrored row and the persisted one
-    // are the SAME row: same derived id, same accounting. Tokens and cost used
-    // to be dropped here, which meant the q:delta carrying the persisted copy
-    // silently changed the divider's footer on arrival.
+  it("preserves cancellation and accounting before the first assistant message", () => {
     const h = harness();
     h.feed(started({ messageId: "u1", role: "user", outputIndex: 0 }));
     h.feed(
@@ -737,47 +747,35 @@ describe("turn.ended — accounting mirror", () => {
         timestamp: T + 5,
       })
     );
-
-    const marker = h.page()!.messages[1];
-    expect(marker).toMatchObject({
-      id: `cancelled-${TURN}`,
-      role: "assistant",
-      turn_id: TURN,
-      turn_stop_reason: "cancelled",
-      cancelled_at: new Date(T + 5).toISOString(),
-      sent_at: new Date(T + 5).toISOString(),
-      tokens: JSON.stringify({ input: 9, output: 1 }),
-      cost: 0.02,
-    });
-    expect(marker.parts).toEqual([]);
+    expect(h.page()!.messages.map((message) => message.id)).toEqual(["u1"]);
+    expect(h.page()!.turns).toMatchObject([
+      {
+        turnId: TURN,
+        stopReason: "cancelled",
+        endedAt: T + 5,
+        tokens: { input: 9, output: 1 },
+        cost: 0.02,
+      },
+    ]);
   });
 
   it("keeps a completed outcome without assistant output or reported accounting", () => {
     const h = harness();
     h.feed(started({ messageId: "u1", role: "user", outputIndex: 0 }));
     h.feed(turnEnded({ stopReason: "end_turn" }));
-
-    expect(h.page()!.messages).toHaveLength(2);
-    expect(h.page()!.messages[1]).toMatchObject({
-      id: `cancelled-${TURN}`,
-      turn_stop_reason: "end_turn",
-      turn_attribution: null,
-      tokens: null,
-      cost: null,
-    });
+    expect(h.page()!.messages).toHaveLength(1);
+    expect(h.page()!.turns).toMatchObject([{ turnId: TURN, stopReason: "end_turn" }]);
+    expect(h.page()!.turns[0].tokens).toBeUndefined();
+    expect(h.page()!.turns[0].cost).toBeUndefined();
   });
 
-  it("turn.started alone mirrors nothing — there is no accounting yet", () => {
+  it("records turn.started without inventing accounting", () => {
     const h = harness();
-    h.feed(started({ messageId: "a1" }));
-    h.feed({
-      type: "turn.started",
-      sessionId: SESSION,
-      turnId: TURN,
-      timestamp: T,
-    } as LifecycleEvent);
-
-    expect(h.page()!.messages[0].turn_stop_reason).toBeUndefined();
+    h.feed({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T });
+    expect(h.page()!.messages).toEqual([]);
+    expect(h.page()!.turns).toMatchObject([{ turnId: TURN, startedAt: T }]);
+    expect(h.page()!.turns[0].stopReason).toBeUndefined();
+    expect(h.page()!.turns[0].cost).toBeUndefined();
   });
 
   it("a cancelled turn closes its open tool parts in the cache too", () => {
@@ -846,10 +844,10 @@ describe("background sessions", () => {
       { sessionId: OTHER }
     );
 
-    expect(h.page(OTHER)!.messages[0]).toMatchObject({
-      turn_stop_reason: "cancelled",
-      cancelled_at: new Date(T + 9).toISOString(),
-      tokens: JSON.stringify({ input: 9, output: 1 }),
+    expect(h.page(OTHER)!.turns[0]).toMatchObject({
+      stopReason: "cancelled",
+      endedAt: T + 9,
+      tokens: { input: 9, output: 1 },
       cost: 0.02,
     });
     // …and the active session is untouched.
@@ -968,6 +966,7 @@ describe("across a tab switch", () => {
 describe("refetchMessages", () => {
   const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const emptyPage = (): PaginatedMessages => ({
+    turns: [],
     messages: [],
     compactions: [],
     has_older: false,

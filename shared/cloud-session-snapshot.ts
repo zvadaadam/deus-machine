@@ -11,7 +11,7 @@ export interface AgentConversationSnapshot {
   seq: number;
   conversation: ConversationState;
   providerCredentialSources?: Record<string, TurnProviderCredentialSource>;
-  /** SQLite's complete order, including cancellation markers. */
+  /** SQLite's complete message order, including local-only rows. */
   messageIds: string[];
 }
 

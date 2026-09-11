@@ -15,7 +15,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
-import type { Message } from "@/shared/types";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -42,14 +41,16 @@ function isAtBottom(el: HTMLElement): boolean {
 // ── Hook ─────────────────────────────────────────────────────────────────
 
 interface UseAutoScrollOptions {
-  messages: Message[];
+  contentCount: number;
+  lastContentId: string | null;
   messagesContainerRef: RefObject<HTMLDivElement>;
   /** Incremented by the UI when the human clicks Send. Triggers resume + jump to bottom. */
   userSendCount: number;
 }
 
 export function useAutoScroll({
-  messages,
+  contentCount,
+  lastContentId,
   messagesContainerRef,
   userSendCount,
 }: UseAutoScrollOptions) {
@@ -59,10 +60,8 @@ export function useAutoScroll({
   const pausedAtRef = useRef(0);
   const chaseRafRef = useRef<number | null>(null);
 
-  const prevMessageCountRef = useRef(messages.length);
-  const prevLastMessageIdRef = useRef<string | null>(
-    messages.length > 0 ? messages[messages.length - 1].id : null
-  );
+  const prevContentCountRef = useRef(contentCount);
+  const prevLastContentIdRef = useRef<string | null>(lastContentId);
 
   // ── Chase loop ──────────────────────────────────────────────────────
 
@@ -248,7 +247,7 @@ export function useAutoScroll({
   }, [messagesContainerRef, resume]);
 
   // ── Start chase when content is present ─────────────────────────────
-  const contentReady = messages.length > 0;
+  const contentReady = contentCount > 0;
   useEffect(() => {
     if (!contentReady || isPausedRef.current) return;
     log("contentReady effect: starting chase");
@@ -278,13 +277,13 @@ export function useAutoScroll({
   // Resume is handled exclusively by: human send, scroll-to-bottom click,
   // or scroll re-engagement (scrolling back to bottom).
   useEffect(() => {
-    const count = messages.length;
-    const prevCount = prevMessageCountRef.current;
-    const lastId = count > 0 ? messages[count - 1].id : null;
-    const prevLastId = prevLastMessageIdRef.current;
+    const count = contentCount;
+    const prevCount = prevContentCountRef.current;
+    const lastId = lastContentId;
+    const prevLastId = prevLastContentIdRef.current;
 
-    prevMessageCountRef.current = count;
-    prevLastMessageIdRef.current = lastId;
+    prevContentCountRef.current = count;
+    prevLastContentIdRef.current = lastId;
 
     if (count <= prevCount) return;
     if (lastId === prevLastId) {
@@ -304,7 +303,7 @@ export function useAutoScroll({
     } else {
       log("message effect: paused — ignoring");
     }
-  }, [messages, startChase, stopChase]);
+  }, [contentCount, lastContentId, startChase, stopChase]);
 
   // ── Cleanup ─────────────────────────────────────────────────────────
   useEffect(() => () => stopChase(), [stopChase]);

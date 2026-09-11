@@ -25,11 +25,7 @@ function makeMessage(overrides: Partial<MessageRow> = {}): MessageRow {
     turn_id: null,
     model: "opus",
     sent_at: "2026-01-01T00:00:00Z",
-    cancelled_at: null,
     parent_tool_call_id: null,
-    tokens: null,
-    cost: null,
-    turn_stop_reason: "end_turn",
     ...overrides,
   };
 }
@@ -184,7 +180,7 @@ describe("attachParts", () => {
       makeMessage({
         id: "msg-1",
         model: "opus",
-        turn_stop_reason: "end_turn",
+        turn_id: "turn-1",
         parent_tool_call_id: "tool-123",
       }),
     ];
@@ -192,7 +188,7 @@ describe("attachParts", () => {
     const result = attachParts(mockDb, messages);
 
     expect(result[0].model).toBe("opus");
-    expect(result[0].turn_stop_reason).toBe("end_turn");
+    expect(result[0].turn_id).toBe("turn-1");
     expect(result[0].parent_tool_call_id).toBe("tool-123");
   });
 });

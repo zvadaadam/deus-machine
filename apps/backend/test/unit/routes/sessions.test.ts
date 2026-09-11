@@ -111,6 +111,12 @@ describeWithDb("GET /sessions/:id/messages", () => {
     // The `PaginatedMessages` contract, checked as a whole: while `compactions`
     // was the one OPTIONAL field, this route could omit it and both the types
     // and the UI agreed.
-    expect(Object.keys(body).sort()).toEqual(["compactions", "has_newer", "has_older", "messages"]);
+    expect(Object.keys(body).sort()).toEqual([
+      "compactions",
+      "has_newer",
+      "has_older",
+      "messages",
+      "turns",
+    ]);
   });
 });

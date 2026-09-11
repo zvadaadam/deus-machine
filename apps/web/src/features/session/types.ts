@@ -7,5 +7,6 @@ export type {
   Message,
   MessageRole,
   Session,
+  SessionTurn,
   SessionStatus,
 } from "@shared/types/session";
