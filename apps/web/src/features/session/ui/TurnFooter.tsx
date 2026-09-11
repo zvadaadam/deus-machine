@@ -16,10 +16,14 @@ interface TurnFooterProps {
 
 export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }: TurnFooterProps) {
   const { copy, copied } = useCopyToClipboard({ resetDelay: 1600 });
-  const { copyText, durationMs, tokens, cost, attribution } = useMemo(
-    () => getTurnFooterData(messages, startedAt, turn),
-    [messages, startedAt, turn]
-  );
+  const {
+    copyText,
+    startedAt: startMs,
+    durationMs,
+    tokens,
+    cost,
+    attribution,
+  } = useMemo(() => getTurnFooterData(messages, startedAt, turn), [messages, startedAt, turn]);
 
   // Billed tokens = non-cached input + cache reads/writes + output (the three
   // input buckets are disjoint by protocol invariant, so this never double-counts).
@@ -36,10 +40,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
   }, [copy, copyText]);
 
   const timestampTooltip = useMemo(() => {
-    if (durationMs == null || !startedAt) return null;
-
-    const startMs = Date.parse(startedAt);
-    if (!Number.isFinite(startMs)) return null;
+    if (durationMs == null || startMs == null) return null;
 
     const startDate = new Date(startMs);
     const endDate = new Date(startMs + durationMs);
@@ -55,7 +56,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
       startedLabel: formatter.format(startDate),
       endedLabel: formatter.format(endDate),
     };
-  }, [durationMs, startedAt]);
+  }, [durationMs, startMs]);
 
   const costLabel =
     cost != null && cost > 0 ? `$${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}` : null;

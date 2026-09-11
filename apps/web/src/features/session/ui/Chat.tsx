@@ -204,7 +204,8 @@ export function Chat({
       if (!item) return index;
       if (item.type === "compaction") return `compaction:${item.compaction.compaction_id}`;
       if (item.type === "cloudEnv") return `cloudEnv:${item.entries[0]?.id ?? index}`;
-      return item.type === "user" ? item.message.id : `turn:${item.turnId}`;
+      if (item.type === "user") return item.message.id;
+      return item.turnId ? `turn:${item.turnId}` : item.messages[0].id;
     },
     [timeline]
   );

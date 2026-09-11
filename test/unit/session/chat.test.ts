@@ -7,6 +7,17 @@ import type { SessionStatus } from "@shared/enums";
 import type { Message, SessionTurn } from "@shared/types/session";
 
 const scroll = vi.hoisted(() => vi.fn());
+const virtualization = vi.hoisted(() => vi.fn());
+vi.mock("@tanstack/react-virtual", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@tanstack/react-virtual")>();
+  return {
+    ...original,
+    useVirtualizer: (options: Parameters<typeof original.useVirtualizer>[0]) => {
+      virtualization(options);
+      return original.useVirtualizer(options);
+    },
+  };
+});
 vi.mock("@/features/session/hooks/useAutoScroll", () => ({
   useAutoScroll: (options: unknown) => {
     scroll(options);
@@ -53,6 +64,33 @@ describe("session alert visibility", () => {
       client.clear();
     }
   });
+});
+
+it("keeps separate assistant groups distinct when older messages have no turn ID", () => {
+  const client = new QueryClient();
+  const rows: Message[] = ["user", "assistant", "user", "assistant"].map((role, index) => ({
+    ...messages[0],
+    id: `old-${index}`,
+    seq: index,
+    turn_id: null,
+    role: role as Message["role"],
+    parts: [{ type: "text", id: `part-${index}`, text: role, state: "done" }],
+  }));
+  try {
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Chat, { messages: rows, loading: false, sessionStatus: "idle" })
+      )
+    );
+    const options = virtualization.mock.calls.at(-1)![0];
+    const keys = Array.from({ length: options.count }, (_, index) => options.getItemKey(index));
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(keys.length);
+  } finally {
+    client.clear();
+  }
 });
 
 it("notifies scrolling for appended messages within a turn and empty outcomes, but identifies prepended history", () => {

@@ -15,6 +15,33 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 }
 
 describe("getTurnFooterData", () => {
+  it("uses the recorded turn start for duration and its timestamp tooltip", () => {
+    const promptTime = "2026-04-13T10:00:00.000Z";
+    const startedAt = Date.parse("2026-04-13T10:00:05.000Z");
+    const endedAt = Date.parse("2026-04-13T10:00:08.000Z");
+    expect(getTurnFooterData([], promptTime, { turnId: "turn", startedAt, endedAt })).toMatchObject(
+      {
+        startedAt,
+        durationMs: 3000,
+      }
+    );
+    expect(
+      getTurnFooterData([createMessage({ sent_at: new Date(endedAt).toISOString() })], promptTime, {
+        turnId: "turn",
+        startedAt,
+      })
+    ).toMatchObject({ startedAt, durationMs: 3000 });
+  });
+
+  it("keeps reversed timestamps unknown while preserving a genuine zero duration", () => {
+    expect(
+      getTurnFooterData([], undefined, { turnId: "reversed", startedAt: 2000, endedAt: 1000 })
+    ).toMatchObject({ durationMs: null });
+    expect(
+      getTurnFooterData([], undefined, { turnId: "zero", startedAt: 1000, endedAt: 1000 })
+    ).toMatchObject({ durationMs: 0 });
+  });
+
   it("shows recorded execution for an empty turn without inventing an account or default model", () => {
     const attribution = { execution: { harness: "codex-app-server" } };
     const result = getTurnFooterData([], undefined, { turnId: "turn", ...attribution });
@@ -66,6 +93,7 @@ describe("getTurnFooterData", () => {
 
     expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
       copyText: "Done.",
+      startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 9000,
       tokens: null,
       cost: null,
@@ -92,6 +120,7 @@ describe("getTurnFooterData", () => {
 
     expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z")).toEqual({
       copyText: "Short answer",
+      startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 6000,
       tokens: null,
       cost: null,
@@ -118,12 +147,14 @@ describe("getTurnFooterData", () => {
     const turn = { turnId: "turn", endedAt: Date.parse("2026-04-13T10:00:08.000Z") };
     expect(getTurnFooterData(messages, "not-a-date", turn)).toEqual({
       copyText: "Partial response",
+      startedAt: null,
       durationMs: null,
       tokens: null,
       cost: null,
     });
     expect(getTurnFooterData(messages, "2026-04-13T10:00:00.000Z", turn)).toEqual({
       copyText: "Partial response",
+      startedAt: Date.parse("2026-04-13T10:00:00.000Z"),
       durationMs: 8000,
       tokens: null,
       cost: null,

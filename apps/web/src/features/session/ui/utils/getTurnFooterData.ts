@@ -4,6 +4,7 @@ import type { TokenUsage } from "@shared/protocol-types";
 export interface TurnFooterData {
   attribution?: Pick<SessionTurn, "execution" | "providerCredentialSource">;
   copyText: string | null;
+  startedAt: number | null;
   durationMs: number | null;
   /** Billed tokens for the turn (turn.ended), when the harness reported them. */
   tokens: TokenUsage | null;
@@ -16,7 +17,8 @@ export function getTurnFooterData(
   startedAt?: string | null,
   turn?: SessionTurn
 ): TurnFooterData {
-  const start = parseTimestamp(startedAt) ?? turn?.startedAt;
+  const start = turn?.startedAt ?? parseTimestamp(startedAt);
+  const end = turn?.endedAt ?? getTurnEndMs(messages);
   return {
     attribution:
       turn?.execution || turn?.providerCredentialSource
@@ -26,10 +28,8 @@ export function getTurnFooterData(
           }
         : undefined,
     copyText: getLastTextContent(messages),
-    durationMs:
-      start != null && turn?.endedAt != null
-        ? Math.max(0, turn.endedAt - start)
-        : getTurnDurationMs(messages, startedAt),
+    startedAt: start,
+    durationMs: start != null && end != null && end >= start ? end - start : null,
     tokens: turn?.tokens ?? null,
     cost: turn?.cost ?? null,
   };
@@ -57,10 +57,7 @@ function extractTextFromParts(parts?: Message["parts"]): string | null {
   return text.length > 0 ? text : null;
 }
 
-function getTurnDurationMs(messages: Message[], startedAt?: string | null): number | null {
-  const startMs = parseTimestamp(startedAt);
-  if (startMs == null) return null;
-
+function getTurnEndMs(messages: Message[]): number | null {
   let latestEndMs: number | null = null;
 
   for (const message of messages) {
@@ -82,9 +79,7 @@ function getTurnDurationMs(messages: Message[], startedAt?: string | null): numb
     }
   }
 
-  if (latestEndMs == null || latestEndMs < startMs) return null;
-
-  return latestEndMs - startMs;
+  return latestEndMs;
 }
 
 function getLatestTimestamp(

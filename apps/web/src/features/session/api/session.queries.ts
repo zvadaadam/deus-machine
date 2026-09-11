@@ -116,8 +116,8 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
  * WS subscription pushes q:delta frames with new messages since last cursor.
  * mergeMessageDelta handles the PaginatedMessages shape, deduplication,
  * and optimistic placeholder cleanup.
- * HTTP queryFn loads all messages (backend caps at 2000). No pagination —
- * the virtualizer handles render-level windowing.
+ * HTTP queryFn loads the latest page; useLoadOlderMessages prepends history.
+ * The virtualizer limits how many loaded messages render at once.
  */
 export function useMessages(sessionId: string | null) {
   const queryClient = useQueryClient();
@@ -205,24 +205,34 @@ export function useLoadOlderMessages() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    onMutate: ({ sessionId }) =>
+      new Map(
+        queryClient
+          .getQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId))
+          ?.turns.map((turn) => [turn.turnId, turn])
+      ),
     mutationFn: ({ sessionId, beforeSeq }: { sessionId: string; beforeSeq: number }) =>
       SessionService.fetchMessages(sessionId, { before: beforeSeq }),
 
-    onSuccess: (olderPage, { sessionId }) => {
+    onSuccess: (olderPage, { sessionId }, turnsAtRequest) => {
       queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
         if (!old) return olderPage;
         const existingIds = new Set(old.messages.map((m) => m.id));
         const newMessages = olderPage.messages.filter((m) => !existingIds.has(m.id));
+        const turns = new Map(old.turns.map((turn) => [turn.turnId, turn]));
+        for (const turn of olderPage.turns) {
+          // Refresh cached history, but preserve live updates received during the fetch.
+          const current = turns.get(turn.turnId);
+          if (!current || current === turnsAtRequest?.get(turn.turnId)) {
+            turns.set(turn.turnId, turn);
+          }
+        }
         return {
           messages: [...newMessages, ...old.messages],
           // The older page carries the session's full compaction list
           // (single digits, never paginated), so it is simply the fresher one.
           compactions: olderPage.compactions,
-          turns: [
-            ...new Map(
-              [...olderPage.turns, ...old.turns].map((turn) => [turn.turnId, turn])
-            ).values(),
-          ],
+          turns: [...turns.values()],
           has_older: olderPage.has_older,
           has_newer: old.has_newer,
         };
