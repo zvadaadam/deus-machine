@@ -425,6 +425,25 @@ describe("message.started{role:user} — the predicted echo", () => {
 // ===========================================================================
 
 describe("restored cloud conversations", () => {
+  it("anchors generated outcomes when the supplied order only contains saved messages", () => {
+    const h = harness();
+    const restored = harness();
+    restored.feed(started({ messageId: "prompt", role: "user", outputIndex: 0 }));
+    restored.feed(turnEnded({ stopReason: "error", execution: { harness: "codex-app-server" } }));
+    restored.feed(started({ messageId: "later", turnId: "later-turn" }));
+    hydrateConversation(h.ctx, {
+      sessionId: SESSION,
+      seq: 3,
+      conversation: restored.fold().state,
+      messageIds: ["prompt", "later"],
+    });
+    expect(h.page()?.messages.map(({ id, seq }) => ({ id, seq }))).toEqual([
+      { id: "prompt", seq: 1 },
+      { id: `cancelled-${TURN}`, seq: 2 },
+      { id: "later", seq: 3 },
+    ]);
+  });
+
   it("completes an empty initial page and ignores the cancelled fetch", async () => {
     const h = harness();
     let finishPage!: (page: PaginatedMessages) => void;

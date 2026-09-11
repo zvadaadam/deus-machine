@@ -624,15 +624,27 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(sessionRow()).toMatchObject({ message_count: 250 });
   });
 
-  it("keeps a cancellation marker beside its user prompt", () => {
-    onFrame(
-      snapshot([message("cancelled-prompt", 0, "turn-1", "user"), message("later", 1, "turn-2")], {
-        turns: [ended("turn-1", { stopReason: "cancelled" }), ended("turn-2")],
-      })
-    );
-    expect(rows().map((row) => row.turn_id)).toEqual(["turn-1", "turn-1", "turn-2"]);
-    expect(rows()[1]).toMatchObject({ role: "assistant", turn_stop_reason: "cancelled" });
-  });
+  it.each(["cancelled", "error", "end_turn"])(
+    "keeps a %s outcome beside its user prompt",
+    (stopReason) => {
+      onFrame(
+        snapshot(
+          [message("cancelled-prompt", 0, "turn-1", "user"), message("later", 1, "turn-2")],
+          {
+            turns: [
+              ended("turn-1", { stopReason, execution: { harness: "codex-app-server" } }),
+              ended("turn-2"),
+            ],
+          }
+        )
+      );
+      for (const messages of [rows(), page().messages]) {
+        expect(messages.map((row) => row.turn_id)).toEqual(["turn-1", "turn-1", "turn-2"]);
+        expect(messages.map((row) => row.seq)).toEqual([1, 2, 3]);
+        expect(messages[1]).toMatchObject({ role: "assistant", turn_stop_reason: stopReason });
+      }
+    }
+  );
 
   it("replaces a temporary cancellation marker when recovery finds the real answer", () => {
     const prompt = message("prompt", 0, "turn-1", "user");

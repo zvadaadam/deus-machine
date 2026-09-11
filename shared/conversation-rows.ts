@@ -13,6 +13,27 @@ import type {
 import { isUnknownEvent, type AnyLifecycleEvent } from "./protocol-types";
 import { turnOutcomeMessageId, type Compaction, type Message } from "./types/session";
 
+/** Anchor generated outcomes after their turn's last saved row, before later turns. */
+export function transcriptOrderRanks(
+  rows: ReadonlyArray<{ id: string; turn_id?: string | null }>,
+  orderedIds: readonly string[]
+): Map<string, number> {
+  const rank = new Map(orderedIds.map((id, index) => [id, index]));
+  const lastInTurn = new Map<string, number>();
+  for (const row of rows) {
+    const index = rank.get(row.id);
+    if (row.turn_id && index !== undefined)
+      lastInTurn.set(row.turn_id, Math.max(lastInTurn.get(row.turn_id) ?? -1, index));
+  }
+  for (const row of rows) {
+    if (row.turn_id && !rank.has(row.id) && row.id === turnOutcomeMessageId(row.turn_id)) {
+      const anchor = lastInTurn.get(row.turn_id);
+      if (anchor !== undefined) rank.set(row.id, anchor + 0.5);
+    }
+  }
+  return rank;
+}
+
 /**
  * The folded message a change addressed.
  *

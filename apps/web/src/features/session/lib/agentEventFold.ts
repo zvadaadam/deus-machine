@@ -57,6 +57,7 @@ import {
   findConversationMessage,
   supersededOutcomeMarkers,
   turnAccountingRow,
+  transcriptOrderRanks,
 } from "@shared/conversation-rows";
 import {
   isUnknownEvent,
@@ -191,20 +192,9 @@ export function hydrateConversation(
       old ? { ...old, messages: old.messages.filter((message) => !markers.has(message.id)) } : old
     );
   }
-  // Accounting may have inserted cancellation markers. Restate their position
+  // Accounting may have inserted outcome markers. Restate their position
   // and SQLite's seq while leaving a new local prompt after the saved rows.
-  const rank = new Map(messageIds.map((id, index) => [id, index + 1]));
   commitTranscriptOrder(ctx.queryClient, sessionId, messageIds);
-  ctx.queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) =>
-    old
-      ? {
-          ...old,
-          messages: old.messages.map((message) =>
-            rank.has(message.id) ? { ...message, seq: rank.get(message.id)! } : message
-          ),
-        }
-      : old
-  );
 }
 
 /** Fold one envelope. The single entry point the hook calls per WS frame. */
@@ -662,8 +652,8 @@ export function patchWorkspaceSessionStatus(
 // ---- Transcript order (snapshot backfill) ----
 
 /**
- * Reorder the cached page so `orderedIds` lead, in that order, and every row the
- * caller doesn't name trails in place. Used once, after a snapshot backfill:
+ * Reorder saved rows and their generated outcomes; unknown local rows trail
+ * in place. Used once, after a snapshot backfill:
  * `writeMessage` APPENDS a row it hasn't seen, so an optimistic prompt sent
  * before the snapshot lands ends up ahead of the reconstructed history — this
  * repairs that. The snapshot IS the full transcript, so it also stamps
@@ -678,12 +668,13 @@ export function commitTranscriptOrder(
   sessionId: string,
   orderedIds: string[]
 ): void {
-  const rank = new Map(orderedIds.map((id, i) => [id, i]));
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) return old;
+    const rank = transcriptOrderRanks(old.messages, orderedIds);
     const known = old.messages
       .filter((m) => rank.has(m.id))
-      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+      .map((message, index) => ({ ...message, seq: index + 1 }));
     const unknown = old.messages.filter((m) => !rank.has(m.id));
     return { ...old, messages: [...known, ...unknown], has_older: false };
   });

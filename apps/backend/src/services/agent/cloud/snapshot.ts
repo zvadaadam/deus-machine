@@ -8,8 +8,7 @@ import {
   projectCloudSnapshot,
   type RestoredCloudConversation,
 } from "@shared/cloud-session-snapshot";
-import { turnOutcomeMessageId } from "@shared/types/session";
-import { supersededOutcomeMarkers } from "@shared/conversation-rows";
+import { supersededOutcomeMarkers, transcriptOrderRanks } from "@shared/conversation-rows";
 import { getErrorMessage } from "@shared/lib/errors";
 import { getDatabase } from "../../../lib/database";
 import {
@@ -103,22 +102,12 @@ export function restoreCloudSnapshot(
         ).run(sessionId, JSON.stringify([...markers]));
       }
 
-      // Cancellation without assistant output creates a marker. Anchor it to
-      // that turn's user message, rather than the end of the restored history.
+      // Outcomes without assistant output belong beside their original prompt.
       const ordered = db
         .prepare("SELECT id, seq, turn_id FROM messages WHERE session_id = ? ORDER BY seq")
         .all(sessionId) as typeof rows;
-      const lastInTurn = new Map<string, number>();
-      for (const row of ordered) {
-        if (row.turn_id && rank.has(row.id)) lastInTurn.set(row.turn_id, rank.get(row.id)!);
-      }
-      for (const row of ordered) {
-        if (row.turn_id && row.id === turnOutcomeMessageId(row.turn_id)) {
-          const anchor = lastInTurn.get(row.turn_id);
-          if (anchor !== undefined) rank.set(row.id, anchor + 0.5);
-        }
-      }
-      ordered.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+      const finalRank = transcriptOrderRanks(ordered, messageIds);
+      ordered.sort((a, b) => (finalRank.get(a.id) ?? Infinity) - (finalRank.get(b.id) ?? Infinity));
       ordered.forEach((row, index) => {
         if (row.seq !== index + 1) updateOrder.run(index + 1, row.id, sessionId);
       });

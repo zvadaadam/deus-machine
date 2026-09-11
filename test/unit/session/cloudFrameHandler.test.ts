@@ -50,6 +50,59 @@ const textPart = (id: string, sessionId: string, messageId: string, text: string
 });
 
 describe("makeCloudFrameHandler", () => {
+  it("keeps a recovered outcome beside its original prompt before later turns", () => {
+    const SESSION = "sess-outcome-order";
+    const qc = new QueryClient();
+    seedEmptyPage(qc, SESSION);
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, SESSION), SESSION);
+    const frame = {
+      type: "session.snapshot",
+      state: {
+        sessionId: SESSION,
+        organizationId: "org",
+        workspaceId: "ws",
+        status: "ready",
+        turns: [
+          {
+            turnId: "first",
+            stopReason: "error",
+            endedAt: T + 1000,
+            execution: { harness: "codex-app-server", thinkingLevel: "high" },
+          },
+        ],
+      },
+      messages: [
+        { id: "first-prompt", turnId: "first", role: "user", outputIndex: 0 },
+        { id: "later-prompt", turnId: "later", role: "user", outputIndex: 0 },
+        { id: "later-answer", turnId: "later", role: "assistant", outputIndex: 1 },
+      ].map((message, messageIndex) => ({
+        ...message,
+        sessionId: SESSION,
+        messageIndex,
+        createdAt: T + messageIndex * 2000,
+        parts: [textPart(`part-${message.id}`, SESSION, message.id, message.id)],
+      })),
+    };
+    onFrame(frame);
+    const page = () => qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
+    expect(page().messages.map((row) => row.id)).toEqual([
+      "first-prompt",
+      "cancelled-first",
+      "later-prompt",
+      "later-answer",
+    ]);
+    expect(JSON.parse(page().messages[1].turn_attribution!)).toEqual({
+      execution: frame.state.turns[0].execution,
+    });
+    onFrame(frame);
+    expect(page().messages.map((row) => row.id)).toEqual([
+      "first-prompt",
+      "cancelled-first",
+      "later-prompt",
+      "later-answer",
+    ]);
+  });
+
   it("folds a live streamed turn into queryKeys.sessions.messages(sessionId)", () => {
     const SESSION = "sess-direct-live";
     const qc = new QueryClient();
