@@ -189,6 +189,59 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       .map(([raw]) => JSON.parse(raw))
       .filter((frame) => frame.event === "agent:snapshot");
 
+  it("retains reported cache usage in SQLite and the desktop cache after reconnect", async () => {
+    const tokens = {
+      input: 3,
+      output: 8,
+      reasoning: 5,
+      cache: { read: 11, write: 7, writeEphemeral5m: 3, writeEphemeral1h: 4 },
+    };
+    onFrame(snapshot([]));
+    onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-1", timestamp: T });
+    const answer = message("answer", 0);
+    onFrame({
+      type: "message.started",
+      sessionId: PROVIDER,
+      turnId: "turn-1",
+      messageId: answer.id,
+      messageIndex: 0,
+      outputIndex: 1,
+      role: "assistant",
+      timestamp: T,
+    });
+    onFrame({
+      type: "message.part",
+      sessionId: PROVIDER,
+      turnId: "turn-1",
+      messageId: answer.id,
+      outputIndex: 1,
+      partIndex: 0,
+      part: answer.parts[0],
+      timestamp: T + 1_000,
+    });
+    onFrame({
+      type: "turn.ended",
+      sessionId: PROVIDER,
+      turnId: "turn-1",
+      timestamp: T + 10_000,
+      stopReason: "end_turn",
+      tokens,
+      cost: 0,
+    });
+    for (const row of [rows()[0], page().messages[0]]) {
+      expect(JSON.parse(row.tokens!)).toEqual(tokens);
+      expect(row.cost).toBe(0);
+    }
+
+    shutdownCloudDriver();
+    await connect();
+    onFrame(snapshot([message("answer", 0)], { turns: [ended("turn-1", { tokens, cost: 0 })] }));
+    for (const row of [rows()[0], page().messages[0]]) {
+      expect(JSON.parse(row.tokens!)).toEqual(tokens);
+      expect(row.cost).toBe(0);
+    }
+  });
+
   it("keeps each turn's selected account and execution in SQLite and the live desktop cache", async () => {
     const execution = {
       harness: "codex-app-server" as const,
