@@ -19,7 +19,7 @@ describe("cloud wake feedback", () => {
       expect(await wakeCloudWorkspace("ws")).toBe(false);
       expect(mocks.post).toHaveBeenCalledExactlyOnceWith("/workspaces/ws/cloud-wake");
       expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
-        "Couldn't wake your computer. Try again."
+        failure === "rejected" ? "Couldn't wake your computer. Try again." : "network down"
       );
     }
   );
@@ -30,6 +30,14 @@ describe("cloud wake feedback", () => {
     expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
       "Couldn't refresh cloud status. Your existing connection is still available."
     );
+  });
+
+  it("shows the cloud's capacity explanation without hiding it behind a generic wake error", async () => {
+    const error =
+      "This organization already has 10 cloud machines running or starting. Pause or stop one before starting another.";
+    mocks.post.mockResolvedValue({ ok: false, status: "paused", error });
+    expect(await wakeCloudWorkspace("ws")).toBe(false);
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(error);
   });
 
   it("leaves successful wake completion to the workspace status events", async () => {

@@ -37,7 +37,21 @@ const providerAccounts = {
 };
 const script = `
   import { createSecretFixture } from ${JSON.stringify(path.join(agnt, "apps/backend/tests/integration/secret-fixture.ts"))};
+  import { workspaces } from ${JSON.stringify(path.join(agnt, "packages/db/src/schema/pg/workspaces.ts"))};
+  import { reserveSandbox, recordSandboxExecution } from ${JSON.stringify(path.join(agnt, "apps/backend/src/sandbox/compute-store.ts"))};
   const fixture = await createSecretFixture();
+  const workspaceId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await fixture.db.insert(workspaces).values({ id: workspaceId, organizationId: fixture.ids.org, createdAt: now, updatedAt: now });
+  for (let i = 0; i < 2; i++) await reserveSandbox(fixture.db, {
+    id: crypto.randomUUID(), organizationId: fixture.ids.org, workspaceId, provider: "e2b",
+  });
+  await recordSandboxExecution(fixture.db, {
+    organizationId: fixture.ids.org, workspaceId, provider: "e2b", sandboxIdentifier: "ui-fixture",
+    executionIdentifier: "ui-execution", eventIdentifier: "ui-pause", event: "paused",
+    startedAt: new Date(Date.now() - 600_000).toISOString(), occurredAt: new Date(Date.now() - 300_000).toISOString(),
+    runtimeMs: 300_000, cpuCount: 2, memoryMb: 512,
+  });
   // External GitHub discovery is synthetic; settings and secret writes use real auth + Postgres.
   fixture.app.get("/orgs/:org/github/:action", c => {
     if (c.req.param("action") === "environment") return c.json({ project: null, branch: "main" });
@@ -77,6 +91,7 @@ try {
   const { Hono } = await import("hono");
   const { cors } = await import("hono/cors");
   const { default: routes } = await import("../../apps/backend/src/routes/environment-secrets.ts");
+  const { default: usageRoutes } = await import("../../apps/backend/src/routes/compute-usage.ts");
   const { setCloudRuntimeCredentials, resetCloudConfigForTests } =
     await import("../../apps/backend/src/services/agent/cloud/config.ts");
   const { readProjectFile, writeProjectFile } =
@@ -93,7 +108,7 @@ try {
     version: 1,
     setup: "./local-only-setup.sh",
   });
-  const app = new Hono().use("*", cors()).route("/api", routes);
+  const app = new Hono().use("*", cors()).route("/api", routes).route("/api", usageRoutes);
   app.get("/api/test-environment-file/:id", (c) => {
     const repoDirectory = repositoryDirectories.get(c.req.param("id"));
     if (!repoDirectory) return c.json({ error: "Unknown repository" }, 404);
@@ -124,13 +139,15 @@ try {
     import { TooltipProvider } from "@/components/ui/tooltip";
     import { useUIStore } from "@/shared/stores/uiStore";
     import { EnvironmentSection } from "@/features/settings/ui/sections/EnvironmentSection";
+    import { AccountSection } from "@/features/settings/ui/sections/AccountSection";
     import "@/global.css";
     const repository = new URL(window.location.href).searchParams.get("repo");
     if (repository) useUIStore.getState().openEnvironmentSettings(repository, "cloud");
     window.secretTestSetupRequest = () => useUIStore.getState().pendingEnvSetup;
     window.secretTestClearSetupRequest = () => useUIStore.getState().clearEnvSetupRequest();
     window.secretCacheContains = value => JSON.stringify([queryClient.getQueryCache().getAll().map(q => q.state.data), queryClient.getMutationCache().getAll().map(m => m.state)]).includes(value);
-    createRoot(document.getElementById("root")).render(<React.StrictMode><QueryClientProvider client={queryClient}><TooltipProvider><main className="mx-auto h-screen max-w-4xl overflow-y-auto p-4 sm:p-8"><EnvironmentSection /></main></TooltipProvider></QueryClientProvider></React.StrictMode>);
+    const account = new URL(window.location.href).searchParams.has("account");
+    createRoot(document.getElementById("root")).render(<React.StrictMode><QueryClientProvider client={queryClient}><TooltipProvider><main className="mx-auto h-screen max-w-4xl overflow-y-auto p-4 sm:p-8">{account ? <AccountSection /> : <EnvironmentSection />}</main></TooltipProvider></QueryClientProvider></React.StrictMode>);
   `
   );
   browser = await chromium.launch({ headless: true });
@@ -217,6 +234,52 @@ try {
       await page.getByLabel("Organization", { exact: true }).click();
       await page.getByRole("option", { name, exact: true }).click();
     };
+    await page.goto(`${vite.resolvedUrls.local[0]}?account`);
+    const usage = page.getByRole("region", { name: "Cloud usage" });
+    const chooseUsageOrg = async (name) => {
+      await page.getByLabel("Usage organization", { exact: true }).click();
+      await page.getByRole("option", { name, exact: true }).click();
+    };
+    await chooseUsageOrg("Secret test organization");
+    await usage.getByText("2 / 10", { exact: true }).waitFor();
+    await usage.getByText("5 min", { exact: true }).waitFor();
+    await shot("cloud-usage");
+    await page.getByRole("button", { name: "Refresh cloud usage" }).click();
+    await usage.getByText("2 / 10", { exact: true }).waitFor();
+    await chooseUsageOrg("Another organization");
+    await usage.getByText("0 / 10", { exact: true }).waitFor();
+    await usage.getByText("0 min", { exact: true }).waitFor();
+    await chooseUsageOrg("Secret test organization");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await usage.getByText("5 min", { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+      false
+    );
+    await shot("cloud-usage-mobile");
+    setCloudRuntimeCredentials({ deusCloudSessionToken: fixture.tokens.outsider });
+    await page.evaluate(
+      ({ token, account }) => {
+        sessionStorage.setItem("deus_cloud_session", token);
+        window.secretTestSignIn(account);
+      },
+      { token: fixture.tokens.outsider, account: fixture.ids.outsider }
+    );
+    await usage.getByText("No cloud organization yet.", { exact: true }).waitFor();
+    assert.equal(await usage.getByText("5 min", { exact: true }).count(), 0);
+    assert.equal(
+      await page.getByRole("button", { name: "Refresh cloud usage" }).isDisabled(),
+      true
+    );
+    setCloudRuntimeCredentials({ deusCloudSessionToken: fixture.tokens.alice });
+    await page.evaluate(
+      ({ token, account }) => {
+        sessionStorage.setItem("deus_cloud_session", token);
+        window.secretTestSignIn(account);
+      },
+      { token: fixture.tokens.alice, account: fixture.ids.alice }
+    );
+    await page.setViewportSize({ width: 1000, height: 1000 });
     const openRepository = () => page.getByRole("button", { name: /acme\/mobile-app/ }).click();
     const setupScript = `bun install --frozen-lockfile\nbun run prepare\n# ${direct ? "web" : "desktop"}`;
     await page.goto(vite.resolvedUrls.local[0]);
@@ -732,7 +795,7 @@ try {
         route.fulfill({ status: 404, contentType: "text/plain", body: "Not Found" })
       );
       await page.reload();
-      await page.getByText("Couldn't load cloud environment settings.", { exact: true }).waitFor();
+      await page.getByText("Couldn't load cloud settings.", { exact: true }).waitFor();
       await page.getByRole("button", { name: /octocat\/Hello-World/ }).click();
       await page.getByText(/Sign in to manage cloud secrets/).waitFor();
       assert.equal(await page.getByRole("button", { name: "Sign in to Deus Cloud" }).count(), 0);
@@ -740,7 +803,7 @@ try {
       await page.unroute(orgsUrl);
       await page.getByRole("button", { name: "Try again", exact: true }).click();
       await page.getByRole("button", { name: "Default secrets", exact: true }).waitFor();
-      assert.equal(await page.getByText("Couldn't load cloud environment settings.").count(), 0);
+      assert.equal(await page.getByText("Couldn't load cloud settings.").count(), 0);
     }
     // Workspace shortcuts accept local repository IDs and cloud Git remote identities.
     const targetRepository = direct ? "https://github.com/Acme/mobile-app.git" : "local";
@@ -757,7 +820,7 @@ try {
     await vite.close();
     vite = null;
     console.log(
-      `${direct ? "Direct web" : "Desktop proxy"}: repository setup → scoped/default secrets → org/account isolation → replace/delete; agent setup targeting, dirty-navigation guards, mobile layout and no values in caches`
+      `${direct ? "Direct web" : "Desktop proxy"}: compute usage + org/account isolation; repository setup → scoped/default secrets → replace/delete; agent setup targeting, dirty-navigation guards, mobile layout and no values in caches`
     );
   }
   resetCloudConfigForTests();

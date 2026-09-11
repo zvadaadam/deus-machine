@@ -25604,6 +25604,13 @@
                               }
                             }
                           ]
+                        },
+                        {
+                          "id": "dI1s4",
+                          "type": "ref",
+                          "ref": "Fife4",
+                          "name": "Cloud usage",
+                          "width": "fill_container"
                         }
                       ]
                     }
@@ -87833,6 +87840,156 @@
                   "fontWeight": "500"
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Fife4",
+          "x": 736,
+          "y": 800,
+          "name": "DS/CloudComputeUsage",
+          "context": "features/settings/ui/sections/CloudComputeUsage.tsx. Account settings for signed-in members. Organization-scoped capacity and settled runtime; refresh on demand. Hidden when signed out.",
+          "reusable": true,
+          "width": 672,
+          "cornerRadius": "$radius-xl",
+          "stroke": "$border-subtle",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "B3Hdua",
+              "name": "Heading",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "GmTRd",
+                  "name": "Organization",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "g3ktWT",
+                      "name": "Title",
+                      "fill": "$text-primary",
+                      "content": "Cloud usage",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "PZFay",
+                      "name": "Organization name",
+                      "fill": "$text-muted",
+                      "content": "Deus",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "vW6cK",
+                  "name": "Refresh cloud usage",
+                  "fill": "$text-primary",
+                  "content": "↻",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-lg",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "qLWtC",
+              "name": "Usage metrics",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "D2VHOJ",
+                  "name": "Machines in use",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "oA6zd",
+                      "name": "Label",
+                      "fill": "$text-muted",
+                      "content": "Machines in use",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GMSWu",
+                      "name": "Value",
+                      "fill": "$text-primary",
+                      "content": "2 / 10",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-lg",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WaaN2",
+                  "name": "Recorded runtime this month",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PY2Ym",
+                      "name": "Label",
+                      "fill": "$text-muted",
+                      "content": "Recorded runtime this month",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "t8i8v",
+                      "name": "Value",
+                      "fill": "$text-primary",
+                      "content": "5 min",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-lg",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "Q8ixKI",
+              "name": "Runtime explanation",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Starting machines and pending shutdowns use capacity. Runtime updates after machines pause or stop; paused time doesn’t count.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xs",
+              "fontWeight": "normal"
             }
           ]
         }

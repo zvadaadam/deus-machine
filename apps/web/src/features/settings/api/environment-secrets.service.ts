@@ -1,59 +1,26 @@
-import { toCamelCaseKeys, toSnakeCaseKeys, type ProjectEnvironment } from "@deus-hq/api";
+import { toSnakeCaseKeys, type ProjectEnvironment } from "@deus-hq/api";
 import type {
   CloudEnvironmentSettings,
   CloudSecretInput,
   CloudSecretScope,
   CloudSettingsOrganizations,
 } from "@shared/types/environment-secrets";
-import { getBaseURL } from "@/shared/config/api.config";
-import { getStoredToken, needsRemoteAuth } from "@/features/auth/hooks/useAuth";
-import {
-  handleWebCloudSessionExpired,
-  isCloudDirectWebMode,
-  readWebCloudSessionBearer,
-  resolveAgntBaseUrl,
-  resolveDeusCloudUrl,
-} from "@/features/session/cloud/webCloudDirectConfig";
+import { requestCloudSettings } from "./cloud-settings.service";
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const direct = isCloudDirectWebMode();
-  const bearer = direct
-    ? await readWebCloudSessionBearer()
-    : needsRemoteAuth()
-      ? getStoredToken()
-      : null;
-  if (direct && !bearer) throw new Error("Sign in to Deus Cloud to manage application secrets.");
+function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const product = /^\/orgs\/[^/]+\/github\//.test(path);
   const remotePath =
     path === "/orgs" || product
       ? path
       : path.replace(/^(\/orgs\/[^/?]+)(.*)$/, "$1/environment-settings$2");
-  const url = direct
-    ? `${product ? resolveDeusCloudUrl() : `${resolveAgntBaseUrl()}/dashboard`}${remotePath}`
-    : `${await getBaseURL()}/settings/environment-secrets${path}`;
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-      "content-type": "application/json",
+  return requestCloudSettings<T>(
+    {
+      cloud: remotePath,
+      desktop: `/settings/environment-secrets${path}`,
+      service: product ? "product" : "platform",
     },
-    signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(init.signal ? [init.signal] : [])]),
-    redirect: "error",
-  });
-  if (!response.ok) {
-    if (direct && response.status === 401) handleWebCloudSessionExpired();
-    const body = await response.json().catch(() => null);
-    throw new Error(
-      typeof body?.message === "string"
-        ? body.message
-        : typeof body?.error === "string"
-          ? body.error
-          : !init.method || init.method === "GET"
-            ? "Couldn't load cloud environment settings."
-            : "Couldn't update cloud environment settings."
-    );
-  }
-  return toCamelCaseKeys(await response.json(), { opaqueKeys: ["project"] });
+    init
+  );
 }
 
 export const listSecretOrganizations = (signal: AbortSignal) =>

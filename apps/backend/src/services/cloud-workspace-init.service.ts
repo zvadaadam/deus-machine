@@ -30,7 +30,7 @@ import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
 import { getCloudConfig, getCloudIdentitySignal, setCloudConnectHook } from "./agent/cloud/config";
-import { getCloudWorkspaceUserId } from "./cloud-environment-settings.service";
+import { getCloudWorkspaceUserId } from "./cloud-settings.service";
 import {
   ensureCloudSession,
   announceCloudEnv,
@@ -390,7 +390,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   provider_workspace_id: string;
   current_session_id: string | null;
   repository_id?: string | null;
-}): Promise<{ ok: boolean; status: string }> {
+}): Promise<{ ok: boolean; status: string; error?: string }> {
   const db = getDatabase();
   const sessionId = workspace.current_session_id;
   const announce = (data: Record<string, unknown>) => {
@@ -438,8 +438,10 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
     if (refreshing && isServing()) return { ok: false, status: "running" };
     const failedStatus = status === "paused" || status === "stopped" ? status : "error";
     setStage(failedStatus);
-    announce({ status: failedStatus, reason: "Could not wake the cloud machine. Try again." });
-    return { ok: false, status: failedStatus };
+    const error =
+      err instanceof Error ? err.message : "Could not wake the cloud machine. Try again.";
+    announce({ status: failedStatus, reason: error });
+    return { ok: false, status: failedStatus, error };
   }
 
   if (sessionId) {

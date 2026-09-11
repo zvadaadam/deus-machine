@@ -4,14 +4,14 @@ import { AppError } from "../lib/errors";
 import { getCloudSettingsConfig, getCloudIdentitySignal } from "./agent/cloud/config";
 
 /** Fixed dashboard paths use the human's session, never the organization SDK key. */
-export async function requestCloudEnvironmentSettings(
+export async function requestCloudSettings(
   path: string,
   init: RequestInit = {},
   service: "platform" | "product" = "platform"
 ) {
   const config = getCloudSettingsConfig();
   if (!config?.deusCloudSessionToken)
-    throw new AppError(401, "Sign in to Deus Cloud to manage application secrets.");
+    throw new AppError(401, "Sign in to Deus Cloud to manage cloud settings.");
   const identity = getCloudIdentitySignal();
   const base = service === "platform" ? `${config.baseUrl}/dashboard` : config.deusCloudUrl;
   if (!base) throw new AppError(503, "Deus Cloud is not configured.");
@@ -36,15 +36,15 @@ export async function requestCloudEnvironmentSettings(
       typeof data?.message === "string"
         ? data.message
         : !init.method || init.method === "GET"
-          ? "Couldn't load cloud environment settings."
-          : "Couldn't update cloud environment settings."
+          ? "Couldn't load cloud settings."
+          : "Couldn't update cloud settings."
     );
   return toCamelCaseKeys(data, { opaqueKeys: ["project"] });
 }
 
 export async function getCloudSettingsOrganizations(): Promise<CloudSettingsOrganizations> {
   const currentOrganizationId = getCloudSettingsConfig().orgId;
-  const data = await requestCloudEnvironmentSettings("/orgs");
+  const data = await requestCloudSettings("/orgs");
   return { ...data, currentOrganizationId };
 }
 

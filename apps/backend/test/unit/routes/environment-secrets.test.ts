@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import routes from "../../../src/routes/environment-secrets";
 import { errorHandler } from "../../../src/middleware/error-handler";
-import { getCloudWorkspaceUserId } from "../../../src/services/cloud-environment-settings.service";
+import { getCloudWorkspaceUserId } from "../../../src/services/cloud-settings.service";
 import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
@@ -92,7 +92,7 @@ describe("application secret forwarding", () => {
     );
     const response = await app.request("/api/settings/environment-secrets/orgs");
     expect(response.status).toBe(status);
-    expect((await response.json()).error).toBe("Couldn't load cloud environment settings.");
+    expect((await response.json()).error).toBe("Couldn't load cloud settings.");
   });
   it("does not lend the desktop owner's session to paired clients or the relay", async () => {
     const paired = new Hono<{ Variables: { device?: unknown } }>()

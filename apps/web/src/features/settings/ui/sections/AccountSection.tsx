@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { native } from "@/platform";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { CloudComputeUsage } from "./CloudComputeUsage";
 
 function formatAccountId(accountId: string | null): string {
   if (!accountId) return "";
@@ -129,6 +130,10 @@ export function AccountSection() {
           )}
         </div>
       </div>
+
+      {signedIn && data.accountId && (
+        <CloudComputeUsage key={data.accountId} accountId={data.accountId} />
+      )}
 
       {/* No expiry countdown: the session renews itself silently (rotating
           refresh) and signs out only when genuinely revoked — a ticking
