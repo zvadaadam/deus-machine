@@ -224,7 +224,7 @@ export async function installDesktop(options: DesktopOptions): Promise<void> {
   }
 }
 
-function getAssetPattern(
+export function getAssetPattern(
   os: string,
   cpuArch: string
 ): { matcher: (name: string) => boolean; description: string } | null {
@@ -232,7 +232,10 @@ function getAssetPattern(
     case "darwin": {
       const archSuffix = cpuArch === "arm64" ? "arm64" : "x64";
       return {
-        matcher: (name) => name.endsWith(".dmg") && name.includes(archSuffix),
+        // electron-builder names Intel DMGs without an architecture suffix.
+        matcher: (name) =>
+          name.endsWith(".dmg") &&
+          (cpuArch === "arm64" ? name.includes("arm64") : !name.includes("arm64")),
         description: `macOS DMG (${archSuffix})`,
       };
     }

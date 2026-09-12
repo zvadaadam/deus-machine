@@ -4,7 +4,8 @@
 # electron-updater reads latest-mac.yml from the release assets to deliver
 # auto-updates.
 #
-# Trigger: GitHub Actions UI → "Run workflow" → pick bump type
+# Trigger: push a vX.Y.Z tag matching both package versions on main, or
+# GitHub Actions UI → "Run workflow" → pick bump type.
 # Or CLI:  gh workflow run release.yml -f bump=patch
 #          gh workflow run release.yml -f bump=minor
 #          gh workflow run release.yml -f bump=patch -f dry_run=true
@@ -19,12 +20,15 @@
 # Optional GitHub Secrets:
 #   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
 #
-# Required for CLI publishing:
-#   NPM_TOKEN                         — npm access token for publishing deus-machine CLI
+# CLI publishing uses npm Trusted Publishing (no npm token secret).
+# Connect npm package deus-machine to GitHub owner zvadaadam, repository
+# deus-machine, workflow release.yml, with direct publishing allowed.
 
 name: Release
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       bump:
@@ -44,6 +48,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
 env:
   BUN_VERSION: 1.2.19
 
@@ -58,36 +66,54 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - name: Ensure release runs from main
-        if: ${{ inputs.dry_run == false }}
+      - name: Ensure release source is on main
+        if: ${{ !inputs.dry_run }}
         run: |
-          if [[ "${{ github.ref_name }}" != "main" ]]; then
-            echo "::error::Release must be triggered from main branch, got: ${{ github.ref_name }}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            git merge-base --is-ancestor HEAD origin/main || {
+              echo "::error::Release tag must point to a commit on main"
+              exit 1
+            }
+          elif [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Release must be triggered from main, got: $GITHUB_REF"
             exit 1
           fi
 
-      - name: Compute next version
+      - name: Resolve release version
         id: validate
         env:
           BUMP: ${{ inputs.bump }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           CURRENT=$(jq -r '.version' package.json)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          case "$BUMP" in
-            patch) PATCH=$((PATCH + 1)) ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-          esac
-          VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          TAG="v${VERSION}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            TAG="$GITHUB_REF_NAME"
+            VERSION="${TAG#v}"
+            if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+               [[ "$VERSION" != "$CURRENT" ]] ||
+               [[ "$VERSION" != "$(jq -r '.version' apps/cli/package.json)" ]]; then
+              echo "::error::Release tag must be vX.Y.Z and match both package versions"
+              exit 1
+            fi
+          else
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            case "$BUMP" in
+              patch) PATCH=$((PATCH + 1)) ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              *) echo "::error::Unknown version bump: $BUMP"; exit 1 ;;
+            esac
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            TAG="v${VERSION}"
 
-          echo "Current: $CURRENT → Next: $VERSION ($BUMP bump)"
-
-          if [[ "${{ inputs.dry_run }}" != "true" ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG already exists on remote"
-            exit 1
+            if [[ "$DRY_RUN" != "true" ]] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              echo "::error::Tag $TAG already exists on remote"
+              exit 1
+            fi
           fi
+          echo "Release: $TAG"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -104,7 +130,7 @@ jobs:
           fi
 
       - name: Bump version, commit & create tag
-        if: ${{ inputs.dry_run == false }}
+        if: ${{ github.ref_type != 'tag' && !inputs.dry_run }}
         run: |
           bash scripts/bump-version.sh "${{ steps.validate.outputs.version }}"
           git config user.name "github-actions[bot]"
@@ -112,7 +138,9 @@ jobs:
           git add package.json apps/cli/package.json
           git commit -m "release: v${{ steps.validate.outputs.version }}"
           git tag "${{ steps.validate.outputs.tag }}"
-          git push --atomic origin HEAD "${{ steps.validate.outputs.tag }}"
+          # GITHUB_TOKEN pushes do not trigger another workflow run. This run
+          # continues with the tag; a maintainer's tag push uses the same jobs.
+          git push --atomic origin HEAD:main "${{ steps.validate.outputs.tag }}"
 
   # ── Step 2a: Build macOS (arm64 + x64), sign, notarize ─────────────
   build-macos:
@@ -124,7 +152,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
+          ref: ${{ !inputs.dry_run && needs.validate-and-bump.outputs.tag || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -329,7 +357,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.dry_run == false && needs.validate-and-bump.outputs.tag || github.ref }}
+          ref: ${{ !inputs.dry_run && needs.validate-and-bump.outputs.tag || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -389,7 +417,7 @@ jobs:
   # ── Step 3: Stage a draft GitHub Release with all artifacts ─────────
   create-release:
     needs: [validate-and-bump, build-macos, build-linux]
-    if: ${{ inputs.dry_run == false }}
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -422,21 +450,12 @@ jobs:
   # ── Step 4: Publish CLI to npm before the release becomes public ────
   publish-cli:
     needs: [validate-and-bump, create-release]
-    if: ${{ inputs.dry_run == false }}
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
-      - name: Validate npm token
-        run: |
-          if [ -z "$NPM_CONFIG_TOKEN" ]; then
-            echo "::error::NPM_TOKEN secret is not configured. Cannot publish CLI."
-            exit 1
-          fi
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate-and-bump.outputs.tag }}
@@ -469,16 +488,16 @@ jobs:
       - name: Publish to npm
         working-directory: apps/cli
         run: |
-          printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_CONFIG_TOKEN" > .npmrc
-          bun publish --access public
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Bun builds and packs; npm's publisher performs the GitHub OIDC exchange.
+          # Clear setup-node's token config so publishing uses workflow identity.
+          unset NODE_AUTH_TOKEN NPM_CONFIG_TOKEN NPM_CONFIG_USERCONFIG
+          bun pm pack --filename "$RUNNER_TEMP/deus-machine.tgz"
+          bunx --package npm@11.14.1 npm publish "$RUNNER_TEMP/deus-machine.tgz" --access public
 
   # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────
   publish-release:
     needs: [validate-and-bump, publish-cli]
-    if: ${{ inputs.dry_run == false }}
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       - name: Publish draft GitHub Release
