@@ -10,10 +10,6 @@ permissions:
 
 jobs:
   probe:
-    strategy:
-      fail-fast: false
-      matrix:
-        signing: [signed, unsigned]
     runs-on: macos-14
     timeout-minutes: 10
     steps:
@@ -55,35 +51,16 @@ jobs:
           <key>CFBundleVersion</key><string>0.3.9</string>
           </dict></plist>
           PLIST
-      - name: Sign probe with release identity
-        if: matrix.signing == 'signed'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          certificate_path="$RUNNER_TEMP/probe.p12"
-          keychain_path="$RUNNER_TEMP/probe.keychain-db"
-          keychain_password="$(openssl rand -hex 24)"
-          echo "::add-mask::$keychain_password"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate_path"
-          security create-keychain -p "$keychain_password" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
-          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain_path" >/dev/null
-          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk '/Developer ID Application/{print $2; exit}')"
-          test -n "$identity"
-          codesign --force --deep --sign "$identity" --keychain "$keychain_path" --options runtime --timestamp --entitlements resources/entitlements.mac.plist --pagesize 4096 probe/Deus.app
       - name: Run cold and warm probes
         run: |
           node <<'JS'
           const { spawnSync } = require('node:child_process');
           const path = require('node:path');
           const binary = path.resolve('probe/Deus.app/Contents/Resources/bin/deus-runtime');
-          for (const timeout of [10000, 60000, 10000]) {
+          for (const timeout of [30000, 10000]) {
             const result = spawnSync(binary, [String(timeout)], { cwd: path.dirname(binary), detached: true, env: { ...process.env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' }, encoding: 'utf8', timeout: timeout + 15000 });
             console.log(JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }));
+            if (result.status !== 0) process.exitCode = 1;
           }
           JS
       - name: Capture system simulator diagnostics
@@ -91,8 +68,3 @@ jobs:
         run: |
           xcode-select -p
           /usr/bin/log show --last 5m --style compact --predicate 'process == "simctl" OR process == "CoreSimulatorService"' | tail -n 160
-      - name: Remove signing material
-        if: always() && matrix.signing == 'signed'
-        run: |
-          security delete-keychain "$RUNNER_TEMP/probe.keychain-db"
-          rm -f "$RUNNER_TEMP/probe.p12"
