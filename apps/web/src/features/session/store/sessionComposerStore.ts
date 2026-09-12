@@ -46,11 +46,18 @@ export interface ComposerState {
 
 interface State {
   composers: Record<string, ComposerState>;
+  // Drafts queued by cross-panel producers (Review Changes, diff/simulator/
+  // browser-to-chat) that arrived before the session's composer slice was
+  // seeded. On a cold start the chat panel may be persisted collapsed, so
+  // ChatArea (and the SessionComposer inside it) never mounts and the slice
+  // is never seeded — without this queue the first appendDraft is silently
+  // dropped. seedIfAbsent flushes the queue once the slice is created.
+  pendingDrafts: Record<string, string>;
 }
 
 export const useSessionComposerStore = create<State>()(
   devtools(
-    immer(() => ({ composers: {} })),
+    immer(() => ({ composers: {}, pendingDrafts: {} })),
     { name: "session-composer-store", enabled: import.meta.env.DEV }
   )
 );
@@ -95,7 +102,14 @@ export const sessionComposerActions = {
     if (useSessionComposerStore.getState().composers[sessionId]) return;
     useSessionComposerStore.setState(
       (s) => {
-        s.composers[sessionId] = initial;
+        const pending = s.pendingDrafts[sessionId];
+        s.composers[sessionId] = pending
+          ? {
+              ...initial,
+              draft: initial.draft.trim() ? initial.draft + "\n\n" + pending : pending,
+            }
+          : initial;
+        delete s.pendingDrafts[sessionId];
       },
       false,
       "composer/seed"
@@ -112,15 +126,32 @@ export const sessionComposerActions = {
     ),
 
   /** Append text to the draft, inserting a blank-line separator if needed.
-   *  Used by cross-panel producers (browser inspector, diff reviewer). */
-  appendDraft: (sid: string, text: string) =>
-    mutate(
-      sid,
-      (c) => {
-        c.draft += (c.draft.trim() ? "\n\n" : "") + text;
+   *  Used by cross-panel producers (Review Changes, diff reviewer, browser/
+   *  simulator-to-chat). If the session's composer slice hasn't been seeded
+   *  yet (cold start with the chat panel persisted collapsed — ChatArea is
+   *  unmounted so SessionComposer never seeds), the text is queued into
+   *  `pendingDrafts` and flushed by `seedIfAbsent` once the slice is
+   *  created, instead of being silently dropped. */
+  appendDraft: (sid: string, text: string) => {
+    if (useSessionComposerStore.getState().composers[sid]) {
+      mutate(
+        sid,
+        (c) => {
+          c.draft += (c.draft.trim() ? "\n\n" : "") + text;
+        },
+        "appendDraft"
+      );
+      return;
+    }
+    useSessionComposerStore.setState(
+      (s) => {
+        const prev = s.pendingDrafts[sid];
+        s.pendingDrafts[sid] = prev ? prev + "\n\n" + text : text;
       },
-      "appendDraft"
-    ),
+      false,
+      "composer/appendDraft-pending"
+    );
+  },
 
   /** Switch model; if the new model doesn't support the current thinking
    *  level, snap to the user's configured default. */
@@ -275,11 +306,14 @@ export const sessionComposerActions = {
     ),
 
   /** Remove the session's entry so the store doesn't accumulate stale keys.
-   *  Called when a chat tab is closed. */
+   *  Called when a chat tab is closed. Also drops any pending draft queued
+   *  before the slice was seeded (e.g. the user closed the tab without ever
+   *  expanding a collapsed chat panel). */
   discard: (sid: string) =>
     useSessionComposerStore.setState(
       (s) => {
         delete s.composers[sid];
+        delete s.pendingDrafts[sid];
       },
       false,
       "composer/discard"
