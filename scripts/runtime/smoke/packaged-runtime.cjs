@@ -291,11 +291,13 @@ async function smokeBackendCommands(port, dataDir) {
     return;
   }
   if (!isCliAvailable("xcrun")) {
-    console.log("[runtime-smoke] packaged backend simulator/AAP command smoke skipped: xcrun unavailable");
+    console.log(
+      "[runtime-smoke] packaged backend simulator/AAP command smoke skipped: xcrun unavailable"
+    );
     return;
   }
 
-  const devicesAck = await sendWsCommand(port, "sim:listDevices", {}, 30_000);
+  const devicesAck = await sendWsCommand(port, "sim:listDevices", {}, 45_000);
   if (!Array.isArray(devicesAck.devices)) {
     throw new Error(`sim:listDevices returned unexpected payload: ${JSON.stringify(devicesAck)}`);
   }

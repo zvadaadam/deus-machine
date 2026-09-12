@@ -78,7 +78,7 @@ export const simulatorService = {
   /** List available iOS simulators. */
   listSimulators: async (): Promise<SimulatorInfo[]> => {
     try {
-      const result = await sendCommand("sim:listDevices", {});
+      const result = await sendCommand("sim:listDevices", {}, 45_000);
       const devices = asRecord(result).devices;
       return Array.isArray(devices) ? (devices as SimulatorInfo[]) : [];
     } catch (err) {
