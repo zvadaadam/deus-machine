@@ -1,6 +1,11 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+const require = createRequire(import.meta.url);
+const { load } = require("js-yaml") as { load: (text: string) => unknown };
 
 describe("release workflow", () => {
   const workflow = readFileSync(path.join(process.cwd(), ".github/workflows/release.yml"), "utf8");
@@ -25,21 +30,70 @@ describe("release workflow", () => {
     );
   });
 
-  it("passes Bun's npm publish token environment to the CLI publish step", () => {
-    const validateStep = workflow.slice(
-      workflow.indexOf("      - name: Validate npm token"),
-      workflow.indexOf("      - uses: actions/checkout@v4", workflow.indexOf("  publish-cli:"))
-    );
-    expect(validateStep).toContain('if [ -z "$NPM_CONFIG_TOKEN" ]; then');
-    expect(validateStep).toContain("NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}");
+  const parsed = load(workflow) as {
+    jobs: Record<string, { steps: Array<{ name?: string; run?: string }> }>;
+  };
+  const resolveVersion = parsed.jobs["validate-and-bump"].steps.find(
+    (step) => step.name === "Resolve release version"
+  )!.run!;
+  const tempRoots: string[] = [];
 
-    const publishStep = workflow.slice(
-      workflow.indexOf("      - name: Publish to npm"),
-      workflow.indexOf("  # ── Step 5:", workflow.indexOf("      - name: Publish to npm"))
+  afterEach(() => {
+    for (const root of tempRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  function resolve(options: { tag?: string; cliVersion?: string; bump?: string }) {
+    const context = path.join(process.cwd(), ".context");
+    mkdirSync(context, { recursive: true });
+    const root = mkdtempSync(path.join(context, "release-version-test-"));
+    tempRoots.push(root);
+    mkdirSync(path.join(root, "apps/cli"), { recursive: true });
+    writeFileSync(path.join(root, "package.json"), JSON.stringify({ version: "0.3.10" }));
+    writeFileSync(
+      path.join(root, "apps/cli/package.json"),
+      JSON.stringify({ version: options.cliVersion ?? "0.3.10" })
     );
-    expect(publishStep).toContain("printf '//registry.npmjs.org/:_authToken=%s\\n'");
-    expect(publishStep).toContain("bun publish --access public");
-    expect(publishStep).toContain("NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}");
-    expect(publishStep).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+    const output = path.join(root, "output");
+    writeFileSync(output, "");
+    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", resolveVersion], {
+      cwd: root,
+      env: {
+        ...process.env,
+        GITHUB_REF_TYPE: options.tag ? "tag" : "branch",
+        GITHUB_REF_NAME: options.tag ?? "main",
+        GITHUB_OUTPUT: output,
+        BUMP: options.bump ?? "patch",
+        DRY_RUN: "true",
+      },
+      encoding: "utf8",
+    });
+    return { ...result, output: readFileSync(output, "utf8") };
+  }
+
+  it("releases the pushed tag without incrementing it", () => {
+    const result = resolve({ tag: "v0.3.10" });
+    expect(result.status).toBe(0);
+    expect(result.output).toBe("version=0.3.10\ntag=v0.3.10\n");
+  });
+
+  it.each([
+    { tag: "v0.3.11" },
+    { tag: "v0.3.10", cliVersion: "0.3.9" },
+    { tag: "v0.3.10-rc.1" },
+    { tag: "v0.3.10;echo unexpected" },
+  ])("rejects a mismatched or non-stable tag: %j", (options) => {
+    const result = resolve(options);
+    expect(result.status).not.toBe(0);
+    expect(result.output).toBe("");
+  });
+
+  it.each([
+    ["patch", "0.3.11"],
+    ["minor", "0.4.0"],
+    ["major", "1.0.0"],
+  ])("keeps the manual %s release path", (bump, version) => {
+    const result = resolve({ bump });
+    expect(result.status).toBe(0);
+    expect(result.output).toBe(`version=${version}\ntag=v${version}\n`);
   });
 });

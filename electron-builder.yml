@@ -81,6 +81,10 @@ mac:
   darkModeSupport: true
   icon: resources/icons/icon.icns
   notarize: true
+dmg:
+  # Auto-updates use ZIPs. DMGs are stapled after packaging, so their earlier
+  # hashes and blockmaps would be stale; retain them only as manual installers.
+  writeUpdateInfo: false
 linux:
   target:
     - target: AppImage
