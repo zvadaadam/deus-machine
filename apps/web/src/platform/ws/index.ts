@@ -18,4 +18,8 @@ export {
   onEvent,
   onConnectionChange,
 } from "./query-protocol-client";
-export type { QueryRequestInterceptor, ToolResponseInterceptor } from "./query-protocol-client";
+export type {
+  QueryRequestInterceptor,
+  ToolResponseInterceptor,
+  MutateResult,
+} from "./query-protocol-client";

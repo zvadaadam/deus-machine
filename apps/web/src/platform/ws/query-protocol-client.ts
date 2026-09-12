@@ -47,8 +47,28 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+/**
+ * Resolved `sendMutate` result. Mutations RESOLVE on the q:mutate_result frame
+ * (they do NOT reject on `success: false`); service-layer wrappers rethrow.
+ *
+ * `status` and `details` are carried on failure when the backend delegated to
+ * a Hono route that returned a non-2xx (see `route-delegate.ts` and
+ * `query-engine.handleMutate`). `status` is the HTTP status (e.g., 409) and
+ * `details` is the route's structured error payload (e.g., the existing
+ * `Repository` row on a 409 conflict). Both are `undefined` on success and on
+ * frames from servers that predate this field — readers MUST treat absence
+ * as "no structured info available."
+ */
+export interface MutateResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  status?: number;
+  details?: unknown;
+}
+
 interface PendingMutation {
-  resolve: (result: { success: boolean; data?: unknown; error?: string }) => void;
+  resolve: (result: MutateResult<unknown>) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -340,11 +360,17 @@ export function sendRequest<T = unknown>(
  * Send a mutation via the q:mutate frame.
  * Returns a promise that resolves with the mutation result when the
  * server sends q:mutate_result, or rejects on timeout.
+ *
+ * On `success: false`, the result carries `error` plus optional `status`
+ * (HTTP status from the delegated route) and `details` (the route's
+ * structured payload, e.g. the existing `Repository` on a 409 conflict) so
+ * service-layer wrappers can re-shape into a structured throw and callers
+ * can recover from conflicts.
  */
 export function sendMutate<T = unknown>(
   action: string,
   params: Record<string, unknown>
-): Promise<{ success: boolean; data?: T; error?: string }> {
+): Promise<MutateResult<T>> {
   // Web-direct: no Mac backend to mutate — reject honestly (see sendCommand).
   if (requestInterceptor) {
     return Promise.reject(new Error(`${action} is not available without a Mac backend`));
@@ -359,7 +385,7 @@ export function sendMutate<T = unknown>(
     }, MUTATE_TIMEOUT_MS);
 
     pendingMutations.set(id, {
-      resolve: resolve as (result: { success: boolean; data?: unknown; error?: string }) => void,
+      resolve: resolve as (result: MutateResult<unknown>) => void,
       reject,
       timer,
     });
@@ -668,6 +694,8 @@ async function openSocket(serverId?: string): Promise<void> {
             success: msg.success as boolean,
             data: msg.data as unknown,
             error: msg.error as string | undefined,
+            status: typeof msg.status === "number" ? msg.status : undefined,
+            details: msg.details,
           });
         }
       })
