@@ -101,6 +101,11 @@ export function registerUpdateHandlers(): void {
       const message = err instanceof Error ? err.message : String(err);
       currentState = { stage: "error", error: message };
       console.error("[auto-updater] Download failed:", err);
+      // Re-throw so the renderer's `await window.electronAPI.downloadUpdate()`
+      // rejects and does NOT treat a failed download as a successfully staged
+      // update (which would persist pendingUpdateVersion and suppress
+      // re-downloads). The renderer's check() catch block surfaces stage:error.
+      throw err;
     }
   });
 
@@ -130,9 +135,15 @@ export function setupAutoUpdater(mainWindow: BrowserWindow): void {
     sendState(mainWindow, { stage: "checking" });
   });
 
-  autoUpdater.on("update-available", (info) => {
-    sendState(mainWindow, toReadyState(info));
-  });
+  // Intentionally NO handler for "update-available". The "ready" stage means an
+  // update has been *downloaded* and is ready to install (see "update-downloaded"
+  // below). Announcing "ready" the moment an update is merely detected makes the
+  // renderer persist the detected version as a pending (already-staged) update
+  // and skip the download entirely — leaving "Restart to update" to call
+  // quitAndInstall() against an empty download cache (a no-op on every
+  // platform). The renderer's `update:check` IPC reply (registerUpdateHandlers)
+  // already carries availability, and the renderer drives downloads itself, so
+  // no state change is needed here.
 
   autoUpdater.on("update-not-available", () => {
     sendState(mainWindow, { stage: "idle" });
