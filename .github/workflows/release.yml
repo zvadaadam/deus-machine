@@ -492,7 +492,7 @@ jobs:
           # Clear setup-node's token config so publishing uses workflow identity.
           unset NODE_AUTH_TOKEN NPM_CONFIG_TOKEN NPM_CONFIG_USERCONFIG
           bun pm pack --filename "$RUNNER_TEMP/deus-machine.tgz"
-          bunx --package npm@11.14.1 npm publish "$RUNNER_TEMP/deus-machine.tgz" --access public
+          bunx npm@11.14.1 publish "$RUNNER_TEMP/deus-machine.tgz" --access public
 
   # ── Step 5: Publish GitHub Release after CLI publish succeeds ───────
   publish-release:

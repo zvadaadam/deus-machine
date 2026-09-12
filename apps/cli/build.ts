@@ -91,8 +91,8 @@ async function main() {
   console.log(`  Bundles: ${bundlesDir}`);
   console.log("\nTo test locally:");
   console.log("  node apps/cli/bin/deus.js start");
-  console.log("\nTo publish:");
-  console.log("  cd apps/cli && bun publish");
+  console.log("\nTo release from main:");
+  console.log("  gh workflow run release.yml --ref main -f bump=patch");
 }
 
 main().catch((err) => {
