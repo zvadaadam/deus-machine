@@ -1,0 +1,98 @@
+name: Simulator release diagnosis
+
+on:
+  push:
+    branches: [zvadaadam/continue-branch-work]
+    paths: [.github/workflows/simctl-release-probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        signing: [signed, unsigned]
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.19
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build isolated simulator probe
+        run: |
+          mkdir -p probe/Deus.app/Contents/MacOS probe/Deus.app/Contents/Resources/bin
+          cat > probe/probe.ts <<'TS'
+          import { execFile } from 'node:child_process';
+          import { promisify } from 'node:util';
+          const started = Date.now();
+          const timeout = Number(process.argv[2] || '10000');
+          const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? '/Applications/Xcode.app/Contents/Developer' };
+          try {
+            const { stdout } = await promisify(execFile)('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], { env, timeout });
+            const data = JSON.parse(stdout);
+            console.log(JSON.stringify({ ok: true, elapsedMs: Date.now() - started, timeout, count: Object.values(data.devices).flat().length }));
+          } catch (error: any) {
+            console.log(JSON.stringify({ ok: false, elapsedMs: Date.now() - started, timeout, message: error.message, code: error.code, signal: error.signal, killed: error.killed, stdout: error.stdout, stderr: error.stderr }));
+            process.exitCode = 1;
+          }
+          TS
+          bun build probe/probe.ts --compile --outfile probe/Deus.app/Contents/Resources/bin/deus-runtime
+          cp probe/Deus.app/Contents/Resources/bin/deus-runtime probe/Deus.app/Contents/MacOS/Deus
+          cat > probe/Deus.app/Contents/Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleIdentifier</key><string>com.deus.app</string>
+          <key>CFBundleExecutable</key><string>Deus</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>CFBundleName</key><string>Deus</string>
+          <key>CFBundleVersion</key><string>0.3.9</string>
+          </dict></plist>
+          PLIST
+      - name: Sign probe with release identity
+        if: matrix.signing == 'signed'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          certificate_path="$RUNNER_TEMP/probe.p12"
+          keychain_path="$RUNNER_TEMP/probe.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$keychain_password"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain_path" >/dev/null
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk '/Developer ID Application/{print $2; exit}')"
+          test -n "$identity"
+          codesign --force --deep --sign "$identity" --keychain "$keychain_path" --options runtime --timestamp --entitlements resources/entitlements.mac.plist --pagesize 4096 probe/Deus.app
+      - name: Run cold and warm probes
+        run: |
+          node <<'JS'
+          const { spawnSync } = require('node:child_process');
+          const path = require('node:path');
+          const binary = path.resolve('probe/Deus.app/Contents/Resources/bin/deus-runtime');
+          for (const timeout of [10000, 60000, 10000]) {
+            const result = spawnSync(binary, [String(timeout)], { cwd: path.dirname(binary), detached: true, env: { ...process.env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' }, encoding: 'utf8', timeout: timeout + 15000 });
+            console.log(JSON.stringify({ status: result.status, signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }));
+          }
+          JS
+      - name: Capture system simulator diagnostics
+        if: always()
+        run: |
+          xcode-select -p
+          /usr/bin/log show --last 5m --style compact --predicate 'process == "simctl" OR process == "CoreSimulatorService"' | tail -n 160
+      - name: Remove signing material
+        if: always() && matrix.signing == 'signed'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/probe.keychain-db"
+          rm -f "$RUNNER_TEMP/probe.p12"
