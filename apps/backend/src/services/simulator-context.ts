@@ -603,10 +603,11 @@ export function getContextForSession(sessionId: string): SimulatorContext | null
 // ---------------------------------------------------------------------------
 
 export async function listDevices(): Promise<SimulatorInfo[]> {
+  // CoreSimulator initialization can exceed 10 seconds on a fresh macOS install.
   const { stdout } = await execFileAsync(
     "xcrun",
     ["simctl", "list", "devices", "available", "-j"],
-    { env: SIM_ENV, timeout: 10_000 }
+    { env: SIM_ENV, timeout: 30_000 }
   );
   const parsed = JSON.parse(stdout) as {
     devices: Record<
