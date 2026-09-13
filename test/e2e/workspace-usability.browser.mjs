@@ -313,7 +313,7 @@ server.httpServer.on("upgrade", (req, socket, head) => {
   if (!req.url?.startsWith("/sessions/provider-session/ws?")) return;
   directSocketAttempts++;
   if (!directSocketOnline) {
-    socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+    socket.destroy();
     return;
   }
   directServer.handleUpgrade(req, socket, head, (ws) => {
