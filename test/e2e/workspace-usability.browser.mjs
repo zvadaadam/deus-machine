@@ -8,6 +8,7 @@ import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import { chromium } from "playwright";
+import { WebSocketServer } from "ws";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const artifacts = path.join(root, ".context/workspace-usability-ui");
@@ -24,6 +25,7 @@ import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
+import { SessionPanel } from "@/features/session/ui/SessionPanel";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import { createStreamCursor } from "@/features/session/lib/agentEventFold";
 import { SessionProvider } from "@/features/session/context";
@@ -62,7 +64,7 @@ function TabJourney() {
   </>;
 }
 function App() {
-  const [view, setView] = useState(location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
+  const [view, setView] = useState(location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
   const [fileMode, setFileMode] = useState("all");
@@ -78,6 +80,7 @@ function App() {
       <main className="mx-auto max-w-3xl">
         {view === "Onboarding" && <OnboardingOverlay />}
         {view === "History" && <SessionComposer sessionId="history-session" />}
+        {view === "Direct" && <SessionPanel sessionId="history-session" workspacePath="" workspaceKind="cloud" embedded={location.search !== "?direct-modal"} />}
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
         {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode={fileMode as any} onFilterModeChange={setFileMode} /></div>}
@@ -105,6 +108,11 @@ let failFinishSetup = true;
 let failHistory = true;
 let historyRequests = 0;
 let directHistory = false;
+let failDirectToken = true;
+let directTokenRequests = 0;
+let directSocketOnline = true;
+let directSocketAttempts = 0;
+const directCommands = [];
 let failAgentAuth = true;
 const createdSessions = [];
 const savedTokens = [];
@@ -210,6 +218,17 @@ const server = await createServer({
               workspace_kind: directHistory ? "cloud" : "local",
               provider_session_id: directHistory ? "provider-session" : null,
             });
+          if (req.url === "/api/query/cloudDirectToken") {
+            directTokenRequests++;
+            return failDirectToken
+              ? json({}, 503)
+              : json({
+                  token: "same-fixture-token",
+                  base_url: `http://${req.headers.host}`,
+                  provider_session_id: "provider-session",
+                  expires_in: 3600,
+                });
+          }
           if (req.url === "/api/query/sessions")
             return json([
               ...["a", "b", "c", "d"].map((id) => ({
@@ -287,6 +306,43 @@ const server = await createServer({
     },
   ],
   server: { host: "127.0.0.1", port: 0 },
+});
+// Real browser socket and reconnect loop, with failures at the server boundary.
+const directServer = new WebSocketServer({ noServer: true });
+server.httpServer.on("upgrade", (req, socket, head) => {
+  if (!req.url?.startsWith("/sessions/provider-session/ws?")) return;
+  directSocketAttempts++;
+  if (!directSocketOnline) {
+    socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+    return;
+  }
+  directServer.handleUpgrade(req, socket, head, (ws) => {
+    ws.on("message", (raw) => {
+      if (raw.toString() === "ping") ws.send("pong");
+      else directCommands.push(JSON.parse(raw.toString()));
+    });
+    ws.send(
+      JSON.stringify({
+        type: "session.snapshot",
+        messages: [],
+        events: [],
+        state: {
+          sessionId: "provider-session",
+          status: "ready",
+          currentTurnId: null,
+          turns: [
+            {
+              turnId: "saved-turn",
+              startedAt: 1,
+              endedAt: 2,
+              stopReason: "end_turn",
+              execution: { harness: "codex-app-server", model: "gpt-5.6-sol" },
+            },
+          ],
+        },
+      })
+    );
+  });
 });
 let browser;
 let page;
@@ -446,6 +502,49 @@ try {
   await page.evaluate(() => window.deliverEmptyCloudSnapshot());
   await page.getByRole("textbox").waitFor();
   assert.equal(historyRequests, beforeDirectHistory, "Direct history never fetches from the Mac");
+  // A failed initial token mint must expose the same usable retry in the full panel.
+  await page.goto(server.resolvedUrls.local[0] + "?direct");
+  const historyError = page
+    .getByRole("alert")
+    .filter({ hasText: "Couldn’t load this conversation." });
+  await historyError.waitFor();
+  assert.equal(await page.getByRole("textbox").count(), 0);
+  assert.equal(directSocketAttempts, 0, "No socket is opened without a token");
+  failDirectToken = false;
+  await historyError.getByRole("button", { name: "Try again", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Select model, currently GPT-5.6 Sol", exact: true })
+    .waitFor();
+  await page.getByRole("textbox").waitFor();
+  // Exhaust connection attempts before a snapshot, this time using the modal composer.
+  directSocketOnline = false;
+  await page.goto(server.resolvedUrls.local[0] + "?direct-modal");
+  await historyError.waitFor({ timeout: 90_000 });
+  assert.equal(await page.getByRole("textbox").count(), 0);
+  const exhaustedAttempts = directSocketAttempts;
+  failDirectToken = true;
+  await historyError.getByRole("button", { name: "Try again", exact: true }).click();
+  const retryButton = historyError.getByRole("button", { name: "Try again", exact: true });
+  assert.equal(await retryButton.isDisabled(), true);
+  await page.locator('[role="alert"] button:enabled').waitFor();
+  assert.equal(directSocketAttempts, exhaustedAttempts, "A failed mint cannot reopen the socket");
+  const beforeRetryTokens = directTokenRequests;
+  failDirectToken = false;
+  directSocketOnline = true;
+  await retryButton.click();
+  await page
+    .getByRole("button", { name: "Select model, currently GPT-5.6 Sol", exact: true })
+    .waitFor();
+  await page.getByRole("textbox").waitFor();
+  assert.equal(directTokenRequests, beforeRetryTokens + 1, "Retry refreshes the token once");
+  assert.equal(
+    directSocketAttempts,
+    exhaustedAttempts + 1,
+    "An identical token reopens the dead socket once"
+  );
+  assert.equal(historyRequests, beforeDirectHistory, "Cloud retries never fetch Mac history");
+  assert.deepEqual(directCommands, [], "Loading history never sends a prompt or cancels a turn");
+  await page.screenshot({ path: path.join(artifacts, "cloud-history-retry.png") });
   await page.evaluate(() => localStorage.removeItem("deus.cloudDirect"));
   directHistory = false;
   // First-run UI with native/transport boundaries, including recoverable failures.
@@ -518,7 +617,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels and model restoration, Files retry/reconnect/refresh failures, mobile layout/error recovery, conversation history retry and empty direct snapshot, and onboarding auth/login/project/finish recovery"
+    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels and model restoration, Files retry/reconnect/refresh failures, mobile layout/error recovery, conversation history retry, direct snapshot/token/socket recovery, and onboarding auth/login/project/finish recovery"
   );
 } catch (err) {
   console.error("UI state:", await page?.locator("body").innerText());
@@ -526,5 +625,6 @@ try {
   throw err;
 } finally {
   await browser?.close();
+  directServer.close();
   await server.close();
 }

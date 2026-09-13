@@ -46,8 +46,8 @@ questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nes
 #### First-run follow-up awaiting canvas sync (September 13)
 
 The live desktop and browser journey now include these changes. The matching canvas
-updates remain pending: Pencil MCP rejects `get_app_state` for this exact file with
-“you are probably referencing the wrong .pen file”. Do not treat these boards as synchronized:
+updates remain pending: Pencil MCP cannot access this exact file. The latest `get_app_state`
+attempt failed with “transport not connected to app: desktop”. Do not treat these boards as synchronized:
 
 - `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
 - `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in

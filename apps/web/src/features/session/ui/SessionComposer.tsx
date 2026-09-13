@@ -56,7 +56,12 @@ interface SessionComposerProps {
   initialModel?: string;
   /** Show the Compact button (modal layout wants it). */
   showCompactButton?: boolean;
-  /** SessionPanel owns the RPC handler; it feeds the boolean in. */
+  /** Direct cloud history comes from the panel's socket, not the message query. */
+  historyConnection?: {
+    error: string | null;
+    retry: () => void;
+    retrying: boolean;
+  };
   /** Called when user picks a model from a locked agent group. */
   onOpenNewTab?: (initialModel?: string) => void;
   /** Reports the current agent harness to parents that gate on it. */
@@ -97,6 +102,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       targetBranch,
       initialModel,
       showCompactButton = false,
+      historyConnection,
       onOpenNewTab,
       onAgentHarnessChange,
       onSendComplete,
@@ -163,10 +169,17 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     if ((!session || turns === undefined) && !initialModel) {
       return (
         <DisabledComposerPlaceholder className={className}>
-          {error ? (
+          {error || historyConnection?.error ? (
             <div role="alert" className="flex items-center justify-between gap-3">
               <span>Couldn’t load this conversation.</span>
-              <Button size="sm" variant="ghost" onClick={() => void retry()}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={historyConnection?.retrying}
+                onClick={() =>
+                  void (historyConnection?.error ? historyConnection.retry() : retry())
+                }
+              >
                 Try again
               </Button>
             </div>

@@ -258,6 +258,8 @@ export interface CloudDirectSessionParams {
   baseUrl: string;
   /** Session-scoped JWT from the dashboard exchange. */
   token: string;
+  /** A successful refresh reopens the socket even if the token is unchanged. */
+  tokenUpdatedAt?: number;
 }
 
 export type CloudDirectStatus = "idle" | "connecting" | "open" | "down" | "error";
@@ -282,6 +284,7 @@ export function useCloudDirectSession(
   const providerSessionId = params?.providerSessionId ?? null;
   const baseUrl = params?.baseUrl ?? null;
   const token = params?.token ?? null;
+  const tokenUpdatedAt = params?.tokenUpdatedAt;
 
   useEffect(() => {
     if (!sessionId || !providerSessionId || !baseUrl || !token) {
@@ -651,7 +654,7 @@ export function useCloudDirectSession(
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();
     };
-  }, [sessionId, providerSessionId, baseUrl, token, queryClient, reconnectNonce]);
+  }, [sessionId, providerSessionId, baseUrl, token, tokenUpdatedAt, queryClient, reconnectNonce]);
 
   return { status, error };
 }
