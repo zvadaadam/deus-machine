@@ -120,9 +120,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
     <div className="flex w-full max-w-lg flex-col gap-6">
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold text-white">Your Projects</h2>
-        <p className="text-sm text-white/50">
-          Select projects to add to Deus, or browse for a folder.
-        </p>
+        <p className="text-sm text-white/50">Select projects to add to Deus.</p>
       </div>
 
       {projectsQuery.isLoading ? (
@@ -132,7 +130,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       ) : projectsQuery.isError ? (
         <div role="alert" className="space-y-3 py-6 text-center">
           <p className="text-sm text-white/70">
-            Couldn’t load recent projects. Try again, or browse for a folder.
+            Couldn’t load recent projects. You can try again or continue setup.
           </p>
           <button
             type="button"
@@ -146,7 +144,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
           <FolderOpen className="h-8 w-8 text-white/20" />
-          <p className="text-sm text-white/40">No recent projects found. Browse to add one.</p>
+          <p className="text-sm text-white/40">No recent projects found.</p>
         </div>
       ) : (
         <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">

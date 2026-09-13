@@ -177,6 +177,7 @@ export function useMessages(sessionId: string | null) {
  * Combined hook for session + messages + status
  */
 export function useSessionWithMessages(sessionId: string | null) {
+  const queryClient = useQueryClient();
   const sessionQuery = useSession(sessionId);
   const messagesQuery = useMessages(sessionId);
 
@@ -194,6 +195,13 @@ export function useSessionWithMessages(sessionId: string | null) {
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
     error: sessionQuery.error || messagesQuery.error,
+    // Invalidation respects disabled queries: cloud-direct history must never
+    // fall back to the desktop's REST projection, even on a manual retry.
+    retry: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(sessionId || "") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId || "") }),
+      ]),
   };
 }
 

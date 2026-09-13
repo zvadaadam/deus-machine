@@ -128,7 +128,7 @@ const electronAPI = {
   setTheme: (theme: "light" | "dark" | "system"): Promise<void> =>
     ipcRenderer.invoke("native:setTheme", { theme }),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke("native:openExternal", { url }),
-  openTerminal: (command: string): Promise<void> =>
+  openTerminal: (command: string): Promise<"opened" | "copied"> =>
     ipcRenderer.invoke("native:openTerminal", { command }),
   contextMenu: (
     items: Array<{ id: string; label: string; type?: string; enabled?: boolean }>

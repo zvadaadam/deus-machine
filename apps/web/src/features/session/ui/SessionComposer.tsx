@@ -17,7 +17,8 @@
  * disabled placeholder — caller doesn't need to branch.
  */
 
-import { forwardRef, useEffect, useImperativeHandle } from "react";
+import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { MessageInput } from "./MessageInput";
 import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
@@ -112,7 +113,8 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // Session-derived props — everything that needs React Query context.
     // Composer state itself (draft/model/etc.) lives in the store;
     // MessageInput reads it directly. We don't subscribe here.
-    const { session, messages, turns, loading, sessionStatus } = useSessionWithMessages(sessionId);
+    const { session, messages, turns, error, retry, sessionStatus } =
+      useSessionWithMessages(sessionId);
     const environment = useProjectEnvironment(workspaceId);
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
@@ -158,8 +160,21 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // The composer seeds its model ONCE (seedIfAbsent on first mount), so the
     // seed must be right the first time: an explicit pick for a new tab wins,
     // otherwise wait for history and restore the last recorded model.
-    if ((!session || loading) && !initialModel) {
-      return <DisabledComposerPlaceholder className={className} />;
+    if ((!session || turns === undefined) && !initialModel) {
+      return (
+        <DisabledComposerPlaceholder className={className}>
+          {error ? (
+            <div role="alert" className="flex items-center justify-between gap-3">
+              <span>Couldn’t load this conversation.</span>
+              <Button size="sm" variant="ghost" onClick={() => void retry()}>
+                Try again
+              </Button>
+            </div>
+          ) : (
+            "Loading conversation…"
+          )}
+        </DisabledComposerPlaceholder>
+      );
     }
     return (
       // Key on sessionId so MessageInput's LOCAL UI state (popover open,
@@ -190,11 +205,17 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
   }
 );
 
-function DisabledComposerPlaceholder({ className }: { className?: string }) {
+function DisabledComposerPlaceholder({
+  className,
+  children,
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
     <div className={`relative z-20 shrink-0 px-2 pb-2 ${className ?? ""}`}>
       <div className="bg-input-surface text-text-muted rounded-2xl px-4 py-3 text-sm shadow-xs">
-        Start a chat to send messages.
+        {children ?? "Start a chat to send messages."}
       </div>
     </div>
   );

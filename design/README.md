@@ -59,6 +59,8 @@ updates remain pending: Pencil MCP rejects `get_app_state` for this exact file w
   controls. Keep accounts, local sign-in and the working default-thinking setting.
 - The sidebar service badge names the affected provider (for example, “Claude: Degraded”);
   its popover identifies the information as the provider's public service status.
+- The composer shows loading or a retryable history error before restoring the recorded
+  model. An unavailable history response must not silently select a different model.
 
 ### Turn details
 

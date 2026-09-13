@@ -348,6 +348,7 @@ try {
             : undefined,
       openTerminal: async (command) => {
         window.loginCommands.push(command);
+        return "opened";
       },
     };
   });

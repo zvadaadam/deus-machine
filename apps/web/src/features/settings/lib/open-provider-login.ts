@@ -5,13 +5,14 @@ export async function openProviderLogin(provider: "claude" | "codex"): Promise<v
   const command = provider === "claude" ? "claude auth login" : "codex login";
   try {
     if (window.electronAPI?.openTerminal) {
-      await window.electronAPI.openTerminal(command);
+      const result = await window.electronAPI.openTerminal(command);
+      if (result === "opened") return;
     } else {
       await navigator.clipboard.writeText(command);
-      toast.success("Copied sign-in command", {
-        description: `Run ${command} in your terminal`,
-      });
     }
+    toast.success("Copied sign-in command", {
+      description: "Paste it into your terminal to sign in.",
+    });
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "Couldn’t start provider sign-in");
   }
