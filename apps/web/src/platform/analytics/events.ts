@@ -119,7 +119,7 @@ export type AnalyticsEventMap = {
   open_in_app: { app_id: string; workspace_id?: string };
 
   // ── Settings ───────────────────────────────────────────────────────────
-  /** key = setting name (e.g., "theme", "claude_provider").
+  /** key = setting name (e.g., "theme", "diff_view_mode").
    *  value = new value, ONLY for safe enum-type settings.
    *  Never include API keys, tokens, or free-text values. */
   setting_changed: { key: string; value?: string };

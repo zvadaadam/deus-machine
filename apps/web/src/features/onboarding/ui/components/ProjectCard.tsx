@@ -24,6 +24,8 @@ export const ProjectCard = memo(function ProjectCard({
 
   return (
     <button
+      type="button"
+      aria-pressed={selected}
       onClick={handleClick}
       className={cn(
         "group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors duration-200",

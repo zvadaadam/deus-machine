@@ -47,17 +47,21 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
   }
 
   async function signInWithGitHubCli(): Promise<void> {
-    const result = await ghAuthLogin.mutateAsync();
-    if (!result.success) {
-      toast.error(result.error ?? "GitHub sign-in did not complete");
-      return;
-    }
+    try {
+      const result = await ghAuthLogin.mutateAsync();
+      if (!result.success) {
+        toast.error(result.error ?? "GitHub sign-in did not complete");
+        return;
+      }
 
-    const refreshed = await ghStatus.refetch();
-    if (refreshed.data?.isAuthenticated) {
-      toast.success("GitHub connected");
-    } else {
-      toast.error("GitHub sign-in finished, but Deus could not verify it yet");
+      const refreshed = await ghStatus.refetch();
+      if (refreshed.data?.isAuthenticated) {
+        toast.success("GitHub connected");
+      } else {
+        toast.error("GitHub sign-in finished, but Deus could not verify it yet");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "GitHub sign-in failed");
     }
   }
 
@@ -134,12 +138,14 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
           Back
         </button>
         <div className="flex-1" />
-        <button
-          onClick={onNext}
-          className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
-        >
-          Skip
-        </button>
+        {!authenticated && (
+          <button
+            onClick={onNext}
+            className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
+          >
+            Skip
+          </button>
+        )}
         {authenticated && (
           <button
             onClick={onNext}

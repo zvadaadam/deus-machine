@@ -1,5 +1,7 @@
 import { useCliCheck } from "../../api";
 import { CliStatusRow } from "../components/CliStatusRow";
+import { useAgentAuth } from "@/features/settings/api/settings.queries";
+import { openProviderLogin } from "@/features/settings/lib/open-provider-login";
 
 interface AIToolsCheckStepProps {
   onNext: () => void;
@@ -9,16 +11,31 @@ interface AIToolsCheckStepProps {
 export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   const claudeCheck = useCliCheck("claude");
   const codexCheck = useCliCheck("codex");
+  const auth = useAgentAuth();
+  const claudeAccount = auth.data?.claude?.error ? undefined : auth.data?.claude?.accountInfo;
 
   const claudeInstalled = claudeCheck.isLoading ? null : (claudeCheck.data?.installed ?? false);
   const codexInstalled = codexCheck.isLoading ? null : (codexCheck.data?.installed ?? false);
 
+  function claudeDetail(): string {
+    if (claudeCheck.data?.webMode) return "CLI checks require the desktop app";
+    if (claudeInstalled === null) return "Checking availability…";
+    if (!claudeInstalled) return "Unavailable · Restart Deus and check again";
+    if (auth.isLoading) return "Checking account…";
+    if (auth.isError || auth.data?.error || auth.data?.claude?.error)
+      return "Couldn’t check account";
+    return claudeAccount
+      ? (claudeAccount.email ?? "Signed in on this computer")
+      : "Sign in on this computer";
+  }
+
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-white">AI Coding Tools</h2>
+        <h2 className="text-2xl font-semibold text-white">Connect your AI tools</h2>
         <p className="text-sm text-white/50">
-          Deus orchestrates these AI agents to write code in your projects.
+          Local agents use the accounts signed in on this computer. You can manage cloud accounts
+          separately in Settings → AI Providers.
         </p>
       </div>
 
@@ -27,18 +44,15 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
           name="Claude Code"
           description="Anthropic's coding agent"
           installed={claudeInstalled}
-          detail={
-            claudeCheck.data?.webMode
-              ? "CLI checks require the desktop app"
-              : claudeInstalled
-                ? `Found at ${claudeCheck.data?.path}`
-                : "Not installed"
-          }
-          actionLabel={claudeInstalled === false ? "Install" : undefined}
-          actionUrl={
-            claudeInstalled === false ? "https://docs.anthropic.com/en/docs/claude-code" : undefined
-          }
-          onRetry={() => claudeCheck.refetch()}
+          detail={claudeDetail()}
+          actionLabel={claudeInstalled && !auth.isLoading && !claudeAccount ? "Sign in" : undefined}
+          onAction={claudeInstalled ? () => void openProviderLogin("claude") : undefined}
+          onRetry={() => {
+            void claudeCheck.refetch();
+            void auth.refetch();
+          }}
+          showRetry={!auth.isLoading && !claudeAccount && claudeInstalled === true}
+          retryLabel="Check again"
         />
 
         <CliStatusRow
@@ -48,18 +62,21 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
           detail={
             codexCheck.data?.webMode
               ? "CLI checks require the desktop app"
-              : codexInstalled
-                ? `Found at ${codexCheck.data?.path}`
-                : "Not installed"
+              : codexInstalled === null
+                ? "Checking availability…"
+                : codexInstalled
+                  ? "Login managed by Codex"
+                  : "Unavailable · Restart Deus and check again"
           }
-          actionLabel={codexInstalled === false ? "Install" : undefined}
-          actionUrl={codexInstalled === false ? "https://github.com/openai/codex" : undefined}
+          actionLabel={codexInstalled ? "Sign in" : undefined}
+          onAction={codexInstalled ? () => void openProviderLogin("codex") : undefined}
           onRetry={() => codexCheck.refetch()}
         />
       </div>
 
       <p className="text-xs text-white/30">
-        You need at least one AI tool installed. You can add more later.
+        Already signed in to Claude Code or Codex? Continue with that account. Otherwise, sign in to
+        at least one tool above. You can finish this later in Settings.
       </p>
 
       <div className="flex items-center gap-3 pt-2">

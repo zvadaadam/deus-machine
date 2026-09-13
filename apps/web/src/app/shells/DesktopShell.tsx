@@ -106,19 +106,19 @@ export function DesktopShell({ reset }: { reset: () => void }) {
     return <ServerOfflinePage onRetry={() => settingsQuery.refetch()} variant="desktop" />;
   }
 
-  if (showOnboarding) {
-    return <OnboardingOverlay />;
-  }
-
   return (
     <UpdateProvider value={autoUpdate}>
-      <ErrorBoundary
-        FallbackComponent={DashboardError}
-        onReset={reset}
-        onError={createBoundaryErrorHandler("react.error-boundary.root")}
-      >
-        <MainLayout />
-      </ErrorBoundary>
+      {showOnboarding ? (
+        <OnboardingOverlay />
+      ) : (
+        <ErrorBoundary
+          FallbackComponent={DashboardError}
+          onReset={reset}
+          onError={createBoundaryErrorHandler("react.error-boundary.root")}
+        >
+          <MainLayout />
+        </ErrorBoundary>
+      )}
       <Toaster />
     </UpdateProvider>
   );

@@ -26,7 +26,6 @@ export function useAnalyticsConsent(): void {
     if (enabled) {
       identifyUser({
         theme: settings?.theme ?? "system",
-        claude_provider: settings?.claude_provider,
       });
 
       // Track app launch once per app lifecycle (guard prevents re-fire
@@ -40,5 +39,5 @@ export function useAnalyticsConsent(): void {
           .catch(() => track("app_launched", { version: "unknown" }));
       }
     }
-  }, [settings?.analytics_enabled, settings?.theme, settings?.claude_provider]);
+  }, [settings?.analytics_enabled, settings?.theme]);
 }

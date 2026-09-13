@@ -28,7 +28,7 @@ import {
   getAgentHarnessForModel,
   type AgentHarness,
   type ThinkingLevel,
-  getDefaultModelForHarness,
+  getModelForSession,
 } from "@/shared/agents";
 import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
 import { readThinkingLevel } from "@shared/protocol";
@@ -112,17 +112,18 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // Session-derived props — everything that needs React Query context.
     // Composer state itself (draft/model/etc.) lives in the store;
     // MessageInput reads it directly. We don't subscribe here.
-    const { session, messages, sessionStatus } = useSessionWithMessages(sessionId);
+    const { session, messages, turns, loading, sessionStatus } = useSessionWithMessages(sessionId);
     const environment = useProjectEnvironment(workspaceId);
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
+    const seedModel =
+      initialModel ??
+      (session ? getModelForSession(session.agent_harness, turns ?? []) : DEFAULT_MODEL);
 
     // Notify parent when the selected model's agent harness changes.
     // We subscribe to just `model` (a string) to avoid re-renders on
     // unrelated staged-content changes like paste.
-    const model = useSessionComposerStore(
-      (s) => s.composers[sessionId]?.model ?? initialModel ?? DEFAULT_MODEL
-    );
+    const model = useSessionComposerStore((s) => s.composers[sessionId]?.model ?? seedModel);
     const agentHarness = getAgentHarnessForModel(model);
     useEffect(() => {
       onAgentHarnessChange?.(agentHarness);
@@ -155,16 +156,11 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     );
 
     // The composer seeds its model ONCE (seedIfAbsent on first mount), so the
-    // seed must be right the first time: an explicit pick (a new tab) wins,
-    // else the session's own harness — which needs the session row. Until the
-    // row is known, hold the pill rather than seed the global default and
-    // reopen a Codex session as Claude (the send derives its harness from the
-    // picked model, so that isn't cosmetic).
-    if (!session && !initialModel) {
+    // seed must be right the first time: an explicit pick for a new tab wins,
+    // otherwise wait for history and restore the last recorded model.
+    if ((!session || loading) && !initialModel) {
       return <DisabledComposerPlaceholder className={className} />;
     }
-    const seedModel = initialModel ?? getDefaultModelForHarness(session!.agent_harness);
-
     return (
       // Key on sessionId so MessageInput's LOCAL UI state (popover open,
       // query buffers) resets when the session changes. Staged content

@@ -401,9 +401,19 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on("before-quit", () => {
+let quitState: "running" | "stopping" | "stopped" = "running";
+app.on("before-quit", (event) => {
+  if (quitState === "stopped") return;
+  event.preventDefault();
+  if (quitState === "stopping") return;
+  quitState = "stopping";
   destroyTray();
-  stopBackend();
+  // Keep the parent and its log pipes alive until the backend has closed
+  // its agent process, terminals, and database. Repeated Quit stays idempotent.
+  void stopBackend().finally(() => {
+    quitState = "stopped";
+    app.quit();
+  });
 });
 
 // Export for IPC handlers that need window reference

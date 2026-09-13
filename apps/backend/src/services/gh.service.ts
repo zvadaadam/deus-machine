@@ -185,6 +185,20 @@ export async function getPrStatus(workspacePath: string): Promise<PrStatusRespon
   const originUrl = await getGitRemoteUrl(workspacePath, "origin");
   const upstreamUrl = await getGitRemoteUrl(workspacePath, "upstream");
 
+  // A local-only project has no PR to look up. Letting gh infer a repository
+  // here turns its "no git remotes found" error into a false network warning.
+  if (!originUrl && !upstreamUrl) {
+    const remotes = await execFileAsync("git", ["remote"], {
+      cwd: workspacePath,
+      encoding: "utf-8",
+      timeout: 3000,
+    }).catch(() => undefined);
+    if (remotes?.stdout.trim() === "") {
+      return { has_pr: false, conclusive: false, error: null };
+    }
+    // A custom remote name (or an inconclusive check) still lets gh resolve it.
+  }
+
   const isFork = upstreamUrl != null && originUrl != null && upstreamUrl !== originUrl;
 
   // Build list of attempts: try upstream first (for forks), then origin.

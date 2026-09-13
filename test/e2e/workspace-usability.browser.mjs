@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GithubCloudAccess } from "@/features/settings/ui/sections/GithubCloudAccess";
 import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
+import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
@@ -45,7 +46,7 @@ function TabJourney() {
   </>;
 }
 function App() {
-  const [view, setView] = useState("GitHub");
+  const [view, setView] = useState(location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
   const [fileMode, setFileMode] = useState("all");
@@ -59,6 +60,7 @@ function App() {
     <div className="bg-background text-foreground min-h-screen p-4 sm:p-8">
       <nav className="mb-6 flex gap-4">{["GitHub", "Cloud", "Chat", "Files", "Tabs"].map(name => <button key={name} onClick={() => setView(name)}>{name}</button>)}</nav>
       <main className="mx-auto max-w-3xl">
+        {view === "Onboarding" && <OnboardingOverlay />}
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
         {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode={fileMode as any} onFilterModeChange={setFileMode} /></div>}
@@ -81,6 +83,8 @@ createRoot(document.getElementById("root")!).render(<App />);
 let filesOnline = false;
 let fileRequests = 0;
 let failGithub = false;
+let failRecentProjects = true;
+let failFinishSetup = true;
 const savedTokens = [];
 const server = await createServer({
   configFile: false,
@@ -108,7 +112,7 @@ const server = await createServer({
       },
       load(id) {
         if (id === "\0api-config")
-          return `export const getBaseURL = async () => location.origin + "/api"; export const getBaseURLSync = () => location.origin + "/api";`;
+          return `export const getBaseURL = async () => location.origin + "/api"; export const getBaseURLSync = () => location.origin + "/api"; export const getBackendUrl = async () => location.origin;`;
         if (id === "\0native")
           return `
         export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/native/deus-cloud.ts"))};
@@ -124,12 +128,12 @@ const server = await createServer({
         window.reconnectFiles = () => { for (const fn of listeners) fn(true); };
         export const onConnectionChange = fn => { listeners.add(fn); return () => listeners.delete(fn); };
         export const sendRequest = async name => { const r = await fetch("/api/query/" + name); if (!r.ok) throw new Error("Cloud computer is reconnecting"); return r.json(); };
-        export const sendMutate = async () => ({success: true});
+        export const sendMutate = async (name, params) => { const r = await fetch("/api/mutate/" + name, {method: "POST", body: JSON.stringify(params)}); return r.json(); };
       `;
       },
       configureServer(vite) {
         vite.middlewares.use(async (req, res, next) => {
-          if (req.url === "/") {
+          if (req.url?.split("?")[0] === "/") {
             res.setHeader("content-type", "text/html");
             res.end(
               '<!doctype html><html><meta name="viewport" content="width=device-width,initial-scale=1"><body><div id="root"></div><script type="module" src="/.context/workspace-usability-ui/entry.tsx"></script></body></html>'
@@ -160,6 +164,25 @@ const server = await createServer({
                   installations: [{ accountLogin: "fixture-user" }],
                   accessibleRepos: ["deus/app"],
                 });
+          if (req.url === "/api/query/settings") return json({ onboarding_completed: false });
+          if (req.url === "/api/query/ghStatus")
+            return json({ isInstalled: true, isAuthenticated: true, login: "fixture-user" });
+          if (req.url === "/api/query/agentAuth")
+            return json({ agents: [], claude: null, codex: null });
+          if (req.url === "/api/query/recentProjects")
+            return failRecentProjects
+              ? json({}, 503)
+              : json({
+                  projects: [{ name: "test-project", path: "/fixture/project", source: "cursor" }],
+                });
+          if (req.url === "/api/mutate/invalidateFileCache") return json({ success: true });
+          if (req.url === "/api/mutate/addRepo")
+            return json({ success: false, error: "not a git repository" });
+          if (req.url === "/api/mutate/saveSetting")
+            return json({
+              success: !failFinishSetup,
+              error: failFinishSetup ? "Disk is full" : undefined,
+            });
           if (req.url === "/api/query/repos")
             return json([
               { git_origin_url: "https://github.com/deus/app.git" },
@@ -311,9 +334,70 @@ try {
   failGithub = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByText("Installed for fixture-user").waitFor();
+  // First-run UI with native/transport boundaries, including recoverable failures.
+  // The normal-profile credentials and filesystem are never used by this test.
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.addInitScript(() => {
+    window.loginCommands = [];
+    window.electronAPI = {
+      invoke: async (command) =>
+        command === "check_cli_tool"
+          ? { installed: true, path: "/bundled/cli" }
+          : command === "native:pickFolder"
+            ? "/fixture/not-git"
+            : undefined,
+      openTerminal: async (command) => {
+        window.loginCommands.push(command);
+      },
+    };
+  });
+  await page.goto(server.resolvedUrls.local[0] + "?onboarding");
+  await page.getByRole("button", { name: "Run Deus", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("heading", { name: "Connect GitHub", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Continue", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Skip", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("heading", { name: "Connect your AI tools", exact: true }).waitFor();
+  const signIns = page.getByRole("button", { name: "Sign in", exact: true });
+  await signIns.first().click();
+  await signIns.last().click();
+  assert.deepEqual(await page.evaluate(() => window.loginCommands), [
+    "claude auth login",
+    "codex login",
+  ]);
+  assert.equal(await page.getByText("/bundled/cli", { exact: false }).count(), 0);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Couldn’t load recent projects" }).waitFor();
+  failRecentProjects = false;
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  const project = page.getByRole("button", { name: /test-project/ });
+  await project.waitFor();
+  await project.click();
+  assert.equal(await project.getAttribute("aria-pressed"), "true");
+  await project.click();
+  assert.equal(await project.getAttribute("aria-pressed"), "false");
+  await page.getByRole("button", { name: "Browse Folder", exact: true }).click();
+  await page
+    .locator('[data-sonner-toast][data-type="error"]')
+    .filter({ hasText: "git repository" })
+    .waitFor();
+  await page.getByRole("heading", { name: "Your Projects", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "Couldn’t finish setup. Disk is full" })
+    .waitFor();
+  await page.screenshot({ path: path.join(artifacts, "onboarding-error.png") });
+  failFinishSetup = false;
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await page.waitForFunction(() =>
+    document.querySelector('[class*="transition-opacity"]')?.classList.contains("opacity-0")
+  );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels, Files retry/reconnect/refresh failures, and mobile layout/error recovery"
+    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels, Files retry/reconnect/refresh failures, mobile layout/error recovery, and onboarding login/project/finish recovery"
   );
 } catch (err) {
   console.error("UI state:", await page?.locator("body").innerText());

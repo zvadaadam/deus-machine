@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { getDefaultModelForHarness, getAgentHarnessForModel, DEFAULT_MODEL } from "@/shared/agents";
+import {
+  getDefaultModelForHarness,
+  getModelForSession,
+  getAgentHarnessForModel,
+  DEFAULT_MODEL,
+} from "@/shared/agents";
+import type { SessionTurn } from "@shared/types/session";
 
 describe("getDefaultModelForHarness (the composer seed for a reopened session)", () => {
   it("round-trips through the harness the send path derives from the model", () => {
@@ -17,5 +23,28 @@ describe("getDefaultModelForHarness (the composer seed for a reopened session)",
 
   it("agrees with the global default for the default harness", () => {
     expect(getDefaultModelForHarness("claude-code")).toBe(DEFAULT_MODEL);
+  });
+});
+
+describe("reopened conversation model", () => {
+  const turn = (startedAt: number, model: string): SessionTurn => ({
+    turnId: String(startedAt),
+    startedAt,
+    execution: { harness: "codex-app-server", model },
+  });
+
+  it("uses the latest recorded choice even when history arrives out of order", () => {
+    expect(
+      getModelForSession("codex-app-server", [turn(2, "gpt-5.6-sol"), turn(1, "gpt-6-astra")])
+    ).toBe("codex-app-server:gpt-5.6-sol");
+  });
+
+  it("uses the session harness default when no usable selection was recorded", () => {
+    for (const turns of [[], [turn(1, "retired-model")]]) {
+      expect(getModelForSession("codex-app-server", turns)).toBe(
+        getDefaultModelForHarness("codex-app-server")
+      );
+    }
+    expect(getModelForSession("claude-code", [turn(1, "gpt-5.6-sol")])).toBe(DEFAULT_MODEL);
   });
 });

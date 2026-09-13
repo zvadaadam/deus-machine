@@ -129,6 +129,20 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-white/30" />
         </div>
+      ) : projectsQuery.isError ? (
+        <div role="alert" className="space-y-3 py-6 text-center">
+          <p className="text-sm text-white/70">
+            Couldn’t load recent projects. Try again, or browse for a folder.
+          </p>
+          <button
+            type="button"
+            onClick={() => void projectsQuery.refetch()}
+            disabled={projectsQuery.isFetching}
+            className="rounded-xl bg-white/10 px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            Try again
+          </button>
+        </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
           <FolderOpen className="h-8 w-8 text-white/20" />

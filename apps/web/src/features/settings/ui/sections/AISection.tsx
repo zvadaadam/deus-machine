@@ -1,10 +1,6 @@
-import { useState, useEffect, useRef } from "react";
 import { CheckCircle2, XCircle, Loader2, RefreshCw, ExternalLink, Terminal } from "lucide-react";
-import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { isElectronEnv } from "@/platform/electron/invoke";
 import {
   Select,
   SelectContent,
@@ -18,6 +14,7 @@ import type { SettingsSectionProps } from "./types";
 import type { AgentProviderAuth } from "../../types";
 import { readThinkingLevel } from "@shared/protocol";
 import { ProviderAccounts } from "./ProviderAccounts";
+import { openProviderLogin } from "../../lib/open-provider-login";
 
 function AuthBadge({
   auth,
@@ -65,17 +62,6 @@ function AuthBadge({
   );
 }
 
-function openInTerminal(command: string) {
-  if (isElectronEnv && window.electronAPI?.openTerminal) {
-    window.electronAPI.openTerminal(command);
-  } else {
-    navigator.clipboard.writeText(command);
-    toast.success("Copied to clipboard", {
-      description: `Run ${command} in your terminal`,
-    });
-  }
-}
-
 export function AISection({
   settings,
   saveSetting,
@@ -93,38 +79,6 @@ export function AISection({
   );
   const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
   const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
-
-  // Controlled state for custom endpoint with debounced save
-  const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? "");
-
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestValueRef = useRef(customEndpoint);
-  const lastSavedRef = useRef(settings.custom_endpoint ?? "");
-
-  useEffect(() => {
-    setCustomEndpoint(settings.custom_endpoint ?? "");
-    lastSavedRef.current = settings.custom_endpoint ?? "";
-  }, [settings.custom_endpoint]);
-
-  const handleEndpointChange = (value: string) => {
-    setCustomEndpoint(value);
-    latestValueRef.current = value;
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      saveSetting("custom_endpoint", value);
-      lastSavedRef.current = value;
-    }, 500);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (latestValueRef.current !== lastSavedRef.current) {
-        saveSetting("custom_endpoint", latestValueRef.current);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (cloudOnly) {
     return (
@@ -146,7 +100,7 @@ export function AISection({
         <div>
           <h3 className="text-base font-semibold">AI Providers</h3>
           <p className="text-muted-foreground mt-1 text-base">
-            Manage AI provider connections, credentials, and model preferences.
+            Manage AI accounts and choose models in each conversation.
           </p>
         </div>
         <Button
@@ -205,102 +159,14 @@ export function AISection({
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1.5 text-xs"
-                onClick={() => openInTerminal("claude login")}
+                onClick={() => void openProviderLogin("claude")}
               >
                 <Terminal className="size-3" />
-                claude login
+                Sign in
               </Button>
             )}
           </div>
         </div>
-
-        <Separator />
-
-        {/* Provider */}
-        <div className="space-y-2">
-          <Label htmlFor="provider" className="text-sm">
-            Provider
-          </Label>
-          <p className="text-muted-foreground text-sm">Where API requests are routed.</p>
-          <Select
-            value={settings.claude_provider ?? "anthropic"}
-            onValueChange={(value) => saveSetting("claude_provider", value)}
-          >
-            <SelectTrigger id="provider" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
-              <SelectItem value="custom">Custom Endpoint</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Model */}
-        <div className="space-y-2">
-          <Label htmlFor="model" className="text-sm">
-            Default model
-          </Label>
-          <p className="text-muted-foreground text-sm">The model used for new conversations.</p>
-          <Select
-            value={settings.claude_model ?? "claude-opus-4-7[1m]"}
-            onValueChange={(value) => saveSetting("claude_model", value)}
-          >
-            <SelectTrigger id="model" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="claude-opus-4-7[1m]">Claude Opus 4.7 1M</SelectItem>
-              <SelectItem value="claude-opus-4-7">Claude Opus 4.7</SelectItem>
-              <SelectItem value="claude-opus-4-6[1m]">Claude Opus 4.6 1M</SelectItem>
-              <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
-              <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Default thinking level */}
-        <div className="space-y-2">
-          <Label htmlFor="thinking-level" className="text-sm">
-            Default thinking
-          </Label>
-          <p className="text-muted-foreground text-sm">
-            How hard the model should think by default. Individual turns can still be adjusted via
-            the thinking indicator next to the model picker.
-          </p>
-          <Select
-            value={readThinkingLevel(settings.default_thinking_level) ?? "high"}
-            onValueChange={(value) => saveSetting("default_thinking_level", value)}
-          >
-            <SelectTrigger id="thinking-level" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Custom endpoint (conditional) */}
-        {settings.claude_provider === "custom" && (
-          <div className="space-y-2">
-            <Label htmlFor="custom-endpoint" className="text-sm">
-              Custom endpoint URL
-            </Label>
-            <p className="text-muted-foreground text-sm">
-              The base URL for your custom Claude-compatible API.
-            </p>
-            <Input
-              id="custom-endpoint"
-              type="url"
-              placeholder="https://api.example.com/v1"
-              value={customEndpoint}
-              onChange={(e) => handleEndpointChange(e.target.value)}
-            />
-          </div>
-        )}
       </div>
 
       {/* ================================================================
@@ -338,13 +204,40 @@ export function AISection({
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1.5 text-xs"
-                onClick={() => openInTerminal("codex login")}
+                onClick={() => void openProviderLogin("codex")}
               >
                 <Terminal className="size-3" />
-                codex login
+                Sign in
               </Button>
             )}
           </div>
+        </div>
+      </div>
+      <div className="space-y-4">
+        <Separator />
+
+        {/* Default thinking level */}
+        <div className="space-y-2">
+          <Label htmlFor="thinking-level" className="text-sm">
+            Default thinking
+          </Label>
+          <p className="text-muted-foreground text-sm">
+            How hard the model should think by default. Individual turns can still be adjusted via
+            the thinking indicator next to the model picker.
+          </p>
+          <Select
+            value={readThinkingLevel(settings.default_thinking_level) ?? "high"}
+            onValueChange={(value) => saveSetting("default_thinking_level", value)}
+          >
+            <SelectTrigger id="thinking-level" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>

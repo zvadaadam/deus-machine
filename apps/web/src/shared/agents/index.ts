@@ -13,6 +13,7 @@ import {
   getKnownAgentConfig,
 } from "@shared/agent-catalog";
 import type { AgentConfig, AgentHarness, ThinkingLevel } from "@shared/agent-catalog";
+import type { SessionTurn } from "@shared/types/session";
 
 export {
   AGENT_CONFIGS,
@@ -80,16 +81,29 @@ export function getAgentLabel(agentHarness: AgentHarness): string {
   return getAgentConfig(agentHarness).label;
 }
 
-/**
- * The picker value a session should open with when nothing else says: its
- * harness's first catalog model. This is what seeds the composer for a
- * HYDRATED tab (a session reopened from the sidebar) — without it the composer
- * fell back to the global default (Claude), and a Codex session's first send
- * ran as Claude, forking a fresh native conversation.
- */
+/** Fallback for a session with no recorded selection, preserving its harness. */
 export function getDefaultModelForHarness(agentHarness: AgentHarness): string {
   const config = getAgentConfig(agentHarness);
   return `${config.id}:${config.models[0].model}`;
+}
+
+/** Reopen with the last recorded selection; an empty session uses its harness default. */
+export function getModelForSession(
+  agentHarness: AgentHarness,
+  turns: readonly SessionTurn[]
+): string {
+  const latest = turns.reduce<SessionTurn | undefined>((previous, turn) => {
+    if (turn.execution?.harness !== agentHarness || !turn.execution.model) return previous;
+    return !previous ||
+      (turn.startedAt ?? turn.endedAt ?? 0) > (previous.startedAt ?? previous.endedAt ?? 0)
+      ? turn
+      : previous;
+  }, undefined);
+  const model = latest?.execution?.model;
+  return (
+    (model && resolveModelSelection(`${agentHarness}:${model}`)) ||
+    getDefaultModelForHarness(agentHarness)
+  );
 }
 
 export function resolveModelSelection(model: string): string | undefined {

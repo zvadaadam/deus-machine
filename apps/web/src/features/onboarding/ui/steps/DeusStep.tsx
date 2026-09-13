@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
@@ -71,8 +70,7 @@ async function resolveExistingRepoId(targetPath: string): Promise<string | null>
  * Runs independently of React component lifecycle -- safe to call then unmount.
  * Uses only singletons: RepoService, queryClient, toast.
  * On success the repo appears in the sidebar via query invalidation.
- * On failure a toast tells the user what happened (the <Toaster> mounts
- * in App.tsx after onboarding completes, well before this async work finishes).
+ * On failure the shared desktop Toaster tells the user what happened.
  */
 async function cloneAndRegisterInBackground() {
   try {
@@ -167,22 +165,14 @@ async function cloneAndRegisterInBackground() {
 export function DeusStep({ onBack, onComplete }: DeusStepProps) {
   const completeMutation = useCompleteOnboarding();
 
-  /**
-   * Fire-and-forget: kick off clone pipeline as a detached promise,
-   * then immediately complete onboarding. The user lands in the app
-   * and the repo appears in the sidebar once cloneAndRegisterInBackground
-   * finishes and invalidates the query cache.
-   */
-  const handleCloneAndFinish = useCallback(async () => {
-    void cloneAndRegisterInBackground();
-    await completeMutation.mutateAsync();
-    onComplete();
-  }, [completeMutation, onComplete]);
-
-  const handleSkip = useCallback(async () => {
-    await completeMutation.mutateAsync();
-    onComplete();
-  }, [completeMutation, onComplete]);
+  function finish(clone: boolean) {
+    completeMutation.mutate(undefined, {
+      onSuccess: () => {
+        if (clone) void cloneAndRegisterInBackground();
+        onComplete();
+      },
+    });
+  }
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
@@ -211,7 +201,13 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
 
       <p className="text-xs text-white/40 italic">{REPO.description}</p>
 
-      <div className="min-h-[28px]" />
+      <div className="min-h-[28px]">
+        {completeMutation.error && (
+          <p role="alert" className="text-sm text-white/70">
+            Couldn’t finish setup. {getErrorMessage(completeMutation.error)}
+          </p>
+        )}
+      </div>
 
       <div className="flex items-center gap-3 pt-2">
         <button
@@ -224,7 +220,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         <div className="flex-1" />
 
         <button
-          onClick={handleSkip}
+          onClick={() => finish(false)}
           disabled={completeMutation.isPending}
           className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white disabled:opacity-50"
         >
@@ -232,7 +228,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         </button>
 
         <button
-          onClick={handleCloneAndFinish}
+          onClick={() => finish(true)}
           disabled={completeMutation.isPending}
           className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
         >

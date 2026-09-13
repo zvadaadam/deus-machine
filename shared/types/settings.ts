@@ -17,9 +17,6 @@ export interface Settings {
 
   // AI — Claude
   anthropic_api_key?: string;
-  claude_provider?: string;
-  claude_model?: string;
-  custom_endpoint?: string;
   /**
    * Default thinking effort for new sessions and model switches (engine
    * vocabulary). `xhigh` is intentionally excluded — not all models support

@@ -66,8 +66,8 @@ export function useUpdateSettings() {
 
     onSuccess: (_data, newSettings) => {
       // Track each changed key. Only include value for safe enum-type settings
-      // (theme, provider). Never log API keys or free-text inputs.
-      const SAFE_VALUE_KEYS = new Set(["theme", "claude_provider"]);
+      // (theme, diff view). Never log API keys or free-text inputs.
+      const SAFE_VALUE_KEYS = new Set(["theme", "diff_view_mode"]);
       for (const key of Object.keys(newSettings)) {
         const value = SAFE_VALUE_KEYS.has(key)
           ? String((newSettings as Record<string, unknown>)[key])

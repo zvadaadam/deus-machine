@@ -43,6 +43,23 @@ reasoning and stays open through completion and the next turn. Answer text, fail
 questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nested
 `PartsRenderer.tsx` share `PartBlock.tsx`; turn details and provider attribution are unchanged.
 
+#### First-run follow-up awaiting canvas sync (September 13)
+
+The live desktop and browser journey now include these changes. The matching canvas
+updates remain pending: Pencil MCP rejects `get_app_state` for this exact file with
+“you are probably referencing the wrong .pen file”. Do not treat these boards as synchronized:
+
+- `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
+- `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in
+  and Check again. Local sign-in is separate from cloud accounts in AI Providers.
+- `47e` Projects: discovery failure has Try again and Browse Folder; selected cards expose
+  their selection state. Folder errors appear through the shared notification host.
+- `47f` Finish: a failed save stays on this step with an error and retryable actions.
+- `54`/`54b` AI Providers: remove unused provider-routing, custom-endpoint and default-model
+  controls. Keep accounts, local sign-in and the working default-thinking setting.
+- The sidebar service badge names the affected provider (for example, “Claude: Degraded”);
+  its popover identifies the information as the provider's public service status.
+
 ### Turn details
 
 Board `15a`, `DS/TurnDetails`, maps to the Details popover in
