@@ -236,9 +236,11 @@ try {
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByRole("treeitem", { name: "README.md", exact: true }).waitFor();
   const before = fileRequests;
+  const reconnectResponse = page.waitForResponse((response) =>
+    response.url().endsWith("/api/query/workspaceFiles")
+  );
   await page.evaluate(() => window.reconnectFiles());
-  await page.waitForFunction(() => document.querySelector('[role="alert"]') === null);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await reconnectResponse;
   assert.equal(fileRequests, before + 1, "A reconnect refreshes Files without a polling loop");
 
   await page.setViewportSize({ width: 390, height: 844 });
