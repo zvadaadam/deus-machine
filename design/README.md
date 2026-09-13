@@ -43,11 +43,14 @@ reasoning and stays open through completion and the next turn. Answer text, fail
 questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nested
 `PartsRenderer.tsx` share `PartBlock.tsx`; turn details and provider attribution are unchanged.
 
-#### First-run follow-up awaiting canvas sync (September 13)
+#### Canvas synchronization follow-up (September 14)
 
-The live desktop and browser journey now include these changes. The matching canvas
-updates remain pending: Pencil MCP cannot access this exact file. The latest `get_app_state`
-attempt failed with “transport not connected to app: desktop”. Do not treat these boards as synchronized:
+The live desktop and browser journey already include the changes below. Pencil MCP access
+to this worktree's document was verified on September 14; the canvas still differs from
+the implementation. The product owner chose to defer these canvas updates to the next
+design PR, an explicit exception to the same-PR design-sync rule for PR #383. This is
+documentation follow-up and does not affect app functionality. Do not treat these boards
+as synchronized:
 
 - `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
 - `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in
