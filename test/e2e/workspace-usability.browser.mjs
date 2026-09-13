@@ -525,8 +525,8 @@ try {
   failDirectToken = true;
   await historyError.getByRole("button", { name: "Try again", exact: true }).click();
   const retryButton = historyError.getByRole("button", { name: "Try again", exact: true });
-  assert.equal(await retryButton.isDisabled(), true);
-  await page.locator('[role="alert"] button:enabled').waitFor();
+  await historyError.locator("button:disabled").waitFor();
+  await historyError.locator("button:enabled").waitFor();
   assert.equal(directSocketAttempts, exhaustedAttempts, "A failed mint cannot reopen the socket");
   const beforeRetryTokens = directTokenRequests;
   failDirectToken = false;
