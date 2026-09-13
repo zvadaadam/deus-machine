@@ -4,7 +4,8 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { sendRequest, sendMutate } from "@/platform/ws";
+import { useEffect } from "react";
+import { sendRequest, sendMutate, onConnectionChange } from "@/platform/ws";
 import type { FileTreeResponse } from "../types";
 
 /**
@@ -18,17 +19,27 @@ async function scanWorkspaceFiles(workspaceId: string): Promise<FileTreeResponse
  * TanStack Query hook for file scanning via q:request
  */
 export function useFiles(workspaceId: string | null, options?: { enabled?: boolean }) {
-  return useQuery({
+  const enabled = !!workspaceId && (options?.enabled ?? true);
+  const query = useQuery({
     queryKey: ["files", workspaceId],
     queryFn: () =>
       workspaceId
         ? scanWorkspaceFiles(workspaceId)
         : Promise.resolve({ files: [], totalFiles: 0, totalSize: 0 }),
-    enabled: !!workspaceId && (options?.enabled ?? true),
+    enabled,
     staleTime: 30000, // 30s cache
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     gcTime: 5 * 60 * 1000, // 5 minutes
   });
+  const { refetch } = query;
+  useEffect(
+    () =>
+      onConnectionChange((connected) => {
+        if (connected && enabled) void refetch();
+      }),
+    [enabled, refetch, workspaceId]
+  );
+  return query;
 }
 
 /**

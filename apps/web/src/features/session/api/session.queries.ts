@@ -476,11 +476,11 @@ export function useStopSession() {
         session_id: sessionId,
         agent_harness: session?.agent_harness,
       });
-      // Immediate invalidation for snappy UI feedback.
-      // Backend also pushes via WS q:invalidate. React Query deduplicates.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions.detail(sessionId),
-      });
+      // Direct sessions project their terminal state from the stream; a local
+      // detail fetch can overwrite it with a stale desktop row.
+      if (!isDirectSessionCached(queryClient, sessionId)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(sessionId) });
+      }
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.all,
       });
@@ -503,8 +503,6 @@ export function useCreateSession() {
         workspace_id: workspaceId,
         agent_harness: newSession?.agent_harness,
       });
-      // Immediate invalidation for snappy UI feedback.
-      // Backend also pushes via WS q:invalidate. React Query deduplicates.
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.all,
       });

@@ -163,6 +163,20 @@ jobs:
       - name: Run app and desktop unit tests
         run: bun run test:simulator
 
+      - name: Install browser for UI regression journey
+        run: bunx playwright install --with-deps chromium
+
+      - name: Verify workspace usability in desktop and mobile layouts
+        run: bun test/e2e/workspace-usability.browser.mjs
+
+      - name: Upload UI regression screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-usability-screenshots
+          path: .context/workspace-usability-ui/*.png
+          if-no-files-found: ignore
+
   runtime-linux:
     name: Native Runtime Smoke (Linux)
     runs-on: ubuntu-latest

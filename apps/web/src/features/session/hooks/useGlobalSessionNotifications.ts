@@ -53,6 +53,7 @@ function formatBody(repoName: string, ws: Workspace): string {
 }
 
 function navigateToWorkspace(workspaceId: string, sessionId: string): void {
+  unreadActions.markRead(sessionId);
   showWindow();
   useWorkspaceStore.getState().selectWorkspace(workspaceId);
   // Only update chat tabs if workspace has existing layout state.

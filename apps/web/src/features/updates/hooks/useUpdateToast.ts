@@ -32,5 +32,5 @@ export function useUpdateToast({ state, install }: UseAutoUpdateReturn) {
         onClick: () => window.open(RELEASES_URL, "_blank"),
       },
     });
-  }, [state.stage, state.version, install]);
+  }, [state, install]);
 }

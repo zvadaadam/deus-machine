@@ -12,24 +12,11 @@
 
 import { memo, useMemo } from "react";
 import { match } from "ts-pattern";
-import type {
-  Part,
-  TextPart,
-  ReasoningPart,
-  ToolPart,
-  ImagePart,
-  FilePart,
-  UnknownPart,
-} from "@shared/protocol-types";
-import { TextBlock } from "./TextBlock";
-import { ThinkingBlock } from "./ThinkingBlock";
-import { StreamingReasoningBlock } from "./StreamingReasoningBlock";
-import { BufferedTextBlock } from "./BufferedTextBlock";
-import { ToolPartBlock } from "./ToolPartBlock";
+import type { Part, UnknownPart } from "@shared/protocol-types";
+import { PartBlock } from "./PartBlock";
 import { PartToolGroupBlock } from "./PartToolGroupBlock";
 import { ChatResourceCards } from "./ChatResourceCards";
 import { groupPartItems } from "../utils/groupParts";
-import { Paperclip } from "lucide-react";
 import { useSession } from "../../context";
 import { extractChatResources } from "../../lib/chatResources";
 
@@ -80,60 +67,16 @@ export const PartsRenderer = memo(function PartsRenderer({
               isSealed={streak.isSealed}
             />
           ))
-          .with({ kind: "part" }, ({ item }) => renderPart(item, lastTextPartId, isStreamingTurn))
+          .with({ kind: "part" }, ({ item }) => (
+            <PartBlock
+              key={item.id}
+              part={item}
+              isStreaming={isStreamingTurn && (item.type !== "text" || item.id === lastTextPartId)}
+            />
+          ))
           .exhaustive()
       )}
       <ChatResourceCards resources={resources} />
     </>
   );
 });
-
-function renderPart(part: Part, lastTextPartId: string | null, isStreamingTurn: boolean) {
-  return (
-    match(part)
-      .with({ type: "text" }, (p: TextPart) => {
-        const isActivelyStreaming = isStreamingTurn && p.id === lastTextPartId;
-        if (isActivelyStreaming) {
-          return <BufferedTextBlock key={p.id} text={p.text} isStreaming={true} />;
-        }
-        return <TextBlock key={p.id} block={p.text} role="assistant" weight="normal" />;
-      })
-      .with({ type: "reasoning" }, (p: ReasoningPart) => {
-        const isActivelyStreaming = isStreamingTurn && p.state === "streaming";
-        if (isActivelyStreaming) {
-          return <StreamingReasoningBlock key={p.id} text={p.text} />;
-        }
-        return <ThinkingBlock key={p.id} part={p} durationSec={getReasoningDurationSec(p)} />;
-      })
-      .with({ type: "tool" }, (p: ToolPart) => <ToolPartBlock key={p.id} part={p} />)
-      // The user echo can carry attachments; the model never emits them.
-      .with({ type: "image" }, (p: ImagePart) => (
-        <img
-          key={p.id}
-          src={p.url ?? `data:${p.mimeType};base64,${p.data ?? ""}`}
-          alt="attachment"
-          className="border-border max-h-64 rounded-md border"
-        />
-      ))
-      .with({ type: "file" }, (p: FilePart) => (
-        <div key={p.id} className="flex items-center gap-2 px-2 py-1 text-xs opacity-70">
-          <Paperclip className="h-3 w-3" />
-          <span>{p.filename ?? p.mimeType}</span>
-        </div>
-      ))
-      .exhaustive()
-  );
-}
-
-/** Reasoning duration, from the part's epoch-ms stamps. */
-function getReasoningDurationSec(part: ReasoningPart): number | undefined {
-  const start = part.time?.start;
-  const end = part.time?.end;
-
-  if (start === undefined || end === undefined) return undefined;
-
-  const durationMs = end - start;
-  if (!Number.isFinite(durationMs) || durationMs < 0) return undefined;
-
-  return Math.max(2, Math.round(durationMs / 1_000));
-}

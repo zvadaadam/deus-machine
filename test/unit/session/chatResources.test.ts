@@ -40,6 +40,25 @@ function writePart(paths: string[], partIndex = 0): Part {
 }
 
 describe("chatResources", () => {
+  it.each([
+    "```sh\nopen http://localhost:3000\n```",
+    "~~~~md\nhttp://localhost:3000\n~~~\n[example](README.md)\n~~~~",
+    "````md\n```\nhttp://localhost:3000\n```\n````",
+    "Try ``http://localhost:3000 `example` `` later",
+    "    http://localhost:3000",
+  ])("does not promote code examples into resource cards: %s", (markdown) => {
+    expect(extractSingleLocalUrl(markdown)).toBeNull();
+    expect(extractChatResources({ parts: [textPart(markdown)], isComplete: true })).toEqual([]);
+  });
+
+  it("distinguishes a prose link from a code sample using Markdown semantics", () => {
+    expect(
+      extractSingleLocalUrl("`http://localhost:3000` then [open](http://localhost:5173)")
+    ).toBe("http://localhost:5173/");
+    expect(extractSingleLocalUrl("unmatched ` then http://localhost:5173")).toBe(
+      "http://localhost:5173/"
+    );
+  });
   it("turns markdown links to supported files into file resources", () => {
     const resources = extractChatResources({
       parts: [textPart("Open [README](README.md)")],

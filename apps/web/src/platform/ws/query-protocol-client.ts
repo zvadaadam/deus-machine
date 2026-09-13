@@ -21,7 +21,7 @@
 import { match } from "ts-pattern";
 import { resolveBackendEndpoints, isRelayMode } from "@/shared/config/backend.config";
 import { getStoredToken, signOut } from "@/features/auth";
-import type { QueryResource, CommandName } from "@shared/types/query-protocol";
+import type { QueryResource, CommandName, QMutateResultFrame } from "@shared/types/query-protocol";
 
 // ---- Types ----
 
@@ -47,8 +47,10 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+type MutateResult<T = unknown> = Omit<QMutateResultFrame<T>, "type" | "id">;
+
 interface PendingMutation {
-  resolve: (result: { success: boolean; data?: unknown; error?: string }) => void;
+  resolve: (result: MutateResult) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -344,7 +346,7 @@ export function sendRequest<T = unknown>(
 export function sendMutate<T = unknown>(
   action: string,
   params: Record<string, unknown>
-): Promise<{ success: boolean; data?: T; error?: string }> {
+): Promise<MutateResult<T>> {
   // Web-direct: no Mac backend to mutate — reject honestly (see sendCommand).
   if (requestInterceptor) {
     return Promise.reject(new Error(`${action} is not available without a Mac backend`));
@@ -359,7 +361,7 @@ export function sendMutate<T = unknown>(
     }, MUTATE_TIMEOUT_MS);
 
     pendingMutations.set(id, {
-      resolve: resolve as (result: { success: boolean; data?: unknown; error?: string }) => void,
+      resolve: resolve as (result: MutateResult) => void,
       reject,
       timer,
     });
@@ -668,6 +670,8 @@ async function openSocket(serverId?: string): Promise<void> {
             success: msg.success as boolean,
             data: msg.data as unknown,
             error: msg.error as string | undefined,
+            status: msg.status as number | undefined,
+            details: msg.details,
           });
         }
       })

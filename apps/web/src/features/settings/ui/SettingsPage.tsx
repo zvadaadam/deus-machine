@@ -9,6 +9,7 @@ import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { useTheme } from "@/app/providers";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { useSettings, useUpdateSettings } from "../api/settings.queries";
+import { resolveSettingsSection } from "../settings-navigation";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import {
   AccountSection,
@@ -22,25 +23,11 @@ import {
   AccessSection,
 } from "./sections";
 
-const SECTION_LABELS: Record<string, string> = {
-  account: "Account",
-  general: "General",
-  github: "GitHub",
-  browser: "Browser",
-  ai: "AI Providers",
-  cloud: "Cloud",
-  environment: "Environment",
-  experimental: "Experimental",
-  access: "Remote Access",
-};
-
 export function SettingsPage() {
   const storedSection = useUIStore((s) => s.activeSettingsSection);
   const cloudOnly = isCloudDirectWebMode();
-  const activeSection =
-    cloudOnly && storedSection !== "ai" && storedSection !== "environment"
-      ? "account"
-      : storedSection;
+  const section = resolveSettingsSection(storedSection);
+  const activeSection = section.id;
   const closeSettings = useUIStore((s) => s.closeSettings);
   const { theme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
@@ -115,8 +102,8 @@ export function SettingsPage() {
   return (
     <SidebarInset className="min-w-0">
       <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
-        {isMobile && (
-          <div className="border-border-subtle flex h-11 flex-shrink-0 items-center gap-2 border-b px-4">
+        <div className="border-border-subtle flex h-11 flex-shrink-0 items-center gap-2 border-b px-4">
+          {isMobile && (
             <button
               type="button"
               aria-label="Open settings menu"
@@ -125,17 +112,16 @@ export function SettingsPage() {
             >
               <PanelLeft className="h-4 w-4" />
             </button>
-            <span className="text-text-secondary text-sm font-medium">
-              {SECTION_LABELS[activeSection] ?? "Settings"}
-            </span>
-          </div>
-        )}
+          )}
+          <span className="text-text-secondary text-sm font-medium">
+            <span className="text-text-muted">Settings / </span>
+            {section.label}
+          </span>
+        </div>
         {/* min-h-0: without it the flex item refuses to shrink below its
             content, the viewport never overflows, and the page can't scroll. */}
         <ScrollArea className="min-h-0 flex-1">
-          <div
-            className={`mx-auto px-4 py-8 sm:px-8 ${activeSection === "environment" ? "max-w-4xl" : "max-w-2xl"}`}
-          >
+          <div className="mx-auto max-w-4xl px-4 py-6 sm:px-8">
             {/* Saving indicator */}
             {saving && (
               <div className="text-muted-foreground mb-4 flex items-center gap-2 text-sm">

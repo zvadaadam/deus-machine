@@ -194,10 +194,36 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const hydrated = useRef(false);
   useEffect(() => {
-    if (!workspaceSessions || hydrated.current) return;
+    if (!workspaceSessions) return;
+    if (hydrated.current) {
+      // A cloud snapshot can establish that an untitled chat has started after
+      // discovery has already hydrated the tabs. Preserve order and draft choices.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile persisted tabs with server discovery
+      setMainTabs((tabs) => {
+        const sequences = computeSequences(
+          tabs
+            .filter(isSessionChatTab)
+            .map((tab) => sessionMap.get(tab.sessionId))
+            .filter((session): session is Session => !!session)
+        );
+        let changed = false;
+        const updated = tabs.map((tab) => {
+          const session = isSessionChatTab(tab) ? sessionMap.get(tab.sessionId) : undefined;
+          if (tab.hasStarted || !session || session.message_count === 0) return tab;
+          changed = true;
+          return {
+            ...tab,
+            hasStarted: true,
+            agentHarness: session.agent_harness,
+            label: buildStartedChatLabel(session.agent_harness, sequences.get(session.id) ?? 1),
+          };
+        });
+        return changed ? updated : tabs;
+      });
+      return;
+    }
     hydrated.current = true;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration sync from DB
     setMainTabs((prev) => {
       // Filter out orphaned session IDs (deleted from DB)
       const validTabs = prev.filter(

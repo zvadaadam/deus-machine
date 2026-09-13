@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
 import { match } from "ts-pattern";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,22 +64,22 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
   }
 
   return (
-    <div className="space-y-5">
+    <FieldGroup className="gap-5">
       <div>
         <h3 className="text-base font-semibold">General</h3>
-        <p className="text-muted-foreground mt-1 text-base">Appearance and display preferences.</p>
+        <p className="text-muted-foreground mt-1 text-sm">Appearance and display preferences.</p>
       </div>
 
-      {/* Theme */}
-      <div className="space-y-2">
-        <Label htmlFor="theme" className="text-sm">
-          Theme
-        </Label>
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel htmlFor="theme">Theme</FieldLabel>
+          <FieldDescription>Choose how Deus looks on this device.</FieldDescription>
+        </FieldContent>
         <Select
           value={theme}
           onValueChange={(value: "light" | "dark" | "system") => setTheme(value)}
         >
-          <SelectTrigger id="theme" className="w-full">
+          <SelectTrigger id="theme" className="min-w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -81,23 +88,18 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
             <SelectItem value="system">System</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-
+      </Field>
       <Separator />
-
-      {/* Diff view mode */}
-      <div className="space-y-2">
-        <Label htmlFor="diff-view" className="text-sm">
-          Diff view mode
-        </Label>
-        <p className="text-muted-foreground text-base">
-          How file changes are displayed in the diff viewer.
-        </p>
+      <Field orientation="responsive">
+        <FieldContent>
+          <FieldLabel htmlFor="diff-view">Diff view mode</FieldLabel>
+          <FieldDescription>How file changes appear in the diff viewer.</FieldDescription>
+        </FieldContent>
         <Select
           value={settings.diff_view_mode ?? "unified"}
           onValueChange={(value) => saveSetting("diff_view_mode", value)}
         >
-          <SelectTrigger id="diff-view" className="w-full">
+          <SelectTrigger id="diff-view" className="min-w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -105,17 +107,16 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
             <SelectItem value="split">Split</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-
+      </Field>
       <Separator />
 
       {/* Replay onboarding — desktop only (requires Electron window effects) */}
       {capabilities.nativeOnboarding && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <Label className="text-sm">Onboarding</Label>
-              <p className="text-muted-foreground text-base">Replay the setup walkthrough.</p>
+              <p className="text-muted-foreground text-sm">Replay the setup walkthrough.</p>
             </div>
             <Button
               variant="outline"
@@ -135,12 +136,12 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
       )}
 
       {/* Analytics */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <Label htmlFor="analytics-toggle" className="text-sm">
             Usage analytics
           </Label>
-          <p className="text-muted-foreground text-base">
+          <p className="text-muted-foreground text-sm">
             Help improve Deus by sharing anonymous usage data.
           </p>
         </div>
@@ -172,11 +173,11 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
             </p>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <Label className="text-sm">Check for updates</Label>
-              <p className="text-muted-foreground text-base">
-                Updates are checked automatically every 5 minutes.
+              <p className="text-muted-foreground text-sm">
+                Updates download automatically in the background.
               </p>
             </div>
             {(() => {
@@ -200,14 +201,13 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           </div>
 
           {updateCtx &&
-            match(updateCtx.state.stage)
-              .with("ready", () => (
-                <div className="bg-primary/5 border-primary/20 flex items-center justify-between rounded-lg border p-3">
+            match(updateCtx.state)
+              .with({ stage: "ready" }, (state) => (
+                <div className="bg-primary/5 border-primary/20 flex items-center justify-between gap-4 rounded-lg border p-3">
                   <div className="flex items-center gap-2">
                     <Download className="text-primary size-4" />
                     <span className="text-sm">
-                      Update <span className="font-semibold">v{updateCtx.state.version}</span> is
-                      ready
+                      Update <span className="font-semibold">v{state.version}</span> is ready
                     </span>
                   </div>
                   <Button size="sm" onClick={() => void updateCtx.install()}>
@@ -215,20 +215,19 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
                   </Button>
                 </div>
               ))
-              .with("downloading", () => (
+              .with({ stage: "downloading" }, () => (
                 <div className="text-muted-foreground flex items-center gap-2 text-sm">
                   <Loader2 className="size-3.5 animate-spin" />
                   <span>Downloading update...</span>
                 </div>
               ))
-              .with("error", () => (
+              .with({ stage: "error" }, (state) => (
                 <div className="text-destructive flex items-center gap-2 text-sm">
                   <AlertCircle className="size-3.5" />
-                  <span>Update check failed: {updateCtx.state.error}</span>
+                  <span>Update failed: {state.error}</span>
                 </div>
               ))
-              .with("idle", () => null)
-              .with("checking", () => null)
+              .with({ stage: "idle" }, { stage: "checking" }, () => null)
               .exhaustive()}
 
           {manualResult === "up-to-date" && (
@@ -239,6 +238,6 @@ export function GeneralSection({ settings, saveSetting, theme, setTheme }: Gener
           )}
         </>
       )}
-    </div>
+    </FieldGroup>
   );
 }

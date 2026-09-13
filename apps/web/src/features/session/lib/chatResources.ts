@@ -1,3 +1,5 @@
+import { fromMarkdown } from "mdast-util-from-markdown";
+import type { Root, RootContent } from "mdast";
 import type { Part, ToolPart } from "@shared/protocol-types";
 import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 
@@ -84,8 +86,9 @@ export function extractChatResources({
     .map((part) => part.text)
     .join("\n");
 
+  const markdown = readMarkdownResources(assistantContent);
   const editedPaths = extractEditedPaths(sortedParts, workspacePath);
-  const markdownPaths = extractMarkdownLinkDestinations(assistantContent)
+  const markdownPaths = markdown.destinations
     .map((path) => normalizeResourcePath(path, workspacePath))
     .filter((path): path is string => path != null);
 
@@ -101,7 +104,7 @@ export function extractChatResources({
   const resources = filePaths.map((path) =>
     isHtmlPath(path) ? createHtmlWebsiteResource(path) : createFileResource(path)
   );
-  const localUrl = extractSingleLocalUrl(assistantContent);
+  const localUrl = singleLocalUrl(markdown.prose);
   if (localUrl) {
     resources.push(createWebsiteResource(localUrl));
     return resources;
@@ -129,8 +132,12 @@ function isHtmlPath(path: string): boolean {
 export function extractSingleLocalUrl(text: string | null | undefined): string | null {
   if (!text) return null;
 
+  return singleLocalUrl(readMarkdownResources(text).prose);
+}
+
+function singleLocalUrl(prose: string): string | null {
   const urls = new Set<string>();
-  for (const match of text.matchAll(URL_RE)) {
+  for (const match of prose.matchAll(URL_RE)) {
     const url = normalizeLocalUrl(match[0]);
     if (url) urls.add(url);
   }
@@ -139,130 +146,24 @@ export function extractSingleLocalUrl(text: string | null | undefined): string |
 }
 
 export function extractMarkdownLinkDestinations(markdown: string | null | undefined): string[] {
-  if (!markdown?.includes("](")) return [];
+  return markdown ? readMarkdownResources(markdown).destinations : [];
+}
 
+/** Use the same CommonMark parser as the chat renderer, not a second set of fence rules. */
+function readMarkdownResources(markdown: string): { prose: string; destinations: string[] } {
+  const prose: string[] = [];
   const destinations: string[] = [];
-  let inFence = false;
-  let fenceMarker: "`" | "~" | null = null;
-
-  for (const line of markdown.split(/\r?\n/u)) {
-    const fence = line.match(/^\s{0,3}(```+|~~~+)/);
-    if (fence) {
-      const marker = fence[1][0] as "`" | "~";
-      if (!inFence) {
-        inFence = true;
-        fenceMarker = marker;
-      } else if (fenceMarker === marker) {
-        inFence = false;
-        fenceMarker = null;
-      }
-      continue;
+  function visit(node: Root | RootContent): void {
+    if (node.type === "code" || node.type === "inlineCode") return;
+    if (node.type === "text") prose.push(node.value);
+    if (node.type === "link") {
+      destinations.push(node.url);
+      prose.push(node.url);
     }
-
-    if (inFence) continue;
-    extractDestinationsFromLine(line, destinations);
+    if ("children" in node) node.children.forEach(visit);
   }
-
-  return destinations;
-}
-
-function extractDestinationsFromLine(line: string, destinations: string[]): void {
-  let index = 0;
-  while (index < line.length) {
-    if (line[index] === "`") {
-      const next = line.indexOf("`", index + 1);
-      if (next === -1) break;
-      index = next + 1;
-      continue;
-    }
-
-    if (line[index] === "]" && line[index + 1] === "(") {
-      const parsed = parseMarkdownDestination(line, index + 2);
-      if (parsed) {
-        destinations.push(parsed.destination);
-        index = parsed.nextIndex;
-        continue;
-      }
-    }
-
-    index += 1;
-  }
-}
-
-function parseMarkdownDestination(
-  line: string,
-  startIndex: number
-): { destination: string; nextIndex: number } | null {
-  let index = skipWhitespace(line, startIndex);
-  if (line[index] === "<") {
-    const close = line.indexOf(">", index + 1);
-    if (close === -1) return null;
-    const next = skipWhitespace(line, close + 1);
-    if (line[next] !== ")") return null;
-    return { destination: line.slice(index + 1, close).trim(), nextIndex: next + 1 };
-  }
-
-  const chars: string[] = [];
-  let parenDepth = 0;
-  while (index < line.length) {
-    const char = line[index];
-    if (char === "\n" || char === "\r") return null;
-    if (char === "\\") {
-      chars.push(line[index + 1] ?? char);
-      index += line[index + 1] == null ? 1 : 2;
-      continue;
-    }
-    if (char === "(") {
-      parenDepth += 1;
-      chars.push(char);
-      index += 1;
-      continue;
-    }
-    if (char === ")") {
-      if (parenDepth === 0) {
-        return { destination: chars.join("").trim(), nextIndex: index + 1 };
-      }
-      parenDepth -= 1;
-      chars.push(char);
-      index += 1;
-      continue;
-    }
-    if ((char === " " || char === "\t") && parenDepth === 0) {
-      const destination = chars.join("").trim();
-      const next = skipMarkdownTitle(line, index);
-      return next == null ? null : { destination, nextIndex: next };
-    }
-    chars.push(char);
-    index += 1;
-  }
-
-  return null;
-}
-
-function skipMarkdownTitle(line: string, startIndex: number): number | null {
-  let index = skipWhitespace(line, startIndex);
-  const quote = line[index];
-  if (quote !== `"` && quote !== `'` && quote !== "(") return null;
-
-  const close = quote === "(" ? ")" : quote;
-  index += 1;
-  while (index < line.length) {
-    if (line[index] === "\\") {
-      index += 2;
-      continue;
-    }
-    if (line[index] === close) {
-      const next = skipWhitespace(line, index + 1);
-      return line[next] === ")" ? next + 1 : null;
-    }
-    index += 1;
-  }
-  return null;
-}
-
-function skipWhitespace(line: string, index: number): number {
-  while (line[index] === " " || line[index] === "\t") index += 1;
-  return index;
+  visit(fromMarkdown(markdown));
+  return { prose: prose.join("\n"), destinations };
 }
 
 function extractEditedPaths(parts: Part[], workspacePath?: string | null): string[] {

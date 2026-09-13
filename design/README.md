@@ -26,6 +26,23 @@ the canvas — read left to right, top to bottom.
 | **70–75 — Mobile**      | `70`…`75`        | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
 | **80 · 85 · 90**        | `80`, `85`, `90` | The `/connect` web route, the web-direct surfaces, and the landing site (its own token set)                                                                                                                                 |
 
+### Workspace usability
+
+The settings sidebar, page heading, and command palette share the section definitions in
+`features/settings/settings-navigation.ts`. Desktop sections use a common 896px content
+width and a `Settings / section` header; hosted web resolves unavailable sections to Account.
+
+Board `52` groups local GitHub CLI status under “On this computer” and cloud repository
+access under “Cloud repositories”. The GitHub App, repository coverage, and optional
+personal access token are owned by `GithubCloudAccess.tsx`. Board `55` contains cloud
+connection state and navigation to the three setup owners; it has no duplicate credential form.
+
+`DS/TurnStatsHeader` now summarizes **Activity**, not SDK message boundaries. The chat in
+`DS/SessionPanel` shows the default collapsed activity state. Expanding reveals tools and
+reasoning and stays open through completion and the next turn. Answer text, failed tools,
+questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nested
+`PartsRenderer.tsx` share `PartBlock.tsx`; turn details and provider attribution are unchanged.
+
 ### Turn details
 
 Board `15a`, `DS/TurnDetails`, maps to the Details popover in
@@ -121,8 +138,8 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   Names can be edited without replacing credentials or changing the default.
   Claude setup tokens do not expose a verified email; the name identifies the account.
   Board `54` puts cloud accounts before local CLI connections and removes the inert
-  local API-key inputs; `55` shows both provider defaults and links to AI Providers.
-  Hosted web exposes Account and AI Providers, without desktop CLI controls.
+  local API-key inputs; `55` shows cloud connection state and links to AI Providers, GitHub, and Environment.
+  Hosted web exposes Account, AI Providers, and Environment, without desktop CLI controls.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states

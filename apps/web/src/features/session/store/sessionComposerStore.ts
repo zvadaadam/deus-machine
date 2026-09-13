@@ -46,11 +46,13 @@ export interface ComposerState {
 
 interface State {
   composers: Record<string, ComposerState>;
+  // Cross-panel prompts can arrive before the composer has mounted.
+  pendingDrafts: Record<string, string>;
 }
 
 export const useSessionComposerStore = create<State>()(
   devtools(
-    immer(() => ({ composers: {} })),
+    immer(() => ({ composers: {}, pendingDrafts: {} })),
     { name: "session-composer-store", enabled: import.meta.env.DEV }
   )
 );
@@ -95,7 +97,11 @@ export const sessionComposerActions = {
     if (useSessionComposerStore.getState().composers[sessionId]) return;
     useSessionComposerStore.setState(
       (s) => {
-        s.composers[sessionId] = initial;
+        const pending = s.pendingDrafts[sessionId];
+        s.composers[sessionId] = pending
+          ? { ...initial, draft: appendText(initial.draft, pending) }
+          : initial;
+        delete s.pendingDrafts[sessionId];
       },
       false,
       "composer/seed"
@@ -114,12 +120,14 @@ export const sessionComposerActions = {
   /** Append text to the draft, inserting a blank-line separator if needed.
    *  Used by cross-panel producers (browser inspector, diff reviewer). */
   appendDraft: (sid: string, text: string) =>
-    mutate(
-      sid,
-      (c) => {
-        c.draft += (c.draft.trim() ? "\n\n" : "") + text;
+    useSessionComposerStore.setState(
+      (s) => {
+        const composer = s.composers[sid];
+        if (composer) composer.draft = appendText(composer.draft, text);
+        else s.pendingDrafts[sid] = appendText(s.pendingDrafts[sid] ?? "", text);
       },
-      "appendDraft"
+      false,
+      "composer/appendDraft"
     ),
 
   /** Switch model; if the new model doesn't support the current thinking
@@ -280,8 +288,13 @@ export const sessionComposerActions = {
     useSessionComposerStore.setState(
       (s) => {
         delete s.composers[sid];
+        delete s.pendingDrafts[sid];
       },
       false,
       "composer/discard"
     ),
 };
+
+function appendText(draft: string, text: string): string {
+  return draft + (draft.trim() ? "\n\n" : "") + text;
+}
