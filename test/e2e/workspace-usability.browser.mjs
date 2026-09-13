@@ -24,6 +24,8 @@ import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
+import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
+import { createStreamCursor } from "@/features/session/lib/agentEventFold";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
@@ -33,18 +35,30 @@ import { Toaster } from "@/components/ui/sonner";
 import "@/global.css";
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.containsCredential = value => JSON.stringify([client.getQueryCache().getAll().map(q => q.state), client.getMutationCache().getAll().map(m => m.state)]).includes(value);
+window.deliverEmptyCloudSnapshot = () => makeCloudFrameHandler({
+  queryClient: client, activeSessionId: "history-session", folds: new Map(),
+  cursor: createStreamCursor(), scheduleFlush: () => {}, requestRefetch: () => {},
+}, "history-session")({
+  type: "session.snapshot", messages: [], events: [],
+  state: {sessionId: "provider-session", status: "ready", currentTurnId: null, turns: []},
+});
 const tabSessions = ["a", "b", "c", "d"].map(id => ({id, agent_harness: "claude-code", message_count: id === "b" ? 1 : 0}));
 workspaceLayoutActions.setChatTabState("tab-workspace", ["a", "b", "c", "d"], "a");
 client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions);
 function TabJourney() {
   const tabs = useChatTabs({workspaceId: "tab-workspace", activeSessionId: "a"});
   return <>
-    <output>{tabs.tabs.map(tab => tab.label).join(" | ")}</output>
+    <output data-model={tabs.activeTab?.initialModel ?? ""} data-harness={tabs.activeTab?.agentHarness}>{tabs.tabs.map(tab => tab.label).join(" | ")}</output>
     <button onClick={() => client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions.map(s => s.id === "a" ? {...s, message_count: 2} : s))}>Discover earlier chat</button>
     <button onClick={() => tabs.markChatTabStarted("tab-c")}>Start third chat</button>
     <button onClick={() => tabs.handleTabClose("tab-b")}>Close original chat</button>
     <button onClick={() => tabs.markChatTabStarted("tab-d")}>Start fourth chat</button>
     <button onClick={() => tabs.handleTabRestore(tabs.closedTabs[0])}>Restore original chat</button>
+    <button onClick={() => tabs.handleTabAdd("codex-app-server:gpt-6-astra")}>Open Codex chat</button>
+    <button onClick={() => tabs.updateChatTabAgentHarness(tabs.activeTab.id, "claude-code")}>Choose Claude</button>
+    <button onClick={() => tabs.markChatTabStarted(tabs.activeTab.id)}>Start active chat</button>
+    <button onClick={() => client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), sessions => sessions.map(s => s.id === tabs.activeTab.sessionId ? {...s, message_count: 1, agent_harness: "claude-code"} : s))}>Discover active chat</button>
+    <button onClick={() => tabs.handleTabClose(tabs.activeTab.id)}>Close active chat</button>
   </>;
 }
 function App() {
@@ -90,6 +104,9 @@ let failRecentProjects = true;
 let failFinishSetup = true;
 let failHistory = true;
 let historyRequests = 0;
+let directHistory = false;
+let failAgentAuth = true;
+const createdSessions = [];
 const savedTokens = [];
 const server = await createServer({
   configFile: false,
@@ -174,14 +191,43 @@ const server = await createServer({
           if (req.url === "/api/query/ghStatus")
             return json({ isInstalled: true, isAuthenticated: true, login: "fixture-user" });
           if (req.url === "/api/query/agentAuth")
-            return json({ agents: [], claude: null, codex: null });
+            return failAgentAuth
+              ? json({}, 503)
+              : json({
+                  agents: [],
+                  claude: {
+                    type: "claude",
+                    agentHarness: "claude-code",
+                    accountInfo: { tokenSource: "none", apiProvider: "firstParty" },
+                  },
+                  codex: null,
+                });
           if (req.url === "/api/query/session")
             return json({
               id: "history-session",
               agent_harness: "codex-app-server",
               status: "idle",
-              workspace_kind: "local",
+              workspace_kind: directHistory ? "cloud" : "local",
+              provider_session_id: directHistory ? "provider-session" : null,
             });
+          if (req.url === "/api/query/sessions")
+            return json([
+              ...["a", "b", "c", "d"].map((id) => ({
+                id,
+                agent_harness: "claude-code",
+                message_count: id === "b" ? 1 : 0,
+              })),
+              ...createdSessions,
+            ]);
+          if (req.url === "/api/mutate/createSession") {
+            const session = {
+              id: `new-${createdSessions.length}`,
+              agent_harness: "claude-code",
+              message_count: 0,
+            };
+            createdSessions.push(session);
+            return json({ success: true, data: session });
+          }
           if (req.url === "/api/query/messages") {
             historyRequests++;
             return failHistory
@@ -350,6 +396,18 @@ try {
     await page.getByText(expected, { exact: true }).waitFor();
     assert.equal(await labels.textContent(), expected);
   }
+  for (const start of ["Start active chat", "Discover active chat"]) {
+    await page.getByRole("button", { name: "Open Codex chat", exact: true }).click();
+    await page.locator('output[data-model="codex-app-server:gpt-6-astra"]').waitFor();
+    await page.getByRole("button", { name: "Choose Claude", exact: true }).click();
+    await page.locator('output[data-harness="claude-code"]').waitFor();
+    await page.getByRole("button", { name: start, exact: true }).click();
+    await page.locator('output[data-model=""]').waitFor();
+    await page.getByRole("button", { name: "Close active chat", exact: true }).click();
+    await page.getByRole("button", { name: "Restore original chat", exact: true }).click();
+    assert.equal(await labels.getAttribute("data-model"), "", "Started chats restore from history");
+    assert.equal(await labels.getAttribute("data-harness"), "claude-code");
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "GitHub", exact: true }).click();
@@ -377,6 +435,19 @@ try {
     .waitFor();
   await page.getByRole("textbox").waitFor();
   assert.equal(historyRequests, failedHistoryRequests + 1, "Try again must refetch history");
+  // Direct cloud history arrives only through the socket. An empty snapshot
+  // must unlock the first prompt without an HTTP fallback or preseeded cache.
+  directHistory = true;
+  const beforeDirectHistory = historyRequests;
+  await page.evaluate(() => localStorage.setItem("deus.cloudDirect", "1"));
+  await page.reload();
+  await page.getByText("Loading conversation…", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("textbox").count(), 0);
+  await page.evaluate(() => window.deliverEmptyCloudSnapshot());
+  await page.getByRole("textbox").waitFor();
+  assert.equal(historyRequests, beforeDirectHistory, "Direct history never fetches from the Mac");
+  await page.evaluate(() => localStorage.removeItem("deus.cloudDirect"));
+  directHistory = false;
   // First-run UI with native/transport boundaries, including recoverable failures.
   // The normal-profile credentials and filesystem are never used by this test.
   await page.setViewportSize({ width: 1200, height: 800 });
@@ -404,6 +475,12 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("heading", { name: "Connect your AI tools", exact: true }).waitFor();
   const signIns = page.getByRole("button", { name: "Sign in", exact: true });
+  await page.getByText("Couldn’t check account", { exact: true }).waitFor();
+  assert.equal(await signIns.count(), 1, "A failed Claude probe must offer retry, not sign-in");
+  failAgentAuth = false;
+  await page.getByRole("button", { name: "Check again", exact: true }).first().click();
+  await page.getByText("Sign in on this computer", { exact: true }).waitFor();
+  assert.equal(await signIns.count(), 2, "The SDK no-credentials account is signed out");
   await signIns.first().click();
   await signIns.last().click();
   assert.deepEqual(await page.evaluate(() => window.loginCommands), [
@@ -441,7 +518,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels, Files retry/reconnect/refresh failures, mobile layout/error recovery, conversation history retry/model restoration, and onboarding login/project/finish recovery"
+    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels and model restoration, Files retry/reconnect/refresh failures, mobile layout/error recovery, conversation history retry and empty direct snapshot, and onboarding auth/login/project/finish recovery"
   );
 } catch (err) {
   console.error("UI state:", await page?.locator("body").innerText());

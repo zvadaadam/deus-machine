@@ -29,6 +29,60 @@ const render = () =>
   );
 
 describe("local agent status", () => {
+  it("offers sign-in for a successful no-credentials Claude account", () => {
+    state.data = {
+      agents: [{ type: "claude-code", installed: true }],
+      claude: {
+        type: "claude_auth_output",
+        agentHarness: "claude-code",
+        accountInfo: { tokenSource: "none", apiProvider: "firstParty" },
+      },
+      codex: null,
+    };
+    const html = render();
+    expect(html).toContain("Not connected");
+    expect(html).toContain(">Sign in</button>");
+  });
+
+  it.each([
+    { tokenSource: "CLAUDE_CODE_OAUTH_TOKEN" },
+    { tokenSource: "none", apiKeySource: "ANTHROPIC_API_KEY" },
+    { email: "member@example.com", orgName: "Example" },
+  ])("keeps an authenticated Claude account connected: %j", (accountInfo) => {
+    state.data = {
+      agents: [{ type: "claude-code", installed: true }],
+      claude: { type: "claude_auth_output", agentHarness: "claude-code", accountInfo },
+      codex: null,
+    };
+    const html = render();
+    expect(html).toContain(">Connected</span>");
+    expect(html).not.toContain(">Sign in</button>");
+    if ("email" in accountInfo) expect(html).toContain("member@example.com · Example");
+  });
+
+  it.each(["request", "envelope", "provider"])(
+    "does not offer sign-in for a failed %s account probe",
+    (failure) => {
+      state.data = {
+        agents: [{ type: "claude-code", installed: true }],
+        claude: {
+          type: "claude_auth_output",
+          agentHarness: "claude-code",
+          accountInfo: { email: "member@example.com" },
+        },
+        codex: null,
+      };
+      if (failure === "request") state.isError = true;
+      if (failure === "envelope") state.data.error = "Agent server not connected";
+      if (failure === "provider") state.data.claude!.error = "auth check timed out";
+      const html = render();
+      expect(html).toContain("Status unavailable");
+      expect(html).toContain('aria-label="Refresh local provider status"');
+      expect(html).not.toContain(">Sign in</button>");
+      expect(html).not.toContain("member@example.com");
+    }
+  );
+
   it.each(["no response", "disconnected runtime", "failed refresh"])(
     "does not claim agents are missing after %s",
     (scenario) => {

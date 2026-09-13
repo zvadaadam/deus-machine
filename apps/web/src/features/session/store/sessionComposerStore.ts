@@ -31,12 +31,8 @@ export interface PastedText {
   content: string;
 }
 
-export interface ComposerState {
+interface StagedContent {
   draft: string;
-  model: string;
-  thinkingLevel: ThinkingLevel;
-  planModeEnabled: boolean;
-  // Staged content — everything the user has added for the next message.
   pastedTexts: PastedText[];
   inspectedElements: InspectedElement[];
   fileMentions: FileMention[];
@@ -44,15 +40,21 @@ export interface ComposerState {
   imageAttachments: ImageAttachment[];
 }
 
+export interface ComposerState extends StagedContent {
+  model: string;
+  thinkingLevel: ThinkingLevel;
+  planModeEnabled: boolean;
+}
+
 interface State {
   composers: Record<string, ComposerState>;
-  // Cross-panel prompts can arrive before the composer has mounted.
-  pendingDrafts: Record<string, string>;
+  // Cross-panel content can arrive before history establishes the model.
+  pendingContent: Record<string, StagedContent>;
 }
 
 export const useSessionComposerStore = create<State>()(
   devtools(
-    immer(() => ({ composers: {}, pendingDrafts: {} })),
+    immer(() => ({ composers: {}, pendingContent: {} })),
     { name: "session-composer-store", enabled: import.meta.env.DEV }
   )
 );
@@ -61,10 +63,16 @@ export const useSessionComposerStore = create<State>()(
  *  selector fallback before the seed effect fires. */
 export function emptyComposer(initialModel: string, defaultThinking: ThinkingLevel): ComposerState {
   return {
-    draft: "",
+    ...emptyContent(),
     model: initialModel,
     thinkingLevel: defaultThinking,
     planModeEnabled: false,
+  };
+}
+
+function emptyContent(): StagedContent {
+  return {
+    draft: "",
     pastedTexts: [],
     inspectedElements: [],
     fileMentions: [],
@@ -87,21 +95,41 @@ function mutate(sessionId: string, recipe: (c: ComposerState) => void, label: st
   );
 }
 
+/** Stage content independently of the model's one-time initialization. */
+function mutateContent(sessionId: string, recipe: (c: StagedContent) => void, label: string): void {
+  useSessionComposerStore.setState(
+    (s) => {
+      const content = s.composers[sessionId] ?? (s.pendingContent[sessionId] ??= emptyContent());
+      recipe(content);
+    },
+    false,
+    `composer/${label}`
+  );
+}
+
 /**
  * Stable, React-free actions — callable from anywhere. Most actions are
- * one-line Immer recipes; the helper above handles the exists-check and
- * the devtools label.
+ * one-line Immer recipes; the helpers distinguish initialized settings
+ * from content that can be staged before mount.
  */
 export const sessionComposerActions = {
   seedIfAbsent: (sessionId: string, initial: ComposerState): void => {
     if (useSessionComposerStore.getState().composers[sessionId]) return;
     useSessionComposerStore.setState(
       (s) => {
-        const pending = s.pendingDrafts[sessionId];
+        const pending = s.pendingContent[sessionId];
         s.composers[sessionId] = pending
-          ? { ...initial, draft: appendText(initial.draft, pending) }
+          ? {
+              ...initial,
+              draft: pending.draft ? appendText(initial.draft, pending.draft) : initial.draft,
+              pastedTexts: [...initial.pastedTexts, ...pending.pastedTexts],
+              inspectedElements: [...initial.inspectedElements, ...pending.inspectedElements],
+              fileMentions: [...initial.fileMentions, ...pending.fileMentions],
+              skillMentions: [...initial.skillMentions, ...pending.skillMentions],
+              imageAttachments: [...initial.imageAttachments, ...pending.imageAttachments],
+            }
           : initial;
-        delete s.pendingDrafts[sessionId];
+        delete s.pendingContent[sessionId];
       },
       false,
       "composer/seed"
@@ -109,7 +137,7 @@ export const sessionComposerActions = {
   },
 
   setDraft: (sid: string, draft: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.draft = draft;
@@ -120,14 +148,12 @@ export const sessionComposerActions = {
   /** Append text to the draft, inserting a blank-line separator if needed.
    *  Used by cross-panel producers (browser inspector, diff reviewer). */
   appendDraft: (sid: string, text: string) =>
-    useSessionComposerStore.setState(
-      (s) => {
-        const composer = s.composers[sid];
-        if (composer) composer.draft = appendText(composer.draft, text);
-        else s.pendingDrafts[sid] = appendText(s.pendingDrafts[sid] ?? "", text);
+    mutateContent(
+      sid,
+      (c) => {
+        c.draft = appendText(c.draft, text);
       },
-      false,
-      "composer/appendDraft"
+      "appendDraft"
     ),
 
   /** Switch model; if the new model doesn't support the current thinking
@@ -166,7 +192,7 @@ export const sessionComposerActions = {
     ),
 
   addPastedText: (sid: string, content: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.pastedTexts.push({ id: crypto.randomUUID(), content });
@@ -175,7 +201,7 @@ export const sessionComposerActions = {
     ),
 
   removePastedText: (sid: string, id: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.pastedTexts = c.pastedTexts.filter((p) => p.id !== id);
@@ -184,7 +210,7 @@ export const sessionComposerActions = {
     ),
 
   addInspectedElement: (sid: string, element: Omit<InspectedElement, "id">) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.inspectedElements.push({ ...element, id: crypto.randomUUID() });
@@ -193,7 +219,7 @@ export const sessionComposerActions = {
     ),
 
   removeInspectedElement: (sid: string, id: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.inspectedElements = c.inspectedElements.filter((el) => el.id !== id);
@@ -202,7 +228,7 @@ export const sessionComposerActions = {
     ),
 
   addFileMention: (sid: string, mention: Omit<FileMention, "id">) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.fileMentions.push({ ...mention, id: crypto.randomUUID() });
@@ -211,7 +237,7 @@ export const sessionComposerActions = {
     ),
 
   removeFileMention: (sid: string, id: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.fileMentions = c.fileMentions.filter((fm) => fm.id !== id);
@@ -220,7 +246,7 @@ export const sessionComposerActions = {
     ),
 
   addSkillMention: (sid: string, mention: Omit<SkillMention, "id">) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.skillMentions.push({ ...mention, id: crypto.randomUUID() });
@@ -229,7 +255,7 @@ export const sessionComposerActions = {
     ),
 
   removeSkillMention: (sid: string, id: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.skillMentions = c.skillMentions.filter((m) => m.id !== id);
@@ -239,7 +265,7 @@ export const sessionComposerActions = {
 
   addImageAttachments: (sid: string, attachments: ImageAttachment[]) => {
     if (attachments.length === 0) return;
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.imageAttachments.push(...attachments);
@@ -249,7 +275,7 @@ export const sessionComposerActions = {
   },
 
   removeImageAttachment: (sid: string, id: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.imageAttachments = c.imageAttachments.filter((a) => a.id !== id);
@@ -259,7 +285,7 @@ export const sessionComposerActions = {
 
   /** Clear draft text only — keep model/thinking/plan. */
   clearDraft: (sid: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.draft = "";
@@ -269,7 +295,7 @@ export const sessionComposerActions = {
 
   /** Clear all staged content on successful send; keep model/thinking/plan. */
   clearContent: (sid: string) =>
-    mutate(
+    mutateContent(
       sid,
       (c) => {
         c.draft = "";
@@ -288,7 +314,7 @@ export const sessionComposerActions = {
     useSessionComposerStore.setState(
       (s) => {
         delete s.composers[sid];
-        delete s.pendingDrafts[sid];
+        delete s.pendingContent[sid];
       },
       false,
       "composer/discard"

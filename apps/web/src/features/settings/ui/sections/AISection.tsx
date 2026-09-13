@@ -11,27 +11,23 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
-import type { AgentProviderAuth } from "../../types";
 import { readThinkingLevel } from "@shared/protocol";
 import { ProviderAccounts } from "./ProviderAccounts";
+import { readLocalProviderAuth, type LocalProviderAuthState } from "../../lib/local-provider-auth";
 import { openProviderLogin } from "../../lib/open-provider-login";
 
 function AuthBadge({
   auth,
   installed,
-  isLoading,
 }: {
-  auth: AgentProviderAuth | null | undefined;
+  auth: LocalProviderAuthState;
   installed: boolean | undefined;
-  isLoading: boolean;
 }) {
-  const isAuthenticated = auth && !auth.error && auth.accountInfo;
-
-  if (isLoading) {
+  if (auth.status === "checking") {
     return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
   }
 
-  if (installed === undefined) {
+  if (installed === undefined || auth.status === "failed") {
     return <span className="text-muted-foreground text-xs font-medium">Status unavailable</span>;
   }
 
@@ -45,7 +41,7 @@ function AuthBadge({
     );
   }
 
-  if (isAuthenticated) {
+  if (auth.status === "signed-in") {
     return (
       <div className="text-accent-green flex items-center gap-1.5">
         <CheckCircle2 className="size-4" />
@@ -70,15 +66,14 @@ export function AISection({
   const agentAuthQuery = useAgentAuth(!cloudOnly);
   const authStatus =
     agentAuthQuery.isError || agentAuthQuery.data?.error ? undefined : agentAuthQuery.data;
-  const claudeAuth = authStatus?.claude;
+  const claudeAuth = readLocalProviderAuth(agentAuthQuery, "claude");
+  const codexAuthState = readLocalProviderAuth(agentAuthQuery, "codex");
   const codexAuth = authStatus?.codex;
   const agents = authStatus?.agents;
   const claudeInstalled = agents?.some((a) => a.type === "claude-code" && a.installed);
   const codexInstalled = agents?.some(
     (a) => (a.type === "codex-app-server" || a.type === "codex-sdk") && a.installed
   );
-  const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
-  const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
 
   if (cloudOnly) {
     return (
@@ -128,7 +123,7 @@ export function AISection({
           <div>
             <p className="text-sm font-medium">Claude Code</p>
             <p className="text-muted-foreground text-sm">Anthropic</p>
-            {claudeConnected && claudeAuth?.accountInfo?.email && (
+            {claudeAuth.status === "signed-in" && claudeAuth.accountInfo.email && (
               <p className="text-muted-foreground mt-0.5 text-xs">
                 {claudeAuth.accountInfo.email}
                 {claudeAuth.accountInfo.orgName ? ` · ${claudeAuth.accountInfo.orgName}` : ""}
@@ -136,11 +131,7 @@ export function AISection({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <AuthBadge
-              auth={claudeAuth}
-              installed={claudeInstalled}
-              isLoading={agentAuthQuery.isLoading}
-            />
+            <AuthBadge auth={claudeAuth} installed={claudeInstalled} />
             {!agentAuthQuery.isLoading && claudeInstalled === false && (
               <Button
                 variant="outline"
@@ -154,7 +145,7 @@ export function AISection({
                 <ExternalLink className="size-3" />
               </Button>
             )}
-            {!agentAuthQuery.isLoading && claudeInstalled && !claudeConnected && (
+            {claudeInstalled && claudeAuth.status === "signed-out" && (
               <Button
                 variant="outline"
                 size="sm"
@@ -182,11 +173,7 @@ export function AISection({
             {!agentAuthQuery.isLoading && codexInstalled && codexAuth == null ? (
               <span className="text-text-muted text-xs">Login managed by Codex</span>
             ) : (
-              <AuthBadge
-                auth={codexAuth}
-                installed={codexInstalled}
-                isLoading={agentAuthQuery.isLoading}
-              />
+              <AuthBadge auth={codexAuthState} installed={codexInstalled} />
             )}
             {!agentAuthQuery.isLoading && codexInstalled === false && (
               <Button
@@ -199,7 +186,7 @@ export function AISection({
                 <ExternalLink className="size-3" />
               </Button>
             )}
-            {!agentAuthQuery.isLoading && codexInstalled && !codexConnected && (
+            {codexInstalled && codexAuthState.status === "signed-out" && (
               <Button
                 variant="outline"
                 size="sm"

@@ -1,4 +1,4 @@
-import { type BrowserWindow, ipcMain } from "electron";
+import { app, autoUpdater as nativeAutoUpdater, type BrowserWindow, ipcMain } from "electron";
 import { autoUpdater, type UpdateInfo } from "electron-updater";
 import type { UpdateCheckResult, UpdateState } from "../../../shared/types/updates";
 
@@ -6,6 +6,7 @@ let currentState: UpdateState = { stage: "idle" };
 let updateWindow: BrowserWindow | null = null;
 let handlersRegistered = false;
 let updaterStarted = false;
+let installRequested = false;
 
 function isAutoUpdateSupported(): boolean {
   return !(process.platform === "linux" && !process.env.APPIMAGE);
@@ -31,6 +32,7 @@ function sendState(state: UpdateState): void {
 }
 
 function reportError(err: unknown): void {
+  installRequested = false;
   sendState({ stage: "error", error: err instanceof Error ? err.message : String(err) });
 }
 
@@ -59,22 +61,44 @@ async function checkForUpdates(): Promise<UpdateCheckResult> {
   }
 }
 
-export function registerUpdateHandlers(): void {
+export function registerUpdateHandlers(quitAfterStopping: (quit: () => void) => void): void {
   if (handlersRegistered) return;
   handlersRegistered = true;
+
+  if (process.platform === "linux" && process.env.APPIMAGE) {
+    // AppImage normally starts the replacement before the old app quits.
+    // Let Electron launch it after shutdown instead, using the installed name.
+    autoUpdater.autoRunAppAfterInstall = false;
+    let appImagePath = process.env.APPIMAGE;
+    autoUpdater.on("appimage-filename-updated", (path: string) => {
+      appImagePath = path;
+    });
+    nativeAutoUpdater.once("before-quit-for-update", () => {
+      // The updater emits this only after installation succeeds. An install
+      // error must leave the current backend running so the app stays usable.
+      quitAfterStopping(() => {
+        app.relaunch({ execPath: appImagePath });
+        app.quit();
+      });
+    });
+  }
 
   ipcMain.handle("update:check", checkForUpdates);
   ipcMain.handle("update:getState", () => currentState);
   ipcMain.handle("update:install", () => {
-    if (isAutoUpdateSupported() && currentState.stage === "ready") {
+    if (!isAutoUpdateSupported() || currentState.stage !== "ready" || installRequested) return;
+    installRequested = true;
+    try {
       autoUpdater.quitAndInstall(false, true);
+    } catch (err) {
+      reportError(err);
+      throw err;
     }
   });
 }
 
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
   updateWindow = mainWindow;
-  registerUpdateHandlers();
   if (!isAutoUpdateSupported() || updaterStarted) return;
   updaterStarted = true;
 

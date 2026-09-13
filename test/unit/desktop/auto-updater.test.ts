@@ -3,7 +3,11 @@ import type { BrowserWindow } from "electron";
 import { EventEmitter } from "node:events";
 
 const mocks = vi.hoisted(() => ({ handle: vi.fn(), check: vi.fn(), install: vi.fn() }));
-vi.mock("electron", () => ({ ipcMain: { handle: mocks.handle } }));
+vi.mock("electron", () => ({
+  app: { relaunch: vi.fn(), quit: vi.fn() },
+  autoUpdater: new EventEmitter(),
+  ipcMain: { handle: mocks.handle },
+}));
 vi.mock("electron-updater", () => ({
   autoUpdater: Object.assign(new EventEmitter(), {
     checkForUpdates: mocks.check,
@@ -20,9 +24,13 @@ beforeEach(async () => {
   vi.stubEnv("APPIMAGE", "/fixture/Deus.AppImage");
   vi.clearAllMocks();
   mocks.check.mockResolvedValue({ isUpdateAvailable: false });
+  const { autoUpdater: nativeAutoUpdater } = await import("electron");
+  nativeAutoUpdater.removeAllListeners();
   updater = (await import("electron-updater")).autoUpdater;
   updater.removeAllListeners();
-  const { setupAutoUpdater } = await import("../../../apps/desktop/main/auto-updater");
+  const { registerUpdateHandlers, setupAutoUpdater } =
+    await import("../../../apps/desktop/main/auto-updater");
+  registerUpdateHandlers((quit) => quit());
   setupAutoUpdater({
     isDestroyed: () => false,
     webContents: { isDestroyed: () => false, send },
@@ -87,7 +95,9 @@ it("rejects failed manual checks and registers only one polling loop", async () 
   mocks.check.mockRejectedValueOnce(new Error("Offline"));
   await expect(invoke("update:check")).rejects.toThrow("Offline");
   expect(invoke("update:getState")).toEqual({ stage: "error", error: "Offline" });
-  const { setupAutoUpdater } = await import("../../../apps/desktop/main/auto-updater");
+  const { registerUpdateHandlers, setupAutoUpdater } =
+    await import("../../../apps/desktop/main/auto-updater");
+  registerUpdateHandlers((quit) => quit());
   setupAutoUpdater({ isDestroyed: () => true } as unknown as BrowserWindow);
   expect(mocks.handle).toHaveBeenCalledTimes(3);
   mocks.check.mockClear();

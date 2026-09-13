@@ -153,6 +153,8 @@ export function extractMarkdownLinkDestinations(markdown: string | null | undefi
 function readMarkdownResources(markdown: string): { prose: string; destinations: string[] } {
   const prose: string[] = [];
   const destinations: string[] = [];
+  const references: string[] = [];
+  const definitions = new Map<string, string>();
   function visit(node: Root | RootContent): void {
     if (node.type === "code" || node.type === "inlineCode") return;
     if (node.type === "text") prose.push(node.value);
@@ -160,9 +162,20 @@ function readMarkdownResources(markdown: string): { prose: string; destinations:
       destinations.push(node.url);
       prose.push(node.url);
     }
+    if (node.type === "linkReference") references.push(node.identifier);
+    if (node.type === "definition" && !definitions.has(node.identifier))
+      definitions.set(node.identifier, node.url);
     if ("children" in node) node.children.forEach(visit);
   }
   visit(fromMarkdown(markdown));
+  // Definitions may follow their links; unused definitions are not resources.
+  for (const reference of references) {
+    const url = definitions.get(reference);
+    if (url) {
+      destinations.push(url);
+      prose.push(url);
+    }
+  }
   return { prose: prose.join("\n"), destinations };
 }
 

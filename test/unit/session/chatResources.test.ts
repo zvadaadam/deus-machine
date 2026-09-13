@@ -40,6 +40,20 @@ function writePart(paths: string[], partIndex = 0): Part {
 }
 
 describe("chatResources", () => {
+  it("resolves used Markdown references without promoting unused or code-only definitions", () => {
+    const markdown =
+      "Open [preview][app] and [readme].\n\n[app]: http://localhost:5173\n[readme]: README.md\n[unused]: http://localhost:3000";
+    expect(extractSingleLocalUrl(markdown)).toBe("http://localhost:5173/");
+    expect(extractMarkdownLinkDestinations(markdown)).toEqual([
+      "http://localhost:5173",
+      "README.md",
+    ]);
+    expect(extractSingleLocalUrl("`[app]`\n\n[app]: http://localhost:5173")).toBeNull();
+    expect(
+      extractSingleLocalUrl("[app]\n\n[app]: http://localhost:5173\n[app]: http://localhost:3000")
+    ).toBe("http://localhost:5173/");
+  });
+
   it.each([
     "```sh\nopen http://localhost:3000\n```",
     "~~~~md\nhttp://localhost:3000\n~~~\n[example](README.md)\n~~~~",

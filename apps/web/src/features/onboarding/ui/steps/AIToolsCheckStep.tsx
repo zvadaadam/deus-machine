@@ -1,6 +1,8 @@
+import { match } from "ts-pattern";
 import { useCliCheck } from "../../api";
 import { CliStatusRow } from "../components/CliStatusRow";
 import { useAgentAuth } from "@/features/settings/api/settings.queries";
+import { readLocalProviderAuth } from "@/features/settings/lib/local-provider-auth";
 import { openProviderLogin } from "@/features/settings/lib/open-provider-login";
 
 interface AIToolsCheckStepProps {
@@ -12,7 +14,7 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   const claudeCheck = useCliCheck("claude");
   const codexCheck = useCliCheck("codex");
   const auth = useAgentAuth();
-  const claudeAccount = auth.data?.claude?.error ? undefined : auth.data?.claude?.accountInfo;
+  const claudeAuth = readLocalProviderAuth(auth, "claude");
 
   const claudeInstalled = claudeCheck.isLoading ? null : (claudeCheck.data?.installed ?? false);
   const codexInstalled = codexCheck.isLoading ? null : (codexCheck.data?.installed ?? false);
@@ -21,12 +23,15 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
     if (claudeCheck.data?.webMode) return "CLI checks require the desktop app";
     if (claudeInstalled === null) return "Checking availability…";
     if (!claudeInstalled) return "Unavailable · Restart Deus and check again";
-    if (auth.isLoading) return "Checking account…";
-    if (auth.isError || auth.data?.error || auth.data?.claude?.error)
-      return "Couldn’t check account";
-    return claudeAccount
-      ? (claudeAccount.email ?? "Signed in on this computer")
-      : "Sign in on this computer";
+    return match(claudeAuth)
+      .with({ status: "checking" }, () => "Checking account…")
+      .with({ status: "failed" }, () => "Couldn’t check account")
+      .with({ status: "signed-out" }, () => "Sign in on this computer")
+      .with(
+        { status: "signed-in" },
+        ({ accountInfo }) => accountInfo.email ?? "Signed in on this computer"
+      )
+      .exhaustive();
   }
 
   return (
@@ -45,13 +50,18 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
           description="Anthropic's coding agent"
           installed={claudeInstalled}
           detail={claudeDetail()}
-          actionLabel={claudeInstalled && !auth.isLoading && !claudeAccount ? "Sign in" : undefined}
+          actionLabel={
+            claudeInstalled && claudeAuth.status === "signed-out" ? "Sign in" : undefined
+          }
           onAction={claudeInstalled ? () => void openProviderLogin("claude") : undefined}
           onRetry={() => {
             void claudeCheck.refetch();
             void auth.refetch();
           }}
-          showRetry={!auth.isLoading && !claudeAccount && claudeInstalled === true}
+          showRetry={
+            claudeInstalled === true &&
+            (claudeAuth.status === "failed" || claudeAuth.status === "signed-out")
+          }
           retryLabel="Check again"
         />
 

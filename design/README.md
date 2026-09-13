@@ -51,16 +51,19 @@ updates remain pending: Pencil MCP rejects `get_app_state` for this exact file w
 
 - `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
 - `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in
-  and Check again. Local sign-in is separate from cloud accounts in AI Providers.
+  and Check again. A failed account check offers retry; a successful check with no
+  credentials offers Sign in. Local sign-in is separate from cloud accounts in AI Providers.
 - `47e` Projects: discovery failure has Try again and Browse Folder; selected cards expose
   their selection state. Folder errors appear through the shared notification host.
 - `47f` Finish: a failed save stays on this step with an error and retryable actions.
 - `54`/`54b` AI Providers: remove unused provider-routing, custom-endpoint and default-model
-  controls. Keep accounts, local sign-in and the working default-thinking setting.
+  controls. Keep accounts, local sign-in and the working default-thinking setting. Local
+  account badges use the same checking, unavailable and signed-in states as onboarding.
 - The sidebar service badge names the affected provider (for example, “Claude: Degraded”);
   its popover identifies the information as the provider's public service status.
 - The composer shows loading or a retryable history error before restoring the recorded
-  model. An unavailable history response must not silently select a different model.
+  model. An unavailable history response must not silently select a different model. A
+  completed empty cloud snapshot enables the first prompt.
 
 ### Turn details
 

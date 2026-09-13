@@ -197,6 +197,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           updated[index] = {
             ...tab,
             hasStarted: true,
+            initialModel: undefined,
             agentHarness: session.agent_harness,
             label: nextStartedChatLabel(updated, session.agent_harness),
           };
@@ -414,6 +415,7 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
         ...tab,
         label: nextStartedChatLabel(prevTabs, tab.agentHarness),
         hasStarted: true,
+        initialModel: undefined,
       };
       return updatedTabs;
     });
