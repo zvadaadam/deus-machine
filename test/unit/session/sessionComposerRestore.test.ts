@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("composer history restoration", () => {
-  it("does not seed a default on failed history, then restores the recorded model after retry", () => {
+  it("does not seed a default on failed history, then restores the model when history arrives", () => {
     state.error = new Error("offline");
     expect(render()).toContain("Couldn’t load this conversation.");
     expect(render()).toContain("Try again");

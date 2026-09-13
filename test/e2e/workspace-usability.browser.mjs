@@ -6,6 +6,7 @@ import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
+import svgr from "vite-plugin-svgr";
 import { chromium } from "playwright";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -22,6 +23,7 @@ import { GithubCloudAccess } from "@/features/settings/ui/sections/GithubCloudAc
 import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
+import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
@@ -46,7 +48,7 @@ function TabJourney() {
   </>;
 }
 function App() {
-  const [view, setView] = useState(location.search ? "Onboarding" : "GitHub");
+  const [view, setView] = useState(location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
   const [fileMode, setFileMode] = useState("all");
@@ -61,6 +63,7 @@ function App() {
       <nav className="mb-6 flex gap-4">{["GitHub", "Cloud", "Chat", "Files", "Tabs"].map(name => <button key={name} onClick={() => setView(name)}>{name}</button>)}</nav>
       <main className="mx-auto max-w-3xl">
         {view === "Onboarding" && <OnboardingOverlay />}
+        {view === "History" && <SessionComposer sessionId="history-session" />}
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
         {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode={fileMode as any} onFilterModeChange={setFileMode} /></div>}
@@ -85,6 +88,8 @@ let fileRequests = 0;
 let failGithub = false;
 let failRecentProjects = true;
 let failFinishSetup = true;
+let failHistory = true;
+let historyRequests = 0;
 const savedTokens = [];
 const server = await createServer({
   configFile: false,
@@ -102,6 +107,7 @@ const server = await createServer({
   },
   plugins: [
     tailwindcss(),
+    svgr(),
     {
       name: "usability-boundaries",
       enforce: "pre",
@@ -169,6 +175,31 @@ const server = await createServer({
             return json({ isInstalled: true, isAuthenticated: true, login: "fixture-user" });
           if (req.url === "/api/query/agentAuth")
             return json({ agents: [], claude: null, codex: null });
+          if (req.url === "/api/query/session")
+            return json({
+              id: "history-session",
+              agent_harness: "codex-app-server",
+              status: "idle",
+              workspace_kind: "local",
+            });
+          if (req.url === "/api/query/messages") {
+            historyRequests++;
+            return failHistory
+              ? json({}, 503)
+              : json({
+                  messages: [],
+                  compactions: [],
+                  has_older: false,
+                  has_newer: false,
+                  turns: [
+                    {
+                      turnId: "saved-turn",
+                      startedAt: 1,
+                      execution: { harness: "codex-app-server", model: "gpt-5.6-sol" },
+                    },
+                  ],
+                });
+          }
           if (req.url === "/api/query/recentProjects")
             return failRecentProjects
               ? json({}, 503)
@@ -334,6 +365,18 @@ try {
   failGithub = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByText("Installed for fixture-user").waitFor();
+  // Exercise the real query retry: failed history must not seed the default model.
+  await page.goto(server.resolvedUrls.local[0] + "?history");
+  await page.getByRole("alert").filter({ hasText: "Couldn’t load this conversation." }).waitFor();
+  assert.equal(await page.getByRole("textbox").count(), 0);
+  const failedHistoryRequests = historyRequests;
+  failHistory = false;
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Select model, currently GPT-5.6 Sol", exact: true })
+    .waitFor();
+  await page.getByRole("textbox").waitFor();
+  assert.equal(historyRequests, failedHistoryRequests + 1, "Try again must refetch history");
   // First-run UI with native/transport boundaries, including recoverable failures.
   // The normal-profile credentials and filesystem are never used by this test.
   await page.setViewportSize({ width: 1200, height: 800 });
@@ -398,7 +441,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels, Files retry/reconnect/refresh failures, mobile layout/error recovery, and onboarding login/project/finish recovery"
+    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels, Files retry/reconnect/refresh failures, mobile layout/error recovery, conversation history retry/model restoration, and onboarding login/project/finish recovery"
   );
 } catch (err) {
   console.error("UI state:", await page?.locator("body").innerText());
