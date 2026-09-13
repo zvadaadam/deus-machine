@@ -227,7 +227,7 @@ export function FileBrowserPanel({
     if (!workspaceId) return;
     try {
       await invalidateFileCache(workspaceId);
-      await refetch();
+      await refetch({ throwOnError: true });
     } catch (err) {
       toast.error(getErrorMessage(err));
     }

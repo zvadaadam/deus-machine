@@ -45,16 +45,8 @@ export const PartsRenderer = memo(function PartsRenderer({
 
   if (grouped.length === 0) return null;
 
-  // Find the last text part for streaming dimming
-  let lastTextPartId: string | null = null;
-  if (isStreamingTurn) {
-    for (let i = sorted.length - 1; i >= 0; i--) {
-      if (sorted[i].type === "text") {
-        lastTextPartId = sorted[i].id;
-        break;
-      }
-    }
-  }
+  const lastPart = sorted.at(-1);
+  const streamingTextId = lastPart?.type === "text" ? lastPart.id : undefined;
 
   return (
     <>
@@ -71,7 +63,7 @@ export const PartsRenderer = memo(function PartsRenderer({
             <PartBlock
               key={item.id}
               part={item}
-              isStreaming={isStreamingTurn && (item.type !== "text" || item.id === lastTextPartId)}
+              isStreaming={isStreamingTurn && (item.type !== "text" || item.id === streamingTextId)}
             />
           ))
           .exhaustive()

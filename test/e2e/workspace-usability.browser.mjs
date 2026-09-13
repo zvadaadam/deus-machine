@@ -23,31 +23,55 @@ import { CloudSection } from "@/features/settings/ui/sections/CloudSection";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
+import { useChatTabs } from "@/app/layouts/useChatTabs";
+import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { Toaster } from "@/components/ui/sonner";
 import "@/global.css";
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.containsCredential = value => JSON.stringify([client.getQueryCache().getAll().map(q => q.state), client.getMutationCache().getAll().map(m => m.state)]).includes(value);
+const tabSessions = ["a", "b", "c", "d"].map(id => ({id, agent_harness: "claude-code", message_count: id === "b" ? 1 : 0}));
+workspaceLayoutActions.setChatTabState("tab-workspace", ["a", "b", "c", "d"], "a");
+client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions);
+function TabJourney() {
+  const tabs = useChatTabs({workspaceId: "tab-workspace", activeSessionId: "a"});
+  return <>
+    <output>{tabs.tabs.map(tab => tab.label).join(" | ")}</output>
+    <button onClick={() => client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions.map(s => s.id === "a" ? {...s, message_count: 2} : s))}>Discover earlier chat</button>
+    <button onClick={() => tabs.markChatTabStarted("tab-c")}>Start third chat</button>
+    <button onClick={() => tabs.handleTabClose("tab-b")}>Close original chat</button>
+    <button onClick={() => tabs.markChatTabStarted("tab-d")}>Start fourth chat</button>
+    <button onClick={() => tabs.handleTabRestore(tabs.closedTabs[0])}>Restore original chat</button>
+  </>;
+}
 function App() {
   const [view, setView] = useState("GitHub");
   const [phase, setPhase] = useState(0);
+  const [laterTool, setLaterTool] = useState(false);
+  const [fileMode, setFileMode] = useState("all");
   const messages = [{ id: "m", session_id: "s", turn_id: "turn", role: "assistant", seq: 1, parts: [
     { type: "reasoning", id: "r", text: "Check the project before changing it.", state: "done" },
     { type: "tool", id: "t", toolCallId: "t", toolName: "Bash", kind: "execute", state: { status: "completed", input: {command: "bun test"}, output: "All checks passed", title: "Run tests" } },
     { type: "text", id: "a", text: "The useful answer stays visible.", state: phase ? "done" : "streaming" },
+    ...(laterTool ? [{ type: "tool", id: "t2", toolCallId: "t2", toolName: "Bash", kind: "execute", state: {status: phase ? "completed" : "in_progress", input: {command: "bun run build"}, title: "Build project", output: ""} }] : []),
   ] }];
   return <QueryClientProvider client={client}><TooltipProvider>
     <div className="bg-background text-foreground min-h-screen p-4 sm:p-8">
-      <nav className="mb-6 flex gap-4">{["GitHub", "Cloud", "Chat", "Files"].map(name => <button key={name} onClick={() => setView(name)}>{name}</button>)}</nav>
+      <nav className="mb-6 flex gap-4">{["GitHub", "Cloud", "Chat", "Files", "Tabs"].map(name => <button key={name} onClick={() => setView(name)}>{name}</button>)}</nav>
       <main className="mx-auto max-w-3xl">
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
-        {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode="all" /></div>}
+        {view === "Files" && <div className="h-[650px]"><FileBrowserPanel selectedWorkspace={{id: "workspace", kind: "cloud"} as any} filterMode={fileMode as any} onFilterModeChange={setFileMode} /></div>}
+        {view === "Tabs" && <TabJourney />}
         {view === "Chat" && <>
           <button onClick={() => setPhase(p => p + 1)}>Advance turn</button>
+          <button onClick={() => setLaterTool(true)}>Run another tool</button>
           <SessionProvider sessionStatus={phase === 1 ? "idle" : "working"} workspaceId="workspace" subagentMessages={new Map()}>
             <AssistantTurn messages={messages as any} isLatest={phase < 2} isWorking={phase !== 1} turn={phase ? {turnId: "turn", stopReason: "end_turn", endedAt: 1} : undefined} />
           </SessionProvider>
         </>}
       </main>
+      <Toaster />
     </div>
   </TooltipProvider></QueryClientProvider>;
 }
@@ -64,7 +88,7 @@ const server = await createServer({
   cacheDir: path.join(artifacts, "vite-cache"),
   logLevel: "error",
   esbuild: { jsx: "automatic" },
-  optimizeDeps: { entries: [path.join(artifacts, "entry.tsx")] },
+  optimizeDeps: { entries: [path.join(artifacts, "entry.tsx")], force: true },
   define: {
     __APP_VERSION__: JSON.stringify("test"),
     "import.meta.env.VITE_CLOUD_DIRECT": JSON.stringify("0"),
@@ -173,7 +197,7 @@ try {
   const errors = [];
   page.on("pageerror", (err) => {
     errors.push(err.message);
-    console.error(err.message);
+    console.error(err.stack);
   });
   await page.goto(server.resolvedUrls.local[0]);
   await page.getByText("Installed for fixture-user").waitFor();
@@ -215,6 +239,8 @@ try {
   await page.evaluate((id) => {
     window.activityNode = document.getElementById(id);
   }, activityId);
+  await page.getByRole("button", { name: "Run another tool" }).click();
+  await page.waitForFunction(() => document.querySelector(".assistant-turn .opacity-60") === null);
   for (let i = 0; i < 2; i++) {
     await page.getByRole("button", { name: "Advance turn" }).click();
     assert.equal(
@@ -242,6 +268,34 @@ try {
   await page.evaluate(() => window.reconnectFiles());
   await reconnectResponse;
   assert.equal(fileRequests, before + 1, "A reconnect refreshes Files without a polling loop");
+  await page.getByRole("button", { name: "Changes", exact: true }).click();
+  await page.getByRole("button", { name: "All changes", exact: true }).click();
+  filesOnline = false;
+  await page.getByRole("menuitem", { name: "Refresh files", exact: true }).click();
+  await page
+    .locator('[data-sonner-toast][data-type="error"]')
+    .filter({ hasText: "Cloud computer is reconnecting" })
+    .waitFor();
+  filesOnline = true;
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await page.getByRole("button", { name: "All files", exact: true }).waitFor();
+
+  await page.getByRole("button", { name: "Tabs", exact: true }).click();
+  const labels = page.locator("output");
+  await page
+    .getByText("New chat | Claude Code #1 | New chat | New chat", { exact: true })
+    .waitFor();
+  for (const [action, expected] of [
+    ["Discover earlier chat", "Claude Code #2 | Claude Code #1 | New chat | New chat"],
+    ["Start third chat", "Claude Code #2 | Claude Code #1 | Claude Code #3 | New chat"],
+    ["Close original chat", "Claude Code #2 | Claude Code #3 | New chat"],
+    ["Start fourth chat", "Claude Code #2 | Claude Code #3 | Claude Code #1"],
+    ["Restore original chat", "Claude Code #2 | Claude Code #3 | Claude Code #1 | Claude Code #4"],
+  ]) {
+    await page.getByRole("button", { name: action, exact: true }).click();
+    await page.getByText(expected, { exact: true }).waitFor();
+    assert.equal(await labels.textContent(), expected);
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "GitHub", exact: true }).click();
@@ -259,7 +313,7 @@ try {
   await page.getByText("Installed for fixture-user").waitFor();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping, Files retry/reconnect, and mobile layout/error recovery"
+    "PASS: GitHub form focus/Enter/cache hygiene, Cloud ownership, stable chat grouping/dimming, unique tab labels, Files retry/reconnect/refresh failures, and mobile layout/error recovery"
   );
 } catch (err) {
   console.error("UI state:", await page?.locator("body").innerText());

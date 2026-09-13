@@ -43,7 +43,8 @@ export const AssistantTurn = memo(function AssistantTurn({
       }),
     [projected.parts, isStreaming, workspacePath]
   );
-  const lastTextId = projected.content.filter((part) => part.type === "text").at(-1)?.id;
+  const lastPart = projected.parts.at(-1);
+  const streamingTextId = lastPart?.type === "text" ? lastPart.id : undefined;
 
   const isCancelled = turn?.stopReason === "cancelled";
   const stopNotice = turnStopNotice(turn?.stopReason);
@@ -86,7 +87,7 @@ export const AssistantTurn = memo(function AssistantTurn({
           <PartBlock
             key={part.id}
             part={part}
-            isStreaming={isStreaming && part.id === lastTextId}
+            isStreaming={isStreaming && part.id === streamingTextId}
           />
         ))}
         <ChatResourceCards resources={resources} />
