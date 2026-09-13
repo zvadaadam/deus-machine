@@ -1,19 +1,10 @@
 import { useEffect, useRef } from "react";
-import type { ComponentType, SVGAttributes } from "react";
+import { ArrowLeft } from "lucide-react";
 import {
-  ArrowLeft,
-  Settings2,
-  Bot,
-  Box,
-  FlaskConical,
-  Globe,
-  Chrome,
-  UserCircle,
-  Cloud,
-} from "lucide-react";
-import { capabilities } from "@/platform";
-import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
+  settingsNavigation,
+  isSettingsSectionAvailable,
+  resolveSettingsSection,
+} from "../settings-navigation";
 import {
   Sidebar,
   SidebarContent,
@@ -24,42 +15,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
-import type { SettingsSection } from "@shared/types/settings";
-
-interface NavItem {
-  id: SettingsSection;
-  label: string;
-  icon: ComponentType<SVGAttributes<SVGSVGElement>>;
-  badge?: string;
-  /** If set, this item only shows when the capability is true. */
-  capability?: keyof typeof capabilities;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { id: "account", label: "Account", icon: UserCircle },
-  { id: "general", label: "General", icon: Settings2 },
-  { id: "github", label: "GitHub", icon: GitHubIcon },
-  { id: "browser", label: "Browser", icon: Chrome, capability: "browserProfileImport" },
-  { id: "ai", label: "AI Providers", icon: Bot },
-  { id: "cloud", label: "Cloud", icon: Cloud },
-  { id: "environment", label: "Environment", icon: Box },
-  { id: "experimental", label: "Experimental", icon: FlaskConical },
-  { id: "access", label: "Remote Access", icon: Globe, badge: "Experimental" },
-];
-
-const visibleItems = NAV_ITEMS.filter((item) => !item.capability || capabilities[item.capability])
-  // Cloud accounts work without the Mac settings store.
-  .filter(
-    (item) =>
-      !isCloudDirectWebMode() ||
-      item.id === "account" ||
-      item.id === "ai" ||
-      item.id === "environment"
-  );
-
 export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);
-  const activeSection = useUIStore((s) => s.activeSettingsSection);
+  const storedSection = useUIStore((s) => s.activeSettingsSection);
+  const activeSection = resolveSettingsSection(storedSection).id;
+  const visibleItems = settingsNavigation.filter(isSettingsSectionAvailable);
   const setActiveSection = useUIStore((s) => s.setActiveSettingsSection);
 
   // Settings sidebar must always be visible — force open if the app sidebar was collapsed.

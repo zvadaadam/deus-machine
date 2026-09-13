@@ -649,8 +649,7 @@ describe("makeCloudFrameHandler", () => {
     expect(d.context_token_count).toBe(50_000);
     expect(d.context_used_percent).toBe(25);
 
-    // Size unknown → count moves, percent KEEPS its prior value (the Mac
-    // backend's COALESCE semantics, mirrored).
+    // Later frames omit size; the fold retains the established capacity.
     onFrame({ type: "session.usage", sessionId: SESSION, turnId: "t", used: 60_000, timestamp: T });
     d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
       "sessions",
@@ -658,7 +657,7 @@ describe("makeCloudFrameHandler", () => {
       SESSION,
     ])!;
     expect(d.context_token_count).toBe(60_000);
-    expect(d.context_used_percent).toBe(25);
+    expect(d.context_used_percent).toBe(30);
   });
 
   it("snapshot restates session facts: live turn → working, real message_count", () => {

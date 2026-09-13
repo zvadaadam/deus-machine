@@ -12,6 +12,7 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
+import type { UpdateCheckResult, UpdateState } from "../../../shared/types/updates";
 
 // ---------------------------------------------------------------------------
 // IPC channel allowlists — ONLY these channels may be used via the generic
@@ -149,12 +150,11 @@ const electronAPI = {
   // Auto-update
   // ---------------------------------------------------------------------------
 
-  checkForUpdates: (): Promise<unknown> => ipcRenderer.invoke("update:check"),
-  downloadUpdate: (): Promise<void> => ipcRenderer.invoke("update:download"),
+  checkForUpdates: (): Promise<UpdateCheckResult> => ipcRenderer.invoke("update:check"),
   installUpdate: (): Promise<void> => ipcRenderer.invoke("update:install"),
-  getUpdateState: (): Promise<unknown> => ipcRenderer.invoke("update:getState"),
-  onUpdateState: (callback: (state: unknown) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, state: unknown): void => callback(state);
+  getUpdateState: (): Promise<UpdateState> => ipcRenderer.invoke("update:getState"),
+  onUpdateState: (callback: (state: UpdateState) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: UpdateState): void => callback(state);
     ipcRenderer.on("update:state", listener);
     return () => ipcRenderer.removeListener("update:state", listener);
   },

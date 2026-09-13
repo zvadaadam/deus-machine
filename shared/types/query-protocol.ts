@@ -116,12 +116,15 @@ export interface QDeltaFrame {
 }
 
 /** Server returns mutation result. Uses `success`, not `ok`. */
-export interface QMutateResultFrame {
+export interface QMutateResultFrame<T = unknown> {
   type: "q:mutate_result";
   id: string;
   success: boolean;
-  data?: unknown;
+  data?: T;
   error?: string;
+  /** Route error metadata, preserved for conflict recovery. */
+  status?: number;
+  details?: unknown;
 }
 
 /** Server tells clients to refetch stale resources. */

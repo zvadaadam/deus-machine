@@ -30,10 +30,12 @@ interface Window {
     isFullscreen: () => Promise<boolean>;
     onFullscreenChange: (callback: (payload: { isFullscreen: boolean }) => void) => () => void;
     getAppVersion: () => Promise<string>;
-    checkForUpdates: () => Promise<unknown>;
-    downloadUpdate: () => Promise<void>;
+    checkForUpdates: () => Promise<import("@shared/types/updates").UpdateCheckResult>;
+    getUpdateState: () => Promise<import("@shared/types/updates").UpdateState>;
     installUpdate: () => Promise<void>;
-    onUpdateState: (callback: (state: unknown) => void) => () => void;
+    onUpdateState: (
+      callback: (state: import("@shared/types/updates").UpdateState) => void
+    ) => () => void;
     openExternal: (url: string) => Promise<void>;
     openTerminal: (command: string) => Promise<void>;
     confirm: (message: string, detail?: string) => Promise<boolean>;

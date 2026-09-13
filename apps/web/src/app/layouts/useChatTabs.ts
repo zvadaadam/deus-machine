@@ -91,15 +91,12 @@ function sessionToTab(session: Session, sequence: number): SessionChatTab {
   };
 }
 
-/** Count started tabs of a given agent type, excluding a specific tab. */
-function countStartedTabsOfHarness(
-  tabs: ChatTab[],
-  agentHarness: AgentHarness,
-  excludeTabId: string
-): number {
-  return tabs.filter(
-    (tab) => tab.id !== excludeTabId && tab.hasStarted && tab.agentHarness === agentHarness
-  ).length;
+/** Keep existing labels stable when chats start out of order or tabs close. */
+function nextStartedChatLabel(tabs: ChatTab[], agentHarness: AgentHarness): string {
+  const labels = new Set(tabs.filter((tab) => tab.hasStarted).map((tab) => tab.label));
+  let sequence = 1;
+  while (labels.has(buildStartedChatLabel(agentHarness, sequence))) sequence++;
+  return buildStartedChatLabel(agentHarness, sequence);
 }
 
 /** Compute per-harness sequence numbers for a list of sessions (in order). */
@@ -194,10 +191,31 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const hydrated = useRef(false);
   useEffect(() => {
-    if (!workspaceSessions || hydrated.current) return;
+    if (!workspaceSessions) return;
+    if (hydrated.current) {
+      // A cloud snapshot can establish that an untitled chat has started after
+      // discovery has already hydrated the tabs. Preserve order and draft choices.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile persisted tabs with server discovery
+      setMainTabs((tabs) => {
+        const updated = [...tabs];
+        let changed = false;
+        tabs.forEach((tab, index) => {
+          const session = isSessionChatTab(tab) ? sessionMap.get(tab.sessionId) : undefined;
+          if (tab.hasStarted || !session || session.message_count === 0) return;
+          changed = true;
+          updated[index] = {
+            ...tab,
+            hasStarted: true,
+            agentHarness: session.agent_harness,
+            label: nextStartedChatLabel(updated, session.agent_harness),
+          };
+        });
+        return changed ? updated : tabs;
+      });
+      return;
+    }
     hydrated.current = true;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration sync from DB
     setMainTabs((prev) => {
       // Filter out orphaned session IDs (deleted from DB)
       const validTabs = prev.filter(
@@ -356,7 +374,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (prev.some((tab) => isSessionChatTab(tab) && tab.sessionId === closedTab.sessionId)) {
         return prev;
       }
-      return [...prev, restoredTab];
+      return [
+        ...prev,
+        restoredTab.hasStarted && prev.some((tab) => tab.label === restoredTab.label)
+          ? { ...restoredTab, label: nextStartedChatLabel(prev, restoredTab.agentHarness) }
+          : restoredTab,
+      ];
     });
     setActiveMainTabId(newId);
     setClosedTabs((prev) => prev.filter((ct) => ct.sessionId !== closedTab.sessionId));
@@ -395,13 +418,10 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const tab = prevTabs[tabIndex];
       if (tab.hasStarted) return prevTabs;
 
-      const agentHarness = tab.agentHarness;
-      const sequence = countStartedTabsOfHarness(prevTabs, agentHarness, tabId) + 1;
-
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: buildStartedChatLabel(agentHarness, sequence),
+        label: nextStartedChatLabel(prevTabs, tab.agentHarness),
         hasStarted: true,
       };
       return updatedTabs;

@@ -25,6 +25,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFiles, invalidateFileCache } from "../api/useFiles";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { getErrorMessage } from "@shared/lib/errors";
 import { FileTree } from "./components/FileTree";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -214,16 +217,19 @@ export function FileBrowserPanel({
   const workspaceId = selectedWorkspace?.id ?? null;
   // Cloud trees ride the same route now — the backend branches on kind and
   // serves the sandbox tree over the fs channel.
-  const { data, isLoading, error, refetch } = useFiles(workspaceId);
+  const { data, isLoading, isFetching, error, refetch } = useFiles(workspaceId);
 
   const handleFileClick = (path: string) => {
     onFileClickProp?.(path);
   };
 
   const handleRefresh = async () => {
-    if (workspaceId) {
+    if (!workspaceId) return;
+    try {
       await invalidateFileCache(workspaceId);
-      refetch();
+      await refetch({ throwOnError: true });
+    } catch (err) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -308,9 +314,6 @@ export function FileBrowserPanel({
     );
   }
 
-  // Cloud workspace — the files live in the sandbox; the tree API arrives in
-  // a later sprint. Honest placeholder instead of an empty scan of "".
-
   // Loading state
   if (isLoading) {
     return (
@@ -333,9 +336,13 @@ export function FileBrowserPanel({
           <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
             <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
           </div>
-          <p className="text-muted-foreground/60 text-xs">
+          <p role="alert" className="text-muted-foreground/60 max-w-sm px-4 text-center text-xs">
             {error instanceof Error ? error.message : "Unable to load files"}
           </p>
+          <Button variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}>
+            <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} />
+            {isFetching ? "Trying again…" : "Try again"}
+          </Button>
         </div>
       </div>
     );

@@ -51,8 +51,8 @@ export function useRepoActions({
     try {
       return await addRepoMutation.mutateAsync(path);
     } catch (err) {
-      const addError = err as { status?: number; details?: { details?: Repository } };
-      const existingRepo = addError?.details?.details;
+      const addError = err as { status?: number; details?: Repository };
+      const existingRepo = addError?.details;
       if (addError?.status === 409 && existingRepo?.id) {
         return existingRepo;
       }
