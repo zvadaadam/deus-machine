@@ -31,7 +31,10 @@ the canvas — read left to right, top to bottom.
 The September 14 **workspace layout proposal** is design-only, as requested before
 implementation. `00b` explains the flow, `22a` shows its controls, and `40a`–`40c`
 show Chat, Split and Expanded views. These clearly marked proposal frames sit at
-y=17,340, separate from the shipped screens. See
+y=17,340, separate from the shipped screens. All available tools are listed directly.
+Open panel stays in the workspace header when closed; Expand/Restore and Close sit
+beside the tool tabs when open. The joined Create PR / branch selector matches the app.
+See
 [workspace-layout-proposal.md](./workspace-layout-proposal.md) for behavior and the
 bounded layout cleanup to consider after review.
 

@@ -167392,7 +167392,7 @@
           "id": "SwIT8",
           "name": "Summary",
           "fill": "$text-secondary",
-          "content": "Three workspace states, one consistent place to open, expand and close the right panel.",
+          "content": "Three workspace views, with panel controls beside the content they affect.",
           "fontFamily": "$font-sans",
           "fontSize": 16,
           "fontWeight": "normal"
@@ -167459,7 +167459,7 @@
               "id": "QOPJh",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Chat gets the space. A quiet list opens the available tools.",
+              "content": "PROPOSAL — Chat gets the space. Every available tool is listed directly; no More menu.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -167986,71 +167986,87 @@
                         },
                         {
                           "type": "frame",
-                          "id": "xDDe7",
-                          "name": "Create PR",
+                          "id": "SobGP",
+                          "name": "Create PR · joined branch selector · PRActions.tsx",
+                          "clip": true,
                           "height": 28,
-                          "fill": "$primary",
                           "cornerRadius": "$radius-lg",
-                          "gap": 6,
-                          "padding": [
-                            0,
-                            10
-                          ],
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "NuEA8",
-                              "name": "Pull request",
-                              "width": 13,
-                              "height": 13,
-                              "icon": "git-pull-request",
-                              "library": "lucide",
-                              "fill": "$primary-foreground"
+                              "type": "frame",
+                              "id": "xDDe7",
+                              "name": "Create PR",
+                              "height": 28,
+                              "fill": "$primary",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "NuEA8",
+                                  "name": "Pull request",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "git-pull-request-create",
+                                  "library": "lucide",
+                                  "fill": "$primary-foreground"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "ODKAL",
+                                  "name": "Create PR label",
+                                  "fill": "$primary-foreground",
+                                  "content": "Create PR",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "600"
+                                }
+                              ]
                             },
                             {
-                              "type": "text",
-                              "id": "ODKAL",
-                              "name": "Create PR label",
-                              "fill": "$primary-foreground",
-                              "content": "Create PR",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "QiLs8",
-                          "name": "Target branch",
-                          "height": 28,
-                          "gap": 4,
-                          "padding": [
-                            0,
-                            8
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "i8PTY",
-                              "name": "Branch",
-                              "fill": "$text-secondary",
-                              "content": "main",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "icon",
-                              "id": "uYIez",
-                              "name": "Choose branch",
-                              "width": 12,
-                              "height": 12,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "type": "frame",
+                              "id": "QiLs8",
+                              "name": "Target branch",
+                              "height": 28,
+                              "fill": "$accent-blue-surface",
+                              "stroke": "$primary",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "strokeAlignment": "inner",
+                              "gap": 4,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "i8PTY",
+                                  "name": "Branch",
+                                  "fill": "$primary",
+                                  "content": "main",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "uYIez",
+                                  "name": "Choose branch",
+                                  "width": 8,
+                                  "height": 8,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$primary"
+                                }
+                              ]
                             }
                           ]
                         },
@@ -168061,13 +168077,6 @@
                           "width": 1,
                           "height": 16,
                           "fill": "$border-subtle"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "u24njv",
-                          "name": "Reserved expand-control space",
-                          "width": 28,
-                          "height": 28
                         },
                         {
                           "id": "xz9qf",
@@ -168622,7 +168631,7 @@
                         {
                           "type": "frame",
                           "id": "N2Aej",
-                          "name": "More tools shortcut",
+                          "name": "Simulator shortcut",
                           "width": "fill_container",
                           "height": 32,
                           "gap": 10,
@@ -168635,19 +168644,89 @@
                             {
                               "type": "icon",
                               "id": "lMp15",
-                              "name": "More tools icon",
+                              "name": "Simulator icon",
                               "width": 15,
                               "height": 15,
-                              "icon": "ellipsis",
+                              "icon": "smartphone",
                               "library": "lucide",
                               "fill": "$text-tertiary"
                             },
                             {
                               "type": "text",
                               "id": "hqq0G",
-                              "name": "More tools label",
-                              "fill": "$text-tertiary",
-                              "content": "More",
+                              "name": "Simulator label",
+                              "fill": "$text-secondary",
+                              "content": "Simulator",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "s5Px47",
+                          "name": "Apps shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "UcrnG",
+                              "name": "Apps icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "layout-grid",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "l8eLP",
+                              "name": "Apps label",
+                              "fill": "$text-secondary",
+                              "content": "Apps",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "I7KrM",
+                          "name": "Agent shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "DJ3k3",
+                              "name": "Agent icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "bot",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "qd5gE",
+                              "name": "Agent label",
+                              "fill": "$text-secondary",
+                              "content": "Agent",
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
                               "fontWeight": "normal"
@@ -168746,7 +168825,7 @@
               "id": "J8Cz9",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Select a shortcut to open a tool. Expand and Close stay together at the top right.",
+              "content": "PROPOSAL — Chat and tools side by side. Expand and Close sit at the right of the tool tabs.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -169273,108 +169352,89 @@
                         },
                         {
                           "type": "frame",
-                          "id": "C4G1ad",
-                          "name": "Create PR",
+                          "id": "NO9Hq",
+                          "name": "Create PR · joined branch selector · PRActions.tsx",
+                          "clip": true,
                           "height": 28,
-                          "fill": "$primary",
                           "cornerRadius": "$radius-lg",
-                          "gap": 6,
-                          "padding": [
-                            0,
-                            10
-                          ],
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "bTaD3",
-                              "name": "Pull request",
-                              "width": 13,
-                              "height": 13,
-                              "icon": "git-pull-request",
-                              "library": "lucide",
-                              "fill": "$primary-foreground"
+                              "type": "frame",
+                              "id": "C4G1ad",
+                              "name": "Create PR",
+                              "height": 28,
+                              "fill": "$primary",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "bTaD3",
+                                  "name": "Pull request",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "git-pull-request-create",
+                                  "library": "lucide",
+                                  "fill": "$primary-foreground"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "wzq4m",
+                                  "name": "Create PR label",
+                                  "fill": "$primary-foreground",
+                                  "content": "Create PR",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "600"
+                                }
+                              ]
                             },
                             {
-                              "type": "text",
-                              "id": "wzq4m",
-                              "name": "Create PR label",
-                              "fill": "$primary-foreground",
-                              "content": "Create PR",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
+                              "type": "frame",
+                              "id": "tpnRo",
+                              "name": "Target branch",
+                              "height": 28,
+                              "fill": "$accent-blue-surface",
+                              "stroke": "$primary",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "strokeAlignment": "inner",
+                              "gap": 4,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "wGFiE",
+                                  "name": "Branch",
+                                  "fill": "$primary",
+                                  "content": "main",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "st8NF",
+                                  "name": "Choose branch",
+                                  "width": 8,
+                                  "height": 8,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$primary"
+                                }
+                              ]
                             }
                           ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "tpnRo",
-                          "name": "Target branch",
-                          "height": 28,
-                          "gap": 4,
-                          "padding": [
-                            0,
-                            8
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "wGFiE",
-                              "name": "Branch",
-                              "fill": "$text-secondary",
-                              "content": "main",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "icon",
-                              "id": "st8NF",
-                              "name": "Choose branch",
-                              "width": 12,
-                              "height": 12,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "E5kTs",
-                          "name": "Action separator",
-                          "width": 1,
-                          "height": 16,
-                          "fill": "$border-subtle"
-                        },
-                        {
-                          "id": "G3Q5Gq",
-                          "type": "ref",
-                          "ref": "AovWi",
-                          "enabled": true,
-                          "name": "Expand panel",
-                          "width": 28,
-                          "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "maximize-2"
-                            }
-                          }
-                        },
-                        {
-                          "id": "qkmhD",
-                          "type": "ref",
-                          "ref": "AovWi",
-                          "name": "Close panel",
-                          "width": 28,
-                          "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-right-close"
-                            }
-                          }
                         }
                       ]
                     }
@@ -169496,15 +169556,81 @@
                               }
                             },
                             {
-                              "id": "ljVHu",
+                              "id": "x3gdC",
                               "type": "ref",
-                              "ref": "AovWi",
-                              "name": "More tools",
+                              "ref": "IGG8T",
+                              "name": "Simulator tab",
                               "descendants": {
-                                "AaONw": {
-                                  "icon": "ellipsis"
+                                "VM51c": {
+                                  "icon": "smartphone"
                                 }
                               }
+                            },
+                            {
+                              "id": "HzlQB",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Apps tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "layout-grid"
+                                }
+                              }
+                            },
+                            {
+                              "id": "psQav",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Agent tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "bot"
+                                }
+                              }
+                            },
+                            {
+                              "type": "frame",
+                              "id": "EgMSH",
+                              "name": "Flexible tab spacing",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Q8XlYs",
+                              "name": "Tool panel controls",
+                              "height": 28,
+                              "gap": 4,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "G3Q5Gq",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "enabled": true,
+                                  "name": "Expand panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "maximize-2"
+                                    }
+                                  }
+                                },
+                                {
+                                  "id": "qkmhD",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "name": "Close panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "panel-right-close"
+                                    }
+                                  }
+                                }
+                              ]
                             }
                           ]
                         },
@@ -170509,108 +170635,89 @@
                         },
                         {
                           "type": "frame",
-                          "id": "LwNey",
-                          "name": "Create PR",
+                          "id": "TkKwk",
+                          "name": "Create PR · joined branch selector · PRActions.tsx",
+                          "clip": true,
                           "height": 28,
-                          "fill": "$primary",
                           "cornerRadius": "$radius-lg",
-                          "gap": 6,
-                          "padding": [
-                            0,
-                            10
-                          ],
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "RdVzl",
-                              "name": "Pull request",
-                              "width": 13,
-                              "height": 13,
-                              "icon": "git-pull-request",
-                              "library": "lucide",
-                              "fill": "$primary-foreground"
+                              "type": "frame",
+                              "id": "LwNey",
+                              "name": "Create PR",
+                              "height": 28,
+                              "fill": "$primary",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "RdVzl",
+                                  "name": "Pull request",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "git-pull-request-create",
+                                  "library": "lucide",
+                                  "fill": "$primary-foreground"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "gM57R",
+                                  "name": "Create PR label",
+                                  "fill": "$primary-foreground",
+                                  "content": "Create PR",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "600"
+                                }
+                              ]
                             },
                             {
-                              "type": "text",
-                              "id": "gM57R",
-                              "name": "Create PR label",
-                              "fill": "$primary-foreground",
-                              "content": "Create PR",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
+                              "type": "frame",
+                              "id": "U5Wwjm",
+                              "name": "Target branch",
+                              "height": 28,
+                              "fill": "$accent-blue-surface",
+                              "stroke": "$primary",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "strokeAlignment": "inner",
+                              "gap": 4,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "H2HPy",
+                                  "name": "Branch",
+                                  "fill": "$primary",
+                                  "content": "main",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "JlSgm",
+                                  "name": "Choose branch",
+                                  "width": 8,
+                                  "height": 8,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$primary"
+                                }
+                              ]
                             }
                           ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "U5Wwjm",
-                          "name": "Target branch",
-                          "height": 28,
-                          "gap": 4,
-                          "padding": [
-                            0,
-                            8
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "H2HPy",
-                              "name": "Branch",
-                              "fill": "$text-secondary",
-                              "content": "main",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "icon",
-                              "id": "JlSgm",
-                              "name": "Choose branch",
-                              "width": 12,
-                              "height": 12,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "psqO6",
-                          "name": "Action separator",
-                          "width": 1,
-                          "height": 16,
-                          "fill": "$border-subtle"
-                        },
-                        {
-                          "id": "egn8z",
-                          "type": "ref",
-                          "ref": "AovWi",
-                          "enabled": true,
-                          "name": "Restore split view",
-                          "width": 28,
-                          "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "minimize-2"
-                            }
-                          }
-                        },
-                        {
-                          "id": "u7suK",
-                          "type": "ref",
-                          "ref": "AovWi",
-                          "name": "Close panel",
-                          "width": 28,
-                          "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-right-close"
-                            }
-                          }
                         }
                       ]
                     }
@@ -170622,7 +170729,15 @@
                   "ref": "NrJQ4",
                   "name": "Expanded Changes panel",
                   "width": "fill_container",
-                  "height": "fill_container"
+                  "height": "fill_container",
+                  "descendants": {
+                    "G3Q5Gq": {
+                      "name": "Restore split view"
+                    },
+                    "G3Q5Gq/AaONw": {
+                      "icon": "minimize-2"
+                    }
+                  }
                 }
               ]
             }
@@ -170651,7 +170766,7 @@
           "id": "xpIic",
           "name": "Proposal label",
           "fill": "$primary",
-          "content": "PROPOSAL · HEADER CONTROLS",
+          "content": "PROPOSAL · PANEL CONTROLS",
           "fontFamily": "$font-sans",
           "fontSize": "$text-xs",
           "fontWeight": "normal"
@@ -170711,7 +170826,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Open the last tool in split view.",
+                  "content": "Workspace header: open the last selected tool beside chat.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -170778,7 +170893,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Expand the tool, or close it to return to chat.",
+                  "content": "Tool tab row: expand the tool, or close it to return to chat.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -170845,7 +170960,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Restore the split, or close to return to chat.",
+                  "content": "Tool tab row: restore the split, or close to return to chat.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -172002,6 +172117,23 @@
     "tw-shadow-color": {
       "type": "color",
       "value": "#0000001A"
+    },
+    "accent-blue-surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#edebe2",
+          "theme": {
+            "mode": "light"
+          }
+        },
+        {
+          "value": "#1c171a",
+          "theme": {
+            "mode": "dark"
+          }
+        }
+      ]
     }
   },
   "fileToken": "9e0461b3-d9a1-4dc2-8634-76689791a7ed"

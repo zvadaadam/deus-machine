@@ -18,18 +18,21 @@ screens and components are preserved.
 There is no separate collapse-chat action and no vertical CHAT or CONTENT strip.
 Expanded refers to the workspace area; it does not enter operating-system full screen.
 
-The workspace identity, Open action and PR actions stay in one header. Expand/Restore
-and Open/Close sit together at its far right. Expand appears only when a panel is open.
-Its space stays reserved so the neighboring actions do not jump when the panel opens.
-Every icon has a tooltip and visible keyboard focus. The reading column is capped at
-720px when chat has room; the initial split gives half the workspace to chat.
+The workspace identity, Open action and joined Create PR / branch selector stay in
+one header. When the tool panel is closed, Open panel sits at the header's far right.
+When it is open, Expand/Restore and Close sit at the right of the tool tab row, directly
+above the panel they control. Every icon has a tooltip and visible keyboard focus.
+The reading column is capped at 720px when chat has room; the initial split gives half
+the workspace to chat.
 
 ## Tool access
 
-The shortcut list and panel tabs use the existing `content-tabs.ts` registry and its
-visibility rules. Changes can show its existing file count. Browser, Simulator and
-Apps appear only when supported; additional tools belong in More. Environment opens
-settings for this repository, rather than becoming a new content tab.
+The shortcut list and panel tabs show every available tool directly, with no More
+menu: Changes, Files, Terminal, Browser, Simulator, Apps and Agent. Both use the existing
+`content-tabs.ts` registry and its visibility rules; Browser, Simulator and Apps appear
+only when supported and enabled. The mockups show a workspace with all tools available.
+Changes can show its existing file count. Environment opens settings for this
+repository, rather than becoming a new content tab.
 
 Opening a file or other resource from chat reveals its tool. Incoming agent events
 update the content without opening a panel the user has closed. The sidebar keeps
