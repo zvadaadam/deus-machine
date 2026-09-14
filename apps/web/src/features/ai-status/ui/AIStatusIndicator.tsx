@@ -40,7 +40,7 @@ export function AIStatusIndicator() {
               <button
                 type="button"
                 aria-label={label}
-                className="hover:bg-bg-muted flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors duration-150"
+                className="control-interaction hover:bg-control-hover active:bg-control-pressed flex items-center gap-1.5 rounded-lg px-1 py-0.5"
               >
                 <StatusPulse dotClass={visuals.dotClass} pulse={worst.indicator === "critical"} />
                 <span className="text-text-muted text-xs">{label}</span>

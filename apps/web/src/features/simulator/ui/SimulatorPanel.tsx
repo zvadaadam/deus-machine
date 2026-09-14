@@ -809,7 +809,7 @@ function InspectorDetailsPanel({
         <button
           type="button"
           onClick={onClose}
-          className="text-text-muted hover:text-text-secondary rounded-md p-1 transition-colors"
+          className="control-interaction text-text-muted hover:text-text-secondary rounded-lg p-1"
           aria-label="Close inspector details"
         >
           <X className="h-3.5 w-3.5" />
@@ -862,7 +862,7 @@ function InspectorDetailsPanel({
       </div>
 
       <div className="border-border-subtle flex justify-end border-t p-2">
-        <Button size="sm" onClick={onSendToChat} className="h-7 gap-1.5 px-2.5 text-xs">
+        <Button size="xs" onClick={onSendToChat} className="gap-1.5 px-2.5">
           <Send className="h-3 w-3" />
           Add to Chat
         </Button>
@@ -922,7 +922,7 @@ function BuildDrawer({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="bg-bg-surface ease hover:bg-bg-surface/80 flex h-7 shrink-0 items-center gap-2 px-3 transition-colors duration-200"
+        className="control-interaction bg-bg-surface hover:bg-bg-surface/80 flex h-7 shrink-0 items-center gap-2 px-3"
       >
         <span className="bg-warning h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
         <span className="text-text-secondary text-xs font-medium">Building</span>

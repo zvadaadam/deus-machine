@@ -186,7 +186,7 @@ function ResourceActionButton({
         <button
           type="button"
           onClick={() => void onAction(resource.primaryAction)}
-          className="text-foreground hover:bg-muted/70 flex h-full shrink-0 items-center gap-1.5 rounded-l-md px-2.5 text-sm font-medium transition-colors duration-150 ease-out"
+          className="control-interaction text-foreground hover:bg-control-hover active:bg-control-pressed flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2.5 text-sm font-normal"
         >
           <ActionIcon action={resource.primaryAction} className="h-3.5 w-3.5 shrink-0" />
           <span className="shrink-0">{resource.primaryAction.label}</span>
@@ -198,7 +198,7 @@ function ResourceActionButton({
           <button
             type="button"
             aria-label={`Choose open target for ${resource.title}`}
-            className="text-muted-foreground hover:bg-muted/70 hover:text-foreground flex h-full shrink-0 items-center rounded-r-md px-1.5 transition-colors duration-150 ease-out"
+            className="control-interaction text-muted-foreground hover:bg-control-hover active:bg-control-pressed hover:text-foreground flex h-full shrink-0 items-center rounded-r-lg px-1.5"
             onPointerEnter={handleOpen}
             onPointerLeave={handleClose}
           >

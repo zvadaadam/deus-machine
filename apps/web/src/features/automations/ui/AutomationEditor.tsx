@@ -162,7 +162,7 @@ export function AutomationEditor({
             type="button"
             aria-label="Back to automations"
             onClick={onBack}
-            className="text-text-secondary hover:bg-foreground/[0.04] flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-150"
+            className="control-interaction text-text-secondary hover:bg-foreground/[0.04] flex h-7 w-7 items-center justify-center rounded-lg"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>

@@ -80,12 +80,11 @@ function CopyButton({ getText }: { getText: () => string }) {
       className={cn(
         // Proper alignment: pre has 8px top + 12px right padding
         // Button positioned at: 12px top (8+4 breathing), 16px right (12+4 breathing)
-        "absolute top-3 right-4",
-        "rounded p-1.5",
+        "control-interaction absolute top-3 right-4",
+        "rounded-lg p-1.5",
         "text-muted-foreground hover:text-foreground",
-        "hover:bg-muted/50",
-        "transition-[color,background-color,opacity] duration-200 ease-out",
-        "opacity-0 group-hover:opacity-100",
+        "hover:bg-control-hover active:bg-control-pressed",
+        "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
         copied && "text-success"
       )}
       aria-label="Copy code"

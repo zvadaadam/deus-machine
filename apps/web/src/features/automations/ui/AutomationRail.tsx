@@ -32,7 +32,7 @@ export function AutomationRail({
           <button
             type="button"
             onClick={onBack}
-            className="text-text-primary hover:text-text-secondary flex items-center gap-1 text-sm font-semibold transition-colors duration-150"
+            className="text-text-primary hover:text-text-secondary flex items-center gap-1 text-sm font-medium transition-colors duration-150"
           >
             <ChevronLeft className="text-text-muted h-3.5 w-3.5" />
             Automations
@@ -41,7 +41,7 @@ export function AutomationRail({
             type="button"
             aria-label="New automation"
             onClick={onNew}
-            className="text-text-muted hover:text-text-secondary flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-150"
+            className="control-interaction text-text-muted hover:text-text-secondary flex h-6 w-6 items-center justify-center rounded-lg"
           >
             <Plus className="h-[15px] w-[15px]" />
           </button>
@@ -58,7 +58,7 @@ export function AutomationRail({
                   type="button"
                   onClick={() => onSelect(automation)}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-2 py-[7px] text-left transition-colors duration-150",
+                    "control-interaction flex items-center gap-2 rounded-lg px-2 py-[7px] text-left",
                     selected ? "bg-bg-selection" : "hover:bg-foreground/[0.04]"
                   )}
                 >

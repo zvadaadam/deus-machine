@@ -386,7 +386,7 @@ function DeviceStateBody({
           <div className="flex flex-col items-center gap-3">
             <Button
               onClick={onStart}
-              className="min-h-11 min-w-[180px] gap-2 rounded-xl transition-[background-color,border-color,color,box-shadow] duration-150"
+              className="min-h-11 min-w-[180px] gap-2 transition-[background-color,border-color,color,box-shadow] duration-150"
             >
               <Play className="h-4 w-4" />
               Start device
@@ -394,7 +394,7 @@ function DeviceStateBody({
             <button
               type="button"
               onClick={onAskAgent}
-              className="bg-bg-muted/55 text-text-muted hover:text-text-secondary hover:bg-bg-muted flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors duration-150"
+              className="control-interaction bg-bg-muted/55 text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed flex items-center gap-1.5 rounded-full px-3 py-1 text-sm"
             >
               <Sparkles className="h-3 w-3" />
               Ask the agent to build and run the app
@@ -420,11 +420,7 @@ function DeviceStateBody({
             <p className="text-destructive text-sm leading-5">
               {describeCloudSimulatorError(error)}
             </p>
-            <Button
-              variant="outline"
-              onClick={onStart}
-              className="min-h-10 min-w-[136px] gap-2 rounded-xl"
-            >
+            <Button variant="outline" onClick={onStart} className="min-h-10 min-w-[136px] gap-2">
               <RotateCcw className="h-4 w-4" />
               Retry
             </Button>

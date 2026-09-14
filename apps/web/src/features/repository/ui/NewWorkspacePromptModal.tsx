@@ -166,9 +166,9 @@ export function NewWorkspacePromptModal({
               aria-label={prompt.trim() ? "Create workspace and send" : "Create workspace"}
               title={prompt.trim() ? "Create & send (Enter)" : "Create workspace (Enter)"}
               className={cn(
-                "mr-1 flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150",
+                "control-interaction mr-1 flex h-7 w-7 items-center justify-center rounded-full",
                 canSubmit
-                  ? "bg-foreground text-background hover:opacity-90 active:scale-95"
+                  ? "bg-button-primary text-button-primary-foreground hover:opacity-90"
                   : "bg-bg-muted text-text-disabled cursor-default"
               )}
             >

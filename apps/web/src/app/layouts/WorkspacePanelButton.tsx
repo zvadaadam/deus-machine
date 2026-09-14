@@ -23,7 +23,7 @@ export function WorkspacePanelButton({
           type="button"
           aria-label={label}
           onClick={onClick}
-          className="no-drag text-text-muted hover:text-text-secondary hover:bg-bg-muted focus-visible:outline-ring flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2"
+          className="control-interaction no-drag text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed flex size-7 shrink-0 items-center justify-center rounded-lg"
         >
           <Icon className="size-4" aria-hidden="true" />
         </button>

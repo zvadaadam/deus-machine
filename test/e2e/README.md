@@ -4,6 +4,20 @@ This directory contains all test files for the Deus application.
 
 ## Test Files
 
+### `controls.browser.mjs`
+
+Runs the shared buttons, joined controls, menus, selects and tabs in an isolated
+browser. Checks disabled actions, stable press geometry, circular overrides,
+keyboard focus/menu behavior, independent tab lifetimes, reduced motion and touch.
+No backend or provider credentials are needed.
+
+```bash
+bun test/e2e/controls.browser.mjs
+```
+
+Light, dark and mobile screenshots are saved under `.context/controls-ui` and
+uploaded by CI alongside the workspace usability/layout screenshots.
+
 ### `environment-secrets.browser.mjs`
 
 Runs the real Environment settings components through both the desktop backend

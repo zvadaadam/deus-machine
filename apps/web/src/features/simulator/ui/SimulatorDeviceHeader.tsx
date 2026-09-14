@@ -62,11 +62,10 @@ export function SimulatorDeviceHeader({
             <span className="inline-flex">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-xs"
                 onClick={onHome}
                 disabled={controlsDisabled}
                 aria-label="Home"
-                className="h-7 w-7 p-0"
               >
                 <Home className="h-3 w-3" />
               </Button>
@@ -81,11 +80,10 @@ export function SimulatorDeviceHeader({
             <span className="inline-flex">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-xs"
                 onClick={onScreenshot}
                 disabled={controlsDisabled}
                 aria-label="Screenshot"
-                className="h-7 w-7 p-0"
               >
                 <Camera className="h-3 w-3" />
               </Button>
@@ -100,11 +98,11 @@ export function SimulatorDeviceHeader({
             <span className="inline-flex">
               <Button
                 variant={inspectMode ? "outline" : "ghost"}
-                size="sm"
+                size="icon-xs"
                 onClick={onToggleInspect}
                 disabled={controlsDisabled || inspectLoading}
                 aria-label={inspectMode ? "Disable inspect mode" : "Inspect app views"}
-                className={cn("h-7 w-7 p-0", inspectMode && "border-primary/40 text-primary")}
+                className={cn("", inspectMode && "border-primary/40 text-primary")}
               >
                 {inspectLoading ? (
                   <Loader2 className="h-3 w-3 animate-spin" />

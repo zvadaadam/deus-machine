@@ -48,7 +48,7 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
           size="sm"
           title="Select model"
           aria-label={`Select model, currently ${modelLabel}`}
-          className="text-text-secondary data-[state=open]:bg-accent gap-1.5 rounded-lg px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
+          className="text-text-secondary data-[state=open]:bg-accent gap-1.5 px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
         >
           {renderAgentLogo(selectedOption?.agentHarness ?? "claude-code", "size-3.5")}
           <span>{modelLabel}</span>

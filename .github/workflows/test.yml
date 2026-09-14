@@ -172,6 +172,9 @@ jobs:
       - name: Verify workspace panels and preserved tool state
         run: bun test/e2e/workspace-layout.browser.mjs
 
+      - name: Verify shared controls with keyboard and touch
+        run: bun test/e2e/controls.browser.mjs
+
       - name: Upload UI regression screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -180,6 +183,7 @@ jobs:
           path: |
             .context/workspace-usability-ui/*.png
             .context/workspace-layout-ui/*.png
+            .context/controls-ui/*.png
           if-no-files-found: ignore
 
   runtime-linux:

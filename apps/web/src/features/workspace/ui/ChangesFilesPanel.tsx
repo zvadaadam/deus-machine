@@ -134,7 +134,7 @@ function FolderGroupView({
         <button
           type="button"
           onClick={() => onToggle(group.folder)}
-          className="text-text-muted hover:text-text-secondary ease flex h-6 w-full items-center gap-1.5 px-3 text-left transition-colors duration-150"
+          className="control-interaction text-text-muted hover:text-text-secondary flex h-6 w-full items-center gap-1.5 px-3 text-left"
         >
           {collapsed ? (
             <ChevronRight className="text-text-muted/60 h-3 w-3 flex-shrink-0" />
@@ -154,7 +154,7 @@ function FolderGroupView({
             type="button"
             onClick={() => onFileClick(file.path)}
             className={cn(
-              "ease flex h-6 w-full items-center gap-1.5 text-left transition-colors duration-150",
+              "control-interaction flex h-6 w-full items-center gap-1.5 text-left",
               isRoot ? "px-3" : "pr-3 pl-8",
               selectedFile === file.path
                 ? "bg-bg-elevated text-text-secondary"

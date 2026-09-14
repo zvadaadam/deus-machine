@@ -44,7 +44,7 @@ export function CopyButton({ text, label = "Copy", className, size = "sm" }: Cop
   }, []);
 
   const sizeClasses = {
-    sm: "h-6 px-2 text-xs",
+    sm: "h-6 px-2 text-sm",
     md: "h-8 px-3 text-sm",
   };
 
@@ -58,11 +58,11 @@ export function CopyButton({ text, label = "Copy", className, size = "sm" }: Cop
       type="button"
       onClick={handleCopy}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg transition-colors duration-200",
-        "hover:bg-muted/50 bg-transparent",
+        "control-interaction inline-flex items-center gap-1.5 rounded-lg",
+        "hover:bg-control-hover active:bg-control-pressed bg-transparent",
         "text-muted-foreground hover:text-foreground",
         "border-border/40 hover:border-border border",
-        "disabled:cursor-not-allowed disabled:opacity-50",
+        "disabled:cursor-not-allowed",
         sizeClasses[size],
         className
       )}

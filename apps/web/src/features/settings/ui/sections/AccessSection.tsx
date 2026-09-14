@@ -306,8 +306,8 @@ function DevicesList({
             </div>
             <Button
               variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive size-7"
+              size="icon-xs"
+              className="text-muted-foreground hover:text-destructive"
               onClick={() => onRemove(device)}
               disabled={isRemoving}
               title={`Remove ${device.name}`}

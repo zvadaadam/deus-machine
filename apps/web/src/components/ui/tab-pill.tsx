@@ -2,10 +2,8 @@
  * TabPill — shared primitive for Browser/Session/Terminal tab bars.
  *
  * Layout: [icon-slot][title]. The icon slot shows the supplied icon at rest;
- * when `onClose` is provided, the slot becomes a button that crossfades to
- * an X on tab hover (skill: Contextual Icon Animations — scale 0.25→1,
- * opacity 0→1, blur 4px→0; both icons stay in the DOM so enter+exit animate
- * without a motion library).
+ * when `onClose` is provided, the slot becomes a button that reveals an X
+ * on hover. Both icons stay mounted so switching does not move the label.
  *
  * Click the title button to select; click the icon slot (when closable) to
  * close. The component sets role="tab" + aria-selected on the title button,
@@ -15,9 +13,6 @@
 import type { KeyboardEvent, ReactNode, RefCallback } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-
-const ICON_CROSS_FADE =
-  "transition-[opacity,filter,scale] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
 
 type TabPillPropsBase = {
   /** Whether this tab is currently active. Drives bg + text color. */
@@ -70,10 +65,10 @@ export function TabPill({
   return (
     <div
       className={cn(
-        "group flex h-7 items-center rounded-md text-xs whitespace-nowrap transition-colors duration-200 ease-out select-none",
+        "group flex h-7 items-center rounded-lg text-sm font-normal whitespace-nowrap transition-colors duration-150 select-none",
         active
           ? "bg-bg-raised text-text-secondary font-medium"
-          : "text-text-muted hover:bg-foreground/5 hover:text-text-tertiary",
+          : "text-text-muted hover:bg-control-hover hover:text-text-tertiary",
         className
       )}
     >
@@ -88,27 +83,14 @@ export function TabPill({
             onClose();
           }}
           className={cn(
-            "relative flex h-full w-7 shrink-0 cursor-pointer items-center justify-center rounded-l-md border-none bg-transparent p-0",
-            "transition-[background-color,scale] duration-150 ease-out",
-            "hover:bg-foreground/10 active:scale-[0.96]"
+            "control-interaction relative flex h-full w-7 shrink-0 cursor-pointer items-center justify-center rounded-l-lg border-none bg-transparent p-0",
+            "hover:bg-control-hover active:bg-control-pressed"
           )}
         >
-          <span
-            className={cn(
-              "absolute inset-0 grid place-items-center",
-              ICON_CROSS_FADE,
-              "group-hover:scale-[0.25] group-hover:opacity-0 group-hover:blur-[4px]"
-            )}
-          >
+          <span className="absolute inset-0 grid place-items-center transition-opacity duration-150 group-hover:opacity-0">
             {icon}
           </span>
-          <span
-            className={cn(
-              "absolute inset-0 grid scale-[0.25] place-items-center opacity-0 blur-[4px]",
-              ICON_CROSS_FADE,
-              "group-hover:scale-100 group-hover:opacity-100 group-hover:blur-none"
-            )}
-          >
+          <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             <X className="h-3.5 w-3.5" />
           </span>
         </button>
@@ -123,7 +105,7 @@ export function TabPill({
         tabIndex={titleTabIndex}
         onClick={onSelect}
         onKeyDown={onTitleKeyDown}
-        className="flex h-full min-w-0 flex-1 cursor-pointer items-center border-none bg-transparent pr-2.5 pl-0.5 text-left text-inherit"
+        className="control-interaction active:bg-control-pressed flex h-full min-w-0 flex-1 cursor-pointer items-center rounded-r-lg border-none bg-transparent pr-2.5 pl-0.5 text-left text-inherit"
       >
         <span className="block truncate">{children}</span>
       </button>

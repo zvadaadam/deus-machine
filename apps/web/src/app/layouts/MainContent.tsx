@@ -233,7 +233,7 @@ export function MainContent({
             data-slot="welcome-sidebar-toggle"
             aria-label="Expand sidebar"
             onClick={toggleSidebar}
-            className="text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-lg transition-[transform,color,background-color] duration-200 ease-out"
+            className="control-interaction text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 absolute top-3 left-3 z-10 flex h-7 w-7 items-center justify-center rounded-lg"
           >
             <PanelLeft className="h-4 w-4" />
           </button>

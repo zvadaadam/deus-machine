@@ -116,7 +116,7 @@ export function ChangesView({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="text-text-muted hover:text-text-secondary ease flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm transition-colors duration-200"
+              className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm"
             >
               <SlidersHorizontal className="h-[11px] w-[11px]" />
               <span>{activeFilterLabel}</span>
@@ -144,7 +144,7 @@ export function ChangesView({
             <button
               type="button"
               onClick={onReview}
-              className="bg-primary/8 hover:bg-primary/14 text-primary ease flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors duration-200"
+              className="control-interaction bg-primary/8 hover:bg-primary/14 text-primary flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-normal"
             >
               <ScanText className="h-3 w-3" />
               <span>Review Changes</span>
@@ -212,7 +212,7 @@ export function ChangesView({
                     type="button"
                     onClick={handleUnpin}
                     aria-label="Collapse file tree to minimap"
-                    className="text-text-muted hover:text-text-secondary hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-150"
+                    className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed flex h-5 w-5 items-center justify-center rounded-lg"
                     title="Collapse to minimap"
                   >
                     <PanelRight className="h-3 w-3" />

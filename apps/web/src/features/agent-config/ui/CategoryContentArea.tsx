@@ -104,7 +104,7 @@ export function CategoryContentArea({
             (hasProjectScope ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
+                  <Button variant="ghost" size="xs" className="gap-1 px-2">
                     <Plus className="h-3.5 w-3.5" />
                     Add
                   </Button>
@@ -123,8 +123,8 @@ export function CategoryContentArea({
             ) : (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
+                size="xs"
+                className="gap-1 px-2"
                 onClick={() => onAdd("global")}
               >
                 <Plus className="h-3.5 w-3.5" />

@@ -33,7 +33,7 @@ export function ThinkingPicker({ level, levels, onLevelChange }: ThinkingPickerP
           size="sm"
           title="Thinking effort"
           aria-label={`Thinking effort: ${LEVEL_LABELS[level]}`}
-          className="text-text-secondary data-[state=open]:bg-accent gap-1.5 rounded-lg px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
+          className="text-text-secondary data-[state=open]:bg-accent gap-1.5 px-2 text-sm focus-visible:ring-1 has-[>svg]:px-2"
         >
           <span>{level === "xhigh" ? "X-High" : LEVEL_LABELS[level]}</span>
           <ChevronDown className="text-text-muted size-3" />

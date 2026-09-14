@@ -106,7 +106,7 @@ export function AutomationDetail({
             type="button"
             aria-label="Back to automations"
             onClick={onBack}
-            className="text-text-secondary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150"
+            className="control-interaction text-text-secondary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -241,7 +241,7 @@ function RunRow({
       type="button"
       onClick={() => onOpen(run)}
       disabled={!openable || opening}
-      className="enabled:hover:bg-foreground/[0.03] flex h-11 w-full items-center gap-2.5 rounded-md px-1.5 text-left transition-colors duration-150 disabled:cursor-default"
+      className="control-interaction enabled:hover:bg-foreground/[0.03] flex h-11 w-full items-center gap-2.5 rounded-lg px-1.5 text-left disabled:cursor-default"
     >
       <Icon className={cn("h-3.5 w-3.5 shrink-0", color, spin && "animate-spin")} />
       <span className="text-text-primary shrink-0 text-sm font-medium">

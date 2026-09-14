@@ -30,7 +30,7 @@ export function ActionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-muted/40 text-muted-foreground hover:text-foreground ease flex h-6 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-200",
+        "control-interaction hover:bg-control-hover active:bg-control-pressed text-muted-foreground hover:text-foreground flex h-6 items-center gap-1.5 rounded-lg px-2 text-sm",
         active && "text-success hover:bg-success/10",
         className
       )}

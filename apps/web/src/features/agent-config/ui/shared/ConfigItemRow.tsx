@@ -39,8 +39,8 @@ export const ConfigItemRow = memo(function ConfigItemRow({
           {onEdit && (
             <Button
               variant="ghost"
-              size="icon"
-              className="text-muted-foreground h-7 w-7"
+              size="icon-xs"
+              className="text-muted-foreground"
               onClick={() => onEdit(item)}
               aria-label={`Edit ${item.name}`}
             >
@@ -50,8 +50,8 @@ export const ConfigItemRow = memo(function ConfigItemRow({
           {onDelete && (
             <Button
               variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive h-7 w-7"
+              size="icon-xs"
+              className="text-muted-foreground hover:text-destructive"
               onClick={() => onDelete(item)}
               aria-label={`Delete ${item.name}`}
             >

@@ -38,25 +38,29 @@ export function CliStatusRow({
   const shouldShowRetry = !!onRetry && (showRetry || (retryWhenUnavailable && installed === false));
 
   return (
-    <div className="flex items-center gap-4 rounded-xl bg-white/5 px-4 py-3">
+    <div className="bg-onboarding-foreground/5 flex items-center gap-4 rounded-xl px-4 py-3">
       <div
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          installed === null ? "bg-white/10" : installed ? "bg-success/20" : "bg-white/10"
+          installed === null
+            ? "bg-onboarding-foreground/10"
+            : installed
+              ? "bg-success/20"
+              : "bg-onboarding-foreground/10"
         )}
       >
         {installed === null ? (
-          <Loader2 className="h-4 w-4 animate-spin text-white/50" />
+          <Loader2 className="text-onboarding-foreground/50 h-4 w-4 animate-spin" />
         ) : installed ? (
           <Check className="text-success h-4 w-4" />
         ) : (
-          <X className="h-4 w-4 text-white/40" />
+          <X className="text-onboarding-foreground/40 h-4 w-4" />
         )}
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-white">{name}</p>
-        <p className="truncate text-xs text-white/50">
+        <p className="text-onboarding-foreground text-sm font-medium">{name}</p>
+        <p className="text-onboarding-foreground/50 truncate text-xs">
           {installed === null ? (detail ?? "Checking...") : detail || description}
         </p>
       </div>
@@ -66,7 +70,7 @@ export function CliStatusRow({
           href={actionUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-white/20"
+          className="bg-onboarding-foreground/10 text-onboarding-foreground hover:bg-onboarding-foreground/20 shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-200"
         >
           {actionLabel}
         </a>
@@ -77,7 +81,7 @@ export function CliStatusRow({
           type="button"
           onClick={onAction}
           disabled={actionDisabled || actionBusy}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black transition-transform duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed"
         >
           {actionBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : actionIcon}
           {actionLabel}
@@ -88,7 +92,7 @@ export function CliStatusRow({
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/70 transition-colors duration-200 hover:bg-white/20 hover:text-white"
+          className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground/70 hover:bg-onboarding-foreground/20 hover:text-onboarding-foreground shrink-0 rounded-lg px-3 py-1.5 text-sm font-normal"
         >
           {retryLabel}
         </button>

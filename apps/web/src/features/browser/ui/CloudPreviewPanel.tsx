@@ -125,7 +125,7 @@ export function CloudPreviewPanel({
               type="button"
               onClick={() => applyPort(quick)}
               className={cn(
-                "rounded-md px-1.5 py-0.5 text-[11px] transition-colors duration-150",
+                "control-interaction rounded-lg px-1.5 py-0.5 text-[11px]",
                 quick === port
                   ? "bg-bg-muted text-text-primary"
                   : "text-text-muted hover:text-text-secondary hover:bg-bg-muted/50"
@@ -140,8 +140,8 @@ export function CloudPreviewPanel({
         </span>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 px-2"
+          size="xs"
+          className="px-2"
           onClick={() => setGeneration((g) => g + 1)}
           disabled={!url}
           aria-label="Reload preview"
@@ -150,8 +150,8 @@ export function CloudPreviewPanel({
         </Button>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 px-2"
+          size="xs"
+          className="px-2"
           onClick={() => url && window.open(url, "_blank", "noopener")}
           disabled={!url}
           aria-label="Open preview in your browser"

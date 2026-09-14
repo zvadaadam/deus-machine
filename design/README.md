@@ -28,6 +28,11 @@ the canvas — read left to right, top to bottom.
 
 ### Workspace usability
 
+Buttons and interactive controls follow [controls.md](./controls.md): native
+12px regular toolbar labels, neutral primary actions, soft `radius-lg` corners,
+and shared hover/pressed/keyboard states. The joined PR control retains its rose
+treatment. Boards `10`, `05` and `02` document the components, states and motion.
+
 The September 14 **right workspace controls** are implemented in `apps/web`. The current
 frames start at y=18,640: `00c` explains the scope, `22b` shows the controls, and
 `40d`–`40f` show the right workspace open, collapsed and expanded. The existing
@@ -136,11 +141,13 @@ revisions are historical metadata; credential values never appear in the panel.
 - `47a`…`47f` the full onboarding flow, in order: Welcome · Deus Cloud sign-in · Connect
   GitHub · Connect your AI tools · Your Projects · Shape Deus with us. `47g`…`47j` show
   account checks, failed project discovery, failed completion and folder errors. It has its own visual
-  language — pure black, a grain layer, white-on-white/10 surfaces, `text-white/50` copy —
-  and does **not** use the app tokens. Don't "fix" it to match the rest.
+  language — pure black, a grain layer and translucent white surfaces — using the
+  `onboarding-foreground` and `onboarding-contrast` tokens. These keep the same
+  dark presentation in both app themes.
   `StepIndicator` sits **above** the card (`pb-6`), not at the bottom of the screen, and
   step 0 doesn't render it at all. The active pip is `w-6`, steps already passed are
-  `w-1.5 bg-white/50`, and the ones still ahead `w-1.5 bg-white/20` — three states, not two.
+  `w-1.5 bg-onboarding-foreground/50`, and the ones still ahead
+  `w-1.5 bg-onboarding-foreground/20` — three states, not two.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environments · `57` Experimental · `58` Remote Access
@@ -392,8 +399,8 @@ image endpoint. Production loads owner avatars directly and uses a folder fallba
 ### The scales are bound, not typed
 
 Every `fontSize` and every `cornerRadius` in the file is a **variable reference**
-(`$text-sm`, `$radius-lg`), not a literal. Change `radius-lg` once and every button, row
-and tab follows; change `text-base` and the whole body scale moves. Don't type a number
+(`$text-sm`, `$radius-lg`), not a literal. Components share the existing scales;
+buttons do not introduce a separate radius system. Don't type a number
 where a token exists — if you need a value that isn't on the scale, that's a design
 decision worth making explicitly.
 

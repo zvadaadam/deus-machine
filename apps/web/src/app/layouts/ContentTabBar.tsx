@@ -36,10 +36,10 @@ function ContentTabButton({
       aria-selected={isActive}
       onClick={onClick}
       className={cn(
-        "relative flex h-7 shrink-0 items-center rounded-lg whitespace-nowrap transition-colors duration-150",
+        "control-interaction relative flex h-7 shrink-0 items-center rounded-lg whitespace-nowrap",
         isActive
           ? "bg-bg-raised text-text-secondary gap-1.5 px-3 text-sm font-medium"
-          : "text-text-muted hover:text-text-secondary hover:bg-bg-muted justify-center px-2"
+          : "text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed justify-center px-2"
       )}
     >
       <Icon className={isActive ? "h-[13px] w-[13px]" : "h-3.5 w-3.5"} />

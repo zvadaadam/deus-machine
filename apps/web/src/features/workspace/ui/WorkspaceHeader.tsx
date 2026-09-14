@@ -123,7 +123,7 @@ export function WorkspaceHeader({
                 type="button"
                 aria-label="Expand sidebar"
                 onClick={toggleSidebar}
-                className="text-text-muted hover:text-text-secondary hover:bg-bg-muted mr-1 -ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
+                className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed mr-1 -ml-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg"
               >
                 <PanelLeft className="h-3.5 w-3.5" />
               </button>
@@ -138,7 +138,7 @@ export function WorkspaceHeader({
           <WorkspaceStatusMenu currentStatus={workspaceStatus} onStatusChange={onStatusChange}>
             <button
               type="button"
-              className="text-text-muted hover:text-text-secondary mr-1 flex items-center gap-1 rounded-lg px-1 py-0.5 transition-colors duration-200"
+              className="control-interaction text-text-muted hover:text-text-secondary mr-1 flex items-center gap-1 rounded-lg px-1 py-0.5"
             >
               <WorkflowStatusIcon status={workspaceStatus} size={14} />
             </button>
@@ -170,7 +170,7 @@ export function WorkspaceHeader({
                     type="button"
                     onClick={onCloudWake}
                     className={cn(
-                      "border-border-secondary hover:text-text-muted focus-visible:ring-ring mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none",
+                      "control-interaction border-border-secondary hover:text-text-muted mr-0.5 flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-full border border-dashed px-1.5 py-px text-[11px] font-medium",
                       cloudUnavailable ? "text-text-muted" : "text-text-disabled"
                     )}
                   >
@@ -237,7 +237,7 @@ export function WorkspaceHeader({
                 type="button"
                 onClick={onOpenAutomation}
                 aria-label={`Automation: ${automationName}`}
-                className="text-text-tertiary border-border-secondary hover:text-text-secondary focus-visible:ring-ring mr-0.5 flex min-w-0 flex-shrink cursor-pointer items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                className="control-interaction text-text-tertiary border-border-secondary hover:text-text-secondary mr-0.5 flex min-w-0 flex-shrink cursor-pointer items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-medium"
               >
                 <ClockFading className="h-3 w-3 shrink-0" />
                 <span className="truncate">{automationName}</span>
@@ -282,7 +282,7 @@ export function WorkspaceHeader({
                   <button
                     type="button"
                     onClick={onViewSetupLogs}
-                    className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
+                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
                   >
                     <ScrollText className="h-3 w-3" />
                   </button>
@@ -298,7 +298,7 @@ export function WorkspaceHeader({
                   <button
                     type="button"
                     onClick={() => onSendAgentMessage(fixSetupErrorPrompt(setupError ?? null))}
-                    className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
+                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
                   >
                     <Sparkles className="h-3 w-3" />
                   </button>
@@ -314,7 +314,7 @@ export function WorkspaceHeader({
                   <button
                     type="button"
                     onClick={onRetrySetup}
-                    className="text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-xs transition-colors duration-200"
+                    className="control-interaction text-text-muted hover:text-text-secondary rounded-lg px-1.5 py-0.5 text-sm"
                   >
                     <RotateCw className="h-3 w-3" />
                   </button>
@@ -445,7 +445,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
             <button
               type="button"
               onClick={handleQuickOpen}
-              className="text-text-subtle hover:bg-bg-muted flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2 transition-colors duration-200"
+              className="control-interaction text-text-subtle hover:bg-control-hover active:bg-control-pressed flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2"
             >
               {defaultApp?.icon ? (
                 <img
@@ -457,7 +457,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
               ) : (
                 <ArrowUpRight className="h-[11px] w-[11px] shrink-0" />
               )}
-              <span className="shrink-0 text-sm font-medium">Open</span>
+              <span className="shrink-0 text-sm font-normal">Open</span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -476,7 +476,7 @@ function HeaderOpenButton({ workspacePath }: { workspacePath: string }) {
           <button
             type="button"
             aria-label="Choose app to open in"
-            className="text-text-muted hover:bg-bg-muted hover:text-text-subtle flex h-full shrink-0 items-center rounded-r-lg px-1.5 transition-colors duration-200"
+            className="control-interaction text-text-muted hover:bg-control-hover active:bg-control-pressed hover:text-text-subtle flex h-full shrink-0 items-center rounded-r-lg px-1.5"
             onPointerEnter={handleOpen}
             onPointerLeave={handleClose}
           >

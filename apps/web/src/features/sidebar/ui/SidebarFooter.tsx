@@ -43,7 +43,7 @@ export function SidebarFooter({
                 setOpen(false);
                 onStartNewProject?.();
               }}
-              className="hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150 focus-visible:outline-none"
+              className="control-interaction hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3"
             >
               <FolderGit2 className="text-text-muted h-4 w-4 shrink-0" />
               <div className="min-w-0 text-left">
@@ -57,7 +57,7 @@ export function SidebarFooter({
                 setOpen(false);
                 onCloneRepository?.();
               }}
-              className="hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150 focus-visible:outline-none"
+              className="control-interaction hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3"
             >
               <GitHubIcon className="text-text-muted h-4 w-4 shrink-0" />
               <div className="min-w-0 text-left">
@@ -72,7 +72,7 @@ export function SidebarFooter({
                   setOpen(false);
                   onAddRepository?.();
                 }}
-                className="hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150 focus-visible:outline-none"
+                className="control-interaction hover:bg-bg-elevated focus-visible:bg-bg-elevated flex w-full items-center gap-3 rounded-lg px-3 py-3"
               >
                 <FolderPlus className="text-text-muted h-4 w-4 shrink-0" />
                 <div className="min-w-0 text-left">

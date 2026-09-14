@@ -380,7 +380,7 @@ export function MessageInput({
             <button
               type="button"
               onClick={handleSetupEnvironment}
-              className="text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-bg-muted flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-xs transition-[color,background-color,border-color,scale] duration-200 active:scale-[0.97]"
+              className="control-interaction text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-control-hover active:bg-control-pressed flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-sm"
             >
               <Wrench className="h-3 w-3 shrink-0" />
               <span>Set up this project</span>
@@ -509,7 +509,7 @@ export function MessageInput({
                 title="Compact conversation"
                 variant="ghost"
                 size="sm"
-                className="text-warning rounded-lg border active:not-disabled:scale-[0.97]"
+                className="text-warning border"
               >
                 <Minimize2 className="size-3.5" />
                 <span className="text-xs font-normal">Compact</span>
@@ -529,7 +529,7 @@ export function MessageInput({
                 size="icon-sm"
                 title="Stop execution"
                 aria-label="Stop execution"
-                className="bg-foreground text-background hover:bg-foreground/90 rounded-full transition-[background-color,scale] duration-150 active:scale-[0.97]"
+                className="rounded-full"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </InputGroupButton>
@@ -542,7 +542,7 @@ export function MessageInput({
               size="icon-sm"
               title="Send message (Enter)"
               aria-label="Send message"
-              className="rounded-full transition-[background-color,color,scale] duration-150 active:not-disabled:scale-[0.97]"
+              className="rounded-full"
             >
               <ArrowUp className="h-4 w-4" />
             </InputGroupButton>

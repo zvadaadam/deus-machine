@@ -41,7 +41,7 @@ export function SidebarHeader({
         type="button"
         aria-label="Open settings"
         onClick={onOpenSettings}
-        className="hover:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors duration-200"
+        className="control-interaction hover:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5"
       >
         <Avatar shape="square" className="h-6 w-6 shrink-0 rounded-md">
           {profile?.avatarUrl && (
@@ -63,7 +63,7 @@ export function SidebarHeader({
             onClick={onNewSession}
             aria-label="New session"
             title={`New session (${modKey}N)`}
-            className="text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150"
+            className="control-interaction text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
           >
             <SquarePen className="h-[16px] w-[16px]" />
           </button>
@@ -75,7 +75,7 @@ export function SidebarHeader({
           aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
           title={!isMobile ? toggleTitle : undefined}
           className={cn(
-            "text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
+            "control-interaction text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
             !isExpanded && "opacity-60"
           )}
         >

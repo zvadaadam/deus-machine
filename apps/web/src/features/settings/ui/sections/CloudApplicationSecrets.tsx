@@ -102,9 +102,8 @@ export function CloudApplicationSecrets({
                 </span>
               ) : (
                 <Button
-                  size="sm"
+                  size="xs"
                   variant="outline"
-                  className="h-7"
                   onClick={() => setAction({ type: "add", name: item.name })}
                 >
                   Set value
@@ -135,7 +134,7 @@ export function CloudApplicationSecrets({
       />
       <button
         type="button"
-        className="border-border-subtle text-text-muted hover:bg-bg-muted focus-visible:ring-ring w-full rounded-lg border border-dashed p-4 text-center text-xs focus-visible:ring-2"
+        className="control-interaction border-border-subtle text-text-muted hover:bg-control-hover active:bg-control-pressed w-full rounded-lg border border-dashed p-4 text-center text-sm"
         onClick={() => fileInput.current?.click()}
         onDragOver={(event) => {
           event.preventDefault();

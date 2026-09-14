@@ -176,34 +176,38 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
-      <span className="text-2xs font-medium tracking-wider text-white/30 uppercase">
+      <span className="text-2xs text-onboarding-foreground/30 font-medium tracking-wider uppercase">
         Community Built
       </span>
 
       <div className="-mt-4 space-y-2">
-        <h2 className="text-2xl font-semibold text-white">Shape Deus with us</h2>
-        <p className="text-sm text-white/50">
+        <h2 className="text-onboarding-foreground text-2xl font-semibold">Shape Deus with us</h2>
+        <p className="text-onboarding-foreground/50 text-sm">
           Deus is built by the people who use it. Clone the source, send a PR, or share an idea. You
           have the power to shape it.
         </p>
       </div>
 
-      <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] p-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.08]">
-          <GitHubIcon className="h-4.5 w-4.5 text-white/60" />
+      <div className="bg-onboarding-foreground/[0.04] flex items-center gap-3 rounded-xl p-4">
+        <div className="bg-onboarding-foreground/[0.08] flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <GitHubIcon className="text-onboarding-foreground/60 h-4.5 w-4.5" />
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">{REPO.displayName}</p>
-          <p className="truncate font-mono text-xs text-white/30">{REPO.displayUrl}</p>
+          <p className="text-onboarding-foreground truncate text-sm font-medium">
+            {REPO.displayName}
+          </p>
+          <p className="text-onboarding-foreground/30 truncate font-mono text-xs">
+            {REPO.displayUrl}
+          </p>
         </div>
       </div>
 
-      <p className="text-xs text-white/40 italic">{REPO.description}</p>
+      <p className="text-onboarding-foreground/40 text-xs italic">{REPO.description}</p>
 
       <div className="min-h-[28px]">
         {completeMutation.error && (
-          <p role="alert" className="text-sm text-white/70">
+          <p role="alert" className="text-onboarding-foreground/70 text-sm">
             Couldn’t finish setup. {getErrorMessage(completeMutation.error)}
           </p>
         )}
@@ -213,7 +217,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         <button
           onClick={onBack}
           disabled={completeMutation.isPending}
-          className="rounded-xl px-6 py-2.5 text-sm font-medium text-white/50 transition-colors duration-200 hover:text-white/80 disabled:opacity-50"
+          className="control-interaction text-onboarding-foreground/50 hover:text-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-normal"
         >
           Back
         </button>
@@ -222,7 +226,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         <button
           onClick={() => finish(false)}
           disabled={completeMutation.isPending}
-          className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white disabled:opacity-50"
+          className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground/70 hover:bg-onboarding-foreground/15 hover:text-onboarding-foreground rounded-lg px-6 py-2.5 text-sm font-normal"
         >
           Skip
         </button>
@@ -230,7 +234,7 @@ export function DeusStep({ onBack, onComplete }: DeusStepProps) {
         <button
           onClick={() => finish(true)}
           disabled={completeMutation.isPending}
-          className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-medium"
         >
           {completeMutation.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />

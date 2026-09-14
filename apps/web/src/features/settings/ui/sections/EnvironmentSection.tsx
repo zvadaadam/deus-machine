@@ -348,7 +348,7 @@ function RepositoryEnvironments({
             <button
               key={row.key}
               type="button"
-              className="hover:bg-bg-muted focus-visible:bg-bg-muted grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-4 text-left transition-colors outline-none sm:grid-cols-[minmax(0,1fr)_140px_80px]"
+              className="hover:bg-control-hover active:bg-control-pressed focus-visible:bg-bg-muted grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-4 text-left transition-colors outline-none sm:grid-cols-[minmax(0,1fr)_140px_80px]"
               onClick={() => navigate(row)}
             >
               <span className="flex min-w-0 items-center gap-2.5">

@@ -241,9 +241,7 @@ export function AgentQuestionOverlay({
                   type="button"
                   onClick={() => handleOptionClick(currentIndex, option)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                    "ease transition-colors duration-150",
-                    "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
+                    "control-interaction inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium",
                     isSelected
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
@@ -264,9 +262,7 @@ export function AgentQuestionOverlay({
               type="button"
               onClick={() => handleOtherClick(currentIndex)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                "ease transition-colors duration-150",
-                "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
+                "control-interaction inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium",
                 isOtherOpen
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground border-dashed"
@@ -322,12 +318,12 @@ export function AgentQuestionOverlay({
             <div className="mt-3 flex items-center justify-between">
               <span className="text-muted-foreground text-xs">Select all that apply</span>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onDismiss}>
+                <Button variant="ghost" size="xs" onClick={onDismiss}>
                   Skip
                 </Button>
                 <Button
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
+                  size="xs"
+                  className="gap-1"
                   disabled={((answers[currentIndex] as string[]) ?? []).length === 0}
                   onClick={() => handleMultiSelectDone(currentIndex)}
                 >
@@ -344,7 +340,7 @@ export function AgentQuestionOverlay({
             </div>
           ) : (
             <div className="mt-3 flex justify-end">
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onDismiss}>
+              <Button variant="ghost" size="xs" onClick={onDismiss}>
                 Skip
               </Button>
             </div>

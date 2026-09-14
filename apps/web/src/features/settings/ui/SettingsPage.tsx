@@ -108,7 +108,7 @@ export function SettingsPage() {
               type="button"
               aria-label="Open settings menu"
               onClick={toggleSidebar}
-              className="text-text-muted hover:text-text-secondary hover:bg-bg-muted -ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
+              className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed -ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg"
             >
               <PanelLeft className="h-4 w-4" />
             </button>

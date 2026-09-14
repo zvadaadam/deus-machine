@@ -106,11 +106,11 @@ export function BranchSelector({
                 type="button"
                 onClick={() => handleSelect(branch.name)}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm text-left transition-colors duration-150",
-                  isMobile ? "px-3 py-2.5 text-sm" : "px-2 py-1.5 text-xs",
+                  "control-interaction flex w-full items-center justify-between gap-2 rounded-lg text-left",
+                  isMobile ? "px-3 py-2.5 text-sm" : "px-2 py-1.5 text-sm",
                   branch.name === currentBranch
                     ? "text-primary font-medium"
-                    : "text-text-secondary hover:bg-bg-muted"
+                    : "text-text-secondary hover:bg-control-hover active:bg-control-pressed"
                 )}
               >
                 <span className="truncate">

@@ -68,9 +68,9 @@ export function GrantRepositoryAccessModal({
             onClick={grant}
             disabled={installing}
             className={cn(
-              "mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-medium",
-              "bg-foreground text-background transition-all duration-150",
-              installing ? "cursor-default opacity-70" : "hover:opacity-90 active:scale-[0.99]"
+              "control-interaction mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium",
+              "bg-button-primary text-button-primary-foreground",
+              installing ? "cursor-default opacity-70" : "hover:opacity-90"
             )}
           >
             <Github className="size-4" />

@@ -934,8 +934,8 @@ export function BrowserPanel({
           <IconTooltip label="Go back">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleGoBack}
               disabled={!activeTab || activeTab.loading || activeTab.historyIndex <= 0}
               aria-label="Go back"
@@ -947,8 +947,8 @@ export function BrowserPanel({
           <IconTooltip label="Go forward">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleGoForward}
               disabled={
                 !activeTab ||
@@ -964,8 +964,8 @@ export function BrowserPanel({
           <IconTooltip label="Reload">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleReload}
               disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
               aria-label="Reload"
@@ -994,7 +994,7 @@ export function BrowserPanel({
                 <button
                   type="button"
                   onClick={handleOpenExternal}
-                  className="text-text-muted hover:text-text-secondary absolute right-1 flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
+                  className="control-interaction text-text-muted hover:text-text-secondary absolute right-1 flex h-5 w-5 items-center justify-center rounded-lg opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
                   aria-label="Open in external browser"
                 >
                   <ArrowUpRight className="h-3.5 w-3.5" />
@@ -1029,8 +1029,8 @@ export function BrowserPanel({
           >
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleToggleSelector}
               disabled={!activeTab?.currentUrl}
               aria-pressed={activeTab?.selectorActive}
@@ -1043,8 +1043,8 @@ export function BrowserPanel({
           <IconTooltip label="Screenshot to chat">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleScreenshot}
               disabled={!activeTab?.currentUrl}
               aria-label="Screenshot to chat"
@@ -1058,8 +1058,8 @@ export function BrowserPanel({
           >
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleToggleMobileView}
               disabled={!activeTab?.currentUrl}
               aria-pressed={!!activeTab?.isMobileView}
@@ -1080,8 +1080,8 @@ export function BrowserPanel({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+                  size="icon-xs"
+                  className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
                   disabled={!activeTab?.currentUrl || !!cookieSyncing}
                   aria-label="Import cookies from browser"
                 >
@@ -1152,8 +1152,8 @@ export function BrowserPanel({
           <IconTooltip label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}>
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleToggleDevtools}
               disabled={!activeTab?.currentUrl}
               aria-pressed={activeTab?.devtoolsOpen}

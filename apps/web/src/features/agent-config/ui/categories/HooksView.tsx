@@ -423,7 +423,7 @@ export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps)
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground h-6 gap-1 px-2 text-xs"
+                  className="text-muted-foreground h-6 gap-1 px-2"
                   onClick={() => addCommand(gi)}
                 >
                   <Plus className="h-3 w-3" />
@@ -436,7 +436,7 @@ export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps)
           <Button
             variant="ghost"
             size="sm"
-            className="text-muted-foreground h-6 gap-1 px-2 text-xs"
+            className="text-muted-foreground h-6 gap-1 px-2"
             onClick={addGroup}
           >
             <Plus className="h-3 w-3" />

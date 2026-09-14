@@ -48,7 +48,7 @@ export function SettingsSidebar() {
         <button
           type="button"
           onClick={closeSettings}
-          className="text-text-muted hover:text-text-primary flex items-center gap-2 rounded-lg py-0.5 text-sm transition-colors duration-200 ease-out"
+          className="control-interaction text-text-muted hover:text-text-primary flex items-center gap-2 rounded-lg py-0.5 text-sm"
         >
           <ArrowLeft className="h-4 w-4 shrink-0" />
           <span>Back to app</span>

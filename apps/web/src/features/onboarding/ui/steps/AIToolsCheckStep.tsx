@@ -37,8 +37,8 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-white">Connect your AI tools</h2>
-        <p className="text-sm text-white/50">
+        <h2 className="text-onboarding-foreground text-2xl font-semibold">Connect your AI tools</h2>
+        <p className="text-onboarding-foreground/50 text-sm">
           Local agents use the accounts signed in on this computer. You can manage cloud accounts
           separately in Settings → AI Providers.
         </p>
@@ -84,7 +84,7 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
         />
       </div>
 
-      <p className="text-xs text-white/30">
+      <p className="text-onboarding-foreground/30 text-xs">
         Already signed in to Claude Code or Codex? Continue with that account. Otherwise, sign in to
         at least one tool above. You can finish this later in Settings.
       </p>
@@ -92,14 +92,14 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
       <div className="flex items-center gap-3 pt-2">
         <button
           onClick={onBack}
-          className="rounded-xl px-6 py-2.5 text-sm font-medium text-white/50 transition-colors duration-200 hover:text-white/80"
+          className="control-interaction text-onboarding-foreground/50 hover:text-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-normal"
         >
           Back
         </button>
         <div className="flex-1" />
         <button
           onClick={onNext}
-          className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-medium"
         >
           Continue
         </button>

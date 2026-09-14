@@ -135,8 +135,8 @@ export function AISection({
             {!agentAuthQuery.isLoading && claudeInstalled === false && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
+                size="xs"
+                className="gap-1.5"
                 onClick={() =>
                   window.open("https://docs.anthropic.com/en/docs/claude-code/overview", "_blank")
                 }
@@ -148,8 +148,8 @@ export function AISection({
             {claudeInstalled && claudeAuth.status === "signed-out" && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
+                size="xs"
+                className="gap-1.5"
                 onClick={() => void openProviderLogin("claude")}
               >
                 <Terminal className="size-3" />
@@ -178,8 +178,8 @@ export function AISection({
             {!agentAuthQuery.isLoading && codexInstalled === false && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
+                size="xs"
+                className="gap-1.5"
                 onClick={() => window.open("https://developers.openai.com/codex/cli", "_blank")}
               >
                 Install
@@ -189,8 +189,8 @@ export function AISection({
             {codexInstalled && codexAuthState.status === "signed-out" && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
+                size="xs"
+                className="gap-1.5"
                 onClick={() => void openProviderLogin("codex")}
               >
                 <Terminal className="size-3" />

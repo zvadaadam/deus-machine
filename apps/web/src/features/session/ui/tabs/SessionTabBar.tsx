@@ -182,10 +182,9 @@ export function SessionTabBar({
                 aria-label="New chat tab"
                 onClick={() => onTabAdd()}
                 className={cn(
-                  "flex items-center justify-center",
+                  "control-interaction flex items-center justify-center",
                   "h-7 shrink-0 rounded-lg px-1.5",
-                  "text-text-disabled hover:text-text-muted",
-                  "transition-colors duration-150"
+                  "text-text-disabled hover:text-text-muted"
                 )}
               >
                 <Plus className="h-4 w-4" />

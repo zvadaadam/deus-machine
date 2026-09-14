@@ -207,7 +207,7 @@ export function StartNewProjectModal({
                       onClick={() => setSelectedTemplate(tpl)}
                       disabled={creating}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors duration-100",
+                        "control-interaction flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left",
                         isSelected
                           ? "border-primary/40 bg-primary/5"
                           : "border-border-subtle hover:bg-bg-raised/40"

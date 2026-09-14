@@ -54,7 +54,7 @@ export function BrowserTabBar({
               type="button"
               aria-label="New tab"
               onClick={onTabAdd}
-              className="text-text-muted hover:bg-foreground/5 hover:text-text-tertiary flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-[color,background-color,scale] duration-150 ease-out active:scale-[0.96]"
+              className="control-interaction text-text-muted hover:bg-foreground/5 hover:text-text-tertiary flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>

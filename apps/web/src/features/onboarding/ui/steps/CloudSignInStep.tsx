@@ -42,28 +42,28 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-white">Sign in to Deus Cloud</h2>
-        <p className="text-sm text-white/50">
+        <h2 className="text-onboarding-foreground text-2xl font-semibold">Sign in to Deus Cloud</h2>
+        <p className="text-onboarding-foreground/50 text-sm">
           Run agents on cloud computers and pick work up from your phone. You can do this later —
           local workspaces work without an account.
         </p>
       </div>
 
-      <div className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/10">
+      <div className="bg-onboarding-foreground/5 flex items-center gap-3 rounded-xl px-4 py-3">
+        <div className="bg-onboarding-foreground/10 flex size-10 shrink-0 items-center justify-center rounded-full">
           {signedIn ? (
-            <span className="text-xs font-semibold text-white">
+            <span className="text-onboarding-foreground text-xs font-semibold">
               {initialsFrom(data?.accountName, data?.accountEmail) ?? "DC"}
             </span>
           ) : (
-            <Cloud className="size-5 text-white/50" />
+            <Cloud className="text-onboarding-foreground/50 size-5" />
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">
+          <p className="text-onboarding-foreground truncate text-sm font-medium">
             {signedIn ? (data?.accountName ?? "Signed in") : "Not signed in"}
           </p>
-          <p className="truncate text-xs text-white/50">
+          <p className="text-onboarding-foreground/50 truncate text-xs">
             {signedIn
               ? (data?.accountEmail ?? data?.accountId)
               : signIn.isPending
@@ -75,7 +75,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
           <button
             onClick={() => signIn.mutate()}
             disabled={signIn.isPending}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white/80 transition-colors duration-200 hover:bg-white/15 hover:text-white disabled:opacity-60"
+            className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground/80 hover:bg-onboarding-foreground/15 hover:text-onboarding-foreground flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-normal"
           >
             {signIn.isPending && <Loader2 className="size-3.5 animate-spin" />}
             {signIn.isPending ? "Waiting" : "Sign in"}
@@ -86,7 +86,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
       <div className="flex items-center gap-3">
         <button
           onClick={onBack}
-          className="rounded-xl px-6 py-2.5 text-sm font-medium text-white/50 transition-colors duration-200 hover:text-white/80"
+          className="control-interaction text-onboarding-foreground/50 hover:text-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-normal"
         >
           Back
         </button>
@@ -95,7 +95,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
         {!signedIn && (
           <button
             onClick={onNext}
-            className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
+            className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground/70 hover:bg-onboarding-foreground/15 hover:text-onboarding-foreground rounded-lg px-6 py-2.5 text-sm font-normal"
           >
             Skip
           </button>
@@ -103,7 +103,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
         {signedIn && (
           <button
             onClick={onNext}
-            className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-medium"
           >
             Continue
           </button>

@@ -38,8 +38,7 @@ export function ContextTokenIndicator({
           onClick={canCompact ? onCompact : undefined}
           aria-label={tooltipText}
           className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-lg",
-            "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
+            "control-interaction flex size-8 shrink-0 items-center justify-center rounded-lg",
             isHigh ? "text-warning" : "text-muted-foreground",
             canCompact && "hover:bg-accent cursor-pointer",
             className

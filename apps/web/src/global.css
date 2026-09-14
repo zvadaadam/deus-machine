@@ -99,6 +99,13 @@
   --color-destructive-tint: var(--destructive-tint);
   --color-control-surface: var(--control-surface);
   --color-control-surface-hover: var(--control-surface-hover);
+  --color-control-surface-pressed: var(--control-surface-pressed);
+  --color-button-primary: var(--button-primary);
+  --color-button-primary-foreground: var(--button-primary-foreground);
+  --color-control-hover: var(--control-hover);
+  --color-control-pressed: var(--control-pressed);
+  --color-onboarding-foreground: var(--onboarding-foreground);
+  --color-onboarding-contrast: var(--onboarding-contrast);
   --color-checked-tint: var(--checked-tint);
   --color-tooltip-kbd: var(--tooltip-kbd);
 
@@ -228,6 +235,11 @@
 }
 
 /* text-2xs is now defined in @theme above */
+
+/* Shared by Button and controls whose semantics/layout require their own markup. */
+@utility control-interaction {
+  @apply focus-visible:ring-primary/60 transition-[color,background-color,border-color,box-shadow,opacity] duration-150 ease-out outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50;
+}
 
 @keyframes tooltip-enter {
   from {
@@ -944,8 +956,16 @@
   /* --- Component surface tokens (light mode) --- */
   --destructive-surface: var(--destructive);
   --destructive-tint: color-mix(in oklch, var(--destructive) 10%, transparent);
-  --control-surface: var(--background);
-  --control-surface-hover: var(--accent);
+  --button-primary: #242424;
+  --button-primary-foreground: #ffffff;
+  /* Onboarding keeps its dark presentation regardless of the app theme. */
+  --onboarding-foreground: #ffffff;
+  --onboarding-contrast: #000000;
+  --control-surface: var(--bg-raised);
+  --control-surface-hover: color-mix(in oklch, var(--foreground) 5%, var(--control-surface));
+  --control-surface-pressed: color-mix(in oklch, var(--foreground) 9%, var(--control-surface));
+  --control-hover: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --control-pressed: color-mix(in oklch, var(--foreground) 9%, transparent);
   --checked-tint: color-mix(in oklch, var(--primary) 5%, transparent);
   --tooltip-kbd: color-mix(in oklch, var(--background) 20%, transparent);
   --mask-transparent: rgb(0 0 0 / 0);
@@ -1122,8 +1142,13 @@
   /* --- Component surface tokens (dark mode) --- */
   --destructive-surface: color-mix(in oklch, var(--destructive) 60%, transparent);
   --destructive-tint: color-mix(in oklch, var(--destructive) 20%, transparent);
-  --control-surface: color-mix(in oklch, var(--input) 30%, transparent);
-  --control-surface-hover: color-mix(in oklch, var(--input) 50%, transparent);
+  --button-primary: #ffffff;
+  --button-primary-foreground: #242424;
+  --control-surface: var(--bg-overlay);
+  --control-surface-hover: color-mix(in oklch, var(--foreground) 5%, var(--control-surface));
+  --control-surface-pressed: color-mix(in oklch, var(--foreground) 9%, var(--control-surface));
+  --control-hover: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --control-pressed: color-mix(in oklch, var(--foreground) 9%, transparent);
   --checked-tint: color-mix(in oklch, var(--primary) 10%, transparent);
   --tooltip-kbd: color-mix(in oklch, var(--background) 10%, transparent);
 
@@ -2305,7 +2330,7 @@ diffs-container.diffs-theme-compact {
 
 /* Squircle progressive enhancement — Apple-style continuous-curvature corners.
  * superellipse(1.5) produces iOS/macOS squircle shape.
- * --corner-radius-scale bumps ALL --radius-* tokens to 1.25× because squircle
+ * --corner-radius-scale bumps radius tokens to 1.25× because squircle
  * corners look visually tighter than standard border-radius at the same pixel
  * value. corner-shape is applied to sm→4xl Tailwind classes; 2xs/xs are too
  * small to benefit and full is a pill. Elements consuming var(--radius-*)
@@ -2318,6 +2343,10 @@ diffs-container.diffs-theme-compact {
   .rounded-sm,
   .rounded-md,
   .rounded-lg,
+  .rounded-l-lg,
+  .rounded-r-lg,
+  .rounded-t-lg,
+  .rounded-b-lg,
   .rounded-xl,
   .rounded-2xl,
   .rounded-3xl,

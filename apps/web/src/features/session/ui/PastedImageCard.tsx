@@ -64,7 +64,7 @@ export const PastedImageCard = forwardRef<HTMLDivElement, PastedImageCardProps>(
               event.stopPropagation();
               onRemove();
             }}
-            className="bg-bg-elevated/96 text-muted-foreground hover:bg-bg-muted hover:text-foreground focus-visible:ring-ring/60 absolute -top-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-black/10 shadow-sm transition-[transform,opacity,background-color,color] duration-150 ease-out before:absolute before:inset-[-12px] before:content-[''] focus-visible:ring-2 focus-visible:outline-none active:scale-[0.96] sm:pointer-events-none sm:opacity-0 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 dark:border-white/10"
+            className="control-interaction bg-bg-elevated/96 text-muted-foreground hover:bg-control-hover active:bg-control-pressed hover:text-foreground absolute -top-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-black/10 shadow-sm before:absolute before:inset-[-12px] before:content-[''] sm:pointer-events-none sm:opacity-0 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 dark:border-white/10"
             aria-label="Remove attachment"
           >
             <X className="text-muted-foreground h-3 w-3" />

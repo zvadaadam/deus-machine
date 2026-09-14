@@ -21,7 +21,7 @@ export function WorkspaceToolShortcuts({
           key={id}
           type="button"
           onClick={() => onSelect(id)}
-          className="hover:bg-bg-muted hover:text-text-secondary flex h-8 items-center gap-3 rounded-lg px-2 text-sm transition-colors"
+          className="control-interaction hover:bg-control-hover active:bg-control-pressed hover:text-text-secondary flex h-8 items-center gap-3 rounded-lg px-2 text-sm"
         >
           <Icon className="size-4" aria-hidden="true" />
           {label}
@@ -31,7 +31,7 @@ export function WorkspaceToolShortcuts({
       <button
         type="button"
         onClick={onEnvironment}
-        className="hover:bg-bg-muted hover:text-text-secondary flex h-8 items-center gap-3 rounded-lg px-2 text-sm transition-colors"
+        className="control-interaction hover:bg-control-hover active:bg-control-pressed hover:text-text-secondary flex h-8 items-center gap-3 rounded-lg px-2 text-sm"
       >
         <Settings2 className="size-4" aria-hidden="true" />
         Environment

@@ -88,7 +88,7 @@ export function MobilePRHeaderAction({
         onClick={() => setSheetOpen(true)}
         disabled={!onCreatePR}
         className={cn(
-          "bg-primary text-primary-foreground flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-opacity duration-200",
+          "control-interaction bg-primary text-primary-foreground flex h-7 flex-shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium",
           !onCreatePR ? "cursor-not-allowed opacity-50" : "hover:opacity-90"
         )}
       >
@@ -114,7 +114,7 @@ export function MobilePRHeaderAction({
               >
                 <button
                   type="button"
-                  className="border-border-subtle bg-bg-elevated flex h-10 w-full items-center justify-between rounded-lg border px-3 text-sm"
+                  className="control-interaction border-border-subtle bg-bg-elevated flex h-10 w-full items-center justify-between rounded-lg border px-3 text-sm"
                 >
                   <span className="text-foreground font-medium">{targetBranch}</span>
                   <ChevronDown className="text-text-muted h-3.5 w-3.5" />
@@ -131,7 +131,7 @@ export function MobilePRHeaderAction({
               }}
               disabled={!onCreatePR}
               className={cn(
-                "bg-primary text-primary-foreground flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-opacity duration-200",
+                "control-interaction bg-primary text-primary-foreground flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium",
                 !onCreatePR ? "cursor-not-allowed opacity-50" : "hover:opacity-90"
               )}
             >
@@ -149,7 +149,7 @@ export function MobilePRHeaderAction({
                     onArchive();
                     setSheetOpen(false);
                   }}
-                  className="text-text-muted hover:text-text-secondary flex h-9 w-full items-center justify-center gap-2 text-sm transition-colors duration-200"
+                  className="control-interaction text-text-muted hover:text-text-secondary flex h-9 w-full items-center justify-center gap-2 text-sm"
                 >
                   <Archive className="h-3.5 w-3.5" />
                   Archive workspace
@@ -345,7 +345,7 @@ function BarAction({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex h-5.5 flex-shrink-0 items-center rounded-md px-2 text-xs font-semibold transition-opacity duration-200",
+        "control-interaction flex h-5.5 flex-shrink-0 items-center rounded-lg px-2 text-sm font-medium",
         BAR_VARIANT_CLASSES[variant],
         disabled ? "cursor-not-allowed opacity-50" : "hover:opacity-90"
       )}

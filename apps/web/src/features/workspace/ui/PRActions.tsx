@@ -189,7 +189,7 @@ function PRLink({ state }: { state: PRActionState }) {
           target="_blank"
           rel="noopener noreferrer"
           className={cn(
-            "ease flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-semibold transition-colors duration-200",
+            "control-interaction flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-medium",
             PR_LINK_COLORS[state.type] ?? "text-text-secondary hover:text-text-primary"
           )}
         >
@@ -214,7 +214,7 @@ function GhWarning({ reason }: { reason: "not_installed" | "not_authenticated" }
         <button
           type="button"
           aria-label="PR actions unavailable"
-          className="bg-warning/10 text-warning flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
+          className="control-interaction bg-warning/10 text-warning flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
         >
           <AlertTriangle className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -242,7 +242,7 @@ function ErrorWarning({ reason }: { reason: "timeout" | "network" }) {
         <button
           type="button"
           aria-label="GitHub unreachable"
-          className="bg-destructive/10 text-destructive flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
+          className="control-interaction bg-destructive/10 text-destructive flex cursor-help items-center gap-1 rounded-lg px-2 py-1"
         >
           <WifiOff className="h-3 w-3" />
           <span className="text-sm font-medium">PR</span>
@@ -333,9 +333,9 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold transition-colors duration-200",
+        "control-interaction flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium",
         VARIANT_CLASSES[variant],
-        disabled ? "cursor-not-allowed opacity-50" : "hover:opacity-90"
+        disabled ? "cursor-not-allowed opacity-50" : "hover:opacity-90 active:opacity-80"
       )}
     >
       {icon}
@@ -366,10 +366,10 @@ function CreatePRButton({
         onClick={onCreatePR}
         disabled={!onCreatePR}
         className={cn(
-          "bg-primary flex items-center gap-1.5 rounded-l-lg px-2.5 text-sm font-semibold transition-colors duration-200",
+          "control-interaction bg-primary focus-visible:ring-primary-foreground/80 flex items-center gap-1.5 rounded-l-lg px-2.5 text-sm font-medium focus-visible:ring-inset",
           !onCreatePR
             ? "text-primary-foreground cursor-not-allowed opacity-50"
-            : "text-primary-foreground hover:opacity-90"
+            : "text-primary-foreground hover:opacity-90 active:opacity-80"
         )}
       >
         <GitPullRequestCreate className="h-2.5 w-2.5" />
@@ -383,7 +383,7 @@ function CreatePRButton({
       >
         <button
           type="button"
-          className="bg-accent-blue-surface border-primary text-primary flex items-center gap-1 rounded-r-lg border-l px-2 text-sm font-medium transition-colors duration-200 hover:opacity-90"
+          className="control-interaction bg-accent-blue-surface border-primary text-primary flex items-center gap-1 rounded-r-lg border-l px-2 text-sm font-normal hover:opacity-90 focus-visible:ring-inset active:opacity-80"
         >
           <span>{targetBranch}</span>
           <ChevronDown className="h-2 w-2" />
