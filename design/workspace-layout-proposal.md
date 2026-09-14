@@ -15,20 +15,23 @@ The normal split keeps its current structure:
 - Conversation tabs keep their existing second row above the chat messages.
 
 Only the right workspace's visibility and expansion controls are being placed.
-Show/Hide sits beside Open in the split and collapsed workspace headers.
+Hide sits beside Open in the split. When collapsed, Show sits at the far right of
+the workspace header, after the PR/branch control.
+In the expanded view, Hide workspace is a single icon before the tool tabs.
 Expand/Restore sits at the far right of the content's existing action row, below
 the tool tabs. No new header row or session-navigation change is needed.
 
 ## The controls
 
-| Right workspace  | Beside Open    | In the content action row | Result                                                                                    |
-| ---------------- | -------------- | ------------------------- | ----------------------------------------------------------------------------------------- |
-| Open beside chat | Hide workspace | Expand workspace          | Hide reveals chat and tool shortcuts. Expand gives the tool the workspace area.           |
-| Collapsed        | Show workspace | —                         | Reopens the last selected tool beside chat.                                               |
-| Expanded         | —              | Restore split             | Restore brings back the workspace header, chat and session tabs at the saved split width. |
+| Right workspace  | In the top row                   | In the content action row | Result                                                                                 |
+| ---------------- | -------------------------------- | ------------------------- | -------------------------------------------------------------------------------------- |
+| Open beside chat | Hide workspace, beside Open      | Expand workspace          | Hide reveals full chat and tool shortcuts. Expand gives the tool the workspace area.   |
+| Collapsed        | Show workspace, at the far right | —                         | Reopens the last selected tool beside chat.                                            |
+| Expanded         | Hide workspace, before tool tabs | Restore split             | Hide returns to full chat. Restore returns to chat and tools at the saved split width. |
 
-Show/Hide controls whether the right workspace is visible. Keeping it beside Open
-makes the toggle available even when the content is hidden. Expand/Restore controls
+Show/Hide controls whether the right workspace is visible. Its position follows the
+layout: beside Open in the split, at the far right in chat-only, and before the tool
+tabs when expanded. Expand/Restore controls
 how much space visible content uses. In Changes, it shares the existing All changes
 / Review Changes row. It remains at that row's right edge after expansion. The
 other content views should use the equivalent end of their own action toolbar;
@@ -38,14 +41,28 @@ The project sidebar retains its own controls. Expanded means using the workspace
 area, with the project sidebar still visible; it is not operating-system full
 screen. Use tooltips and visible keyboard focus for these icon buttons.
 
-The expanded view is focused on the content: omit the workspace title, Open and
-Show/Hide group. Tool tabs start at the same left edge as the content panel, with
-the joined PR/branch button at the right. Do not move the omitted controls onto
-another row. Restore returns to the split and restores the normal workspace
-header; the selected workspace remains identifiable in the project sidebar.
+The expanded view omits the workspace title and Open. Keep the same Hide workspace
+icon as the first item, followed by the tool tabs; the joined PR/branch button stays
+at the right. The toolbar shares the content panel's left edge. Do not move the
+omitted controls onto another row. Hide returns directly to full chat, while Restore
+returns to the split and restores the normal workspace header. Both use the same
+existing layout states; they are not duplicate Restore buttons. The selected
+workspace remains identifiable in the project sidebar.
 
 The existing joined, colored Create PR / branch selector remains. Session tabs,
 conversation switching, drafts and the selected session retain their current behavior.
+
+## Icon weight
+
+Keep Lucide, which the app already uses. These four layout icons use a 1.5 stroke
+on Lucide's 24-unit viewBox, rendered at 16px in the existing 28px button. This is
+lighter than Lucide's default 2 stroke without reducing the click target. Apply
+the same weight to Show, Hide, Expand and Restore; no new icon library is needed.
+
+Pencil's Lucide icon node does not expose stroke width. The current proposal uses
+the installed Lucide SVG geometry as path overrides, with a 1px rendered stroke
+at 16px, to match `strokeWidth={1.5}` in React. This is a design representation;
+implementation should keep the normal Lucide components.
 
 ## Tool access
 
@@ -60,10 +77,11 @@ inside Changes; they do not become new workspace navigation rows.
 
 ## Implementation after design approval
 
-Keep `SessionTabBar` and its state owner where they are. Place Show/Hide alongside
-Open when the workspace header is visible, and reserve the trailing action slot in
-the content toolbar for Expand/Restore. In the expanded state, show only the tool
-tabs and PR in the top row; Restore brings back the normal split header.
+Keep `SessionTabBar` and its state owner where they are. Place Hide alongside Open
+in the split, Show after PR at the far right when collapsed, and Hide before the
+tool tabs when expanded.
+Reserve the trailing action slot in the content toolbar for Expand/Restore.
+Keep the workspace title and Open hidden in the expanded view.
 Reuse the selected tool, saved split width, per-workspace layout state and
 resizable-panel library. The earlier request to replace the vertical collapsed
 CHAT/CONTENT strips with these controls still applies.

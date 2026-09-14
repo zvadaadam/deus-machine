@@ -31,10 +31,13 @@ the canvas — read left to right, top to bottom.
 The September 14 **right workspace controls proposal** is design-only. The current
 frames start at y=18,640: `00c` explains the scope, `22b` shows the controls, and
 `40d`–`40f` show the right workspace open, collapsed and expanded. The existing
-workspace header and session-tab row remain in the split. Show/Hide sits beside Open
-in the split and collapsed views. The expanded view omits the title/Open group so
-tool tabs align with the content's left edge. Expand/Restore sits in the content's
-existing action row; Restore brings back the split and normal header.
+workspace header and session-tab row remain in the split. Hide sits beside Open in
+the split; Show sits at the far right, after PR, in the collapsed view.
+The expanded view omits the title and Open but
+keeps one Hide workspace icon before the tool tabs. The toolbar aligns with the
+content's left edge. Hide returns to full chat; Expand/Restore sits in the content's
+existing action row and Restore brings back the split and normal header.
+The four layout controls use Lucide at a lighter 1.5 stroke with the same 28px button.
 The joined PR/branch button and project sidebar remain. All available tools are
 listed directly. The earlier exploration is preserved at y=17,340 (`00b`, `22a`,
 `40a`–`40c`). See [workspace-layout-proposal.md](./workspace-layout-proposal.md).

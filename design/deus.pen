@@ -171593,11 +171593,26 @@
                               "name": "Hide right workspace",
                               "width": 28,
                               "height": 28,
-                              "descendants": {
-                                "AaONw": {
-                                  "icon": "panel-right-close"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "znqEZ",
+                                  "name": "Lucide/panel-right-close · stroke 1.5",
+                                  "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 16,
+                                  "height": 16,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 1,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             }
                           ]
                         }
@@ -171948,7 +171963,27 @@
                           "width": 1
                         },
                         "sUno8": {
-                          "enabled": true
+                          "enabled": true,
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "F94Snz",
+                              "name": "Lucide/maximize-2 · stroke 1.5",
+                              "geometry": "M15 3h6v6m0-6l-7 7m-11 11l7-7m-1 7h-6v-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
                         }
                       }
                     }
@@ -172000,7 +172035,7 @@
               "id": "lGpo4",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Show workspace stays beside Open. It reopens the last tool beside chat. Session tabs keep their existing row.",
+              "content": "PROPOSAL — Show workspace sits at the far right, after PR. It reopens the last tool beside chat. Session tabs keep their row.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -172526,27 +172561,6 @@
                           ]
                         },
                         {
-                          "id": "VA6FX",
-                          "type": "ref",
-                          "ref": "AovWi",
-                          "name": "Show right workspace",
-                          "width": 28,
-                          "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-right-open"
-                            }
-                          }
-                        },
-                        {
-                          "type": "frame",
-                          "id": "ZlSAi",
-                          "name": "Action separator",
-                          "width": 1,
-                          "height": 16,
-                          "fill": "$border-subtle"
-                        },
-                        {
                           "type": "frame",
                           "id": "rT0mM",
                           "name": "Create PR · joined branch selector · PRActions.tsx",
@@ -172629,6 +172643,42 @@
                                   "fill": "$primary"
                                 }
                               ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZlSAi",
+                          "name": "Action separator",
+                          "width": 1,
+                          "height": 16,
+                          "fill": "$border-subtle"
+                        },
+                        {
+                          "id": "VA6FX",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "Show right workspace",
+                          "width": 28,
+                          "height": 28,
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "Z0yioB",
+                              "name": "Lucide/panel-right-open · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-5-6l-3-3 3-3",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
                           ]
                         }
@@ -173149,7 +173199,7 @@
               "id": "Pb2Wc",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Tool tabs align with the content edge. Restore returns to the split and workspace header. The project sidebar stays.",
+              "content": "PROPOSAL — The leading icon returns to full chat. Restore returns to the split. Title and Open remain hidden.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -173529,7 +173579,7 @@
                 {
                   "type": "frame",
                   "id": "v157k",
-                  "name": "Focused workspace · tool tabs and PR",
+                  "name": "Focused workspace · visibility and tool tabs",
                   "width": "fill_container",
                   "height": 44,
                   "alignItems": "center",
@@ -173547,6 +173597,34 @@
                       ],
                       "alignItems": "center",
                       "children": [
+                        {
+                          "id": "tKcmc",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "Hide workspace · return to full chat",
+                          "width": 28,
+                          "height": 28,
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "Wl2j6",
+                              "name": "Lucide/panel-right-close · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
+                        },
                         {
                           "type": "frame",
                           "id": "og9be",
@@ -173753,10 +173831,27 @@
                         },
                         "sUno8": {
                           "enabled": true,
-                          "name": "Restore workspace split"
-                        },
-                        "sUno8/AaONw": {
-                          "icon": "minimize-2"
+                          "name": "Restore workspace split",
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "uqHg7",
+                              "name": "Lucide/minimize-2 · stroke 1.5",
+                              "geometry": "M14 10l7-7m-1 7h-6v-6m-11 17l7-7m-6 0h6v6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
                         }
                       }
                     }
@@ -173789,7 +173884,7 @@
           "id": "fAaSL",
           "name": "Comparison title",
           "fill": "$text-primary",
-          "content": "Show and hide beside Open. Expand inside the content.",
+          "content": "One control for visibility. One for expansion.",
           "fontFamily": "$font-sans",
           "fontSize": 24,
           "fontWeight": "600"
@@ -173799,7 +173894,7 @@
           "id": "cOjDr",
           "name": "Comparison premise",
           "fill": "$text-secondary",
-          "content": "Show/Hide stays beside Open in the split and chat views. Expand/Restore lives in the content action row. The expanded view starts with tool tabs aligned to the content.",
+          "content": "Hide beside Open in the split. Reopen at the right edge when hidden. Hide before the tool tabs when expanded. Expand/Restore stays in the content action row.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-base",
           "fontWeight": "normal"
@@ -173868,7 +173963,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Show stays beside Open and reopens the last tool. Conversation tabs keep their row.",
+                  "content": "Show workspace sits at the far right of the header and reopens the last tool. Conversation tabs keep their row.",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-base",
                   "fontWeight": "normal"
@@ -173900,7 +173995,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Title, Open and Hide leave the expanded header. Tabs align to the content. Restore returns to the saved split.",
+                  "content": "One Hide workspace icon leads the tabs. Title and Open stay hidden. Hide returns to full chat; Restore returns to the split.",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-base",
                   "fontWeight": "normal"
@@ -174125,11 +174220,26 @@
                           "name": "Hide right workspace",
                           "width": 28,
                           "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-right-close"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "vFRHE",
+                              "name": "Lucide/panel-right-close · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     }
@@ -174559,11 +174669,26 @@
                               "name": "Expand right workspace",
                               "width": 28,
                               "height": 28,
-                              "descendants": {
-                                "AaONw": {
-                                  "icon": "maximize-2"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "yK54S",
+                                  "name": "Lucide/maximize-2 · stroke 1.5",
+                                  "geometry": "M15 3h6v6m0-6l-7 7m-11 11l7-7m-1 7h-6v-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 16,
+                                  "height": 16,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 1,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             }
                           ]
                         }
@@ -174580,7 +174705,7 @@
           "id": "Njlzh",
           "name": "Collapsed state explanation",
           "fill": "$text-secondary",
-          "content": "COLLAPSED · The same toggle beside Open shows the right workspace again.",
+          "content": "COLLAPSED · Show workspace sits at the far right, after the joined PR / branch control.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-sm",
           "fontWeight": "normal"
@@ -174735,27 +174860,6 @@
                   ]
                 },
                 {
-                  "id": "JRqTd",
-                  "type": "ref",
-                  "ref": "AovWi",
-                  "name": "Show right workspace",
-                  "width": 28,
-                  "height": 28,
-                  "descendants": {
-                    "AaONw": {
-                      "icon": "panel-right-open"
-                    }
-                  }
-                },
-                {
-                  "type": "frame",
-                  "id": "OP9Df",
-                  "name": "Action separator",
-                  "width": 1,
-                  "height": 16,
-                  "fill": "$border-subtle"
-                },
-                {
                   "type": "frame",
                   "id": "UsGUK",
                   "name": "Create PR · joined branch selector · PRActions.tsx",
@@ -174840,6 +174944,42 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OP9Df",
+                  "name": "Action separator",
+                  "width": 1,
+                  "height": 16,
+                  "fill": "$border-subtle"
+                },
+                {
+                  "id": "JRqTd",
+                  "type": "ref",
+                  "ref": "AovWi",
+                  "name": "Show right workspace",
+                  "width": 28,
+                  "height": 28,
+                  "children": [
+                    {
+                      "type": "path",
+                      "id": "roII1",
+                      "name": "Lucide/panel-right-open · stroke 1.5",
+                      "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-5-6l-3-3 3-3",
+                      "viewBox": [
+                        0,
+                        0,
+                        24,
+                        24
+                      ],
+                      "width": 16,
+                      "height": 16,
+                      "stroke": "$text-muted",
+                      "strokeWidth": 1,
+                      "strokeLinejoin": "round",
+                      "strokeLinecap": "round"
+                    }
+                  ]
                 }
               ]
             }
@@ -174850,7 +174990,7 @@
           "id": "ytzC1",
           "name": "Expanded state explanation",
           "fill": "$text-secondary",
-          "content": "EXPANDED · Only tool tabs and PR remain above the content. Restore returns to the split and workspace header.",
+          "content": "EXPANDED · Hide workspace leads the tool tabs and returns to full chat. Restore below returns to the split.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-sm",
           "fontWeight": "normal"
@@ -174867,7 +175007,7 @@
             {
               "type": "frame",
               "id": "E0zeRb",
-              "name": "Focused workspace · tool tabs and PR",
+              "name": "Focused workspace · visibility and tool tabs",
               "width": "fill_container",
               "height": 44,
               "alignItems": "center",
@@ -174885,6 +175025,34 @@
                   ],
                   "alignItems": "center",
                   "children": [
+                    {
+                      "id": "wlUiz",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "Hide workspace · return to full chat",
+                      "width": 28,
+                      "height": 28,
+                      "children": [
+                        {
+                          "type": "path",
+                          "id": "h7vH8",
+                          "name": "Lucide/panel-right-close · stroke 1.5",
+                          "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 16,
+                          "height": 16,
+                          "stroke": "$text-muted",
+                          "strokeWidth": 1,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        }
+                      ]
+                    },
                     {
                       "type": "frame",
                       "id": "FmrLV",
@@ -175182,11 +175350,26 @@
                           "name": "Restore workspace split",
                           "width": 28,
                           "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "minimize-2"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "N8tzsP",
+                              "name": "Lucide/minimize-2 · stroke 1.5",
+                              "geometry": "M14 10l7-7m-1 7h-6v-6m-11 17l7-7m-6 0h6v6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     }
