@@ -28,22 +28,14 @@ the canvas — read left to right, top to bottom.
 
 ### Workspace usability
 
-The September 14 **workspace layout proposal** is design-only, as requested before
-implementation. `00b` explains the flow, `22a` shows its controls, and `40a`–`40c`
-show Chat, Split and Expanded views. These clearly marked proposal frames sit at
-y=17,340, separate from the shipped screens. All available tools are listed directly.
-Open panel stays in the workspace header when closed; Expand/Restore and Close sit
-beside the tool tabs when open. The joined Create PR / branch selector matches the app.
-See
-[workspace-layout-proposal.md](./workspace-layout-proposal.md) for behavior and the
-bounded layout cleanup to consider after review.
-
-The follow-up **compact-header exploration** starts at y=18,640: `00c` compares the
-directions, `40d` keeps visible conversation tabs, `40e` uses a conversation picker,
-and `40f` moves conversations into the sidebar. Each uses one 44px navigation baseline,
-with tab groups anchored above their own pane. `22b` checks the closed state and an
-1100px window, which uses a single usable pane rather than clipping controls to force
-a split. These remain design alternatives, with the existing app layout unchanged.
+The September 14 **right workspace controls proposal** is design-only. The current
+frames start at y=18,640: `00c` explains the scope, `22b` shows the controls, and
+`40d`–`40f` show the right workspace open, collapsed and expanded. The existing
+workspace header and session-tab row remain. Expand/Restore and Collapse join the
+right tool toolbar; Show workspace appears in the existing header when collapsed.
+The joined PR/branch button and project sidebar remain. All available tools are
+listed directly. The earlier exploration is preserved at y=17,340 (`00b`, `22a`,
+`40a`–`40c`). See [workspace-layout-proposal.md](./workspace-layout-proposal.md).
 
 The settings sidebar, page heading, and command palette share the section definitions in
 `features/settings/settings-navigation.ts`. Desktop sections use a common 896px content

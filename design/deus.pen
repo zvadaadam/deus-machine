@@ -170987,7 +170987,7 @@
       "id": "xTbch",
       "x": 0,
       "y": 18860,
-      "name": "40d · Compact workspace — visible sessions · PROPOSAL",
+      "name": "40d · Right workspace — split · PROPOSAL",
       "theme": {
         "mode": "dark"
       },
@@ -171012,7 +171012,7 @@
               "id": "n014x",
               "name": "State title",
               "fill": "$text-primary",
-              "content": "A · One row with visible conversations",
+              "content": "01 · Right workspace open",
               "fontFamily": "$font-sans",
               "fontSize": 18,
               "fontWeight": "500"
@@ -171022,7 +171022,7 @@
               "id": "IOp1v",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL · RECOMMENDED — One 44px row. Each tab group stays above its own pane and follows its width.",
+              "content": "PROPOSAL — Keep the existing header and session row. Expand and Collapse join the right workspace toolbar.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -171402,7 +171402,7 @@
                 {
                   "type": "frame",
                   "id": "fJGAC",
-                  "name": "Pane-aligned workspace header",
+                  "name": "Existing workspace headers",
                   "width": "fill_container",
                   "height": 44,
                   "alignItems": "center",
@@ -171464,90 +171464,6 @@
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
                               "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "FzAuK",
-                          "name": "Workspace and conversations separator",
-                          "width": 1,
-                          "height": 16,
-                          "fill": "$border-subtle"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "ZP7TR",
-                          "name": "Session navigation",
-                          "height": 28,
-                          "gap": 4,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "s48g2Q",
-                              "name": "Codex session tab",
-                              "height": 28,
-                              "fill": "$bg-raised",
-                              "cornerRadius": "$radius-md",
-                              "gap": 6,
-                              "padding": [
-                                0,
-                                8
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "path",
-                                  "id": "QfZbp",
-                                  "name": "Codex logo",
-                                  "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
-                                  "viewBox": [
-                                    29,
-                                    29,
-                                    42,
-                                    42
-                                  ],
-                                  "fill": "$text-secondary",
-                                  "width": 14,
-                                  "height": 14
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "Iua5U",
-                                  "name": "Session title",
-                                  "fill": "$text-secondary",
-                                  "content": "Codex #1",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-sm",
-                                  "fontWeight": "500"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "YHwzU",
-                              "type": "ref",
-                              "ref": "Cr6GJ",
-                              "name": "Claude session tab",
-                              "width": 98,
-                              "fill": "$bg-surface",
-                              "descendants": {
-                                "Pkiuf": {
-                                  "content": "Claude #2",
-                                  "fontSize": "$text-sm"
-                                }
-                              }
-                            },
-                            {
-                              "id": "Qo9Lh",
-                              "type": "ref",
-                              "ref": "AovWi",
-                              "name": "New chat",
-                              "descendants": {
-                                "AaONw": {
-                                  "icon": "plus"
-                                }
-                              }
                             }
                           ]
                         },
@@ -171748,43 +171664,6 @@
                                   "icon": "bot"
                                 }
                               }
-                            },
-                            {
-                              "type": "frame",
-                              "id": "OXg6g",
-                              "name": "Tool panel controls",
-                              "height": 28,
-                              "gap": 4,
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "id": "sUno8",
-                                  "type": "ref",
-                                  "ref": "AovWi",
-                                  "enabled": true,
-                                  "name": "Expand panel",
-                                  "width": 28,
-                                  "height": 28,
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "maximize-2"
-                                    }
-                                  }
-                                },
-                                {
-                                  "id": "N9EhR",
-                                  "type": "ref",
-                                  "ref": "AovWi",
-                                  "name": "Close panel",
-                                  "width": 28,
-                                  "height": 28,
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "panel-right-close"
-                                    }
-                                  }
-                                }
-                              ]
                             }
                           ]
                         },
@@ -171880,6 +171759,43 @@
                               ]
                             }
                           ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OXg6g",
+                          "name": "Tool panel controls",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "sUno8",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "enabled": true,
+                              "name": "Expand panel",
+                              "width": 28,
+                              "height": 28,
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "maximize-2"
+                                }
+                              }
+                            },
+                            {
+                              "id": "N9EhR",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "name": "Collapse right workspace",
+                              "width": 28,
+                              "height": 28,
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "panel-right-close"
+                                }
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -171906,6 +171822,83 @@
                         24
                       ],
                       "children": [
+                        {
+                          "type": "frame",
+                          "id": "ZP7TR",
+                          "name": "Session tabs · existing second row",
+                          "width": "fill_container",
+                          "height": 40,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "s48g2Q",
+                              "name": "Codex session tab",
+                              "height": 28,
+                              "fill": "$bg-raised",
+                              "cornerRadius": "$radius-md",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "QfZbp",
+                                  "name": "Codex logo",
+                                  "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                                  "viewBox": [
+                                    29,
+                                    29,
+                                    42,
+                                    42
+                                  ],
+                                  "fill": "$text-secondary",
+                                  "width": 14,
+                                  "height": 14
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "Iua5U",
+                                  "name": "Session title",
+                                  "fill": "$text-secondary",
+                                  "content": "Codex #1",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "YHwzU",
+                              "type": "ref",
+                              "ref": "Cr6GJ",
+                              "name": "Claude session tab",
+                              "width": 98,
+                              "fill": "$bg-surface",
+                              "descendants": {
+                                "Pkiuf": {
+                                  "content": "Claude #2",
+                                  "fontSize": "$text-sm"
+                                }
+                              }
+                            },
+                            {
+                              "id": "Qo9Lh",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "name": "New chat",
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "plus"
+                                }
+                              }
+                            }
+                          ]
+                        },
                         {
                           "id": "P5ZkB",
                           "type": "ref",
@@ -171959,7 +171952,7 @@
       "id": "jBhc1",
       "x": 1560,
       "y": 18860,
-      "name": "40e · Compact workspace — conversation picker · PROPOSAL",
+      "name": "40e · Right workspace — collapsed · PROPOSAL",
       "theme": {
         "mode": "dark"
       },
@@ -171984,7 +171977,7 @@
               "id": "gwdHF",
               "name": "State title",
               "fill": "$text-primary",
-              "content": "B · One row with a conversation picker",
+              "content": "02 · Right workspace collapsed",
               "fontFamily": "$font-sans",
               "fontSize": 18,
               "fontWeight": "500"
@@ -171994,7 +171987,7 @@
               "id": "lGpo4",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — More room for workspace identity. Switching conversations takes a menu; other activity is less visible.",
+              "content": "PROPOSAL — Session tabs stay in their row. Reopen the right workspace from the existing header or a tool shortcut.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -172360,7 +172353,7 @@
             },
             {
               "type": "frame",
-              "id": "u6jpu",
+              "id": "a3pPr",
               "name": "Workspace",
               "width": "fill_container",
               "height": "fill_container",
@@ -172373,162 +172366,75 @@
               "children": [
                 {
                   "type": "frame",
-                  "id": "ikiqb",
-                  "name": "Pane-aligned workspace header",
+                  "id": "TZB38",
+                  "name": "Workspace header",
                   "width": "fill_container",
                   "height": 44,
+                  "gap": 12,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "justifyContent": "space_between",
                   "alignItems": "center",
                   "children": [
                     {
                       "type": "frame",
-                      "id": "UKIES",
-                      "name": "Chat header · above chat",
-                      "width": 592,
-                      "height": 44,
-                      "gap": 10,
-                      "padding": [
-                        0,
-                        12
-                      ],
+                      "id": "JHA0J",
+                      "name": "Workspace identity",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "EVjql",
+                          "type": "ref",
+                          "ref": "diRwM",
+                          "name": "Workspace status",
+                          "width": 14,
+                          "height": 14
+                        },
+                        {
+                          "type": "text",
+                          "id": "Ho80X",
+                          "name": "Repository",
+                          "fill": "$text-secondary",
+                          "content": "onboarding-fixture",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "sAulR",
+                          "name": "Slash",
+                          "fill": "$text-muted",
+                          "content": "/",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "q84duh",
+                          "name": "Workspace name",
+                          "fill": "$text-primary",
+                          "content": "aquila",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EEykg",
+                      "name": "Workspace actions",
+                      "gap": 6,
                       "alignItems": "center",
                       "children": [
                         {
                           "type": "frame",
-                          "id": "daQii",
-                          "name": "Workspace identity",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "id": "X8b7N",
-                              "type": "ref",
-                              "ref": "diRwM",
-                              "name": "Workspace status",
-                              "width": 14,
-                              "height": 14
-                            },
-                            {
-                              "type": "text",
-                              "id": "wVoZh",
-                              "name": "Repository",
-                              "fill": "$text-secondary",
-                              "content": "onboarding-fixture",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-base",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "iGL2a",
-                              "name": "Slash",
-                              "fill": "$text-muted",
-                              "content": "/",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-base",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "sujcD",
-                              "name": "Workspace name",
-                              "fill": "$text-primary",
-                              "content": "aquila",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-base",
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "CmWgw",
-                          "name": "Workspace and conversations separator",
-                          "width": 1,
-                          "height": 16,
-                          "fill": "$border-subtle"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "M9nYDY",
-                          "name": "Session navigation",
-                          "height": 28,
-                          "gap": 4,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "dtBlc",
-                              "name": "Conversation picker",
-                              "height": 28,
-                              "fill": "$bg-raised",
-                              "cornerRadius": "$radius-md",
-                              "gap": 6,
-                              "padding": [
-                                0,
-                                8
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "path",
-                                  "id": "A6V0VN",
-                                  "name": "Codex logo",
-                                  "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
-                                  "viewBox": [
-                                    29,
-                                    29,
-                                    42,
-                                    42
-                                  ],
-                                  "fill": "$text-secondary",
-                                  "width": 14,
-                                  "height": 14
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "mtXoa",
-                                  "name": "Session title",
-                                  "fill": "$text-secondary",
-                                  "content": "Codex #1",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-sm",
-                                  "fontWeight": "500"
-                                },
-                                {
-                                  "type": "icon",
-                                  "id": "P31MN",
-                                  "name": "Choose conversation",
-                                  "width": 10,
-                                  "height": 10,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$text-tertiary"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "c0xOEv",
-                              "type": "ref",
-                              "ref": "AovWi",
-                              "name": "New chat",
-                              "descendants": {
-                                "AaONw": {
-                                  "icon": "plus"
-                                }
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "CJ7cV",
-                          "name": "Chat header flexible space",
-                          "width": "fill_container",
-                          "height": 1
-                        },
-                        {
-                          "type": "frame",
-                          "id": "HZeLk",
+                          "id": "FgrMA",
                           "name": "Open in editor",
                           "clip": true,
                           "height": 28,
@@ -172541,7 +172447,7 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "KiEZM",
+                              "id": "o8YuK",
                               "name": "Quick",
                               "height": 28,
                               "gap": 6,
@@ -172553,7 +172459,7 @@
                               "children": [
                                 {
                                   "type": "icon",
-                                  "id": "urrW6",
+                                  "id": "fXwGM",
                                   "name": "arrow-up-right",
                                   "width": 11,
                                   "height": 11,
@@ -172563,7 +172469,7 @@
                                 },
                                 {
                                   "type": "text",
-                                  "id": "ajN3u",
+                                  "id": "T1nMDm",
                                   "name": "Open",
                                   "fill": "$text-subtle",
                                   "content": "Open",
@@ -172575,7 +172481,7 @@
                             },
                             {
                               "type": "rectangle",
-                              "id": "eHgX9",
+                              "id": "EM1Ve",
                               "name": "Divider",
                               "fill": "$border-strong",
                               "width": 1,
@@ -172583,7 +172489,7 @@
                             },
                             {
                               "type": "frame",
-                              "id": "P7OgE",
+                              "id": "B64kNw",
                               "name": "More",
                               "height": 28,
                               "padding": [
@@ -172594,7 +172500,7 @@
                               "children": [
                                 {
                                   "type": "icon",
-                                  "id": "Y0cA8",
+                                  "id": "csV2z",
                                   "name": "chevron-down",
                                   "width": 10,
                                   "height": 10,
@@ -172605,167 +172511,10 @@
                               ]
                             }
                           ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "djpRq",
-                      "name": "Pane divider · aligned with resize handle",
-                      "width": 1,
-                      "height": 44,
-                      "fill": "$border-subtle"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "AnRvw",
-                      "name": "Tool header · above workspace tools",
-                      "width": "fill_container",
-                      "height": 44,
-                      "gap": 8,
-                      "padding": [
-                        0,
-                        8
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "S7kIK",
-                          "name": "Tool navigation",
-                          "height": 28,
-                          "gap": 4,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "id": "dPFnZ",
-                              "type": "ref",
-                              "ref": "YWfmp",
-                              "name": "Changes tab",
-                              "descendants": {
-                                "h701Y": {
-                                  "icon": "git-branch"
-                                },
-                                "SgEjB": {
-                                  "content": "Changes"
-                                }
-                              }
-                            },
-                            {
-                              "id": "jXhRU",
-                              "type": "ref",
-                              "ref": "IGG8T",
-                              "name": "Files tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "folder-open"
-                                }
-                              }
-                            },
-                            {
-                              "id": "O8Hh1u",
-                              "type": "ref",
-                              "ref": "IGG8T",
-                              "name": "Terminal tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "terminal"
-                                }
-                              }
-                            },
-                            {
-                              "id": "ur13U",
-                              "type": "ref",
-                              "ref": "IGG8T",
-                              "name": "Browser tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "globe"
-                                }
-                              }
-                            },
-                            {
-                              "id": "xOeQe",
-                              "type": "ref",
-                              "ref": "IGG8T",
-                              "name": "Simulator tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "smartphone"
-                                }
-                              }
-                            },
-                            {
-                              "id": "JAlWY",
-                              "type": "ref",
-                              "ref": "IGG8T",
-                              "name": "Apps tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "layout-grid"
-                                }
-                              }
-                            },
-                            {
-                              "id": "vSqKS",
-                              "type": "ref",
-                              "ref": "IGG8T",
-                              "name": "Agent tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "bot"
-                                }
-                              }
-                            },
-                            {
-                              "type": "frame",
-                              "id": "GeGda",
-                              "name": "Tool panel controls",
-                              "height": 28,
-                              "gap": 4,
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "id": "GvZUU",
-                                  "type": "ref",
-                                  "ref": "AovWi",
-                                  "enabled": true,
-                                  "name": "Expand panel",
-                                  "width": 28,
-                                  "height": 28,
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "maximize-2"
-                                    }
-                                  }
-                                },
-                                {
-                                  "id": "rRZlN",
-                                  "type": "ref",
-                                  "ref": "AovWi",
-                                  "name": "Close panel",
-                                  "width": 28,
-                                  "height": 28,
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "panel-right-close"
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          ]
                         },
                         {
                           "type": "frame",
-                          "id": "gt6He",
-                          "name": "Tool header flexible space",
-                          "width": "fill_container",
-                          "height": 1
-                        },
-                        {
-                          "type": "frame",
-                          "id": "pJkeQ",
+                          "id": "rT0mM",
                           "name": "Create PR · joined branch selector · PRActions.tsx",
                           "clip": true,
                           "height": 28,
@@ -172774,7 +172523,7 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "KLjvj",
+                              "id": "jj6tM",
                               "name": "Create PR",
                               "height": 28,
                               "fill": "$primary",
@@ -172787,7 +172536,7 @@
                               "children": [
                                 {
                                   "type": "icon",
-                                  "id": "X5SWZ",
+                                  "id": "fUZ96",
                                   "name": "Pull request",
                                   "width": 10,
                                   "height": 10,
@@ -172797,7 +172546,7 @@
                                 },
                                 {
                                   "type": "text",
-                                  "id": "hjl4i",
+                                  "id": "AM4LM",
                                   "name": "Create PR label",
                                   "fill": "$primary-foreground",
                                   "content": "Create PR",
@@ -172809,7 +172558,7 @@
                             },
                             {
                               "type": "frame",
-                              "id": "ASA2H",
+                              "id": "g3ZzwA",
                               "name": "Target branch",
                               "height": 28,
                               "fill": "$accent-blue-surface",
@@ -172827,7 +172576,7 @@
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "w0wNIz",
+                                  "id": "GdbbV",
                                   "name": "Branch",
                                   "fill": "$primary",
                                   "content": "main",
@@ -172837,7 +172586,7 @@
                                 },
                                 {
                                   "type": "icon",
-                                  "id": "h7wD6",
+                                  "id": "A04Bon",
                                   "name": "Choose branch",
                                   "width": 8,
                                   "height": 8,
@@ -172848,6 +172597,27 @@
                               ]
                             }
                           ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZlSAi",
+                          "name": "Action separator",
+                          "width": 1,
+                          "height": 16,
+                          "fill": "$border-subtle"
+                        },
+                        {
+                          "id": "VA6FX",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "Show right workspace",
+                          "width": 28,
+                          "height": 28,
+                          "descendants": {
+                            "AaONw": {
+                              "icon": "panel-right-open"
+                            }
+                          }
                         }
                       ]
                     }
@@ -172855,16 +172625,16 @@
                 },
                 {
                   "type": "frame",
-                  "id": "A2OA6U",
-                  "name": "Resizable chat and tool",
+                  "id": "i5N2Y",
+                  "name": "Chat and tool shortcuts",
                   "width": "fill_container",
                   "height": "fill_container",
                   "children": [
                     {
                       "type": "frame",
-                      "id": "UApC4",
+                      "id": "St4fQ",
                       "name": "Chat lane",
-                      "width": 592,
+                      "width": "fill_container",
                       "height": "fill_container",
                       "layout": "vertical",
                       "padding": [
@@ -172873,179 +172643,448 @@
                         20,
                         24
                       ],
+                      "alignItems": "center",
                       "children": [
                         {
-                          "id": "B71LzF",
-                          "type": "ref",
-                          "ref": "T1zcza",
-                          "name": "Chat",
-                          "width": "fill_container",
+                          "type": "frame",
+                          "id": "jFJNA",
+                          "name": "Chat reading column",
+                          "width": 720,
                           "height": "fill_container",
-                          "descendants": {
-                            "uz2d7": {
-                              "enabled": false,
-                              "height": 0,
-                              "width": 1
+                          "layout": "vertical",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "tHKbK",
+                              "name": "Session tabs · existing second row",
+                              "width": "fill_container",
+                              "height": 40,
+                              "gap": 4,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "UycQv",
+                                  "name": "Codex session tab",
+                                  "height": 28,
+                                  "fill": "$bg-raised",
+                                  "cornerRadius": "$radius-md",
+                                  "gap": 6,
+                                  "padding": [
+                                    0,
+                                    8
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "path",
+                                      "id": "wjchz",
+                                      "name": "Codex logo",
+                                      "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                                      "viewBox": [
+                                        29,
+                                        29,
+                                        42,
+                                        42
+                                      ],
+                                      "fill": "$text-secondary",
+                                      "width": 14,
+                                      "height": 14
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "tHRi2",
+                                      "name": "Session title",
+                                      "fill": "$text-secondary",
+                                      "content": "Codex #1",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "id": "c1lvIh",
+                                  "type": "ref",
+                                  "ref": "Cr6GJ",
+                                  "name": "Claude session tab",
+                                  "width": 98,
+                                  "fill": "$bg-surface",
+                                  "descendants": {
+                                    "Pkiuf": {
+                                      "content": "Claude #2",
+                                      "fontSize": "$text-sm"
+                                    }
+                                  }
+                                },
+                                {
+                                  "id": "RRbQE",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "name": "New chat",
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "plus"
+                                    }
+                                  }
+                                }
+                              ]
                             },
-                            "v82R2": {
-                              "width": "fill_container"
+                            {
+                              "id": "cbI1D",
+                              "type": "ref",
+                              "ref": "T1zcza",
+                              "name": "Chat",
+                              "width": "fill_container",
+                              "height": "fill_container",
+                              "descendants": {
+                                "uz2d7": {
+                                  "enabled": false,
+                                  "height": 0,
+                                  "width": 1
+                                },
+                                "v82R2": {
+                                  "width": "fill_container"
+                                }
+                              }
                             }
-                          }
+                          ]
                         }
                       ]
                     },
                     {
                       "type": "frame",
-                      "id": "HQyuK",
-                      "name": "Resize divider",
-                      "width": 1,
+                      "id": "fsMso",
+                      "name": "Workspace tool shortcuts",
+                      "width": 208,
                       "height": "fill_container",
-                      "fill": "$border-subtle"
-                    },
-                    {
-                      "id": "SFfqy",
-                      "type": "ref",
-                      "ref": "NrJQ4",
-                      "descendants": {
-                        "vmuaf": {
-                          "enabled": false,
-                          "height": 0,
-                          "width": 1
-                        }
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "Ch4uw",
-                  "layoutPosition": "absolute",
-                  "x": 230,
-                  "y": 48,
-                  "name": "Conversation menu · open state",
-                  "width": 228,
-                  "fill": "$bg-elevated",
-                  "cornerRadius": "$radius-lg",
-                  "stroke": "$border-strong",
-                  "strokeWidth": 1,
-                  "layout": "vertical",
-                  "gap": 2,
-                  "padding": 6,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "bjuID",
-                      "name": "Selected conversation · Codex #1",
-                      "width": "fill_container",
-                      "height": 32,
-                      "fill": "$bg-raised",
-                      "cornerRadius": "$radius-md",
-                      "gap": 6,
+                      "layout": "vertical",
+                      "gap": 4,
                       "padding": [
+                        48,
+                        20,
                         0,
                         8
                       ],
-                      "alignItems": "center",
                       "children": [
                         {
-                          "type": "path",
-                          "id": "gREgU",
-                          "name": "Codex logo",
-                          "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
-                          "viewBox": [
-                            29,
-                            29,
-                            42,
-                            42
-                          ],
-                          "fill": "$text-secondary",
-                          "width": 14,
-                          "height": 14
-                        },
-                        {
                           "type": "text",
-                          "id": "L5DiMj",
-                          "name": "Session title",
-                          "fill": "$text-secondary",
-                          "content": "Codex #1",
+                          "id": "CY3m8",
+                          "name": "Shortcut heading",
+                          "fill": "$text-tertiary",
+                          "content": "In this workspace",
                           "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "500"
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "frame",
-                          "id": "vzn8w",
-                          "name": "Selected row spacing",
+                          "id": "X8V1u",
+                          "name": "Changes shortcut",
                           "width": "fill_container",
-                          "height": 1
+                          "height": 32,
+                          "cornerRadius": "$radius-md",
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "wICG0",
+                              "name": "Changes icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "git-branch",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "wnB6U",
+                              "name": "Changes label",
+                              "fill": "$text-secondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Changes",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "gitev",
+                              "name": "Change count",
+                              "fill": "$text-tertiary",
+                              "content": "1",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-xs",
+                              "fontWeight": "normal"
+                            }
+                          ]
                         },
                         {
-                          "type": "icon",
-                          "id": "f8zWz",
-                          "name": "Selected conversation",
-                          "width": 14,
-                          "height": 14,
-                          "icon": "check",
-                          "library": "lucide",
-                          "fill": "$text-secondary"
-                        }
-                      ]
-                    },
-                    {
-                      "id": "sPmfm",
-                      "type": "ref",
-                      "ref": "Cr6GJ",
-                      "name": "Claude #2 conversation",
-                      "width": "fill_container",
-                      "height": 32,
-                      "fill": "$bg-elevated",
-                      "descendants": {
-                        "Pkiuf": {
-                          "content": "Claude #2",
-                          "fontSize": "$text-sm"
-                        }
-                      }
-                    },
-                    {
-                      "type": "frame",
-                      "id": "sWLGl",
-                      "name": "Conversation menu separator",
-                      "width": "fill_container",
-                      "height": 1,
-                      "fill": "$border-subtle"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "K6g6x",
-                      "name": "New conversation",
-                      "width": "fill_container",
-                      "height": 32,
-                      "gap": 8,
-                      "padding": [
-                        0,
-                        8
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "iKbNt",
-                          "name": "New conversation icon",
-                          "width": 14,
-                          "height": 14,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "type": "frame",
+                          "id": "DPxFk",
+                          "name": "Files shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "cornerRadius": "$radius-md",
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "reeDD",
+                              "name": "Files icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "folder-open",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "KtJrL",
+                              "name": "Files label",
+                              "fill": "$text-secondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Files",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "G7rvD",
-                          "name": "New conversation label",
-                          "fill": "$text-secondary",
-                          "content": "New conversation",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "normal"
+                          "type": "frame",
+                          "id": "einye",
+                          "name": "Terminal shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "cornerRadius": "$radius-md",
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "FIaG8",
+                              "name": "Terminal icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "terminal",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "R9bxH",
+                              "name": "Terminal label",
+                              "fill": "$text-secondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Terminal",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pPuQG",
+                          "name": "Browser shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "cornerRadius": "$radius-md",
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "oh2W9",
+                              "name": "Browser icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "globe",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "onYoi",
+                              "name": "Browser label",
+                              "fill": "$text-secondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Browser",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Qt6Ev",
+                          "name": "Simulator shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "MDnMR",
+                              "name": "Simulator icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "smartphone",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Vkhhm",
+                              "name": "Simulator label",
+                              "fill": "$text-secondary",
+                              "content": "Simulator",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hTlWM",
+                          "name": "Apps shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Lcwoj",
+                              "name": "Apps icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "layout-grid",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "iVCrs",
+                              "name": "Apps label",
+                              "fill": "$text-secondary",
+                              "content": "Apps",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "g4Vb1n",
+                          "name": "Agent shortcut",
+                          "width": "fill_container",
+                          "height": 32,
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "UVHhH",
+                              "name": "Agent icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "bot",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "wjHRa",
+                              "name": "Agent label",
+                              "fill": "$text-secondary",
+                              "content": "Agent",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "z8IXDI",
+                          "name": "Section gap",
+                          "width": 1,
+                          "height": 12
+                        },
+                        {
+                          "type": "frame",
+                          "id": "PLsEa",
+                          "name": "Repository environment settings",
+                          "width": "fill_container",
+                          "height": 32,
+                          "gap": 10,
+                          "padding": [
+                            0,
+                            4
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "W2jAec",
+                              "name": "Environment icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "settings-2",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "V7rtNq",
+                              "name": "Environment label",
+                              "fill": "$text-tertiary",
+                              "content": "Environment",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
                         }
                       ]
                     }
@@ -173062,7 +173101,7 @@
       "id": "WN5k0",
       "x": 3120,
       "y": 18860,
-      "name": "40f · Compact workspace — sidebar conversations · PROPOSAL",
+      "name": "40f · Right workspace — expanded · PROPOSAL",
       "theme": {
         "mode": "dark"
       },
@@ -173087,7 +173126,7 @@
               "id": "YqKcF",
               "name": "State title",
               "fill": "$text-primary",
-              "content": "C · Conversations in the sidebar",
+              "content": "03 · Right workspace expanded",
               "fontFamily": "$font-sans",
               "fontSize": 18,
               "fontWeight": "500"
@@ -173097,7 +173136,7 @@
               "id": "Pb2Wc",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Clear canvas and visible conversations. A deeper sidebar changes how people navigate every workspace.",
+              "content": "PROPOSAL — Restore brings back the chat and its session tabs. Collapse returns to chat. The project sidebar stays.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -173328,114 +173367,6 @@
                     },
                     {
                       "type": "frame",
-                      "id": "v4blo4",
-                      "name": "Conversations in selected workspace",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "padding": [
-                        0,
-                        6,
-                        0,
-                        24
-                      ],
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "h8cuvH",
-                          "name": "Selected conversation · Codex #1",
-                          "width": "fill_container",
-                          "height": 30,
-                          "fill": "$bg-raised",
-                          "cornerRadius": "$radius-md",
-                          "gap": 6,
-                          "padding": [
-                            0,
-                            8
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "path",
-                              "id": "qh5Rw",
-                              "name": "Codex logo",
-                              "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
-                              "viewBox": [
-                                29,
-                                29,
-                                42,
-                                42
-                              ],
-                              "fill": "$text-secondary",
-                              "width": 14,
-                              "height": 14
-                            },
-                            {
-                              "type": "text",
-                              "id": "E0nAJ",
-                              "name": "Session title",
-                              "fill": "$text-secondary",
-                              "content": "Codex #1",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "id": "N8imOC",
-                          "type": "ref",
-                          "ref": "Cr6GJ",
-                          "name": "Claude #2 conversation",
-                          "width": "fill_container",
-                          "height": 30,
-                          "fill": "$bg-sidebar",
-                          "descendants": {
-                            "Pkiuf": {
-                              "content": "Claude #2",
-                              "fontSize": "$text-sm"
-                            }
-                          }
-                        },
-                        {
-                          "type": "frame",
-                          "id": "Nj6JG",
-                          "name": "New conversation",
-                          "width": "fill_container",
-                          "height": 30,
-                          "gap": 6,
-                          "padding": [
-                            0,
-                            8
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "K4YD2Y",
-                              "name": "New conversation icon",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "plus",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
-                            },
-                            {
-                              "type": "text",
-                              "id": "piOED",
-                              "name": "New conversation label",
-                              "fill": "$text-tertiary",
-                              "content": "New conversation",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-sm",
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
                       "id": "SgVJz",
                       "name": "New workspace",
                       "width": "fill_container",
@@ -173585,7 +173516,7 @@
                 {
                   "type": "frame",
                   "id": "v157k",
-                  "name": "Pane-aligned workspace header",
+                  "name": "Expanded workspace header",
                   "width": "fill_container",
                   "height": 44,
                   "alignItems": "center",
@@ -173593,8 +173524,7 @@
                     {
                       "type": "frame",
                       "id": "gPUTC",
-                      "name": "Chat header · above chat",
-                      "width": 592,
+                      "name": "Workspace identity and Open",
                       "height": 44,
                       "gap": 10,
                       "padding": [
@@ -173649,13 +173579,6 @@
                               "fontWeight": "500"
                             }
                           ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "DTRrK",
-                          "name": "Chat header flexible space",
-                          "width": "fill_container",
-                          "height": 1
                         },
                         {
                           "type": "frame",
@@ -173738,14 +173661,6 @@
                           ]
                         }
                       ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "L7Lk7c",
-                      "name": "Pane divider · aligned with resize handle",
-                      "width": 1,
-                      "height": 44,
-                      "fill": "$border-subtle"
                     },
                     {
                       "type": "frame",
@@ -173847,43 +173762,6 @@
                                   "icon": "bot"
                                 }
                               }
-                            },
-                            {
-                              "type": "frame",
-                              "id": "N4RRj9",
-                              "name": "Tool panel controls",
-                              "height": 28,
-                              "gap": 4,
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "id": "tWmAM",
-                                  "type": "ref",
-                                  "ref": "AovWi",
-                                  "enabled": true,
-                                  "name": "Expand panel",
-                                  "width": 28,
-                                  "height": 28,
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "maximize-2"
-                                    }
-                                  }
-                                },
-                                {
-                                  "id": "XGZ78",
-                                  "type": "ref",
-                                  "ref": "AovWi",
-                                  "name": "Close panel",
-                                  "width": 28,
-                                  "height": 28,
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "panel-right-close"
-                                    }
-                                  }
-                                }
-                              ]
                             }
                           ]
                         },
@@ -173979,6 +173857,43 @@
                               ]
                             }
                           ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "N4RRj9",
+                          "name": "Tool panel controls",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "tWmAM",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "enabled": true,
+                              "name": "Restore workspace split",
+                              "width": 28,
+                              "height": 28,
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "minimize-2"
+                                }
+                              }
+                            },
+                            {
+                              "id": "XGZ78",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "name": "Collapse right workspace",
+                              "width": 28,
+                              "height": 28,
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "panel-right-close"
+                                }
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -173991,48 +173906,6 @@
                   "width": "fill_container",
                   "height": "fill_container",
                   "children": [
-                    {
-                      "type": "frame",
-                      "id": "o0pt3",
-                      "name": "Chat lane",
-                      "width": 592,
-                      "height": "fill_container",
-                      "layout": "vertical",
-                      "padding": [
-                        0,
-                        24,
-                        20,
-                        24
-                      ],
-                      "children": [
-                        {
-                          "id": "Hk4jw",
-                          "type": "ref",
-                          "ref": "T1zcza",
-                          "name": "Chat",
-                          "width": "fill_container",
-                          "height": "fill_container",
-                          "descendants": {
-                            "uz2d7": {
-                              "enabled": false,
-                              "height": 0,
-                              "width": 1
-                            },
-                            "v82R2": {
-                              "width": "fill_container"
-                            }
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "WcqKe",
-                      "name": "Resize divider",
-                      "width": 1,
-                      "height": "fill_container",
-                      "fill": "$border-subtle"
-                    },
                     {
                       "id": "oFKo8",
                       "type": "ref",
@@ -174058,7 +173931,7 @@
       "id": "xjMsB",
       "x": 0,
       "y": 18640,
-      "name": "00c · Compact workspace — variant comparison",
+      "name": "00c · Right workspace controls — current proposal",
       "theme": {
         "mode": "dark"
       },
@@ -174074,7 +173947,7 @@
           "id": "fAaSL",
           "name": "Comparison title",
           "fill": "$text-primary",
-          "content": "One navigation row. Three ways to handle conversations.",
+          "content": "Keep the two existing rows. Put controls with the right workspace.",
           "fontFamily": "$font-sans",
           "fontSize": 24,
           "fontWeight": "600"
@@ -174084,7 +173957,7 @@
           "id": "cOjDr",
           "name": "Comparison premise",
           "fill": "$text-secondary",
-          "content": "Design exploration · One 44px baseline, with each header attached to its pane. A narrow window uses one usable pane; controls never cross the divider.",
+          "content": "The workspace header and session tabs stay as they are. Expand, Restore and Collapse live on the right tool toolbar. No extra header row.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-base",
           "fontWeight": "normal"
@@ -174099,7 +173972,7 @@
             {
               "type": "frame",
               "id": "hpEej",
-              "name": "A · Visible conversations · recommended",
+              "name": "Open workspace",
               "width": "fill_container",
               "layout": "vertical",
               "gap": 6,
@@ -174109,7 +173982,7 @@
                   "id": "KQWiu",
                   "name": "Direction title",
                   "fill": "$text-primary",
-                  "content": "A · Visible conversations · recommended",
+                  "content": "Open workspace",
                   "fontFamily": "$font-sans",
                   "fontSize": 16,
                   "fontWeight": "500"
@@ -174121,7 +173994,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "One-click tabs above chat; tool tabs above the workspace. Keep the groups inside their pane as it resizes.",
+                  "content": "Expand uses the workspace area. Collapse reveals chat and its tool shortcuts.",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-base",
                   "fontWeight": "normal"
@@ -174131,7 +174004,7 @@
             {
               "type": "frame",
               "id": "kTAPo",
-              "name": "B · Conversation picker",
+              "name": "Collapsed workspace",
               "width": "fill_container",
               "layout": "vertical",
               "gap": 6,
@@ -174141,7 +174014,7 @@
                   "id": "FPs9T",
                   "name": "Direction title",
                   "fill": "$text-primary",
-                  "content": "B · Conversation picker",
+                  "content": "Collapsed workspace",
                   "fontFamily": "$font-sans",
                   "fontSize": 16,
                   "fontWeight": "500"
@@ -174153,7 +174026,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Most room for long workspace names. Switching conversations takes a menu and hides other conversations' activity.",
+                  "content": "The existing header offers Show workspace. Conversation tabs remain on their own row.",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-base",
                   "fontWeight": "normal"
@@ -174163,7 +174036,7 @@
             {
               "type": "frame",
               "id": "nuKXT",
-              "name": "C · Sidebar conversations",
+              "name": "Expanded workspace",
               "width": "fill_container",
               "layout": "vertical",
               "gap": 6,
@@ -174173,7 +174046,7 @@
                   "id": "J96cEu",
                   "name": "Direction title",
                   "fill": "$text-primary",
-                  "content": "C · Sidebar conversations",
+                  "content": "Expanded workspace",
                   "fontFamily": "$font-sans",
                   "fontSize": 16,
                   "fontWeight": "500"
@@ -174185,7 +174058,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "All conversations are visible in the project tree. The deeper sidebar is a broader product-navigation decision.",
+                  "content": "Restore returns to the saved split. Collapse returns to chat; project navigation stays visible.",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-base",
                   "fontWeight": "normal"
@@ -174201,12 +174074,12 @@
       "id": "vVjnR",
       "x": 0,
       "y": 19940,
-      "name": "22b · Compact header — state and width checks · PROPOSAL",
+      "name": "22b · Right workspace controls — existing toolbar · PROPOSAL",
       "theme": {
         "mode": "dark"
       },
       "width": 1440,
-      "height": 480,
+      "height": 420,
       "fill": "$bg-sidebar",
       "layout": "vertical",
       "gap": 12,
@@ -174214,746 +174087,48 @@
       "children": [
         {
           "type": "text",
-          "id": "Bh3LE",
-          "name": "Header state title",
+          "id": "zxoXn",
+          "name": "Controls placement title",
           "fill": "$text-primary",
-          "content": "A · Keep pane boundaries, use one pane when space runs out",
+          "content": "Right workspace controls · existing tool toolbar",
           "fontFamily": "$font-sans",
           "fontSize": 20,
           "fontWeight": "600"
         },
         {
           "type": "text",
-          "id": "pQf6z",
-          "name": "CHAT · Open restores the last selected tool. Session tabs remain visible.",
+          "id": "h2Bxu",
+          "name": "OPEN · Expand and Collapse sit after the joined PR button, on the existing tool-tab row.",
           "fill": "$text-secondary",
-          "content": "CHAT · Open restores the last selected tool. Session tabs remain visible.",
+          "content": "OPEN · Expand and Collapse sit after the joined PR button, on the existing tool-tab row.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-sm",
           "fontWeight": "normal"
         },
         {
           "type": "frame",
-          "id": "V8AW0y",
-          "name": "Compact header · chat",
-          "width": 1184,
+          "id": "sZ5r6",
+          "name": "Open right workspace toolbar",
+          "width": 591,
           "height": 44,
           "fill": "$bg-surface",
-          "gap": 12,
+          "gap": 8,
           "padding": [
             0,
-            12
+            8
           ],
           "alignItems": "center",
           "children": [
             {
               "type": "frame",
-              "id": "GU1mf",
-              "name": "Workspace identity",
-              "gap": 8,
-              "alignItems": "center",
-              "children": [
-                {
-                  "id": "x6BmiZ",
-                  "type": "ref",
-                  "ref": "diRwM",
-                  "name": "Workspace status",
-                  "width": 14,
-                  "height": 14
-                },
-                {
-                  "type": "text",
-                  "id": "E10Kc6",
-                  "name": "Workspace name",
-                  "fill": "$text-primary",
-                  "content": "aquila",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-base",
-                  "fontWeight": "500"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "ddGtl",
-              "name": "Workspace and conversations separator",
-              "width": 1,
-              "height": 16,
-              "fill": "$border-subtle"
-            },
-            {
-              "type": "frame",
-              "id": "dpmuT",
-              "name": "Session navigation",
-              "height": 28,
-              "gap": 4,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "Twrat",
-                  "name": "Codex session tab",
-                  "height": 28,
-                  "fill": "$bg-raised",
-                  "cornerRadius": "$radius-md",
-                  "gap": 6,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "path",
-                      "id": "NtdEA",
-                      "name": "Codex logo",
-                      "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
-                      "viewBox": [
-                        29,
-                        29,
-                        42,
-                        42
-                      ],
-                      "fill": "$text-secondary",
-                      "width": 14,
-                      "height": 14
-                    },
-                    {
-                      "type": "text",
-                      "id": "m9eYfx",
-                      "name": "Session title",
-                      "fill": "$text-secondary",
-                      "content": "Codex #1",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "500"
-                    }
-                  ]
-                },
-                {
-                  "id": "bRgF8",
-                  "type": "ref",
-                  "ref": "Cr6GJ",
-                  "name": "Claude session tab",
-                  "width": 98,
-                  "fill": "$bg-surface",
-                  "descendants": {
-                    "Pkiuf": {
-                      "content": "Claude #2",
-                      "fontSize": "$text-sm"
-                    }
-                  }
-                },
-                {
-                  "id": "M7XRU",
-                  "type": "ref",
-                  "ref": "AovWi",
-                  "name": "New chat",
-                  "descendants": {
-                    "AaONw": {
-                      "icon": "plus"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "CheOw",
-              "name": "Header flexible space",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "yKNEX",
-              "name": "Workspace actions",
-              "gap": 6,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "r8FMD",
-                  "name": "Open in editor",
-                  "clip": true,
-                  "height": 28,
-                  "fill": "#00000000",
-                  "cornerRadius": "$radius-lg",
-                  "stroke": "$border-strong",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "F9PMy",
-                      "name": "Quick",
-                      "height": 28,
-                      "gap": 6,
-                      "padding": [
-                        0,
-                        8
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "yLIgP",
-                          "name": "arrow-up-right",
-                          "width": 11,
-                          "height": 11,
-                          "icon": "arrow-up-right",
-                          "library": "lucide",
-                          "fill": "$text-subtle"
-                        },
-                        {
-                          "type": "text",
-                          "id": "JRKy5",
-                          "name": "Open",
-                          "fill": "$text-subtle",
-                          "content": "Open",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "MpLNt",
-                      "name": "Divider",
-                      "fill": "$border-strong",
-                      "width": 1,
-                      "height": 16
-                    },
-                    {
-                      "type": "frame",
-                      "id": "BpBsN",
-                      "name": "More",
-                      "height": 28,
-                      "padding": [
-                        0,
-                        6
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "d4DJ6",
-                          "name": "chevron-down",
-                          "width": 10,
-                          "height": 10,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$text-muted"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "W09MmF",
-                  "name": "Create PR · joined branch selector · PRActions.tsx",
-                  "clip": true,
-                  "height": 28,
-                  "cornerRadius": "$radius-lg",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "z25ket",
-                      "name": "Create PR",
-                      "height": 28,
-                      "fill": "$primary",
-                      "gap": 6,
-                      "padding": [
-                        0,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "BYgGF",
-                          "name": "Pull request",
-                          "width": 10,
-                          "height": 10,
-                          "icon": "git-pull-request-create",
-                          "library": "lucide",
-                          "fill": "$primary-foreground"
-                        },
-                        {
-                          "type": "text",
-                          "id": "GPDRh",
-                          "name": "Create PR label",
-                          "fill": "$primary-foreground",
-                          "content": "Create PR",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "cXAPB",
-                      "name": "Target branch",
-                      "height": 28,
-                      "fill": "$accent-blue-surface",
-                      "stroke": "$primary",
-                      "strokeWidth": {
-                        "left": 1
-                      },
-                      "strokeAlignment": "inner",
-                      "gap": 4,
-                      "padding": [
-                        0,
-                        8
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "rAVoo",
-                          "name": "Branch",
-                          "fill": "$primary",
-                          "content": "main",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "500"
-                        },
-                        {
-                          "type": "icon",
-                          "id": "kbUik",
-                          "name": "Choose branch",
-                          "width": 8,
-                          "height": 8,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$primary"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "id": "ZrvoH",
-              "type": "ref",
-              "ref": "AovWi",
-              "name": "Open panel",
-              "width": 28,
-              "height": 28,
-              "descendants": {
-                "AaONw": {
-                  "icon": "panel-right-open"
-                }
-              }
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "id": "Y0c8F",
-          "name": "NARROW · 1100px desktop / 844px workspace. The session strip scrolls; + and every tool stay available.",
-          "fill": "$text-secondary",
-          "content": "NARROW · 1100px window. Chat fills the workspace; opening a tool uses the whole workspace.",
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-sm",
-          "fontWeight": "normal"
-        },
-        {
-          "type": "frame",
-          "id": "bZsso",
-          "name": "Narrow window · chat fills workspace",
-          "width": 844,
-          "height": 44,
-          "fill": "$bg-surface",
-          "gap": 12,
-          "padding": [
-            0,
-            12
-          ],
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "frame",
-              "id": "ggESN",
-              "name": "Workspace identity",
-              "gap": 8,
-              "alignItems": "center",
-              "children": [
-                {
-                  "id": "x58Lxn",
-                  "type": "ref",
-                  "ref": "diRwM",
-                  "name": "Workspace status",
-                  "width": 14,
-                  "height": 14
-                },
-                {
-                  "type": "text",
-                  "id": "q4TzmD",
-                  "name": "Workspace name",
-                  "fill": "$text-primary",
-                  "content": "aquila",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-base",
-                  "fontWeight": "500"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "WWiCj",
-              "name": "Workspace and conversations separator",
-              "width": 1,
-              "height": 16,
-              "fill": "$border-subtle"
-            },
-            {
-              "type": "frame",
-              "id": "y60kQ",
-              "name": "Session navigation",
-              "height": 28,
-              "gap": 4,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "XEyR7",
-                  "name": "Codex session tab",
-                  "height": 28,
-                  "fill": "$bg-raised",
-                  "cornerRadius": "$radius-md",
-                  "gap": 6,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "path",
-                      "id": "QxCPq",
-                      "name": "Codex logo",
-                      "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
-                      "viewBox": [
-                        29,
-                        29,
-                        42,
-                        42
-                      ],
-                      "fill": "$text-secondary",
-                      "width": 14,
-                      "height": 14
-                    },
-                    {
-                      "type": "text",
-                      "id": "l0Wqfh",
-                      "name": "Session title",
-                      "fill": "$text-secondary",
-                      "content": "Codex #1",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "500"
-                    }
-                  ]
-                },
-                {
-                  "id": "R7R8M",
-                  "type": "ref",
-                  "ref": "Cr6GJ",
-                  "name": "Claude session tab",
-                  "width": 98,
-                  "fill": "$bg-surface",
-                  "descendants": {
-                    "Pkiuf": {
-                      "content": "Claude #2",
-                      "fontSize": "$text-sm"
-                    }
-                  }
-                },
-                {
-                  "id": "Xe0wK",
-                  "type": "ref",
-                  "ref": "AovWi",
-                  "name": "New chat",
-                  "descendants": {
-                    "AaONw": {
-                      "icon": "plus"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "KukG9",
-              "name": "Header flexible space",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "knVBj",
-              "name": "Workspace actions",
-              "gap": 6,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "uwRjH",
-                  "name": "Open in editor",
-                  "clip": true,
-                  "height": 28,
-                  "fill": "#00000000",
-                  "cornerRadius": "$radius-lg",
-                  "stroke": "$border-strong",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "k7t8b",
-                      "name": "Quick",
-                      "height": 28,
-                      "gap": 6,
-                      "padding": [
-                        0,
-                        8
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "baldN",
-                          "name": "arrow-up-right",
-                          "width": 11,
-                          "height": 11,
-                          "icon": "arrow-up-right",
-                          "library": "lucide",
-                          "fill": "$text-subtle"
-                        },
-                        {
-                          "type": "text",
-                          "id": "bZ7sJ",
-                          "name": "Open",
-                          "fill": "$text-subtle",
-                          "content": "Open",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "kJaSJ",
-                      "name": "Divider",
-                      "fill": "$border-strong",
-                      "width": 1,
-                      "height": 16
-                    },
-                    {
-                      "type": "frame",
-                      "id": "nnYUZ",
-                      "name": "More",
-                      "height": 28,
-                      "padding": [
-                        0,
-                        6
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "rMQK2",
-                          "name": "chevron-down",
-                          "width": 10,
-                          "height": 10,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$text-muted"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "K0bvj",
-                  "name": "Create PR · joined branch selector · PRActions.tsx",
-                  "clip": true,
-                  "height": 28,
-                  "cornerRadius": "$radius-lg",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "oJSQ9",
-                      "name": "Create PR",
-                      "height": 28,
-                      "fill": "$primary",
-                      "gap": 6,
-                      "padding": [
-                        0,
-                        10
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "s9zBC",
-                          "name": "Pull request",
-                          "width": 10,
-                          "height": 10,
-                          "icon": "git-pull-request-create",
-                          "library": "lucide",
-                          "fill": "$primary-foreground"
-                        },
-                        {
-                          "type": "text",
-                          "id": "Bwa8B",
-                          "name": "Create PR label",
-                          "fill": "$primary-foreground",
-                          "content": "Create PR",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Ncakv",
-                      "name": "Target branch",
-                      "height": 28,
-                      "fill": "$accent-blue-surface",
-                      "stroke": "$primary",
-                      "strokeWidth": {
-                        "left": 1
-                      },
-                      "strokeAlignment": "inner",
-                      "gap": 4,
-                      "padding": [
-                        0,
-                        8
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "R6F8ok",
-                          "name": "Branch",
-                          "fill": "$primary",
-                          "content": "main",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-sm",
-                          "fontWeight": "500"
-                        },
-                        {
-                          "type": "icon",
-                          "id": "TY7Q7",
-                          "name": "Choose branch",
-                          "width": 8,
-                          "height": 8,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$primary"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "id": "txSr8",
-              "type": "ref",
-              "ref": "AovWi",
-              "name": "Open panel",
-              "width": 28,
-              "height": 28,
-              "descendants": {
-                "AaONw": {
-                  "icon": "panel-right-open"
-                }
-              }
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "id": "c5Ihxl",
-          "name": "EXPANDED · Tools use the workspace. Restore returns to the same conversation and saved split.",
-          "fill": "$text-secondary",
-          "content": "NARROW TOOL · Every tool stays visible above its content. Close brings chat back.",
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-sm",
-          "fontWeight": "normal"
-        },
-        {
-          "type": "frame",
-          "id": "Y870s",
-          "name": "Narrow window · tool fills workspace",
-          "width": 844,
-          "height": 44,
-          "fill": "$bg-surface",
-          "gap": 12,
-          "padding": [
-            0,
-            12
-          ],
-          "alignItems": "center",
-          "children": [
-            {
-              "type": "frame",
-              "id": "gfSm6",
-              "name": "Workspace identity",
-              "gap": 8,
-              "alignItems": "center",
-              "children": [
-                {
-                  "id": "uAPRJ",
-                  "type": "ref",
-                  "ref": "diRwM",
-                  "name": "Workspace status",
-                  "width": 14,
-                  "height": 14
-                },
-                {
-                  "type": "text",
-                  "id": "eeZGy",
-                  "name": "Workspace name",
-                  "fill": "$text-primary",
-                  "content": "aquila",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-base",
-                  "fontWeight": "500"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "F4ccQ",
-              "name": "Header flexible space",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "X7AC2",
+              "id": "RwMl7",
               "name": "Tool navigation",
               "height": 28,
               "gap": 4,
               "alignItems": "center",
               "children": [
                 {
-                  "id": "nortd",
+                  "id": "p8z42",
                   "type": "ref",
                   "ref": "YWfmp",
                   "name": "Changes tab",
@@ -174967,7 +174142,7 @@
                   }
                 },
                 {
-                  "id": "PWi89",
+                  "id": "kEnXO",
                   "type": "ref",
                   "ref": "IGG8T",
                   "name": "Files tab",
@@ -174978,7 +174153,7 @@
                   }
                 },
                 {
-                  "id": "c6ITj",
+                  "id": "r05RZS",
                   "type": "ref",
                   "ref": "IGG8T",
                   "name": "Terminal tab",
@@ -174989,7 +174164,7 @@
                   }
                 },
                 {
-                  "id": "Kz8xj",
+                  "id": "c5Or7X",
                   "type": "ref",
                   "ref": "IGG8T",
                   "name": "Browser tab",
@@ -175000,7 +174175,7 @@
                   }
                 },
                 {
-                  "id": "WLLhL",
+                  "id": "soRXg",
                   "type": "ref",
                   "ref": "IGG8T",
                   "name": "Simulator tab",
@@ -175011,7 +174186,7 @@
                   }
                 },
                 {
-                  "id": "aTtB0",
+                  "id": "AQp1V",
                   "type": "ref",
                   "ref": "IGG8T",
                   "name": "Apps tab",
@@ -175022,7 +174197,7 @@
                   }
                 },
                 {
-                  "id": "pEOT6",
+                  "id": "nW0ur",
                   "type": "ref",
                   "ref": "IGG8T",
                   "name": "Agent tab",
@@ -175031,27 +174206,97 @@
                       "icon": "bot"
                     }
                   }
-                },
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rukhT",
+              "name": "Tool header flexible space",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "GNvQL",
+              "name": "Create PR · joined branch selector · PRActions.tsx",
+              "clip": true,
+              "height": 28,
+              "cornerRadius": "$radius-lg",
+              "alignItems": "center",
+              "children": [
                 {
                   "type": "frame",
-                  "id": "b6nQB",
-                  "name": "Tool panel controls",
+                  "id": "QxSTl",
+                  "name": "Create PR",
                   "height": 28,
-                  "gap": 4,
+                  "fill": "$primary",
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    10
+                  ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "mERW2",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "Close panel",
-                      "width": 28,
-                      "height": 28,
-                      "descendants": {
-                        "AaONw": {
-                          "icon": "panel-right-close"
-                        }
-                      }
+                      "type": "icon",
+                      "id": "R3Bh2B",
+                      "name": "Pull request",
+                      "width": 10,
+                      "height": 10,
+                      "icon": "git-pull-request-create",
+                      "library": "lucide",
+                      "fill": "$primary-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Tsvxo",
+                      "name": "Create PR label",
+                      "fill": "$primary-foreground",
+                      "content": "Create PR",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "lCqBS",
+                  "name": "Target branch",
+                  "height": 28,
+                  "fill": "$accent-blue-surface",
+                  "stroke": "$primary",
+                  "strokeWidth": {
+                    "left": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "pZwgb",
+                      "name": "Branch",
+                      "fill": "$primary",
+                      "content": "main",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "QBCSf",
+                      "name": "Choose branch",
+                      "width": 8,
+                      "height": 8,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$primary"
                     }
                   ]
                 }
@@ -175059,22 +174304,125 @@
             },
             {
               "type": "frame",
-              "id": "zHND8",
-              "name": "Tool and workspace actions separator",
-              "width": 1,
-              "height": 16,
-              "fill": "$border-subtle"
+              "id": "V5B3FA",
+              "name": "Tool panel controls",
+              "height": 28,
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "s65gY0",
+                  "type": "ref",
+                  "ref": "AovWi",
+                  "enabled": true,
+                  "name": "Expand panel",
+                  "width": 28,
+                  "height": 28,
+                  "descendants": {
+                    "AaONw": {
+                      "icon": "maximize-2"
+                    }
+                  }
+                },
+                {
+                  "id": "Gj0Lq",
+                  "type": "ref",
+                  "ref": "AovWi",
+                  "name": "Collapse right workspace",
+                  "width": 28,
+                  "height": 28,
+                  "descendants": {
+                    "AaONw": {
+                      "icon": "panel-right-close"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "z4RzmL",
+          "name": "COLLAPSED · Show workspace is in the existing workspace header.",
+          "fill": "$text-secondary",
+          "content": "COLLAPSED · Show workspace is in the existing workspace header.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "ttS4i",
+          "name": "Collapsed workspace header",
+          "width": 1184,
+          "height": 44,
+          "fill": "$bg-surface",
+          "gap": 12,
+          "padding": [
+            0,
+            16
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "WOF6A",
+              "name": "Workspace identity",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "jkrf1",
+                  "type": "ref",
+                  "ref": "diRwM",
+                  "name": "Workspace status",
+                  "width": 14,
+                  "height": 14
+                },
+                {
+                  "type": "text",
+                  "id": "Cimtd",
+                  "name": "Repository",
+                  "fill": "$text-secondary",
+                  "content": "onboarding-fixture",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "Suym6",
+                  "name": "Slash",
+                  "fill": "$text-muted",
+                  "content": "/",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "vPJ4h",
+                  "name": "Workspace name",
+                  "fill": "$text-primary",
+                  "content": "aquila",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "500"
+                }
+              ]
             },
             {
               "type": "frame",
-              "id": "B24fmq",
+              "id": "pXY5v",
               "name": "Workspace actions",
               "gap": 6,
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "ORouh",
+                  "id": "cIc6H",
                   "name": "Open in editor",
                   "clip": true,
                   "height": 28,
@@ -175087,7 +174435,7 @@
                   "children": [
                     {
                       "type": "frame",
-                      "id": "Bkg0Z",
+                      "id": "ZOT4k",
                       "name": "Quick",
                       "height": 28,
                       "gap": 6,
@@ -175099,7 +174447,7 @@
                       "children": [
                         {
                           "type": "icon",
-                          "id": "AS6PD",
+                          "id": "cBo8X",
                           "name": "arrow-up-right",
                           "width": 11,
                           "height": 11,
@@ -175109,7 +174457,7 @@
                         },
                         {
                           "type": "text",
-                          "id": "q28ob",
+                          "id": "eZ3rh",
                           "name": "Open",
                           "fill": "$text-subtle",
                           "content": "Open",
@@ -175121,7 +174469,7 @@
                     },
                     {
                       "type": "rectangle",
-                      "id": "nYiq7",
+                      "id": "zAbAS",
                       "name": "Divider",
                       "fill": "$border-strong",
                       "width": 1,
@@ -175129,7 +174477,7 @@
                     },
                     {
                       "type": "frame",
-                      "id": "XvSRg",
+                      "id": "LNpfF",
                       "name": "More",
                       "height": 28,
                       "padding": [
@@ -175140,7 +174488,7 @@
                       "children": [
                         {
                           "type": "icon",
-                          "id": "f9moNQ",
+                          "id": "eqJcJ",
                           "name": "chevron-down",
                           "width": 10,
                           "height": 10,
@@ -175154,7 +174502,7 @@
                 },
                 {
                   "type": "frame",
-                  "id": "V7ORH",
+                  "id": "b9ZT5F",
                   "name": "Create PR · joined branch selector · PRActions.tsx",
                   "clip": true,
                   "height": 28,
@@ -175163,7 +174511,7 @@
                   "children": [
                     {
                       "type": "frame",
-                      "id": "WMcEn",
+                      "id": "UtcZL",
                       "name": "Create PR",
                       "height": 28,
                       "fill": "$primary",
@@ -175176,7 +174524,7 @@
                       "children": [
                         {
                           "type": "icon",
-                          "id": "q39Hv",
+                          "id": "jEm0C",
                           "name": "Pull request",
                           "width": 10,
                           "height": 10,
@@ -175186,7 +174534,7 @@
                         },
                         {
                           "type": "text",
-                          "id": "HAYlB",
+                          "id": "mIe98",
                           "name": "Create PR label",
                           "fill": "$primary-foreground",
                           "content": "Create PR",
@@ -175198,7 +174546,7 @@
                     },
                     {
                       "type": "frame",
-                      "id": "sFl0C",
+                      "id": "MNdfY",
                       "name": "Target branch",
                       "height": 28,
                       "fill": "$accent-blue-surface",
@@ -175216,7 +174564,7 @@
                       "children": [
                         {
                           "type": "text",
-                          "id": "vHcVl",
+                          "id": "TQmBK",
                           "name": "Branch",
                           "fill": "$primary",
                           "content": "main",
@@ -175226,7 +174574,7 @@
                         },
                         {
                           "type": "icon",
-                          "id": "qsVXc",
+                          "id": "qSVnh",
                           "name": "Choose branch",
                           "width": 8,
                           "height": 8,
@@ -175237,6 +174585,27 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "StpsG",
+                  "name": "Action separator",
+                  "width": 1,
+                  "height": 16,
+                  "fill": "$border-subtle"
+                },
+                {
+                  "id": "AKTab",
+                  "type": "ref",
+                  "ref": "AovWi",
+                  "name": "Show right workspace",
+                  "width": 28,
+                  "height": 28,
+                  "descendants": {
+                    "AaONw": {
+                      "icon": "panel-right-open"
+                    }
+                  }
                 }
               ]
             }
@@ -175244,12 +174613,409 @@
         },
         {
           "type": "text",
-          "id": "a9FzSF",
-          "name": "Content and availability note",
+          "id": "Ekksx",
+          "name": "EXPANDED · Expand becomes Restore. Collapse stays beside it, on the same row.",
+          "fill": "$text-secondary",
+          "content": "EXPANDED · Expand becomes Restore. Collapse stays beside it, on the same row.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "alehl",
+          "name": "Expanded workspace header",
+          "width": 1184,
+          "height": 44,
+          "fill": "$bg-surface",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "D4LxO",
+              "name": "Workspace identity and Open",
+              "height": 44,
+              "gap": 10,
+              "padding": [
+                0,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "KhGS1",
+                  "name": "Workspace identity",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "PyXYk",
+                      "type": "ref",
+                      "ref": "diRwM",
+                      "name": "Workspace status",
+                      "width": 14,
+                      "height": 14
+                    },
+                    {
+                      "type": "text",
+                      "id": "GOzjL",
+                      "name": "Repository",
+                      "fill": "$text-secondary",
+                      "content": "onboarding-fixture",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "xJxEY",
+                      "name": "Slash",
+                      "fill": "$text-muted",
+                      "content": "/",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Tm8d0",
+                      "name": "Workspace name",
+                      "fill": "$text-primary",
+                      "content": "aquila",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "z9Uki",
+                  "name": "Open in editor",
+                  "clip": true,
+                  "height": 28,
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-strong",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "u1BkmJ",
+                      "name": "Quick",
+                      "height": 28,
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "HhhGw",
+                          "name": "arrow-up-right",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "arrow-up-right",
+                          "library": "lucide",
+                          "fill": "$text-subtle"
+                        },
+                        {
+                          "type": "text",
+                          "id": "lyLim",
+                          "name": "Open",
+                          "fill": "$text-subtle",
+                          "content": "Open",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "HMCsh",
+                      "name": "Divider",
+                      "fill": "$border-strong",
+                      "width": 1,
+                      "height": 16
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YHtdK",
+                      "name": "More",
+                      "height": 28,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "hfcS3",
+                          "name": "chevron-down",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "a0rKnq",
+              "name": "Tool header · above workspace tools",
+              "width": "fill_container",
+              "height": 44,
+              "gap": 8,
+              "padding": [
+                0,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "M1UC4i",
+                  "name": "Tool navigation",
+                  "height": 28,
+                  "gap": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "Ig3uQ",
+                      "type": "ref",
+                      "ref": "YWfmp",
+                      "name": "Changes tab",
+                      "descendants": {
+                        "h701Y": {
+                          "icon": "git-branch"
+                        },
+                        "SgEjB": {
+                          "content": "Changes"
+                        }
+                      }
+                    },
+                    {
+                      "id": "FVeIL",
+                      "type": "ref",
+                      "ref": "IGG8T",
+                      "name": "Files tab",
+                      "descendants": {
+                        "VM51c": {
+                          "icon": "folder-open"
+                        }
+                      }
+                    },
+                    {
+                      "id": "R5YT7",
+                      "type": "ref",
+                      "ref": "IGG8T",
+                      "name": "Terminal tab",
+                      "descendants": {
+                        "VM51c": {
+                          "icon": "terminal"
+                        }
+                      }
+                    },
+                    {
+                      "id": "H5LED",
+                      "type": "ref",
+                      "ref": "IGG8T",
+                      "name": "Browser tab",
+                      "descendants": {
+                        "VM51c": {
+                          "icon": "globe"
+                        }
+                      }
+                    },
+                    {
+                      "id": "O0ibjn",
+                      "type": "ref",
+                      "ref": "IGG8T",
+                      "name": "Simulator tab",
+                      "descendants": {
+                        "VM51c": {
+                          "icon": "smartphone"
+                        }
+                      }
+                    },
+                    {
+                      "id": "wALvS",
+                      "type": "ref",
+                      "ref": "IGG8T",
+                      "name": "Apps tab",
+                      "descendants": {
+                        "VM51c": {
+                          "icon": "layout-grid"
+                        }
+                      }
+                    },
+                    {
+                      "id": "m6kkwP",
+                      "type": "ref",
+                      "ref": "IGG8T",
+                      "name": "Agent tab",
+                      "descendants": {
+                        "VM51c": {
+                          "icon": "bot"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QG6My",
+                  "name": "Tool header flexible space",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "gh6X5",
+                  "name": "Create PR · joined branch selector · PRActions.tsx",
+                  "clip": true,
+                  "height": 28,
+                  "cornerRadius": "$radius-lg",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "m1eq5x",
+                      "name": "Create PR",
+                      "height": 28,
+                      "fill": "$primary",
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "uMqAq",
+                          "name": "Pull request",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "git-pull-request-create",
+                          "library": "lucide",
+                          "fill": "$primary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "eTozx",
+                          "name": "Create PR label",
+                          "fill": "$primary-foreground",
+                          "content": "Create PR",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ULc25",
+                      "name": "Target branch",
+                      "height": 28,
+                      "fill": "$accent-blue-surface",
+                      "stroke": "$primary",
+                      "strokeWidth": {
+                        "left": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "IUBsV",
+                          "name": "Branch",
+                          "fill": "$primary",
+                          "content": "main",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "GhJBC",
+                          "name": "Choose branch",
+                          "width": 8,
+                          "height": 8,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$primary"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "U8lVR2",
+                  "name": "Tool panel controls",
+                  "height": 28,
+                  "gap": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "f3aWL",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "enabled": true,
+                      "name": "Restore workspace split",
+                      "width": 28,
+                      "height": 28,
+                      "descendants": {
+                        "AaONw": {
+                          "icon": "minimize-2"
+                        }
+                      }
+                    },
+                    {
+                      "id": "F6Cqq",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "Collapse right workspace",
+                      "width": 28,
+                      "height": 28,
+                      "descendants": {
+                        "AaONw": {
+                          "icon": "panel-right-close"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "ujIEB",
+          "name": "Session scope note",
           "fill": "$text-tertiary",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "The split has a minimum usable width. Below it, use chat or the expanded tool—no clipped session chip and no tabs spilling into the other pane. All seven available tools remain directly accessible.",
+          "content": "Session tabs keep their existing second row. These controls belong to the right workspace; the project sidebar keeps its own controls.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-base",
           "fontWeight": "normal"
