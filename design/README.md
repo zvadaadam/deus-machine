@@ -28,6 +28,13 @@ the canvas — read left to right, top to bottom.
 
 ### Workspace usability
 
+The September 14 **workspace layout proposal** is design-only, as requested before
+implementation. `00b` explains the flow, `22a` shows its controls, and `40a`–`40c`
+show Chat, Split and Expanded views. These clearly marked proposal frames sit at
+y=17,340, separate from the shipped screens. See
+[workspace-layout-proposal.md](./workspace-layout-proposal.md) for behavior and the
+bounded layout cleanup to consider after review.
+
 The settings sidebar, page heading, and command palette share the section definitions in
 `features/settings/settings-navigation.ts`. Desktop sections use a common 896px content
 width and a `Settings / section` header; hosted web resolves unavailable sections to Account.
