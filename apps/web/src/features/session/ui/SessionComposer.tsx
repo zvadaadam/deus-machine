@@ -31,7 +31,11 @@ import {
   type ThinkingLevel,
   getModelForSession,
 } from "@/shared/agents";
-import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
+import {
+  emptyComposer,
+  sessionComposerActions,
+  useSessionComposerStore,
+} from "../store/sessionComposerStore";
 import { readThinkingLevel } from "@shared/protocol";
 
 export interface SessionComposerRef {
@@ -152,6 +156,11 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       () => ({
         sendMessage: async (content, modelOverride) => {
           if (modelOverride) {
+            // Welcome sends carry an explicit model before history mounts the input.
+            sessionComposerActions.seedIfAbsent(
+              sessionId,
+              emptyComposer(modelOverride, defaultThinking)
+            );
             sessionComposerActions.setModel(sessionId, modelOverride, defaultThinking);
           }
           return sendMessage(content, modelOverride);

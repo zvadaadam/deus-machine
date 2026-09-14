@@ -16,7 +16,7 @@ await mkdir(artifacts, { recursive: true });
 await writeFile(
   path.join(artifacts, "entry.tsx"),
   `
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,6 +26,7 @@ import { OnboardingOverlay } from "@/features/onboarding/ui/OnboardingOverlay";
 import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
+import { emptyComposer, sessionComposerActions, useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import { createStreamCursor } from "@/features/session/lib/agentEventFold";
 import { SessionProvider } from "@/features/session/context";
@@ -36,6 +37,30 @@ import { queryKeys } from "@/shared/api/queryKeys";
 import { Toaster } from "@/components/ui/sonner";
 import "@/global.css";
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+window.welcomeCommands = [];
+window.welcomeSendAttempts = 0;
+window.composerForSession = sessionId => useSessionComposerStore.getState().composers[sessionId];
+window.deliverWelcomeHistory = () => client.setQueryData(queryKeys.sessions.messages("history-session"), {
+  messages: [{id: "saved-message", session_id: "history-session", turn_id: "saved-turn", role: "user", seq: 1, parts: [{type: "text", id: "saved-text", text: "Earlier recorded prompt", state: "done"}]}],
+  compactions: [], has_older: false, has_newer: false,
+  turns: [{turnId: "saved-turn", startedAt: 1, execution: {harness: "codex-app-server", model: "gpt-5.6-sol"}}],
+});
+if (location.search === "?welcome-existing") {
+  sessionComposerActions.seedIfAbsent("history-session", {
+    ...emptyComposer("codex-app-server:gpt-5.6-sol", "medium"), planModeEnabled: true,
+  });
+}
+function WelcomeSendJourney() {
+  const panel = useRef(null);
+  // Like MainLayout's workspace-selection effect: this runs before history,
+  // and resolving the child queries must not require a second send attempt.
+  useEffect(() => {
+    window.welcomeSendAttempts++;
+    void panel.current.sendMessage("Start from home", "codex-app-server:gpt-6-astra")
+      .then(sent => { window.welcomeSendResult = sent; });
+  }, []);
+  return <SessionPanel ref={panel} sessionId="history-session" workspacePath="" embedded />;
+}
 window.containsCredential = value => JSON.stringify([client.getQueryCache().getAll().map(q => q.state), client.getMutationCache().getAll().map(m => m.state)]).includes(value);
 window.deliverEmptyCloudSnapshot = () => makeCloudFrameHandler({
   queryClient: client, activeSessionId: "history-session", folds: new Map(),
@@ -50,13 +75,19 @@ client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions
 function TabJourney() {
   const tabs = useChatTabs({workspaceId: "tab-workspace", activeSessionId: "a"});
   return <>
-    <output data-model={tabs.activeTab?.initialModel ?? ""} data-harness={tabs.activeTab?.agentHarness}>{tabs.tabs.map(tab => tab.label).join(" | ")}</output>
+    <output data-model={tabs.activeTab?.initialModel ?? ""} data-harness={tabs.activeTab?.agentHarness} data-session={tabs.activeTab?.sessionId}>{tabs.tabs.map(tab => tab.label).join(" | ")}</output>
     <button onClick={() => client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), tabSessions.map(s => s.id === "a" ? {...s, message_count: 2} : s))}>Discover earlier chat</button>
     <button onClick={() => tabs.markChatTabStarted("tab-c")}>Start third chat</button>
     <button onClick={() => tabs.handleTabClose("tab-b")}>Close original chat</button>
     <button onClick={() => tabs.markChatTabStarted("tab-d")}>Start fourth chat</button>
     <button onClick={() => tabs.handleTabRestore(tabs.closedTabs[0])}>Restore original chat</button>
     <button onClick={() => tabs.handleTabAdd("codex-app-server:gpt-6-astra")}>Open Codex chat</button>
+    {["gpt-5.6-sol", "gpt-6-astra"].map(model => <button key={model} onClick={() => {
+      const sessionId = tabs.activeTab.sessionId;
+      sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(tabs.activeTab.initialModel, "high"));
+      sessionComposerActions.setModel(sessionId, "codex-app-server:" + model, "high");
+      client.setQueryData(queryKeys.sessions.messages(sessionId), {messages: [], turns: [], compactions: [], has_older: false, has_newer: false});
+    }}>Choose {model} in composer</button>)}
     <button onClick={() => tabs.updateChatTabAgentHarness(tabs.activeTab.id, "claude-code")}>Choose Claude</button>
     <button onClick={() => tabs.markChatTabStarted(tabs.activeTab.id)}>Start active chat</button>
     <button onClick={() => client.setQueryData(queryKeys.sessions.byWorkspace("tab-workspace"), sessions => sessions.map(s => s.id === tabs.activeTab.sessionId ? {...s, message_count: 1, agent_harness: "claude-code"} : s))}>Discover active chat</button>
@@ -64,7 +95,7 @@ function TabJourney() {
   </>;
 }
 function App() {
-  const [view, setView] = useState(location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
+  const [view, setView] = useState(location.search.startsWith("?welcome") ? "Welcome" : location.search.startsWith("?direct") ? "Direct" : location.search === "?history" ? "History" : location.search ? "Onboarding" : "GitHub");
   const [phase, setPhase] = useState(0);
   const [laterTool, setLaterTool] = useState(false);
   const [fileMode, setFileMode] = useState("all");
@@ -80,6 +111,7 @@ function App() {
       <main className="mx-auto max-w-3xl">
         {view === "Onboarding" && <OnboardingOverlay />}
         {view === "History" && <SessionComposer sessionId="history-session" />}
+        {view === "Welcome" && <WelcomeSendJourney />}
         {view === "Direct" && <SessionPanel sessionId="history-session" workspacePath="" workspaceKind="cloud" embedded={location.search !== "?direct-modal"} />}
         {view === "GitHub" && <GithubCloudAccess />}
         {view === "Cloud" && <CloudSection />}
@@ -107,6 +139,8 @@ let failRecentProjects = true;
 let failFinishSetup = true;
 let failHistory = true;
 let historyRequests = 0;
+let delayWelcomeHistory = false;
+const pendingWelcomeHistory = [];
 let directHistory = false;
 let failDirectToken = true;
 let directTokenRequests = 0;
@@ -160,6 +194,8 @@ const server = await createServer({
         export const onConnectionChange = fn => { listeners.add(fn); return () => listeners.delete(fn); };
         export const sendRequest = async name => { const r = await fetch("/api/query/" + name); if (!r.ok) throw new Error("Cloud computer is reconnecting"); return r.json(); };
         export const sendMutate = async (name, params) => { const r = await fetch("/api/mutate/" + name, {method: "POST", body: JSON.stringify(params)}); return r.json(); };
+        export const isConnected = () => location.search.startsWith("?welcome");
+        export const sendCommand = async (name, params) => { window.welcomeCommands.push({name, params}); return {accepted: true}; };
       `;
       },
       configureServer(vite) {
@@ -210,14 +246,19 @@ const server = await createServer({
                   },
                   codex: null,
                 });
-          if (req.url === "/api/query/session")
-            return json({
-              id: "history-session",
-              agent_harness: "codex-app-server",
-              status: "idle",
-              workspace_kind: directHistory ? "cloud" : "local",
-              provider_session_id: directHistory ? "provider-session" : null,
-            });
+          if (req.url === "/api/query/session") {
+            const respond = () =>
+              json({
+                id: "history-session",
+                agent_harness: "codex-app-server",
+                status: "idle",
+                workspace_kind: directHistory ? "cloud" : "local",
+                provider_session_id: directHistory ? "provider-session" : null,
+              });
+            if (delayWelcomeHistory) pendingWelcomeHistory.push(respond);
+            else respond();
+            return;
+          }
           if (req.url === "/api/query/cloudDirectToken") {
             directTokenRequests++;
             return failDirectToken
@@ -249,21 +290,25 @@ const server = await createServer({
           }
           if (req.url === "/api/query/messages") {
             historyRequests++;
-            return failHistory
-              ? json({}, 503)
-              : json({
-                  messages: [],
-                  compactions: [],
-                  has_older: false,
-                  has_newer: false,
-                  turns: [
-                    {
-                      turnId: "saved-turn",
-                      startedAt: 1,
-                      execution: { harness: "codex-app-server", model: "gpt-5.6-sol" },
-                    },
-                  ],
-                });
+            const respond = () =>
+              failHistory
+                ? json({}, 503)
+                : json({
+                    messages: [],
+                    compactions: [],
+                    has_older: false,
+                    has_newer: false,
+                    turns: [
+                      {
+                        turnId: "saved-turn",
+                        startedAt: 1,
+                        execution: { harness: "codex-app-server", model: "gpt-5.6-sol" },
+                      },
+                    ],
+                  });
+            if (delayWelcomeHistory) pendingWelcomeHistory.push(respond);
+            else respond();
+            return;
           }
           if (req.url === "/api/query/recentProjects")
             return failRecentProjects
@@ -305,7 +350,7 @@ const server = await createServer({
       },
     },
   ],
-  server: { host: "127.0.0.1", port: 0 },
+  server: { host: "127.0.0.1", port: 0, watch: null, hmr: false },
 });
 // Real browser socket and reconnect loop, with failures at the server boundary.
 const directServer = new WebSocketServer({ noServer: true });
@@ -464,6 +509,33 @@ try {
     assert.equal(await labels.getAttribute("data-model"), "", "Started chats restore from history");
     assert.equal(await labels.getAttribute("data-harness"), "claude-code");
   }
+  // A send ACK can mark a tab started before turn history records its model.
+  // Closing discards composer state, so restore must snapshot the current pick.
+  await page.getByRole("button", { name: "Open Codex chat", exact: true }).click();
+  await page.locator('output[data-model="codex-app-server:gpt-6-astra"]').waitFor();
+  for (const model of ["gpt-5.6-sol", "gpt-6-astra"]) {
+    const sessionId = await labels.getAttribute("data-session");
+    await page.getByRole("button", { name: `Choose ${model} in composer`, exact: true }).click();
+    assert.equal(
+      await page.evaluate((sid) => window.composerForSession(sid).model, sessionId),
+      `codex-app-server:${model}`
+    );
+    if (model === "gpt-5.6-sol") {
+      await page.getByRole("button", { name: "Start active chat", exact: true }).click();
+      await page.locator('output[data-model=""]').waitFor();
+    }
+    await page.getByRole("button", { name: "Close active chat", exact: true }).click();
+    assert.equal(
+      await page.evaluate((sid) => window.composerForSession(sid), sessionId),
+      undefined
+    );
+    await page.getByRole("button", { name: "Restore original chat", exact: true }).click();
+    assert.equal(
+      await labels.getAttribute("data-model"),
+      `codex-app-server:${model}`,
+      "Restore keeps the latest composer model before history arrives"
+    );
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "GitHub", exact: true }).click();
@@ -479,7 +551,48 @@ try {
   failGithub = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByText("Installed for fixture-user").waitFor();
+  // The welcome effect only gets one attempt when the workspace is selected.
+  // Its explicit model must be sufficient before either session or history arrives.
+  failHistory = false;
+  for (const existing of [false, true]) {
+    delayWelcomeHistory = true;
+    await page.goto(server.resolvedUrls.local[0] + (existing ? "?welcome-existing" : "?welcome"));
+    await page.waitForFunction(() => window.welcomeSendResult !== undefined);
+    assert.equal(
+      await page.evaluate(() => window.welcomeSendResult),
+      true,
+      "An explicit welcome send must succeed before the composer UI mounts"
+    );
+    assert.equal(await page.getByRole("textbox").count(), 0);
+    const commands = await page.evaluate(() => window.welcomeCommands);
+    assert.equal(commands.length, 1);
+    assert.equal(commands[0].name, "sendMessage");
+    assert.equal(commands[0].params.content, "Start from home");
+    assert.equal(commands[0].params.model, "gpt-6-astra");
+    assert.equal(commands[0].params.agentHarness, "codex-app-server");
+    assert.equal(commands[0].params.thinkingLevel, existing ? "medium" : "high");
+    assert.equal(commands[0].params.permissionMode, existing ? "plan" : undefined);
+    delayWelcomeHistory = false;
+    for (const respond of pendingWelcomeHistory.splice(0)) respond();
+    await page.getByRole("textbox").waitFor();
+    await page.evaluate(() => window.deliverWelcomeHistory());
+    await page.getByText("Earlier recorded prompt", { exact: true }).waitFor();
+    await page
+      .getByRole("button", { name: "Select model, currently GPT-6 Astra", exact: true })
+      .waitFor();
+    assert.equal(
+      await page.evaluate(() => window.welcomeCommands.length),
+      1,
+      "Resolving history must not dispatch the accepted welcome prompt again"
+    );
+    assert.equal(await page.evaluate(() => window.welcomeSendAttempts), 1);
+    const composer = await page.evaluate(() => window.composerForSession("history-session"));
+    assert.equal(composer.model, "codex-app-server:gpt-6-astra");
+    assert.equal(composer.thinkingLevel, existing ? "medium" : "high");
+    assert.equal(composer.planModeEnabled, existing);
+  }
   // Exercise the real query retry: failed history must not seed the default model.
+  failHistory = true;
   await page.goto(server.resolvedUrls.local[0] + "?history");
   await page.getByRole("alert").filter({ hasText: "Couldn’t load this conversation." }).waitFor();
   assert.equal(await page.getByRole("textbox").count(), 0);

@@ -12,7 +12,10 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
 import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import {
+  sessionComposerActions,
+  useSessionComposerStore,
+} from "@/features/session/store/sessionComposerStore";
 import type { Session } from "@/features/session/types";
 import type {
   ChatTab,
@@ -299,7 +302,10 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           sessionId: closingTab.sessionId,
           agentHarness: closingTab.agentHarness,
           hasStarted: closingTab.hasStarted,
-          initialModel: closingTab.initialModel,
+          // Preserve the current pick even when the send ACK precedes turn history.
+          initialModel:
+            useSessionComposerStore.getState().composers[closingTab.sessionId]?.model ??
+            closingTab.initialModel,
           closedAt: Date.now(),
         };
         setClosedTabs((prevClosed) =>
