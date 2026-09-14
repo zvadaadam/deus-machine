@@ -8,6 +8,7 @@
 
 import { useEffect, useId, useState } from "react";
 import mermaid from "mermaid";
+import { CircleAlert } from "lucide-react";
 import { useTheme } from "@/app/providers/ThemeProvider";
 import { cn } from "@/shared/lib/utils";
 
@@ -73,20 +74,7 @@ export default function MermaidDiagram({ chart }: MermaidDiagramProps) {
     return (
       <div className="my-3">
         <div className="text-muted-foreground/70 mb-1.5 flex items-center gap-1.5 text-xs">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
+          <CircleAlert className="size-3" />
           <span>Diagram syntax error</span>
         </div>
         <pre className="border-border/50 bg-muted/30 overflow-x-auto rounded-lg border p-3 text-xs">

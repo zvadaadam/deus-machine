@@ -1,58 +1,29 @@
-/**
- * Panel Shortcut Hook
- *
- * Cmd+\  toggles the session (chat) panel
- * Cmd+]  toggles the content panel
- *
- * Extracted from MainContent to keep the layout component focused on
- * rendering. All shortcuts operate on imperative panel refs.
- */
-
 import { useEffect } from "react";
-import type { ImperativePanelHandle } from "react-resizable-panels";
+import type { WorkspacePanelMode } from "@/features/workspace/store/workspaceLayoutStore";
 
-interface UsePanelShortcutsOptions {
-  /** Whether any workspace is selected (shortcuts disabled without one) */
-  enabled: boolean;
-  /** Chat panel state */
-  chatPanelCollapsed: boolean;
-  chatPanelRef: React.RefObject<ImperativePanelHandle | null>;
-  /** Content panel state */
-  contentPanelCollapsed: boolean;
-  contentPanelRef: React.RefObject<ImperativePanelHandle | null>;
-}
-
+/** Cmd+\ toggles workspace focus; Cmd+] toggles workspace visibility. */
 export function usePanelShortcuts({
   enabled,
-  chatPanelCollapsed,
-  chatPanelRef,
-  contentPanelCollapsed,
-  contentPanelRef,
-}: UsePanelShortcutsOptions) {
+  mode,
+  onModeChange,
+}: {
+  enabled: boolean;
+  mode: WorkspacePanelMode;
+  onModeChange: (mode: WorkspacePanelMode) => void;
+}) {
   useEffect(() => {
     if (!enabled) return;
-    const handler = (e: KeyboardEvent) => {
-      // Cmd+\ — toggle chat panel
-      if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
-        e.preventDefault();
-        if (chatPanelCollapsed) {
-          chatPanelRef.current?.expand();
-        } else {
-          chatPanelRef.current?.collapse();
-        }
-      }
-
-      // Cmd+] — toggle content panel
-      if ((e.metaKey || e.ctrlKey) && e.key === "]") {
-        e.preventDefault();
-        if (contentPanelCollapsed) {
-          contentPanelRef.current?.expand();
-        } else {
-          contentPanelRef.current?.collapse();
-        }
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "\\") {
+        event.preventDefault();
+        onModeChange(mode === "content" ? "split" : "content");
+      } else if (event.key === "]") {
+        event.preventDefault();
+        onModeChange(mode === "chat" ? "split" : "chat");
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [enabled, chatPanelCollapsed, chatPanelRef, contentPanelCollapsed, contentPanelRef]);
+  }, [enabled, mode, onModeChange]);
 }

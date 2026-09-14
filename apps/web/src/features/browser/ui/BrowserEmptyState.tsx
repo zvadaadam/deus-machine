@@ -54,7 +54,7 @@ export function BrowserEmptyState({ onOpen }: BrowserEmptyStateProps) {
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3">
       <div className="bg-muted/50 flex h-10 w-10 items-center justify-center rounded-xl">
-        <Globe className="text-muted-foreground/60 h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+        <Globe className="text-muted-foreground/60 h-5 w-5" aria-hidden="true" />
       </div>
       <div className="text-center">
         <p className="text-muted-foreground text-sm">

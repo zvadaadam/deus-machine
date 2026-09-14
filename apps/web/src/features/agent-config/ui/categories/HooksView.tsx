@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 /**
  * Hooks category view — fetches, displays, and manages CRUD for hook configurations.
  *
@@ -47,6 +48,7 @@ interface FormMatcherGroup {
 interface HooksViewProps {
   repoPath?: string;
   repoName?: string;
+  toolbarAction?: ReactNode;
 }
 
 const EMPTY_FORM_GROUP: FormMatcherGroup = {
@@ -199,7 +201,7 @@ function getMatcherHint(event: string): string {
 /*  Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export function HooksView({ repoPath, repoName }: HooksViewProps) {
+export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps) {
   const globalQuery = useAgentConfigList<HooksMap>("hooks", "global");
   const projectQuery = useAgentConfigList<HooksMap>("hooks", "project", repoPath, {
     enabled: !!repoPath,
@@ -460,6 +462,7 @@ export function HooksView({ repoPath, repoName }: HooksViewProps) {
 
   return (
     <CategoryContentArea
+      toolbarAction={toolbarAction}
       categoryLabel="Hooks"
       globalItems={globalItems}
       projectItems={projectItems}

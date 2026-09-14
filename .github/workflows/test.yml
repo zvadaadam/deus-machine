@@ -169,12 +169,17 @@ jobs:
       - name: Verify workspace usability in desktop and mobile layouts
         run: bun test/e2e/workspace-usability.browser.mjs
 
+      - name: Verify workspace panels and preserved tool state
+        run: bun test/e2e/workspace-layout.browser.mjs
+
       - name: Upload UI regression screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: workspace-usability-screenshots
-          path: .context/workspace-usability-ui/*.png
+          path: |
+            .context/workspace-usability-ui/*.png
+            .context/workspace-layout-ui/*.png
           if-no-files-found: ignore
 
   runtime-linux:

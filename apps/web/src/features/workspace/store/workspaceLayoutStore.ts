@@ -1,20 +1,4 @@
-/**
- * Workspace Layout Store
- *
- * Per-workspace layout state persistence for content panel, files, and browser.
- * Each workspace remembers its own layout configuration independently.
- *
- * State Structure:
- * {
- *   [workspaceId]: {
- *     activeContentTab: 'changes' | 'files' | 'config' | 'terminal' | ...
- *     selectedFilePath: string | null
- *     sidebarCollapsed: boolean
- *     chatPanelCollapsed: boolean
- *     contentPanelCollapsed: boolean
- *   }
- * }
- */
+/** Per-workspace view, tab and file state. Live terminal processes are never persisted. */
 
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
@@ -29,6 +13,8 @@ export type ContentTab =
   | "browser"
   | "simulator"
   | "apps";
+
+export type WorkspacePanelMode = "split" | "chat" | "content";
 
 export interface PersistedTerminalTab {
   id: string;
@@ -47,11 +33,9 @@ interface WorkspaceLayoutState {
   activeContentTab: ContentTab;
   selectedFilePath: string | null;
   pendingFileNavigation: PendingFileNavigation | null;
-  sidebarCollapsed: boolean;
   browserTabs: PersistedBrowserTab[]; // Persisted browser tab URLs/titles
   activeBrowserTabId: string | null; // Which browser tab was last active
-  chatPanelCollapsed: boolean;
-  contentPanelCollapsed: boolean;
+  panelMode: WorkspacePanelMode;
   fileTreePinned: boolean; // true = expanded file tree panel, false = minimap strip + hover
   chatTabSessionIds: string[]; // Ordered session IDs for open chat tabs
   activeChatTabSessionId: string | null; // Which chat tab is active
@@ -71,9 +55,7 @@ interface WorkspaceLayoutStore {
   setActiveContentTab: (workspaceId: string, tab: ContentTab) => void;
   setSelectedFilePath: (workspaceId: string, path: string | null) => void;
   setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) => void;
-  setSidebarCollapsed: (workspaceId: string, collapsed: boolean) => void;
-  setChatPanelCollapsed: (workspaceId: string, collapsed: boolean) => void;
-  setContentPanelCollapsed: (workspaceId: string, collapsed: boolean) => void;
+  setPanelMode: (workspaceId: string, mode: WorkspacePanelMode) => void;
   setPendingTerminalCommand: (workspaceId: string, command: string | null) => void;
   setSimulatorUdid: (workspaceId: string, udid: string | null) => void;
   setChatTabState: (
@@ -96,11 +78,9 @@ export const defaultLayout: WorkspaceLayoutState = {
   activeContentTab: "changes",
   selectedFilePath: null,
   pendingFileNavigation: null,
-  sidebarCollapsed: false,
   browserTabs: [],
   activeBrowserTabId: null,
-  chatPanelCollapsed: false,
-  contentPanelCollapsed: false,
+  panelMode: "split",
   fileTreePinned: true,
   chatTabSessionIds: [],
   activeChatTabSessionId: null,
@@ -139,157 +119,27 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
           ),
 
         setActiveContentTab: (workspaceId, tab) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  activeContentTab: tab,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setActiveContentTab"
-          ),
-
+          get().setLayout(workspaceId, { activeContentTab: tab }),
         setSelectedFilePath: (workspaceId, path) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  selectedFilePath: path,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setSelectedFilePath"
-          ),
-
+          get().setLayout(workspaceId, { selectedFilePath: path }),
         setPendingFileNavigation: (workspaceId, navigation) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  pendingFileNavigation: navigation,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setPendingFileNavigation"
-          ),
-
-        setSidebarCollapsed: (workspaceId, collapsed) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  sidebarCollapsed: collapsed,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setSidebarCollapsed"
-          ),
-
-        setChatPanelCollapsed: (workspaceId, collapsed) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  chatPanelCollapsed: collapsed,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setChatPanelCollapsed"
-          ),
-
-        setContentPanelCollapsed: (workspaceId, collapsed) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  contentPanelCollapsed: collapsed,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setContentPanelCollapsed"
-          ),
-
+          get().setLayout(workspaceId, { pendingFileNavigation: navigation }),
+        setPanelMode: (workspaceId, panelMode) => get().setLayout(workspaceId, { panelMode }),
         setChatTabState: (workspaceId, sessionIds, activeSessionId) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  chatTabSessionIds: sessionIds,
-                  activeChatTabSessionId: activeSessionId,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setChatTabState"
-          ),
-
+          get().setLayout(workspaceId, {
+            chatTabSessionIds: sessionIds,
+            activeChatTabSessionId: activeSessionId,
+          }),
         setTerminalTabState: (workspaceId, tabs, activeTabId, nextNum) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  terminalTabs: tabs,
-                  activeTerminalTabId: activeTabId,
-                  nextTerminalNum: nextNum,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setTerminalTabState"
-          ),
-
+          get().setLayout(workspaceId, {
+            terminalTabs: tabs,
+            activeTerminalTabId: activeTabId,
+            nextTerminalNum: nextNum,
+          }),
         setPendingTerminalCommand: (workspaceId, command) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  pendingTerminalCommand: command,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setPendingTerminalCommand"
-          ),
-
+          get().setLayout(workspaceId, { pendingTerminalCommand: command }),
         setSimulatorUdid: (workspaceId, udid) =>
-          set(
-            (state) => ({
-              layouts: {
-                ...state.layouts,
-                [workspaceId]: {
-                  ...(state.layouts[workspaceId] || defaultLayout),
-                  simulatorUdid: udid,
-                },
-              },
-            }),
-            false,
-            "workspaceLayout/setSimulatorUdid"
-          ),
+          get().setLayout(workspaceId, { simulatorUdid: udid }),
 
         clearWorkspaceLayout: (workspaceId) =>
           set(
@@ -305,7 +155,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
       }),
       {
         name: "workspace-layout-store",
-        version: 10,
+        version: 11,
         partialize: (state) => ({
           ...state,
           layouts: Object.fromEntries(
@@ -322,7 +172,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutStore>()(
             ])
           ),
         }),
-        // No migration — stale v9 data falls back to defaultLayout
+        // Pre-launch: obsolete layout preferences fall back to defaults; history lives in the DB.
         migrate: () => ({ layouts: {} }) as unknown as WorkspaceLayoutStore,
       }
     ),
@@ -346,12 +196,16 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setSelectedFilePath(workspaceId, path),
   setPendingFileNavigation: (workspaceId: string, navigation: PendingFileNavigation | null) =>
     useWorkspaceLayoutStore.getState().setPendingFileNavigation(workspaceId, navigation),
-  setSidebarCollapsed: (workspaceId: string, collapsed: boolean) =>
-    useWorkspaceLayoutStore.getState().setSidebarCollapsed(workspaceId, collapsed),
-  setChatPanelCollapsed: (workspaceId: string, collapsed: boolean) =>
-    useWorkspaceLayoutStore.getState().setChatPanelCollapsed(workspaceId, collapsed),
-  setContentPanelCollapsed: (workspaceId: string, collapsed: boolean) =>
-    useWorkspaceLayoutStore.getState().setContentPanelCollapsed(workspaceId, collapsed),
+  setPanelMode: (workspaceId: string, mode: WorkspacePanelMode) =>
+    useWorkspaceLayoutStore.getState().setPanelMode(workspaceId, mode),
+  // Explicit navigation reveals the tool. Background tab updates do not change the view.
+  openContentTab: (workspaceId: string, tab: ContentTab) => {
+    const store = useWorkspaceLayoutStore.getState();
+    store.setLayout(workspaceId, {
+      activeContentTab: tab,
+      panelMode: store.getLayout(workspaceId).panelMode === "content" ? "content" : "split",
+    });
+  },
   setChatTabState: (workspaceId: string, sessionIds: string[], activeSessionId: string | null) =>
     useWorkspaceLayoutStore.getState().setChatTabState(workspaceId, sessionIds, activeSessionId),
   setTerminalTabState: (
@@ -375,7 +229,8 @@ export const workspaceLayoutActions = {
     useWorkspaceLayoutStore.getState().setLayout(workspaceId, {
       activeContentTab: target,
       selectedFilePath: normalizedPath,
-      contentPanelCollapsed: false,
+      panelMode:
+        workspaceLayoutActions.getLayout(workspaceId).panelMode === "content" ? "content" : "split",
       pendingFileNavigation: {
         requestId: crypto.randomUUID(),
         path: normalizedPath,

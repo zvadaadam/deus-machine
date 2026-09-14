@@ -160,9 +160,9 @@ export function AppSidebar({
         <SidebarContent className="flex h-full items-center justify-center">
           <div className="flex flex-col items-center gap-3 px-6 text-center">
             {webDirect ? (
-              <Cloud className="text-text-muted/30 h-10 w-10" strokeWidth={1.5} />
+              <Cloud className="text-text-muted/30 h-10 w-10" />
             ) : (
-              <FolderOpen className="text-text-muted/30 h-10 w-10" strokeWidth={1.5} />
+              <FolderOpen className="text-text-muted/30 h-10 w-10" />
             )}
             <div className="space-y-1">
               <p className="text-text-secondary text-sm font-medium">

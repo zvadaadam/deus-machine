@@ -302,7 +302,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       if (!workspaceId) return;
       workspaceLayoutActions.setLayout(workspaceId, {
         activeContentTab: "terminal",
-        contentPanelCollapsed: false,
+        panelMode: "split",
       });
       workspaceLayoutActions.setPendingTerminalCommand(workspaceId, "claude login");
     }, [workspaceId]);

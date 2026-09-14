@@ -10,6 +10,7 @@
  */
 
 import { useRef, useEffect, useState } from "react";
+import { CircleAlert, Eye } from "lucide-react";
 
 /** Elements that create nested browsing contexts capable of executing scripts */
 const BLOCKED_ELEMENTS = new Set([
@@ -133,20 +134,7 @@ export function HtmlPreviewBlock({ code }: HtmlPreviewBlockProps) {
     return (
       <div className="my-3">
         <div className="text-muted-foreground/70 mb-1.5 flex items-center gap-1.5 text-xs">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
+          <CircleAlert className="size-3" />
           <span>Preview error</span>
         </div>
         <pre className="border-border/50 bg-muted/30 overflow-x-auto rounded-lg border p-3 text-xs">
@@ -159,19 +147,7 @@ export function HtmlPreviewBlock({ code }: HtmlPreviewBlockProps) {
   return (
     <div className="my-3">
       <div className="text-muted-foreground/70 mb-1.5 flex items-center gap-1.5 text-xs">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
+        <Eye className="size-3" />
         <span>Preview</span>
       </div>
       <div className="border-border/50 bg-muted/30 overflow-hidden rounded-lg border">

@@ -6,25 +6,7 @@ import {
 
 describe("workspaceLayoutStore", () => {
   beforeEach(() => {
-    const storage = new Map<string, string>();
-
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: (key: string) => storage.get(key) ?? null,
-        setItem: (key: string, value: string) => {
-          storage.set(key, value);
-        },
-        removeItem: (key: string) => {
-          storage.delete(key);
-        },
-        clear: () => {
-          storage.clear();
-        },
-      },
-    });
-
-    useWorkspaceLayoutStore.setState({ layouts: {} });
+    workspaceLayoutActions.resetAll();
   });
 
   it("opens a file in the requested content tab and queues a reveal request", () => {
@@ -34,7 +16,7 @@ describe("workspaceLayoutStore", () => {
 
     expect(layout.activeContentTab).toBe("files");
     expect(layout.selectedFilePath).toBe("src/demo.tsx");
-    expect(layout.contentPanelCollapsed).toBe(false);
+    expect(layout.panelMode).toBe("split");
     expect(layout.pendingFileNavigation).toMatchObject({
       path: "src/demo.tsx",
       target: "files",
@@ -61,5 +43,53 @@ describe("workspaceLayoutStore", () => {
     workspaceLayoutActions.openFileInContent("ws-123", "../outside.ts", "files");
 
     expect(useWorkspaceLayoutStore.getState().layouts["ws-123"]).toBeUndefined();
+  });
+
+  it("changes views without losing tool or session state or touching another workspace", () => {
+    workspaceLayoutActions.setLayout("first", {
+      activeContentTab: "browser",
+      browserTabs: [{ id: "preview", url: "http://localhost:3000", title: "Preview" }],
+      activeBrowserTabId: "preview",
+      selectedFilePath: "README.md",
+    });
+    workspaceLayoutActions.setChatTabState("first", ["claude", "codex"], "codex");
+    workspaceLayoutActions.setTerminalTabState(
+      "first",
+      [{ id: "shell", title: "Dev server" }],
+      "shell",
+      2
+    );
+    workspaceLayoutActions.setPanelMode("second", "content");
+    const before = workspaceLayoutActions.getLayout("first");
+
+    for (const mode of ["chat", "content", "split"] as const) {
+      workspaceLayoutActions.setPanelMode("first", mode);
+      expect(workspaceLayoutActions.getLayout("first")).toEqual({ ...before, panelMode: mode });
+      expect(workspaceLayoutActions.getLayout("second").panelMode).toBe("content");
+    }
+  });
+
+  it("keeps a hidden workspace hidden for background events, and opens it for explicit navigation", () => {
+    workspaceLayoutActions.setPanelMode("first", "chat");
+    workspaceLayoutActions.setActiveContentTab("first", "browser");
+    expect(workspaceLayoutActions.getLayout("first").panelMode).toBe("chat");
+
+    workspaceLayoutActions.openContentTab("first", "terminal");
+    expect(workspaceLayoutActions.getLayout("first")).toMatchObject({
+      panelMode: "split",
+      activeContentTab: "terminal",
+    });
+
+    workspaceLayoutActions.setPanelMode("first", "chat");
+    workspaceLayoutActions.openFileInContent("first", "README.md", "files");
+    expect(workspaceLayoutActions.getLayout("first").panelMode).toBe("split");
+  });
+
+  it("keeps the workspace expanded when navigating between tools and files", () => {
+    workspaceLayoutActions.setPanelMode("first", "content");
+    workspaceLayoutActions.openContentTab("first", "browser");
+    expect(workspaceLayoutActions.getLayout("first").panelMode).toBe("content");
+    workspaceLayoutActions.openFileInContent("first", "README.md", "changes");
+    expect(workspaceLayoutActions.getLayout("first").panelMode).toBe("content");
   });
 });

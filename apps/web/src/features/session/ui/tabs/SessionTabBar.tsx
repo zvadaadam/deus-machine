@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { PanelLeftClose, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   DndContext,
   MouseSensor,
@@ -34,7 +34,6 @@ interface SessionTabBarProps {
   onTabReorder?: (reorderedTabs: ChatTab[]) => void;
   closedTabs?: ClosedSessionTab[];
   onTabRestore?: (closedTab: ClosedSessionTab) => void;
-  onCollapseChatPanel?: () => void;
 }
 
 function getWrappedIndex(currentIndex: number, nextIndex: number, count: number): number {
@@ -56,7 +55,6 @@ export function SessionTabBar({
   onTabReorder,
   closedTabs = EMPTY_CLOSED_TABS,
   onTabRestore,
-  onCollapseChatPanel,
 }: SessionTabBarProps) {
   const canCloseTabs = tabs.length > 1;
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -205,27 +203,6 @@ export function SessionTabBar({
 
       {onTabRestore && (
         <ClosedSessionsPopover closedTabs={closedTabs} onTabRestore={onTabRestore} />
-      )}
-
-      {onCollapseChatPanel && (
-        <Tooltip delayDuration={300}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Collapse chat panel"
-              onClick={onCollapseChatPanel}
-              className="text-text-disabled hover:text-text-secondary hover:bg-bg-overlay ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ease-out"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={8}>
-            <div className="flex items-center gap-3">
-              <span className="text-xs">Collapse chat</span>
-              <TooltipKbd>⌘\</TooltipKbd>
-            </div>
-          </TooltipContent>
-        </Tooltip>
       )}
     </div>
   );

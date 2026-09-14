@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 /**
  * MCP Servers category view — fetches, displays, and manages CRUD for MCP server configs.
  *
@@ -23,6 +24,7 @@ import type { ConfigDisplayItem, ConfigScope, McpServerItem } from "../../types"
 interface McpViewProps {
   repoPath?: string;
   repoName?: string;
+  toolbarAction?: ReactNode;
 }
 
 function toDisplayItems(items: McpServerItem[], scope: ConfigScope): ConfigDisplayItem[] {
@@ -36,7 +38,7 @@ function toDisplayItems(items: McpServerItem[], scope: ConfigScope): ConfigDispl
   }));
 }
 
-export function McpView({ repoPath, repoName }: McpViewProps) {
+export function McpView({ repoPath, repoName, toolbarAction }: McpViewProps) {
   const globalQuery = useAgentConfigList<McpServerItem[]>("mcp-servers", "global");
   const projectQuery = useAgentConfigList<McpServerItem[]>("mcp-servers", "project", repoPath, {
     enabled: !!repoPath,
@@ -209,6 +211,7 @@ export function McpView({ repoPath, repoName }: McpViewProps) {
 
   return (
     <CategoryContentArea
+      toolbarAction={toolbarAction}
       categoryLabel="MCP Servers"
       globalItems={globalItems}
       projectItems={projectItems}

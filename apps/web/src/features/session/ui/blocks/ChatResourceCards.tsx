@@ -40,7 +40,7 @@ export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
   const openBrowserUrl = useCallback(
     (url: string) => {
       if (!workspaceId) return;
-      workspaceLayoutActions.setActiveContentTab(workspaceId, "browser");
+      workspaceLayoutActions.openContentTab(workspaceId, "browser");
       browserWindowActions.requestNewTab(workspaceId, url);
     },
     [workspaceId]
@@ -227,7 +227,7 @@ function ResourceActionButton({
 
 function ResourceIcon({ resource }: { resource: ChatResource }) {
   const className = "h-4 w-4";
-  if (resource.type === "website") return <Globe className={className} strokeWidth={1.5} />;
+  if (resource.type === "website") return <Globe className={className} />;
 
   const extension = resource.path?.split(".").pop()?.toLowerCase();
   if (extension && ["avif", "gif", "jpeg", "jpg", "png", "webp"].includes(extension)) {
@@ -247,7 +247,7 @@ function ResourceIcon({ resource }: { resource: ChatResource }) {
 
 function ActionIcon({ action, className }: { action: ResourceAction; className: string }) {
   if (action.kind === "deus-browser" || action.kind === "deus-browser-file") {
-    return <Globe className={className} strokeWidth={1.5} />;
+    return <Globe className={className} />;
   }
   if (action.kind === "deus-file") return <FileText className={className} />;
   if (action.kind === "finder") return <FolderOpen className={className} />;

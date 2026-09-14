@@ -109,7 +109,7 @@ export function TabPill({
               "group-hover:scale-100 group-hover:opacity-100 group-hover:blur-none"
             )}
           >
-            <X strokeWidth={1.75} className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" />
           </span>
         </button>
       ) : (

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { match } from "ts-pattern";
 import { AlertCircle, Check, ChevronDown, Loader2, Rocket, RotateCcw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { formatSimulatorRuntime } from "./simulatorDisplay";
 
 interface SimulatorContentHeaderProps {
   state: SimPhase;
+  toolbarAction?: ReactNode;
   simulators: SimulatorInfo[];
   selectedSim: SimulatorInfo | undefined;
   selectedUdid: string | null;
@@ -32,6 +34,7 @@ interface SimulatorContentHeaderProps {
 
 export function SimulatorContentHeader({
   state,
+  toolbarAction,
   simulators,
   selectedSim,
   selectedUdid,
@@ -197,6 +200,7 @@ export function SimulatorContentHeader({
           <TooltipContent side="bottom">Stop simulator</TooltipContent>
         </Tooltip>
       )}
+      {toolbarAction}
     </div>
   );
 }

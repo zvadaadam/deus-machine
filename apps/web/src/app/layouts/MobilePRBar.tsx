@@ -188,7 +188,7 @@ export function MobilePRStatusBar({
     .with({ type: "ci_pending" }, (s) => (
       <StatusBar prNumber={s.prNumber} prUrl={s.prUrl}>
         <span className="text-warning flex items-center gap-1 text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.5} />
+          <Loader2 className="h-3 w-3 animate-spin" />
           {s.checksTotal > 0 ? `${s.checksDone}/${s.checksTotal} checks` : "Checks running"}
         </span>
       </StatusBar>

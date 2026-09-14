@@ -9,7 +9,7 @@
  * screenshots and the agent's device actions.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, Check, Loader2, Play, RotateCcw, Sparkles, X } from "lucide-react";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ import { CloudSimulatorScreen } from "./CloudSimulatorScreen";
 interface CloudSimulatorPanelProps {
   workspace: Workspace;
   visible: boolean;
+  toolbarAction?: ReactNode;
 }
 
 /** The platform stops an idle device after 20 minutes; a viewer looking at
@@ -102,7 +103,11 @@ async function attachScreenshot(sessionId: string, base64: string): Promise<void
   if (processed.length) sessionComposerActions.addImageAttachments(sessionId, processed);
 }
 
-export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelProps) {
+export function CloudSimulatorPanel({
+  workspace,
+  visible,
+  toolbarAction,
+}: CloudSimulatorPanelProps) {
   const workspaceId = workspace.id;
   const device = useCloudSimulatorStore(
     (s) => s.byWorkspace[workspaceId] ?? EMPTY_CLOUD_SIM_DEVICE
@@ -298,6 +303,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
 
   const header = (
     <CloudSimulatorHeader
+      toolbarAction={toolbarAction}
       device={device}
       phase={phase}
       onStart={handleStart}
@@ -315,19 +321,17 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   return (
     <TooltipProvider delayDuration={200}>
       <div className="bg-bg-base flex h-full w-full flex-col">
+        {header}
         {/*
           The stage. The platform's stream draws its own device — a realistic
           iPhone skin around the screen, touch, hardware buttons, rotation —
           so Deus must not draw a second phone around it (the local simulator
           keeps its DeviceFrame: that stream is bare pixels). Give the viewer
           the whole area and it centers and scales the device itself; our
-          controls float above it.
+          controls stay in the tool row above it.
         */}
         <div className="bg-bg-muted/30 relative min-h-0 flex-1">
-          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
-            <div className="pointer-events-auto w-full max-w-[420px]">{header}</div>
-          </div>
-          <div className="absolute inset-0 pt-16">
+          <div className="absolute inset-0">
             {phase === "live" && device.streamUrl ? (
               <CloudSimulatorScreen
                 key={device.streamUrl}

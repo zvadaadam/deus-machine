@@ -28,7 +28,7 @@ the canvas — read left to right, top to bottom.
 
 ### Workspace usability
 
-The September 14 **right workspace controls proposal** is design-only. The current
+The September 14 **right workspace controls** are implemented in `apps/web`. The current
 frames start at y=18,640: `00c` explains the scope, `22b` shows the controls, and
 `40d`–`40f` show the right workspace open, collapsed and expanded. The existing
 workspace header and session-tab row remain in the split. Hide sits beside Open in
@@ -37,10 +37,11 @@ The expanded view omits the title and Open but
 keeps one Hide workspace icon before the tool tabs. The toolbar aligns with the
 content's left edge. Hide returns to full chat; Expand/Restore sits in the content's
 existing action row and Restore brings back the split and normal header.
-The four layout controls use Lucide at a lighter 1.5 stroke with the same 28px button.
+Lucide icons share a 1.5 stroke; layout controls keep a 28px button. The current
+screens, control board and iconography foundation use matching SVG path overrides.
 The joined PR/branch button and project sidebar remain. All available tools are
 listed directly. The earlier exploration is preserved at y=17,340 (`00b`, `22a`,
-`40a`–`40c`). See [workspace-layout-proposal.md](./workspace-layout-proposal.md).
+`40a`–`40c`). See [workspace-layout.md](./workspace-layout.md).
 
 The settings sidebar, page heading, and command palette share the section definitions in
 `features/settings/settings-navigation.ts`. Desktop sections use a common 896px content

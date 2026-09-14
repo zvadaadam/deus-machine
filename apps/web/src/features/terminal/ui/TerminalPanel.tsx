@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Plus, Terminal as TerminalIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Plus, Terminal as TerminalIcon } from "lucide-react";
 import { TabPill } from "@/components/ui/tab-pill";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTerminalTaskStore, consumeTerminalTask } from "../store/terminalTaskStore";
@@ -26,7 +25,7 @@ interface TerminalPanelProps {
   cloud?: boolean;
   /** Whether the terminal panel is the active (visible) right-side tab */
   panelVisible?: boolean;
-  onCollapse?: () => void;
+  toolbarAction?: ReactNode;
 }
 
 /**
@@ -86,7 +85,7 @@ export function TerminalPanel({
   workspacePath,
   cloud,
   panelVisible = true,
-  onCollapse,
+  toolbarAction,
 }: TerminalPanelProps) {
   // Track all visited workspaces so their Terminal components stay mounted
   // across workspace switches, preserving PTY processes and xterm history.
@@ -229,7 +228,7 @@ export function TerminalPanel({
       {/* Tab bar — shows only the current workspace's tabs */}
       <div className="vibrancy-panel border-border/40 flex h-9 flex-shrink-0 items-center justify-between border-b">
         <div
-          className="flex flex-1 items-center gap-1 overflow-x-auto px-2"
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2"
           role="tablist"
           aria-label="Terminal tabs"
         >
@@ -237,7 +236,7 @@ export function TerminalPanel({
             <TabPill
               key={tab.id}
               active={activeTabId === tab.id}
-              icon={<TerminalIcon strokeWidth={1.75} className="h-3.5 w-3.5" />}
+              icon={<TerminalIcon className="h-3.5 w-3.5" />}
               onSelect={() => updateTabs(tabs, tab.id)}
               onClose={() => closeTab(tab.id)}
               closeAriaLabel={`Close ${tab.title}`}
@@ -254,7 +253,7 @@ export function TerminalPanel({
                 onClick={addTerminal}
                 className="text-text-muted hover:bg-foreground/5 hover:text-text-tertiary flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent transition-[color,background-color,scale] duration-150 ease-out active:scale-[0.96]"
               >
-                <Plus strokeWidth={1.75} className="h-3.5 w-3.5" />
+                <Plus className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={8}>
@@ -263,19 +262,7 @@ export function TerminalPanel({
           </Tooltip>
         </div>
 
-        {/* Collapse button on same line as tabs */}
-        {onCollapse && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onCollapse}
-            className="mr-2 h-5 w-5"
-            title="Collapse terminal"
-            aria-label="Collapse terminal"
-          >
-            <ChevronDown className="h-3 w-3" />
-          </Button>
-        )}
+        {toolbarAction && <div className="mr-2 flex shrink-0 items-center">{toolbarAction}</div>}
       </div>
 
       {/* Terminal content — renders ALL visited workspaces' terminals,

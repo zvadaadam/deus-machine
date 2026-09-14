@@ -34335,7 +34335,7 @@
               "fill": "$text-muted",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "lucide-react throughout, at 6 sizes. Meaning is carried by the glyph; colour only enters for git lifecycle and attention.",
+              "content": "Lucide throughout. One 1.5 stroke on the 24-unit grid; meaning comes from the glyph. Colour signals git lifecycle and attention.",
               "lineHeight": 1.5,
               "fontFamily": "$font-sans",
               "fontSize": "$text-xs",
@@ -34371,14 +34371,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "z5V2t",
-                  "name": "i",
+                  "type": "path",
+                  "id": "IA9IW",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 10,
                   "height": 10,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 0.625,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34401,14 +34409,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "g9AkBq",
-                  "name": "i",
+                  "type": "path",
+                  "id": "y6opp",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 11,
                   "height": 11,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 0.6875,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34431,14 +34447,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "KTW3O",
-                  "name": "i",
+                  "type": "path",
+                  "id": "sBL5g",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 12,
                   "height": 12,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 0.75,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34461,14 +34485,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "vr30M",
-                  "name": "i",
+                  "type": "path",
+                  "id": "N6sWkB",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 13,
                   "height": 13,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 0.8125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34491,14 +34523,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "T302s",
-                  "name": "i",
+                  "type": "path",
+                  "id": "OSBaD",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 14,
                   "height": 14,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 0.875,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34521,14 +34561,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "SMMUe",
-                  "name": "i",
+                  "type": "path",
+                  "id": "XaNTX",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 16,
                   "height": 16,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34551,14 +34599,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "cjgbi",
-                  "name": "i",
+                  "type": "path",
+                  "id": "gdLLR",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34581,14 +34637,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "k42ol4",
-                  "name": "i",
+                  "type": "path",
+                  "id": "HfqZc",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 20,
                   "height": 20,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.25,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34611,7 +34675,7 @@
           "fill": "$text-disabled",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Sizes are set explicitly (h-3.5 w-3.5), never inherited — the [&_svg]:size-4 default in button/menu is the only implicit one.",
+          "content": "Explicit icon sizes stay unchanged; at 16px the stroke is 1px. Current boards use Lucide SVG paths because Pencil’s icon node cannot set stroke width. Brand marks and status illustrations retain their own geometry.",
           "fontFamily": "$font-sans",
           "fontSize": 10,
           "fontWeight": "normal"
@@ -34644,14 +34708,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "MFCVZ",
-                  "name": "i",
+                  "type": "path",
+                  "id": "j3JAdd",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-muted"
+                  "stroke": "$text-muted",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34679,14 +34751,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "YGFYw",
-                  "name": "i",
+                  "type": "path",
+                  "id": "kAeuP",
+                  "name": "Lucide/git-pull-request-draft · stroke 1.5",
+                  "geometry": "M21 18a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12-12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9 0v-1m0 6v-1m-12-1l0 12",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-pull-request-draft",
-                  "library": "lucide",
-                  "fill": "$text-tertiary"
+                  "stroke": "$text-tertiary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34714,14 +34794,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "lO8s6",
-                  "name": "i",
+                  "type": "path",
+                  "id": "vHcCl",
+                  "name": "Lucide/git-pull-request · stroke 1.5",
+                  "geometry": "M21 18a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12-12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m4 0h3a2 2 0 0 1 2 2v7m-12-6l0 12",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-pull-request",
-                  "library": "lucide",
-                  "fill": "$accent-green"
+                  "stroke": "$accent-green",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34749,14 +34837,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "wSfWz",
-                  "name": "i",
+                  "type": "path",
+                  "id": "XFT1e",
+                  "name": "Lucide/git-pull-request-arrow · stroke 1.5",
+                  "geometry": "M8 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m17-3a3 3 0 1 0-6 0 3 3 0 1 0 6 0m15 9l-3-3 3-3m-25-15h5a2 2 0 0 1 2 2v7",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-pull-request-arrow",
-                  "library": "lucide",
-                  "fill": "$accent-gold"
+                  "stroke": "$accent-gold",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34784,14 +34880,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "sjCF3",
-                  "name": "i",
+                  "type": "path",
+                  "id": "WYRFO",
+                  "name": "Lucide/git-merge · stroke 1.5",
+                  "geometry": "M21 18a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12-12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 15v-12a9 9 0 0 0 9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-merge",
-                  "library": "lucide",
-                  "fill": "$status-in-review"
+                  "stroke": "$status-in-review",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34819,14 +34923,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "GdYYS",
-                  "name": "i",
+                  "type": "path",
+                  "id": "Bcksd",
+                  "name": "Lucide/git-pull-request-closed · stroke 1.5",
+                  "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m21 3l-6 6m21 9l-6-6m-18-21.5v3.5m3 3a3 3 0 1 0-6 0 3 3 0 1 0 6 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-pull-request-closed",
-                  "library": "lucide",
-                  "fill": "$accent-red-muted"
+                  "stroke": "$accent-red-muted",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34854,14 +34966,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "nMvSc",
-                  "name": "i",
+                  "type": "path",
+                  "id": "VeUkb",
+                  "name": "Lucide/triangle-alert · stroke 1.5",
+                  "geometry": "M21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14a2 2 0 0 0 1.75 3h16a2 2 0 0 0 1.73-3m-9.73-9v4m0 4h0.01",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "triangle-alert",
-                  "library": "lucide",
-                  "fill": "$accent-gold"
+                  "stroke": "$accent-gold",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34909,14 +35029,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "n7GB6y",
-                  "name": "i",
+                  "type": "path",
+                  "id": "xC8aQ",
+                  "name": "Lucide/plus · stroke 1.5",
+                  "geometry": "M5 12h14m-7-7v14",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "plus",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34944,14 +35072,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "bHNxN",
-                  "name": "i",
+                  "type": "path",
+                  "id": "iLXdY",
+                  "name": "Lucide/square-pen · stroke 1.5",
+                  "geometry": "M12 3h-7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7m-2.625-9.375a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-0.853 0.505l-2.873 0.84a0.5 0.5 0 0 1-0.62-0.62l0.84-2.873a2 2 0 0 1 0.506-0.852z",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "square-pen",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -34979,14 +35115,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "XRlAx",
-                  "name": "i",
+                  "type": "path",
+                  "id": "mHF3K",
+                  "name": "Lucide/panel-left-close · stroke 1.5",
+                  "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m4 0v18m16 15l-3-3 3-3",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "panel-left-close",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35014,14 +35158,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "QJmFd",
-                  "name": "i",
+                  "type": "path",
+                  "id": "DpLcB",
+                  "name": "Lucide/panel-left · stroke 1.5",
+                  "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m4 0v18",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "panel-left",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35049,14 +35201,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "Drkac",
-                  "name": "i",
+                  "type": "path",
+                  "id": "j4grym",
+                  "name": "Lucide/archive · stroke 1.5",
+                  "geometry": "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-18a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z m1 5v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-11m-10 4h4",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "archive",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35084,14 +35244,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "WMpDB",
-                  "name": "i",
+                  "type": "path",
+                  "id": "D9phmJ",
+                  "name": "Lucide/rotate-cw · stroke 1.5",
+                  "geometry": "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74l2.26 2.26m0-5v5h-5",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "rotate-cw",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35119,14 +35287,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "ByxoP",
-                  "name": "i",
+                  "type": "path",
+                  "id": "OW44g",
+                  "name": "Lucide/scroll-text · stroke 1.5",
+                  "geometry": "M15 12h-5m5-4h-5m9 9v-12a2 2 0 0 0-2-2h-13m4 18h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1h-10a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0v-14a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "scroll-text",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35154,14 +35330,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "dgwdh",
-                  "name": "i",
+                  "type": "path",
+                  "id": "HwXxv",
+                  "name": "Lucide/arrow-up-right · stroke 1.5",
+                  "geometry": "M7 7h10v10m-10 0l10-10",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "arrow-up-right",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35209,14 +35393,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "K8td3W",
-                  "name": "i",
+                  "type": "path",
+                  "id": "rQUJv",
+                  "name": "Lucide/git-branch · stroke 1.5",
+                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "git-branch",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35244,14 +35436,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "C0iYyV",
-                  "name": "i",
+                  "type": "path",
+                  "id": "xmcbb",
+                  "name": "Lucide/folder-open · stroke 1.5",
+                  "geometry": "M6 14l1.5-2.9a2 2 0 0 1 1.74-1.1h10.76a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5h-14.45a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69 0.9l0.81 1.2a2 2 0 0 0 1.67 0.9h5.93a2 2 0 0 1 2 2v2",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "folder-open",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35279,14 +35479,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "bZgPI",
-                  "name": "i",
+                  "type": "path",
+                  "id": "yCGx0",
+                  "name": "Lucide/terminal · stroke 1.5",
+                  "geometry": "M12 19h8m4 17l6-6-6-6",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "terminal",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35314,14 +35522,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "g7pHv",
-                  "name": "i",
+                  "type": "path",
+                  "id": "h3jED",
+                  "name": "Lucide/pen-tool · stroke 1.5",
+                  "geometry": "M15.707 21.293a1 1 0 0 1-1.414 0l-1.586-1.586a1 1 0 0 1 0-1.414l5.586-5.586a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414z m18 13l-1.375-6.874a1 1 0 0 0-0.746-0.776l-28.351-24.615a1 1 0 0 0-1.207 1.207l3.322 12.644a1 1 0 0 0 0.776 0.746l6.874 1.375m2.3 2.3l7.286 7.286m-9.586-16.586a2 2 0 1 0-4 0 2 2 0 1 0 4 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "pen-tool",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35349,14 +35565,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "eZjhf",
-                  "name": "i",
+                  "type": "path",
+                  "id": "MjCIr",
+                  "name": "Lucide/globe · stroke 1.5",
+                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "globe",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35384,14 +35608,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "cSlBe",
-                  "name": "i",
+                  "type": "path",
+                  "id": "Qb0tz",
+                  "name": "Lucide/smartphone · stroke 1.5",
+                  "geometry": "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2z m5 16h0.01",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "smartphone",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35419,14 +35651,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "QeTHN",
-                  "name": "i",
+                  "type": "path",
+                  "id": "No4FC",
+                  "name": "Lucide/layout-grid · stroke 1.5",
+                  "geometry": "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m0 11h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m-11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "layout-grid",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35454,14 +35694,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "c7nfC",
-                  "name": "i",
+                  "type": "path",
+                  "id": "BS4r1",
+                  "name": "Lucide/bot · stroke 1.5",
+                  "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "bot",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35509,14 +35757,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "bTrFr",
-                  "name": "i",
+                  "type": "path",
+                  "id": "X32gRG",
+                  "name": "Lucide/file-code · stroke 1.5",
+                  "geometry": "M10 12.5l-2 2.5 2 2.5m14 12.5l2 2.5-2 2.5m-10-33v4a2 2 0 0 0 2 2h4m-5-6h-9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-13z",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "file-code",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35544,14 +35800,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "h7atp",
-                  "name": "i",
+                  "type": "path",
+                  "id": "CmM8T",
+                  "name": "Lucide/file-pen-line · stroke 1.5",
+                  "geometry": "M18 5l-2.414-2.414a2 2 0 0 0-1.414-0.586h-8.172a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2m1.378-7.374a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-0.506 0.854l-0.837 2.87a0.5 0.5 0 0 0 0.62 0.62l2.87-0.837a2 2 0 0 0 0.854-0.506z m-13.378 5.374h1",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "file-pen-line",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35579,14 +35843,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "a1WHK0",
-                  "name": "i",
+                  "type": "path",
+                  "id": "bFm7a",
+                  "name": "Lucide/search-code · stroke 1.5",
+                  "geometry": "M13 13.5l2-2.5-2-2.5m21 21l-4.3-4.3m-20.7-16.7l-2 2.5 2 2.5m10-2.5a8 8 0 1 0-16 0 8 8 0 1 0 16 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "search-code",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35614,14 +35886,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "KEVDb",
-                  "name": "i",
+                  "type": "path",
+                  "id": "zeWm9",
+                  "name": "Lucide/file-search · stroke 1.5",
+                  "geometry": "M14 2v4a2 2 0 0 0 2 2h4m-15.732 13a2 2 0 0 0 1.727 1h12.005a2 2 0 0 0 2-2v-13l-5-5h-9a2 2 0 0 0-2 2v3m9 18l-1.5-1.5m-3.5-9.5a3 3 0 1 0-6 0 3 3 0 1 0 6 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "file-search",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35649,14 +35929,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "fLDmT",
-                  "name": "i",
+                  "type": "path",
+                  "id": "SB7QB",
+                  "name": "Lucide/square-terminal · stroke 1.5",
+                  "geometry": "M7 11l2-2-2-2m4 6h4m-10-10h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "square-terminal",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35684,14 +35972,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "CNnga",
-                  "name": "i",
+                  "type": "path",
+                  "id": "SB377",
+                  "name": "Lucide/list-checks · stroke 1.5",
+                  "geometry": "M13 5h8m-8 7h8m-8 7h8m3 17l2 2 4-4m3 7l2 2 4-4",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "list-checks",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35719,14 +36015,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "h9UnC4",
-                  "name": "i",
+                  "type": "path",
+                  "id": "uzjfH",
+                  "name": "Lucide/bot · stroke 1.5",
+                  "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "bot",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35754,14 +36058,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "yoHPH",
-                  "name": "i",
+                  "type": "path",
+                  "id": "YcZEB",
+                  "name": "Lucide/globe · stroke 1.5",
+                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "globe",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35809,14 +36121,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "MEqgN",
-                  "name": "i",
+                  "type": "path",
+                  "id": "Un7R3",
+                  "name": "Lucide/circle-check · stroke 1.5",
+                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m9 12l2 2 4-4",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "circle-check",
-                  "library": "lucide",
-                  "fill": "$success"
+                  "stroke": "$success",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35844,14 +36164,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "CizqK",
-                  "name": "i",
+                  "type": "path",
+                  "id": "Hr8f2",
+                  "name": "Lucide/circle-alert · stroke 1.5",
+                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-4l0 4m0 4l0.01 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "circle-alert",
-                  "library": "lucide",
-                  "fill": "$warning"
+                  "stroke": "$warning",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35879,14 +36207,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "cb4As",
-                  "name": "i",
+                  "type": "path",
+                  "id": "Afwv1",
+                  "name": "Lucide/circle-x · stroke 1.5",
+                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m15 9l-6 6m9 9l6 6",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "circle-x",
-                  "library": "lucide",
-                  "fill": "$destructive"
+                  "stroke": "$destructive",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35914,14 +36250,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "M30Z5J",
-                  "name": "i",
+                  "type": "path",
+                  "id": "kV7uz",
+                  "name": "Lucide/loader · stroke 1.5",
+                  "geometry": "M12 2v4m16.2 7.8l2.9-2.9m-13.1 1.1h4m16.2 16.2l2.9 2.9m-29.1-13.1v4m4.9 19.1l2.9-2.9m-17.8-26.2h4m4.9 4.9l2.9 2.9",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "loader",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35949,14 +36293,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "vJ2fj",
-                  "name": "i",
+                  "type": "path",
+                  "id": "pHddY",
+                  "name": "Lucide/cloud · stroke 1.5",
+                  "geometry": "M17.5 19h-8.5a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "cloud",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -35984,14 +36336,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "G3aQ3M",
-                  "name": "i",
+                  "type": "path",
+                  "id": "L1Bfqn",
+                  "name": "Lucide/cloud-off · stroke 1.5",
+                  "geometry": "M2 2l20 20m-16.218-16.218a7 7 0 0 0 3.218 13.218h8.5a4.5 4.5 0 0 0 1.307-0.193m2.725-2.307a4.5 4.5 0 0 0-4.032-6.5h-1.79a7.008 7.008 0 0 0-5.71-4.93",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "cloud-off",
-                  "library": "lucide",
-                  "fill": "$text-secondary"
+                  "stroke": "$text-secondary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -36019,14 +36379,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "cKA7h",
-                  "name": "i",
+                  "type": "path",
+                  "id": "kqRDJ",
+                  "name": "Lucide/wifi-off · stroke 1.5",
+                  "geometry": "M12 20h0.01m-3.51-3.571a5 5 0 0 1 7 0m-10.5-3.57a10 10 0 0 1 5.17-2.69m8.83 2.69a10 10 0 0 0-2.007-1.523m-14.993-2.516a15 15 0 0 1 4.177-2.643m15.823 2.643a15 15 0 0 0-11.288-3.764m2 2l20 20",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "wifi-off",
-                  "library": "lucide",
-                  "fill": "$warning"
+                  "stroke": "$warning",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -36054,14 +36422,22 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "icon",
-                  "id": "N2OuCp",
-                  "name": "i",
+                  "type": "path",
+                  "id": "Jaug0",
+                  "name": "Lucide/sparkles · stroke 1.5",
+                  "geometry": "M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z m8.983-0.814v4m2-2h-4m-12 16a2 2 0 1 0-4 0 2 2 0 1 0 4 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    24,
+                    24
+                  ],
                   "width": 18,
                   "height": 18,
-                  "icon": "sparkles",
-                  "library": "lucide",
-                  "fill": "$primary"
+                  "stroke": "$primary",
+                  "strokeWidth": 1.125,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
                 },
                 {
                   "type": "text",
@@ -168120,7 +168496,7 @@
                         {
                           "type": "frame",
                           "id": "T1zcza",
-                          "name": "Proposal/WorkspaceChat · ChatArea.tsx",
+                          "name": "DS/WorkspaceChat · ChatArea.tsx",
                           "reusable": true,
                           "width": 720,
                           "height": "fill_container",
@@ -169487,7 +169863,7 @@
                     {
                       "type": "frame",
                       "id": "NrJQ4",
-                      "name": "Proposal/WorkspaceTools · ContentView.tsx",
+                      "name": "DS/WorkspaceTools · ContentView.tsx",
                       "reusable": true,
                       "width": "fill_container",
                       "height": "fill_container",
@@ -171011,7 +171387,7 @@
       "id": "xTbch",
       "x": 0,
       "y": 18860,
-      "name": "40d · Right workspace — split · PROPOSAL",
+      "name": "40d · Right workspace — split",
       "theme": {
         "mode": "dark"
       },
@@ -171046,7 +171422,7 @@
               "id": "IOp1v",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Hide workspace sits beside Open. Expand sits in the existing content action row. Session tabs stay as they are.",
+              "content": "Hide workspace sits beside Open. Expand sits in the existing content action row. Session tabs stay as they are.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -171133,7 +171509,27 @@
                           "name": "New session",
                           "theme": {
                             "mode": "dark"
-                          }
+                          },
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "nTQYr",
+                              "name": "Lucide/square-pen · stroke 1.5",
+                              "geometry": "M12 3h-7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7m-2.625-9.375a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-0.853 0.505l-2.873 0.84a0.5 0.5 0 0 1-0.62-0.62l0.84-2.873a2 2 0 0 1 0.506-0.852z",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
                         },
                         {
                           "id": "fKnrb",
@@ -171143,13 +171539,26 @@
                           "theme": {
                             "mode": "dark"
                           },
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-left-close",
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "jGxDS",
+                              "name": "Lucide/panel-left-close · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m4 0v18m16 15l-3-3 3-3",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 18,
-                              "height": 18
+                              "height": 18,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1.125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     }
@@ -171169,14 +171578,22 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "icon",
-                      "id": "i8s4cj",
-                      "name": "Automations icon",
+                      "type": "path",
+                      "id": "WLbMW",
+                      "name": "Lucide/clock-3 · stroke 1.5",
+                      "geometry": "M12 6v6h4m6 0a10 10 0 1 0-20 0 10 10 0 1 0 20 0",
+                      "viewBox": [
+                        0,
+                        0,
+                        24,
+                        24
+                      ],
                       "width": 14,
                       "height": 14,
-                      "icon": "clock-3",
-                      "library": "lucide",
-                      "fill": "$text-tertiary"
+                      "stroke": "$text-tertiary",
+                      "strokeWidth": 0.875,
+                      "strokeLinejoin": "round",
+                      "strokeLinecap": "round"
                     },
                     {
                       "type": "text",
@@ -171289,14 +171706,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "i8w7nm",
-                          "name": "Add icon",
+                          "type": "path",
+                          "id": "xMGd2",
+                          "name": "Lucide/plus · stroke 1.5",
+                          "geometry": "M5 12h14m-7-7v14",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 14,
                           "height": 14,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.875,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -171324,14 +171749,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "q1wR3L",
-                          "name": "Expand repository",
+                          "type": "path",
+                          "id": "Cz0iY",
+                          "name": "Lucide/chevron-right · stroke 1.5",
+                          "geometry": "M9 18l6-6-6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 12,
                           "height": 12,
-                          "icon": "chevron-right",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.75,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -171368,14 +171801,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "bRKim",
-                          "name": "Plus",
+                          "type": "path",
+                          "id": "pYcBj",
+                          "name": "Lucide/plus · stroke 1.5",
+                          "geometry": "M5 12h14m-7-7v14",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 16,
                           "height": 16,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-muted"
+                          "stroke": "$text-muted",
+                          "strokeWidth": 1,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -171532,14 +171973,22 @@
                                   "alignItems": "center",
                                   "children": [
                                     {
-                                      "type": "icon",
-                                      "id": "Of5J3",
-                                      "name": "arrow-up-right",
+                                      "type": "path",
+                                      "id": "s4WgG",
+                                      "name": "Lucide/arrow-up-right · stroke 1.5",
+                                      "geometry": "M7 7h10v10m-10 0l10-10",
+                                      "viewBox": [
+                                        0,
+                                        0,
+                                        24,
+                                        24
+                                      ],
                                       "width": 11,
                                       "height": 11,
-                                      "icon": "arrow-up-right",
-                                      "library": "lucide",
-                                      "fill": "$text-subtle"
+                                      "stroke": "$text-subtle",
+                                      "strokeWidth": 0.6875,
+                                      "strokeLinejoin": "round",
+                                      "strokeLinecap": "round"
                                     },
                                     {
                                       "type": "text",
@@ -171573,14 +172022,22 @@
                                   "alignItems": "center",
                                   "children": [
                                     {
-                                      "type": "icon",
-                                      "id": "HwFa1",
-                                      "name": "chevron-down",
+                                      "type": "path",
+                                      "id": "qHHYo",
+                                      "name": "Lucide/chevron-down · stroke 1.5",
+                                      "geometry": "M6 9l6 6 6-6",
+                                      "viewBox": [
+                                        0,
+                                        0,
+                                        24,
+                                        24
+                                      ],
                                       "width": 10,
                                       "height": 10,
-                                      "icon": "chevron-down",
-                                      "library": "lucide",
-                                      "fill": "$text-muted"
+                                      "stroke": "$text-muted",
+                                      "strokeWidth": 0.625,
+                                      "strokeLinejoin": "round",
+                                      "strokeLinecap": "round"
                                     }
                                   ]
                                 }
@@ -171598,7 +172055,7 @@
                                   "type": "path",
                                   "id": "znqEZ",
                                   "name": "Lucide/panel-right-close · stroke 1.5",
-                                  "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                                  "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m8 9l3 3-3 3",
                                   "viewBox": [
                                     0,
                                     0,
@@ -171654,7 +172111,22 @@
                               "name": "Changes tab",
                               "descendants": {
                                 "h701Y": {
-                                  "icon": "git-branch"
+                                  "type": "path",
+                                  "id": "HKfu9",
+                                  "name": "Lucide/git-branch · stroke 1.5",
+                                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 13,
+                                  "height": 13,
+                                  "stroke": "$text-secondary",
+                                  "strokeWidth": 0.8125,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 "SgEjB": {
                                   "content": "Changes"
@@ -171666,66 +172138,156 @@
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Files tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "folder-open"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "z9z7TG",
+                                  "name": "Lucide/folder-open · stroke 1.5",
+                                  "geometry": "M6 14l1.5-2.9a2 2 0 0 1 1.74-1.1h10.76a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5h-14.45a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69 0.9l0.81 1.2a2 2 0 0 0 1.67 0.9h5.93a2 2 0 0 1 2 2v2",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "UVpjV",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Terminal tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "terminal"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "dE3Al",
+                                  "name": "Lucide/terminal · stroke 1.5",
+                                  "geometry": "M12 19h8m4 17l6-6-6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "s9JbRL",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Browser tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "globe"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "R0pjCe",
+                                  "name": "Lucide/globe · stroke 1.5",
+                                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "Pp9FZ",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Simulator tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "smartphone"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "H5WcbB",
+                                  "name": "Lucide/smartphone · stroke 1.5",
+                                  "geometry": "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2z m5 16h0.01",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "TAcx9",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Apps tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "layout-grid"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "m4BXEN",
+                                  "name": "Lucide/layout-grid · stroke 1.5",
+                                  "geometry": "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m0 11h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m-11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "GPzLj",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Agent tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "bot"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "DPJgA",
+                                  "name": "Lucide/bot · stroke 1.5",
+                                  "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             }
                           ]
                         },
@@ -171759,14 +172321,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "c1BGNt",
-                                  "name": "Pull request",
+                                  "type": "path",
+                                  "id": "wCmO0",
+                                  "name": "Lucide/git-pull-request-create · stroke 1.5",
+                                  "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m7-15h3a2 2 0 0 1 2 2v3m0 4v6m3-3h-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 10,
                                   "height": 10,
-                                  "icon": "git-pull-request-create",
-                                  "library": "lucide",
-                                  "fill": "$primary-foreground"
+                                  "stroke": "$primary-foreground",
+                                  "strokeWidth": 0.625,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 {
                                   "type": "text",
@@ -171809,14 +172379,22 @@
                                   "fontWeight": "500"
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "Rf7p8",
-                                  "name": "Choose branch",
+                                  "type": "path",
+                                  "id": "iBF9l",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 8,
                                   "height": 8,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$primary"
+                                  "stroke": "$primary",
+                                  "strokeWidth": 0.5,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
                               ]
                             }
@@ -171916,11 +172494,26 @@
                               "type": "ref",
                               "ref": "AovWi",
                               "name": "New chat",
-                              "descendants": {
-                                "AaONw": {
-                                  "icon": "plus"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "dqRUf",
+                                  "name": "Lucide/plus · stroke 1.5",
+                                  "geometry": "M5 12h14m-7-7v14",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 16,
+                                  "height": 16,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 1,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             }
                           ]
                         },
@@ -171939,6 +172532,136 @@
                             },
                             "v82R2": {
                               "width": "fill_container"
+                            },
+                            "v05DmJ/zi104": {
+                              "type": "path",
+                              "id": "wt9vd",
+                              "name": "Lucide/chevron-right · stroke 1.5",
+                              "geometry": "M9 18l6-6-6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            },
+                            "laI6W": {
+                              "type": "path",
+                              "id": "aURoO",
+                              "name": "Lucide/file-text · stroke 1.5",
+                              "geometry": "M15 2h-9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-13z m-1 0v4a2 2 0 0 0 2 2h4m-10 1h-2m8 4h-8m8 4h-8",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 18,
+                              "height": 18,
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 1.125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            },
+                            "iyVsh": {
+                              "type": "path",
+                              "id": "mjHss",
+                              "name": "Lucide/arrow-up-right · stroke 1.5",
+                              "geometry": "M7 7h10v10m-10 0l10-10",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 13,
+                              "height": 13,
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.8125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            },
+                            "LVxmy": {
+                              "type": "path",
+                              "id": "ws3UZ",
+                              "name": "Lucide/copy · stroke 1.5",
+                              "geometry": "M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2z m-6 8c-1.1 0-2-0.9-2-2v-10c0-1.1 0.9-2 2-2h10c1.1 0 2 0.9 2 2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 12,
+                              "height": 12,
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.75,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            },
+                            "L4L8nf/C5j7Gr": {
+                              "type": "path",
+                              "id": "N1sCsu",
+                              "name": "Lucide/chevron-down · stroke 1.5",
+                              "geometry": "M6 9l6 6 6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 12,
+                              "height": 12,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.75,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            },
+                            "L4L8nf/a2NZ3C": {
+                              "type": "path",
+                              "id": "mHCTB",
+                              "name": "Lucide/chevron-down · stroke 1.5",
+                              "geometry": "M6 9l6 6 6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 12,
+                              "height": 12,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.75,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            },
+                            "L4L8nf/Bskju": {
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "EDNIu",
+                                  "name": "Lucide/arrow-up · stroke 1.5",
+                                  "geometry": "M5 12l7-7 7 7m-7 7v-14",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 16,
+                                  "height": 16,
+                                  "stroke": "$text-primary",
+                                  "strokeWidth": 1,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                }
+                              ]
                             }
                           }
                         }
@@ -171962,6 +172685,42 @@
                           "height": 0,
                           "width": 1
                         },
+                        "jyOmQ": {
+                          "type": "path",
+                          "id": "DgUEk",
+                          "name": "Lucide/list-filter · stroke 1.5",
+                          "geometry": "M2 5h20m-16 7h12m-9 7h6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 13,
+                          "height": 13,
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.8125,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        },
+                        "bM1Vf": {
+                          "type": "path",
+                          "id": "e1gV6F",
+                          "name": "Lucide/chevron-down · stroke 1.5",
+                          "geometry": "M6 9l6 6 6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 12,
+                          "height": 12,
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.75,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        },
                         "sUno8": {
                           "enabled": true,
                           "children": [
@@ -171969,7 +172728,47 @@
                               "type": "path",
                               "id": "F94Snz",
                               "name": "Lucide/maximize-2 · stroke 1.5",
-                              "geometry": "M15 3h6v6m0-6l-7 7m-11 11l7-7m-1 7h-6v-6",
+                              "geometry": "M15 3h6v6m21 3l-7 7m3 21l7-7m-36-12h-6v-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
+                        },
+                        "i68l8": {
+                          "type": "path",
+                          "id": "DXwUC",
+                          "name": "Lucide/file-text · stroke 1.5",
+                          "geometry": "M15 2h-9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-13z m-1 0v4a2 2 0 0 0 2 2h4m-10 1h-2m8 4h-8m8 4h-8",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 14,
+                          "height": 14,
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.875,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        },
+                        "h4No5": {
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "K568N",
+                              "name": "Lucide/panel-right · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18",
                               "viewBox": [
                                 0,
                                 0,
@@ -172000,7 +172799,7 @@
       "id": "jBhc1",
       "x": 1560,
       "y": 18860,
-      "name": "40e · Right workspace — collapsed · PROPOSAL",
+      "name": "40e · Right workspace — chat",
       "theme": {
         "mode": "dark"
       },
@@ -172035,7 +172834,7 @@
               "id": "lGpo4",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Show workspace sits at the far right, after PR. It reopens the last tool beside chat. Session tabs keep their row.",
+              "content": "Show workspace sits at the far right, after PR. It reopens the last tool beside chat. Session tabs keep their row.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -172122,7 +172921,27 @@
                           "name": "New session",
                           "theme": {
                             "mode": "dark"
-                          }
+                          },
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "Mvgxr",
+                              "name": "Lucide/square-pen · stroke 1.5",
+                              "geometry": "M12 3h-7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7m-2.625-9.375a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-0.853 0.505l-2.873 0.84a0.5 0.5 0 0 1-0.62-0.62l0.84-2.873a2 2 0 0 1 0.506-0.852z",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
                         },
                         {
                           "id": "A7fUm",
@@ -172132,13 +172951,26 @@
                           "theme": {
                             "mode": "dark"
                           },
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-left-close",
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "scUMY",
+                              "name": "Lucide/panel-left-close · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m4 0v18m16 15l-3-3 3-3",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 18,
-                              "height": 18
+                              "height": 18,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1.125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     }
@@ -172158,14 +172990,22 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "icon",
-                      "id": "V6RG2y",
-                      "name": "Automations icon",
+                      "type": "path",
+                      "id": "TRm5q",
+                      "name": "Lucide/clock-3 · stroke 1.5",
+                      "geometry": "M12 6v6h4m6 0a10 10 0 1 0-20 0 10 10 0 1 0 20 0",
+                      "viewBox": [
+                        0,
+                        0,
+                        24,
+                        24
+                      ],
                       "width": 14,
                       "height": 14,
-                      "icon": "clock-3",
-                      "library": "lucide",
-                      "fill": "$text-tertiary"
+                      "stroke": "$text-tertiary",
+                      "strokeWidth": 0.875,
+                      "strokeLinejoin": "round",
+                      "strokeLinecap": "round"
                     },
                     {
                       "type": "text",
@@ -172278,14 +173118,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "I6famD",
-                          "name": "Add icon",
+                          "type": "path",
+                          "id": "xyJ6Z",
+                          "name": "Lucide/plus · stroke 1.5",
+                          "geometry": "M5 12h14m-7-7v14",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 14,
                           "height": 14,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.875,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -172313,14 +173161,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "h4i6P",
-                          "name": "Expand repository",
+                          "type": "path",
+                          "id": "wGe7R",
+                          "name": "Lucide/chevron-right · stroke 1.5",
+                          "geometry": "M9 18l6-6-6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 12,
                           "height": 12,
-                          "icon": "chevron-right",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.75,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -172357,14 +173213,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "xq5hw",
-                          "name": "Plus",
+                          "type": "path",
+                          "id": "jDZ6I",
+                          "name": "Lucide/plus · stroke 1.5",
+                          "geometry": "M5 12h14m-7-7v14",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 16,
                           "height": 16,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-muted"
+                          "stroke": "$text-muted",
+                          "strokeWidth": 1,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -172506,14 +173370,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "fXwGM",
-                                  "name": "arrow-up-right",
+                                  "type": "path",
+                                  "id": "Pp8S1",
+                                  "name": "Lucide/arrow-up-right · stroke 1.5",
+                                  "geometry": "M7 7h10v10m-10 0l10-10",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 11,
                                   "height": 11,
-                                  "icon": "arrow-up-right",
-                                  "library": "lucide",
-                                  "fill": "$text-subtle"
+                                  "stroke": "$text-subtle",
+                                  "strokeWidth": 0.6875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 {
                                   "type": "text",
@@ -172547,14 +173419,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "csV2z",
-                                  "name": "chevron-down",
+                                  "type": "path",
+                                  "id": "onTub",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 10,
                                   "height": 10,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.625,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
                               ]
                             }
@@ -172583,14 +173463,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "fUZ96",
-                                  "name": "Pull request",
+                                  "type": "path",
+                                  "id": "aNPxC",
+                                  "name": "Lucide/git-pull-request-create · stroke 1.5",
+                                  "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m7-15h3a2 2 0 0 1 2 2v3m0 4v6m3-3h-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 10,
                                   "height": 10,
-                                  "icon": "git-pull-request-create",
-                                  "library": "lucide",
-                                  "fill": "$primary-foreground"
+                                  "stroke": "$primary-foreground",
+                                  "strokeWidth": 0.625,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 {
                                   "type": "text",
@@ -172633,14 +173521,22 @@
                                   "fontWeight": "500"
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "A04Bon",
-                                  "name": "Choose branch",
+                                  "type": "path",
+                                  "id": "r2WrO",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 8,
                                   "height": 8,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$primary"
+                                  "stroke": "$primary",
+                                  "strokeWidth": 0.5,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
                               ]
                             }
@@ -172785,11 +173681,26 @@
                                   "type": "ref",
                                   "ref": "AovWi",
                                   "name": "New chat",
-                                  "descendants": {
-                                    "AaONw": {
-                                      "icon": "plus"
+                                  "children": [
+                                    {
+                                      "type": "path",
+                                      "id": "Fwx8V",
+                                      "name": "Lucide/plus · stroke 1.5",
+                                      "geometry": "M5 12h14m-7-7v14",
+                                      "viewBox": [
+                                        0,
+                                        0,
+                                        24,
+                                        24
+                                      ],
+                                      "width": 16,
+                                      "height": 16,
+                                      "stroke": "$text-muted",
+                                      "strokeWidth": 1,
+                                      "strokeLinejoin": "round",
+                                      "strokeLinecap": "round"
                                     }
-                                  }
+                                  ]
                                 }
                               ]
                             },
@@ -172808,6 +173719,136 @@
                                 },
                                 "v82R2": {
                                   "width": "fill_container"
+                                },
+                                "v05DmJ/zi104": {
+                                  "type": "path",
+                                  "id": "ZFre8",
+                                  "name": "Lucide/chevron-right · stroke 1.5",
+                                  "geometry": "M9 18l6-6-6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                },
+                                "laI6W": {
+                                  "type": "path",
+                                  "id": "J6CkQW",
+                                  "name": "Lucide/file-text · stroke 1.5",
+                                  "geometry": "M15 2h-9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-13z m-1 0v4a2 2 0 0 0 2 2h4m-10 1h-2m8 4h-8m8 4h-8",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 18,
+                                  "height": 18,
+                                  "stroke": "$text-tertiary",
+                                  "strokeWidth": 1.125,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                },
+                                "iyVsh": {
+                                  "type": "path",
+                                  "id": "QSjfg",
+                                  "name": "Lucide/arrow-up-right · stroke 1.5",
+                                  "geometry": "M7 7h10v10m-10 0l10-10",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 13,
+                                  "height": 13,
+                                  "stroke": "$text-tertiary",
+                                  "strokeWidth": 0.8125,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                },
+                                "LVxmy": {
+                                  "type": "path",
+                                  "id": "j0lcy",
+                                  "name": "Lucide/copy · stroke 1.5",
+                                  "geometry": "M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2z m-6 8c-1.1 0-2-0.9-2-2v-10c0-1.1 0.9-2 2-2h10c1.1 0 2 0.9 2 2",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 12,
+                                  "height": 12,
+                                  "stroke": "$text-tertiary",
+                                  "strokeWidth": 0.75,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                },
+                                "L4L8nf/C5j7Gr": {
+                                  "type": "path",
+                                  "id": "Gs60e",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 12,
+                                  "height": 12,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.75,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                },
+                                "L4L8nf/a2NZ3C": {
+                                  "type": "path",
+                                  "id": "o1PDk",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 12,
+                                  "height": 12,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.75,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
+                                },
+                                "L4L8nf/Bskju": {
+                                  "children": [
+                                    {
+                                      "type": "path",
+                                      "id": "xHm1n",
+                                      "name": "Lucide/arrow-up · stroke 1.5",
+                                      "geometry": "M5 12l7-7 7 7m-7 7v-14",
+                                      "viewBox": [
+                                        0,
+                                        0,
+                                        24,
+                                        24
+                                      ],
+                                      "width": 16,
+                                      "height": 16,
+                                      "stroke": "$text-primary",
+                                      "strokeWidth": 1,
+                                      "strokeLinejoin": "round",
+                                      "strokeLinecap": "round"
+                                    }
+                                  ]
                                 }
                               }
                             }
@@ -172855,14 +173896,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "wICG0",
-                              "name": "Changes icon",
+                              "type": "path",
+                              "id": "PtIKh",
+                              "name": "Lucide/git-branch · stroke 1.5",
+                              "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "git-branch",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -172903,14 +173952,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "reeDD",
-                              "name": "Files icon",
+                              "type": "path",
+                              "id": "nlUWj",
+                              "name": "Lucide/folder-open · stroke 1.5",
+                              "geometry": "M6 14l1.5-2.9a2 2 0 0 1 1.74-1.1h10.76a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5h-14.45a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69 0.9l0.81 1.2a2 2 0 0 0 1.67 0.9h5.93a2 2 0 0 1 2 2v2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "folder-open",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -172941,14 +173998,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "FIaG8",
-                              "name": "Terminal icon",
+                              "type": "path",
+                              "id": "IReGG",
+                              "name": "Lucide/terminal · stroke 1.5",
+                              "geometry": "M12 19h8m4 17l6-6-6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "terminal",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -172979,14 +174044,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "oh2W9",
-                              "name": "Browser icon",
+                              "type": "path",
+                              "id": "a0sR9",
+                              "name": "Lucide/globe · stroke 1.5",
+                              "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "globe",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -173016,14 +174089,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "MDnMR",
-                              "name": "Simulator icon",
+                              "type": "path",
+                              "id": "gGD59",
+                              "name": "Lucide/smartphone · stroke 1.5",
+                              "geometry": "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2z m5 16h0.01",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "smartphone",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -173051,14 +174132,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "Lcwoj",
-                              "name": "Apps icon",
+                              "type": "path",
+                              "id": "b2kzS",
+                              "name": "Lucide/layout-grid · stroke 1.5",
+                              "geometry": "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m0 11h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m-11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "layout-grid",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -173086,14 +174175,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "UVHhH",
-                              "name": "Agent icon",
+                              "type": "path",
+                              "id": "xz9hc",
+                              "name": "Lucide/bot · stroke 1.5",
+                              "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "bot",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -173128,14 +174225,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "W2jAec",
-                              "name": "Environment icon",
+                              "type": "path",
+                              "id": "WwY56",
+                              "name": "Lucide/settings-2 · stroke 1.5",
+                              "geometry": "M14 17h-9m14-10h-9m10 10a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-10-10a3 3 0 1 0-6 0 3 3 0 1 0 6 0",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 15,
                               "height": 15,
-                              "icon": "settings-2",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.9375,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -173164,7 +174269,7 @@
       "id": "WN5k0",
       "x": 3120,
       "y": 18860,
-      "name": "40f · Right workspace — expanded · PROPOSAL",
+      "name": "40f · Right workspace — expanded",
       "theme": {
         "mode": "dark"
       },
@@ -173199,7 +174304,7 @@
               "id": "Pb2Wc",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — The leading icon returns to full chat. Restore returns to the split. Title and Open remain hidden.",
+              "content": "The leading icon returns to full chat. Restore returns to the split. Title and Open remain hidden.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -173286,7 +174391,27 @@
                           "name": "New session",
                           "theme": {
                             "mode": "dark"
-                          }
+                          },
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "YPhTr",
+                              "name": "Lucide/square-pen · stroke 1.5",
+                              "geometry": "M12 3h-7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7m-2.625-9.375a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-0.853 0.505l-2.873 0.84a0.5 0.5 0 0 1-0.62-0.62l0.84-2.873a2 2 0 0 1 0.506-0.852z",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
                         },
                         {
                           "id": "B79Vm3",
@@ -173296,13 +174421,26 @@
                           "theme": {
                             "mode": "dark"
                           },
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-left-close",
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "pEWqD",
+                              "name": "Lucide/panel-left-close · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m4 0v18m16 15l-3-3 3-3",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 18,
-                              "height": 18
+                              "height": 18,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1.125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     }
@@ -173322,14 +174460,22 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "icon",
-                      "id": "XkAhn",
-                      "name": "Automations icon",
+                      "type": "path",
+                      "id": "jX86O",
+                      "name": "Lucide/clock-3 · stroke 1.5",
+                      "geometry": "M12 6v6h4m6 0a10 10 0 1 0-20 0 10 10 0 1 0 20 0",
+                      "viewBox": [
+                        0,
+                        0,
+                        24,
+                        24
+                      ],
                       "width": 14,
                       "height": 14,
-                      "icon": "clock-3",
-                      "library": "lucide",
-                      "fill": "$text-tertiary"
+                      "stroke": "$text-tertiary",
+                      "strokeWidth": 0.875,
+                      "strokeLinejoin": "round",
+                      "strokeLinecap": "round"
                     },
                     {
                       "type": "text",
@@ -173442,14 +174588,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "S3LMC",
-                          "name": "Add icon",
+                          "type": "path",
+                          "id": "kzmIs",
+                          "name": "Lucide/plus · stroke 1.5",
+                          "geometry": "M5 12h14m-7-7v14",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 14,
                           "height": 14,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.875,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -173477,14 +174631,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "WD2Vu",
-                          "name": "Expand repository",
+                          "type": "path",
+                          "id": "mNpNC",
+                          "name": "Lucide/chevron-right · stroke 1.5",
+                          "geometry": "M9 18l6-6-6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 12,
                           "height": 12,
-                          "icon": "chevron-right",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.75,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -173521,14 +174683,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "tSSxV",
-                          "name": "Plus",
+                          "type": "path",
+                          "id": "w3WMo7",
+                          "name": "Lucide/plus · stroke 1.5",
+                          "geometry": "M5 12h14m-7-7v14",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 16,
                           "height": 16,
-                          "icon": "plus",
-                          "library": "lucide",
-                          "fill": "$text-muted"
+                          "stroke": "$text-muted",
+                          "strokeWidth": 1,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -173609,7 +174779,7 @@
                               "type": "path",
                               "id": "Wl2j6",
                               "name": "Lucide/panel-right-close · stroke 1.5",
-                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m8 9l3 3-3 3",
                               "viewBox": [
                                 0,
                                 0,
@@ -173640,7 +174810,22 @@
                               "name": "Changes tab",
                               "descendants": {
                                 "h701Y": {
-                                  "icon": "git-branch"
+                                  "type": "path",
+                                  "id": "L6m6iy",
+                                  "name": "Lucide/git-branch · stroke 1.5",
+                                  "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 13,
+                                  "height": 13,
+                                  "stroke": "$text-secondary",
+                                  "strokeWidth": 0.8125,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 "SgEjB": {
                                   "content": "Changes"
@@ -173652,66 +174837,156 @@
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Files tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "folder-open"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "nI8MV",
+                                  "name": "Lucide/folder-open · stroke 1.5",
+                                  "geometry": "M6 14l1.5-2.9a2 2 0 0 1 1.74-1.1h10.76a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5h-14.45a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69 0.9l0.81 1.2a2 2 0 0 0 1.67 0.9h5.93a2 2 0 0 1 2 2v2",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "p0TPud",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Terminal tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "terminal"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "T2LWMC",
+                                  "name": "Lucide/terminal · stroke 1.5",
+                                  "geometry": "M12 19h8m4 17l6-6-6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "vzNhk",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Browser tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "globe"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "EL5bc",
+                                  "name": "Lucide/globe · stroke 1.5",
+                                  "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "Uw8bk",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Simulator tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "smartphone"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "yKY20",
+                                  "name": "Lucide/smartphone · stroke 1.5",
+                                  "geometry": "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2z m5 16h0.01",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "WFM0B",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Apps tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "layout-grid"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "WjNwv",
+                                  "name": "Lucide/layout-grid · stroke 1.5",
+                                  "geometry": "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m0 11h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m-11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             },
                             {
                               "id": "LAnog",
                               "type": "ref",
                               "ref": "IGG8T",
                               "name": "Agent tab",
-                              "descendants": {
-                                "VM51c": {
-                                  "icon": "bot"
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "Cxx7H",
+                                  "name": "Lucide/bot · stroke 1.5",
+                                  "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
+                                  "width": 14,
+                                  "height": 14,
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
-                              }
+                              ]
                             }
                           ]
                         },
@@ -173745,14 +175020,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "NEcBw",
-                                  "name": "Pull request",
+                                  "type": "path",
+                                  "id": "f7TRBG",
+                                  "name": "Lucide/git-pull-request-create · stroke 1.5",
+                                  "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m7-15h3a2 2 0 0 1 2 2v3m0 4v6m3-3h-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 10,
                                   "height": 10,
-                                  "icon": "git-pull-request-create",
-                                  "library": "lucide",
-                                  "fill": "$primary-foreground"
+                                  "stroke": "$primary-foreground",
+                                  "strokeWidth": 0.625,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 {
                                   "type": "text",
@@ -173795,14 +175078,22 @@
                                   "fontWeight": "500"
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "fh4da",
-                                  "name": "Choose branch",
+                                  "type": "path",
+                                  "id": "BUFRQ",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 8,
                                   "height": 8,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$primary"
+                                  "stroke": "$primary",
+                                  "strokeWidth": 0.5,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
                               ]
                             }
@@ -173829,6 +175120,42 @@
                           "height": 0,
                           "width": 1
                         },
+                        "jyOmQ": {
+                          "type": "path",
+                          "id": "qCkIM",
+                          "name": "Lucide/list-filter · stroke 1.5",
+                          "geometry": "M2 5h20m-16 7h12m-9 7h6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 13,
+                          "height": 13,
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.8125,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        },
+                        "bM1Vf": {
+                          "type": "path",
+                          "id": "On2xb",
+                          "name": "Lucide/chevron-down · stroke 1.5",
+                          "geometry": "M6 9l6 6 6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 12,
+                          "height": 12,
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.75,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        },
                         "sUno8": {
                           "enabled": true,
                           "name": "Restore workspace split",
@@ -173838,6 +175165,46 @@
                               "id": "uqHg7",
                               "name": "Lucide/minimize-2 · stroke 1.5",
                               "geometry": "M14 10l7-7m-1 7h-6v-6m-11 17l7-7m-6 0h6v6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
+                            }
+                          ]
+                        },
+                        "i68l8": {
+                          "type": "path",
+                          "id": "nPYU8",
+                          "name": "Lucide/file-text · stroke 1.5",
+                          "geometry": "M15 2h-9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-13z m-1 0v4a2 2 0 0 0 2 2h4m-10 1h-2m8 4h-8m8 4h-8",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
+                          "width": 14,
+                          "height": 14,
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.875,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
+                        },
+                        "h4No5": {
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "C9Rm81",
+                              "name": "Lucide/panel-right · stroke 1.5",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18",
                               "viewBox": [
                                 0,
                                 0,
@@ -173868,7 +175235,7 @@
       "id": "xjMsB",
       "x": 0,
       "y": 18640,
-      "name": "00c · Right workspace controls — current proposal",
+      "name": "00c · Right workspace controls",
       "theme": {
         "mode": "dark"
       },
@@ -174011,7 +175378,7 @@
       "id": "vVjnR",
       "x": 0,
       "y": 19940,
-      "name": "22b · Right workspace controls — Open and content actions · PROPOSAL",
+      "name": "22b · Right workspace controls — Open and content actions",
       "theme": {
         "mode": "dark"
       },
@@ -174159,14 +175526,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "PKkHe",
-                                  "name": "arrow-up-right",
+                                  "type": "path",
+                                  "id": "tQWRd",
+                                  "name": "Lucide/arrow-up-right · stroke 1.5",
+                                  "geometry": "M7 7h10v10m-10 0l10-10",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 11,
                                   "height": 11,
-                                  "icon": "arrow-up-right",
-                                  "library": "lucide",
-                                  "fill": "$text-subtle"
+                                  "stroke": "$text-subtle",
+                                  "strokeWidth": 0.6875,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 },
                                 {
                                   "type": "text",
@@ -174200,14 +175575,22 @@
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "icon",
-                                  "id": "yQV8n",
-                                  "name": "chevron-down",
+                                  "type": "path",
+                                  "id": "YZJUT",
+                                  "name": "Lucide/chevron-down · stroke 1.5",
+                                  "geometry": "M6 9l6 6 6-6",
+                                  "viewBox": [
+                                    0,
+                                    0,
+                                    24,
+                                    24
+                                  ],
                                   "width": 10,
                                   "height": 10,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "stroke": "$text-muted",
+                                  "strokeWidth": 0.625,
+                                  "strokeLinejoin": "round",
+                                  "strokeLinecap": "round"
                                 }
                               ]
                             }
@@ -174225,7 +175608,7 @@
                               "type": "path",
                               "id": "vFRHE",
                               "name": "Lucide/panel-right-close · stroke 1.5",
-                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                              "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m8 9l3 3-3 3",
                               "viewBox": [
                                 0,
                                 0,
@@ -174281,7 +175664,22 @@
                           "name": "Changes tab",
                           "descendants": {
                             "h701Y": {
-                              "icon": "git-branch"
+                              "type": "path",
+                              "id": "IVNXp",
+                              "name": "Lucide/git-branch · stroke 1.5",
+                              "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 13,
+                              "height": 13,
+                              "stroke": "$text-secondary",
+                              "strokeWidth": 0.8125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             "SgEjB": {
                               "content": "Changes"
@@ -174293,66 +175691,156 @@
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Files tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "folder-open"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "PmSD0",
+                              "name": "Lucide/folder-open · stroke 1.5",
+                              "geometry": "M6 14l1.5-2.9a2 2 0 0 1 1.74-1.1h10.76a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5h-14.45a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69 0.9l0.81 1.2a2 2 0 0 0 1.67 0.9h5.93a2 2 0 0 1 2 2v2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "ni8b1",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Terminal tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "terminal"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "qw1az",
+                              "name": "Lucide/terminal · stroke 1.5",
+                              "geometry": "M12 19h8m4 17l6-6-6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "lfOiu",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Browser tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "globe"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "fxXCM",
+                              "name": "Lucide/globe · stroke 1.5",
+                              "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "zmcfH",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Simulator tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "smartphone"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "wS3Yg",
+                              "name": "Lucide/smartphone · stroke 1.5",
+                              "geometry": "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2z m5 16h0.01",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "y7n6E",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Apps tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "layout-grid"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "hVLJg",
+                              "name": "Lucide/layout-grid · stroke 1.5",
+                              "geometry": "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m0 11h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m-11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "dVbWr",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Agent tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "bot"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "I6k9P",
+                              "name": "Lucide/bot · stroke 1.5",
+                              "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     },
@@ -174386,14 +175874,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "AE2BP",
-                              "name": "Pull request",
+                              "type": "path",
+                              "id": "H9IxJ",
+                              "name": "Lucide/git-pull-request-create · stroke 1.5",
+                              "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m7-15h3a2 2 0 0 1 2 2v3m0 4v6m3-3h-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 10,
                               "height": 10,
-                              "icon": "git-pull-request-create",
-                              "library": "lucide",
-                              "fill": "$primary-foreground"
+                              "stroke": "$primary-foreground",
+                              "strokeWidth": 0.625,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -174436,14 +175932,22 @@
                               "fontWeight": "500"
                             },
                             {
-                              "type": "icon",
-                              "id": "HQ4Gy",
-                              "name": "Choose branch",
+                              "type": "path",
+                              "id": "Z7YTT",
+                              "name": "Lucide/chevron-down · stroke 1.5",
+                              "geometry": "M6 9l6 6 6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 8,
                               "height": 8,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$primary"
+                              "stroke": "$primary",
+                              "strokeWidth": 0.5,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
                           ]
                         }
@@ -174541,11 +176045,26 @@
                           "type": "ref",
                           "ref": "AovWi",
                           "name": "New chat",
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "plus"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "LgfcT",
+                              "name": "Lucide/plus · stroke 1.5",
+                              "geometry": "M5 12h14m-7-7v14",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 16,
+                              "height": 16,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 1,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     }
@@ -174596,14 +176115,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "v6b3dz",
-                              "name": "Filter icon",
+                              "type": "path",
+                              "id": "VLfTj",
+                              "name": "Lucide/list-filter · stroke 1.5",
+                              "geometry": "M2 5h20m-16 7h12m-9 7h6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 13,
                               "height": 13,
-                              "icon": "list-filter",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.8125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -174616,14 +176143,22 @@
                               "fontWeight": "normal"
                             },
                             {
-                              "type": "icon",
-                              "id": "lJDa0",
-                              "name": "Change filter",
+                              "type": "path",
+                              "id": "AknFQ",
+                              "name": "Lucide/chevron-down · stroke 1.5",
+                              "geometry": "M6 9l6 6 6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 12,
                               "height": 12,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$text-tertiary"
+                              "stroke": "$text-tertiary",
+                              "strokeWidth": 0.75,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
                           ]
                         },
@@ -174674,7 +176209,7 @@
                                   "type": "path",
                                   "id": "yK54S",
                                   "name": "Lucide/maximize-2 · stroke 1.5",
-                                  "geometry": "M15 3h6v6m0-6l-7 7m-11 11l7-7m-1 7h-6v-6",
+                                  "geometry": "M15 3h6v6m21 3l-7 7m3 21l7-7m-36-12h-6v-6",
                                   "viewBox": [
                                     0,
                                     0,
@@ -174805,14 +176340,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "CZDn9",
-                          "name": "arrow-up-right",
+                          "type": "path",
+                          "id": "KZYnB",
+                          "name": "Lucide/arrow-up-right · stroke 1.5",
+                          "geometry": "M7 7h10v10m-10 0l10-10",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 11,
                           "height": 11,
-                          "icon": "arrow-up-right",
-                          "library": "lucide",
-                          "fill": "$text-subtle"
+                          "stroke": "$text-subtle",
+                          "strokeWidth": 0.6875,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -174846,14 +176389,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "RWUOZ",
-                          "name": "chevron-down",
+                          "type": "path",
+                          "id": "J0z56S",
+                          "name": "Lucide/chevron-down · stroke 1.5",
+                          "geometry": "M6 9l6 6 6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 10,
                           "height": 10,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$text-muted"
+                          "stroke": "$text-muted",
+                          "strokeWidth": 0.625,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         }
                       ]
                     }
@@ -174882,14 +176433,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "fDzmb",
-                          "name": "Pull request",
+                          "type": "path",
+                          "id": "T1vYk",
+                          "name": "Lucide/git-pull-request-create · stroke 1.5",
+                          "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m7-15h3a2 2 0 0 1 2 2v3m0 4v6m3-3h-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 10,
                           "height": 10,
-                          "icon": "git-pull-request-create",
-                          "library": "lucide",
-                          "fill": "$primary-foreground"
+                          "stroke": "$primary-foreground",
+                          "strokeWidth": 0.625,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -174932,14 +176491,22 @@
                           "fontWeight": "500"
                         },
                         {
-                          "type": "icon",
-                          "id": "shFax",
-                          "name": "Choose branch",
+                          "type": "path",
+                          "id": "P85os",
+                          "name": "Lucide/chevron-down · stroke 1.5",
+                          "geometry": "M6 9l6 6 6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 8,
                           "height": 8,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$primary"
+                          "stroke": "$primary",
+                          "strokeWidth": 0.5,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         }
                       ]
                     }
@@ -175037,7 +176604,7 @@
                           "type": "path",
                           "id": "h7vH8",
                           "name": "Lucide/panel-right-close · stroke 1.5",
-                          "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m-7-12l3 3-3 3",
+                          "geometry": "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z m10 0v18m8 9l3 3-3 3",
                           "viewBox": [
                             0,
                             0,
@@ -175068,7 +176635,22 @@
                           "name": "Changes tab",
                           "descendants": {
                             "h701Y": {
-                              "icon": "git-branch"
+                              "type": "path",
+                              "id": "qVKeX",
+                              "name": "Lucide/git-branch · stroke 1.5",
+                              "geometry": "M6 3l0 12m15-9a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-12 12a3 3 0 1 0-6 0 3 3 0 1 0 6 0m9-9a9 9 0 0 1-9 9",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 13,
+                              "height": 13,
+                              "stroke": "$text-secondary",
+                              "strokeWidth": 0.8125,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             "SgEjB": {
                               "content": "Changes"
@@ -175080,66 +176662,156 @@
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Files tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "folder-open"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "J4IcUW",
+                              "name": "Lucide/folder-open · stroke 1.5",
+                              "geometry": "M6 14l1.5-2.9a2 2 0 0 1 1.74-1.1h10.76a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5h-14.45a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69 0.9l0.81 1.2a2 2 0 0 0 1.67 0.9h5.93a2 2 0 0 1 2 2v2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "gnUdx",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Terminal tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "terminal"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "MByVA",
+                              "name": "Lucide/terminal · stroke 1.5",
+                              "geometry": "M12 19h8m4 17l6-6-6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "I07nD",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Browser tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "globe"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "Hq2mk",
+                              "name": "Lucide/globe · stroke 1.5",
+                              "geometry": "M22 12a10 10 0 1 0-20 0 10 10 0 1 0 20 0m-10-10a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20m-10 10h20",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "kiooL",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Simulator tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "smartphone"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "JhGxt",
+                              "name": "Lucide/smartphone · stroke 1.5",
+                              "geometry": "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2z m5 16h0.01",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "PafJ5",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Apps tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "layout-grid"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "AzHoA",
+                              "name": "Lucide/layout-grid · stroke 1.5",
+                              "geometry": "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m0 11h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z m-11 0h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         },
                         {
                           "id": "K7V5oY",
                           "type": "ref",
                           "ref": "IGG8T",
                           "name": "Agent tab",
-                          "descendants": {
-                            "VM51c": {
-                              "icon": "bot"
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "N0EJZV",
+                              "name": "Lucide/bot · stroke 1.5",
+                              "geometry": "M12 8v-4h-4m-2 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z m-4 6h2m16 0h2m-7-1v2m-6-2v2",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
+                              "width": 14,
+                              "height": 14,
+                              "stroke": "$text-muted",
+                              "strokeWidth": 0.875,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
-                          }
+                          ]
                         }
                       ]
                     },
@@ -175173,14 +176845,22 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "icon",
-                              "id": "IiwYS",
-                              "name": "Pull request",
+                              "type": "path",
+                              "id": "kfkoI",
+                              "name": "Lucide/git-pull-request-create · stroke 1.5",
+                              "geometry": "M9 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0m-3 3v12m7-15h3a2 2 0 0 1 2 2v3m0 4v6m3-3h-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 10,
                               "height": 10,
-                              "icon": "git-pull-request-create",
-                              "library": "lucide",
-                              "fill": "$primary-foreground"
+                              "stroke": "$primary-foreground",
+                              "strokeWidth": 0.625,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             },
                             {
                               "type": "text",
@@ -175223,14 +176903,22 @@
                               "fontWeight": "500"
                             },
                             {
-                              "type": "icon",
-                              "id": "G6zTIb",
-                              "name": "Choose branch",
+                              "type": "path",
+                              "id": "G8Bux",
+                              "name": "Lucide/chevron-down · stroke 1.5",
+                              "geometry": "M6 9l6 6 6-6",
+                              "viewBox": [
+                                0,
+                                0,
+                                24,
+                                24
+                              ],
                               "width": 8,
                               "height": 8,
-                              "icon": "chevron-down",
-                              "library": "lucide",
-                              "fill": "$primary"
+                              "stroke": "$primary",
+                              "strokeWidth": 0.5,
+                              "strokeLinejoin": "round",
+                              "strokeLinecap": "round"
                             }
                           ]
                         }
@@ -175277,14 +176965,22 @@
                       "alignItems": "center",
                       "children": [
                         {
-                          "type": "icon",
-                          "id": "TE4KQ",
-                          "name": "Filter icon",
+                          "type": "path",
+                          "id": "xfBJr",
+                          "name": "Lucide/list-filter · stroke 1.5",
+                          "geometry": "M2 5h20m-16 7h12m-9 7h6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 13,
                           "height": 13,
-                          "icon": "list-filter",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.8125,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -175297,14 +176993,22 @@
                           "fontWeight": "normal"
                         },
                         {
-                          "type": "icon",
-                          "id": "GL3Tj",
-                          "name": "Change filter",
+                          "type": "path",
+                          "id": "TB9PF",
+                          "name": "Lucide/chevron-down · stroke 1.5",
+                          "geometry": "M6 9l6 6 6-6",
+                          "viewBox": [
+                            0,
+                            0,
+                            24,
+                            24
+                          ],
                           "width": 12,
                           "height": 12,
-                          "icon": "chevron-down",
-                          "library": "lucide",
-                          "fill": "$text-tertiary"
+                          "stroke": "$text-tertiary",
+                          "strokeWidth": 0.75,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         }
                       ]
                     },

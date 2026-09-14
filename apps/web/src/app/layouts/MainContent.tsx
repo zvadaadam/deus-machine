@@ -1,31 +1,11 @@
-/**
- * Main Content -- layout orchestrator.
- *
- * Two-panel horizontal split (40/60 default ratio):
- *   SESSION PANEL (left, 40%):  WorkspaceHeader → SessionTabs → Chat → Input
- *   CONTENT PANEL (right, 60%): ContentTabBar + PRActions → ContentArea
- *
- * Each panel has its own header bar. The split is the top-level layout.
- * Content tab switching (Code, Config, Terminal, etc.) lives in the
- * content panel's header. PR actions also live in the content panel header.
- *
- * Panel resizing uses react-resizable-panels for keyboard accessibility,
- * touch support, and built-in collapse/expand with snap behavior.
- *
- * Concerns are split across extracted hooks:
- * - useWorkspaceActions: PR bridge, archive, retry, manifest tasks
- * - useKeyboardShortcuts: Cmd+\ toggles session panel
- */
+/** Workspace actions and desktop/mobile composition. Pane geometry lives in WorkspacePanels. */
 
-import { useRef, useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { wakeCloudWorkspace } from "@/features/workspace/api/wakeCloudWorkspace";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
-import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { SessionPanelRef } from "@/features/session";
 import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
-import { webviewManager } from "@/features/browser/webview-manager";
-import { useCollapsedSizePercent } from "@/features/workspace/hooks/useCollapsedSizePercent";
 import type { ContentTab } from "@/features/workspace/store";
 import { useFileWatcher } from "@/features/file-browser/hooks/useFileWatcher";
 import { useSimulatorCapabilities } from "@/features/simulator";
@@ -33,13 +13,12 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { ContentTabBar } from "./ContentTabBar";
-import { isTabVisible, anyContentTabVisible } from "./content-tabs";
+import { CONTENT_TABS, isTabVisible, anyContentTabVisible } from "./content-tabs";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { PRActions } from "@/features/workspace/ui/PRActions";
 import { useSettings } from "@/features/settings/api/settings.queries";
 import { SidebarInset, useSidebar } from "@/components/ui";
 import { cn } from "@/shared/lib/utils";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { PanelLeft } from "lucide-react";
 import type { Workspace, RepoGroup, PRStatus, GhCliStatus } from "@/shared/types";
 import { useUpdateWorkspaceStatus } from "@/features/workspace/api";
@@ -52,8 +31,10 @@ import { ContentView } from "./ContentView";
 import { MobileLayout } from "./MobileLayout";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
-import { CollapsedChatStrip, CollapsedContentStrip } from "./CollapsedPanelStrips";
 import { useWorkspaceActions } from "./hooks/useWorkspaceActions";
+import { WorkspacePanels } from "./WorkspacePanels";
+import { WorkspacePanelButton } from "./WorkspacePanelButton";
+import { WorkspaceToolShortcuts } from "./WorkspaceToolShortcuts";
 import { usePanelShortcuts } from "./hooks/usePanelShortcuts";
 
 interface MainContentProps {
@@ -108,14 +89,8 @@ export function MainContent({
   // Provenance: the automation whose held sandbox this workspace is (if any)
   // — renders the header chip that jumps to the automation's run history.
   const workspaceAutomation = useAutomationForWorkspace(selectedWorkspaceId);
-  const {
-    contentTab,
-    setContentTab,
-    chatPanelCollapsed,
-    setChatPanelCollapsed,
-    contentPanelCollapsed,
-    setContentPanelCollapsed,
-  } = useWorkspaceLayout(selectedWorkspaceId);
+  const { contentTab, setContentTab, panelMode, setPanelMode } =
+    useWorkspaceLayout(selectedWorkspaceId);
 
   // Effective tab: if the stored tab is hidden by experimental settings, fall back to "changes".
   const experimentalSettings = useSettings().data;
@@ -135,6 +110,7 @@ export function MainContent({
   // No tab can serve (web-direct hides them all) → chat-only layout: the chat
   // pane renders full-width and the content pane + splitter don't mount.
   const contentPaneAvailable = anyContentTabVisible(experimentalSettings, tabVisibility);
+  const view = contentPaneAvailable ? panelMode : "chat";
 
   const connectionState = useConnectionState().state;
   const isDisconnected = connectionState === "disconnected";
@@ -179,23 +155,6 @@ export function MainContent({
     isReady ? selectedWorkspaceId : null
   );
 
-  // --- Refs for imperative panel control ---
-  const chatPanelRef = useRef<ImperativePanelHandle>(null);
-  const contentPanelRef = useRef<ImperativePanelHandle>(null);
-  const panelGroupContainerRef = useRef<HTMLDivElement>(null);
-
-  // Dynamic collapsed size: 36px strip -> percentage of container width.
-  const MIN_PANEL_SIZE = 15;
-  const collapsedSizePct = useCollapsedSizePercent(panelGroupContainerRef, 36);
-  const safeCollapsedSize = Math.min(collapsedSizePct, MIN_PANEL_SIZE - 0.1);
-
-  // Default split: 40% session / 60% content — same for all tabs.
-  const sessionPanelDefaultSize = 40;
-  const contentPanelDefaultSize = 60;
-
-  const sessionStatus = selectedWorkspace?.session_status;
-  const isSessionWorking = sessionStatus === "working";
-
   // --- Content tab change ---
   const handleContentTabChange = useCallback(
     (tab: ContentTab) => {
@@ -217,88 +176,11 @@ export function MainContent({
     [setContentTab, selectedWorkspaceId]
   );
 
-  // --- Chat panel collapse/expand ---
-  const handleCollapseChatPanel = useCallback(() => {
-    setChatPanelCollapsed(true);
-    chatPanelRef.current?.collapse();
-  }, [setChatPanelCollapsed]);
-
-  const handleExpandChatPanel = useCallback(() => {
-    setChatPanelCollapsed(false);
-  }, [setChatPanelCollapsed]);
-
-  // --- Content panel collapse/expand ---
-  const handleCollapseContentPanel = useCallback(() => {
-    setContentPanelCollapsed(true);
-    contentPanelRef.current?.collapse();
-  }, [setContentPanelCollapsed]);
-
-  const handleExpandContentPanel = useCallback(() => {
-    setContentPanelCollapsed(false);
-  }, [setContentPanelCollapsed]);
-
-  useEffect(() => {
-    if (!selectedWorkspaceId) return;
-    if (contentPanelCollapsed) {
-      contentPanelRef.current?.collapse();
-    } else {
-      contentPanelRef.current?.expand();
-    }
-  }, [contentPanelCollapsed, selectedWorkspaceId]);
-
-  // Mirror chatPanelCollapsed state to the ResizablePanel ref so external
-  // callers (browser focus mode, keyboard shortcuts) can collapse/expand the
-  // chat by flipping the store state alone — no need to thread refs through.
-  useEffect(() => {
-    if (!selectedWorkspaceId) return;
-    if (chatPanelCollapsed) {
-      chatPanelRef.current?.collapse();
-    } else {
-      chatPanelRef.current?.expand();
-    }
-  }, [chatPanelCollapsed, selectedWorkspaceId]);
-
-  // --- Keyboard shortcuts ---
   usePanelShortcuts({
-    // No panel toggles in chat-only: the single panel isn't collapsible.
     enabled: selectedWorkspace !== null && !isMobile && contentPaneAvailable,
-    chatPanelCollapsed,
-    chatPanelRef,
-    contentPanelCollapsed,
-    contentPanelRef,
+    mode: panelMode,
+    onModeChange: setPanelMode,
   });
-
-  // --- Reset panel sizes on workspace switch ---
-  // ResizablePanelGroup has no key prop — it stays mounted across workspace
-  // switches so SimulatorPanel and BrowserPanel keep their native sessions alive.
-  // Without the key, react-resizable-panels won't re-apply defaultSize on
-  // re-render. We must imperatively collapse/expand panels to match the
-  // per-workspace Zustand state when the selected workspace changes.
-  useEffect(() => {
-    if (!selectedWorkspaceId) return;
-    // Chat-only (web-direct): the group holds ONE panel, so there is nothing to
-    // size against — a `resize(40)` here makes react-resizable-panels look up
-    // the missing neighbour and assert ("Previous layout not found for panel
-    // index -1"), which took the whole MainContent down.
-    if (!contentPaneAvailable) return;
-    if (chatPanelCollapsed) {
-      chatPanelRef.current?.collapse();
-    } else {
-      chatPanelRef.current?.expand();
-      chatPanelRef.current?.resize(sessionPanelDefaultSize);
-    }
-    if (contentPanelCollapsed) {
-      contentPanelRef.current?.collapse();
-    } else {
-      contentPanelRef.current?.expand();
-      contentPanelRef.current?.resize(contentPanelDefaultSize);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on workspace change, not on collapse toggles
-  }, [selectedWorkspaceId]);
-
-  // Note: <webview> elements stack normally in the DOM — no IPC hideAll
-  // dance is needed on workspace switch. CSS visibility handles per-tab
-  // hide/show inside BrowserPanel.
 
   // Insert code review prompt into the active chat's composer. Goes
   // straight through the composer store — no SessionPanel ref round-trip,
@@ -309,13 +191,19 @@ export function MainContent({
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
-  // Guard against a panel unmount during a splitter drag — react-resizable-
-  // panels fires onDragging(false) on release but NOT when the component
-  // unmounts mid-drag (workspace switch, modal open, HMR). Without this
-  // cleanup, every live webview stays stuck at `pointer-events: none`.
-  useEffect(() => {
-    return () => webviewManager.setPointerEventsEnabled(true);
-  }, []);
+  const prActions = selectedWorkspace && (
+    <PRActions
+      prStatus={prStatus}
+      ghStatus={ghStatus}
+      onCreatePR={createPRHandler ? handleCreatePR : undefined}
+      onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
+      onArchive={handleArchive}
+      targetBranch={selectedTargetBranch}
+      onTargetBranchChange={setSelectedTargetBranch}
+      repoId={selectedWorkspace.repository_id}
+      workspaceId={selectedWorkspaceId ?? undefined}
+    />
+  );
 
   return (
     <SidebarInset className="min-w-0">
@@ -386,162 +274,156 @@ export function MainContent({
               onTargetBranchChange={setSelectedTargetBranch}
             />
           ) : (
-            /* Two-panel split — the top-level layout, no full-width header */
-            <div ref={panelGroupContainerRef} className="min-h-0 min-w-0 flex-1">
-              <ResizablePanelGroup direction="horizontal">
-                {/* ─── SESSION PANEL (left, collapsible) ─── */}
-                <ResizablePanel
-                  ref={chatPanelRef}
-                  collapsible={contentPaneAvailable}
-                  collapsedSize={safeCollapsedSize}
-                  minSize={MIN_PANEL_SIZE}
-                  defaultSize={
-                    !contentPaneAvailable
-                      ? 100
-                      : chatPanelCollapsed
-                        ? safeCollapsedSize
-                        : sessionPanelDefaultSize
-                  }
-                  onCollapse={handleCollapseChatPanel}
-                  onExpand={handleExpandChatPanel}
-                  className="min-w-0"
-                  order={1}
-                >
-                  {contentPaneAvailable && chatPanelCollapsed ? (
-                    <CollapsedChatStrip
-                      onExpand={() => chatPanelRef.current?.expand()}
-                      isWorking={isSessionWorking}
-                    />
-                  ) : (
-                    <div className="flex h-full min-w-0 flex-col">
-                      {/* Title header — workspace name + repo/branch + Open */}
-                      <WorkspaceHeader
-                        repositoryId={selectedWorkspace.repository_id}
-                        title={selectedWorkspace.title ?? undefined}
-                        repositoryName={selectedWorkspace.repo_name}
-                        branch={selectedWorkspace.git_branch ?? undefined}
-                        workspacePath={selectedWorkspace.workspace_path}
-                        kind={selectedWorkspace.kind}
-                        automationName={workspaceAutomation?.name}
-                        onOpenAutomation={
-                          workspaceAutomation
-                            ? () => uiActions.openAutomations(workspaceAutomation.id)
-                            : undefined
-                        }
-                        cloudPresence={cloudState}
-                        onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
-                        setupStatus={selectedWorkspace.setup_status}
-                        setupError={selectedWorkspace.error_message}
-                        onSendAgentMessage={
-                          sendAgentMessageHandler ? handleSendAgentMessage : undefined
-                        }
-                        onRetrySetup={
-                          selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
-                        }
-                        onViewSetupLogs={
-                          selectedWorkspace.setup_status === "failed"
-                            ? handleViewSetupLogs
-                            : undefined
-                        }
-                        workspaceStatus={selectedWorkspace.status}
-                        onStatusChange={
-                          webDirect
-                            ? undefined
-                            : (status) =>
-                                statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
-                        }
-                        tasks={environmentTasks}
-                        onRunTask={handleRunTask}
-                      />
-
-                      {/* Session tabs + chat messages + input */}
-                      <ChatArea
-                        key={selectedWorkspace.id}
-                        workspace={selectedWorkspace}
-                        workspaceChatPanelRef={workspaceChatPanelRef}
-                        onCreatePRHandlerChange={setCreatePRHandler}
-                        onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
-                        onCollapseChatPanel={
-                          contentPaneAvailable ? handleCollapseChatPanel : undefined
-                        }
-                      />
-                    </div>
-                  )}
-                </ResizablePanel>
-
-                {contentPaneAvailable && (
+            <div className="min-h-0 min-w-0 flex-1">
+              <WorkspacePanels
+                workspaceId={selectedWorkspace.id}
+                mode={panelMode}
+                onModeChange={setPanelMode}
+                chat={
                   <>
-                    <ResizableHandle
-                      /* Toggle pointer-events on every live <webview> during
-                       * drag. Electron's webview guest eats pointermove before
-                       * they bubble to document; without this, dragging the
-                       * splitter rightward (cursor crosses into the webview)
-                       * freezes because react-resizable-panels loses its
-                       * document-level pointermove stream. */
-                      onDragging={(isDragging) =>
-                        webviewManager.setPointerEventsEnabled(!isDragging)
+                    <WorkspaceHeader
+                      repositoryId={selectedWorkspace.repository_id}
+                      title={selectedWorkspace.title ?? undefined}
+                      repositoryName={selectedWorkspace.repo_name}
+                      branch={selectedWorkspace.git_branch ?? undefined}
+                      workspacePath={selectedWorkspace.workspace_path}
+                      kind={selectedWorkspace.kind}
+                      automationName={workspaceAutomation?.name}
+                      onOpenAutomation={
+                        workspaceAutomation
+                          ? () => uiActions.openAutomations(workspaceAutomation.id)
+                          : undefined
                       }
+                      cloudPresence={cloudState}
+                      onCloudWake={isCloudDirectWebMode() ? undefined : handleCloudWake}
+                      setupStatus={selectedWorkspace.setup_status}
+                      setupError={selectedWorkspace.error_message}
+                      onSendAgentMessage={
+                        sendAgentMessageHandler ? handleSendAgentMessage : undefined
+                      }
+                      onRetrySetup={
+                        selectedWorkspace.setup_status === "failed" ? handleRetrySetup : undefined
+                      }
+                      onViewSetupLogs={
+                        selectedWorkspace.setup_status === "failed"
+                          ? handleViewSetupLogs
+                          : undefined
+                      }
+                      workspaceStatus={selectedWorkspace.status}
+                      onStatusChange={
+                        webDirect
+                          ? undefined
+                          : (status) =>
+                              statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
+                      }
+                      trailingActions={
+                        contentPaneAvailable && (
+                          <>
+                            {view === "chat" && prActions}
+                            <div
+                              className={cn(
+                                "flex items-center",
+                                view === "chat" && "border-border-subtle ml-1 border-l pl-2"
+                              )}
+                            >
+                              <WorkspacePanelButton
+                                action={view === "chat" ? "show" : "hide"}
+                                onClick={() => setPanelMode(view === "chat" ? "split" : "chat")}
+                              />
+                            </div>
+                          </>
+                        )
+                      }
+                      tasks={environmentTasks}
+                      onRunTask={handleRunTask}
                     />
-
-                    {/* ─── CONTENT PANEL (right, collapsible) ─── */}
-                    <ResizablePanel
-                      ref={contentPanelRef}
-                      collapsible
-                      collapsedSize={safeCollapsedSize}
-                      defaultSize={
-                        contentPanelCollapsed ? safeCollapsedSize : contentPanelDefaultSize
-                      }
-                      minSize={MIN_PANEL_SIZE}
-                      onCollapse={handleCollapseContentPanel}
-                      onExpand={handleExpandContentPanel}
-                      className="min-w-0"
-                      order={2}
-                    >
-                      {contentPanelCollapsed ? (
-                        <CollapsedContentStrip onExpand={() => contentPanelRef.current?.expand()} />
-                      ) : (
-                        <div className="flex h-full flex-col pr-2 pb-2">
-                          {/* Tab header: content tabs (left) + PR actions (right) */}
-                          <div className="drag-region flex h-11 flex-shrink-0 items-center justify-between px-2.5">
-                            <ContentTabBar
-                              activeTab={effectiveContentTab}
-                              onTabChange={handleContentTabChange}
-                              workspaceId={selectedWorkspaceId}
-                              simulatorAvailable={simulatorAvailable}
-                              cloudSimulator={cloudSimulator}
-                            />
-                            <PRActions
-                              prStatus={prStatus}
-                              ghStatus={ghStatus}
-                              onCreatePR={createPRHandler ? handleCreatePR : undefined}
-                              onSendAgentMessage={
-                                sendAgentMessageHandler ? handleSendAgentMessage : undefined
-                              }
-                              onArchive={handleArchive}
-                              targetBranch={selectedTargetBranch}
-                              onTargetBranchChange={setSelectedTargetBranch}
-                              repoId={selectedWorkspace.repository_id}
-                              workspaceId={selectedWorkspaceId ?? undefined}
-                            />
-                          </div>
-
-                          {/* Content area — rounded corners, subtle border */}
-                          <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
-                            <ContentView
-                              workspace={selectedWorkspace}
-                              activeTab={effectiveContentTab}
-                              isWatched={isWatched}
-                              onReview={handleInsertReviewPrompt}
-                              simulatorAvailable={simulatorAvailable}
-                              cloudSimulator={cloudSimulator}
-                            />
-                          </div>
+                    <div className="@container flex min-h-0 flex-1">
+                      <div
+                        className={cn(
+                          "flex min-h-0 min-w-0 flex-1 justify-center",
+                          view === "chat" && "px-4"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "flex min-h-0 min-w-0 flex-1",
+                            view === "chat" && "max-w-[720px]"
+                          )}
+                        >
+                          <ChatArea
+                            key={selectedWorkspace.id}
+                            workspace={selectedWorkspace}
+                            workspaceChatPanelRef={workspaceChatPanelRef}
+                            onCreatePRHandlerChange={setCreatePRHandler}
+                            onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
+                          />
                         </div>
+                      </div>
+                      {contentPaneAvailable && view === "chat" && (
+                        <WorkspaceToolShortcuts
+                          items={CONTENT_TABS.filter((item) =>
+                            isTabVisible(item.id, experimentalSettings, tabVisibility)
+                          )}
+                          onSelect={handleContentTabChange}
+                          onEnvironment={() =>
+                            uiActions.openEnvironmentSettings(
+                              selectedWorkspace.repository_id,
+                              selectedWorkspace.kind === "cloud" ? "cloud" : "local"
+                            )
+                          }
+                        />
                       )}
-                    </ResizablePanel>
+                    </div>
                   </>
-                )}
-              </ResizablePanelGroup>
+                }
+                content={
+                  contentPaneAvailable ? (
+                    <div
+                      className={cn(
+                        "flex h-full min-w-0 flex-col pr-2 pb-2",
+                        view === "content" && "pl-2"
+                      )}
+                    >
+                      <div
+                        data-slot="workspace-tool-header"
+                        className="drag-region flex h-11 shrink-0 items-center gap-2 px-2"
+                      >
+                        {view === "content" && (
+                          <WorkspacePanelButton
+                            action="hide"
+                            onClick={() => setPanelMode("chat")}
+                          />
+                        )}
+                        <ContentTabBar
+                          activeTab={effectiveContentTab}
+                          onTabChange={handleContentTabChange}
+                          workspaceId={selectedWorkspaceId}
+                          simulatorAvailable={simulatorAvailable}
+                          cloudSimulator={cloudSimulator}
+                        />
+                        {prActions}
+                      </div>
+                      <div className="border-border-subtle bg-bg-elevated flex min-h-0 flex-1 overflow-hidden rounded-lg border">
+                        <ContentView
+                          workspace={selectedWorkspace}
+                          activeTab={effectiveContentTab}
+                          panelVisible={view !== "chat"}
+                          isWatched={isWatched}
+                          onReview={handleInsertReviewPrompt}
+                          simulatorAvailable={simulatorAvailable}
+                          cloudSimulator={cloudSimulator}
+                          toolbarAction={
+                            <WorkspacePanelButton
+                              action={view === "content" ? "restore" : "expand"}
+                              onClick={() => setPanelMode(view === "content" ? "split" : "content")}
+                            />
+                          }
+                        />
+                      </div>
+                    </div>
+                  ) : undefined
+                }
+              />
             </div>
           )
         ) : (

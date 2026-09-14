@@ -1,5 +1,5 @@
 import type { CloudPresence } from "../lib/cloudPresence";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -42,6 +42,7 @@ import { uiActions } from "@/shared/stores/uiStore";
 
 interface WorkspaceHeaderProps {
   repositoryId: string;
+  trailingActions?: ReactNode;
   title?: string;
   repositoryName?: string;
   branch?: string;
@@ -71,11 +72,11 @@ interface WorkspaceHeaderProps {
 /**
  * Workspace title header — sits at the top of the LEFT (chat) panel.
  *
- * Simple 36px bar: title + repo/branch on left, Open button on right.
- * PR actions have moved to the right panel's ContentPanelHeader.
+ * The 44px bar keeps Open, run and layout actions beside the workspace identity.
  */
 export function WorkspaceHeader({
   repositoryId,
+  trailingActions,
   title,
   repositoryName,
   branch,
@@ -329,7 +330,7 @@ export function WorkspaceHeader({
 
       {/* Right: Run + Open buttons (desktop only) */}
       {!mobile && (
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {onRunTask && (
             <HeaderRunButton
               tasks={tasks ?? []}
@@ -344,6 +345,7 @@ export function WorkspaceHeader({
             />
           )}
           {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
+          {trailingActions}
         </div>
       )}
     </div>

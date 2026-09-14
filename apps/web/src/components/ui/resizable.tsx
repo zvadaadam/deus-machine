@@ -3,16 +3,18 @@ import * as ResizablePrimitive from "react-resizable-panels";
 
 import { cn } from "@/shared/lib/utils";
 
-function ResizablePanelGroup(props: React.ComponentProps<typeof ResizablePrimitive.PanelGroup>) {
-  const { className, ...rest } = props;
-  return (
-    <ResizablePrimitive.PanelGroup
-      data-slot="resizable-panel-group"
-      className={cn("flex h-full w-full data-[panel-group-direction=vertical]:flex-col", className)}
-      {...rest}
-    />
-  );
-}
+const ResizablePanelGroup = React.forwardRef<
+  React.ComponentRef<typeof ResizablePrimitive.PanelGroup>,
+  React.ComponentPropsWithoutRef<typeof ResizablePrimitive.PanelGroup>
+>(({ className, ...rest }, ref) => (
+  <ResizablePrimitive.PanelGroup
+    ref={ref}
+    data-slot="resizable-panel-group"
+    className={cn("flex h-full w-full data-[panel-group-direction=vertical]:flex-col", className)}
+    {...rest}
+  />
+));
+ResizablePanelGroup.displayName = "ResizablePanelGroup";
 
 // forwardRef required in React 18 — ref is a reserved prop stripped from ...props.
 // Without this, imperative handles (collapse/expand/resize) silently receive null.

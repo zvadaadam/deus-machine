@@ -68,7 +68,7 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
       if (!workspaceId) return;
       const url = resolveBrowserLinkUrl(href);
       if (!url) return;
-      workspaceLayoutActions.setActiveContentTab(workspaceId, "browser");
+      workspaceLayoutActions.openContentTab(workspaceId, "browser");
       browserWindowActions.requestNewTab(workspaceId, url);
     },
     [workspaceId]
@@ -106,7 +106,7 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
       if (isBrowserPreviewPath(path)) {
         const baseUrl = await getBaseURL();
         const url = createWorkspacePreviewUrl(baseUrl, workspaceId, path);
-        workspaceLayoutActions.setActiveContentTab(workspaceId, "browser");
+        workspaceLayoutActions.openContentTab(workspaceId, "browser");
         browserWindowActions.requestNewTab(workspaceId, url);
         return;
       }

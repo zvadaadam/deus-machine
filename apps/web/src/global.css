@@ -393,18 +393,6 @@
   }
 }
 
-/* Breathing pulse for collapsed panel strip — signals active agent work.
- * Slow 2s cycle with ease-in-out-cubic feels organic, not mechanical. */
-@keyframes strip-breathe {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 /* Simulator idle state — subtle breathing on device silhouette.
  * Oscillates around the element's base opacity (0.3) by scaling 0.7–1.0.
  * The 6s cycle is intentionally slow — calm, unhurried. */
@@ -414,18 +402,6 @@
     opacity: 0.7;
   }
   50% {
-    opacity: 1;
-  }
-}
-
-/* Settle-in for collapsed strip content — pure opacity fade.
- * No translate: the strip uses writing-mode: vertical-rl + rotate-180,
- * and translateY would move along the wrong axis, causing a jarring multi-direction flash. */
-@keyframes strip-settle {
-  from {
-    opacity: 0;
-  }
-  to {
     opacity: 1;
   }
 }
@@ -1198,6 +1174,14 @@
 
   --diff-line-number: #404040;
   --diff-line-number-bg: #141414;
+}
+
+/* Lucide's 24-unit viewBox renders this stroke as 1px at 16px.
+ * Keep the default in base so stroke utilities can override illustration weights. */
+@layer base {
+  .lucide {
+    stroke-width: 1.5;
+  }
 }
 
 /* Apply semantic border color to all elements with border utilities */

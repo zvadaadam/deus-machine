@@ -63,8 +63,8 @@ interface FileBrowserPanelProps {
   revealRequest?: PendingFileNavigation | null;
   /** Called after a reveal request has been applied to the tree */
   onRevealConsumed?: (requestId: string) => void;
-  /** Optional header slot rendered above the panel */
-  headerSlot?: React.ReactNode;
+  /** Action at the end of the existing search/filter row. */
+  toolbarAction?: React.ReactNode;
   /** Controlled filter mode — when provided, component uses this instead of local state */
   filterMode?: FilterMode;
   /** Called when user changes the filter tab (Changes / All files) */
@@ -201,7 +201,7 @@ export function FileBrowserPanel({
   onFileClick: onFileClickProp,
   revealRequest,
   onRevealConsumed,
-  headerSlot,
+  toolbarAction,
   filterMode: controlledFilterMode,
   onFilterModeChange,
   hideTabToggle = false,
@@ -299,59 +299,35 @@ export function FileBrowserPanel({
     return changedOnly;
   }, [enrichedTree, filterMode, searchQuery, changesFilter, uncommittedPaths, lastTurnPaths]);
 
-  // Empty state — no workspace
-  if (!selectedWorkspace) {
-    return (
-      <div className="flex h-full flex-col overflow-hidden">
-        {headerSlot}
-        <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
-          <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
-            <FileCode className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-          </div>
-          <p className="text-muted-foreground/60 text-xs">Select a workspace to view files</p>
-        </div>
+  const status = !selectedWorkspace ? (
+    <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
+      <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+        <FileCode className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
       </div>
-    );
-  }
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col overflow-hidden">
-        {headerSlot}
-        <div className="animate-fade-in flex flex-1 flex-col items-center justify-center gap-3">
-          <Loader2 className="text-muted-foreground/50 h-5 w-5 animate-spin" />
-          <p className="text-muted-foreground/60 text-xs">Scanning files...</p>
-        </div>
+      <p className="text-muted-foreground/60 text-xs">Select a workspace to view files</p>
+    </div>
+  ) : isLoading ? (
+    <div className="animate-fade-in flex flex-1 flex-col items-center justify-center gap-3">
+      <Loader2 className="text-muted-foreground/50 h-5 w-5 animate-spin" />
+      <p className="text-muted-foreground/60 text-xs">Scanning files...</p>
+    </div>
+  ) : error ? (
+    <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
+      <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+        <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
       </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="flex h-full flex-col overflow-hidden">
-        {headerSlot}
-        <div className="animate-fade-in-up flex flex-1 flex-col items-center justify-center gap-3">
-          <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
-            <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-          </div>
-          <p role="alert" className="text-muted-foreground/60 max-w-sm px-4 text-center text-xs">
-            {error instanceof Error ? error.message : "Unable to load files"}
-          </p>
-          <Button variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}>
-            <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} />
-            {isFetching ? "Trying again…" : "Try again"}
-          </Button>
-        </div>
-      </div>
-    );
-  }
+      <p role="alert" className="text-muted-foreground/60 max-w-sm px-4 text-center text-xs">
+        {error instanceof Error ? error.message : "Unable to load files"}
+      </p>
+      <Button variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}>
+        <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} />
+        {isFetching ? "Trying again…" : "Try again"}
+      </Button>
+    </div>
+  ) : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {headerSlot}
-
       {/* Header: tab toggle (left) + filter dropdown (right) — hidden when parent manages tabs */}
       {!hideTabToggle && (
         <div className="flex h-9 flex-shrink-0 items-center justify-between px-3">
@@ -422,7 +398,7 @@ export function FileBrowserPanel({
 
       {/* Search bar — only for All files tab */}
       {filterMode === "all" && (
-        <div className="border-border/30 flex items-center gap-1.5 border-b px-2 py-1">
+        <div className="border-border/30 flex h-10 shrink-0 items-center gap-1.5 border-b px-2">
           <Search className="text-muted-foreground/40 h-3 w-3 flex-shrink-0" />
           <input
             ref={searchInputRef}
@@ -440,52 +416,57 @@ export function FileBrowserPanel({
               <X className="h-3 w-3" />
             </button>
           )}
+          {toolbarAction}
         </div>
       )}
 
-      {/* Truncation warning — shown when diff has too many files */}
-      {fileChangesTruncated && filterMode === "changes" && (
-        <div className="border-border/30 bg-muted/20 border-b px-2.5 py-1.5">
-          <p className="text-muted-foreground text-xs">
-            Showing {fileChanges.length.toLocaleString()} of{" "}
-            {(fileChangesTotalCount ?? 0).toLocaleString()} changed files
-          </p>
-        </div>
-      )}
-
-      {/* File Tree — Pierre virtualizes internally; remount on mode change
-          so defaultExpanded takes effect at construction. */}
-      <div className="flex-1 overflow-hidden py-1">
-        {filteredFiles.length > 0 ? (
-          <FileTree
-            key={filterMode}
-            nodes={filteredFiles}
-            selectedPath={selectedFilePath}
-            onFileClick={handleFileClick}
-            defaultExpanded={filterMode === "changes"}
-            revealPath={revealRequest?.path ?? null}
-            revealRequestId={revealRequest?.requestId ?? null}
-            onRevealConsumed={onRevealConsumed}
-          />
-        ) : (
-          <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">
-            <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
-              {filterMode === "changes" ? (
-                <GitBranch className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-              ) : (
-                <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
-              )}
+      {status ?? (
+        <>
+          {/* Truncation warning — shown when diff has too many files */}
+          {fileChangesTruncated && filterMode === "changes" && (
+            <div className="border-border/30 bg-muted/20 border-b px-2.5 py-1.5">
+              <p className="text-muted-foreground text-xs">
+                Showing {fileChanges.length.toLocaleString()} of{" "}
+                {(fileChangesTotalCount ?? 0).toLocaleString()} changed files
+              </p>
             </div>
-            <p className="text-muted-foreground/60 text-xs">
-              {filterMode === "changes"
-                ? "No file changes detected"
-                : searchQuery
-                  ? "No matching files"
-                  : "No files found"}
-            </p>
+          )}
+
+          {/* File Tree — Pierre virtualizes internally; remount on mode change
+          so defaultExpanded takes effect at construction. */}
+          <div className="flex-1 overflow-hidden py-1">
+            {filteredFiles.length > 0 ? (
+              <FileTree
+                key={filterMode}
+                nodes={filteredFiles}
+                selectedPath={selectedFilePath}
+                onFileClick={handleFileClick}
+                defaultExpanded={filterMode === "changes"}
+                revealPath={revealRequest?.path ?? null}
+                revealRequestId={revealRequest?.requestId ?? null}
+                onRevealConsumed={onRevealConsumed}
+              />
+            ) : (
+              <div className="animate-fade-in-up flex flex-col items-center justify-center gap-3 py-12">
+                <div className="bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
+                  {filterMode === "changes" ? (
+                    <GitBranch className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <FolderOpen className="text-muted-foreground/50 h-5 w-5" aria-hidden="true" />
+                  )}
+                </div>
+                <p className="text-muted-foreground/60 text-xs">
+                  {filterMode === "changes"
+                    ? "No file changes detected"
+                    : searchQuery
+                      ? "No matching files"
+                      : "No files found"}
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

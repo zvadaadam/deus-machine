@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 /**
- * The floating control strip above the cloud device frame — the cloud twin
+ * The control strip above the cloud device frame — the cloud twin
  * of SimulatorDeviceHeader: status dot + label, Start/Stop, Home, Screenshot.
  */
 
@@ -23,6 +24,7 @@ function phaseLabel(phase: CloudSimPhase): string {
 
 interface CloudSimulatorHeaderProps {
   device: CloudSimDevice;
+  toolbarAction?: ReactNode;
   phase: CloudSimPhase;
   onStart: () => void;
   onStop: () => void;
@@ -40,6 +42,7 @@ interface CloudSimulatorHeaderProps {
 
 export function CloudSimulatorHeader({
   device,
+  toolbarAction,
   phase,
   onStart,
   onStop,
@@ -59,7 +62,7 @@ export function CloudSimulatorHeader({
   const controlsDisabled = phase !== "live" || inFlight;
 
   return (
-    <div className="border-border-subtle bg-bg-surface/95 flex min-h-9 w-full items-center gap-2.5 rounded-xl border px-2.5 py-1.5 shadow-sm backdrop-blur">
+    <div className="border-border-subtle flex h-10 w-full shrink-0 items-center gap-2 border-b px-2">
       <span
         aria-label={`${label}: ${status}`}
         className={cn("h-2 w-2 shrink-0 rounded-full", {
@@ -186,6 +189,7 @@ export function CloudSimulatorHeader({
           </TooltipContent>
         </Tooltip>
       </div>
+      {toolbarAction}
     </div>
   );
 }

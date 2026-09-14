@@ -31,7 +31,7 @@ import { cn } from "@/shared/lib/utils";
 import { ShikiCodeBlock } from "./ShikiCodeBlock";
 import { LazyMermaidDiagram } from "./LazyMermaidDiagram";
 import { HtmlPreviewBlock } from "./HtmlPreviewBlock";
-import { ArrowUpRight, FileText, Globe } from "lucide-react";
+import { ArrowUpRight, Check, Copy, FileText, Globe } from "lucide-react";
 
 export interface MarkdownFileLink {
   path: string;
@@ -90,36 +90,7 @@ function CopyButton({ getText }: { getText: () => string }) {
       )}
       aria-label="Copy code"
     >
-      {copied ? (
-        // Check icon (copied state)
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : (
-        // Copy icon (default state)
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-      )}
+      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
     </button>
   );
 }
@@ -242,7 +213,7 @@ export function MarkdownRenderer({
                 }}
               >
                 <span className="truncate">{children}</span>
-                <Globe className="relative top-0.5 h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <Globe className="relative top-0.5 h-3 w-3 shrink-0" />
               </a>
             );
           }
@@ -314,9 +285,9 @@ function shouldHandleMarkdownHref(href: string): boolean {
 
 function MarkdownLinkIcon({ target }: { target: MarkdownFileLink["target"] }) {
   const className = "relative top-0.5 h-3 w-3 shrink-0";
-  if (target === "browser") return <Globe className={className} strokeWidth={1.5} />;
-  if (target === "file") return <FileText className={className} strokeWidth={1.5} />;
-  return <ArrowUpRight className={className} strokeWidth={1.5} />;
+  if (target === "browser") return <Globe className={className} />;
+  if (target === "file") return <FileText className={className} />;
+  return <ArrowUpRight className={className} />;
 }
 
 function getLinkLabel(children: unknown): string {

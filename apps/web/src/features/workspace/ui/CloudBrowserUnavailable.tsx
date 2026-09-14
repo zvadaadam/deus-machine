@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Globe } from "lucide-react";
 
 /**
@@ -6,9 +7,10 @@ import { Globe } from "lucide-react";
  * the session snapshot). Once known, ContentView mounts CloudPreviewPanel
  * instead — this is the honest interim, not a "coming soon".
  */
-export function CloudBrowserUnavailable() {
+export function CloudBrowserUnavailable({ toolbarAction }: { toolbarAction?: ReactNode }) {
   return (
-    <div className="bg-bg-base flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="bg-bg-base relative flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+      {toolbarAction && <div className="absolute top-1.5 right-2">{toolbarAction}</div>}
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
         <Globe className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
       </div>

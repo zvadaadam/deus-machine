@@ -102,7 +102,7 @@ export function PRActions({
         ))
         .with({ type: "ci_pending" }, (s) => (
           <StatusText
-            icon={<Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} />}
+            icon={<Loader2 className="h-3.5 w-3.5 animate-spin" />}
             label={s.checksTotal > 0 ? `${s.checksDone}/${s.checksTotal} checks` : "Checks running"}
             variant="pending"
           />
