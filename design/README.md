@@ -38,6 +38,13 @@ See
 [workspace-layout-proposal.md](./workspace-layout-proposal.md) for behavior and the
 bounded layout cleanup to consider after review.
 
+The follow-up **compact-header exploration** starts at y=18,640: `00c` compares the
+directions, `40d` keeps visible conversation tabs, `40e` uses a conversation picker,
+and `40f` moves conversations into the sidebar. Each uses one 44px navigation baseline,
+with tab groups anchored above their own pane. `22b` checks the closed state and an
+1100px window, which uses a single usable pane rather than clipping controls to force
+a split. These remain design alternatives, with the existing app layout unchanged.
+
 The settings sidebar, page heading, and command palette share the section definitions in
 `features/settings/settings-navigation.ts`. Desktop sections use a common 896px content
 width and a `Settings / section` header; hosted web resolves unavailable sections to Account.

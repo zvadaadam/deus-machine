@@ -170981,6 +170981,4280 @@
           "fontWeight": "normal"
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "xTbch",
+      "x": 0,
+      "y": 18860,
+      "name": "40d · Compact workspace — visible sessions · PROPOSAL",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 960,
+      "fill": "$bg-sidebar",
+      "layout": "vertical",
+      "gap": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "XQGrY",
+          "name": "Design annotation",
+          "width": "fill_container",
+          "height": 44,
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "n014x",
+              "name": "State title",
+              "fill": "$text-primary",
+              "content": "A · One row with visible conversations",
+              "fontFamily": "$font-sans",
+              "fontSize": 18,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "IOp1v",
+              "name": "Proposal note",
+              "fill": "$text-tertiary",
+              "content": "PROPOSAL · RECOMMENDED — One 44px row. Each tab group stays above its own pane and follows its width.",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-sm",
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ZP3Bx",
+          "name": "App viewport · 1440 × 900",
+          "clip": true,
+          "width": "fill_container",
+          "height": 900,
+          "fill": "$bg-sidebar",
+          "children": [
+            {
+              "type": "frame",
+              "id": "R8K4df",
+              "name": "Project sidebar",
+              "width": 256,
+              "height": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ZI3eP",
+                  "name": "Account and navigation",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    6
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "eRFJQ",
+                      "name": "Account",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "gap": 8,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "zC5su",
+                          "type": "ref",
+                          "ref": "a0JI15",
+                          "name": "Avatar",
+                          "theme": {
+                            "mode": "dark"
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "id": "DugFq",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Adam Zvada",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500",
+                          "letterSpacing": -0.13
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hhhAP",
+                      "name": "Actions",
+                      "gap": 2,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "J1bur",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "New session",
+                          "theme": {
+                            "mode": "dark"
+                          }
+                        },
+                        {
+                          "id": "fKnrb",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "Collapse",
+                          "theme": {
+                            "mode": "dark"
+                          },
+                          "descendants": {
+                            "AaONw": {
+                              "icon": "panel-left-close",
+                              "width": 18,
+                              "height": 18
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "s3UcS",
+                  "name": "Automations navigation",
+                  "width": "fill_container",
+                  "height": 36,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "i8s4cj",
+                      "name": "Automations icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "clock-3",
+                      "library": "lucide",
+                      "fill": "$text-tertiary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "s62HiW",
+                      "name": "Automations label",
+                      "fill": "$text-secondary",
+                      "content": "Automations",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ans6Z",
+                  "name": "Projects",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    20,
+                    6
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "xbeyM",
+                      "name": "Repository heading",
+                      "width": "fill_container",
+                      "height": 28,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "G2Izen",
+                          "name": "Repository label",
+                          "fill": "$text-tertiary",
+                          "content": "ONBOARDING-FIXTURE",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "e9twV",
+                      "name": "Selected workspace aquila",
+                      "width": "fill_container",
+                      "height": 32,
+                      "fill": "$bg-raised",
+                      "cornerRadius": "$radius-lg",
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "xFMAF",
+                          "type": "ref",
+                          "ref": "diRwM",
+                          "name": "In progress",
+                          "width": 14,
+                          "height": 14
+                        },
+                        {
+                          "type": "text",
+                          "id": "F24le",
+                          "name": "Workspace name",
+                          "fill": "$text-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "aquila",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "TV8K1",
+                          "name": "Change count",
+                          "fill": "$success",
+                          "content": "+2",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RTODb",
+                      "name": "New workspace",
+                      "width": "fill_container",
+                      "height": 28,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "i8w7nm",
+                          "name": "Add icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "ArXQl",
+                          "name": "Add label",
+                          "fill": "$text-tertiary",
+                          "content": "New workspace",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kQg7x",
+                      "name": "Other repository",
+                      "width": "fill_container",
+                      "height": 40,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "q1wR3L",
+                          "name": "Expand repository",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "chevron-right",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Ovzcv",
+                          "name": "Repository label",
+                          "fill": "$text-tertiary",
+                          "content": "SAO-TOME",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "vFK75",
+                  "name": "Add project and status",
+                  "width": "fill_container",
+                  "height": 46,
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "oHV1L",
+                      "name": "Add project",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "bRKim",
+                          "name": "Plus",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "wInCK",
+                          "name": "Label",
+                          "fill": "$text-muted",
+                          "content": "Add project",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IY0qL",
+                      "name": "Status",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "wATjC",
+                          "name": "ConnectionOrb",
+                          "fill": "$accent-green",
+                          "width": 8,
+                          "height": 8
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "HK8t6",
+              "name": "Workspace",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$bg-surface",
+              "stroke": "$border-subtle",
+              "strokeWidth": {
+                "left": 1
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "fJGAC",
+                  "name": "Pane-aligned workspace header",
+                  "width": "fill_container",
+                  "height": 44,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "k78Si",
+                      "name": "Chat header · above chat",
+                      "width": 592,
+                      "height": 44,
+                      "gap": 10,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "tFTjC",
+                          "name": "Workspace identity",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "ThE2d",
+                              "type": "ref",
+                              "ref": "diRwM",
+                              "name": "Workspace status",
+                              "width": 14,
+                              "height": 14
+                            },
+                            {
+                              "type": "text",
+                              "id": "W2dwod",
+                              "name": "Repository",
+                              "fill": "$text-secondary",
+                              "content": "onboarding-fixture",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "uiKPk",
+                              "name": "Slash",
+                              "fill": "$text-muted",
+                              "content": "/",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "KiPCm",
+                              "name": "Workspace name",
+                              "fill": "$text-primary",
+                              "content": "aquila",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FzAuK",
+                          "name": "Workspace and conversations separator",
+                          "width": 1,
+                          "height": 16,
+                          "fill": "$border-subtle"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZP7TR",
+                          "name": "Session navigation",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "s48g2Q",
+                              "name": "Codex session tab",
+                              "height": 28,
+                              "fill": "$bg-raised",
+                              "cornerRadius": "$radius-md",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "QfZbp",
+                                  "name": "Codex logo",
+                                  "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                                  "viewBox": [
+                                    29,
+                                    29,
+                                    42,
+                                    42
+                                  ],
+                                  "fill": "$text-secondary",
+                                  "width": 14,
+                                  "height": 14
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "Iua5U",
+                                  "name": "Session title",
+                                  "fill": "$text-secondary",
+                                  "content": "Codex #1",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "YHwzU",
+                              "type": "ref",
+                              "ref": "Cr6GJ",
+                              "name": "Claude session tab",
+                              "width": 98,
+                              "fill": "$bg-surface",
+                              "descendants": {
+                                "Pkiuf": {
+                                  "content": "Claude #2",
+                                  "fontSize": "$text-sm"
+                                }
+                              }
+                            },
+                            {
+                              "id": "Qo9Lh",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "name": "New chat",
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "plus"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "k6OI2",
+                          "name": "Chat header flexible space",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "iASaE",
+                          "name": "Open in editor",
+                          "clip": true,
+                          "height": 28,
+                          "fill": "#00000000",
+                          "cornerRadius": "$radius-lg",
+                          "stroke": "$border-strong",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "McWkI",
+                              "name": "Quick",
+                              "height": 28,
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "Of5J3",
+                                  "name": "arrow-up-right",
+                                  "width": 11,
+                                  "height": 11,
+                                  "icon": "arrow-up-right",
+                                  "library": "lucide",
+                                  "fill": "$text-subtle"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "K2G8jI",
+                                  "name": "Open",
+                                  "fill": "$text-subtle",
+                                  "content": "Open",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "KESJQ",
+                              "name": "Divider",
+                              "fill": "$border-strong",
+                              "width": 1,
+                              "height": 16
+                            },
+                            {
+                              "type": "frame",
+                              "id": "EDLVY",
+                              "name": "More",
+                              "height": 28,
+                              "padding": [
+                                0,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "HwFa1",
+                                  "name": "chevron-down",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "PNg0w",
+                      "name": "Pane divider · aligned with resize handle",
+                      "width": 1,
+                      "height": 44,
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MrQJw",
+                      "name": "Tool header · above workspace tools",
+                      "width": "fill_container",
+                      "height": 44,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "zL0Y3",
+                          "name": "Tool navigation",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "u3hQe",
+                              "type": "ref",
+                              "ref": "YWfmp",
+                              "name": "Changes tab",
+                              "descendants": {
+                                "h701Y": {
+                                  "icon": "git-branch"
+                                },
+                                "SgEjB": {
+                                  "content": "Changes"
+                                }
+                              }
+                            },
+                            {
+                              "id": "ME3SQ",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Files tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "folder-open"
+                                }
+                              }
+                            },
+                            {
+                              "id": "UVpjV",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Terminal tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "terminal"
+                                }
+                              }
+                            },
+                            {
+                              "id": "s9JbRL",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Browser tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "globe"
+                                }
+                              }
+                            },
+                            {
+                              "id": "Pp9FZ",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Simulator tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "smartphone"
+                                }
+                              }
+                            },
+                            {
+                              "id": "TAcx9",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Apps tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "layout-grid"
+                                }
+                              }
+                            },
+                            {
+                              "id": "GPzLj",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Agent tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "bot"
+                                }
+                              }
+                            },
+                            {
+                              "type": "frame",
+                              "id": "OXg6g",
+                              "name": "Tool panel controls",
+                              "height": 28,
+                              "gap": 4,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "sUno8",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "enabled": true,
+                                  "name": "Expand panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "maximize-2"
+                                    }
+                                  }
+                                },
+                                {
+                                  "id": "N9EhR",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "name": "Close panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "panel-right-close"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "W9PbF",
+                          "name": "Tool header flexible space",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zyJkU",
+                          "name": "Create PR · joined branch selector · PRActions.tsx",
+                          "clip": true,
+                          "height": 28,
+                          "cornerRadius": "$radius-lg",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "OGkTN",
+                              "name": "Create PR",
+                              "height": 28,
+                              "fill": "$primary",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "c1BGNt",
+                                  "name": "Pull request",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "git-pull-request-create",
+                                  "library": "lucide",
+                                  "fill": "$primary-foreground"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "YFowh",
+                                  "name": "Create PR label",
+                                  "fill": "$primary-foreground",
+                                  "content": "Create PR",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "dP2Ou",
+                              "name": "Target branch",
+                              "height": 28,
+                              "fill": "$accent-blue-surface",
+                              "stroke": "$primary",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "strokeAlignment": "inner",
+                              "gap": 4,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Y95Cvg",
+                                  "name": "Branch",
+                                  "fill": "$primary",
+                                  "content": "main",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "Rf7p8",
+                                  "name": "Choose branch",
+                                  "width": 8,
+                                  "height": 8,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$primary"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iY6MU",
+                  "name": "Resizable chat and tool",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "MrRNZ",
+                      "name": "Chat lane",
+                      "width": 592,
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        24,
+                        20,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "id": "P5ZkB",
+                          "type": "ref",
+                          "ref": "T1zcza",
+                          "name": "Chat",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "descendants": {
+                            "uz2d7": {
+                              "enabled": false,
+                              "height": 0,
+                              "width": 1
+                            },
+                            "v82R2": {
+                              "width": "fill_container"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "le6BG",
+                      "name": "Resize divider",
+                      "width": 1,
+                      "height": "fill_container",
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "id": "qxf4z",
+                      "type": "ref",
+                      "ref": "NrJQ4",
+                      "descendants": {
+                        "vmuaf": {
+                          "enabled": false,
+                          "height": 0,
+                          "width": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "jBhc1",
+      "x": 1560,
+      "y": 18860,
+      "name": "40e · Compact workspace — conversation picker · PROPOSAL",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 960,
+      "fill": "$bg-sidebar",
+      "layout": "vertical",
+      "gap": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "IZ5B4",
+          "name": "Design annotation",
+          "width": "fill_container",
+          "height": 44,
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "gwdHF",
+              "name": "State title",
+              "fill": "$text-primary",
+              "content": "B · One row with a conversation picker",
+              "fontFamily": "$font-sans",
+              "fontSize": 18,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "lGpo4",
+              "name": "Proposal note",
+              "fill": "$text-tertiary",
+              "content": "PROPOSAL — More room for workspace identity. Switching conversations takes a menu; other activity is less visible.",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-sm",
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "hYowB",
+          "name": "App viewport · 1440 × 900",
+          "clip": true,
+          "width": "fill_container",
+          "height": 900,
+          "fill": "$bg-sidebar",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Psuwj",
+              "name": "Project sidebar",
+              "width": 256,
+              "height": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "A4Ctx4",
+                  "name": "Account and navigation",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    6
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "s0jF5M",
+                      "name": "Account",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "gap": 8,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "n3ziRV",
+                          "type": "ref",
+                          "ref": "a0JI15",
+                          "name": "Avatar",
+                          "theme": {
+                            "mode": "dark"
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "id": "b8aoxM",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Adam Zvada",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500",
+                          "letterSpacing": -0.13
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ozEMn",
+                      "name": "Actions",
+                      "gap": 2,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "Zgyuy",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "New session",
+                          "theme": {
+                            "mode": "dark"
+                          }
+                        },
+                        {
+                          "id": "A7fUm",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "Collapse",
+                          "theme": {
+                            "mode": "dark"
+                          },
+                          "descendants": {
+                            "AaONw": {
+                              "icon": "panel-left-close",
+                              "width": 18,
+                              "height": 18
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Q08GcR",
+                  "name": "Automations navigation",
+                  "width": "fill_container",
+                  "height": 36,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "V6RG2y",
+                      "name": "Automations icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "clock-3",
+                      "library": "lucide",
+                      "fill": "$text-tertiary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zLClC",
+                      "name": "Automations label",
+                      "fill": "$text-secondary",
+                      "content": "Automations",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FLeXg",
+                  "name": "Projects",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    20,
+                    6
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "PRRUo",
+                      "name": "Repository heading",
+                      "width": "fill_container",
+                      "height": 28,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "kQq3D",
+                          "name": "Repository label",
+                          "fill": "$text-tertiary",
+                          "content": "ONBOARDING-FIXTURE",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "k2XRc",
+                      "name": "Selected workspace aquila",
+                      "width": "fill_container",
+                      "height": 32,
+                      "fill": "$bg-raised",
+                      "cornerRadius": "$radius-lg",
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "zeVwj",
+                          "type": "ref",
+                          "ref": "diRwM",
+                          "name": "In progress",
+                          "width": 14,
+                          "height": 14
+                        },
+                        {
+                          "type": "text",
+                          "id": "dKJL6",
+                          "name": "Workspace name",
+                          "fill": "$text-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "aquila",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "oKRxX",
+                          "name": "Change count",
+                          "fill": "$success",
+                          "content": "+2",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YAOHN",
+                      "name": "New workspace",
+                      "width": "fill_container",
+                      "height": 28,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "I6famD",
+                          "name": "Add icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "k2EZw",
+                          "name": "Add label",
+                          "fill": "$text-tertiary",
+                          "content": "New workspace",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BwU8P",
+                      "name": "Other repository",
+                      "width": "fill_container",
+                      "height": 40,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "h4i6P",
+                          "name": "Expand repository",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "chevron-right",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "czfko",
+                          "name": "Repository label",
+                          "fill": "$text-tertiary",
+                          "content": "SAO-TOME",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "gR5i1",
+                  "name": "Add project and status",
+                  "width": "fill_container",
+                  "height": 46,
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "dR1Kh",
+                      "name": "Add project",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "xq5hw",
+                          "name": "Plus",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "D6ib0n",
+                          "name": "Label",
+                          "fill": "$text-muted",
+                          "content": "Add project",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IzMz7",
+                      "name": "Status",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "rpHnt",
+                          "name": "ConnectionOrb",
+                          "fill": "$accent-green",
+                          "width": 8,
+                          "height": 8
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "u6jpu",
+              "name": "Workspace",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$bg-surface",
+              "stroke": "$border-subtle",
+              "strokeWidth": {
+                "left": 1
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ikiqb",
+                  "name": "Pane-aligned workspace header",
+                  "width": "fill_container",
+                  "height": 44,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "UKIES",
+                      "name": "Chat header · above chat",
+                      "width": 592,
+                      "height": 44,
+                      "gap": 10,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "daQii",
+                          "name": "Workspace identity",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "X8b7N",
+                              "type": "ref",
+                              "ref": "diRwM",
+                              "name": "Workspace status",
+                              "width": 14,
+                              "height": 14
+                            },
+                            {
+                              "type": "text",
+                              "id": "wVoZh",
+                              "name": "Repository",
+                              "fill": "$text-secondary",
+                              "content": "onboarding-fixture",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "iGL2a",
+                              "name": "Slash",
+                              "fill": "$text-muted",
+                              "content": "/",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "sujcD",
+                              "name": "Workspace name",
+                              "fill": "$text-primary",
+                              "content": "aquila",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "CmWgw",
+                          "name": "Workspace and conversations separator",
+                          "width": 1,
+                          "height": 16,
+                          "fill": "$border-subtle"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "M9nYDY",
+                          "name": "Session navigation",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "dtBlc",
+                              "name": "Conversation picker",
+                              "height": 28,
+                              "fill": "$bg-raised",
+                              "cornerRadius": "$radius-md",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "path",
+                                  "id": "A6V0VN",
+                                  "name": "Codex logo",
+                                  "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                                  "viewBox": [
+                                    29,
+                                    29,
+                                    42,
+                                    42
+                                  ],
+                                  "fill": "$text-secondary",
+                                  "width": 14,
+                                  "height": 14
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "mtXoa",
+                                  "name": "Session title",
+                                  "fill": "$text-secondary",
+                                  "content": "Codex #1",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "P31MN",
+                                  "name": "Choose conversation",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$text-tertiary"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "c0xOEv",
+                              "type": "ref",
+                              "ref": "AovWi",
+                              "name": "New chat",
+                              "descendants": {
+                                "AaONw": {
+                                  "icon": "plus"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "CJ7cV",
+                          "name": "Chat header flexible space",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "HZeLk",
+                          "name": "Open in editor",
+                          "clip": true,
+                          "height": 28,
+                          "fill": "#00000000",
+                          "cornerRadius": "$radius-lg",
+                          "stroke": "$border-strong",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "KiEZM",
+                              "name": "Quick",
+                              "height": 28,
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "urrW6",
+                                  "name": "arrow-up-right",
+                                  "width": 11,
+                                  "height": 11,
+                                  "icon": "arrow-up-right",
+                                  "library": "lucide",
+                                  "fill": "$text-subtle"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "ajN3u",
+                                  "name": "Open",
+                                  "fill": "$text-subtle",
+                                  "content": "Open",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "eHgX9",
+                              "name": "Divider",
+                              "fill": "$border-strong",
+                              "width": 1,
+                              "height": 16
+                            },
+                            {
+                              "type": "frame",
+                              "id": "P7OgE",
+                              "name": "More",
+                              "height": 28,
+                              "padding": [
+                                0,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "Y0cA8",
+                                  "name": "chevron-down",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "djpRq",
+                      "name": "Pane divider · aligned with resize handle",
+                      "width": 1,
+                      "height": 44,
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AnRvw",
+                      "name": "Tool header · above workspace tools",
+                      "width": "fill_container",
+                      "height": 44,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "S7kIK",
+                          "name": "Tool navigation",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "dPFnZ",
+                              "type": "ref",
+                              "ref": "YWfmp",
+                              "name": "Changes tab",
+                              "descendants": {
+                                "h701Y": {
+                                  "icon": "git-branch"
+                                },
+                                "SgEjB": {
+                                  "content": "Changes"
+                                }
+                              }
+                            },
+                            {
+                              "id": "jXhRU",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Files tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "folder-open"
+                                }
+                              }
+                            },
+                            {
+                              "id": "O8Hh1u",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Terminal tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "terminal"
+                                }
+                              }
+                            },
+                            {
+                              "id": "ur13U",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Browser tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "globe"
+                                }
+                              }
+                            },
+                            {
+                              "id": "xOeQe",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Simulator tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "smartphone"
+                                }
+                              }
+                            },
+                            {
+                              "id": "JAlWY",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Apps tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "layout-grid"
+                                }
+                              }
+                            },
+                            {
+                              "id": "vSqKS",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Agent tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "bot"
+                                }
+                              }
+                            },
+                            {
+                              "type": "frame",
+                              "id": "GeGda",
+                              "name": "Tool panel controls",
+                              "height": 28,
+                              "gap": 4,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "GvZUU",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "enabled": true,
+                                  "name": "Expand panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "maximize-2"
+                                    }
+                                  }
+                                },
+                                {
+                                  "id": "rRZlN",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "name": "Close panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "panel-right-close"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "gt6He",
+                          "name": "Tool header flexible space",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pJkeQ",
+                          "name": "Create PR · joined branch selector · PRActions.tsx",
+                          "clip": true,
+                          "height": 28,
+                          "cornerRadius": "$radius-lg",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "KLjvj",
+                              "name": "Create PR",
+                              "height": 28,
+                              "fill": "$primary",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "X5SWZ",
+                                  "name": "Pull request",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "git-pull-request-create",
+                                  "library": "lucide",
+                                  "fill": "$primary-foreground"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "hjl4i",
+                                  "name": "Create PR label",
+                                  "fill": "$primary-foreground",
+                                  "content": "Create PR",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ASA2H",
+                              "name": "Target branch",
+                              "height": 28,
+                              "fill": "$accent-blue-surface",
+                              "stroke": "$primary",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "strokeAlignment": "inner",
+                              "gap": 4,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "w0wNIz",
+                                  "name": "Branch",
+                                  "fill": "$primary",
+                                  "content": "main",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "h7wD6",
+                                  "name": "Choose branch",
+                                  "width": 8,
+                                  "height": 8,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$primary"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "A2OA6U",
+                  "name": "Resizable chat and tool",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "UApC4",
+                      "name": "Chat lane",
+                      "width": 592,
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        24,
+                        20,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "id": "B71LzF",
+                          "type": "ref",
+                          "ref": "T1zcza",
+                          "name": "Chat",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "descendants": {
+                            "uz2d7": {
+                              "enabled": false,
+                              "height": 0,
+                              "width": 1
+                            },
+                            "v82R2": {
+                              "width": "fill_container"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "HQyuK",
+                      "name": "Resize divider",
+                      "width": 1,
+                      "height": "fill_container",
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "id": "SFfqy",
+                      "type": "ref",
+                      "ref": "NrJQ4",
+                      "descendants": {
+                        "vmuaf": {
+                          "enabled": false,
+                          "height": 0,
+                          "width": 1
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Ch4uw",
+                  "layoutPosition": "absolute",
+                  "x": 230,
+                  "y": 48,
+                  "name": "Conversation menu · open state",
+                  "width": 228,
+                  "fill": "$bg-elevated",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-strong",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 2,
+                  "padding": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "bjuID",
+                      "name": "Selected conversation · Codex #1",
+                      "width": "fill_container",
+                      "height": 32,
+                      "fill": "$bg-raised",
+                      "cornerRadius": "$radius-md",
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "path",
+                          "id": "gREgU",
+                          "name": "Codex logo",
+                          "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                          "viewBox": [
+                            29,
+                            29,
+                            42,
+                            42
+                          ],
+                          "fill": "$text-secondary",
+                          "width": 14,
+                          "height": 14
+                        },
+                        {
+                          "type": "text",
+                          "id": "L5DiMj",
+                          "name": "Session title",
+                          "fill": "$text-secondary",
+                          "content": "Codex #1",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "vzn8w",
+                          "name": "Selected row spacing",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "icon",
+                          "id": "f8zWz",
+                          "name": "Selected conversation",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "check",
+                          "library": "lucide",
+                          "fill": "$text-secondary"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "sPmfm",
+                      "type": "ref",
+                      "ref": "Cr6GJ",
+                      "name": "Claude #2 conversation",
+                      "width": "fill_container",
+                      "height": 32,
+                      "fill": "$bg-elevated",
+                      "descendants": {
+                        "Pkiuf": {
+                          "content": "Claude #2",
+                          "fontSize": "$text-sm"
+                        }
+                      }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sWLGl",
+                      "name": "Conversation menu separator",
+                      "width": "fill_container",
+                      "height": 1,
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "K6g6x",
+                      "name": "New conversation",
+                      "width": "fill_container",
+                      "height": 32,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "iKbNt",
+                          "name": "New conversation icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "G7rvD",
+                          "name": "New conversation label",
+                          "fill": "$text-secondary",
+                          "content": "New conversation",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "WN5k0",
+      "x": 3120,
+      "y": 18860,
+      "name": "40f · Compact workspace — sidebar conversations · PROPOSAL",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 960,
+      "fill": "$bg-sidebar",
+      "layout": "vertical",
+      "gap": 16,
+      "children": [
+        {
+          "type": "frame",
+          "id": "gPbhW",
+          "name": "Design annotation",
+          "width": "fill_container",
+          "height": 44,
+          "layout": "vertical",
+          "gap": 6,
+          "children": [
+            {
+              "type": "text",
+              "id": "YqKcF",
+              "name": "State title",
+              "fill": "$text-primary",
+              "content": "C · Conversations in the sidebar",
+              "fontFamily": "$font-sans",
+              "fontSize": 18,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "Pb2Wc",
+              "name": "Proposal note",
+              "fill": "$text-tertiary",
+              "content": "PROPOSAL — Clear canvas and visible conversations. A deeper sidebar changes how people navigate every workspace.",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-sm",
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "XK1dX",
+          "name": "App viewport · 1440 × 900",
+          "clip": true,
+          "width": "fill_container",
+          "height": 900,
+          "fill": "$bg-sidebar",
+          "children": [
+            {
+              "type": "frame",
+              "id": "aW45N",
+              "name": "Project sidebar",
+              "width": 256,
+              "height": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "tWCsj",
+                  "name": "Account and navigation",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 4,
+                  "padding": [
+                    0,
+                    6
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "C1i4f6",
+                      "name": "Account",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "gap": 8,
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "BOYag",
+                          "type": "ref",
+                          "ref": "a0JI15",
+                          "name": "Avatar",
+                          "theme": {
+                            "mode": "dark"
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "id": "KxOS2",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Adam Zvada",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500",
+                          "letterSpacing": -0.13
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lYgDY",
+                      "name": "Actions",
+                      "gap": 2,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "dMaWl",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "New session",
+                          "theme": {
+                            "mode": "dark"
+                          }
+                        },
+                        {
+                          "id": "B79Vm3",
+                          "type": "ref",
+                          "ref": "AovWi",
+                          "name": "Collapse",
+                          "theme": {
+                            "mode": "dark"
+                          },
+                          "descendants": {
+                            "AaONw": {
+                              "icon": "panel-left-close",
+                              "width": 18,
+                              "height": 18
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "VRfU1",
+                  "name": "Automations navigation",
+                  "width": "fill_container",
+                  "height": 36,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "XkAhn",
+                      "name": "Automations icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "clock-3",
+                      "library": "lucide",
+                      "fill": "$text-tertiary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "nntAD",
+                      "name": "Automations label",
+                      "fill": "$text-secondary",
+                      "content": "Automations",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "M1sdYa",
+                  "name": "Projects",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    20,
+                    6
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sBpoF",
+                      "name": "Repository heading",
+                      "width": "fill_container",
+                      "height": 28,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "flcRy",
+                          "name": "Repository label",
+                          "fill": "$text-tertiary",
+                          "content": "ONBOARDING-FIXTURE",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "e8dKb",
+                      "name": "Selected workspace aquila",
+                      "width": "fill_container",
+                      "height": 32,
+                      "fill": "$bg-raised",
+                      "cornerRadius": "$radius-lg",
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "i0r8j",
+                          "type": "ref",
+                          "ref": "diRwM",
+                          "name": "In progress",
+                          "width": 14,
+                          "height": 14
+                        },
+                        {
+                          "type": "text",
+                          "id": "g0ku44",
+                          "name": "Workspace name",
+                          "fill": "$text-primary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "aquila",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-base",
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QF3YJ",
+                          "name": "Change count",
+                          "fill": "$success",
+                          "content": "+2",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "v4blo4",
+                      "name": "Conversations in selected workspace",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "padding": [
+                        0,
+                        6,
+                        0,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "h8cuvH",
+                          "name": "Selected conversation · Codex #1",
+                          "width": "fill_container",
+                          "height": 30,
+                          "fill": "$bg-raised",
+                          "cornerRadius": "$radius-md",
+                          "gap": 6,
+                          "padding": [
+                            0,
+                            8
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "path",
+                              "id": "qh5Rw",
+                              "name": "Codex logo",
+                              "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                              "viewBox": [
+                                29,
+                                29,
+                                42,
+                                42
+                              ],
+                              "fill": "$text-secondary",
+                              "width": 14,
+                              "height": 14
+                            },
+                            {
+                              "type": "text",
+                              "id": "E0nAJ",
+                              "name": "Session title",
+                              "fill": "$text-secondary",
+                              "content": "Codex #1",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-sm",
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "N8imOC",
+                          "type": "ref",
+                          "ref": "Cr6GJ",
+                          "name": "Claude #2 conversation",
+                          "width": "fill_container",
+                          "height": 30,
+                          "fill": "$bg-sidebar",
+                          "descendants": {
+                            "Pkiuf": {
+                              "content": "Claude #2",
+                              "fontSize": "$text-sm"
+                            }
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Nj6JG",
+                          "name": "New conversation",
+                          "width": "fill_container",
+                          "height": 30,
+                          "gap": 6,
+                          "padding": [
+                            0,
+                            8
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "K4YD2Y",
+                              "name": "New conversation icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$text-tertiary"
+                            },
+                            {
+                              "type": "text",
+                              "id": "piOED",
+                              "name": "New conversation label",
+                              "fill": "$text-tertiary",
+                              "content": "New conversation",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-sm",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SgVJz",
+                      "name": "New workspace",
+                      "width": "fill_container",
+                      "height": 28,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "S3LMC",
+                          "name": "Add icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "B4alQS",
+                          "name": "Add label",
+                          "fill": "$text-tertiary",
+                          "content": "New workspace",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JeEPF",
+                      "name": "Other repository",
+                      "width": "fill_container",
+                      "height": 40,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "WD2Vu",
+                          "name": "Expand repository",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "chevron-right",
+                          "library": "lucide",
+                          "fill": "$text-tertiary"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Q5uYU",
+                          "name": "Repository label",
+                          "fill": "$text-tertiary",
+                          "content": "SAO-TOME",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZEz0i",
+                  "name": "Add project and status",
+                  "width": "fill_container",
+                  "height": 46,
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "CdPCc",
+                      "name": "Add project",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "tSSxV",
+                          "name": "Plus",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "CSEvR",
+                          "name": "Label",
+                          "fill": "$text-muted",
+                          "content": "Add project",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "r1cNT",
+                      "name": "Status",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "k6wkgY",
+                          "name": "ConnectionOrb",
+                          "fill": "$accent-green",
+                          "width": 8,
+                          "height": 8
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "V48MJ9",
+              "name": "Workspace",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$bg-surface",
+              "stroke": "$border-subtle",
+              "strokeWidth": {
+                "left": 1
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "v157k",
+                  "name": "Pane-aligned workspace header",
+                  "width": "fill_container",
+                  "height": 44,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "gPUTC",
+                      "name": "Chat header · above chat",
+                      "width": 592,
+                      "height": 44,
+                      "gap": 10,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ZpIm9",
+                          "name": "Workspace identity",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "FtFD4",
+                              "type": "ref",
+                              "ref": "diRwM",
+                              "name": "Workspace status",
+                              "width": 14,
+                              "height": 14
+                            },
+                            {
+                              "type": "text",
+                              "id": "YRRnK",
+                              "name": "Repository",
+                              "fill": "$text-secondary",
+                              "content": "onboarding-fixture",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Ujji0",
+                              "name": "Slash",
+                              "fill": "$text-muted",
+                              "content": "/",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Q24G6k",
+                              "name": "Workspace name",
+                              "fill": "$text-primary",
+                              "content": "aquila",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "DTRrK",
+                          "name": "Chat header flexible space",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KzUr1",
+                          "name": "Open in editor",
+                          "clip": true,
+                          "height": 28,
+                          "fill": "#00000000",
+                          "cornerRadius": "$radius-lg",
+                          "stroke": "$border-strong",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "ONq1z",
+                              "name": "Quick",
+                              "height": 28,
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "f8F0O",
+                                  "name": "arrow-up-right",
+                                  "width": 11,
+                                  "height": 11,
+                                  "icon": "arrow-up-right",
+                                  "library": "lucide",
+                                  "fill": "$text-subtle"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "uwkkH",
+                                  "name": "Open",
+                                  "fill": "$text-subtle",
+                                  "content": "Open",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "iZ2rn",
+                              "name": "Divider",
+                              "fill": "$border-strong",
+                              "width": 1,
+                              "height": 16
+                            },
+                            {
+                              "type": "frame",
+                              "id": "x31Oz",
+                              "name": "More",
+                              "height": 28,
+                              "padding": [
+                                0,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "nt2i3",
+                                  "name": "chevron-down",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "L7Lk7c",
+                      "name": "Pane divider · aligned with resize handle",
+                      "width": 1,
+                      "height": 44,
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RpPDm",
+                      "name": "Tool header · above workspace tools",
+                      "width": "fill_container",
+                      "height": 44,
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "og9be",
+                          "name": "Tool navigation",
+                          "height": 28,
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "P33lfs",
+                              "type": "ref",
+                              "ref": "YWfmp",
+                              "name": "Changes tab",
+                              "descendants": {
+                                "h701Y": {
+                                  "icon": "git-branch"
+                                },
+                                "SgEjB": {
+                                  "content": "Changes"
+                                }
+                              }
+                            },
+                            {
+                              "id": "qJkKF",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Files tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "folder-open"
+                                }
+                              }
+                            },
+                            {
+                              "id": "p0TPud",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Terminal tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "terminal"
+                                }
+                              }
+                            },
+                            {
+                              "id": "vzNhk",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Browser tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "globe"
+                                }
+                              }
+                            },
+                            {
+                              "id": "Uw8bk",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Simulator tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "smartphone"
+                                }
+                              }
+                            },
+                            {
+                              "id": "WFM0B",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Apps tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "layout-grid"
+                                }
+                              }
+                            },
+                            {
+                              "id": "LAnog",
+                              "type": "ref",
+                              "ref": "IGG8T",
+                              "name": "Agent tab",
+                              "descendants": {
+                                "VM51c": {
+                                  "icon": "bot"
+                                }
+                              }
+                            },
+                            {
+                              "type": "frame",
+                              "id": "N4RRj9",
+                              "name": "Tool panel controls",
+                              "height": 28,
+                              "gap": 4,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "id": "tWmAM",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "enabled": true,
+                                  "name": "Expand panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "maximize-2"
+                                    }
+                                  }
+                                },
+                                {
+                                  "id": "XGZ78",
+                                  "type": "ref",
+                                  "ref": "AovWi",
+                                  "name": "Close panel",
+                                  "width": 28,
+                                  "height": 28,
+                                  "descendants": {
+                                    "AaONw": {
+                                      "icon": "panel-right-close"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "yj0gy",
+                          "name": "Tool header flexible space",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Z7ZoG",
+                          "name": "Create PR · joined branch selector · PRActions.tsx",
+                          "clip": true,
+                          "height": 28,
+                          "cornerRadius": "$radius-lg",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "IUnKS",
+                              "name": "Create PR",
+                              "height": 28,
+                              "fill": "$primary",
+                              "gap": 6,
+                              "padding": [
+                                0,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "NEcBw",
+                                  "name": "Pull request",
+                                  "width": 10,
+                                  "height": 10,
+                                  "icon": "git-pull-request-create",
+                                  "library": "lucide",
+                                  "fill": "$primary-foreground"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "XLLBp",
+                                  "name": "Create PR label",
+                                  "fill": "$primary-foreground",
+                                  "content": "Create PR",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "DUy09",
+                              "name": "Target branch",
+                              "height": 28,
+                              "fill": "$accent-blue-surface",
+                              "stroke": "$primary",
+                              "strokeWidth": {
+                                "left": 1
+                              },
+                              "strokeAlignment": "inner",
+                              "gap": 4,
+                              "padding": [
+                                0,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "lFDdl",
+                                  "name": "Branch",
+                                  "fill": "$primary",
+                                  "content": "main",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "fh4da",
+                                  "name": "Choose branch",
+                                  "width": 8,
+                                  "height": 8,
+                                  "icon": "chevron-down",
+                                  "library": "lucide",
+                                  "fill": "$primary"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "e7TXtR",
+                  "name": "Resizable chat and tool",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "o0pt3",
+                      "name": "Chat lane",
+                      "width": 592,
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        0,
+                        24,
+                        20,
+                        24
+                      ],
+                      "children": [
+                        {
+                          "id": "Hk4jw",
+                          "type": "ref",
+                          "ref": "T1zcza",
+                          "name": "Chat",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "descendants": {
+                            "uz2d7": {
+                              "enabled": false,
+                              "height": 0,
+                              "width": 1
+                            },
+                            "v82R2": {
+                              "width": "fill_container"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "WcqKe",
+                      "name": "Resize divider",
+                      "width": 1,
+                      "height": "fill_container",
+                      "fill": "$border-subtle"
+                    },
+                    {
+                      "id": "oFKo8",
+                      "type": "ref",
+                      "ref": "NrJQ4",
+                      "descendants": {
+                        "vmuaf": {
+                          "enabled": false,
+                          "height": 0,
+                          "width": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "xjMsB",
+      "x": 0,
+      "y": 18640,
+      "name": "00c · Compact workspace — variant comparison",
+      "theme": {
+        "mode": "dark"
+      },
+      "width": 4560,
+      "height": 180,
+      "fill": "$bg-sidebar",
+      "layout": "vertical",
+      "gap": 12,
+      "padding": 24,
+      "children": [
+        {
+          "type": "text",
+          "id": "fAaSL",
+          "name": "Comparison title",
+          "fill": "$text-primary",
+          "content": "One navigation row. Three ways to handle conversations.",
+          "fontFamily": "$font-sans",
+          "fontSize": 24,
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "cOjDr",
+          "name": "Comparison premise",
+          "fill": "$text-secondary",
+          "content": "Design exploration · One 44px baseline, with each header attached to its pane. A narrow window uses one usable pane; controls never cross the divider.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-base",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "E7g76",
+          "name": "Three directions",
+          "width": "fill_container",
+          "gap": 40,
+          "children": [
+            {
+              "type": "frame",
+              "id": "hpEej",
+              "name": "A · Visible conversations · recommended",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "KQWiu",
+                  "name": "Direction title",
+                  "fill": "$text-primary",
+                  "content": "A · Visible conversations · recommended",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 16,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "emz0e",
+                  "name": "Direction tradeoff",
+                  "fill": "$text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "One-click tabs above chat; tool tabs above the workspace. Keep the groups inside their pane as it resizes.",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "kTAPo",
+              "name": "B · Conversation picker",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "FPs9T",
+                  "name": "Direction title",
+                  "fill": "$text-primary",
+                  "content": "B · Conversation picker",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 16,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "jFEP9",
+                  "name": "Direction tradeoff",
+                  "fill": "$text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Most room for long workspace names. Switching conversations takes a menu and hides other conversations' activity.",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "nuKXT",
+              "name": "C · Sidebar conversations",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "J96cEu",
+                  "name": "Direction title",
+                  "fill": "$text-primary",
+                  "content": "C · Sidebar conversations",
+                  "fontFamily": "$font-sans",
+                  "fontSize": 16,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "M7QNo",
+                  "name": "Direction tradeoff",
+                  "fill": "$text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "All conversations are visible in the project tree. The deeper sidebar is a broader product-navigation decision.",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "vVjnR",
+      "x": 0,
+      "y": 19940,
+      "name": "22b · Compact header — state and width checks · PROPOSAL",
+      "theme": {
+        "mode": "dark"
+      },
+      "width": 1440,
+      "height": 480,
+      "fill": "$bg-sidebar",
+      "layout": "vertical",
+      "gap": 12,
+      "padding": 24,
+      "children": [
+        {
+          "type": "text",
+          "id": "Bh3LE",
+          "name": "Header state title",
+          "fill": "$text-primary",
+          "content": "A · Keep pane boundaries, use one pane when space runs out",
+          "fontFamily": "$font-sans",
+          "fontSize": 20,
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "pQf6z",
+          "name": "CHAT · Open restores the last selected tool. Session tabs remain visible.",
+          "fill": "$text-secondary",
+          "content": "CHAT · Open restores the last selected tool. Session tabs remain visible.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "V8AW0y",
+          "name": "Compact header · chat",
+          "width": 1184,
+          "height": 44,
+          "fill": "$bg-surface",
+          "gap": 12,
+          "padding": [
+            0,
+            12
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "GU1mf",
+              "name": "Workspace identity",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "x6BmiZ",
+                  "type": "ref",
+                  "ref": "diRwM",
+                  "name": "Workspace status",
+                  "width": 14,
+                  "height": 14
+                },
+                {
+                  "type": "text",
+                  "id": "E10Kc6",
+                  "name": "Workspace name",
+                  "fill": "$text-primary",
+                  "content": "aquila",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ddGtl",
+              "name": "Workspace and conversations separator",
+              "width": 1,
+              "height": 16,
+              "fill": "$border-subtle"
+            },
+            {
+              "type": "frame",
+              "id": "dpmuT",
+              "name": "Session navigation",
+              "height": 28,
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Twrat",
+                  "name": "Codex session tab",
+                  "height": 28,
+                  "fill": "$bg-raised",
+                  "cornerRadius": "$radius-md",
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "path",
+                      "id": "NtdEA",
+                      "name": "Codex logo",
+                      "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                      "viewBox": [
+                        29,
+                        29,
+                        42,
+                        42
+                      ],
+                      "fill": "$text-secondary",
+                      "width": 14,
+                      "height": 14
+                    },
+                    {
+                      "type": "text",
+                      "id": "m9eYfx",
+                      "name": "Session title",
+                      "fill": "$text-secondary",
+                      "content": "Codex #1",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "id": "bRgF8",
+                  "type": "ref",
+                  "ref": "Cr6GJ",
+                  "name": "Claude session tab",
+                  "width": 98,
+                  "fill": "$bg-surface",
+                  "descendants": {
+                    "Pkiuf": {
+                      "content": "Claude #2",
+                      "fontSize": "$text-sm"
+                    }
+                  }
+                },
+                {
+                  "id": "M7XRU",
+                  "type": "ref",
+                  "ref": "AovWi",
+                  "name": "New chat",
+                  "descendants": {
+                    "AaONw": {
+                      "icon": "plus"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "CheOw",
+              "name": "Header flexible space",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "yKNEX",
+              "name": "Workspace actions",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "r8FMD",
+                  "name": "Open in editor",
+                  "clip": true,
+                  "height": 28,
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-strong",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "F9PMy",
+                      "name": "Quick",
+                      "height": 28,
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "yLIgP",
+                          "name": "arrow-up-right",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "arrow-up-right",
+                          "library": "lucide",
+                          "fill": "$text-subtle"
+                        },
+                        {
+                          "type": "text",
+                          "id": "JRKy5",
+                          "name": "Open",
+                          "fill": "$text-subtle",
+                          "content": "Open",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "MpLNt",
+                      "name": "Divider",
+                      "fill": "$border-strong",
+                      "width": 1,
+                      "height": 16
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BpBsN",
+                      "name": "More",
+                      "height": 28,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "d4DJ6",
+                          "name": "chevron-down",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "W09MmF",
+                  "name": "Create PR · joined branch selector · PRActions.tsx",
+                  "clip": true,
+                  "height": 28,
+                  "cornerRadius": "$radius-lg",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "z25ket",
+                      "name": "Create PR",
+                      "height": 28,
+                      "fill": "$primary",
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "BYgGF",
+                          "name": "Pull request",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "git-pull-request-create",
+                          "library": "lucide",
+                          "fill": "$primary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "GPDRh",
+                          "name": "Create PR label",
+                          "fill": "$primary-foreground",
+                          "content": "Create PR",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cXAPB",
+                      "name": "Target branch",
+                      "height": 28,
+                      "fill": "$accent-blue-surface",
+                      "stroke": "$primary",
+                      "strokeWidth": {
+                        "left": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rAVoo",
+                          "name": "Branch",
+                          "fill": "$primary",
+                          "content": "main",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "kbUik",
+                          "name": "Choose branch",
+                          "width": 8,
+                          "height": 8,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$primary"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "ZrvoH",
+              "type": "ref",
+              "ref": "AovWi",
+              "name": "Open panel",
+              "width": 28,
+              "height": 28,
+              "descendants": {
+                "AaONw": {
+                  "icon": "panel-right-open"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "Y0c8F",
+          "name": "NARROW · 1100px desktop / 844px workspace. The session strip scrolls; + and every tool stay available.",
+          "fill": "$text-secondary",
+          "content": "NARROW · 1100px window. Chat fills the workspace; opening a tool uses the whole workspace.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "bZsso",
+          "name": "Narrow window · chat fills workspace",
+          "width": 844,
+          "height": 44,
+          "fill": "$bg-surface",
+          "gap": 12,
+          "padding": [
+            0,
+            12
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "ggESN",
+              "name": "Workspace identity",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "x58Lxn",
+                  "type": "ref",
+                  "ref": "diRwM",
+                  "name": "Workspace status",
+                  "width": 14,
+                  "height": 14
+                },
+                {
+                  "type": "text",
+                  "id": "q4TzmD",
+                  "name": "Workspace name",
+                  "fill": "$text-primary",
+                  "content": "aquila",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WWiCj",
+              "name": "Workspace and conversations separator",
+              "width": 1,
+              "height": 16,
+              "fill": "$border-subtle"
+            },
+            {
+              "type": "frame",
+              "id": "y60kQ",
+              "name": "Session navigation",
+              "height": 28,
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "XEyR7",
+                  "name": "Codex session tab",
+                  "height": 28,
+                  "fill": "$bg-raised",
+                  "cornerRadius": "$radius-md",
+                  "gap": 6,
+                  "padding": [
+                    0,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "path",
+                      "id": "QxCPq",
+                      "name": "Codex logo",
+                      "geometry": "M65.6261 46.7346c0.8277-2.4514 0.5427-5.1369-0.781-7.3667-1.9907-3.42-5.9926-5.1796-9.9009-4.3515-1.7388-1.9328-4.2368-3.032-6.8557-3.0162-3.995-0.009-7.5397 2.529-8.7688 6.2799-2.5664 0.5186-4.7817 2.1037-6.0781 4.3504-2.0055 3.4111-1.5483 7.7109 1.131 10.636-0.8277 2.4514-0.5427 5.1369 0.781 7.3667 1.9907 3.42 5.9926 5.1796 9.901 4.3515 1.7376 1.9328 4.2367 3.032 6.8556 3.0151 3.9974 0.0101 7.5432-2.5302 8.7723-6.2844 2.5664-0.5186 4.7817-2.1038 6.078-4.3504 2.0033-3.4111 1.5449-7.7076-1.1333-10.6326z m-13.7136 18.9128c-1.5996 0.0022-3.149-0.5501-4.377-1.5615 0.0559-0.0293 0.1528-0.0822 0.2155-0.1204l7.265-4.1401c0.3717-0.2081 0.5997-0.5985 0.5974-1.0204v-10.1061l3.0704 1.7494c0.0331 0.0158 0.0547 0.0473 0.0593 0.0833v8.369c-0.0046 3.7216-3.059 6.7389-6.8306 6.7468z m-14.6895-6.191c-0.8015-1.3658-1.09-2.9667-0.8152-4.5204 0.0536 0.0315 0.1482 0.0889 0.2155 0.1272l7.2649 4.14c0.3683 0.2127 0.8244 0.2127 1.1938 0l8.8691-5.0536v3.4989c0.0023 0.036-0.0148 0.0708-0.0433 0.0933l-7.3437 4.184c-3.271 1.8585-7.4485 0.7538-9.34-2.4694z m-1.912-15.648c0.7981-1.368 2.0579-2.4143 3.5584-2.9577 0 0.0619-0.0035 0.171-0.0035 0.2475v8.2813c-0.0022 0.4208 0.2258 0.8112 0.5963 1.0193l8.8692 5.0525-3.0704 1.7494c-0.0308 0.0203-0.0696 0.0236-0.1038 0.009l-7.3448-4.1873c-3.2642-1.8653-4.3838-5.9863-2.5026-9.2129z m25.2267 5.7928l-8.8692-5.0536 3.0704-1.7483c0.0308-0.0203 0.0696-0.0237 0.1038-0.009l7.3447 4.1839c3.27 1.8642 4.3907 5.9919 2.5015 9.2185-0.7992 1.3658-2.0579 2.412-3.5572 2.9565v-8.5288c0.0034-0.4207-0.2235-0.81-0.5929-1.0192z m3.0555-4.5384c-0.0536-0.0326-0.1482-0.0889-0.2155-0.1271l-7.2649-4.1401c-0.3683-0.2126-0.8243-0.2126-1.1937 0l-8.8692 5.0536v-3.4988c-0.0022-0.036 0.0149-0.0709 0.0434-0.0934l7.3436-4.1806c3.271-1.8619 7.4531-0.7537 9.3389 2.4751 0.7969 1.3635 1.0854 2.9599 0.8152 4.5113z m-19.2124 6.236l-3.0716-1.7494c-0.033-0.0157-0.0547-0.0472-0.0592-0.0832v-8.3691c0.0022-3.7261 3.0658-6.7456 6.8419-6.7434 1.5974 0 3.1434 0.5535 4.3713 1.5616-0.0559 0.0292-0.1516 0.0821-0.2155 0.1203l-7.2649 4.1401c-0.3717 0.2081-0.5997 0.5974-0.5975 1.0193l-0.0045 10.1016z m1.668-3.5483l3.9506-2.2512 3.9506 2.2501v4.5012l-3.9506 2.25-3.9506-2.25z",
+                      "viewBox": [
+                        29,
+                        29,
+                        42,
+                        42
+                      ],
+                      "fill": "$text-secondary",
+                      "width": 14,
+                      "height": 14
+                    },
+                    {
+                      "type": "text",
+                      "id": "l0Wqfh",
+                      "name": "Session title",
+                      "fill": "$text-secondary",
+                      "content": "Codex #1",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "id": "R7R8M",
+                  "type": "ref",
+                  "ref": "Cr6GJ",
+                  "name": "Claude session tab",
+                  "width": 98,
+                  "fill": "$bg-surface",
+                  "descendants": {
+                    "Pkiuf": {
+                      "content": "Claude #2",
+                      "fontSize": "$text-sm"
+                    }
+                  }
+                },
+                {
+                  "id": "Xe0wK",
+                  "type": "ref",
+                  "ref": "AovWi",
+                  "name": "New chat",
+                  "descendants": {
+                    "AaONw": {
+                      "icon": "plus"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "KukG9",
+              "name": "Header flexible space",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "knVBj",
+              "name": "Workspace actions",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "uwRjH",
+                  "name": "Open in editor",
+                  "clip": true,
+                  "height": 28,
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-strong",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "k7t8b",
+                      "name": "Quick",
+                      "height": 28,
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "baldN",
+                          "name": "arrow-up-right",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "arrow-up-right",
+                          "library": "lucide",
+                          "fill": "$text-subtle"
+                        },
+                        {
+                          "type": "text",
+                          "id": "bZ7sJ",
+                          "name": "Open",
+                          "fill": "$text-subtle",
+                          "content": "Open",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "kJaSJ",
+                      "name": "Divider",
+                      "fill": "$border-strong",
+                      "width": 1,
+                      "height": 16
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nnYUZ",
+                      "name": "More",
+                      "height": 28,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "rMQK2",
+                          "name": "chevron-down",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "K0bvj",
+                  "name": "Create PR · joined branch selector · PRActions.tsx",
+                  "clip": true,
+                  "height": 28,
+                  "cornerRadius": "$radius-lg",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "oJSQ9",
+                      "name": "Create PR",
+                      "height": 28,
+                      "fill": "$primary",
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "s9zBC",
+                          "name": "Pull request",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "git-pull-request-create",
+                          "library": "lucide",
+                          "fill": "$primary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Bwa8B",
+                          "name": "Create PR label",
+                          "fill": "$primary-foreground",
+                          "content": "Create PR",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ncakv",
+                      "name": "Target branch",
+                      "height": 28,
+                      "fill": "$accent-blue-surface",
+                      "stroke": "$primary",
+                      "strokeWidth": {
+                        "left": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "R6F8ok",
+                          "name": "Branch",
+                          "fill": "$primary",
+                          "content": "main",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "TY7Q7",
+                          "name": "Choose branch",
+                          "width": 8,
+                          "height": 8,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$primary"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "txSr8",
+              "type": "ref",
+              "ref": "AovWi",
+              "name": "Open panel",
+              "width": 28,
+              "height": 28,
+              "descendants": {
+                "AaONw": {
+                  "icon": "panel-right-open"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "c5Ihxl",
+          "name": "EXPANDED · Tools use the workspace. Restore returns to the same conversation and saved split.",
+          "fill": "$text-secondary",
+          "content": "NARROW TOOL · Every tool stays visible above its content. Close brings chat back.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-sm",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "Y870s",
+          "name": "Narrow window · tool fills workspace",
+          "width": 844,
+          "height": 44,
+          "fill": "$bg-surface",
+          "gap": 12,
+          "padding": [
+            0,
+            12
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "gfSm6",
+              "name": "Workspace identity",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "uAPRJ",
+                  "type": "ref",
+                  "ref": "diRwM",
+                  "name": "Workspace status",
+                  "width": 14,
+                  "height": 14
+                },
+                {
+                  "type": "text",
+                  "id": "eeZGy",
+                  "name": "Workspace name",
+                  "fill": "$text-primary",
+                  "content": "aquila",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-base",
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "F4ccQ",
+              "name": "Header flexible space",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "X7AC2",
+              "name": "Tool navigation",
+              "height": 28,
+              "gap": 4,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "nortd",
+                  "type": "ref",
+                  "ref": "YWfmp",
+                  "name": "Changes tab",
+                  "descendants": {
+                    "h701Y": {
+                      "icon": "git-branch"
+                    },
+                    "SgEjB": {
+                      "content": "Changes"
+                    }
+                  }
+                },
+                {
+                  "id": "PWi89",
+                  "type": "ref",
+                  "ref": "IGG8T",
+                  "name": "Files tab",
+                  "descendants": {
+                    "VM51c": {
+                      "icon": "folder-open"
+                    }
+                  }
+                },
+                {
+                  "id": "c6ITj",
+                  "type": "ref",
+                  "ref": "IGG8T",
+                  "name": "Terminal tab",
+                  "descendants": {
+                    "VM51c": {
+                      "icon": "terminal"
+                    }
+                  }
+                },
+                {
+                  "id": "Kz8xj",
+                  "type": "ref",
+                  "ref": "IGG8T",
+                  "name": "Browser tab",
+                  "descendants": {
+                    "VM51c": {
+                      "icon": "globe"
+                    }
+                  }
+                },
+                {
+                  "id": "WLLhL",
+                  "type": "ref",
+                  "ref": "IGG8T",
+                  "name": "Simulator tab",
+                  "descendants": {
+                    "VM51c": {
+                      "icon": "smartphone"
+                    }
+                  }
+                },
+                {
+                  "id": "aTtB0",
+                  "type": "ref",
+                  "ref": "IGG8T",
+                  "name": "Apps tab",
+                  "descendants": {
+                    "VM51c": {
+                      "icon": "layout-grid"
+                    }
+                  }
+                },
+                {
+                  "id": "pEOT6",
+                  "type": "ref",
+                  "ref": "IGG8T",
+                  "name": "Agent tab",
+                  "descendants": {
+                    "VM51c": {
+                      "icon": "bot"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "b6nQB",
+                  "name": "Tool panel controls",
+                  "height": 28,
+                  "gap": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "mERW2",
+                      "type": "ref",
+                      "ref": "AovWi",
+                      "name": "Close panel",
+                      "width": 28,
+                      "height": 28,
+                      "descendants": {
+                        "AaONw": {
+                          "icon": "panel-right-close"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zHND8",
+              "name": "Tool and workspace actions separator",
+              "width": 1,
+              "height": 16,
+              "fill": "$border-subtle"
+            },
+            {
+              "type": "frame",
+              "id": "B24fmq",
+              "name": "Workspace actions",
+              "gap": 6,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ORouh",
+                  "name": "Open in editor",
+                  "clip": true,
+                  "height": 28,
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-strong",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Bkg0Z",
+                      "name": "Quick",
+                      "height": 28,
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "AS6PD",
+                          "name": "arrow-up-right",
+                          "width": 11,
+                          "height": 11,
+                          "icon": "arrow-up-right",
+                          "library": "lucide",
+                          "fill": "$text-subtle"
+                        },
+                        {
+                          "type": "text",
+                          "id": "q28ob",
+                          "name": "Open",
+                          "fill": "$text-subtle",
+                          "content": "Open",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "nYiq7",
+                      "name": "Divider",
+                      "fill": "$border-strong",
+                      "width": 1,
+                      "height": 16
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XvSRg",
+                      "name": "More",
+                      "height": 28,
+                      "padding": [
+                        0,
+                        6
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "f9moNQ",
+                          "name": "chevron-down",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "V7ORH",
+                  "name": "Create PR · joined branch selector · PRActions.tsx",
+                  "clip": true,
+                  "height": 28,
+                  "cornerRadius": "$radius-lg",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "WMcEn",
+                      "name": "Create PR",
+                      "height": 28,
+                      "fill": "$primary",
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "q39Hv",
+                          "name": "Pull request",
+                          "width": 10,
+                          "height": 10,
+                          "icon": "git-pull-request-create",
+                          "library": "lucide",
+                          "fill": "$primary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "HAYlB",
+                          "name": "Create PR label",
+                          "fill": "$primary-foreground",
+                          "content": "Create PR",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sFl0C",
+                      "name": "Target branch",
+                      "height": 28,
+                      "fill": "$accent-blue-surface",
+                      "stroke": "$primary",
+                      "strokeWidth": {
+                        "left": 1
+                      },
+                      "strokeAlignment": "inner",
+                      "gap": 4,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vHcVl",
+                          "name": "Branch",
+                          "fill": "$primary",
+                          "content": "main",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "qsVXc",
+                          "name": "Choose branch",
+                          "width": 8,
+                          "height": 8,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$primary"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "a9FzSF",
+          "name": "Content and availability note",
+          "fill": "$text-tertiary",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "The split has a minimum usable width. Below it, use chat or the expanded tool—no clipped session chip and no tabs spilling into the other pane. All seven available tools remain directly accessible.",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-base",
+          "fontWeight": "normal"
+        }
+      ]
     }
   ],
   "themes": {
