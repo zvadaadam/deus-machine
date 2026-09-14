@@ -31,8 +31,8 @@ the canvas — read left to right, top to bottom.
 The September 14 **right workspace controls proposal** is design-only. The current
 frames start at y=18,640: `00c` explains the scope, `22b` shows the controls, and
 `40d`–`40f` show the right workspace open, collapsed and expanded. The existing
-workspace header and session-tab row remain. Expand/Restore and Collapse join the
-right tool toolbar; Show workspace appears in the existing header when collapsed.
+workspace header and session-tab row remain. Show/Hide sits beside Open in every
+state. Expand/Restore sits in the content's existing action row, below the tool tabs.
 The joined PR/branch button and project sidebar remain. All available tools are
 listed directly. The earlier exploration is preserved at y=17,340 (`00b`, `22a`,
 `40a`–`40c`). See [workspace-layout-proposal.md](./workspace-layout-proposal.md).

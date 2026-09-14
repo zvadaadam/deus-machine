@@ -14,22 +14,29 @@ The normal split keeps its current structure:
   sit above the right workspace on the same baseline.
 - Conversation tabs keep their existing second row above the chat messages.
 
-Only the right workspace's expand/collapse controls are being placed. They join its
-existing toolbar, after the joined Create PR / branch button. No new header row,
-conversation picker, sidebar conversation tree, or session-navigation move is needed.
+Only the right workspace's visibility and expansion controls are being placed.
+Show/Hide sits beside Open in the workspace header. Expand/Restore sits at the far
+right of the content's existing action row, below the tool tabs. No new header row
+or session-navigation change is needed.
 
 ## The controls
 
-| Right workspace  | Controls                                         | Result                                                                                                   |
-| ---------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Open beside chat | Expand workspace; Collapse workspace             | Expand gives the tool the workspace area. Collapse reveals chat and the tool shortcuts.                  |
-| Collapsed        | Show workspace, in the existing workspace header | Reopens the last selected tool beside chat.                                                              |
-| Expanded         | Restore split; Collapse workspace                | Restore brings back chat with its existing session tabs and saved split width. Collapse returns to chat. |
+| Right workspace  | Beside Open    | In the content action row | Result                                                                                        |
+| ---------------- | -------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
+| Open beside chat | Hide workspace | Expand workspace          | Hide reveals chat and tool shortcuts. Expand gives the tool the workspace area.               |
+| Collapsed        | Show workspace | —                         | Reopens the last selected tool beside chat.                                                   |
+| Expanded         | Hide workspace | Restore split             | Restore brings back chat and its session tabs at the saved split width. Hide returns to chat. |
 
-Expand/Restore and Collapse stay adjacent at the end of the tool toolbar. The
-project sidebar retains its own controls. Expanded means using the workspace area,
-with the project sidebar still visible; it is not operating-system full screen.
-Use tooltips and visible keyboard focus for these icon buttons.
+Show/Hide controls whether the right workspace is visible. Keeping it beside Open
+makes the toggle available even when the content is hidden. Expand/Restore controls
+how much space visible content uses. In Changes, it shares the existing All changes
+/ Review Changes row. It remains at that row's right edge after expansion. The
+other content views should use the equivalent end of their own action toolbar;
+this proposal draws Changes, so those views still need a placement check.
+
+The project sidebar retains its own controls. Expanded means using the workspace
+area, with the project sidebar still visible; it is not operating-system full
+screen. Use tooltips and visible keyboard focus for these icon buttons.
 
 The existing joined, colored Create PR / branch selector remains. Session tabs,
 conversation switching, drafts and the selected session retain their current behavior.
@@ -47,10 +54,11 @@ inside Changes; they do not become new workspace navigation rows.
 
 ## Implementation after design approval
 
-Keep `SessionTabBar` and its state owner where they are. Add the right workspace
-controls to the existing content-panel header. Reuse the selected tool, saved split
-width, per-workspace layout state and resizable-panel library. The earlier request
-to replace the vertical collapsed CHAT/CONTENT strips with these controls still applies.
+Keep `SessionTabBar` and its state owner where they are. Place Show/Hide alongside
+Open and reserve the trailing action slot in the content toolbar for Expand/Restore.
+Reuse the selected tool, saved split width, per-workspace layout state and
+resizable-panel library. The earlier request to replace the vertical collapsed
+CHAT/CONTENT strips with these controls still applies.
 
 Hiding or expanding a pane must preserve conversation scroll, drafts, selected files,
 terminal/browser state and running agents. Verify open → expand → restore → collapse
