@@ -173149,7 +173149,7 @@
               "id": "Pb2Wc",
               "name": "Proposal note",
               "fill": "$text-tertiary",
-              "content": "PROPOSAL — Restore sits in the content action row. Hide workspace stays beside Open. The project sidebar remains visible.",
+              "content": "PROPOSAL — Tool tabs align with the content edge. Restore returns to the split and workspace header. The project sidebar stays.",
               "fontFamily": "$font-sans",
               "fontSize": "$text-sm",
               "fontWeight": "normal"
@@ -173529,175 +173529,11 @@
                 {
                   "type": "frame",
                   "id": "v157k",
-                  "name": "Expanded workspace header",
+                  "name": "Focused workspace · tool tabs and PR",
                   "width": "fill_container",
                   "height": 44,
                   "alignItems": "center",
                   "children": [
-                    {
-                      "type": "frame",
-                      "id": "gPUTC",
-                      "name": "Workspace identity and Open",
-                      "height": 44,
-                      "gap": 10,
-                      "padding": [
-                        0,
-                        12
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "ZpIm9",
-                          "name": "Workspace identity",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "id": "FtFD4",
-                              "type": "ref",
-                              "ref": "diRwM",
-                              "name": "Workspace status",
-                              "width": 14,
-                              "height": 14
-                            },
-                            {
-                              "type": "text",
-                              "id": "YRRnK",
-                              "name": "Repository",
-                              "fill": "$text-secondary",
-                              "content": "onboarding-fixture",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-base",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "Ujji0",
-                              "name": "Slash",
-                              "fill": "$text-muted",
-                              "content": "/",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-base",
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "Q24G6k",
-                              "name": "Workspace name",
-                              "fill": "$text-primary",
-                              "content": "aquila",
-                              "fontFamily": "$font-sans",
-                              "fontSize": "$text-base",
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "oykYr",
-                          "name": "Open in and right workspace visibility",
-                          "height": 28,
-                          "gap": 6,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "KzUr1",
-                              "name": "Open in editor",
-                              "clip": true,
-                              "height": 28,
-                              "fill": "#00000000",
-                              "cornerRadius": "$radius-lg",
-                              "stroke": "$border-strong",
-                              "strokeWidth": 1,
-                              "strokeAlignment": "inner",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "ONq1z",
-                                  "name": "Quick",
-                                  "height": 28,
-                                  "gap": 6,
-                                  "padding": [
-                                    0,
-                                    8
-                                  ],
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "f8F0O",
-                                      "name": "arrow-up-right",
-                                      "width": 11,
-                                      "height": 11,
-                                      "icon": "arrow-up-right",
-                                      "library": "lucide",
-                                      "fill": "$text-subtle"
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "uwkkH",
-                                      "name": "Open",
-                                      "fill": "$text-subtle",
-                                      "content": "Open",
-                                      "fontFamily": "$font-sans",
-                                      "fontSize": "$text-sm",
-                                      "fontWeight": "500"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "rectangle",
-                                  "id": "iZ2rn",
-                                  "name": "Divider",
-                                  "fill": "$border-strong",
-                                  "width": 1,
-                                  "height": 16
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "x31Oz",
-                                  "name": "More",
-                                  "height": 28,
-                                  "padding": [
-                                    0,
-                                    6
-                                  ],
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "nt2i3",
-                                      "name": "chevron-down",
-                                      "width": 10,
-                                      "height": 10,
-                                      "icon": "chevron-down",
-                                      "library": "lucide",
-                                      "fill": "$text-muted"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "id": "XGZ78",
-                              "type": "ref",
-                              "ref": "AovWi",
-                              "name": "Hide right workspace",
-                              "width": 28,
-                              "height": 28,
-                              "descendants": {
-                                "AaONw": {
-                                  "icon": "panel-right-close"
-                                }
-                              }
-                            }
-                          ]
-                        }
-                      ]
-                    },
                     {
                       "type": "frame",
                       "id": "RpPDm",
@@ -173963,7 +173799,7 @@
           "id": "cOjDr",
           "name": "Comparison premise",
           "fill": "$text-secondary",
-          "content": "Keep the existing workspace header, session row and tool tabs. Show/Hide sits beside Open. Expand/Restore sits at the far right of the content action row.",
+          "content": "Show/Hide stays beside Open in the split and chat views. Expand/Restore lives in the content action row. The expanded view starts with tool tabs aligned to the content.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-base",
           "fontWeight": "normal"
@@ -174064,7 +173900,7 @@
                   "fill": "$text-secondary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Restore stays in the content action row. Hide stays beside Open and returns to chat.",
+                  "content": "Title, Open and Hide leave the expanded header. Tabs align to the content. Restore returns to the saved split.",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-base",
                   "fontWeight": "normal"
@@ -174085,7 +173921,6 @@
         "mode": "dark"
       },
       "width": 1440,
-      "height": 560,
       "fill": "$bg-sidebar",
       "layout": "vertical",
       "gap": 12,
@@ -175015,7 +174850,7 @@
           "id": "ytzC1",
           "name": "Expanded state explanation",
           "fill": "$text-secondary",
-          "content": "EXPANDED · Restore stays in the content action row. Hide remains beside Open.",
+          "content": "EXPANDED · Only tool tabs and PR remain above the content. Restore returns to the split and workspace header.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-sm",
           "fontWeight": "normal"
@@ -175032,175 +174867,11 @@
             {
               "type": "frame",
               "id": "E0zeRb",
-              "name": "Expanded workspace header",
+              "name": "Focused workspace · tool tabs and PR",
               "width": "fill_container",
               "height": 44,
               "alignItems": "center",
               "children": [
-                {
-                  "type": "frame",
-                  "id": "pTC7a",
-                  "name": "Workspace identity and Open",
-                  "height": 44,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    12
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "bM4mX",
-                      "name": "Workspace identity",
-                      "gap": 8,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "id": "b2jTXm",
-                          "type": "ref",
-                          "ref": "diRwM",
-                          "name": "Workspace status",
-                          "width": 14,
-                          "height": 14
-                        },
-                        {
-                          "type": "text",
-                          "id": "N8HUgE",
-                          "name": "Repository",
-                          "fill": "$text-secondary",
-                          "content": "onboarding-fixture",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-base",
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "svWl9",
-                          "name": "Slash",
-                          "fill": "$text-muted",
-                          "content": "/",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-base",
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "N2wha",
-                          "name": "Workspace name",
-                          "fill": "$text-primary",
-                          "content": "aquila",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-base",
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "NFos2",
-                      "name": "Open in and right workspace visibility",
-                      "height": 28,
-                      "gap": 6,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "g5CRR",
-                          "name": "Open in editor",
-                          "clip": true,
-                          "height": 28,
-                          "fill": "#00000000",
-                          "cornerRadius": "$radius-lg",
-                          "stroke": "$border-strong",
-                          "strokeWidth": 1,
-                          "strokeAlignment": "inner",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "LcgZg",
-                              "name": "Quick",
-                              "height": 28,
-                              "gap": 6,
-                              "padding": [
-                                0,
-                                8
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "wPsnb",
-                                  "name": "arrow-up-right",
-                                  "width": 11,
-                                  "height": 11,
-                                  "icon": "arrow-up-right",
-                                  "library": "lucide",
-                                  "fill": "$text-subtle"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "HZ45e",
-                                  "name": "Open",
-                                  "fill": "$text-subtle",
-                                  "content": "Open",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-sm",
-                                  "fontWeight": "500"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "rectangle",
-                              "id": "m8PHN",
-                              "name": "Divider",
-                              "fill": "$border-strong",
-                              "width": 1,
-                              "height": 16
-                            },
-                            {
-                              "type": "frame",
-                              "id": "CI26s",
-                              "name": "More",
-                              "height": 28,
-                              "padding": [
-                                0,
-                                6
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "icon",
-                                  "id": "qQL5L",
-                                  "name": "chevron-down",
-                                  "width": 10,
-                                  "height": 10,
-                                  "icon": "chevron-down",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "id": "I8b3u",
-                          "type": "ref",
-                          "ref": "AovWi",
-                          "name": "Hide right workspace",
-                          "width": 28,
-                          "height": 28,
-                          "descendants": {
-                            "AaONw": {
-                              "icon": "panel-right-close"
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                },
                 {
                   "type": "frame",
                   "id": "B3poZn",

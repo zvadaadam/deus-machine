@@ -15,17 +15,17 @@ The normal split keeps its current structure:
 - Conversation tabs keep their existing second row above the chat messages.
 
 Only the right workspace's visibility and expansion controls are being placed.
-Show/Hide sits beside Open in the workspace header. Expand/Restore sits at the far
-right of the content's existing action row, below the tool tabs. No new header row
-or session-navigation change is needed.
+Show/Hide sits beside Open in the split and collapsed workspace headers.
+Expand/Restore sits at the far right of the content's existing action row, below
+the tool tabs. No new header row or session-navigation change is needed.
 
 ## The controls
 
-| Right workspace  | Beside Open    | In the content action row | Result                                                                                        |
-| ---------------- | -------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
-| Open beside chat | Hide workspace | Expand workspace          | Hide reveals chat and tool shortcuts. Expand gives the tool the workspace area.               |
-| Collapsed        | Show workspace | —                         | Reopens the last selected tool beside chat.                                                   |
-| Expanded         | Hide workspace | Restore split             | Restore brings back chat and its session tabs at the saved split width. Hide returns to chat. |
+| Right workspace  | Beside Open    | In the content action row | Result                                                                                    |
+| ---------------- | -------------- | ------------------------- | ----------------------------------------------------------------------------------------- |
+| Open beside chat | Hide workspace | Expand workspace          | Hide reveals chat and tool shortcuts. Expand gives the tool the workspace area.           |
+| Collapsed        | Show workspace | —                         | Reopens the last selected tool beside chat.                                               |
+| Expanded         | —              | Restore split             | Restore brings back the workspace header, chat and session tabs at the saved split width. |
 
 Show/Hide controls whether the right workspace is visible. Keeping it beside Open
 makes the toggle available even when the content is hidden. Expand/Restore controls
@@ -37,6 +37,12 @@ this proposal draws Changes, so those views still need a placement check.
 The project sidebar retains its own controls. Expanded means using the workspace
 area, with the project sidebar still visible; it is not operating-system full
 screen. Use tooltips and visible keyboard focus for these icon buttons.
+
+The expanded view is focused on the content: omit the workspace title, Open and
+Show/Hide group. Tool tabs start at the same left edge as the content panel, with
+the joined PR/branch button at the right. Do not move the omitted controls onto
+another row. Restore returns to the split and restores the normal workspace
+header; the selected workspace remains identifiable in the project sidebar.
 
 The existing joined, colored Create PR / branch selector remains. Session tabs,
 conversation switching, drafts and the selected session retain their current behavior.
@@ -55,7 +61,9 @@ inside Changes; they do not become new workspace navigation rows.
 ## Implementation after design approval
 
 Keep `SessionTabBar` and its state owner where they are. Place Show/Hide alongside
-Open and reserve the trailing action slot in the content toolbar for Expand/Restore.
+Open when the workspace header is visible, and reserve the trailing action slot in
+the content toolbar for Expand/Restore. In the expanded state, show only the tool
+tabs and PR in the top row; Restore brings back the normal split header.
 Reuse the selected tool, saved split width, per-workspace layout state and
 resizable-panel library. The earlier request to replace the vertical collapsed
 CHAT/CONTENT strips with these controls still applies.
