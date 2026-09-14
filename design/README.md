@@ -76,6 +76,13 @@ deferred. The subsequent composer polish updates both the design and the app.
   only for local Claude sessions, and the placeholder lists only supported pickers.
   `DS/Composer` and the restored composer on `16a` share these states; empty drafts have
   disabled Send, and the Codex example uses the Codex logo.
+- Composer spacing now uses 12px vertical textarea padding, 16px horizontal padding,
+  and a footer with 8px side/bottom padding. Model and thinking-effort selectors share
+  32px controls, 8px horizontal padding, and the same text and menu styles.
+  `ThinkingPicker.tsx` replaces the animated cycling label with explicit choices from
+  the existing model catalog. `16` and `16b` show its selected radio item and menu.
+  The canvas's `tw-shadow-color` variable records the 10% black default used by
+  Tailwind's small/medium shadow tokens.
 
 ### Turn details
 

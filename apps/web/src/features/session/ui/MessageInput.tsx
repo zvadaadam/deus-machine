@@ -54,12 +54,11 @@ import {
   DEFAULT_MODEL,
   getAgentHarnessForModel,
   getModelOption,
-  cycleThinkingLevel,
   getThinkingLevelsForModel,
   type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { ThinkingIndicator } from "./ThinkingIndicator";
+import { ThinkingPicker } from "./ThinkingPicker";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -349,14 +348,7 @@ export function MessageInput({
     }
   };
 
-  // Thinking cycle — derive supported levels from the selected model.
   const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
-  const showThinkingIndicator = modelThinkingLevels.length > 0;
-
-  const handleCycleThinking = () => {
-    const next = cycleThinkingLevel(thinkingLevel, agentHarness, modelId);
-    composer.setThinkingLevel(next);
-  };
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation =
@@ -402,11 +394,7 @@ export function MessageInput({
 
       <InputGroup
         data-no-ring={true}
-        // Unified glass pill: translucent raised bg + backdrop blur + hairline
-        // ring + shadow. Reads as an elevated surface against the chat panel
-        // (which is ~#f5f5f4) and as a floating glass pill against a webpage
-        // in focus mode. Same styling in both contexts — no branching.
-        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-lg ring-1 backdrop-blur-xl"
+        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
       >
         <ComposerStagedContent
           skillMentions={skillMentions}
@@ -486,15 +474,12 @@ export function MessageInput({
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className={cn(
-            "placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
-            className
-          )}
+          className="placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto px-4 py-3"
         />
 
         <InputGroupAddon
           align="block-end"
-          className="flex w-full flex-wrap items-center justify-between px-2"
+          className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 pt-0 pb-2"
         >
           <div className="flex items-center gap-0.5">
             <ModelPicker
@@ -504,8 +489,12 @@ export function MessageInput({
               onOpenNewTab={onOpenNewTab}
             />
 
-            {showThinkingIndicator && (
-              <ThinkingIndicator level={thinkingLevel} onClick={handleCycleThinking} />
+            {modelThinkingLevels.length > 0 && (
+              <ThinkingPicker
+                level={thinkingLevel}
+                levels={modelThinkingLevels}
+                onLevelChange={composer.setThinkingLevel}
+              />
             )}
             {showPlanMode && (
               <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />

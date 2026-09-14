@@ -1,7 +1,7 @@
 // Plan mode toggle — toolbar button that enables permissionMode: "plan".
-// Follows ThinkingIndicator pattern: small button with tooltip in the input toolbar.
 
 import { ClipboardList } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -14,21 +14,22 @@ export function PlanModeToggle({ enabled, onClick }: PlanModeToggleProps) {
   return (
     <Tooltip delayDuration={200}>
       <TooltipTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={onClick}
           aria-pressed={enabled}
           aria-label={enabled ? "Plan mode (active)" : "Plan mode"}
           className={cn(
-            "flex h-8 items-center justify-center rounded-lg px-2",
-            "transition-[color,background-color,scale] duration-200 ease-out",
-            "hover:bg-accent active:scale-[0.97]",
-            "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
-            enabled ? "text-accent-gold" : "text-muted-foreground opacity-60"
+            "focus-visible:ring-1",
+            enabled
+              ? "text-accent-gold bg-accent-gold/8 hover:text-accent-gold hover:bg-accent-gold/12"
+              : "text-text-muted"
           )}
         >
-          <ClipboardList className="h-3.5 w-3.5" />
-        </button>
+          <ClipboardList className="size-3.5" />
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
         {enabled ? "Disable plan mode" : "Enable plan mode"}

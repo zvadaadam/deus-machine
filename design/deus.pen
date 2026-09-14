@@ -21092,7 +21092,7 @@
           "fill": "$text-muted",
           "textGrowth": "fixed-width",
           "width": 1036,
-          "content": "features/session/ui/MessageInput.tsx — one glass pill: bg-bg-muted/75, backdrop blur, hairline ring, shadow-lg. Staged content stacks above the textarea.",
+          "content": "features/session/ui/MessageInput.tsx — compact writing surface, matched model and effort selectors, subtle ring and small shadow. Staged content stacks above the textarea.",
           "lineHeight": 1.5,
           "fontFamily": "$font-sans",
           "fontSize": "$text-xs",
@@ -21114,17 +21114,29 @@
           "stroke": "$border-subtle",
           "strokeWidth": 1,
           "strokeAlignment": "inner",
-          "effect": {
-            "type": "shadow",
-            "shadowType": "outer",
-            "color": "#00000059",
-            "offset": {
-              "x": 0,
-              "y": 8
+          "effect": [
+            {
+              "type": "shadow",
+              "shadowType": "outer",
+              "color": "$tw-shadow-color",
+              "offset": {
+                "x": 0,
+                "y": 1
+              },
+              "blur": 3
             },
-            "blur": 24,
-            "spread": -6
-          },
+            {
+              "type": "shadow",
+              "shadowType": "outer",
+              "color": "$tw-shadow-color",
+              "offset": {
+                "x": 0,
+                "y": 1
+              },
+              "blur": 2,
+              "spread": -1
+            }
+          ],
           "layout": "vertical",
           "children": [
             {
@@ -21134,8 +21146,6 @@
               "width": "fill_container",
               "layout": "vertical",
               "padding": [
-                16,
-                12,
                 12,
                 16
               ],
@@ -21148,6 +21158,7 @@
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "Ask a follow-up… (@ files, / skills)",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
                   "fontWeight": "normal"
@@ -21160,9 +21171,9 @@
               "name": "Toolbar",
               "width": "fill_container",
               "padding": [
-                6,
+                0,
                 8,
-                12,
+                8,
                 8
               ],
               "justifyContent": "space_between",
@@ -21184,7 +21195,7 @@
                       "gap": 6,
                       "padding": [
                         0,
-                        12
+                        8
                       ],
                       "alignItems": "center",
                       "children": [
@@ -21199,7 +21210,7 @@
                             42,
                             42
                           ],
-                          "fill": "$text-muted",
+                          "fill": "$text-secondary",
                           "width": 14,
                           "height": 14
                         },
@@ -21207,10 +21218,11 @@
                           "type": "text",
                           "id": "osKn1",
                           "name": "Model",
-                          "fill": "$text-muted",
+                          "fill": "$text-secondary",
                           "content": "Opus 5",
+                          "lineHeight": 1.5,
                           "fontFamily": "$font-sans",
-                          "fontSize": "$text-xs",
+                          "fontSize": "$text-sm",
                           "fontWeight": "500"
                         },
                         {
@@ -21221,39 +21233,17 @@
                           "height": 12,
                           "icon": "chevron-down",
                           "library": "lucide",
-                          "fill": "$text-disabled"
+                          "fill": "$text-muted"
                         }
                       ]
                     },
                     {
                       "type": "frame",
                       "id": "SbH7B",
-                      "name": "Thinking",
-                      "width": 58,
+                      "name": "ThinkingPicker",
                       "height": 32,
                       "cornerRadius": "$radius-lg",
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "iNwKQ",
-                          "name": "Level",
-                          "opacity": 0.9,
-                          "fill": "$text-muted",
-                          "content": "High",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-xs",
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "D0QIBc",
-                      "name": "PlanMode",
-                      "height": 32,
-                      "cornerRadius": "$radius-lg",
+                      "gap": 6,
                       "padding": [
                         0,
                         8
@@ -21262,10 +21252,42 @@
                       "alignItems": "center",
                       "children": [
                         {
+                          "type": "text",
+                          "id": "iNwKQ",
+                          "name": "Level",
+                          "fill": "$text-secondary",
+                          "content": "High",
+                          "lineHeight": 1.5,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon",
+                          "id": "a2NZ3C",
+                          "name": "Chevron",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "chevron-down",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "D0QIBc",
+                      "name": "PlanMode",
+                      "width": 32,
+                      "height": 32,
+                      "cornerRadius": "$radius-lg",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
                           "type": "icon",
                           "id": "kj8ga",
                           "name": "Icon",
-                          "opacity": 0.6,
                           "width": 14,
                           "height": 14,
                           "icon": "clipboard-list",
@@ -22128,25 +22150,42 @@
           "stroke": "$border-default",
           "strokeWidth": 1,
           "strokeAlignment": "inner",
-          "effect": {
-            "type": "shadow",
-            "shadowType": "outer",
-            "color": "#00000075",
-            "offset": {
-              "x": 0,
-              "y": 16
+          "effect": [
+            {
+              "type": "shadow",
+              "shadowType": "outer",
+              "color": "$tw-shadow-color",
+              "offset": {
+                "x": 0,
+                "y": 4
+              },
+              "blur": 6,
+              "spread": -1
             },
-            "blur": 48
-          },
+            {
+              "type": "shadow",
+              "shadowType": "outer",
+              "color": "$tw-shadow-color",
+              "offset": {
+                "x": 0,
+                "y": 2
+              },
+              "blur": 4,
+              "spread": -2
+            }
+          ],
           "layout": "vertical",
-          "padding": 6,
+          "padding": 4,
           "children": [
             {
               "type": "frame",
               "id": "kqxsd",
               "name": "Claude Code",
               "width": "fill_container",
-              "padding": 6,
+              "padding": [
+                6,
+                8
+              ],
               "children": [
                 {
                   "type": "text",
@@ -22154,10 +22193,10 @@
                   "name": "Claude Code",
                   "fill": "$text-muted",
                   "content": "Claude Code",
+                  "lineHeight": 1.45,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-2xs",
-                  "fontWeight": "normal",
-                  "letterSpacing": 0.3
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -22186,7 +22225,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22196,8 +22235,9 @@
                   "name": "Opus 5",
                   "fill": "$text-secondary",
                   "content": "Opus 5",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22243,7 +22283,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22253,18 +22293,22 @@
                   "name": "Opus 5 1M",
                   "fill": "$text-secondary",
                   "content": "Opus 5 1M",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
                   "id": "MDZzi",
+                  "x": 100,
+                  "y": 8,
                   "name": "new",
+                  "enabled": false,
                   "height": 14,
-                  "fill": "#A875741A",
+                  "fill": "$bg-muted",
                   "cornerRadius": "$radius-xs",
-                  "stroke": "$accent-red-muted",
+                  "stroke": "$border-subtle",
                   "strokeWidth": 1,
                   "strokeAlignment": "inner",
                   "padding": [
@@ -22277,12 +22321,11 @@
                       "type": "text",
                       "id": "wOHAm",
                       "name": "NEW",
-                      "fill": "$accent-red-muted",
-                      "content": "NEW",
+                      "fill": "$text-muted",
+                      "content": "New",
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-2xs",
-                      "fontWeight": "normal",
-                      "letterSpacing": 0.5
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -22319,7 +22362,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22329,8 +22372,9 @@
                   "name": "Sonnet 5",
                   "fill": "$text-secondary",
                   "content": "Sonnet 5",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22366,7 +22410,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22376,8 +22420,9 @@
                   "name": "Haiku 4.5",
                   "fill": "$text-secondary",
                   "content": "Haiku 4.5",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22402,7 +22447,10 @@
               "id": "b1BAtj",
               "name": "Codex",
               "width": "fill_container",
-              "padding": 6,
+              "padding": [
+                6,
+                8
+              ],
               "children": [
                 {
                   "type": "text",
@@ -22410,10 +22458,10 @@
                   "name": "Codex",
                   "fill": "$text-muted",
                   "content": "Codex",
+                  "lineHeight": 1.45,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-2xs",
-                  "fontWeight": "normal",
-                  "letterSpacing": 0.3
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -22441,7 +22489,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22451,8 +22499,9 @@
                   "name": "GPT-6 Astra",
                   "fill": "$text-secondary",
                   "content": "GPT-6 Astra",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22460,9 +22509,9 @@
                   "id": "z0y4kF",
                   "name": "new",
                   "height": 14,
-                  "fill": "#A875741A",
+                  "fill": "$bg-muted",
                   "cornerRadius": "$radius-xs",
-                  "stroke": "$accent-red-muted",
+                  "stroke": "$border-subtle",
                   "strokeWidth": 1,
                   "strokeAlignment": "inner",
                   "padding": [
@@ -22475,12 +22524,11 @@
                       "type": "text",
                       "id": "GzJkG",
                       "name": "NEW",
-                      "fill": "$accent-red-muted",
-                      "content": "NEW",
+                      "fill": "$text-muted",
+                      "content": "New",
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-2xs",
-                      "fontWeight": "normal",
-                      "letterSpacing": 0.5
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -22517,7 +22565,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22527,8 +22575,9 @@
                   "name": "GPT-5.6 Sol",
                   "fill": "$text-secondary",
                   "content": "GPT-5.6 Sol",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22536,9 +22585,9 @@
                   "id": "KORTx",
                   "name": "new",
                   "height": 14,
-                  "fill": "#A875741A",
+                  "fill": "$bg-muted",
                   "cornerRadius": "$radius-xs",
-                  "stroke": "$accent-red-muted",
+                  "stroke": "$border-subtle",
                   "strokeWidth": 1,
                   "strokeAlignment": "inner",
                   "padding": [
@@ -22551,12 +22600,11 @@
                       "type": "text",
                       "id": "SNeu7",
                       "name": "NEW",
-                      "fill": "$accent-red-muted",
-                      "content": "NEW",
+                      "fill": "$text-muted",
+                      "content": "New",
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-2xs",
-                      "fontWeight": "normal",
-                      "letterSpacing": 0.5
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -22593,7 +22641,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22603,8 +22651,9 @@
                   "name": "GPT-5.5",
                   "fill": "$text-secondary",
                   "content": "GPT-5.5",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22640,7 +22689,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 16,
                   "height": 16
                 },
@@ -22650,8 +22699,9 @@
                   "name": "GPT-5.4",
                   "fill": "$text-secondary",
                   "content": "GPT-5.4",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 },
                 {
@@ -22669,184 +22719,191 @@
           "type": "text",
           "id": "QQI4r",
           "x": 32,
-          "y": 854,
+          "y": 880,
           "name": "ModelPicker · w-60, side=top, agent groups l",
           "fill": "$text-disabled",
-          "content": "ModelPicker · w-60, side=top, agent groups lock once a session has messages",
+          "content": "ModelPicker · the shared menu surface, with a neutral New badge",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
         },
         {
           "type": "frame",
-          "id": "Lv25H",
+          "id": "N25uU",
           "x": 320,
           "y": 550,
-          "name": "Thinking levels",
+          "name": "ThinkingPicker — open",
+          "width": 160,
+          "fill": "$bg-overlay",
+          "cornerRadius": "$radius-xl",
+          "stroke": "$border-default",
+          "strokeWidth": 1,
+          "strokeAlignment": "inner",
+          "effect": [
+            {
+              "type": "shadow",
+              "shadowType": "outer",
+              "color": "$tw-shadow-color",
+              "offset": {
+                "x": 0,
+                "y": 4
+              },
+              "blur": 6,
+              "spread": -1
+            },
+            {
+              "type": "shadow",
+              "shadowType": "outer",
+              "color": "$tw-shadow-color",
+              "offset": {
+                "x": 0,
+                "y": 2
+              },
+              "blur": 4,
+              "spread": -2
+            }
+          ],
           "layout": "vertical",
-          "gap": 8,
+          "padding": 4,
           "children": [
             {
               "type": "frame",
-              "id": "WsQ5n",
+              "id": "G0HBB",
+              "name": "Menu heading",
+              "width": "fill_container",
+              "padding": [
+                6,
+                8
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "z3mV7",
+                  "name": "Thinking effort",
+                  "fill": "$text-muted",
+                  "content": "Thinking effort",
+                  "lineHeight": 1.45,
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "wpXqq",
               "name": "Low",
-              "gap": 12,
+              "width": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "padding": [
+                6,
+                8,
+                6,
+                32
+              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "frame",
-                  "id": "a5s5v",
-                  "name": "pill",
-                  "width": 58,
-                  "height": 24,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "rfo0D",
-                      "name": "Low",
-                      "opacity": 0.6,
-                      "fill": "$text-muted",
-                      "content": "Low",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
                   "type": "text",
-                  "id": "xpXj6",
-                  "name": "plain text, weight + opacity carry intensity",
-                  "fill": "$text-disabled",
-                  "content": "plain text, weight + opacity carry intensity",
+                  "id": "DhZ9Y",
+                  "name": "Level",
+                  "fill": "$text-primary",
+                  "content": "Low",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-2xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "dEiap",
-              "name": "Med",
-              "gap": 12,
+              "id": "BJwNJ",
+              "name": "Medium",
+              "width": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "padding": [
+                6,
+                8,
+                6,
+                32
+              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "frame",
-                  "id": "NFClu",
-                  "name": "pill",
-                  "width": 58,
-                  "height": 24,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "st0fy",
-                      "name": "Med",
-                      "opacity": 0.75,
-                      "fill": "$text-muted",
-                      "content": "Med",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    }
-                  ]
-                },
-                {
                   "type": "text",
-                  "id": "PiTGS",
-                  "name": "plain text, weight + opacity carry intensity",
-                  "fill": "$text-disabled",
-                  "content": "plain text, weight + opacity carry intensity",
+                  "id": "ucwCv",
+                  "name": "Level",
+                  "fill": "$text-primary",
+                  "content": "Medium",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-2xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "JbdMm",
+              "id": "KWNjN",
               "name": "High",
-              "gap": 12,
+              "width": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "padding": [
+                6,
+                8,
+                6,
+                32
+              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "frame",
-                  "id": "kvfjS",
-                  "name": "pill",
-                  "width": 58,
-                  "height": 24,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "AP7Q6",
-                      "name": "High",
-                      "opacity": 0.9,
-                      "fill": "$text-muted",
-                      "content": "High",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "600"
-                    }
-                  ]
+                  "type": "ellipse",
+                  "id": "lcaED",
+                  "layoutPosition": "absolute",
+                  "x": 12,
+                  "y": 12,
+                  "name": "Selected",
+                  "fill": "$text-primary",
+                  "width": 7,
+                  "height": 7
                 },
                 {
                   "type": "text",
-                  "id": "pbRGE",
-                  "name": "plain text, weight + opacity carry intensity",
-                  "fill": "$text-disabled",
-                  "content": "plain text, weight + opacity carry intensity",
+                  "id": "ZPOxu",
+                  "name": "Level",
+                  "fill": "$text-primary",
+                  "content": "High",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-2xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "x9DTwI",
-              "name": "X-High",
-              "gap": 12,
+              "id": "E7qEa",
+              "name": "Extra high",
+              "width": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "padding": [
+                6,
+                8,
+                6,
+                32
+              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "frame",
-                  "id": "WSJvf",
-                  "name": "pill",
-                  "width": 58,
-                  "height": 24,
-                  "fill": "#C78B2814",
-                  "cornerRadius": "$radius-md",
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "czHlu",
-                      "name": "X-High",
-                      "fill": "$accent-gold",
-                      "content": "X-High",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "700"
-                    }
-                  ]
-                },
-                {
                   "type": "text",
-                  "id": "rRR4j",
-                  "name": "tinted pill — top gear",
-                  "fill": "$text-disabled",
-                  "content": "tinted pill — top gear",
+                  "id": "dYKZo",
+                  "name": "Level",
+                  "fill": "$text-primary",
+                  "content": "Extra high",
+                  "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-2xs",
+                  "fontSize": "$text-sm",
                   "fontWeight": "normal"
                 }
               ]
@@ -22857,10 +22914,12 @@
           "type": "text",
           "id": "j19Z9",
           "x": 320,
-          "y": 690,
-          "name": "ThinkingIndicator · click cycles; only X-Hig",
+          "y": 728,
+          "name": "ThinkingPicker · model-specific choices",
           "fill": "$text-disabled",
-          "content": "ThinkingIndicator · click cycles; only X-High earns a background",
+          "textGrowth": "fixed-width",
+          "width": 260,
+          "content": "ThinkingPicker · choose directly from this model’s supported effort levels.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -22868,8 +22927,8 @@
         {
           "type": "frame",
           "id": "Y51DFO",
-          "x": 320,
-          "y": 724,
+          "x": 600,
+          "y": 550,
           "name": "Send / stop",
           "gap": 12,
           "alignItems": "center",
@@ -22951,12 +23010,12 @@
         {
           "type": "text",
           "id": "yvNM1",
-          "x": 320,
-          "y": 764,
+          "x": 600,
+          "y": 594,
           "name": "send (has content) · send (empty, outline) ·",
           "fill": "$text-disabled",
           "textGrowth": "fixed-width",
-          "width": 720,
+          "width": 460,
           "content": "Stop stays available while working or waiting for a plan / question response.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
@@ -165834,7 +165893,7 @@
                     42,
                     42
                   ],
-                  "fill": "$text-muted",
+                  "fill": "$text-secondary",
                   "width": 14,
                   "height": 14
                 },
@@ -166773,7 +166832,7 @@
           "fill": "$text-muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "A quieter empty state and context usage that stays readable beside Send.",
+          "content": "Matched selectors, consistent text and spacing, and a quieter writing surface.",
           "lineHeight": 1.5,
           "fontFamily": "$font-sans",
           "fontSize": "$text-sm",
@@ -166815,7 +166874,7 @@
                         42,
                         42
                       ],
-                      "fill": "$text-muted",
+                      "fill": "$text-secondary",
                       "width": 14,
                       "height": 14
                     },
@@ -166857,7 +166916,7 @@
                   "fill": "$text-muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "No empty context ring. Send enables when there is a draft. Codex shows its own logo and no unavailable Plan control.",
+                  "content": "Model and effort share the same height, padding and text treatment. An empty chat has no context indicator.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -166904,7 +166963,7 @@
                         42,
                         42
                       ],
-                      "fill": "$text-muted",
+                      "fill": "$text-secondary",
                       "width": 14,
                       "height": 14
                     },
@@ -166990,7 +167049,7 @@
                     "Q8hHBD": {
                       "layout": "vertical",
                       "alignItems": "start",
-                      "gap": 0
+                      "gap": 4
                     },
                     "hEl2Y": {
                       "width": "fill_container",
@@ -167037,6 +167096,239 @@
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
                   "content": "Controls wrap together when space is tight. High usage turns amber; the context shortcut still compacts. Stop remains available.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "s3qog",
+          "name": "Choose thinking effort",
+          "width": "fill_container",
+          "gap": 32,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "fBBvN",
+              "name": "Effort menu preview",
+              "width": 458,
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "i2Spz",
+                  "name": "Thinking effort — choices",
+                  "width": 160,
+                  "fill": "$bg-overlay",
+                  "cornerRadius": "$radius-xl",
+                  "stroke": "$border-default",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "effect": [
+                    {
+                      "type": "shadow",
+                      "shadowType": "outer",
+                      "color": "$tw-shadow-color",
+                      "offset": {
+                        "x": 0,
+                        "y": 4
+                      },
+                      "blur": 6,
+                      "spread": -1
+                    },
+                    {
+                      "type": "shadow",
+                      "shadowType": "outer",
+                      "color": "$tw-shadow-color",
+                      "offset": {
+                        "x": 0,
+                        "y": 2
+                      },
+                      "blur": 4,
+                      "spread": -2
+                    }
+                  ],
+                  "layout": "vertical",
+                  "padding": 4,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "wn1Y7",
+                      "name": "Menu heading",
+                      "width": "fill_container",
+                      "padding": [
+                        6,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Uvg3C",
+                          "name": "Thinking effort",
+                          "fill": "$text-muted",
+                          "content": "Thinking effort",
+                          "lineHeight": 1.45,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vhpWe",
+                      "name": "Low",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "padding": [
+                        6,
+                        8,
+                        6,
+                        32
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "AjfTx",
+                          "name": "Level",
+                          "fill": "$text-primary",
+                          "content": "Low",
+                          "lineHeight": 1.5,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dmGZK",
+                      "name": "Medium",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "padding": [
+                        6,
+                        8,
+                        6,
+                        32
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dChyJ",
+                          "name": "Level",
+                          "fill": "$text-primary",
+                          "content": "Medium",
+                          "lineHeight": 1.5,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "A1boM",
+                      "name": "High",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "padding": [
+                        6,
+                        8,
+                        6,
+                        32
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "FVQpK",
+                          "layoutPosition": "absolute",
+                          "x": 12,
+                          "y": 12,
+                          "name": "Selected",
+                          "fill": "$text-primary",
+                          "width": 7,
+                          "height": 7
+                        },
+                        {
+                          "type": "text",
+                          "id": "ODNEp",
+                          "name": "Level",
+                          "fill": "$text-primary",
+                          "content": "High",
+                          "lineHeight": 1.5,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EafkD",
+                      "name": "Extra high",
+                      "width": "fill_container",
+                      "cornerRadius": "$radius-lg",
+                      "padding": [
+                        6,
+                        8,
+                        6,
+                        32
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "cB1i6",
+                          "name": "Level",
+                          "fill": "$text-primary",
+                          "content": "Extra high",
+                          "lineHeight": 1.5,
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "AFBiU",
+              "name": "Effort explanation",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "YZh4b",
+                  "name": "Title",
+                  "fill": "$text-primary",
+                  "content": "Choose thinking effort",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "HJjBq",
+                  "name": "Behavior",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Open the menu to choose directly. The current level is marked, and each model shows only the options it supports. The menu and model picker use the same styling.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -168179,6 +168471,10 @@
           }
         }
       ]
+    },
+    "tw-shadow-color": {
+      "type": "color",
+      "value": "#0000001A"
     }
   },
   "fileToken": "9e0461b3-d9a1-4dc2-8634-76689791a7ed"

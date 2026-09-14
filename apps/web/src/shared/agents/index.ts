@@ -6,12 +6,7 @@
 // cannot switch mid-session. The UI currently exposes Claude Code and Codex;
 // the legacy codex-sdk harness remains registered for backend/CLI compatibility.
 
-import {
-  AGENT_CONFIGS,
-  DEFAULT_MODEL,
-  MODEL_PICKER_GROUPS,
-  getKnownAgentConfig,
-} from "@shared/agent-catalog";
+import { AGENT_CONFIGS, MODEL_PICKER_GROUPS, getKnownAgentConfig } from "@shared/agent-catalog";
 import type { AgentConfig, AgentHarness, ThinkingLevel } from "@shared/agent-catalog";
 import type { SessionTurn } from "@shared/types/session";
 
@@ -165,13 +160,13 @@ export function getModelId(model: string): string {
 // Thinking
 // ============================================================================
 //
-// The frontend only cares which levels a model supports and how to cycle them.
+// The frontend only cares which levels a model supports.
 // Provider SDK mappings live in the agent-server harnesses.
 
 /**
  * Returns the thinking levels available for a given model. Falls back to
  * the agent's default levels when the model doesn't declare its own. An
- * empty array means the model doesn't support thinking (hide the indicator).
+ * empty array means the model doesn't support thinking (hide the picker).
  */
 export function getThinkingLevelsForModel(
   agentHarness: AgentHarness,
@@ -180,36 +175,6 @@ export function getThinkingLevelsForModel(
   const config = getAgentConfig(agentHarness);
   const modelOption = config.models.find((m) => m.model === model);
   return modelOption?.thinkingLevels ?? config.thinkingLevels;
-}
-
-/**
- * Computes the next thinking level on click. Walks the model's thinkingLevels
- * array, wrapping at the end.
- *
- * "off" enters the ladder AT the first entry rather than one past it: turning
- * thinking on is a click that should land on the lowest level, and skipping
- * "low" left no way to reach it from off without wrapping the whole ladder.
- * (The old code normalized "off" to `thinkingLevels[0]` and then advanced,
- * yielding the SECOND entry — the doc above it always claimed otherwise.)
- *
- * Opus 4.7: ["low", "medium", "high", "xhigh"] — full ladder incl. xhigh
- * Claude (default): ["low", "medium", "high"] — shared by Opus 4.6 / Sonnet 4.6
- * Codex: ["low", "medium", "high"] — graduated reasoning
- * Haiku: [] → indicator hidden; callers receive "off"
- */
-export function cycleThinkingLevel(
-  current: ThinkingLevel,
-  agentHarness: AgentHarness,
-  model: string
-): ThinkingLevel {
-  const thinkingLevels = getThinkingLevelsForModel(agentHarness, model);
-  if (thinkingLevels.length === 0) return "off";
-  if (current === "off") return thinkingLevels[0];
-  const idx = thinkingLevels.indexOf(current);
-  // A level the model does not expose (a stale pick carried across a model
-  // switch) is treated as off — enter at the first entry.
-  if (idx === -1) return thinkingLevels[0];
-  return thinkingLevels[(idx + 1) % thinkingLevels.length];
 }
 
 /**
