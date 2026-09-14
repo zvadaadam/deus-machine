@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Cloud, CloudOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { wakeCloudWorkspace } from "../api/wakeCloudWorkspace";
@@ -8,9 +8,11 @@ import type { CloudGateStage } from "../lib/cloudPresence";
 export function CloudSandboxGate({
   workspaceId,
   stage,
+  toolbarAction,
 }: {
   workspaceId: string;
   stage: CloudGateStage;
+  toolbarAction?: ReactNode;
 }) {
   const [waking, setWaking] = useState(false);
   // `waking` bridges the window before the server echoes; `stage` is
@@ -59,7 +61,8 @@ export function CloudSandboxGate({
   const unavailable = stage === "unavailable";
 
   return (
-    <div className="bg-bg-base/95 flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center backdrop-blur-sm">
+    <div className="bg-bg-base/95 relative flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center backdrop-blur-sm">
+      {toolbarAction && <div className="absolute top-1.5 right-2">{toolbarAction}</div>}
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
         {showSpinner ? (
           <Loader2 className="text-text-muted h-5 w-5 animate-spin" aria-hidden="true" />

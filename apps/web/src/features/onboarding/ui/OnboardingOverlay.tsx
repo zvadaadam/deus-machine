@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useSettings } from "@/features/settings";
+import { useSettings } from "@/features/settings/api/settings.queries";
 import { native } from "@/platform";
 import { cn } from "@/shared/lib/utils";
 import { track } from "@/platform/analytics";

@@ -69,8 +69,8 @@ function createFakeChild() {
   return child;
 }
 
-afterEach(() => {
-  stopBackend();
+afterEach(async () => {
+  await stopBackend();
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
@@ -92,6 +92,30 @@ afterEach(() => {
 });
 
 describe("desktop backend process", () => {
+  it("keeps shutdown pending until the backend actually exits", async () => {
+    const resourcesPath = createTempResourcesRoot();
+    createRuntimeExecutable(resourcesPath);
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+    const child = createFakeChild();
+    child.kill.mockImplementation(() => true);
+    mockSpawn.mockReturnValue(child);
+    const starting = spawnBackend();
+    child.stdout.write("[BACKEND_PORT]45678\n");
+    await starting;
+
+    let stopped = false;
+    const stopping = stopBackend().then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(stopped).toBe(false);
+    child.exitCode = 0;
+    child.emit("exit", 0, null);
+    await stopping;
+    expect(stopped).toBe(true);
+  });
+
   it("starts packaged backend through bundled deus-runtime without Electron-as-Node", async () => {
     Object.defineProperty(process, "platform", {
       configurable: true,

@@ -5,7 +5,7 @@
  * survive workspace switches and stop only on explicit Stop or app shutdown.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { match } from "ts-pattern";
 import { ChevronDown, Crosshair, Loader2, RotateCcw, Send, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import { SimulatorLaunchPreview } from "./SimulatorLaunchPreview";
 interface SimulatorPanelProps {
   workspaceId: string;
   workspacePath: string;
+  toolbarAction?: ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +106,7 @@ const IDLE_PHASE: SimPhase = { phase: "idle" };
 // Component
 // ---------------------------------------------------------------------------
 
-export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelProps) {
+export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: SimulatorPanelProps) {
   const [simulators, setSimulators] = useState<SimulatorInfo[] | null>(null);
   const [selectedUdid, setSelectedUdid] = useState<string | null>(null);
 
@@ -630,22 +631,6 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     );
   }, [inspectPrompt, inspectorSnapshot, selectedInspectorNode, workspaceId]);
 
-  // -------------------------------------------------------------------------
-  // Empty state — no simulators installed
-  // -------------------------------------------------------------------------
-
-  if (simulators === null) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </div>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Main render
-  // -------------------------------------------------------------------------
-
   const isBuilding = state.phase === "building";
   const deviceHeader = (
     <SimulatorDeviceHeader
@@ -664,6 +649,7 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
     <TooltipProvider delayDuration={200}>
       <div className="bg-bg-base flex h-full flex-col">
         <SimulatorContentHeader
+          toolbarAction={toolbarAction}
           state={state}
           simulators={iosSimulators}
           selectedSim={selectedSim}
@@ -679,7 +665,11 @@ export function SimulatorPanel({ workspaceId, workspacePath }: SimulatorPanelPro
           onStop={handleStop}
         />
 
-        {noIosSimulators ? (
+        {simulators === null ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          </div>
+        ) : noIosSimulators ? (
           <SimulatorEmptySurface
             icon={<Smartphone className="h-5 w-5" />}
             title="No iOS Simulators"
@@ -819,7 +809,7 @@ function InspectorDetailsPanel({
         <button
           type="button"
           onClick={onClose}
-          className="text-text-muted hover:text-text-secondary rounded-md p-1 transition-colors"
+          className="control-interaction text-text-muted hover:text-text-secondary rounded-lg p-1"
           aria-label="Close inspector details"
         >
           <X className="h-3.5 w-3.5" />
@@ -872,7 +862,7 @@ function InspectorDetailsPanel({
       </div>
 
       <div className="border-border-subtle flex justify-end border-t p-2">
-        <Button size="sm" onClick={onSendToChat} className="h-7 gap-1.5 px-2.5 text-xs">
+        <Button size="xs" onClick={onSendToChat} className="gap-1.5 px-2.5">
           <Send className="h-3 w-3" />
           Add to Chat
         </Button>
@@ -932,7 +922,7 @@ function BuildDrawer({
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="bg-bg-surface ease hover:bg-bg-surface/80 flex h-7 shrink-0 items-center gap-2 px-3 transition-colors duration-200"
+        className="control-interaction bg-bg-surface hover:bg-bg-surface/80 flex h-7 shrink-0 items-center gap-2 px-3"
       >
         <span className="bg-warning h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
         <span className="text-text-secondary text-xs font-medium">Building</span>

@@ -1,17 +1,3 @@
-/**
- * Turn Stats Header
- *
- * Displays aggregated statistics for a collapsed assistant turn.
- * Matches the exact visual alignment of BaseToolRenderer for consistency.
- *
- * Design:
- * - Perfect alignment with tool calls below (same padding, same icon size)
- * - Chevron in 14x14px container on the left (matches tool icons)
- * - Minimal, intentional - every pixel matters
- * - Visual continuity - feels part of the same system
- * - Context-aware: Shows "Collapse" when expanded, metrics when collapsed
- */
-
 import { memo } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -21,15 +7,16 @@ interface TurnStatsHeaderProps {
   stats: TurnStats;
   isExpanded: boolean;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  hiddenMessageCount: number; // Number of messages hidden when collapsed
+  activityId: string;
+  label: string;
 }
 
-/** Memoized: stats/isExpanded/hiddenMessageCount are stable for sealed turns. */
 export const TurnStatsHeader = memo(function TurnStatsHeader({
   stats,
   isExpanded,
   onClick,
-  hiddenMessageCount,
+  activityId,
+  label,
 }: TurnStatsHeaderProps) {
   const { toolCount, subagentCount, filesChanged } = stats;
 
@@ -45,8 +32,9 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
         "opacity-80 hover:opacity-100",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
       )}
+      aria-controls={activityId}
       aria-expanded={isExpanded}
-      aria-label={`${isExpanded ? "Collapse" : "Expand"} assistant turn with ${toolCount} tool calls`}
+      aria-label={`${isExpanded ? "Collapse" : "Expand"} activity with ${toolCount} tool calls`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {/* Chevron container - same size as tool icons (14x14px) for perfect alignment */}
@@ -62,9 +50,7 @@ export const TurnStatsHeader = memo(function TurnStatsHeader({
 
         {/* Metrics stay visible in both states — expansion should add detail, not remove context. */}
         <>
-          <span className="text-muted-foreground truncate tabular-nums">
-            {hiddenMessageCount} message{hiddenMessageCount !== 1 ? "s" : ""}
-          </span>
+          <span className="text-muted-foreground truncate tabular-nums">{label}</span>
 
           {subagentCount > 0 && (
             <>

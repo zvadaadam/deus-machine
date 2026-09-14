@@ -30,6 +30,7 @@ import type { ConfigDisplayItem, ConfigScope } from "../types";
 
 interface CategoryContentAreaProps {
   categoryLabel: string;
+  toolbarAction?: ReactNode;
   globalItems: ConfigDisplayItem[];
   projectItems: ConfigDisplayItem[];
   repoName?: string;
@@ -53,6 +54,7 @@ interface CategoryContentAreaProps {
 
 export function CategoryContentArea({
   categoryLabel,
+  toolbarAction,
   globalItems,
   projectItems,
   repoName,
@@ -94,40 +96,43 @@ export function CategoryContentArea({
       {/* Category header */}
       <div className="border-border/40 flex h-10 shrink-0 items-center justify-between border-b px-4">
         <h2 className="text-sm font-medium">{categoryLabel}</h2>
-        {onAdd &&
-          !addingInScope &&
-          !editingItem &&
-          !pendingDeleteItem &&
-          (hasProjectScope ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs">
-                  <Plus className="h-3.5 w-3.5" />
-                  Add
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onAdd("project")}>
-                  <FolderGit2 className="h-3.5 w-3.5" />
-                  Add to {repoName ?? "Project"}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onAdd("global")}>
-                  <Globe className="h-3.5 w-3.5" />
-                  Add to Global
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs"
-              onClick={() => onAdd("global")}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add
-            </Button>
-          ))}
+        <div className="flex shrink-0 items-center gap-2">
+          {onAdd &&
+            !addingInScope &&
+            !editingItem &&
+            !pendingDeleteItem &&
+            (hasProjectScope ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="xs" className="gap-1 px-2">
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onAdd("project")}>
+                    <FolderGit2 className="h-3.5 w-3.5" />
+                    Add to {repoName ?? "Project"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onAdd("global")}>
+                    <Globe className="h-3.5 w-3.5" />
+                    Add to Global
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="gap-1 px-2"
+                onClick={() => onAdd("global")}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </Button>
+            ))}
+          {toolbarAction}
+        </div>
       </div>
 
       {/* Scrollable content — plain div avoids Radix ScrollArea's display:table

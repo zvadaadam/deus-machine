@@ -9,7 +9,7 @@
  * screenshots and the agent's device actions.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, Check, Loader2, Play, RotateCcw, Sparkles, X } from "lucide-react";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ import { CloudSimulatorScreen } from "./CloudSimulatorScreen";
 interface CloudSimulatorPanelProps {
   workspace: Workspace;
   visible: boolean;
+  toolbarAction?: ReactNode;
 }
 
 /** The platform stops an idle device after 20 minutes; a viewer looking at
@@ -102,7 +103,11 @@ async function attachScreenshot(sessionId: string, base64: string): Promise<void
   if (processed.length) sessionComposerActions.addImageAttachments(sessionId, processed);
 }
 
-export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelProps) {
+export function CloudSimulatorPanel({
+  workspace,
+  visible,
+  toolbarAction,
+}: CloudSimulatorPanelProps) {
   const workspaceId = workspace.id;
   const device = useCloudSimulatorStore(
     (s) => s.byWorkspace[workspaceId] ?? EMPTY_CLOUD_SIM_DEVICE
@@ -298,6 +303,7 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
 
   const header = (
     <CloudSimulatorHeader
+      toolbarAction={toolbarAction}
       device={device}
       phase={phase}
       onStart={handleStart}
@@ -315,19 +321,17 @@ export function CloudSimulatorPanel({ workspace, visible }: CloudSimulatorPanelP
   return (
     <TooltipProvider delayDuration={200}>
       <div className="bg-bg-base flex h-full w-full flex-col">
+        {header}
         {/*
           The stage. The platform's stream draws its own device — a realistic
           iPhone skin around the screen, touch, hardware buttons, rotation —
           so Deus must not draw a second phone around it (the local simulator
           keeps its DeviceFrame: that stream is bare pixels). Give the viewer
           the whole area and it centers and scales the device itself; our
-          controls float above it.
+          controls stay in the tool row above it.
         */}
         <div className="bg-bg-muted/30 relative min-h-0 flex-1">
-          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
-            <div className="pointer-events-auto w-full max-w-[420px]">{header}</div>
-          </div>
-          <div className="absolute inset-0 pt-16">
+          <div className="absolute inset-0">
             {phase === "live" && device.streamUrl ? (
               <CloudSimulatorScreen
                 key={device.streamUrl}
@@ -382,7 +386,7 @@ function DeviceStateBody({
           <div className="flex flex-col items-center gap-3">
             <Button
               onClick={onStart}
-              className="min-h-11 min-w-[180px] gap-2 rounded-xl transition-[background-color,border-color,color,box-shadow] duration-150"
+              className="min-h-11 min-w-[180px] gap-2 transition-[background-color,border-color,color,box-shadow] duration-150"
             >
               <Play className="h-4 w-4" />
               Start device
@@ -390,7 +394,7 @@ function DeviceStateBody({
             <button
               type="button"
               onClick={onAskAgent}
-              className="bg-bg-muted/55 text-text-muted hover:text-text-secondary hover:bg-bg-muted flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors duration-150"
+              className="control-interaction bg-bg-muted/55 text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed flex items-center gap-1.5 rounded-full px-3 py-1 text-sm"
             >
               <Sparkles className="h-3 w-3" />
               Ask the agent to build and run the app
@@ -416,11 +420,7 @@ function DeviceStateBody({
             <p className="text-destructive text-sm leading-5">
               {describeCloudSimulatorError(error)}
             </p>
-            <Button
-              variant="outline"
-              onClick={onStart}
-              className="min-h-10 min-w-[136px] gap-2 rounded-xl"
-            >
+            <Button variant="outline" onClick={onStart} className="min-h-10 min-w-[136px] gap-2">
               <RotateCcw className="h-4 w-4" />
               Retry
             </Button>

@@ -10,14 +10,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useCreateSession, useWorkspaceSessions } from "@/features/session/api/session.queries";
-import {
-  getAgentLabel,
-  getAgentHarnessForModel,
-  getDefaultModelForHarness,
-  type AgentHarness,
-} from "@/shared/agents";
+import { getAgentLabel, getAgentHarnessForModel, type AgentHarness } from "@/shared/agents";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
+import {
+  sessionComposerActions,
+  useSessionComposerStore,
+} from "@/features/session/store/sessionComposerStore";
 import type { Session } from "@/features/session/types";
 import type {
   ChatTab,
@@ -82,24 +80,17 @@ function sessionToTab(session: Session, sequence: number): SessionChatTab {
     label: hasStarted ? buildStartedChatLabel(session.agent_harness, sequence) : NEW_CHAT_LABEL,
     agentHarness: session.agent_harness,
     hasStarted,
-    // Seed the composer from the session's OWN harness. The composer store is
-    // in-memory, so a reopened session (web reload, desktop restart) otherwise
-    // starts on the global default (Claude) — and since the wire harness is
-    // derived from the picked model, a Codex session's next send ran as Claude
-    // and forked a fresh native conversation.
-    initialModel: getDefaultModelForHarness(session.agent_harness),
+    // Hydrated tabs let SessionComposer restore the model from recorded turns.
+    // initialModel is reserved for an explicit choice when opening a new tab.
   };
 }
 
-/** Count started tabs of a given agent type, excluding a specific tab. */
-function countStartedTabsOfHarness(
-  tabs: ChatTab[],
-  agentHarness: AgentHarness,
-  excludeTabId: string
-): number {
-  return tabs.filter(
-    (tab) => tab.id !== excludeTabId && tab.hasStarted && tab.agentHarness === agentHarness
-  ).length;
+/** Keep existing labels stable when chats start out of order or tabs close. */
+function nextStartedChatLabel(tabs: ChatTab[], agentHarness: AgentHarness): string {
+  const labels = new Set(tabs.filter((tab) => tab.hasStarted).map((tab) => tab.label));
+  let sequence = 1;
+  while (labels.has(buildStartedChatLabel(agentHarness, sequence))) sequence++;
+  return buildStartedChatLabel(agentHarness, sequence);
 }
 
 /** Compute per-harness sequence numbers for a list of sessions (in order). */
@@ -194,10 +185,32 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
 
   const hydrated = useRef(false);
   useEffect(() => {
-    if (!workspaceSessions || hydrated.current) return;
+    if (!workspaceSessions) return;
+    if (hydrated.current) {
+      // A cloud snapshot can establish that an untitled chat has started after
+      // discovery has already hydrated the tabs. Preserve order and draft choices.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile persisted tabs with server discovery
+      setMainTabs((tabs) => {
+        const updated = [...tabs];
+        let changed = false;
+        tabs.forEach((tab, index) => {
+          const session = isSessionChatTab(tab) ? sessionMap.get(tab.sessionId) : undefined;
+          if (tab.hasStarted || !session || session.message_count === 0) return;
+          changed = true;
+          updated[index] = {
+            ...tab,
+            hasStarted: true,
+            initialModel: undefined,
+            agentHarness: session.agent_harness,
+            label: nextStartedChatLabel(updated, session.agent_harness),
+          };
+        });
+        return changed ? updated : tabs;
+      });
+      return;
+    }
     hydrated.current = true;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration sync from DB
     setMainTabs((prev) => {
       // Filter out orphaned session IDs (deleted from DB)
       const validTabs = prev.filter(
@@ -289,7 +302,10 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
           sessionId: closingTab.sessionId,
           agentHarness: closingTab.agentHarness,
           hasStarted: closingTab.hasStarted,
-          initialModel: closingTab.initialModel,
+          // Preserve the current pick even when the send ACK precedes turn history.
+          initialModel:
+            useSessionComposerStore.getState().composers[closingTab.sessionId]?.model ??
+            closingTab.initialModel,
           closedAt: Date.now(),
         };
         setClosedTabs((prevClosed) =>
@@ -356,7 +372,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       if (prev.some((tab) => isSessionChatTab(tab) && tab.sessionId === closedTab.sessionId)) {
         return prev;
       }
-      return [...prev, restoredTab];
+      return [
+        ...prev,
+        restoredTab.hasStarted && prev.some((tab) => tab.label === restoredTab.label)
+          ? { ...restoredTab, label: nextStartedChatLabel(prev, restoredTab.agentHarness) }
+          : restoredTab,
+      ];
     });
     setActiveMainTabId(newId);
     setClosedTabs((prev) => prev.filter((ct) => ct.sessionId !== closedTab.sessionId));
@@ -395,14 +416,12 @@ export function useChatTabs({ workspaceId, activeSessionId }: UseChatTabsOptions
       const tab = prevTabs[tabIndex];
       if (tab.hasStarted) return prevTabs;
 
-      const agentHarness = tab.agentHarness;
-      const sequence = countStartedTabsOfHarness(prevTabs, agentHarness, tabId) + 1;
-
       const updatedTabs = [...prevTabs];
       updatedTabs[tabIndex] = {
         ...tab,
-        label: buildStartedChatLabel(agentHarness, sequence),
+        label: nextStartedChatLabel(prevTabs, tab.agentHarness),
         hasStarted: true,
+        initialModel: undefined,
       };
       return updatedTabs;
     });

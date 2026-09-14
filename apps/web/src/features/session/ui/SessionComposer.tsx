@@ -17,7 +17,8 @@
  * disabled placeholder — caller doesn't need to branch.
  */
 
-import { forwardRef, useEffect, useImperativeHandle } from "react";
+import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { MessageInput } from "./MessageInput";
 import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
@@ -28,9 +29,13 @@ import {
   getAgentHarnessForModel,
   type AgentHarness,
   type ThinkingLevel,
-  getDefaultModelForHarness,
+  getModelForSession,
 } from "@/shared/agents";
-import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
+import {
+  emptyComposer,
+  sessionComposerActions,
+  useSessionComposerStore,
+} from "../store/sessionComposerStore";
 import { readThinkingLevel } from "@shared/protocol";
 
 export interface SessionComposerRef {
@@ -55,7 +60,12 @@ interface SessionComposerProps {
   initialModel?: string;
   /** Show the Compact button (modal layout wants it). */
   showCompactButton?: boolean;
-  /** SessionPanel owns the RPC handler; it feeds the boolean in. */
+  /** Direct cloud history comes from the panel's socket, not the message query. */
+  historyConnection?: {
+    error: string | null;
+    retry: () => void;
+    retrying: boolean;
+  };
   /** Called when user picks a model from a locked agent group. */
   onOpenNewTab?: (initialModel?: string) => void;
   /** Reports the current agent harness to parents that gate on it. */
@@ -96,6 +106,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       targetBranch,
       initialModel,
       showCompactButton = false,
+      historyConnection,
       onOpenNewTab,
       onAgentHarnessChange,
       onSendComplete,
@@ -112,17 +123,19 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     // Session-derived props — everything that needs React Query context.
     // Composer state itself (draft/model/etc.) lives in the store;
     // MessageInput reads it directly. We don't subscribe here.
-    const { session, messages, sessionStatus } = useSessionWithMessages(sessionId);
+    const { session, messages, turns, error, retry, sessionStatus } =
+      useSessionWithMessages(sessionId);
     const environment = useProjectEnvironment(workspaceId);
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
+    const seedModel =
+      initialModel ??
+      (session ? getModelForSession(session.agent_harness, turns ?? []) : DEFAULT_MODEL);
 
     // Notify parent when the selected model's agent harness changes.
     // We subscribe to just `model` (a string) to avoid re-renders on
     // unrelated staged-content changes like paste.
-    const model = useSessionComposerStore(
-      (s) => s.composers[sessionId]?.model ?? initialModel ?? DEFAULT_MODEL
-    );
+    const model = useSessionComposerStore((s) => s.composers[sessionId]?.model ?? seedModel);
     const agentHarness = getAgentHarnessForModel(model);
     useEffect(() => {
       onAgentHarnessChange?.(agentHarness);
@@ -143,6 +156,11 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
       () => ({
         sendMessage: async (content, modelOverride) => {
           if (modelOverride) {
+            // Welcome sends carry an explicit model before history mounts the input.
+            sessionComposerActions.seedIfAbsent(
+              sessionId,
+              emptyComposer(modelOverride, defaultThinking)
+            );
             sessionComposerActions.setModel(sessionId, modelOverride, defaultThinking);
           }
           return sendMessage(content, modelOverride);
@@ -155,16 +173,31 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     );
 
     // The composer seeds its model ONCE (seedIfAbsent on first mount), so the
-    // seed must be right the first time: an explicit pick (a new tab) wins,
-    // else the session's own harness — which needs the session row. Until the
-    // row is known, hold the pill rather than seed the global default and
-    // reopen a Codex session as Claude (the send derives its harness from the
-    // picked model, so that isn't cosmetic).
-    if (!session && !initialModel) {
-      return <DisabledComposerPlaceholder className={className} />;
+    // seed must be right the first time: an explicit pick for a new tab wins,
+    // otherwise wait for history and restore the last recorded model.
+    if ((!session || turns === undefined) && !initialModel) {
+      return (
+        <DisabledComposerPlaceholder className={className}>
+          {error || historyConnection?.error ? (
+            <div role="alert" className="flex items-center justify-between gap-3">
+              <span>Couldn’t load this conversation.</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={historyConnection?.retrying}
+                onClick={() =>
+                  void (historyConnection?.error ? historyConnection.retry() : retry())
+                }
+              >
+                Try again
+              </Button>
+            </div>
+          ) : (
+            "Loading conversation…"
+          )}
+        </DisabledComposerPlaceholder>
+      );
     }
-    const seedModel = initialModel ?? getDefaultModelForHarness(session!.agent_harness);
-
     return (
       // Key on sessionId so MessageInput's LOCAL UI state (popover open,
       // query buffers) resets when the session changes. Staged content
@@ -194,11 +227,17 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
   }
 );
 
-function DisabledComposerPlaceholder({ className }: { className?: string }) {
+function DisabledComposerPlaceholder({
+  className,
+  children,
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
     <div className={`relative z-20 shrink-0 px-2 pb-2 ${className ?? ""}`}>
       <div className="bg-input-surface text-text-muted rounded-2xl px-4 py-3 text-sm shadow-xs">
-        Start a chat to send messages.
+        {children ?? "Start a chat to send messages."}
       </div>
     </div>
   );

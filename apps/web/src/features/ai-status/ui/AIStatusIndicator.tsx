@@ -21,6 +21,8 @@ export function AIStatusIndicator() {
   const reduceMotion = useReducedMotion();
 
   const visuals = worst ? getIndicatorVisuals(worst.indicator) : null;
+  const affected = worst?.affectedProviders.map((id) => PROVIDER_REGISTRY[id]?.name ?? id);
+  const label = affected?.length === 1 ? `${affected[0]}: ${visuals?.label}` : "AI service issues";
 
   // AnimatePresence must stay mounted for exit animations to fire
   return (
@@ -37,11 +39,11 @@ export function AIStatusIndicator() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                aria-label={`AI provider status: ${visuals.label}`}
-                className="hover:bg-bg-muted flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition-colors duration-150"
+                aria-label={label}
+                className="control-interaction hover:bg-control-hover active:bg-control-pressed flex items-center gap-1.5 rounded-lg px-1 py-0.5"
               >
                 <StatusPulse dotClass={visuals.dotClass} pulse={worst.indicator === "critical"} />
-                <span className="text-text-muted text-xs">{visuals.label}</span>
+                <span className="text-text-muted text-xs">{label}</span>
               </button>
             </PopoverTrigger>
 
@@ -74,7 +76,10 @@ function StatusPulse({ dotClass, pulse }: { dotClass: string; pulse: boolean }) 
 function StatusPopover({ statuses }: { statuses: ProviderStatusEntry[] }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <p className="text-text-secondary text-xs font-medium">Provider Status</p>
+      <div>
+        <p className="text-text-secondary text-xs font-medium">AI service status</p>
+        <p className="text-text-muted mt-1 text-xs">Reported by the providers’ status pages.</p>
+      </div>
       {statuses.map((s) => {
         const config = PROVIDER_REGISTRY[s.providerId];
         if (!config) return null;

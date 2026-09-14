@@ -49,7 +49,7 @@ export function UndoStrip({ itemName, onUndo, onExpire, duration = 4000 }: UndoS
       <span className="text-muted-foreground text-xs">
         Deleted <span className="text-foreground font-medium">{itemName}</span>
       </span>
-      <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={handleUndo}>
+      <Button variant="ghost" size="sm" className="h-6 gap-1 px-2" onClick={handleUndo}>
         <Undo2 className="h-3 w-3" />
         Undo
       </Button>

@@ -42,7 +42,7 @@ export function AgentConfigSidebar({ activeCategory, onCategoryChange }: AgentCo
             type="button"
             data-active={isActive}
             onClick={() => onCategoryChange(item.id)}
-            className="text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-ring data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm outline-hidden transition-colors duration-200 focus-visible:ring-2 data-[active=true]:font-medium"
+            className="control-interaction text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm data-[active=true]:font-medium"
           >
             <Icon className="size-4 shrink-0" />
             <span>{item.label}</span>

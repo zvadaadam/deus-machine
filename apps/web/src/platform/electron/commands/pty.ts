@@ -17,7 +17,10 @@ export const ptyCommands = {
     cwd: string;
     /** Cloud workspaces: the backend reroutes the shell into the sandbox. */
     cloudWorkspaceId?: string;
-  }): Promise<void> => sendCommand("pty:spawn", options).then(() => {}),
+  }): Promise<void> =>
+    sendCommand("pty:spawn", options).then((result) => {
+      if (!result.accepted) throw new Error(result.error || "Failed to start terminal");
+    }),
 
   write: (id: string, data: number[]): Promise<void> =>
     sendCommand("pty:write", { id, data }).then(() => {}),

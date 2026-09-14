@@ -389,7 +389,7 @@ export function HomeView({
                   <button
                     type="button"
                     onClick={() => setRepoPickerOpen(!repoPickerOpen)}
-                    className="text-text-muted hover:text-text-secondary group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors duration-150"
+                    className="control-interaction text-text-muted hover:text-text-secondary group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm"
                   >
                     {/* Green glow dot — active project indicator */}
                     <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
@@ -738,9 +738,9 @@ export function HomeView({
                 aria-label="Send message"
                 title="Send message (Enter)"
                 className={cn(
-                  "mr-1 flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150",
+                  "control-interaction mr-1 flex h-7 w-7 items-center justify-center rounded-full",
                   canSend
-                    ? "bg-foreground text-background hover:opacity-90 active:scale-95"
+                    ? "bg-button-primary text-button-primary-foreground hover:opacity-90"
                     : "bg-bg-muted text-text-disabled cursor-default"
                 )}
               >
@@ -1020,7 +1020,7 @@ function CloudSessionsHome({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
-          className="bg-foreground text-background rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
+          className="control-interaction bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 active:bg-button-primary/80 rounded-lg px-4 py-2 text-sm font-normal"
         >
           Try again
         </motion.button>
@@ -1033,7 +1033,7 @@ function CloudSessionsHome({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.12, ease: EASE_OUT_QUART }}
-          className="bg-foreground text-background rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
+          className="control-interaction bg-button-primary text-button-primary-foreground hover:bg-button-primary/90 active:bg-button-primary/80 rounded-lg px-4 py-2 text-sm font-normal"
         >
           Download Deus for macOS
         </motion.a>

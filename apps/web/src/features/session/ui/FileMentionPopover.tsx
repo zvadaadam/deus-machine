@@ -93,7 +93,7 @@ export function FileMentionPopover({
                 key={result.path}
                 data-selected={isSelected ? "true" : undefined}
                 className={cn(
-                  "flex w-full items-start rounded-xl px-3 py-2 text-left transition-colors duration-150 ease-out",
+                  "control-interaction flex w-full items-start rounded-lg px-3 py-2 text-left",
                   isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/40"
                 )}
                 onMouseDown={(e) => {

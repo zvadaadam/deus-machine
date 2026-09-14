@@ -9,7 +9,7 @@
  * snake_case names here must match the renderer exactly.
  */
 
-import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "electron";
+import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app, clipboard } from "electron";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
@@ -222,25 +222,25 @@ export function registerNativeHandlers(): void {
   });
 
   // -------------------------------------------------------------------------
-  // Open terminal with a command (macOS only)
+  // Open Terminal on macOS; other platforms copy the resolved bundled command.
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("native:openTerminal", (_e, { command }: { command: string }) => {
+  ipcMain.handle("native:openTerminal", async (_e, { command }: { command: string }) => {
     const terminalCommand = resolveTerminalCliCommand(command);
-    if (!terminalCommand) return;
+    if (!terminalCommand)
+      throw new Error("The sign-in command is unavailable in this installation.");
+    if (process.platform !== "darwin") {
+      clipboard.writeText(terminalCommand);
+      return "copied";
+    }
 
-    execFile(
-      "osascript",
-      [
-        "-e",
-        'tell application "Terminal" to activate',
-        "-e",
-        `tell application "Terminal" to do script ${toAppleScriptString(terminalCommand)}`,
-      ],
-      (err: Error | null) => {
-        if (err) console.error("[native:openTerminal] Failed:", err.message);
-      }
-    );
+    await execFileAsync("osascript", [
+      "-e",
+      'tell application "Terminal" to activate',
+      "-e",
+      `tell application "Terminal" to do script ${toAppleScriptString(terminalCommand)}`,
+    ]);
+    return "opened";
   });
 
   // -------------------------------------------------------------------------

@@ -62,7 +62,7 @@ export function DeusEmptyState({ parentBranch, className }: DeusEmptyStateProps)
     >
       <div className="flex w-full max-w-[280px] flex-col items-center gap-6">
         {/* Semantic anchor — PR icon at low primary opacity */}
-        <GitPullRequest className="text-primary/30 h-4 w-4" strokeWidth={1.5} aria-hidden />
+        <GitPullRequest className="text-primary/30 h-4 w-4" aria-hidden />
 
         {/* Identity copy — the reorienting moment */}
         <div className="text-center">
@@ -104,7 +104,7 @@ export function DeusEmptyState({ parentBranch, className }: DeusEmptyStateProps)
               >
                 {/* Step icon */}
                 <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  <Icon className="text-text-muted h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                  <Icon className="text-text-muted h-3.5 w-3.5" aria-hidden />
                 </div>
 
                 {/* Step label */}

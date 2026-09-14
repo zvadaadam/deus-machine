@@ -250,7 +250,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              className="flex h-5 w-3.5 shrink-0 items-center transition-opacity hover:opacity-80"
+              className="control-interaction flex h-5 w-3.5 shrink-0 items-center hover:opacity-80"
               aria-label={`Status: ${workspace.status}`}
             >
               <WorkspaceGitIcon workspace={workspace} displayStatus={displayStatus} />
@@ -328,7 +328,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         )}
       </div>
 
-      {/* Archive button — hover reveal */}
+      {/* Archive button — revealed on hover or keyboard focus */}
       {canArchive && (
         <button
           type="button"
@@ -336,9 +336,9 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           aria-label={`Archive workspace ${displayName}`}
           title="Archive workspace"
           className={cn(
-            "text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
-            "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity",
-            "group-hover/sidebar-row:opacity-100"
+            "control-interaction text-text-muted hover:text-text-secondary flex h-7 w-7 items-center justify-center rounded-lg",
+            "absolute top-1/2 right-1 -translate-y-1/2 opacity-0",
+            "group-hover/sidebar-row:opacity-100 focus-visible:opacity-100"
           )}
         >
           <Archive className="h-3.5 w-3.5" />

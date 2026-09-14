@@ -121,10 +121,10 @@ function TaskSplitButton({
               onClick={handleQuickRun}
               disabled={disabled}
               aria-label={defaultTask.name === "run" ? "Run app" : `Run task: ${defaultTask.name}`}
-              className="text-text-subtle hover:bg-bg-muted flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2 transition-colors duration-200"
+              className="control-interaction text-text-subtle hover:bg-control-hover active:bg-control-pressed flex h-full shrink-0 items-center gap-1.5 rounded-l-lg px-2"
             >
               <DefaultIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="max-w-[100px] shrink-0 truncate text-sm font-medium">
+              <span className="max-w-[100px] shrink-0 truncate text-sm font-normal">
                 {defaultTask.name === "run" ? "Run app" : defaultTask.name}
               </span>
             </button>
@@ -143,7 +143,7 @@ function TaskSplitButton({
             type="button"
             disabled={disabled}
             aria-label="Choose task to run"
-            className="text-text-muted hover:bg-bg-muted hover:text-text-subtle flex h-full shrink-0 items-center rounded-r-lg px-1.5 transition-colors duration-200"
+            className="control-interaction text-text-muted hover:bg-control-hover active:bg-control-pressed hover:text-text-subtle flex h-full shrink-0 items-center rounded-r-lg px-1.5"
             onPointerEnter={handleOpen}
             onPointerLeave={handleClose}
           >
@@ -209,7 +209,7 @@ function SettingsButton({ onOpenSettings }: { onOpenSettings: () => void }) {
           type="button"
           onClick={onOpenSettings}
           aria-label="Open environment settings"
-          className="text-text-muted hover:text-text-secondary hover:bg-bg-muted border-border-strong flex h-7 w-7 items-center justify-center rounded-lg border transition-colors duration-200"
+          className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed border-border-strong flex h-7 w-7 items-center justify-center rounded-lg border"
         >
           <Settings className="h-3 w-3" />
         </button>

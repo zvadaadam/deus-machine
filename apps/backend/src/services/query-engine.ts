@@ -8,6 +8,7 @@
 // to the correct callback.
 
 import { match } from "ts-pattern";
+import { AppError } from "../lib/errors";
 import { getDatabase } from "../lib/database";
 import {
   getDashboardWorkspaces,
@@ -377,6 +378,8 @@ async function handleMutate(connectionId: string, msg: MutateFrameInput): Promis
       id,
       success: false,
       error: err instanceof Error ? err.message : "Mutation failed",
+      status: err instanceof AppError ? err.statusCode : undefined,
+      details: err instanceof AppError ? err.details : undefined,
     });
   }
 }

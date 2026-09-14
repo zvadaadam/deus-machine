@@ -156,9 +156,6 @@ export const PreferencesFile = z
     diff_view_mode: z.string().optional(),
     onboarding_completed: z.boolean().optional(),
     anthropic_api_key: z.string().optional(),
-    claude_provider: z.string().optional(),
-    claude_model: z.string().optional(),
-    custom_endpoint: z.string().optional(),
     // Engine vocabulary (lowercase). Files written by older builds carry the
     // retired UPPERCASE spellings — normalized on read, see readThinkingLevel.
     default_thinking_level: z.string().optional(),

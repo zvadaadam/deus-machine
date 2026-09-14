@@ -69,7 +69,7 @@ function AutomationCard({ automation }: { automation: Automation }) {
         <button
           type="button"
           onClick={() => uiActions.openAutomations(automation.id)}
-          className="border-border-default bg-bg-base text-text-secondary hover:text-text-primary flex h-7 items-center rounded-md border px-2.5 text-xs font-medium transition-colors duration-150"
+          className="control-interaction border-border-default bg-bg-base text-text-secondary hover:text-text-primary flex h-7 items-center rounded-lg border px-2.5 text-sm font-medium"
         >
           View
         </button>

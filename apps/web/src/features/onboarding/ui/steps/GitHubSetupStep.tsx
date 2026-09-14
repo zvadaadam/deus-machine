@@ -47,17 +47,21 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
   }
 
   async function signInWithGitHubCli(): Promise<void> {
-    const result = await ghAuthLogin.mutateAsync();
-    if (!result.success) {
-      toast.error(result.error ?? "GitHub sign-in did not complete");
-      return;
-    }
+    try {
+      const result = await ghAuthLogin.mutateAsync();
+      if (!result.success) {
+        toast.error(result.error ?? "GitHub sign-in did not complete");
+        return;
+      }
 
-    const refreshed = await ghStatus.refetch();
-    if (refreshed.data?.isAuthenticated) {
-      toast.success("GitHub connected");
-    } else {
-      toast.error("GitHub sign-in finished, but Deus could not verify it yet");
+      const refreshed = await ghStatus.refetch();
+      if (refreshed.data?.isAuthenticated) {
+        toast.success("GitHub connected");
+      } else {
+        toast.error("GitHub sign-in finished, but Deus could not verify it yet");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "GitHub sign-in failed");
     }
   }
 
@@ -73,8 +77,8 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-white">Connect GitHub</h2>
-        <p className="text-sm text-white/50">
+        <h2 className="text-onboarding-foreground text-2xl font-semibold">Connect GitHub</h2>
+        <p className="text-onboarding-foreground/50 text-sm">
           Sign in to create branches and pull requests from your workspaces.
         </p>
       </div>
@@ -85,25 +89,27 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
           target="_blank"
           rel="noopener noreferrer"
           title={`Open @${login} on GitHub`}
-          className="flex items-center gap-3 rounded-xl bg-white/5 px-4 py-3 transition-colors duration-150 hover:bg-white/[0.07]"
+          className="bg-onboarding-foreground/5 hover:bg-onboarding-foreground/[0.07] flex items-center gap-3 rounded-xl px-4 py-3 transition-colors duration-150"
         >
           <div className="relative shrink-0">
             <Avatar className="size-10">
               {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName || login} />}
-              <AvatarFallback className="bg-white/10 text-xs font-semibold text-white">
+              <AvatarFallback className="bg-onboarding-foreground/10 text-onboarding-foreground text-xs font-semibold">
                 {getInitials(displayName, login)}
               </AvatarFallback>
             </Avatar>
             <span
               aria-hidden="true"
-              className="absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full bg-white text-black ring-2 ring-black"
+              className="bg-onboarding-foreground text-onboarding-contrast ring-onboarding-contrast absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full ring-2"
             >
               <GitHubIcon className="size-2.5" />
             </span>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white">{displayName || login}</p>
-            <p className="truncate text-xs text-white/50">
+            <p className="text-onboarding-foreground truncate text-sm font-medium">
+              {displayName || login}
+            </p>
+            <p className="text-onboarding-foreground/50 truncate text-xs">
               {displayName ? `@${login}` : "Signed in to GitHub"}
             </p>
           </div>
@@ -129,21 +135,23 @@ export function GitHubSetupStep({ onNext, onBack }: GitHubSetupStepProps) {
       <div className="flex items-center gap-3 pt-2">
         <button
           onClick={onBack}
-          className="rounded-xl px-6 py-2.5 text-sm font-medium text-white/50 transition-colors duration-200 hover:text-white/80"
+          className="control-interaction text-onboarding-foreground/50 hover:text-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-normal"
         >
           Back
         </button>
         <div className="flex-1" />
-        <button
-          onClick={onNext}
-          className="rounded-xl bg-white/10 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors duration-200 hover:bg-white/15 hover:text-white"
-        >
-          Skip
-        </button>
+        {!authenticated && (
+          <button
+            onClick={onNext}
+            className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground/70 hover:bg-onboarding-foreground/15 hover:text-onboarding-foreground rounded-lg px-6 py-2.5 text-sm font-normal"
+          >
+            Skip
+          </button>
+        )}
         {authenticated && (
           <button
             onClick={onNext}
-            className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-lg px-6 py-2.5 text-sm font-medium"
           >
             Continue
           </button>

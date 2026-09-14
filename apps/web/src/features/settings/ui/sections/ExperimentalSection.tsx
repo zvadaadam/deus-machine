@@ -1,4 +1,10 @@
-import { Label } from "@/components/ui/label";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useSimulatorCapabilities } from "@/features/simulator";
@@ -14,70 +20,68 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
     settings.experimental_simulator !== true && simulatorCapabilities.data.available === false;
 
   return (
-    <div className="space-y-5">
+    <FieldGroup className="gap-5">
       <div>
         <h3 className="text-base font-semibold">Experimental</h3>
-        <p className="text-muted-foreground mt-1 text-base">
+        <p className="text-muted-foreground mt-1 text-sm">
           Early-access features that are still in development.
         </p>
       </div>
 
       {/* iOS Simulator */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="experimental-simulator" className="text-sm">
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor="experimental-simulator" className="text-sm">
             iOS Simulator
-          </Label>
-          <p className="text-muted-foreground text-base">
+          </FieldLabel>
+          <FieldDescription>
             {simulatorUnavailableReason ??
               "Let the AI agent interact with and test on iOS simulators."}
-          </p>
-        </div>
+          </FieldDescription>
+        </FieldContent>
         <Switch
           id="experimental-simulator"
           checked={settings.experimental_simulator === true}
           disabled={simulatorSwitchDisabled}
           onCheckedChange={(checked) => saveSetting("experimental_simulator", checked)}
         />
-      </div>
+      </Field>
 
       <Separator />
 
       {/* Browser */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="experimental-browser" className="text-sm">
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor="experimental-browser" className="text-sm">
             Browser
-          </Label>
-          <p className="text-muted-foreground text-base">
+          </FieldLabel>
+          <FieldDescription>
             Let the AI agent use a browser to test and develop websites.
-          </p>
-        </div>
+          </FieldDescription>
+        </FieldContent>
         <Switch
           id="experimental-browser"
           checked={settings.experimental_browser === true}
           onCheckedChange={(checked) => saveSetting("experimental_browser", checked)}
         />
-      </div>
+      </Field>
 
       <Separator />
 
       {/* Apps */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <Label htmlFor="experimental-apps" className="text-sm">
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor="experimental-apps" className="text-sm">
             Apps
-          </Label>
-          <p className="text-muted-foreground text-base">
-            Launch and manage agentic apps inside the workspace.
-          </p>
-        </div>
+          </FieldLabel>
+          <FieldDescription>Launch and manage agentic apps inside the workspace.</FieldDescription>
+        </FieldContent>
         <Switch
           id="experimental-apps"
           checked={settings.experimental_apps === true}
           onCheckedChange={(checked) => saveSetting("experimental_apps", checked)}
         />
-      </div>
-    </div>
+      </Field>
+    </FieldGroup>
   );
 }

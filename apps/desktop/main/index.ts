@@ -344,7 +344,7 @@ app.whenReady().then(async () => {
   registerGithubAppHandlers();
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
-  registerUpdateHandlers();
+  registerUpdateHandlers(quitAfterStopping);
 
   // Cross-window event relay — forwards a sender's event to all other windows.
   // Used for chat-insert (e.g. terminal/simulator feeding the main composer).
@@ -401,9 +401,24 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on("before-quit", () => {
+let quitState: "running" | "stopping" | "stopped" = "running";
+function quitAfterStopping(quit: () => void): void {
+  if (quitState !== "running") return;
+  quitState = "stopping";
   destroyTray();
-  stopBackend();
+  // Keep the parent and its log pipes alive until the backend has closed
+  // its agent process, terminals, and database. The first Quit or successful update
+  // owns the final action; repeated requests cannot start another shutdown.
+  void stopBackend().finally(() => {
+    quitState = "stopped";
+    quit();
+  });
+}
+
+app.on("before-quit", (event) => {
+  if (quitState === "stopped") return;
+  event.preventDefault();
+  quitAfterStopping(() => app.quit());
 });
 
 // Export for IPC handlers that need window reference

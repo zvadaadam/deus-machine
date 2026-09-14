@@ -26,6 +26,86 @@ the canvas — read left to right, top to bottom.
 | **70–75 — Mobile**      | `70`…`75`        | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
 | **80 · 85 · 90**        | `80`, `85`, `90` | The `/connect` web route, the web-direct surfaces, and the landing site (its own token set)                                                                                                                                 |
 
+### Workspace usability
+
+Buttons and interactive controls follow [controls.md](./controls.md): native
+12px regular toolbar labels, neutral primary actions, soft `radius-lg` corners,
+and shared hover/pressed/keyboard states. The joined PR control retains its rose
+treatment. Boards `10`, `05` and `02` document the components, states and motion.
+
+The September 14 **right workspace controls** are implemented in `apps/web`. The current
+frames start at y=18,640: `00c` explains the scope, `22b` shows the controls, and
+`40d`–`40f` show the right workspace open, collapsed and expanded. The existing
+workspace header and session-tab row remain in the split. Hide sits beside Open in
+the split; Show sits at the far right, after PR, in the collapsed view.
+The expanded view omits the title and Open but
+keeps one Hide workspace icon before the tool tabs. The toolbar aligns with the
+content's left edge. Hide returns to full chat; Expand/Restore sits in the content's
+existing action row and Restore brings back the split and normal header.
+Lucide icons share a 1.5 stroke; layout controls keep a 28px button. The current
+screens, control board and iconography foundation use matching SVG path overrides.
+The joined PR/branch button and project sidebar remain. All available tools are
+listed directly. The earlier exploration is preserved at y=17,340 (`00b`, `22a`,
+`40a`–`40c`). See [workspace-layout.md](./workspace-layout.md).
+
+The settings sidebar, page heading, and command palette share the section definitions in
+`features/settings/settings-navigation.ts`. Desktop sections use a common 896px content
+width and a `Settings / section` header; hosted web resolves unavailable sections to Account.
+
+Board `52` groups local GitHub CLI status under “On this computer” and cloud repository
+access under “Cloud repositories”. The GitHub App, repository coverage, and optional
+personal access token are owned by `GithubCloudAccess.tsx`. Board `55` contains cloud
+connection state and navigation to the three setup owners; it has no duplicate credential form.
+
+`DS/TurnStatsHeader` now summarizes **Activity**, not SDK message boundaries. The chat in
+`DS/SessionPanel` shows the default collapsed activity state. Expanding reveals tools and
+reasoning and stays open through completion and the next turn. Answer text, failed tools,
+questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nested
+`PartsRenderer.tsx` share `PartBlock.tsx`; turn details and provider attribution are unchanged.
+
+#### PR #383 canvas review (September 14)
+
+The canvas now includes the changes below from the implemented desktop and browser
+journey. Board `00a` indexes the screens for visual review. The product owner requested
+this synchronization in PR #383 after Pencil access was restored; it is no longer
+deferred. The subsequent composer polish updates both the design and the app.
+
+- `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
+- `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in
+  and Check again. A failed account check offers retry; a successful check with no
+  credentials offers Sign in. Local sign-in is separate from cloud accounts in AI Providers.
+  The obsolete Cursor Agent row is removed; `47g` shows the local account-check states.
+- `47e` Projects: discovery failure has Try again and Browse Folder; selected cards expose
+  their selection state. `47h` shows discovery failure and `47j` shows the shared folder-error
+  notification. Browse Folder sits beside Continue in the footer.
+- `47f` Finish: Back, Skip and Clone & Continue match the app; `47i` shows a failed save
+  remaining on this step with an error and retryable actions.
+- `54`/`54e` AI Providers: unused provider-routing, custom-endpoint and default-model
+  controls are removed. Accounts, local sign-in and default thinking remain. `54e` is the
+  scrolled local section, so these controls can be reviewed without the cloud forms above.
+  `54b` now documents implemented local account states rather than proposed provider rows.
+- `22` public service status: the sidebar badge names the affected provider (for example,
+  “Claude: Degraded”). Its popover links to the providers' public status pages and contains
+  no account sign-in or installation controls.
+- `16a` conversation history: loading, retryable error and the restored composer are shown
+  together. An unavailable history response does not silently select a different model.
+  A completed empty cloud snapshot enables the first prompt.
+- `16b` composer details: empty chats hide context usage; used context shows only a ring,
+  with the percentage and exact tokens in the tooltip. High usage uses the warning token
+  and retains its compact shortcut. Controls wrap together at narrow widths. Plan is shown
+  only for local Claude sessions, and the placeholder lists only supported pickers.
+  `DS/Composer` and the restored composer on `16a` share these states; empty drafts have
+  disabled Send, and the Codex example uses the Codex logo.
+- `15a` turn details: recorded accounts retain their existing metadata. Missing account
+  information displays an em dash, and the explanatory history note is removed.
+- Composer spacing uses a 48px minimum textarea height, 12px vertical textarea padding,
+  16px horizontal padding, and a footer with 8px side/bottom padding. Model and thinking-effort
+  selectors share 32px controls, 8px horizontal padding, and the same text and menu styles.
+  `ThinkingPicker.tsx` replaces the animated cycling label with explicit choices from
+  the existing model catalog. `16` and `16b` show its selected radio item and menu.
+  The canvas's `tw-shadow-color` variable records the 10% black default used by
+  Tailwind's small/medium shadow tokens.
+
 ### Turn details
 
 Board `15a`, `DS/TurnDetails`, maps to the Details popover in
@@ -59,12 +139,15 @@ revisions are historical metadata; credential values never appear in the panel.
   time deus.pen is the active Pen document. `46x` the ChatGPT/Cursor reference
   screenshots (PNGs in `references/automations/`, teardown notes in the captions).
 - `47a`…`47f` the full onboarding flow, in order: Welcome · Deus Cloud sign-in · Connect
-  GitHub · AI coding tools · Your Projects · Shape Deus with us. It has its own visual
-  language — pure black, a grain layer, white-on-white/10 surfaces, `text-white/50` copy —
-  and does **not** use the app tokens. Don't "fix" it to match the rest.
+  GitHub · Connect your AI tools · Your Projects · Shape Deus with us. `47g`…`47j` show
+  account checks, failed project discovery, failed completion and folder errors. It has its own visual
+  language — pure black, a grain layer and translucent white surfaces — using the
+  `onboarding-foreground` and `onboarding-contrast` tokens. These keep the same
+  dark presentation in both app themes.
   `StepIndicator` sits **above** the card (`pb-6`), not at the bottom of the screen, and
   step 0 doesn't render it at all. The active pip is `w-6`, steps already passed are
-  `w-1.5 bg-white/50`, and the ones still ahead `w-1.5 bg-white/20` — three states, not two.
+  `w-1.5 bg-onboarding-foreground/50`, and the ones still ahead
+  `w-1.5 bg-onboarding-foreground/20` — three states, not two.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environments · `57` Experimental · `58` Remote Access
@@ -75,13 +158,13 @@ Settings is the largest district in the file, so it has its own lane rather than
 the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
 (1,440 board + 120 gutter), four baselines:
 
-| Band | y     | Frames                                          |
-| ---- | ----- | ----------------------------------------------- |
-| 1    | 6400  | `50`…`58` — shipped sections                    |
-| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i` |
-| 3    | 8800  | `66a` `66b` — settings overlays                 |
-| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule        |
-| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`              |
+| Band | y     | Frames                                                     |
+| ---- | ----- | ---------------------------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections                               |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i`            |
+| 3    | 8800  | `66a` `66b` — overlays; `54b` states; `54e` local accounts |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule                   |
+| 4    | 10300 | `54a` `54c` `54d` `59` `59a`                               |
 
 Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
 board, so nothing unshipped reads as a tenth section. A board that is not built says so on
@@ -94,14 +177,15 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   opens the existing pairing dialog (`66`); its Copy Link and QR code include the pairing
   code. The link keeps that code through the browser redirect and targets the signed-in
   iOS pairing flow when the native app is installed and associated with the domain.
-- `54a`–`54d` and `59`/`59a` are a **proposal, not built** — the settings revamp, parked in
-  band 4. `54d` is the exception that had to be untangled first: it housed
+- `54a`, `54c` and `59`/`59a` are a **proposal, not built** — the settings revamp, parked in
+  band 4. `54b` has been updated to the implemented local account states and moved to band 3.
+  `54d` is the implemented cloud flow: it previously housed
   `DS/ProviderAccounts — connected`, `DS/ProviderDeviceLogin — waiting` and
   `DS/AuthBadge — unavailable`, and shipped board `54` instances the first of them. All
   three now live on board `25`, and `54d` renders them as instances, so the exploration can
   be moved or archived without breaking a shipped screen. `54a` is
-  the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
-  local status matrix. Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.
+  the proposed row-per-provider AI Providers section with a Local and a Cloud lane.
+  Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.
   `59` carries the system behind it — the `cell` row primitive
   (leading · trailing · below, hairline inset dividers, no card per row, controls sized to
   their content) and a regrouped nav — and `59a` applies it to General. The primitive is
@@ -121,8 +205,8 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   Names can be edited without replacing credentials or changing the default.
   Claude setup tokens do not expose a verified email; the name identifies the account.
   Board `54` puts cloud accounts before local CLI connections and removes the inert
-  local API-key inputs; `55` shows both provider defaults and links to AI Providers.
-  Hosted web exposes Account and AI Providers, without desktop CLI controls.
+  local API-key inputs; `55` shows cloud connection state and links to AI Providers, GitHub, and Environment.
+  Hosted web exposes Account, AI Providers, and Environment, without desktop CLI controls.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
@@ -315,8 +399,8 @@ image endpoint. Production loads owner avatars directly and uses a folder fallba
 ### The scales are bound, not typed
 
 Every `fontSize` and every `cornerRadius` in the file is a **variable reference**
-(`$text-sm`, `$radius-lg`), not a literal. Change `radius-lg` once and every button, row
-and tab follows; change `text-base` and the whole body scale moves. Don't type a number
+(`$text-sm`, `$radius-lg`), not a literal. Components share the existing scales;
+buttons do not introduce a separate radius system. Don't type a number
 where a token exists — if you need a value that isn't on the scale, that's a design
 decision worth making explicitly.
 

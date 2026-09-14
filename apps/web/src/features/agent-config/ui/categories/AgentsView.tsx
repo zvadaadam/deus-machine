@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 /**
  * Agents category view — fetches, displays, and manages CRUD for agent configs.
  *
@@ -21,6 +22,7 @@ import type { ConfigDisplayItem, ConfigScope, AgentItem } from "../../types";
 interface AgentsViewProps {
   repoPath?: string;
   repoName?: string;
+  toolbarAction?: ReactNode;
 }
 
 function toDisplayItems(items: AgentItem[], scope: ConfigScope): ConfigDisplayItem[] {
@@ -34,7 +36,7 @@ function toDisplayItems(items: AgentItem[], scope: ConfigScope): ConfigDisplayIt
   }));
 }
 
-export function AgentsView({ repoPath, repoName }: AgentsViewProps) {
+export function AgentsView({ repoPath, repoName, toolbarAction }: AgentsViewProps) {
   const globalQuery = useAgentConfigList<AgentItem[]>("agents", "global");
   const projectQuery = useAgentConfigList<AgentItem[]>("agents", "project", repoPath, {
     enabled: !!repoPath,
@@ -158,6 +160,7 @@ export function AgentsView({ repoPath, repoName }: AgentsViewProps) {
 
   return (
     <CategoryContentArea
+      toolbarAction={toolbarAction}
       categoryLabel="Agents"
       globalItems={globalItems}
       projectItems={projectItems}

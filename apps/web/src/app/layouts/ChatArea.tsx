@@ -28,7 +28,6 @@ interface ChatAreaProps {
   onSendAgentMessageHandlerChange: Dispatch<
     SetStateAction<((text: string) => Promise<void>) | null>
   >;
-  onCollapseChatPanel?: () => void;
 }
 
 export function ChatArea({
@@ -36,7 +35,6 @@ export function ChatArea({
   workspaceChatPanelRef,
   onCreatePRHandlerChange,
   onSendAgentMessageHandlerChange,
-  onCollapseChatPanel,
 }: ChatAreaProps) {
   const {
     tabs,
@@ -124,7 +122,6 @@ export function ChatArea({
         onTabReorder={handleTabReorder}
         closedTabs={closedTabs}
         onTabRestore={handleTabRestore}
-        onCollapseChatPanel={onCollapseChatPanel}
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

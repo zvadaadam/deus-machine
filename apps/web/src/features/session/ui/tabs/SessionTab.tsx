@@ -56,7 +56,7 @@ export function SessionTab({
       titleTabIndex={isActive ? 0 : -1}
       titleRef={tabRef}
       className={cn(
-        "max-w-[200px] min-w-[80px] text-base",
+        "max-w-[200px] min-w-[80px] text-sm",
         !isActive && isUnread && "text-text-secondary hover:text-text-secondary"
       )}
       {...closeProps}

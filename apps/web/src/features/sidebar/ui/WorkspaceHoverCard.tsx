@@ -201,7 +201,7 @@ export function WorkspaceHoverCard({
                 e.stopPropagation();
                 uiActions.openAutomations(automation.id);
               }}
-              className="bg-bg-raised text-text-secondary hover:text-text-primary text-2xs flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium transition-colors duration-150"
+              className="control-interaction bg-bg-raised text-text-secondary hover:text-text-primary text-2xs flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium"
             >
               <ClockFading className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">Automation · {automation.name}</span>

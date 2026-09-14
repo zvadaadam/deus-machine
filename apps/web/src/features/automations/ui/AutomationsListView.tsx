@@ -107,7 +107,7 @@ export function AutomationsListView({
                 type="button"
                 onClick={() => setFilter(f)}
                 className={cn(
-                  "h-7 rounded-full px-3 text-sm capitalize transition-colors duration-150",
+                  "control-interaction h-7 rounded-full px-3 text-sm capitalize",
                   filter === f
                     ? "bg-bg-selection text-text-primary font-medium"
                     : "text-text-tertiary hover:text-text-secondary"
@@ -270,7 +270,7 @@ export function RowMenu({
           type="button"
           aria-label="Automation actions"
           onClick={(e) => e.stopPropagation()}
-          className="text-text-muted hover:text-text-secondary flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150"
+          className="control-interaction text-text-muted hover:text-text-secondary flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
         >
           <Ellipsis className="h-4 w-4" />
         </button>

@@ -119,20 +119,32 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
   return (
     <div className="flex w-full max-w-lg flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-white">Your Projects</h2>
-        <p className="text-sm text-white/50">
-          Select projects to add to Deus, or browse for a folder.
-        </p>
+        <h2 className="text-onboarding-foreground text-2xl font-semibold">Your Projects</h2>
+        <p className="text-onboarding-foreground/50 text-sm">Select projects to add to Deus.</p>
       </div>
 
       {projectsQuery.isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-white/30" />
+          <Loader2 className="text-onboarding-foreground/30 h-5 w-5 animate-spin" />
+        </div>
+      ) : projectsQuery.isError ? (
+        <div role="alert" className="space-y-3 py-6 text-center">
+          <p className="text-onboarding-foreground/70 text-sm">
+            Couldn’t load recent projects. You can try again or continue setup.
+          </p>
+          <button
+            type="button"
+            onClick={() => void projectsQuery.refetch()}
+            disabled={projectsQuery.isFetching}
+            className="control-interaction bg-onboarding-foreground/10 text-onboarding-foreground rounded-lg px-4 py-2 text-sm"
+          >
+            Try again
+          </button>
         </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
-          <FolderOpen className="h-8 w-8 text-white/20" />
-          <p className="text-sm text-white/40">No recent projects found. Browse to add one.</p>
+          <FolderOpen className="text-onboarding-foreground/20 h-8 w-8" />
+          <p className="text-onboarding-foreground/40 text-sm">No recent projects found.</p>
         </div>
       ) : (
         <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
@@ -151,7 +163,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
         <button
           onClick={onBack}
           disabled={importing}
-          className="rounded-xl px-4 py-2 text-sm text-white/50 transition-colors hover:text-white disabled:opacity-50"
+          className="control-interaction text-onboarding-foreground/50 hover:text-onboarding-foreground rounded-lg px-4 py-2 text-sm"
         >
           Back
         </button>
@@ -161,7 +173,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
             <button
               onClick={handleBrowse}
               disabled={importing}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/5 disabled:opacity-50"
+              className="control-interaction border-onboarding-foreground/10 text-onboarding-foreground/80 hover:bg-onboarding-foreground/5 rounded-lg border px-4 py-2 text-sm font-normal"
             >
               Browse Folder
             </button>
@@ -170,7 +182,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
           <button
             onClick={handleOpenProjects}
             disabled={importing}
-            className="rounded-xl bg-white px-5 py-2 text-sm font-semibold text-black transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+            className="control-interaction bg-onboarding-foreground text-onboarding-contrast hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-lg px-5 py-2 text-sm font-medium disabled:cursor-not-allowed"
           >
             {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue"}
           </button>

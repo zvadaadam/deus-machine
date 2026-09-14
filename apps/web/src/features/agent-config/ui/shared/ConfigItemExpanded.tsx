@@ -42,16 +42,10 @@ export function ConfigItemExpanded({
         {children}
 
         <div className="flex items-center justify-end gap-2 pt-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-3 text-xs"
-            onClick={onCancel}
-            disabled={isSaving}
-          >
+          <Button variant="ghost" size="xs" className="px-3" onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button size="sm" className="h-7 px-3 text-xs" onClick={onSave} disabled={isSaving}>
+          <Button size="xs" className="px-3" onClick={onSave} disabled={isSaving}>
             {isSaving ? "Saving..." : saveLabel}
           </Button>
         </div>

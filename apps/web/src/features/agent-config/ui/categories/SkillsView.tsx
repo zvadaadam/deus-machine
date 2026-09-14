@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 /**
  * Skills category view — fetches, displays, and manages CRUD for skills.
  *
@@ -22,6 +23,7 @@ import type { ConfigDisplayItem, ConfigScope, SkillItem } from "../../types";
 interface SkillsViewProps {
   repoPath?: string;
   repoName?: string;
+  toolbarAction?: ReactNode;
 }
 
 function toDisplayItems(items: SkillItem[], scope: ConfigScope): ConfigDisplayItem[] {
@@ -35,7 +37,7 @@ function toDisplayItems(items: SkillItem[], scope: ConfigScope): ConfigDisplayIt
   }));
 }
 
-export function SkillsView({ repoPath, repoName }: SkillsViewProps) {
+export function SkillsView({ repoPath, repoName, toolbarAction }: SkillsViewProps) {
   const globalQuery = useAgentConfigList<SkillItem[]>("skills", "global");
   const projectQuery = useAgentConfigList<SkillItem[]>("skills", "project", repoPath, {
     enabled: !!repoPath,
@@ -138,6 +140,7 @@ export function SkillsView({ repoPath, repoName }: SkillsViewProps) {
 
   return (
     <CategoryContentArea
+      toolbarAction={toolbarAction}
       categoryLabel="Skills"
       globalItems={globalItems}
       projectItems={projectItems}

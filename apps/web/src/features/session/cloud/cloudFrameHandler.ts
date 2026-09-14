@@ -103,7 +103,8 @@ export function makeCloudFrameHandler(
       } else if (type === "session.usage") {
         // The composer's context gauge — mirror the Mac backend's projection
         // (persistUsage): count always, percent only when a size is known.
-        const { used, size } = frame as { used?: number; size?: number };
+        const { used } = frame as { used?: number };
+        const size = ctx.folds.get(sessionId)?.state.usage?.size;
         if (typeof used === "number") {
           patchSessionDetail(ctx.queryClient, sessionId, {
             context_token_count: used,
@@ -132,6 +133,13 @@ function backfillSnapshot(
   const { events, messageIds } = projectCloudSnapshot(snapshot);
   for (const event of events) route(event);
   const currentTurnId = snapshot.state.currentTurnId ?? null;
+  ctx.queryClient.setQueriesData<import("@shared/types/session").Session[]>(
+    { queryKey: ["sessions", "by-workspace"] },
+    (sessions) =>
+      sessions?.map((session) =>
+        session.id === sessionId ? { ...session, message_count: messageIds.length } : session
+      )
+  );
 
   // Commit the transcript ORDER. The fold APPENDS a message whose id it has not
   // seen, so if the user sent before this snapshot arrived, the optimistic

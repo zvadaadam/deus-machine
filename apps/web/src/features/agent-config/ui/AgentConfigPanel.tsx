@@ -6,7 +6,7 @@
  * Both scopes (project + global) are always visible; no scope filter.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { match } from "ts-pattern";
 import { AgentConfigSidebar } from "./AgentConfigSidebar";
 import { SkillsView } from "./categories/SkillsView";
@@ -19,15 +19,16 @@ import type { Workspace } from "@/shared/types";
 
 interface AgentConfigPanelProps {
   workspace?: Workspace;
+  toolbarAction?: ReactNode;
 }
 
-export function AgentConfigPanel({ workspace }: AgentConfigPanelProps) {
+export function AgentConfigPanel({ workspace, toolbarAction }: AgentConfigPanelProps) {
   const [activeCategory, setActiveCategory] = useState<AgentConfigCategory>("skills");
 
   const repoPath = workspace?.root_path;
   const repoName = workspace?.repo_name;
 
-  const categoryProps = { repoPath, repoName };
+  const categoryProps = { repoPath, repoName, toolbarAction };
 
   return (
     <div className="flex h-full min-h-0">

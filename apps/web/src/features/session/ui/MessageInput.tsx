@@ -54,12 +54,11 @@ import {
   DEFAULT_MODEL,
   getAgentHarnessForModel,
   getModelOption,
-  cycleThinkingLevel,
   getThinkingLevelsForModel,
   type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
-import { ThinkingIndicator } from "./ThinkingIndicator";
+import { ThinkingPicker } from "./ThinkingPicker";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -74,8 +73,7 @@ interface MessageInputProps {
   workspaceId?: string | null;
   /** Workspace root path for / slash-command discovery. */
   workspacePath?: string | null;
-  /** "cloud" disables plan mode — neither cloud lane carries a permission
-   *  mode (the sandbox sidecar runs bypass), so the toggle would be a lie. */
+  /** Cloud sessions hide plan mode because the sidecar runs bypass. */
   workspaceKind?: WorkspaceKind | null;
   /** Seed initial model on first mount if the store doesn't have this
    *  session yet. Ignored afterwards. */
@@ -350,14 +348,7 @@ export function MessageInput({
     }
   };
 
-  // Thinking cycle — derive supported levels from the selected model.
   const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
-  const showThinkingIndicator = modelThinkingLevels.length > 0;
-
-  const handleCycleThinking = () => {
-    const next = cycleThinkingLevel(thinkingLevel, agentHarness, modelId);
-    composer.setThinkingLevel(next);
-  };
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation =
@@ -372,13 +363,8 @@ export function MessageInput({
     if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
   };
 
-  // Codex has no plan mode; cloud has no permission-mode transport on either
-  // lane (Mac relay and direct both send none; the sidecar runs bypass) — an
-  // enabled toggle there would promise a policy nothing enforces.
-  const planModeDisabled =
-    agentHarness === "codex-sdk" ||
-    agentHarness === "codex-app-server" ||
-    workspaceKind === "cloud";
+  // Only local Claude sessions support plan mode; cloud sidecars run bypass.
+  const showPlanMode = isClaudeAgent && workspaceKind !== "cloud";
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>
@@ -394,7 +380,7 @@ export function MessageInput({
             <button
               type="button"
               onClick={handleSetupEnvironment}
-              className="text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-bg-muted flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-xs transition-[color,background-color,border-color,scale] duration-200 active:scale-[0.97]"
+              className="control-interaction text-text-muted hover:text-text-secondary border-border-subtle hover:border-border hover:bg-control-hover active:bg-control-pressed flex items-center gap-1.5 rounded-lg border border-dashed px-3 py-1.5 text-sm"
             >
               <Wrench className="h-3 w-3 shrink-0" />
               <span>Set up this project</span>
@@ -408,11 +394,7 @@ export function MessageInput({
 
       <InputGroup
         data-no-ring={true}
-        // Unified glass pill: translucent raised bg + backdrop blur + hairline
-        // ring + shadow. Reads as an elevated surface against the chat panel
-        // (which is ~#f5f5f4) and as a floating glass pill against a webpage
-        // in focus mode. Same styling in both contexts — no branching.
-        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-lg ring-1 backdrop-blur-xl"
+        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
       >
         <ComposerStagedContent
           skillMentions={skillMentions}
@@ -480,8 +462,10 @@ export function MessageInput({
           // the hint would promise pickers that come back empty.
           placeholder={
             isCloudDirectWebMode()
-              ? "Ask a follow-up ..."
-              : "Ask a follow-up ... (@ files, / skills)"
+              ? "Ask a follow-up…"
+              : isClaudeAgent
+                ? "Ask a follow-up… (@ files, / skills)"
+                : "Ask a follow-up… (@ files)"
           }
           disabled={sending}
           onKeyDown={handleKeyDown}
@@ -490,15 +474,12 @@ export function MessageInput({
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className={cn(
-            "placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto pt-4 pl-4",
-            className
-          )}
+          className="placeholder:text-placeholder max-h-48 min-h-12 overflow-y-auto px-4 py-3"
         />
 
         <InputGroupAddon
           align="block-end"
-          className="flex w-full items-center justify-between px-2"
+          className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 pt-0 pb-2"
         >
           <div className="flex items-center gap-0.5">
             <ModelPicker
@@ -508,17 +489,19 @@ export function MessageInput({
               onOpenNewTab={onOpenNewTab}
             />
 
-            {showThinkingIndicator && (
-              <ThinkingIndicator level={thinkingLevel} onClick={handleCycleThinking} />
+            {modelThinkingLevels.length > 0 && (
+              <ThinkingPicker
+                level={thinkingLevel}
+                levels={modelThinkingLevels}
+                onLevelChange={composer.setThinkingLevel}
+              />
             )}
-            <PlanModeToggle
-              enabled={planModeEnabled}
-              onClick={composer.togglePlanMode}
-              disabled={planModeDisabled}
-            />
+            {showPlanMode && (
+              <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {showCompactButton && (
               <Button
                 onClick={onCompact}
@@ -526,7 +509,7 @@ export function MessageInput({
                 title="Compact conversation"
                 variant="ghost"
                 size="sm"
-                className="text-warning rounded-lg border active:not-disabled:scale-[0.97]"
+                className="text-warning border"
               >
                 <Minimize2 className="size-3.5" />
                 <span className="text-xs font-normal">Compact</span>
@@ -545,7 +528,8 @@ export function MessageInput({
                 variant="default"
                 size="icon-sm"
                 title="Stop execution"
-                className="bg-foreground text-background hover:bg-foreground/90 rounded-full transition-[background-color,scale] duration-150 active:scale-[0.97]"
+                aria-label="Stop execution"
+                className="rounded-full"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </InputGroupButton>
@@ -558,7 +542,7 @@ export function MessageInput({
               size="icon-sm"
               title="Send message (Enter)"
               aria-label="Send message"
-              className="rounded-full transition-[background-color,color,scale] duration-150 active:not-disabled:scale-[0.97]"
+              className="rounded-full"
             >
               <ArrowUp className="h-4 w-4" />
             </InputGroupButton>

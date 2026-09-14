@@ -12,7 +12,7 @@
  * webview's history model. See lib/cloudPreview.ts for the v1 posture.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ExternalLink, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ interface CloudPreviewPanelProps {
    *  preview store, never from the row. */
   template: string;
   visible: boolean;
+  toolbarAction?: ReactNode;
 }
 
 function previewTab(workspaceId: string, url: string): BrowserTabState {
@@ -44,7 +45,12 @@ function previewTab(workspaceId: string, url: string): BrowserTabState {
   return { ...tab, title: "Preview", url, currentUrl: url, history: [url], historyIndex: 0 };
 }
 
-export function CloudPreviewPanel({ workspace, template, visible }: CloudPreviewPanelProps) {
+export function CloudPreviewPanel({
+  workspace,
+  template,
+  visible,
+  toolbarAction,
+}: CloudPreviewPanelProps) {
   const [port, setPort] = useState(() => readStoredPreviewPort(workspace.id));
   const [draft, setDraft] = useState(String(port));
   const [generation, setGeneration] = useState(0);
@@ -119,7 +125,7 @@ export function CloudPreviewPanel({ workspace, template, visible }: CloudPreview
               type="button"
               onClick={() => applyPort(quick)}
               className={cn(
-                "rounded-md px-1.5 py-0.5 text-[11px] transition-colors duration-150",
+                "control-interaction rounded-lg px-1.5 py-0.5 text-[11px]",
                 quick === port
                   ? "bg-bg-muted text-text-primary"
                   : "text-text-muted hover:text-text-secondary hover:bg-bg-muted/50"
@@ -134,8 +140,8 @@ export function CloudPreviewPanel({ workspace, template, visible }: CloudPreview
         </span>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 px-2"
+          size="xs"
+          className="px-2"
           onClick={() => setGeneration((g) => g + 1)}
           disabled={!url}
           aria-label="Reload preview"
@@ -144,14 +150,15 @@ export function CloudPreviewPanel({ workspace, template, visible }: CloudPreview
         </Button>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 px-2"
+          size="xs"
+          className="px-2"
           onClick={() => url && window.open(url, "_blank", "noopener")}
           disabled={!url}
           aria-label="Open preview in your browser"
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </Button>
+        {toolbarAction}
       </div>
       <div className="relative min-h-0 flex-1">
         {tab ? (

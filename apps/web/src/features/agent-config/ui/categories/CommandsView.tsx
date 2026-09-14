@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 /**
  * Commands category view — fetches, displays, and manages CRUD for commands.
  *
@@ -22,6 +23,7 @@ import type { ConfigDisplayItem, ConfigScope, CommandItem } from "../../types";
 interface CommandsViewProps {
   repoPath?: string;
   repoName?: string;
+  toolbarAction?: ReactNode;
 }
 
 function toDisplayItems(items: CommandItem[], scope: ConfigScope): ConfigDisplayItem[] {
@@ -35,7 +37,7 @@ function toDisplayItems(items: CommandItem[], scope: ConfigScope): ConfigDisplay
   }));
 }
 
-export function CommandsView({ repoPath, repoName }: CommandsViewProps) {
+export function CommandsView({ repoPath, repoName, toolbarAction }: CommandsViewProps) {
   const globalQuery = useAgentConfigList<CommandItem[]>("commands", "global");
   const projectQuery = useAgentConfigList<CommandItem[]>("commands", "project", repoPath, {
     enabled: !!repoPath,
@@ -138,6 +140,7 @@ export function CommandsView({ repoPath, repoName }: CommandsViewProps) {
 
   return (
     <CategoryContentArea
+      toolbarAction={toolbarAction}
       categoryLabel="Commands"
       globalItems={globalItems}
       projectItems={projectItems}

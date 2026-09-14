@@ -76,7 +76,7 @@ export function MentionChip({
         type="button"
         onClick={onRemove}
         aria-label={removeAriaLabel}
-        className="text-foreground/30 hover:text-foreground/60 ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors duration-200"
+        className="control-interaction text-foreground/30 hover:text-foreground/60 ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
       >
         <X className="h-3 w-3" />
       </button>

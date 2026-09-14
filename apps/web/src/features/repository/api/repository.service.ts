@@ -41,7 +41,12 @@ export const RepoService = {
    */
   add: async (rootPath: string): Promise<Repository> => {
     const result = await sendMutate<Repository>("addRepo", { root_path: rootPath });
-    if (!result.success) throw new Error(result.error || "Failed to add repository");
+    if (!result.success) {
+      throw Object.assign(new Error(result.error || "Failed to add repository"), {
+        status: result.status,
+        details: result.details,
+      });
+    }
     return result.data!;
   },
 

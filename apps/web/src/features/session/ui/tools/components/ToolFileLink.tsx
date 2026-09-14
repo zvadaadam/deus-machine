@@ -66,10 +66,9 @@ export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
         event.stopPropagation();
       }}
       className={cn(
-        "group/file-link inline-flex max-w-full min-w-0 items-center gap-1 rounded-md py-0.5 pr-1 pl-1.5 font-mono text-sm font-normal",
-        "border-primary/10 bg-accent-blue-surface text-primary/85 border transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out",
+        "control-interaction group/file-link inline-flex max-w-full min-w-0 items-center gap-1 rounded-lg py-0.5 pr-1 pl-1.5 font-mono text-sm font-normal",
+        "border-primary/10 bg-accent-blue-surface text-primary/85 border",
         "hover:border-primary/25 hover:bg-primary/12 hover:text-primary hover:shadow-xs",
-        "focus-visible:ring-ring/60 focus-visible:ring-2 focus-visible:outline-none",
         className
       )}
       title={`Open in ${targetLabel}`}

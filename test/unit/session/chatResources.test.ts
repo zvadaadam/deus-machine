@@ -40,6 +40,39 @@ function writePart(paths: string[], partIndex = 0): Part {
 }
 
 describe("chatResources", () => {
+  it("resolves used Markdown references without promoting unused or code-only definitions", () => {
+    const markdown =
+      "Open [preview][app] and [readme].\n\n[app]: http://localhost:5173\n[readme]: README.md\n[unused]: http://localhost:3000";
+    expect(extractSingleLocalUrl(markdown)).toBe("http://localhost:5173/");
+    expect(extractMarkdownLinkDestinations(markdown)).toEqual([
+      "http://localhost:5173",
+      "README.md",
+    ]);
+    expect(extractSingleLocalUrl("`[app]`\n\n[app]: http://localhost:5173")).toBeNull();
+    expect(
+      extractSingleLocalUrl("[app]\n\n[app]: http://localhost:5173\n[app]: http://localhost:3000")
+    ).toBe("http://localhost:5173/");
+  });
+
+  it.each([
+    "```sh\nopen http://localhost:3000\n```",
+    "~~~~md\nhttp://localhost:3000\n~~~\n[example](README.md)\n~~~~",
+    "````md\n```\nhttp://localhost:3000\n```\n````",
+    "Try ``http://localhost:3000 `example` `` later",
+    "    http://localhost:3000",
+  ])("does not promote code examples into resource cards: %s", (markdown) => {
+    expect(extractSingleLocalUrl(markdown)).toBeNull();
+    expect(extractChatResources({ parts: [textPart(markdown)], isComplete: true })).toEqual([]);
+  });
+
+  it("distinguishes a prose link from a code sample using Markdown semantics", () => {
+    expect(
+      extractSingleLocalUrl("`http://localhost:3000` then [open](http://localhost:5173)")
+    ).toBe("http://localhost:5173/");
+    expect(extractSingleLocalUrl("unmatched ` then http://localhost:5173")).toBe(
+      "http://localhost:5173/"
+    );
+  });
   it("turns markdown links to supported files into file resources", () => {
     const resources = extractChatResources({
       parts: [textPart("Open [README](README.md)")],

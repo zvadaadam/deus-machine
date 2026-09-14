@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { match } from "ts-pattern";
 import { AlertCircle, Check, ChevronDown, Loader2, Rocket, RotateCcw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { formatSimulatorRuntime } from "./simulatorDisplay";
 
 interface SimulatorContentHeaderProps {
   state: SimPhase;
+  toolbarAction?: ReactNode;
   simulators: SimulatorInfo[];
   selectedSim: SimulatorInfo | undefined;
   selectedUdid: string | null;
@@ -32,6 +34,7 @@ interface SimulatorContentHeaderProps {
 
 export function SimulatorContentHeader({
   state,
+  toolbarAction,
   simulators,
   selectedSim,
   selectedUdid,
@@ -54,7 +57,7 @@ export function SimulatorContentHeader({
             disabled={selectorDisabled}
             aria-label="Select simulator device"
             aria-haspopup="menu"
-            className="border-border-subtle/70 bg-bg-overlay/70 text-text-secondary hover:bg-bg-overlay hover:text-foreground focus-visible:ring-ring/40 flex h-7 max-w-[360px] items-center gap-1.5 rounded-lg border px-2 text-xs transition-[background-color,border-color,color,box-shadow] duration-150 ease-out focus-visible:ring-[3px] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45"
+            className="control-interaction border-border-subtle/70 bg-bg-overlay/70 text-text-secondary hover:bg-bg-overlay hover:text-foreground flex h-7 max-w-[360px] items-center gap-1.5 rounded-lg border px-2 text-sm"
           >
             <AppleLogoIcon className="h-[13px] w-[13px] shrink-0" />
             <span className="truncate">
@@ -116,19 +119,14 @@ export function SimulatorContentHeader({
       {match(state)
         .with({ phase: "idle" }, () => null)
         .with({ phase: "booting" }, () => (
-          <Button variant="outline" size="sm" disabled className="h-7 gap-1.5 px-2.5 text-xs">
+          <Button variant="outline" size="xs" disabled className="gap-1.5 px-2.5">
             <Loader2 className="h-3 w-3 animate-spin" />
             Booting
           </Button>
         ))
         .with({ phase: "streaming" }, () =>
           hasProject ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onBuildAndRun}
-              className="h-7 gap-1.5 px-2.5 text-xs"
-            >
+            <Button variant="outline" size="xs" onClick={onBuildAndRun} className="gap-1.5 px-2.5">
               <Rocket className="h-3 w-3" />
               Build & Run
             </Button>
@@ -136,12 +134,7 @@ export function SimulatorContentHeader({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex cursor-not-allowed">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled
-                    className="h-7 gap-1.5 px-2.5 text-xs opacity-40"
-                  >
+                  <Button variant="ghost" size="xs" disabled className="gap-1.5 px-2.5 opacity-40">
                     <Rocket className="h-3 w-3" />
                     Build & Run
                   </Button>
@@ -154,19 +147,14 @@ export function SimulatorContentHeader({
           ) : null
         )
         .with({ phase: "building" }, () => (
-          <Button variant="outline" size="sm" disabled className="h-7 gap-1.5 px-2.5 text-xs">
+          <Button variant="outline" size="xs" disabled className="gap-1.5 px-2.5">
             <Loader2 className="h-3 w-3 animate-spin" />
             Building
           </Button>
         ))
         .with({ phase: "running" }, () =>
           hasProject ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onBuildAndRun}
-              className="h-7 gap-1.5 px-2.5 text-xs"
-            >
+            <Button variant="outline" size="xs" onClick={onBuildAndRun} className="gap-1.5 px-2.5">
               <RotateCcw className="h-3 w-3" />
               Rebuild
             </Button>
@@ -174,12 +162,7 @@ export function SimulatorContentHeader({
         )
         .with({ phase: "error" }, (errorState) =>
           errorState.canRetry ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRetry}
-              className="h-7 gap-1.5 px-2.5 text-xs"
-            >
+            <Button variant="outline" size="xs" onClick={onRetry} className="gap-1.5 px-2.5">
               <RotateCcw className="h-3 w-3" />
               Retry
             </Button>
@@ -190,13 +173,14 @@ export function SimulatorContentHeader({
       {state.phase !== "idle" && state.phase !== "error" && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" onClick={onStop} className="h-7 w-7 p-0">
+            <Button variant="ghost" size="icon-xs" onClick={onStop}>
               <Square className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Stop simulator</TooltipContent>
         </Tooltip>
       )}
+      {toolbarAction}
     </div>
   );
 }

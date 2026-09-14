@@ -9,7 +9,7 @@
  * Data fetching is owned by each tab component, not by this router.
  */
 
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
@@ -30,6 +30,8 @@ import type { Workspace } from "@/shared/types";
 interface ContentViewProps {
   workspace: Workspace;
   activeTab: ContentTab;
+  panelVisible?: boolean;
+  toolbarAction?: ReactNode;
   /** Whether file watcher is active */
   isWatched?: boolean;
   /** Insert a code review prompt into the chat input */
@@ -42,6 +44,8 @@ interface ContentViewProps {
 export function ContentView({
   workspace,
   activeTab,
+  panelVisible = true,
+  toolbarAction,
   isWatched = false,
   onReview,
   simulatorAvailable,
@@ -140,14 +144,25 @@ export function ContentView({
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Lazy tabs — mounted only when active */}
       {activeTab === "changes" && (
-        <ChangesView workspace={workspace} isWatched={isWatched} onReview={onReview} />
+        <ChangesView
+          toolbarAction={toolbarAction}
+          workspace={workspace}
+          isWatched={isWatched}
+          onReview={onReview}
+        />
       )}
 
-      {activeTab === "files" && <FilesView workspace={workspace} isWatched={isWatched} />}
+      {activeTab === "files" && (
+        <FilesView toolbarAction={toolbarAction} workspace={workspace} isWatched={isWatched} />
+      )}
 
-      {activeTab === "config" && <AgentConfigPanel workspace={workspace} />}
+      {activeTab === "config" && (
+        <AgentConfigPanel toolbarAction={toolbarAction} workspace={workspace} />
+      )}
 
-      {activeTab === "apps" && <AppsLauncher workspaceId={workspace.id} />}
+      {activeTab === "apps" && (
+        <AppsLauncher toolbarAction={toolbarAction} workspaceId={workspace.id} />
+      )}
 
       {/* Persistent tabs — always mounted, hidden when inactive */}
       <div
@@ -157,27 +172,35 @@ export function ContentView({
         )}
       >
         {browserTarget && (
-          <BrowserPanel
-            workspaceId={browserTarget}
-            panelVisible={activeTab === "browser" && workspace.kind !== "cloud"}
-          />
+          <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+            <BrowserPanel
+              toolbarAction={toolbarAction}
+              workspaceId={browserTarget}
+              panelVisible={panelVisible && activeTab === "browser" && workspace.kind !== "cloud"}
+            />
+          </div>
         )}
         {workspace.kind === "cloud" && (
           <div className="absolute inset-0 z-10">
             {cloudStage ? (
               // Asleep / provisioning: nothing inside the sandbox can answer.
-              <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+              <CloudSandboxGate
+                toolbarAction={toolbarAction}
+                workspaceId={workspace.id}
+                stage={cloudStage}
+              />
             ) : cloudPreviewTemplate ? (
               // Keyed: switching between two cloud computers must not carry
               // the first one's port (and its draft) onto the second.
               <CloudPreviewPanel
+                toolbarAction={toolbarAction}
                 key={workspace.id}
                 workspace={workspace}
                 template={cloudPreviewTemplate}
-                visible={activeTab === "browser"}
+                visible={panelVisible && activeTab === "browser"}
               />
             ) : (
-              <CloudBrowserUnavailable />
+              <CloudBrowserUnavailable toolbarAction={toolbarAction} />
             )}
           </div>
         )}
@@ -196,12 +219,13 @@ export function ContentView({
           // never mix into the frozen local panel below. Only ever a SERVING
           // workspace's id (see the freeze above), so the shell never spawns
           // against a down computer.
-          <div className={cn("h-full w-full", workspace.kind !== "cloud" && "hidden")}>
+          <div className={cn("h-full w-full", !cloudServing && "hidden")}>
             <TerminalPanel
+              toolbarAction={toolbarAction}
               workspaceId={cloudTerminalId}
               workspacePath=""
               cloud
-              panelVisible={activeTab === "terminal" && cloudServing}
+              panelVisible={panelVisible && activeTab === "terminal" && cloudServing}
             />
           </div>
         )}
@@ -215,9 +239,10 @@ export function ContentView({
           // avoid.
           <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
             <TerminalPanel
+              toolbarAction={toolbarAction}
               workspaceId={terminalTarget.id}
               workspacePath={terminalTarget.path}
-              panelVisible={activeTab === "terminal" && workspace.kind !== "cloud"}
+              panelVisible={panelVisible && activeTab === "terminal" && workspace.kind !== "cloud"}
             />
           </div>
         )}
@@ -228,7 +253,11 @@ export function ContentView({
           // Enter" corpse / WebSocket error), and any other awake workspace's
           // shells stay live underneath the overlay.
           <div className="absolute inset-0 z-10">
-            <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+            <CloudSandboxGate
+              toolbarAction={toolbarAction}
+              workspaceId={workspace.id}
+              stage={cloudStage}
+            />
           </div>
         )}
       </div>
@@ -245,6 +274,7 @@ export function ContentView({
             // unmounted, under a cloud selection.
             <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
               <SimulatorPanel
+                toolbarAction={toolbarAction}
                 workspaceId={simulatorTarget.id}
                 workspacePath={simulatorTarget.path}
               />
@@ -255,14 +285,19 @@ export function ContentView({
               {cloudStage ? (
                 // Asleep / provisioning: the platform's device is reached
                 // through the sidecar, which isn't up.
-                <CloudSandboxGate workspaceId={workspace.id} stage={cloudStage} />
+                <CloudSandboxGate
+                  toolbarAction={toolbarAction}
+                  workspaceId={workspace.id}
+                  stage={cloudStage}
+                />
               ) : (
                 // Keyed: two cloud computers must not share a panel instance
                 // (its webview and screenshot bookkeeping are per device).
                 <CloudSimulatorPanel
+                  toolbarAction={toolbarAction}
                   key={workspace.id}
                   workspace={workspace}
-                  visible={activeTab === "simulator"}
+                  visible={panelVisible && activeTab === "simulator"}
                 />
               )}
             </div>

@@ -29,6 +29,8 @@ export interface CloudDirectResult {
   active: boolean;
   status: CloudDirectStatus;
   error: string | null;
+  retry: () => void;
+  retrying: boolean;
 }
 
 export function useCloudDirect(
@@ -70,6 +72,7 @@ export function useCloudDirect(
           providerSessionId: conn.provider_session_id,
           baseUrl: conn.base_url,
           token: conn.token,
+          tokenUpdatedAt: tokenQuery.dataUpdatedAt,
         }
       : null
   );
@@ -79,5 +82,9 @@ export function useCloudDirect(
     active: enabled && !!conn,
     status: direct.status,
     error: direct.error ?? tokenError,
+    retry: () => {
+      void tokenQuery.refetch({ cancelRefetch: false });
+    },
+    retrying: tokenQuery.isFetching,
   };
 }

@@ -6,7 +6,7 @@
  * Fetches its own file change data for marking modified files.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { FileText } from "lucide-react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useWorkspaceLayout } from "../hooks/useWorkspaceLayout";
@@ -21,9 +21,10 @@ interface FilesViewProps {
   workspace: Workspace;
   /** Whether file watcher is active — disables polling in useFileChanges */
   isWatched?: boolean;
+  toolbarAction?: ReactNode;
 }
 
-export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
+export function FilesView({ workspace, isWatched = false, toolbarAction }: FilesViewProps) {
   const { selectedFilePath, setSelectedFilePath } = useWorkspaceLayout(workspace.id);
   const pendingFileNavigation = useWorkspaceLayoutStore(
     (state) => state.layouts[workspace.id]?.pendingFileNavigation ?? null
@@ -57,7 +58,13 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
   );
 
   if (gateStage) {
-    return <CloudSandboxGate workspaceId={workspace.id} stage={gateStage} />;
+    return (
+      <CloudSandboxGate
+        workspaceId={workspace.id}
+        stage={gateStage}
+        toolbarAction={toolbarAction}
+      />
+    );
   }
 
   return (
@@ -87,6 +94,7 @@ export function FilesView({ workspace, isWatched = false }: FilesViewProps) {
           onRevealConsumed={handleRevealConsumed}
           filterMode="all"
           hideTabToggle
+          toolbarAction={toolbarAction}
         />
       </ResizablePanel>
     </ResizablePanelGroup>

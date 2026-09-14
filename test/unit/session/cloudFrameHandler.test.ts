@@ -29,8 +29,7 @@ function makeCtx(qc: QueryClient, sessionId: string): AgentStreamContext {
   };
 }
 
-/** Mac-closed mode has no HTTP page to fetch — start from an empty page (the
- *  hook seeds this before the socket opens). */
+/** An existing cached page, for tests that join a live stream. */
 function seedEmptyPage(qc: QueryClient, sessionId: string) {
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
     turns: [],
@@ -51,6 +50,28 @@ const textPart = (id: string, sessionId: string, messageId: string, text: string
 });
 
 describe("makeCloudFrameHandler", () => {
+  it("marks an empty direct snapshot as loaded without a backend query or prior cache", () => {
+    const sessionId = "empty-direct";
+    const qc = new QueryClient();
+    const onFrame = makeCloudFrameHandler(makeCtx(qc, sessionId), sessionId);
+
+    expect(qc.getQueryData(messagesKey(sessionId))).toBeUndefined();
+    onFrame({
+      type: "session.snapshot",
+      state: { sessionId, status: "ready", currentTurnId: null, turns: [] },
+      messages: [],
+      events: [],
+    });
+
+    expect(qc.getQueryData(messagesKey(sessionId))).toEqual({
+      messages: [],
+      turns: [],
+      compactions: [],
+      has_older: false,
+      has_newer: false,
+    });
+  });
+
   it("keeps a recovered outcome beside its original prompt before later turns", () => {
     const SESSION = "sess-outcome-order";
     const qc = new QueryClient();
@@ -649,8 +670,7 @@ describe("makeCloudFrameHandler", () => {
     expect(d.context_token_count).toBe(50_000);
     expect(d.context_used_percent).toBe(25);
 
-    // Size unknown → count moves, percent KEEPS its prior value (the Mac
-    // backend's COALESCE semantics, mirrored).
+    // Later frames omit size; the fold retains the established capacity.
     onFrame({ type: "session.usage", sessionId: SESSION, turnId: "t", used: 60_000, timestamp: T });
     d = qc.getQueryData<{ context_token_count: number; context_used_percent: number }>([
       "sessions",
@@ -658,7 +678,7 @@ describe("makeCloudFrameHandler", () => {
       SESSION,
     ])!;
     expect(d.context_token_count).toBe(60_000);
-    expect(d.context_used_percent).toBe(25);
+    expect(d.context_used_percent).toBe(30);
   });
 
   it("snapshot restates session facts: live turn → working, real message_count", () => {

@@ -9,6 +9,7 @@
 // internal request (not a remote HTTP call).
 
 import type { Hono } from "hono";
+import { AppError } from "../lib/errors";
 
 /** Hono app reference, set once at startup via setApp(). */
 let _app: Hono | null = null;
@@ -61,13 +62,15 @@ export async function delegateToRoute(
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
     let errorMessage: string;
+    let details: unknown;
     try {
       const parsed = JSON.parse(errorBody);
       errorMessage = parsed.error || parsed.message || `Route returned ${response.status}`;
+      details = parsed.details;
     } catch {
       errorMessage = errorBody || `Route returned ${response.status}`;
     }
-    throw new Error(errorMessage);
+    throw new AppError(response.status, errorMessage, details);
   }
 
   return response.json();

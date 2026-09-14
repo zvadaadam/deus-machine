@@ -65,7 +65,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
               : {}),
         }}
       >
-        <h1 className="text-[86px] leading-[0.88] font-extrabold tracking-tighter text-white">
+        <h1 className="text-onboarding-foreground text-[86px] leading-[0.88] font-extrabold tracking-tighter">
           <span className="relative inline-block">
             {/* Deus — fades out */}
             <span
@@ -88,7 +88,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
             </span>
           </span>
         </h1>
-        <span className="text-[86px] leading-[0.88] font-extrabold tracking-tighter text-white/20">
+        <span className="text-onboarding-foreground/20 text-[86px] leading-[0.88] font-extrabold tracking-tighter">
           machine.
         </span>
       </div>
@@ -103,7 +103,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       >
         <button
           onClick={handleRun}
-          className="rounded-full bg-white px-10 py-3.5 text-sm font-semibold text-black/90 hover:scale-[1.04] hover:opacity-95 active:scale-[0.97]"
+          className="control-interaction bg-onboarding-foreground text-onboarding-contrast/90 hover:bg-onboarding-foreground/90 active:bg-onboarding-foreground/80 rounded-full px-10 py-3.5 text-sm font-medium hover:opacity-95"
           style={{
             boxShadow: "0 0 30px -4px oklch(0.65 0.15 264 / 0.3), 0 2px 12px oklch(0 0 0 / 0.2)",
             transition: isAnimating

@@ -68,7 +68,7 @@ export function AppCard({ app, running, workspaceId }: AppCardProps) {
 
   const handleOpen = useCallback(() => {
     if (!running) return;
-    workspaceLayoutActions.setActiveContentTab(workspaceId, "browser");
+    workspaceLayoutActions.openContentTab(workspaceId, "browser");
     browserWindowActions.requestNewTab(workspaceId, running.url);
   }, [running, workspaceId]);
 

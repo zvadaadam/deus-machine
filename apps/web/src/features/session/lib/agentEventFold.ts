@@ -160,10 +160,6 @@ export function hydrateConversation(
   ctx.folds.set(sessionId, { state: conversation, dirtyMessages: new Set() });
   // An older HTTP page cannot overwrite a snapshot delivered on this stream.
   void ctx.queryClient.cancelQueries({ queryKey: messagesKey(sessionId), exact: true });
-  ctx.queryClient.setQueryData<PaginatedMessages>(
-    messagesKey(sessionId),
-    (old) => old ?? { messages: [], turns: [], compactions: [], has_older: false, has_newer: false }
-  );
   for (const entry of conversation.timeline) {
     if (entry.kind === "message") {
       writeMessage(ctx.queryClient, sessionId, conversation, entry.messageId, { seed: true });
@@ -606,7 +602,8 @@ export function patchWorkspaceSessionStatus(
  * `writeMessage` APPENDS a row it hasn't seen, so an optimistic prompt sent
  * before the snapshot lands ends up ahead of the reconstructed history — this
  * repairs that. The snapshot IS the full transcript, so it also stamps
- * `has_older: false`.
+ * `has_older: false`. An empty snapshot still establishes a loaded page;
+ * absence is reserved for history that has not arrived yet.
  *
  * Lives here with the other `messages`-cache writers (writeMessage,
  * writeTurn, writeCompaction) so this key has exactly one writer
@@ -618,7 +615,8 @@ export function commitTranscriptOrder(
   orderedIds: string[]
 ): void {
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
-    if (!old) return old;
+    if (!old)
+      return { messages: [], turns: [], compactions: [], has_older: false, has_newer: false };
     const rank = new Map(orderedIds.map((id, index) => [id, index]));
     const known = old.messages
       .filter((m) => rank.has(m.id))

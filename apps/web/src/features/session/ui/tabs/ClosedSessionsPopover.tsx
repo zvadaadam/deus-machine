@@ -33,10 +33,9 @@ export function ClosedSessionsPopover({ closedTabs, onTabRestore }: ClosedSessio
               type="button"
               aria-label="Restore closed session"
               className={cn(
-                "flex items-center justify-center",
+                "control-interaction flex items-center justify-center",
                 "h-7 shrink-0 rounded-lg px-1.5",
-                "text-text-disabled hover:text-text-muted",
-                "transition-colors duration-150"
+                "text-text-disabled hover:text-text-muted"
               )}
             >
               <History className="h-3.5 w-3.5" />
@@ -62,9 +61,8 @@ export function ClosedSessionsPopover({ closedTabs, onTabRestore }: ClosedSessio
                 setOpen(false);
               }}
               className={cn(
-                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5",
+                "control-interaction flex w-full items-center gap-2 rounded-lg px-2 py-1.5",
                 "text-text-secondary text-left text-base",
-                "transition-colors duration-150",
                 "hover:bg-bg-raised"
               )}
             >

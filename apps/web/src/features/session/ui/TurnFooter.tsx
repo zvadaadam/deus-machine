@@ -136,7 +136,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
             <button
               type="button"
               aria-label="View turn details"
-              className="hover:bg-foreground/5 hover:text-foreground focus-visible:ring-ring cursor-pointer rounded-sm px-1.5 py-0.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
+              className="control-interaction hover:bg-foreground/5 hover:text-foreground cursor-pointer rounded-lg px-1.5 py-0.5"
             >
               Details
             </button>
@@ -171,7 +171,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
                     ? "SDK-supplied API key"
                     : attribution.providerCredentialSource
                       ? "Personal account"
-                      : "Not recorded")}
+                      : "—")}
               </dd>
               {attribution.providerCredentialSource && (
                 <>
@@ -198,9 +198,6 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
                 </>
               )}
             </dl>
-            <p className="text-muted-foreground mt-3">
-              Recorded for this turn. Renaming or removing an account does not change this history.
-            </p>
           </PopoverContent>
         </Popover>
       )}
@@ -210,7 +207,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
           type="button"
           onClick={handleCopy}
           className={cn(
-            "hover:bg-foreground/5 focus-visible:ring-ring inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-[color,background-color] duration-150 ease-out focus-visible:ring-2 focus-visible:outline-none",
+            "control-interaction hover:bg-foreground/5 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-lg",
             copied
               ? "text-success hover:bg-success/10 hover:text-success"
               : "text-muted-foreground/55 hover:text-foreground"

@@ -1,10 +1,6 @@
-import { useState, useEffect, useRef } from "react";
 import { CheckCircle2, XCircle, Loader2, RefreshCw, ExternalLink, Terminal } from "lucide-react";
-import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { isElectronEnv } from "@/platform/electron/invoke";
 import {
   Select,
   SelectContent,
@@ -15,26 +11,23 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
-import type { AgentProviderAuth } from "../../types";
 import { readThinkingLevel } from "@shared/protocol";
 import { ProviderAccounts } from "./ProviderAccounts";
+import { readLocalProviderAuth, type LocalProviderAuthState } from "../../lib/local-provider-auth";
+import { openProviderLogin } from "../../lib/open-provider-login";
 
 function AuthBadge({
   auth,
   installed,
-  isLoading,
 }: {
-  auth: AgentProviderAuth | null | undefined;
+  auth: LocalProviderAuthState;
   installed: boolean | undefined;
-  isLoading: boolean;
 }) {
-  const isAuthenticated = auth && !auth.error && auth.accountInfo;
-
-  if (isLoading) {
+  if (auth.status === "checking") {
     return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
   }
 
-  if (installed === undefined) {
+  if (installed === undefined || auth.status === "failed") {
     return <span className="text-muted-foreground text-xs font-medium">Status unavailable</span>;
   }
 
@@ -48,7 +41,7 @@ function AuthBadge({
     );
   }
 
-  if (isAuthenticated) {
+  if (auth.status === "signed-in") {
     return (
       <div className="text-accent-green flex items-center gap-1.5">
         <CheckCircle2 className="size-4" />
@@ -65,17 +58,6 @@ function AuthBadge({
   );
 }
 
-function openInTerminal(command: string) {
-  if (isElectronEnv && window.electronAPI?.openTerminal) {
-    window.electronAPI.openTerminal(command);
-  } else {
-    navigator.clipboard.writeText(command);
-    toast.success("Copied to clipboard", {
-      description: `Run ${command} in your terminal`,
-    });
-  }
-}
-
 export function AISection({
   settings,
   saveSetting,
@@ -84,47 +66,14 @@ export function AISection({
   const agentAuthQuery = useAgentAuth(!cloudOnly);
   const authStatus =
     agentAuthQuery.isError || agentAuthQuery.data?.error ? undefined : agentAuthQuery.data;
-  const claudeAuth = authStatus?.claude;
+  const claudeAuth = readLocalProviderAuth(agentAuthQuery, "claude");
+  const codexAuthState = readLocalProviderAuth(agentAuthQuery, "codex");
   const codexAuth = authStatus?.codex;
   const agents = authStatus?.agents;
   const claudeInstalled = agents?.some((a) => a.type === "claude-code" && a.installed);
   const codexInstalled = agents?.some(
     (a) => (a.type === "codex-app-server" || a.type === "codex-sdk") && a.installed
   );
-  const claudeConnected = claudeAuth && !claudeAuth.error && claudeAuth.accountInfo;
-  const codexConnected = codexAuth && !codexAuth.error && codexAuth.accountInfo;
-
-  // Controlled state for custom endpoint with debounced save
-  const [customEndpoint, setCustomEndpoint] = useState(settings.custom_endpoint ?? "");
-
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestValueRef = useRef(customEndpoint);
-  const lastSavedRef = useRef(settings.custom_endpoint ?? "");
-
-  useEffect(() => {
-    setCustomEndpoint(settings.custom_endpoint ?? "");
-    lastSavedRef.current = settings.custom_endpoint ?? "";
-  }, [settings.custom_endpoint]);
-
-  const handleEndpointChange = (value: string) => {
-    setCustomEndpoint(value);
-    latestValueRef.current = value;
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      saveSetting("custom_endpoint", value);
-      lastSavedRef.current = value;
-    }, 500);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (latestValueRef.current !== lastSavedRef.current) {
-        saveSetting("custom_endpoint", latestValueRef.current);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (cloudOnly) {
     return (
@@ -146,7 +95,7 @@ export function AISection({
         <div>
           <h3 className="text-base font-semibold">AI Providers</h3>
           <p className="text-muted-foreground mt-1 text-base">
-            Manage AI provider connections, credentials, and model preferences.
+            Manage AI accounts and choose models in each conversation.
           </p>
         </div>
         <Button
@@ -174,7 +123,7 @@ export function AISection({
           <div>
             <p className="text-sm font-medium">Claude Code</p>
             <p className="text-muted-foreground text-sm">Anthropic</p>
-            {claudeConnected && claudeAuth?.accountInfo?.email && (
+            {claudeAuth.status === "signed-in" && claudeAuth.accountInfo.email && (
               <p className="text-muted-foreground mt-0.5 text-xs">
                 {claudeAuth.accountInfo.email}
                 {claudeAuth.accountInfo.orgName ? ` · ${claudeAuth.accountInfo.orgName}` : ""}
@@ -182,16 +131,12 @@ export function AISection({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <AuthBadge
-              auth={claudeAuth}
-              installed={claudeInstalled}
-              isLoading={agentAuthQuery.isLoading}
-            />
+            <AuthBadge auth={claudeAuth} installed={claudeInstalled} />
             {!agentAuthQuery.isLoading && claudeInstalled === false && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
+                size="xs"
+                className="gap-1.5"
                 onClick={() =>
                   window.open("https://docs.anthropic.com/en/docs/claude-code/overview", "_blank")
                 }
@@ -200,64 +145,63 @@ export function AISection({
                 <ExternalLink className="size-3" />
               </Button>
             )}
-            {!agentAuthQuery.isLoading && claudeInstalled && !claudeConnected && (
+            {claudeInstalled && claudeAuth.status === "signed-out" && (
               <Button
                 variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
-                onClick={() => openInTerminal("claude login")}
+                size="xs"
+                className="gap-1.5"
+                onClick={() => void openProviderLogin("claude")}
               >
                 <Terminal className="size-3" />
-                claude login
+                Sign in
               </Button>
             )}
           </div>
         </div>
+      </div>
 
+      {/* ================================================================
+          Codex
+          ================================================================ */}
+      <div className="border-border-subtle space-y-4 rounded-lg border p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Codex</p>
+            <p className="text-muted-foreground text-sm">OpenAI</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {!agentAuthQuery.isLoading && codexInstalled && codexAuth == null ? (
+              <span className="text-text-muted text-xs">Login managed by Codex</span>
+            ) : (
+              <AuthBadge auth={codexAuthState} installed={codexInstalled} />
+            )}
+            {!agentAuthQuery.isLoading && codexInstalled === false && (
+              <Button
+                variant="outline"
+                size="xs"
+                className="gap-1.5"
+                onClick={() => window.open("https://developers.openai.com/codex/cli", "_blank")}
+              >
+                Install
+                <ExternalLink className="size-3" />
+              </Button>
+            )}
+            {codexInstalled && codexAuthState.status === "signed-out" && (
+              <Button
+                variant="outline"
+                size="xs"
+                className="gap-1.5"
+                onClick={() => void openProviderLogin("codex")}
+              >
+                <Terminal className="size-3" />
+                Sign in
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="space-y-4">
         <Separator />
-
-        {/* Provider */}
-        <div className="space-y-2">
-          <Label htmlFor="provider" className="text-sm">
-            Provider
-          </Label>
-          <p className="text-muted-foreground text-sm">Where API requests are routed.</p>
-          <Select
-            value={settings.claude_provider ?? "anthropic"}
-            onValueChange={(value) => saveSetting("claude_provider", value)}
-          >
-            <SelectTrigger id="provider" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="anthropic">Anthropic (Official)</SelectItem>
-              <SelectItem value="custom">Custom Endpoint</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Model */}
-        <div className="space-y-2">
-          <Label htmlFor="model" className="text-sm">
-            Default model
-          </Label>
-          <p className="text-muted-foreground text-sm">The model used for new conversations.</p>
-          <Select
-            value={settings.claude_model ?? "claude-opus-4-7[1m]"}
-            onValueChange={(value) => saveSetting("claude_model", value)}
-          >
-            <SelectTrigger id="model" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="claude-opus-4-7[1m]">Claude Opus 4.7 1M</SelectItem>
-              <SelectItem value="claude-opus-4-7">Claude Opus 4.7</SelectItem>
-              <SelectItem value="claude-opus-4-6[1m]">Claude Opus 4.6 1M</SelectItem>
-              <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
-              <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
         {/* Default thinking level */}
         <div className="space-y-2">
@@ -281,70 +225,6 @@ export function AISection({
               <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-
-        {/* Custom endpoint (conditional) */}
-        {settings.claude_provider === "custom" && (
-          <div className="space-y-2">
-            <Label htmlFor="custom-endpoint" className="text-sm">
-              Custom endpoint URL
-            </Label>
-            <p className="text-muted-foreground text-sm">
-              The base URL for your custom Claude-compatible API.
-            </p>
-            <Input
-              id="custom-endpoint"
-              type="url"
-              placeholder="https://api.example.com/v1"
-              value={customEndpoint}
-              onChange={(e) => handleEndpointChange(e.target.value)}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ================================================================
-          Codex
-          ================================================================ */}
-      <div className="border-border-subtle space-y-4 rounded-lg border p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Codex</p>
-            <p className="text-muted-foreground text-sm">OpenAI</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!agentAuthQuery.isLoading && codexInstalled && codexAuth == null ? (
-              <span className="text-text-muted text-xs">Login managed by Codex</span>
-            ) : (
-              <AuthBadge
-                auth={codexAuth}
-                installed={codexInstalled}
-                isLoading={agentAuthQuery.isLoading}
-              />
-            )}
-            {!agentAuthQuery.isLoading && codexInstalled === false && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
-                onClick={() => window.open("https://developers.openai.com/codex/cli", "_blank")}
-              >
-                Install
-                <ExternalLink className="size-3" />
-              </Button>
-            )}
-            {!agentAuthQuery.isLoading && codexInstalled && !codexConnected && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
-                onClick={() => openInTerminal("codex login")}
-              >
-                <Terminal className="size-3" />
-                codex login
-              </Button>
-            )}
-          </div>
         </div>
       </div>
     </div>

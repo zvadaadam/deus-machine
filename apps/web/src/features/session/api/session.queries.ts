@@ -177,6 +177,7 @@ export function useMessages(sessionId: string | null) {
  * Combined hook for session + messages + status
  */
 export function useSessionWithMessages(sessionId: string | null) {
+  const queryClient = useQueryClient();
   const sessionQuery = useSession(sessionId);
   const messagesQuery = useMessages(sessionId);
 
@@ -194,6 +195,13 @@ export function useSessionWithMessages(sessionId: string | null) {
     sessionStatus: (sessionQuery.data?.status as SessionStatus) || "idle",
     loading: sessionQuery.isLoading || messagesQuery.isLoading,
     error: sessionQuery.error || messagesQuery.error,
+    // Invalidation respects disabled queries: cloud-direct history must never
+    // fall back to the desktop's REST projection, even on a manual retry.
+    retry: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(sessionId || "") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId || "") }),
+      ]),
   };
 }
 
@@ -476,11 +484,11 @@ export function useStopSession() {
         session_id: sessionId,
         agent_harness: session?.agent_harness,
       });
-      // Immediate invalidation for snappy UI feedback.
-      // Backend also pushes via WS q:invalidate. React Query deduplicates.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions.detail(sessionId),
-      });
+      // Direct sessions project their terminal state from the stream; a local
+      // detail fetch can overwrite it with a stale desktop row.
+      if (!isDirectSessionCached(queryClient, sessionId)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(sessionId) });
+      }
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.all,
       });
@@ -503,8 +511,6 @@ export function useCreateSession() {
         workspace_id: workspaceId,
         agent_harness: newSession?.agent_harness,
       });
-      // Immediate invalidation for snappy UI feedback.
-      // Backend also pushes via WS q:invalidate. React Query deduplicates.
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.all,
       });

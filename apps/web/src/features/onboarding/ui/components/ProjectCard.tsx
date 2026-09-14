@@ -24,31 +24,35 @@ export const ProjectCard = memo(function ProjectCard({
 
   return (
     <button
+      type="button"
+      aria-pressed={selected}
       onClick={handleClick}
       className={cn(
-        "group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors duration-200",
-        selected ? "bg-white/10" : "bg-white/[0.04] hover:bg-white/[0.07]"
+        "control-interaction group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left",
+        selected
+          ? "bg-onboarding-foreground/10"
+          : "bg-onboarding-foreground/[0.04] hover:bg-onboarding-foreground/[0.07]"
       )}
     >
       <div
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
-          selected ? "bg-white/15" : "bg-white/5"
+          selected ? "bg-onboarding-foreground/15" : "bg-onboarding-foreground/5"
         )}
       >
         {selected ? (
-          <Check className="h-4 w-4 text-white" />
+          <Check className="text-onboarding-foreground h-4 w-4" />
         ) : (
-          <FolderOpen className="h-4 w-4 text-white/40" />
+          <FolderOpen className="text-onboarding-foreground/40 h-4 w-4" />
         )}
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">{project.name}</p>
-        <p className="truncate text-xs text-white/40">{project.path}</p>
+        <p className="text-onboarding-foreground truncate text-sm font-medium">{project.name}</p>
+        <p className="text-onboarding-foreground/40 truncate text-xs">{project.path}</p>
       </div>
 
-      <span className="text-2xs shrink-0 rounded-md bg-white/5 px-2 py-0.5 font-medium tracking-wider text-white/30 uppercase">
+      <span className="text-2xs bg-onboarding-foreground/5 text-onboarding-foreground/30 shrink-0 rounded-md px-2 py-0.5 font-medium tracking-wider uppercase">
         {SOURCE_LABELS[project.source] || project.source}
       </span>
     </button>

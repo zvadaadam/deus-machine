@@ -6,15 +6,16 @@ import {
   GitBranch,
   GitPullRequest,
   Settings,
-  Bot,
   ArrowUpRight,
-  UserCircle,
   ClockFading,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
+import {
+  settingsNavigation,
+  isSettingsSectionAvailable,
+} from "@/features/settings/settings-navigation";
 
 export type CommandGroup = "workspace" | "project" | "navigation" | "settings";
 
@@ -40,11 +41,6 @@ export const GROUP_LABELS: Record<CommandGroup, string> = {
   settings: "Settings",
 };
 
-/**
- * Web-direct (deusmachine.ai driving cloud sessions with no desktop behind
- * it) has no Mac backend: workspace creation, project setup, automations and
- * every settings section but Account are dark there, so their commands hide.
- */
 const macBackendAvailable = () => !isCloudDirectWebMode();
 
 /**
@@ -135,52 +131,18 @@ export const staticCommands: CommandDefinition[] = [
     action: () => uiActions.openAutomations(),
   },
 
-  // --- Settings sections ---
-  {
-    id: "settings-account",
-    label: "Settings: Account",
-    icon: UserCircle,
-    group: "settings",
-    keywords: ["account", "deus cloud", "cloud", "auth", "login", "sign in"],
-    action: () => {
-      uiActions.openSettings();
-      uiActions.setActiveSettingsSection("account");
-    },
-  },
-  {
-    id: "settings-general",
-    label: "Settings: General",
-    icon: Settings,
-    group: "settings",
-    keywords: ["theme", "appearance", "name", "preferences"],
-    when: macBackendAvailable,
-    action: () => {
-      uiActions.openSettings();
-      uiActions.setActiveSettingsSection("general");
-    },
-  },
-  {
-    id: "settings-github",
-    label: "Settings: GitHub",
-    icon: GitHubIcon,
-    group: "settings",
-    keywords: ["github", "gh", "pull request", "pr", "branch", "auth", "login"],
-    when: macBackendAvailable,
-    action: () => {
-      uiActions.openSettings();
-      uiActions.setActiveSettingsSection("github");
-    },
-  },
-  {
-    id: "settings-ai",
-    label: "Settings: Providers",
-    icon: Bot,
-    group: "settings",
-    keywords: ["ai", "model", "claude", "anthropic", "codex", "openai", "api", "key", "provider"],
-    when: macBackendAvailable,
-    action: () => {
-      uiActions.openSettings();
-      uiActions.setActiveSettingsSection("ai");
-    },
-  },
+  ...settingsNavigation.map(
+    (section): CommandDefinition => ({
+      id: `settings-${section.id}`,
+      label: `Settings: ${section.label}`,
+      icon: section.icon,
+      group: "settings",
+      keywords: section.keywords,
+      when: () => isSettingsSectionAvailable(section),
+      action: () => {
+        uiActions.openSettings();
+        uiActions.setActiveSettingsSection(section.id);
+      },
+    })
+  ),
 ];

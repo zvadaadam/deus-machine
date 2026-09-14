@@ -178,7 +178,9 @@ Two things the file cannot render exactly, both documented on canvas: corners sh
 `corner-shape: superellipse(1.5)` with every radius token scaled ×1.25 (`md` = 10px, not
 8px) and Pencil can only draw circular arcs; and the system font stack (SF Pro Text / SF
 Mono) is substituted with Inter / Roboto Mono because Pencil carries only Google fonts.
-Use the scaled radius values — they are what ships.
+Use the scaled radius values — they are what ships in supporting browsers.
+Buttons reuse `radius-lg` (10px circular fallback, 12.5px continuous corners);
+circular controls retain `radius-full`. See `design/controls.md`.
 
 Working notes for the Pencil editor: set variables before nodes; the canvas has no
 autosave, so save with `osascript -e 'tell application "Pen" to activate' -e 'tell

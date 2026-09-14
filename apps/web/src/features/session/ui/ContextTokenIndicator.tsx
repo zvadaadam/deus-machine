@@ -18,6 +18,8 @@ export function ContextTokenIndicator({
   onCompact,
   className,
 }: ContextTokenIndicatorProps) {
+  if (contextTokenCount === 0 && contextUsedPercent === 0) return null;
+
   // Prefer DB percent (agent-server knows the model's real max), fallback to estimate
   const percentage =
     contextUsedPercent > 0
@@ -26,16 +28,7 @@ export function ContextTokenIndicator({
 
   const isHigh = percentage > 80;
   const canCompact = isHigh && !!onCompact;
-  const fillColor = isHigh ? "var(--primary)" : "var(--muted-foreground)";
-
-  const formattedCount =
-    contextTokenCount >= 1000
-      ? `${(contextTokenCount / 1000).toFixed(0)}k`
-      : String(contextTokenCount);
-
-  const tooltipText = canCompact
-    ? `Context ${percentage.toFixed(0)}% full — click to compact`
-    : `Context: ${contextTokenCount.toLocaleString()} tokens (${percentage.toFixed(1)}%)`;
+  const tooltipText = `Context: ${contextTokenCount.toLocaleString()} tokens (${percentage.toFixed(1)}%)${canCompact ? " — click to compact" : ""}`;
 
   return (
     <Tooltip delayDuration={200}>
@@ -45,12 +38,13 @@ export function ContextTokenIndicator({
           onClick={canCompact ? onCompact : undefined}
           aria-label={tooltipText}
           className={cn(
-            "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+            "control-interaction flex size-8 shrink-0 items-center justify-center rounded-lg",
+            isHigh ? "text-warning" : "text-muted-foreground",
             canCompact && "hover:bg-accent cursor-pointer",
             className
           )}
         >
-          <svg className="h-3.5 w-3.5 -rotate-90" viewBox="0 0 16 16">
+          <svg aria-hidden="true" className="size-3.5 shrink-0 -rotate-90" viewBox="0 0 16 16">
             <circle
               cx="8"
               cy="8"
@@ -65,18 +59,13 @@ export function ContextTokenIndicator({
               cy="8"
               r="6"
               fill="transparent"
-              stroke={fillColor}
+              stroke="currentColor"
               strokeWidth="2"
               strokeDasharray={`${(percentage / 100) * 37.7} 37.7`}
               strokeLinecap="round"
-              className="transition-[stroke-dasharray] duration-300"
+              className="transition-[stroke-dasharray] duration-300 motion-reduce:transition-none"
             />
           </svg>
-          {contextTokenCount > 0 && (
-            <span className="text-2xs text-muted-foreground absolute font-medium">
-              {formattedCount}
-            </span>
-          )}
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{tooltipText}</TooltipContent>

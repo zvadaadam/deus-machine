@@ -297,11 +297,11 @@ export async function spawnBackend(
   });
 }
 
-export function stopBackend(): void {
+export function stopBackend(): Promise<void> {
   isQuitting = true;
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-  void terminateBackend();
+  return terminateBackend();
 }

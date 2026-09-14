@@ -48,19 +48,14 @@ export function PlanApprovalOverlay({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 text-xs"
+              className="h-8 gap-1.5"
               onClick={onReject}
               aria-label="Reject plan"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
               Reject
             </Button>
-            <Button
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={onApprove}
-              aria-label="Approve plan"
-            >
+            <Button size="sm" className="h-8 gap-1.5" onClick={onApprove} aria-label="Approve plan">
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
               Approve
             </Button>

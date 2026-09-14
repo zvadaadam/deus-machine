@@ -84,9 +84,10 @@ function ModelOptionList({
                 type="button"
                 onClick={() => onSelect(option.value)}
                 className={cn(
-                  "flex w-full items-center rounded-lg transition-colors duration-100",
+                  "control-interaction flex w-full items-center rounded-lg",
                   "hover:bg-bg-raised/45",
-                  lg ? "gap-2.5 px-2 py-2.5 text-sm" : "gap-2 px-2 py-1.5 text-xs",
+                  "px-2 text-sm",
+                  lg ? "gap-2.5 py-2.5" : "gap-2 py-1.5",
                   isSelected ? "text-text-primary" : "text-text-secondary"
                 )}
               >
@@ -121,10 +122,10 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
     <button
       type="button"
       onClick={isMobile ? () => setOpen(true) : undefined}
-      className="text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
+      className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm"
     >
       <AgentLogo type={selectedOption?.agentHarness ?? "claude-code"} className="h-3 w-3" />
-      <span className="font-medium">{getModelLabel(model)}</span>
+      <span className="font-normal">{getModelLabel(model)}</span>
       <ChevronDown
         className={cn(
           "text-text-disabled size-3 transition-transform duration-200",
@@ -231,7 +232,7 @@ export function CloudToggle({
   const label = (
     <label
       className={cn(
-        "flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150 select-none",
+        "control-interaction flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm select-none",
         location === "cloud" ? "text-text-secondary" : "text-text-disabled hover:text-text-muted"
       )}
     >
@@ -289,7 +290,7 @@ export function BranchPickerButton({
     <BranchSelector repoId={repoId} currentBranch={displayBranch} onBranchSelect={onBranchSelect}>
       <button
         type="button"
-        className="text-text-disabled hover:text-text-muted flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors duration-150"
+        className="control-interaction text-text-disabled hover:text-text-muted flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm"
       >
         <GitBranch className="size-3 shrink-0" />
         <span className="max-w-[120px] truncate">{displayBranch}</span>

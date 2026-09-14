@@ -28,7 +28,7 @@ export function DeusRepositoryBanner({ onNewWorkspace, className }: DeusReposito
     >
       <div className="flex items-center gap-2">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-          <GitPullRequest className="text-primary/40 h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+          <GitPullRequest className="text-primary/40 h-3.5 w-3.5" aria-hidden />
         </span>
         <p className="text-2xs text-text-muted leading-[1.45]">
           This is the tool you&apos;re using.{" "}

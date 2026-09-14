@@ -133,7 +133,7 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
               <button
                 type="button"
                 onClick={() => setShowRawMarkdown((v) => !v)}
-                className="text-muted-foreground hover:text-foreground ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
+                className="control-interaction text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-lg"
                 title={showRawMarkdown ? "Show preview" : "Show raw markdown"}
                 aria-label={showRawMarkdown ? "Show preview" : "Show raw markdown"}
               >
@@ -146,7 +146,7 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
               <button
                 type="button"
                 onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
+                className="control-interaction text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-lg"
                 title={copied ? "Copied" : "Copy file content"}
                 aria-label="Copy file content"
               >
@@ -159,7 +159,7 @@ export function FileViewer({ workspaceId, filePath, onClose }: FileViewerProps) 
               <button
                 type="button"
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-200"
+                className="control-interaction text-muted-foreground hover:text-foreground flex h-5 w-5 items-center justify-center rounded-lg"
                 title="Close file preview"
                 aria-label="Close file preview"
               >

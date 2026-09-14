@@ -48,7 +48,7 @@ export function TemplatesView({
             type="button"
             aria-label="Back to automations"
             onClick={onBack}
-            className="text-text-secondary hover:bg-foreground/[0.04] flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-150"
+            className="control-interaction text-text-secondary hover:bg-foreground/[0.04] flex h-7 w-7 items-center justify-center rounded-lg"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -110,7 +110,7 @@ function CategoryChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-full px-3 text-sm transition-colors duration-150",
+        "control-interaction flex h-7 items-center gap-1.5 rounded-full px-3 text-sm",
         active
           ? "bg-bg-selection text-text-primary font-medium"
           : "text-text-tertiary hover:text-text-secondary"

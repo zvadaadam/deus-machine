@@ -132,7 +132,7 @@ export function useWorkspaceActions({
           // Open a new terminal tab running the task command (scoped to this
           // workspace so it can only run in its own repo)
           queueTerminalTask(selectedWorkspace.id, taskName, command);
-          // Switch to terminal tab (right panel is always visible now)
+          // Explicit navigation reveals the terminal if the workspace panel is hidden.
           setContentTab("terminal");
         })
         .catch((err) => {

@@ -269,7 +269,7 @@ export function Chat({
                 <div className="flex h-10 items-center justify-center">
                   <button
                     type="button"
-                    className="text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition-colors"
+                    className="control-interaction text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
                     onClick={onLoadOlder}
                     disabled={loadingOlder}
                   >
@@ -390,7 +390,7 @@ export function Chat({
                         <button
                           type="button"
                           onClick={onDismissContextLost}
-                          className="text-warning/50 hover:text-warning focus-visible:ring-ring -mr-1 shrink-0 rounded-md p-0.5 transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
+                          className="control-interaction text-warning/50 hover:text-warning -mr-1 shrink-0 rounded-lg p-0.5"
                           aria-label="Dismiss"
                         >
                           <X className="h-3.5 w-3.5" />
@@ -448,12 +448,7 @@ export function Chat({
                         {match(errorCategory)
                           .with("auth", () =>
                             onOpenLoginTerminal ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={onOpenLoginTerminal}
-                              >
+                              <Button variant="outline" size="xs" onClick={onOpenLoginTerminal}>
                                 <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
                                 Log in
                               </Button>
@@ -461,12 +456,7 @@ export function Chat({
                           )
                           .with("context_limit", () =>
                             retryInNewChat ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={retryInNewChat}
-                              >
+                              <Button variant="outline" size="xs" onClick={retryInNewChat}>
                                 <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
                                 New session
                               </Button>
@@ -474,48 +464,28 @@ export function Chat({
                           )
                           .with("rate_limit", () =>
                             retryInNewChat ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={retryInNewChat}
-                              >
+                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
                                 Retry in new chat
                               </Button>
                             ) : null
                           )
                           .with("network", () =>
                             retryInNewChat ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={retryInNewChat}
-                              >
+                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
                                 Retry in new chat
                               </Button>
                             ) : null
                           )
                           .with("process_exit", () =>
                             retryInNewChat ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={retryInNewChat}
-                              >
+                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
                                 Retry in new chat
                               </Button>
                             ) : null
                           )
                           .otherwise(() =>
                             retryInNewChat ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={retryInNewChat}
-                              >
+                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
                                 Retry in new chat
                               </Button>
                             ) : null

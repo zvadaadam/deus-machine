@@ -195,7 +195,7 @@ function AnimatedCheckmark({ reduced }: { reduced: boolean | null }) {
         animate={{ scale: 1 }}
         transition={reduced ? { duration: 0.1 } : { ...SPRING_OVERSHOOT, delay: 0.15 }}
       >
-        <Check className="text-success size-10" strokeWidth={2.5} />
+        <Check className="text-success size-10 stroke-[2.5]" />
       </m.div>
     </m.div>
   );

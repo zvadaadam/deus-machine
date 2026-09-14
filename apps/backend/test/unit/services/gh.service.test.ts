@@ -379,6 +379,35 @@ describe("runGh", () => {
 // ─── getPrStatus ─────────────────────────────────────────────────
 
 describe("getPrStatus", () => {
+  it("does not call GitHub for a local-only project", async () => {
+    mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: "main\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" });
+    mockGetGitRemoteUrl.mockResolvedValue(null);
+
+    expect(await getPrStatus("/workspace")).toEqual({
+      has_pr: false,
+      conclusive: false,
+      error: null,
+    });
+    expect(mockExecFileAsync.mock.calls.map(([command]) => command)).toEqual(["git", "git"]);
+  });
+
+  it("still lets gh resolve a custom-named remote", async () => {
+    mockGetGitRemoteUrl.mockResolvedValue(null);
+    mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: "main\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "github\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: "[]", stderr: "" });
+
+    expect(await getPrStatus("/workspace")).toMatchObject({
+      has_pr: false,
+      conclusive: true,
+      error: null,
+    });
+    expect(mockExecFileAsync.mock.calls[2][0]).toBe("gh");
+  });
+
   it("looks up the PR by workspace branch without author filtering", async () => {
     const pr = {
       number: 720,

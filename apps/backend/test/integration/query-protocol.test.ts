@@ -47,6 +47,9 @@ vi.mock("../../src/server", () => ({
 }));
 
 import fs from "fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { setApp } from "../../src/services/route-delegate";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
@@ -215,6 +218,7 @@ beforeAll(async () => {
   seedTestData();
 
   const created = createApp();
+  setApp(created.app);
   await new Promise<void>((resolve) => {
     server = serve({ fetch: created.app.fetch, port: 0, hostname: "127.0.0.1" }, (info) => {
       port = info.port;
@@ -733,6 +737,38 @@ describe("q:unsubscribe", () => {
 });
 
 describe("q:mutate → q:mutate_result", () => {
+  it("preserves repository conflict metadata through HTTP delegation and WebSocket", async () => {
+    const root = path.join(TEST_DIR, "existing-repo");
+    fs.mkdirSync(root, { recursive: true });
+    execFileSync("git", ["init", root], { stdio: "ignore" });
+    testDb
+      .prepare(
+        "INSERT INTO repositories (id, name, root_path, git_default_branch) VALUES (?, ?, ?, ?)"
+      )
+      .run("existing-repo", "existing", fs.realpathSync(root), "main");
+    const { ws } = await connectAndAuth();
+    try {
+      const result = await sendAndReceive(
+        ws,
+        {
+          type: "q:mutate",
+          id: "repo-conflict",
+          action: "addRepo",
+          params: { root_path: root },
+        },
+        "q:mutate_result"
+      );
+      expect(result).toMatchObject({
+        success: false,
+        status: 409,
+        details: { id: "existing-repo" },
+      });
+    } finally {
+      ws.close();
+      testDb.prepare("DELETE FROM repositories WHERE id = ?").run("existing-repo");
+    }
+  });
+
   it("archives a workspace", async () => {
     const { ws } = await connectAndAuth();
     try {

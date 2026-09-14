@@ -1,6 +1,6 @@
 /**
  * Shares auto-update state from AppContent to child components (e.g. Settings).
- * Avoids calling useAutoUpdate() twice (which would create duplicate polling).
+ * Keeps settings and the update toast on the same Electron state subscription.
  */
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";

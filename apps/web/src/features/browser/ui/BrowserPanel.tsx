@@ -43,7 +43,6 @@ import { BrowserTab } from "./BrowserTab";
 import { FocusModeOverlay } from "./FocusModeOverlay";
 import { InspectPromptOverlay } from "./InspectPromptOverlay";
 import { webviewManager, type Bounds } from "../webview-manager";
-import { useSidebar } from "@/components/ui";
 import type {
   BrowserTabState,
   BrowserTabHandle,
@@ -137,6 +136,7 @@ interface BrowserPanelProps {
    *
    *  Defaults true so out-of-tree callers (storybook, tests) still work. */
   panelVisible?: boolean;
+  toolbarAction?: ReactNode;
 }
 
 /** Load or create browser tabs for a workspace from persisted layout state */
@@ -182,7 +182,11 @@ function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
     }));
 }
 
-export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelProps) {
+export function BrowserPanel({
+  workspaceId,
+  panelVisible = true,
+  toolbarAction,
+}: BrowserPanelProps) {
   // --- Initialize tabs from persisted state or create a fresh empty tab ---
   const [{ tabs: initialTabs, activeTabId: initialActiveId }] = useState(() =>
     loadWorkspaceTabs(workspaceId)
@@ -200,100 +204,23 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   const activeSelectorActive = !!activeTab?.selectorActive;
 
-  // Focus mode — toggle lives in `browserWindowStore.focusModeByWorkspace`.
-  // When flipped ON, we stash the current layout and collapse chat + sidebar;
-  // flipped OFF, we restore. The ContentTabBar button drives this flag.
-  const focusMode = useBrowserWindowStore((s) =>
-    workspaceId ? (s.focusModeByWorkspace[workspaceId] ?? false) : false
+  // Workspace focus owns geometry. The browser only supplies its floating composer.
+  const expanded = useWorkspaceLayoutStore(
+    (s) => !!workspaceId && s.layouts[workspaceId]?.panelMode === "content"
   );
-
-  // Chat-panel collapsed state. The overlay composer appears whenever
-  // chat is collapsed AND we're on the Browser tab — the user either
-  // dragged the splitter to collapse or clicked the focus button. Either
-  // way, we give them the floating composer so they can keep chatting
-  // without a visible chat panel.
-  const chatCollapsed = useWorkspaceLayoutStore((s) =>
-    workspaceId ? (s.layouts[workspaceId]?.chatPanelCollapsed ?? false) : false
-  );
-  const showFocusOverlay = (focusMode || chatCollapsed) && panelVisible && !!workspaceId;
-  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
-  const previousLayoutRef = useRef<{ chatCollapsed: boolean; sidebarOpen: boolean } | null>(null);
-
-  // Hold the latest values in refs so the focus-mode side-effect doesn't
-  // re-fire just because `setSidebarOpen` or `sidebarOpen` changed identity
-  // (useSidebar re-memoises setOpen on every open flip, which used to
-  // reset focus mode mid-entry).
-  const setSidebarOpenRef = useRef(setSidebarOpen);
-  const sidebarOpenRef = useRef(sidebarOpen);
-  useEffect(() => {
-    setSidebarOpenRef.current = setSidebarOpen;
-    sidebarOpenRef.current = sidebarOpen;
-  });
-
-  // Apply / revert the layout changes when focus mode toggles.
-  useEffect(() => {
-    if (!workspaceId) return;
-    if (focusMode) {
-      if (!previousLayoutRef.current) {
-        const layout = workspaceLayoutActions.getLayout(workspaceId);
-        previousLayoutRef.current = {
-          chatCollapsed: layout.chatPanelCollapsed,
-          sidebarOpen: sidebarOpenRef.current,
-        };
-      }
-      workspaceLayoutActions.setChatPanelCollapsed(workspaceId, true);
-      setSidebarOpenRef.current(false);
-    } else if (previousLayoutRef.current) {
-      workspaceLayoutActions.setChatPanelCollapsed(
-        workspaceId,
-        previousLayoutRef.current.chatCollapsed
-      );
-      setSidebarOpenRef.current(previousLayoutRef.current.sidebarOpen);
-      previousLayoutRef.current = null;
-    }
-  }, [focusMode, workspaceId]);
-
-  // On workspace switch: exit focus mode (so the overlay doesn't follow the
-  // user to a different workspace) and restore the previous layout.
-  useEffect(() => {
-    return () => {
-      if (!workspaceId) return;
-      if (previousLayoutRef.current) {
-        workspaceLayoutActions.setChatPanelCollapsed(
-          workspaceId,
-          previousLayoutRef.current.chatCollapsed
-        );
-        setSidebarOpenRef.current(previousLayoutRef.current.sidebarOpen);
-        previousLayoutRef.current = null;
-      }
-      browserWindowActions.setFocusMode(workspaceId, false);
-    };
+  const showFocusOverlay = expanded && panelVisible && !!workspaceId;
+  const exitFocusMode = useCallback(() => {
+    if (workspaceId) workspaceLayoutActions.setPanelMode(workspaceId, "split");
   }, [workspaceId]);
 
-  // Esc exits focus mode unless inspect mode is currently consuming it.
   useEffect(() => {
-    if (!focusMode || !workspaceId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !activeSelectorActive) {
-        browserWindowActions.setFocusMode(workspaceId, false);
-      }
+    if (!showFocusOverlay) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !activeSelectorActive) exitFocusMode();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusMode, workspaceId, activeSelectorActive]);
-
-  // Auto-exit when the Browser content tab is no longer active — otherwise
-  // the portal-rendered overlay would keep floating over whatever tab the
-  // user switched to (Apps / Files / etc).
-  useEffect(() => {
-    if (!panelVisible && focusMode && workspaceId) {
-      browserWindowActions.setFocusMode(workspaceId, false);
-    }
-  }, [panelVisible, focusMode, workspaceId]);
-
-  const exitFocusMode = useCallback(() => {
-    if (workspaceId) browserWindowActions.setFocusMode(workspaceId, false);
-  }, [workspaceId]);
+  }, [showFocusOverlay, activeSelectorActive, exitFocusMode]);
 
   // Imperative handles per tab
   const tabRefs = useRef<Map<string, BrowserTabHandle>>(new Map());
@@ -995,7 +922,7 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
         onTabSelect={handleTabSelect}
         onTabClose={closeTab}
         onTabAdd={addTab}
-        workspaceId={workspaceId}
+        toolbarAction={toolbarAction}
       />
 
       {/* Navigation Bar — h-9 to align with chat tabs row.
@@ -1007,21 +934,21 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
           <IconTooltip label="Go back">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleGoBack}
               disabled={!activeTab || activeTab.loading || activeTab.historyIndex <= 0}
               aria-label="Go back"
             >
-              <ChevronLeft strokeWidth={1.75} className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
           </IconTooltip>
 
           <IconTooltip label="Go forward">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleGoForward}
               disabled={
                 !activeTab ||
@@ -1030,23 +957,20 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               }
               aria-label="Go forward"
             >
-              <ChevronRight strokeWidth={1.75} className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </IconTooltip>
 
           <IconTooltip label="Reload">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleReload}
               disabled={!activeTab || activeTab.loading || !activeTab.currentUrl}
               aria-label="Reload"
             >
-              <RotateCw
-                strokeWidth={1.75}
-                className={`h-3 w-3 ${activeTab?.loading ? "animate-spin" : ""}`}
-              />
+              <RotateCw className={`h-3 w-3 ${activeTab?.loading ? "animate-spin" : ""}`} />
             </Button>
           </IconTooltip>
 
@@ -1070,10 +994,10 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
                 <button
                   type="button"
                   onClick={handleOpenExternal}
-                  className="text-text-muted hover:text-text-secondary absolute right-1 flex h-5 w-5 items-center justify-center rounded opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100"
+                  className="control-interaction text-text-muted hover:text-text-secondary absolute right-1 flex h-5 w-5 items-center justify-center rounded-lg opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
                   aria-label="Open in external browser"
                 >
-                  <ArrowUpRight strokeWidth={1.75} className="h-3.5 w-3.5" />
+                  <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               </IconTooltip>
             )}
@@ -1105,27 +1029,27 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
           >
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleToggleSelector}
               disabled={!activeTab?.currentUrl}
               aria-pressed={activeTab?.selectorActive}
               aria-label={activeTab?.selectorActive ? "Exit inspect mode" : "Inspect an element"}
             >
-              <MousePointer2 strokeWidth={1.75} className="h-3.5 w-3.5" />
+              <MousePointer2 className="h-3.5 w-3.5" />
             </Button>
           </IconTooltip>
 
           <IconTooltip label="Screenshot to chat">
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleScreenshot}
               disabled={!activeTab?.currentUrl}
               aria-label="Screenshot to chat"
             >
-              <Camera strokeWidth={1.75} className="h-3.5 w-3.5" />
+              <Camera className="h-3.5 w-3.5" />
             </Button>
           </IconTooltip>
 
@@ -1134,8 +1058,8 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
           >
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleToggleMobileView}
               disabled={!activeTab?.currentUrl}
               aria-pressed={!!activeTab?.isMobileView}
@@ -1144,9 +1068,9 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               }
             >
               {activeTab?.isMobileView ? (
-                <Smartphone strokeWidth={1.75} className="h-3.5 w-3.5" />
+                <Smartphone className="h-3.5 w-3.5" />
               ) : (
-                <Monitor strokeWidth={1.75} className="h-3.5 w-3.5" />
+                <Monitor className="h-3.5 w-3.5" />
               )}
             </Button>
           </IconTooltip>
@@ -1156,15 +1080,15 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+                  size="icon-xs"
+                  className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
                   disabled={!activeTab?.currentUrl || !!cookieSyncing}
                   aria-label="Import cookies from browser"
                 >
                   {cookieSyncing ? (
-                    <Loader2 strokeWidth={1.75} className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Cookie strokeWidth={1.75} className="h-3.5 w-3.5" />
+                    <Cookie className="h-3.5 w-3.5" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
@@ -1228,14 +1152,14 @@ export function BrowserPanel({ workspaceId, panelVisible = true }: BrowserPanelP
           <IconTooltip label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}>
             <Button
               variant="ghost"
-              size="icon"
-              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary h-7 w-7 transition-colors duration-150 ease-out"
+              size="icon-xs"
+              className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
               onClick={handleToggleDevtools}
               disabled={!activeTab?.currentUrl}
               aria-pressed={activeTab?.devtoolsOpen}
               aria-label={activeTab?.devtoolsOpen ? "Close DevTools" : "Open DevTools"}
             >
-              <Terminal strokeWidth={1.75} className="h-3.5 w-3.5" />
+              <Terminal className="h-3.5 w-3.5" />
             </Button>
           </IconTooltip>
         </div>

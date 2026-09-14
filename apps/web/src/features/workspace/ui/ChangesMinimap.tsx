@@ -157,7 +157,7 @@ export function ChangesMinimap({
                 <button
                   type="button"
                   onClick={onPin}
-                  className="text-text-muted hover:text-text-secondary hover:bg-muted/50 ease flex h-5 w-5 items-center justify-center rounded-md transition-colors duration-150"
+                  className="control-interaction text-text-muted hover:text-text-secondary hover:bg-control-hover active:bg-control-pressed flex h-5 w-5 items-center justify-center rounded-lg"
                   title="Pin file tree open"
                 >
                   <PinIcon className="h-3 w-3" />

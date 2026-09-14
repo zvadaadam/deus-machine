@@ -48,18 +48,18 @@ afterEach(() => {
 
 describe("terminal command helpers", () => {
   it("quotes simple CLI commands for shell execution", () => {
-    expect(resolveTerminalCliCommand("claude login")).toBe("'claude' 'login'");
+    expect(resolveTerminalCliCommand("claude auth login")).toBe("'claude' 'auth' 'login'");
   });
 
   it("rejects shell metacharacters", () => {
-    expect(resolveTerminalCliCommand("claude login; rm -rf /")).toBeNull();
+    expect(resolveTerminalCliCommand("claude auth login; rm -rf /")).toBeNull();
   });
 
   it("uses bundled agent CLI paths in packaged runtime", () => {
     const claudePath = createBundledTool("claude");
     process.env.DEUS_PACKAGED = "1";
 
-    expect(resolveTerminalCliCommand("claude login")).toBe(`'${claudePath}' 'login'`);
+    expect(resolveTerminalCliCommand("claude auth login")).toBe(`'${claudePath}' 'auth' 'login'`);
   });
 
   it("uses bundled Codex CLI paths in packaged runtime", () => {
@@ -88,7 +88,7 @@ describe("terminal command helpers", () => {
     process.env.DEUS_BUNDLED_BIN_DIR = "/missing";
 
     expect(resolveTerminalCliCommand("codex login")).toBeNull();
-    expect(resolveTerminalCliCommand("claude login")).toBeNull();
+    expect(resolveTerminalCliCommand("claude auth login")).toBeNull();
     expect(resolveTerminalCliCommand("gh auth login")).toBeNull();
     expect(resolveTerminalCliCommand("rg search")).toBeNull();
   });

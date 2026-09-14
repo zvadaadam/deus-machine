@@ -413,7 +413,7 @@ function VideoModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur-sm transition-colors duration-150 hover:bg-black/60 hover:text-white"
+          className="control-interaction absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/80 backdrop-blur-sm hover:bg-black/60 hover:text-white"
           aria-label="Close player"
         >
           <X className="h-4 w-4" />
