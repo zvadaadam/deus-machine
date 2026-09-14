@@ -43,30 +43,33 @@ reasoning and stays open through completion and the next turn. Answer text, fail
 questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nested
 `PartsRenderer.tsx` share `PartBlock.tsx`; turn details and provider attribution are unchanged.
 
-#### Canvas synchronization follow-up (September 14)
+#### PR #383 canvas review (September 14)
 
-The live desktop and browser journey already include the changes below. Pencil MCP access
-to this worktree's document was verified on September 14; the canvas still differs from
-the implementation. The product owner chose to defer these canvas updates to the next
-design PR, an explicit exception to the same-PR design-sync rule for PR #383. This is
-documentation follow-up and does not affect app functionality. Do not treat these boards
-as synchronized:
+The canvas now includes the changes below from the implemented desktop and browser
+journey. Board `00a` indexes the screens for visual review. The product owner requested
+this synchronization in PR #383 after Pencil access was restored; it is no longer
+deferred. This pass updates the design document without changing application behavior.
 
 - `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
 - `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in
   and Check again. A failed account check offers retry; a successful check with no
   credentials offers Sign in. Local sign-in is separate from cloud accounts in AI Providers.
+  The obsolete Cursor Agent row is removed; `47g` shows the local account-check states.
 - `47e` Projects: discovery failure has Try again and Browse Folder; selected cards expose
-  their selection state. Folder errors appear through the shared notification host.
-- `47f` Finish: a failed save stays on this step with an error and retryable actions.
-- `54`/`54b` AI Providers: remove unused provider-routing, custom-endpoint and default-model
-  controls. Keep accounts, local sign-in and the working default-thinking setting. Local
-  account badges use the same checking, unavailable and signed-in states as onboarding.
-- The sidebar service badge names the affected provider (for example, “Claude: Degraded”);
-  its popover identifies the information as the provider's public service status.
-- The composer shows loading or a retryable history error before restoring the recorded
-  model. An unavailable history response must not silently select a different model. A
-  completed empty cloud snapshot enables the first prompt.
+  their selection state. `47h` shows discovery failure and `47j` shows the shared folder-error
+  notification. Browse Folder sits beside Continue in the footer.
+- `47f` Finish: Back, Skip and Clone & Continue match the app; `47i` shows a failed save
+  remaining on this step with an error and retryable actions.
+- `54`/`54e` AI Providers: unused provider-routing, custom-endpoint and default-model
+  controls are removed. Accounts, local sign-in and default thinking remain. `54e` is the
+  scrolled local section, so these controls can be reviewed without the cloud forms above.
+  `54b` now documents implemented local account states rather than proposed provider rows.
+- `22` public service status: the sidebar badge names the affected provider (for example,
+  “Claude: Degraded”). Its popover links to the providers' public status pages and contains
+  no account sign-in or installation controls.
+- `16a` conversation history: loading, retryable error and the restored composer are shown
+  together. An unavailable history response does not silently select a different model.
+  A completed empty cloud snapshot enables the first prompt.
 
 ### Turn details
 
@@ -101,7 +104,8 @@ revisions are historical metadata; credential values never appear in the panel.
   time deus.pen is the active Pen document. `46x` the ChatGPT/Cursor reference
   screenshots (PNGs in `references/automations/`, teardown notes in the captions).
 - `47a`…`47f` the full onboarding flow, in order: Welcome · Deus Cloud sign-in · Connect
-  GitHub · AI coding tools · Your Projects · Shape Deus with us. It has its own visual
+  GitHub · Connect your AI tools · Your Projects · Shape Deus with us. `47g`…`47j` show
+  account checks, failed project discovery, failed completion and folder errors. It has its own visual
   language — pure black, a grain layer, white-on-white/10 surfaces, `text-white/50` copy —
   and does **not** use the app tokens. Don't "fix" it to match the rest.
   `StepIndicator` sits **above** the card (`pb-6`), not at the bottom of the screen, and
@@ -117,13 +121,13 @@ Settings is the largest district in the file, so it has its own lane rather than
 the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
 (1,440 board + 120 gutter), four baselines:
 
-| Band | y     | Frames                                          |
-| ---- | ----- | ----------------------------------------------- |
-| 1    | 6400  | `50`…`58` — shipped sections                    |
-| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i` |
-| 3    | 8800  | `66a` `66b` — settings overlays                 |
-| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule        |
-| 4    | 10300 | `54a` `54b` `54c` `54d` `59` `59a`              |
+| Band | y     | Frames                                                     |
+| ---- | ----- | ---------------------------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections                               |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i`            |
+| 3    | 8800  | `66a` `66b` — overlays; `54b` states; `54e` local accounts |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule                   |
+| 4    | 10300 | `54a` `54c` `54d` `59` `59a`                               |
 
 Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
 board, so nothing unshipped reads as a tenth section. A board that is not built says so on
@@ -136,14 +140,15 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   opens the existing pairing dialog (`66`); its Copy Link and QR code include the pairing
   code. The link keeps that code through the browser redirect and targets the signed-in
   iOS pairing flow when the native app is installed and associated with the domain.
-- `54a`–`54d` and `59`/`59a` are a **proposal, not built** — the settings revamp, parked in
-  band 4. `54d` is the exception that had to be untangled first: it housed
+- `54a`, `54c` and `59`/`59a` are a **proposal, not built** — the settings revamp, parked in
+  band 4. `54b` has been updated to the implemented local account states and moved to band 3.
+  `54d` is the implemented cloud flow: it previously housed
   `DS/ProviderAccounts — connected`, `DS/ProviderDeviceLogin — waiting` and
   `DS/AuthBadge — unavailable`, and shipped board `54` instances the first of them. All
   three now live on board `25`, and `54d` renders them as instances, so the exploration can
   be moved or archived without breaking a shipped screen. `54a` is
-  the row-per-provider AI Providers section with a Local and a Cloud lane, `54b` its
-  local status matrix. Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.
+  the proposed row-per-provider AI Providers section with a Local and a Cloud lane.
+  Superseded cloud setup/state diagrams are removed from `22`, `54b`, and `54c`; `54d` is the current cloud flow.
   `59` carries the system behind it — the `cell` row primitive
   (leading · trailing · below, hairline inset dividers, no card per row, controls sized to
   their content) and a regrouped nav — and `59a` applies it to General. The primitive is
