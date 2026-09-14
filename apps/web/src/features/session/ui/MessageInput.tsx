@@ -74,8 +74,7 @@ interface MessageInputProps {
   workspaceId?: string | null;
   /** Workspace root path for / slash-command discovery. */
   workspacePath?: string | null;
-  /** "cloud" disables plan mode — neither cloud lane carries a permission
-   *  mode (the sandbox sidecar runs bypass), so the toggle would be a lie. */
+  /** Cloud sessions hide plan mode because the sidecar runs bypass. */
   workspaceKind?: WorkspaceKind | null;
   /** Seed initial model on first mount if the store doesn't have this
    *  session yet. Ignored afterwards. */
@@ -372,13 +371,8 @@ export function MessageInput({
     if (setupLocation) onSend(setupEnvironmentPrompt(setupLocation));
   };
 
-  // Codex has no plan mode; cloud has no permission-mode transport on either
-  // lane (Mac relay and direct both send none; the sidecar runs bypass) — an
-  // enabled toggle there would promise a policy nothing enforces.
-  const planModeDisabled =
-    agentHarness === "codex-sdk" ||
-    agentHarness === "codex-app-server" ||
-    workspaceKind === "cloud";
+  // Only local Claude sessions support plan mode; cloud sidecars run bypass.
+  const showPlanMode = isClaudeAgent && workspaceKind !== "cloud";
   return (
     <div className={cn("relative z-20 shrink-0 px-2 pb-2", className)}>
       <AnimatePresence initial={false}>
@@ -480,8 +474,10 @@ export function MessageInput({
           // the hint would promise pickers that come back empty.
           placeholder={
             isCloudDirectWebMode()
-              ? "Ask a follow-up ..."
-              : "Ask a follow-up ... (@ files, / skills)"
+              ? "Ask a follow-up…"
+              : isClaudeAgent
+                ? "Ask a follow-up… (@ files, / skills)"
+                : "Ask a follow-up… (@ files)"
           }
           disabled={sending}
           onKeyDown={handleKeyDown}
@@ -498,7 +494,7 @@ export function MessageInput({
 
         <InputGroupAddon
           align="block-end"
-          className="flex w-full items-center justify-between px-2"
+          className="flex w-full flex-wrap items-center justify-between px-2"
         >
           <div className="flex items-center gap-0.5">
             <ModelPicker
@@ -511,14 +507,12 @@ export function MessageInput({
             {showThinkingIndicator && (
               <ThinkingIndicator level={thinkingLevel} onClick={handleCycleThinking} />
             )}
-            <PlanModeToggle
-              enabled={planModeEnabled}
-              onClick={composer.togglePlanMode}
-              disabled={planModeDisabled}
-            />
+            {showPlanMode && (
+              <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {showCompactButton && (
               <Button
                 onClick={onCompact}
@@ -545,6 +539,7 @@ export function MessageInput({
                 variant="default"
                 size="icon-sm"
                 title="Stop execution"
+                aria-label="Stop execution"
                 className="bg-foreground text-background hover:bg-foreground/90 rounded-full transition-[background-color,scale] duration-150 active:scale-[0.97]"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />

@@ -48,7 +48,7 @@ questions, plans, and media stay visible outside it. `AssistantTurn.tsx` and nes
 The canvas now includes the changes below from the implemented desktop and browser
 journey. Board `00a` indexes the screens for visual review. The product owner requested
 this synchronization in PR #383 after Pencil access was restored; it is no longer
-deferred. This pass updates the design document without changing application behavior.
+deferred. The subsequent composer polish updates both the design and the app.
 
 - `47c` Connect GitHub: an authenticated user has one Continue action, without a duplicate Skip.
 - `47d` AI tools: “Connect your AI tools”, account status instead of binary paths, Sign in
@@ -70,6 +70,12 @@ deferred. This pass updates the design document without changing application beh
 - `16a` conversation history: loading, retryable error and the restored composer are shown
   together. An unavailable history response does not silently select a different model.
   A completed empty cloud snapshot enables the first prompt.
+- `16b` composer details: empty chats hide context usage; used context shows a ring beside
+  a percentage, with exact tokens in the tooltip. High usage uses the warning token and
+  retains its compact shortcut. Controls wrap together at narrow widths. Plan is shown
+  only for local Claude sessions, and the placeholder lists only supported pickers.
+  `DS/Composer` and the restored composer on `16a` share these states; empty drafts have
+  disabled Send, and the Codex example uses the Codex logo.
 
 ### Turn details
 
