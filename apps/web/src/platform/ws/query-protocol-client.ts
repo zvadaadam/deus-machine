@@ -20,7 +20,8 @@
 
 import { match } from "ts-pattern";
 import { resolveBackendEndpoints, isRelayMode } from "@/shared/config/backend.config";
-import { getStoredToken, signOut } from "@/features/auth";
+// Keep transport dependencies independent of auth screens and their hot updates.
+import { getStoredToken, signOut } from "@/features/auth/hooks/useAuth";
 import type { QueryResource, CommandName, QMutateResultFrame } from "@shared/types/query-protocol";
 
 // ---- Types ----

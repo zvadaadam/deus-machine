@@ -1,6 +1,7 @@
 import type { ErrorInfo } from "react";
 import * as Sentry from "@sentry/react";
-import { track } from "@/platform/analytics";
+// Avoid loading settings UI back into the WebSocket client through error reporting.
+import { track } from "@/platform/analytics/track";
 type ErrorContext = {
   source?: string;
   action?: string;
