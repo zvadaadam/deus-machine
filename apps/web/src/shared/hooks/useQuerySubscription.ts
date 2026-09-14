@@ -75,9 +75,9 @@ export function useQuerySubscription(
       resource,
       params,
       // onSnapshot: replace entire cache entry.
-      // Null data = subscription ack from delta-only resources (messages).
+      // Delta-only resources (messages) don't send a snapshot — they send
+      // q:subscribed instead and the HTTP queryFn supplies initial data.
       (data) => {
-        if (data === null) return;
         queryClientRef.current.setQueryData(queryKeyRef.current, data);
       },
       // onDelta: merge incremental updates (for list resources like messages)
