@@ -474,7 +474,7 @@ export function MessageInput({
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className="placeholder:text-placeholder max-h-48 min-h-10 overflow-y-auto px-4 py-3"
+          className="placeholder:text-placeholder max-h-48 min-h-12 overflow-y-auto px-4 py-3"
         />
 
         <InputGroupAddon

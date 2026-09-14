@@ -171,7 +171,7 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
                     ? "SDK-supplied API key"
                     : attribution.providerCredentialSource
                       ? "Personal account"
-                      : "Not recorded")}
+                      : "—")}
               </dd>
               {attribution.providerCredentialSource && (
                 <>
@@ -198,9 +198,6 @@ export const TurnFooter = memo(function TurnFooter({ messages, turn, startedAt }
                 </>
               )}
             </dl>
-            <p className="text-muted-foreground mt-3">
-              Recorded for this turn. Renaming or removing an account does not change this history.
-            </p>
           </PopoverContent>
         </Popover>
       )}

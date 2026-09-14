@@ -21144,6 +21144,7 @@
               "id": "Lwea6",
               "name": "Textarea",
               "width": "fill_container",
+              "height": 48,
               "layout": "vertical",
               "padding": [
                 12,
@@ -21309,13 +21310,10 @@
                       "type": "frame",
                       "id": "DjbsC",
                       "name": "Context usage",
+                      "width": 32,
                       "height": 32,
                       "cornerRadius": "$radius-lg",
-                      "gap": 6,
-                      "padding": [
-                        0,
-                        8
-                      ],
+                      "justifyContent": "center",
                       "alignItems": "center",
                       "children": [
                         {
@@ -21352,19 +21350,6 @@
                               "height": 14
                             }
                           ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "yxlLn",
-                          "name": "Percentage",
-                          "fill": "$text-muted",
-                          "textGrowth": "fixed-width",
-                          "width": 28,
-                          "content": "19%",
-                          "textAlign": "right",
-                          "fontFamily": "$font-sans",
-                          "fontSize": "$text-xs",
-                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -21430,7 +21415,7 @@
           "type": "text",
           "id": "m0qEW",
           "x": 32,
-          "y": 190,
+          "y": 202,
           "name": "composer at rest · 458 wide in a 40 % sessio",
           "fill": "$text-disabled",
           "content": "composer at rest · 458 wide in a 40 % session panel",
@@ -163384,20 +163369,53 @@
                   ]
                 }
               ]
-            },
-            {
-              "type": "text",
-              "id": "STngs",
-              "name": "History note",
-              "fill": "$text-muted",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Recorded for this turn. Renaming or removing an account does not change this history.",
-              "fontFamily": "$font-sans",
-              "fontSize": "$text-xs",
-              "fontWeight": "normal"
             }
           ]
+        },
+        {
+          "type": "text",
+          "id": "KsP0s",
+          "name": "Local account state label",
+          "fill": "$text-muted",
+          "content": "Local turn · account unavailable",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
+        },
+        {
+          "id": "OJb26",
+          "type": "ref",
+          "ref": "vSnj0",
+          "name": "Local turn details",
+          "width": 320,
+          "descendants": {
+            "Y1tzl": {
+              "content": "gpt-5.6-sol"
+            },
+            "bqwJh": {
+              "enabled": false,
+              "width": 296
+            },
+            "b6tRRY": {
+              "content": "—"
+            },
+            "NpXTs": {
+              "enabled": false,
+              "width": 296
+            },
+            "cqsJG": {
+              "enabled": false,
+              "width": 296
+            },
+            "yJbFI": {
+              "enabled": false,
+              "width": 296
+            },
+            "QPTtg": {
+              "enabled": false,
+              "width": 296
+            }
+          }
         }
       ]
     },
@@ -165905,9 +165923,6 @@
                 },
                 "DjbsC": {
                   "enabled": false
-                },
-                "yxlLn": {
-                  "content": "19%"
                 }
               }
             },
@@ -166832,7 +166847,7 @@
           "fill": "$text-muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Matched selectors, consistent text and spacing, and a quieter writing surface.",
+          "content": "Matched selectors, a little more writing room, and context details kept in the tooltip.",
           "lineHeight": 1.5,
           "fontFamily": "$font-sans",
           "fontSize": "$text-sm",
@@ -167011,7 +167026,7 @@
                   "fill": "$text-muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Percentage sits beside the ring. Hover or keyboard focus reveals the exact token count.",
+                  "content": "Context stays a quiet ring. Hover or keyboard focus reveals the percentage and exact token count.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -167057,10 +167072,6 @@
                     },
                     "x0TPdv": {
                       "sweepAngle": -324,
-                      "fill": "$warning"
-                    },
-                    "yxlLn": {
-                      "content": "90%",
                       "fill": "$warning"
                     },
                     "jnavX": {

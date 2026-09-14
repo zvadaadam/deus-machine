@@ -38,7 +38,7 @@ export function ContextTokenIndicator({
           onClick={canCompact ? onCompact : undefined}
           aria-label={tooltipText}
           className={cn(
-            "flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs tabular-nums",
+            "flex size-8 shrink-0 items-center justify-center rounded-lg",
             "focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none",
             isHigh ? "text-warning" : "text-muted-foreground",
             canCompact && "hover:bg-accent cursor-pointer",
@@ -67,7 +67,6 @@ export function ContextTokenIndicator({
               className="transition-[stroke-dasharray] duration-300 motion-reduce:transition-none"
             />
           </svg>
-          <span className="min-w-7 text-right">{percentage.toFixed(0)}%</span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{tooltipText}</TooltipContent>
