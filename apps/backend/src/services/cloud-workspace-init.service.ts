@@ -483,7 +483,7 @@ export async function getCloudSettingsStatus(): Promise<{
     })) {
       // Environment-scoped GitHub App mints expire; only an org-wide token
       // counts as the user's saved PAT.
-      if (secret.keyName.toLowerCase() === "github_token" && secret.appliesToAll !== false) {
+      if (secret.name.toLowerCase() === "github_token" && secret.appliesToAll !== false) {
         hasGithubToken = true;
         break;
       }
@@ -755,7 +755,7 @@ async function refreshEnvironmentGithubToken(
     // couldn't.
     const keepUnknown = !mint.definitive;
     for await (const secret of agntListSecrets({ baseUrl, apiKey })) {
-      if (secret.keyName.toLowerCase() !== "github_token") continue;
+      if (secret.name.toLowerCase() !== "github_token") continue;
       if (secret.appliesToAll !== false) continue;
       // MUST be linked to the environment we are refreshing. Deleting the
       // first non-global github_token in the org would destroy a DIFFERENT
