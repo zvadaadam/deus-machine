@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { native } from "@/platform";
+import type { PendingExternalWindow } from "@/platform/native/window";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
@@ -83,6 +84,20 @@ export function SlackSection() {
 
 function SlackSettings({ accountId }: { accountId: string }) {
   const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
+  const [unsaved, setUnsaved] = useState<ReadonlySet<string>>(() => new Set());
+  const markUnsaved = useCallback((environmentId: string, dirty: boolean) => {
+    setUnsaved((current) => {
+      if (current.has(environmentId) === dirty) return current;
+      const next = new Set(current);
+      if (dirty) next.add(environmentId);
+      else next.delete(environmentId);
+      return next;
+    });
+  }, []);
+  function selectOrganization(id: string) {
+    if (unsaved.size > 0 && !window.confirm("Discard unsaved repository descriptions?")) return;
+    setSelectedOrg(id);
+  }
   const organizations = useQuery({
     queryKey: queryKeys.settings.environments.organizations(accountId),
     queryFn: ({ signal }) => listSecretOrganizations(signal),
@@ -105,7 +120,7 @@ function SlackSettings({ accountId }: { accountId: string }) {
           </p>
         </div>
         {(organizations.data?.items.length ?? 0) > 1 && (
-          <Select value={orgId ?? ""} onValueChange={setSelectedOrg}>
+          <Select value={orgId ?? ""} onValueChange={selectOrganization}>
             <SelectTrigger aria-label="Slack organization" className="w-auto max-w-full">
               <SelectValue />
             </SelectTrigger>
@@ -135,7 +150,11 @@ function SlackSettings({ accountId }: { accountId: string }) {
         <>
           <WorkspaceCard accountId={accountId} orgId={orgId} />
           <CompanyAccountCard accountId={accountId} orgId={orgId} />
-          <SlackRepositoriesCard accountId={accountId} orgId={orgId} />
+          <SlackRepositoriesCard
+            accountId={accountId}
+            orgId={orgId}
+            onUnsavedChange={markUnsaved}
+          />
         </>
       )}
     </div>
@@ -154,9 +173,15 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
     retry: false,
   });
   const connect = useMutation({
-    mutationFn: async () => {
-      const result = await getSlackInstallUrl(orgId, new AbortController().signal);
-      await native.window.openExternal(result.url);
+    // The tab is reserved in the click itself: a browser blocks one opened after the request.
+    mutationFn: async (tab: PendingExternalWindow) => {
+      try {
+        const result = await getSlackInstallUrl(orgId, new AbortController().signal);
+        await tab.open(result.url);
+      } catch (error) {
+        tab.cancel();
+        throw error;
+      }
     },
     onSuccess: () => toast.info("Approve Deus in Slack, then come back to Settings"),
     onError: (error) => toast.error(error instanceof Error ? error.message : "Couldn't open Slack"),
@@ -205,7 +230,11 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
           <p className="text-text-muted text-sm">
             You&apos;ll confirm in your browser, then approve Deus in Slack.
           </p>
-          <Button size="sm" onClick={() => connect.mutate()} disabled={connect.isPending}>
+          <Button
+            size="sm"
+            onClick={() => connect.mutate(native.window.openExternalPending())}
+            disabled={connect.isPending}
+          >
             {connect.isPending ? "Opening…" : "Connect Slack"}
           </Button>
         </div>
@@ -235,7 +264,7 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => connect.mutate()}
+            onClick={() => connect.mutate(native.window.openExternalPending())}
             disabled={connect.isPending}
           >
             {connect.isPending ? "Opening…" : "Connect another workspace"}
@@ -393,7 +422,15 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
   );
 }
 
-function SlackRepositoriesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
+function SlackRepositoriesCard({
+  accountId,
+  orgId,
+  onUnsavedChange,
+}: {
+  accountId: string;
+  orgId: string;
+  onUnsavedChange: (environmentId: string, dirty: boolean) => void;
+}) {
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
@@ -436,6 +473,7 @@ function SlackRepositoriesCard({ accountId, orgId }: { accountId: string; orgId:
               orgId={orgId}
               environment={environment}
               canEdit={settings.data.canManageShared}
+              onUnsavedChange={onUnsavedChange}
             />
           ))}
         </div>
@@ -448,10 +486,12 @@ function DescriptionRow({
   orgId,
   environment,
   canEdit,
+  onUnsavedChange,
 }: {
   orgId: string;
   environment: { id: string; name: string; repo: string | null; description: string | null };
   canEdit: boolean;
+  onUnsavedChange: (environmentId: string, dirty: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState(environment.description ?? "");
@@ -474,6 +514,10 @@ function DescriptionRow({
   const current = environment.description ?? "";
   const trimmed = value.trim();
   const changed = trimmed !== current;
+  useEffect(() => {
+    onUnsavedChange(environment.id, changed);
+    return () => onUnsavedChange(environment.id, false);
+  }, [environment.id, changed, onUnsavedChange]);
 
   return (
     <div className="space-y-3 py-4">

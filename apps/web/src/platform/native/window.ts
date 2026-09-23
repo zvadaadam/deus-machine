@@ -32,6 +32,40 @@ export async function openExternal(url: string): Promise<void> {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+/** A tab opened during a click, for a URL a request is still fetching. */
+export interface PendingExternalWindow {
+  open(url: string): Promise<void>;
+  cancel(): void;
+}
+
+/**
+ * `openExternal` for a URL the click has to fetch first. A browser allows a
+ * new tab only while it handles the click, so the tab opens now, blank, and
+ * goes to the URL when `open` gets it; call this synchronously in the click
+ * handler. The desktop app opens URLs in the system browser and reserves none.
+ */
+export function openExternalPending(): PendingExternalWindow {
+  if (window.electronAPI?.openExternal || capabilities.ipcInvoke) {
+    return { open: openExternal, cancel: () => {} };
+  }
+
+  const tab = window.open("about:blank", "_blank");
+  // What the tab loads must not reach back into this window.
+  if (tab) tab.opener = null;
+  return {
+    async open(url) {
+      if (!isHttpUrl(url)) {
+        tab?.close();
+        return;
+      }
+      // Blocked even during the click: go there in this window, not nowhere.
+      if (!tab) window.location.assign(url);
+      else if (!tab.closed) tab.location.replace(url);
+    },
+    cancel: () => tab?.close(),
+  };
+}
+
 function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
