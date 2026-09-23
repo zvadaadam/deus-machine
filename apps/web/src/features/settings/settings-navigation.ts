@@ -1,6 +1,7 @@
 import type { ComponentType, SVGAttributes } from "react";
 import { Bot, Box, Chrome, Cloud, FlaskConical, Globe, Settings2, UserCircle } from "lucide-react";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
+import { SlackIcon } from "@/shared/components/icons/SlackIcon";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import type { SettingsSection } from "@shared/types/settings";
@@ -57,6 +58,13 @@ export const settingsNavigation: SettingsNavigationItem[] = [
     icon: Box,
     cloudDirect: true,
     keywords: ["repository", "setup", "run", "script", "secrets", "variables"],
+  },
+  {
+    id: "slack",
+    label: "Slack",
+    icon: SlackIcon,
+    cloudDirect: true,
+    keywords: ["chat", "integration", "mention", "thread", "bot", "channel"],
   },
   {
     id: "experimental",

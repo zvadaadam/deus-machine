@@ -26,6 +26,7 @@ describe("settings navigation", () => {
       "account",
       "ai",
       "environment",
+      "slack",
     ]);
     expect(resolveSettingsSection("general").id).toBe("account");
     expect(resolveSettingsSection("ai").id).toBe("ai");
@@ -33,7 +34,7 @@ describe("settings navigation", () => {
       staticCommands
         .filter((command) => command.group === "settings" && command.when?.())
         .map((command) => command.id)
-    ).toEqual(["settings-account", "settings-ai", "settings-environment"]);
+    ).toEqual(["settings-account", "settings-ai", "settings-environment", "settings-slack"]);
   });
 
   it("keeps desktop sections and gates browser settings by the actual capability", () => {
