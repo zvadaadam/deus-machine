@@ -149,7 +149,8 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
     queryKey: queryKeys.settings.slack.installations(accountId, orgId),
     queryFn: ({ signal }) => listSlackInstallations(orgId, signal),
     staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    // "always": returning from Slack's consent within staleTime must still show the result.
+    refetchOnWindowFocus: "always",
     retry: false,
   });
   const connect = useMutation({
@@ -344,6 +345,11 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
           message={organization.error.message}
           retry={() => void organization.refetch()}
         />
+      ) : !organization.data?.companyModelAccount && providerAccounts.isError ? (
+        <SettingsError
+          message={providerAccounts.error.message}
+          retry={() => void providerAccounts.refetch()}
+        />
       ) : organization.isPending || providerAccounts.isLoading ? (
         <p role="status" className="text-text-muted text-sm">
           Loading shared account…
@@ -457,7 +463,8 @@ function DescriptionRow({
         description,
         new AbortController().signal
       ),
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      setValue(saved.description ?? "");
       toast.success("Repository description saved");
       await queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all });
     },
@@ -466,7 +473,7 @@ function DescriptionRow({
   });
   const current = environment.description ?? "";
   const trimmed = value.trim();
-  const changed = value !== current;
+  const changed = trimmed !== current;
 
   return (
     <div className="space-y-3 py-4">

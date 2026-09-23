@@ -6,6 +6,7 @@ import { SlackSection } from "@/features/settings/ui/sections/SlackSection";
 import { queryKeys } from "@/shared/api/queryKeys";
 
 const providerState = vi.hoisted(() => ({
+  error: null as Error | null,
   data: {} as {
     providers: Array<{
       id: "claude";
@@ -67,9 +68,12 @@ vi.mock("@/features/settings/api/provider-accounts.queries", () => ({
   PROVIDER_ACCOUNTS_QUERY_KEY: ["settings", "provider-accounts"],
   useProviderAccounts: () => ({
     accountId: "account",
-    data: providerState.data,
+    data: providerState.error ? undefined : providerState.data,
     isLoading: false,
     isFetching: false,
+    isError: providerState.error !== null,
+    error: providerState.error,
+    refetch: vi.fn(),
   }),
 }));
 
@@ -109,6 +113,7 @@ function seedBase() {
 beforeEach(() => {
   client = new QueryClient();
   providerState.data = defaultProviderData();
+  providerState.error = null;
   seedBase();
 });
 
@@ -193,6 +198,17 @@ it("guides members without a Claude account to AI settings", () => {
   const html = render();
   expect(html).toContain("Connect a Claude account first");
   expect(html).toContain("Open AI settings");
+});
+
+it("shows a failed Claude-account lookup as an error, not as a missing account", () => {
+  providerState.error = new Error("Couldn't load AI accounts.");
+  client.setQueryData(queryKeys.settings.slack.installations("account", "org"), {
+    configured: true,
+    installations: [],
+  });
+  const html = render();
+  expect(html).toContain("Couldn&#x27;t load AI accounts.");
+  expect(html).not.toContain("Connect a Claude account first");
 });
 
 it("shows repository descriptions read-only for non-admins", () => {

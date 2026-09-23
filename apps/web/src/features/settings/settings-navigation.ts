@@ -12,6 +12,8 @@ interface SettingsNavigationItem {
   icon: ComponentType<SVGAttributes<SVGSVGElement>>;
   keywords: string[];
   cloudDirect?: boolean;
+  /** Needs the person's own Deus Cloud session: the desktop app or the hosted web app. */
+  ownCloudSession?: boolean;
   capability?: keyof typeof capabilities;
   badge?: string;
 }
@@ -64,6 +66,7 @@ export const settingsNavigation: SettingsNavigationItem[] = [
     label: "Slack",
     icon: SlackIcon,
     cloudDirect: true,
+    ownCloudSession: true,
     keywords: ["chat", "integration", "mention", "thread", "bot", "channel"],
   },
   {
@@ -84,7 +87,8 @@ export const settingsNavigation: SettingsNavigationItem[] = [
 export function isSettingsSectionAvailable(item: SettingsNavigationItem): boolean {
   return (
     (!isCloudDirectWebMode() || item.cloudDirect === true) &&
-    (!item.capability || capabilities[item.capability])
+    (!item.capability || capabilities[item.capability]) &&
+    (!item.ownCloudSession || capabilities.deusCloudSignIn || isCloudDirectWebMode())
   );
 }
 
