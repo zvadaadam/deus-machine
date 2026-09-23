@@ -17,6 +17,7 @@ export interface CloudEnvironmentSettings {
     id: string;
     name: string;
     repo: string | null;
+    description: string | null;
     ownerType: "ORG" | "USER";
     isRepositoryDefault: boolean;
   }>;

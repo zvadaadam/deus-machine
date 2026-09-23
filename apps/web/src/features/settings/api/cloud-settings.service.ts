@@ -9,6 +9,18 @@ import {
   resolveDeusCloudUrl,
 } from "@/features/session/cloud/webCloudDirectConfig";
 
+export class CloudSettingsError extends Error {
+  status: number;
+  code: string | null;
+
+  constructor(message: string, status: number, code: string | null = null) {
+    super(message);
+    this.name = "CloudSettingsError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 /** Fixed settings routes share account authentication on desktop and direct web. */
 export async function requestCloudSettings<T>(
   paths: { cloud: string; desktop: string; service?: "platform" | "product" },
@@ -35,15 +47,26 @@ export async function requestCloudSettings<T>(
   });
   if (!response.ok) {
     if (direct && response.status === 401) handleWebCloudSessionExpired();
-    const body = await response.json().catch(() => null);
-    throw new Error(
+    const body = (await response.json().catch(() => null)) as {
+      message?: unknown;
+      error?: unknown;
+      code?: unknown;
+      details?: { code?: unknown };
+    } | null;
+    throw new CloudSettingsError(
       typeof body?.message === "string"
         ? body.message
         : typeof body?.error === "string"
           ? body.error
           : !init.method || init.method === "GET"
             ? "Couldn't load cloud settings."
-            : "Couldn't update cloud settings."
+            : "Couldn't update cloud settings.",
+      response.status,
+      typeof body?.code === "string"
+        ? body.code
+        : typeof body?.details?.code === "string"
+          ? body.details.code
+          : null
     );
   }
   return toCamelCaseKeys(await response.json(), { opaqueKeys: ["project"] });

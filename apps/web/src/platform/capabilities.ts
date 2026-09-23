@@ -28,6 +28,11 @@ export const capabilities = {
    *  only — the backend returns nothing off Darwin. */
   browserProfileImport: isElectron && isMac,
 
+  /** Deus Cloud sign-in from this window: the desktop app's loopback login.
+   *  The hosted web app signs in on its own (web-direct mode); a relay visit
+   *  or plain local web has no way to hold the person's own session. */
+  deusCloudSignIn: isElectron,
+
   /** Embedded browser — uses Electron's <webview> tag, which requires
    *  `webPreferences.webviewTag: true` on the host window. Not available
    *  in plain web mode (there's no equivalent DOM element for embedding

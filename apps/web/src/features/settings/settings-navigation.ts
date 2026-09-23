@@ -1,6 +1,7 @@
 import type { ComponentType, SVGAttributes } from "react";
 import { Bot, Box, Chrome, Cloud, FlaskConical, Globe, Settings2, UserCircle } from "lucide-react";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
+import { SlackIcon } from "@/shared/components/icons/SlackIcon";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import type { SettingsSection } from "@shared/types/settings";
@@ -11,6 +12,8 @@ interface SettingsNavigationItem {
   icon: ComponentType<SVGAttributes<SVGSVGElement>>;
   keywords: string[];
   cloudDirect?: boolean;
+  /** Needs the person's own Deus Cloud session: the desktop app or the hosted web app. */
+  ownCloudSession?: boolean;
   capability?: keyof typeof capabilities;
   badge?: string;
 }
@@ -59,6 +62,14 @@ export const settingsNavigation: SettingsNavigationItem[] = [
     keywords: ["repository", "setup", "run", "script", "secrets", "variables"],
   },
   {
+    id: "slack",
+    label: "Slack",
+    icon: SlackIcon,
+    cloudDirect: true,
+    ownCloudSession: true,
+    keywords: ["chat", "integration", "mention", "thread", "bot", "channel"],
+  },
+  {
     id: "experimental",
     label: "Experimental",
     icon: FlaskConical,
@@ -76,7 +87,8 @@ export const settingsNavigation: SettingsNavigationItem[] = [
 export function isSettingsSectionAvailable(item: SettingsNavigationItem): boolean {
   return (
     (!isCloudDirectWebMode() || item.cloudDirect === true) &&
-    (!item.capability || capabilities[item.capability])
+    (!item.capability || capabilities[item.capability]) &&
+    (!item.ownCloudSession || capabilities.deusCloudSignIn || isCloudDirectWebMode())
   );
 }
 
