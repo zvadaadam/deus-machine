@@ -345,8 +345,12 @@ class RemoteNodeDriver implements NodeDriver {
     // so Files shows "empty", not a dead panel that never refetches.
     const sessionId = this.workspace.current_session_id;
     if (!sessionId) return { files: [], totalFiles: 0, totalSize: 0, provisioning: true };
-    const { tree, truncated } = await listCloudTree(sessionId);
-    return { ...cloudTreeToResponse(tree), truncated };
+    // An unreachable/asleep sandbox answers with the EMPTY shape, not an error —
+    // the Files panel polls this route. Mirrors the guard in `fsSearch`; without
+    // it a reject surfaces as HTTP 400 and kills the panel through auto-recovery.
+    const listed = await listCloudTree(sessionId).catch(() => null);
+    if (!listed) return { files: [], totalFiles: 0, totalSize: 0, provisioning: true };
+    return { ...cloudTreeToResponse(listed.tree), truncated: listed.truncated };
   }
 
   async fsRead(filePath: string): Promise<FsReadOutcome> {
