@@ -95,30 +95,42 @@ async function spawnAgentServer(): Promise<SpawnedServer> {
     stderrOutput += data.toString();
   });
 
-  const wsUrl = await new Promise<string>((resolve, reject) => {
-    let stdoutBuffer = "";
-    const timeout = setTimeout(() => {
-      reject(
-        new Error(`Agent-server did not print LISTEN_URL within 30s. stderr: ${stderrOutput}`)
-      );
-    }, 30_000);
+  try {
+    const wsUrl = await new Promise<string>((resolve, reject) => {
+      let stdoutBuffer = "";
+      const timeout = setTimeout(() => {
+        reject(
+          new Error(`Agent-server did not print LISTEN_URL within 30s. stderr: ${stderrOutput}`)
+        );
+      }, 30_000);
 
-    proc.stdout?.on("data", (data: Buffer) => {
-      stdoutBuffer += data.toString();
-      const match = stdoutBuffer.match(/LISTEN_URL=(.+)/);
-      if (match) {
+      proc.stdout?.on("data", (data: Buffer) => {
+        stdoutBuffer += data.toString();
+        const match = stdoutBuffer.match(/LISTEN_URL=(.+)/);
+        if (match) {
+          clearTimeout(timeout);
+          resolve(match[1].trim());
+        }
+      });
+
+      proc.on("exit", (code) => {
         clearTimeout(timeout);
-        resolve(match[1].trim());
-      }
+        reject(new Error(`Agent-server exited with code ${code}. stderr: ${stderrOutput}`));
+      });
     });
 
-    proc.on("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Agent-server exited with code ${code}. stderr: ${stderrOutput}`));
-    });
-  });
-
-  return { process: proc, wsUrl, logPath: `/tmp/deus-${proc.pid}.log` };
+    return { process: proc, wsUrl, logPath: `/tmp/deus-${proc.pid}.log` };
+  } catch (err) {
+    // The wait for LISTEN_URL failed (timeout or early exit). Don't orphan the
+    // spawned server: afterEach only runs after a successful spawn(), and the
+    // parent test runner would otherwise leave the child re-parented to PID 1.
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      // Already dead.
+    }
+    throw err;
+  }
 }
 
 async function killAgentServer(srv: SpawnedServer): Promise<void> {
