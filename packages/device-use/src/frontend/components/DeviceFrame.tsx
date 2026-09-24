@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSimStore } from "../stores/sim-store";
 import { useRefsStore } from "../stores/refs-store";
 import { api } from "../lib/api";
+import { getShellSpec } from "../lib/shell-spec";
 
 interface Ripple {
   id: number;
@@ -38,60 +39,6 @@ const HARDWARE_BUTTONS: HardwareButton[] = [
   { label: "Home", button: "home", key: ["h", "H"] },
   { label: "Lock", button: "lock", key: ["l", "L"] },
 ];
-
-/** Visual shell spec — bezel dimensions per device class.
- *
- *  The shell's aspect ratio is derived from the stream's point dimensions
- *  (streamInfo.size.ptW/ptH) so the content fills the screen box exactly
- *  regardless of which iPhone/iPad model is pinned. A fixed
- *  `430 / 932` looked wrong on iPhone Air (420×912) and iPhone 17 Pro Max
- *  (440×956). Percentage insets + rem radii scale automatically.
- *
- *  We do NOT draw dynamic island / camera hole overlays — the simulator's
- *  MJPEG stream already includes iOS's native status bar (with its own
- *  cutout). Drawing a second pill on top caused the "two islands stacked"
- *  artifact. The shell is the bezel only; the stream is the screen. */
-interface ShellSpec {
-  aspectRatio: string;
-  shellRadius: string;
-  screenRadius: string;
-  screenInsets: { top: string; left: string; right: string; bottom: string };
-}
-
-const PHONE_INSETS = { top: 1.7, left: 2.5, right: 2.5, bottom: 1.9 }; // %
-const TABLET_INSETS = { top: 2.1, left: 2.2, right: 2.2, bottom: 2.1 }; // %
-
-function getShellSpec(
-  deviceName: string | null | undefined,
-  size: { ptW: number; ptH: number } | undefined
-): ShellSpec {
-  const isTablet = deviceName?.includes("iPad") ?? false;
-  const insets = isTablet ? TABLET_INSETS : PHONE_INSETS;
-
-  // Derive shell aspect ratio from the stream so the screen box matches
-  // the stream's native ratio after subtracting the bezel insets.
-  //
-  //   shellW × (1 − (insetL+insetR)/100) = screenW
-  //   shellH × (1 − (insetT+insetB)/100) = screenH
-  //   screenAR = ptW / ptH   (from streamInfo.size)
-  //   shellAR  = screenAR × (widthFrac / heightFrac)
-  const widthFrac = 1 - (insets.left + insets.right) / 100;
-  const heightFrac = 1 - (insets.top + insets.bottom) / 100;
-  const screenAR = size ? size.ptW / size.ptH : isTablet ? 834 / 1194 : 430 / 932;
-  const shellAR = (screenAR * widthFrac) / heightFrac;
-
-  return {
-    aspectRatio: `${shellAR}`,
-    shellRadius: isTablet ? "2.75rem" : "3.25rem",
-    screenRadius: isTablet ? "2.1rem" : "2.6rem",
-    screenInsets: {
-      top: `${insets.top}%`,
-      left: `${insets.left}%`,
-      right: `${insets.right}%`,
-      bottom: `${insets.bottom}%`,
-    },
-  };
-}
 
 export function DeviceFrame() {
   const { pinnedUdid, sims, streamInfo } = useSimStore();
