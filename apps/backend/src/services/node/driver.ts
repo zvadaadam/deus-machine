@@ -21,7 +21,7 @@
 import path from "path";
 import fs from "fs";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
-import { ValidationError } from "../../lib/errors";
+import { AppError, ValidationError } from "../../lib/errors";
 import * as gitService from "../git.service";
 import * as filesService from "../files.service";
 import { getCloudDiffSummary, getCloudDiffFile, requestCloudFs } from "../agent/cloud/driver";
@@ -100,6 +100,39 @@ export interface NodeDriver {
   fsInvalidate(): void;
 }
 
+// ──────────────────────────── path containment ────────────────────────────
+
+/**
+ * Resolve a worktree-relative path to its canonical real path, rejecting
+ * symlink escapes OUTSIDE the workspace. Mirrors the `realpathSync`
+ * containment re-check the `fsRead` lane has always done; now shared by the
+ * `diffFile` lane too so a worktree-relative symlink whose target lies outside
+ * the worktree is rejected rather than followed by `fs.readFileSync`.
+ * (`resolveWorkspaceRelativePath` is purely lexical — it normalizes and
+ * rejects `..`/absolute, but does not walk symlinks.)
+ *
+ * Returns the resolved real path, or `null` when the path does not exist (so
+ * the diff lane's git fallback and the fs lane's "not found" error both keep
+ * their existing behavior). Throws `ValidationError` when the path resolves to
+ * something outside the workspace (a symlink escape).
+ */
+function resolveContainedRealPath(workspacePath: string, relativePath: string): string | null {
+  const absolutePath = path.resolve(workspacePath, relativePath);
+  let realWorkspacePath: string;
+  let realPath: string;
+  try {
+    realWorkspacePath = fs.realpathSync(workspacePath);
+    realPath = fs.realpathSync(absolutePath);
+  } catch {
+    return null;
+  }
+  const relativeRealPath = path.relative(realWorkspacePath, realPath);
+  if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
+    throw new ValidationError("Invalid file path");
+  }
+  return realPath;
+}
+
 // ─────────────────────────── local worktree ───────────────────────────
 
 /** Local worktree — git + fs against the on-disk workspace path. */
@@ -154,19 +187,30 @@ class LocalNodeDriver implements NodeDriver {
       if (diffInfo.isDeleted) {
         newContent = "";
       } else {
-        // Read from working directory (not HEAD) since we diff merge-base against workdir
-        try {
-          const buf = fs.readFileSync(path.resolve(workspacePath, safeNewPath));
-          // Detect binary files (null bytes in first 8KB)
-          const sample = buf.subarray(0, 8192);
-          newContent = sample.includes(0) ? null : buf.toString("utf-8");
-        } catch {
+        // Read from working directory (not HEAD) since we diff merge-base against workdir.
+        // Re-check containment *after* symlink resolution (the lexical guard above
+        // does not walk symlinks) so a worktree-relative symlink that escapes the
+        // worktree is rejected instead of followed by `fs.readFileSync`.
+        const realNewPath = resolveContainedRealPath(workspacePath, safeNewPath);
+        if (realNewPath === null) {
           newContent = gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
+        } else {
+          try {
+            const buf = fs.readFileSync(realNewPath);
+            // Detect binary files (null bytes in first 8KB)
+            const sample = buf.subarray(0, 8192);
+            newContent = sample.includes(0) ? null : buf.toString("utf-8");
+          } catch {
+            newContent = gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
+          }
         }
       }
 
       return { ok: true, file, diff: output, old_content: oldContent, new_content: newContent };
     } catch (gitError: unknown) {
+      // ValidationError / AppError are caller errors, not git failures — let
+      // them propagate so the error handler maps them to the right status.
+      if (gitError instanceof AppError) throw gitError;
       const msg = getErrorMessage(gitError);
       const killed = isExecError(gitError) && gitError.killed;
       const errorResponse: Record<string, unknown> = {
@@ -204,24 +248,8 @@ class LocalNodeDriver implements NodeDriver {
     const safeRelativePath = gitService.resolveWorkspaceRelativePath(workspacePath, filePath);
     if (!safeRelativePath) throw new ValidationError("Invalid file path");
 
-    const absolutePath = path.resolve(workspacePath, safeRelativePath);
-    if (!fs.existsSync(absolutePath)) {
-      throw new ValidationError("File not found");
-    }
-
-    let realWorkspacePath: string;
-    let realPath: string;
-    try {
-      realWorkspacePath = fs.realpathSync(workspacePath);
-      realPath = fs.realpathSync(absolutePath);
-    } catch {
-      throw new ValidationError("File not found");
-    }
-
-    const relativeRealPath = path.relative(realWorkspacePath, realPath);
-    if (relativeRealPath.startsWith("..") || path.isAbsolute(relativeRealPath)) {
-      throw new ValidationError("Invalid file path");
-    }
+    const realPath = resolveContainedRealPath(workspacePath, safeRelativePath);
+    if (realPath === null) throw new ValidationError("File not found");
 
     const content = filesService.readTextFile(realPath);
     if (content === null) {
