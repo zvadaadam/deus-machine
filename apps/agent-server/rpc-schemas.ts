@@ -182,17 +182,8 @@ export const RegisterAppMcpRequestSchema = z.object({
   url: z.string(),
 });
 
-export const RegisterAppMcpResponseSchema = z.object({
-  added: z.array(z.string()),
-  errors: z.record(z.string(), z.string()).optional(),
-});
-
 export const UnregisterAppMcpRequestSchema = z.object({
   serverName: z.string(),
-});
-
-export const UnregisterAppMcpResponseSchema = z.object({
-  removed: z.array(z.string()),
 });
 
 // ============================================================================
@@ -210,10 +201,6 @@ export type GetTerminalOutputResponse = z.infer<typeof GetTerminalOutputResponse
 export type ExitPlanModeRequest = z.infer<typeof ExitPlanModeRequestSchema>;
 export type ExitPlanModeResponse = z.infer<typeof ExitPlanModeResponseSchema>;
 
-// `InstalledApp` is canonical in shared/aap/types.ts — re-exported here so
-// existing `import { InstalledApp } from "./rpc-schemas"` call sites keep
-// working without a second source of truth.
-export type { InstalledApp } from "@shared/aap/types";
 export type ListAppsRequest = z.infer<typeof ListAppsRequestSchema>;
 export type ListAppsResponse = z.infer<typeof ListAppsResponseSchema>;
 export type LaunchAppRequest = z.infer<typeof LaunchAppRequestSchema>;
@@ -224,7 +211,3 @@ export type ReadAppSkillRequest = z.infer<typeof ReadAppSkillRequestSchema>;
 export type ReadAppSkillResponse = z.infer<typeof ReadAppSkillResponseSchema>;
 export type AutomationUpdateRequest = z.infer<typeof AutomationUpdateRequestSchema>;
 export type AutomationUpdateResponse = z.infer<typeof AutomationUpdateResponseSchema>;
-export type RegisterAppMcpRequest = z.infer<typeof RegisterAppMcpRequestSchema>;
-export type RegisterAppMcpResponse = z.infer<typeof RegisterAppMcpResponseSchema>;
-export type UnregisterAppMcpRequest = z.infer<typeof UnregisterAppMcpRequestSchema>;
-export type UnregisterAppMcpResponse = z.infer<typeof UnregisterAppMcpResponseSchema>;
