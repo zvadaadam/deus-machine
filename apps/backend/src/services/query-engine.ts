@@ -11,7 +11,6 @@ import { match } from "ts-pattern";
 import { AppError } from "../lib/errors";
 import { getDatabase } from "../lib/database";
 import {
-  getDashboardWorkspaces,
   getStats,
   getSessionsByWorkspaceId,
   getSessionById,

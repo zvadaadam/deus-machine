@@ -162,22 +162,6 @@ export function getWorkspacesBySessionIds(
     .all(...sessionIds) as WorkspaceWithDetailsRow[];
 }
 
-/**
- * Non-archived workspaces for query engine and relay clients.
- * Used by: query-engine snapshots, relay initial state, relay data requests.
- */
-export function getDashboardWorkspaces(db: Database.Database): WorkspaceWithDetailsRow[] {
-  return db
-    .prepare(
-      `
-    ${WORKSPACE_DETAILS_SELECT}
-    WHERE w.state != 'archived'
-    ORDER BY r.sort_order ASC, r.name ASC, w.updated_at DESC
-  `
-    )
-    .all() as WorkspaceWithDetailsRow[];
-}
-
 // ─── Session Queries ─────────────────────────────────────────
 
 /** Coerce SQLite INTEGER booleans (0/1) to JS booleans so HTTP and IPC return the same shape. */
