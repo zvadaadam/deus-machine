@@ -159,6 +159,69 @@ describe("recent-projects.service", () => {
     ]);
   });
 
+  it("keeps the first full JSONL record when byte before the window is a newline", () => {
+    const tempRoot = createTempRoot();
+    const homeDir = path.join(tempRoot, "home");
+    const projectsDir = path.join(homeDir, ".claude", "projects");
+    const boundaryProject = path.join(homeDir, "Developer", "boundary-project");
+    const sessionDir = path.join(projectsDir, "project-boundary", "session-1");
+    const sessionFile = path.join(sessionDir, "agent.jsonl");
+
+    mkdirSync(boundaryProject, { recursive: true });
+    execFileSync("git", ["init"], { cwd: boundaryProject });
+    mkdirSync(sessionDir, { recursive: true });
+
+    const cwdLine = JSON.stringify({ cwd: boundaryProject, type: "assistant" });
+    // The 16 KiB scan window starts exactly after a line boundary: the byte just
+    // before the window is a newline, while the buffer starts with the first byte
+    // of a complete cwd record. The leading line is NOT partial and must be kept.
+    const prefix = "p".repeat(63) + "\n";
+    const suffix = cwdLine + "\n";
+    const filler = "x".repeat(16 * 1024 - suffix.length);
+    writeFileSync(sessionFile, prefix + suffix + filler);
+
+    const canonicalProject = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: boundaryProject,
+      encoding: "utf8",
+    }).trim();
+
+    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+      { path: canonicalProject, name: "boundary-project", source: "claude" },
+    ]);
+  });
+
+  it("drops the partial leading line when it crosses the truncation boundary", () => {
+    const tempRoot = createTempRoot();
+    const homeDir = path.join(tempRoot, "home");
+    const projectsDir = path.join(homeDir, ".claude", "projects");
+    const boundaryProject = path.join(homeDir, "Developer", "boundary-project");
+    const sessionDir = path.join(projectsDir, "project-boundary", "session-1");
+    const sessionFile = path.join(sessionDir, "agent.jsonl");
+
+    mkdirSync(boundaryProject, { recursive: true });
+    execFileSync("git", ["init"], { cwd: boundaryProject });
+    mkdirSync(sessionDir, { recursive: true });
+
+    const cwdLine = JSON.stringify({ cwd: boundaryProject, type: "assistant" });
+    // The byte before the window is content (mid-record cut) and the buffer starts
+    // with content, so the leading line is a genuine partial fragment and must be
+    // dropped before scanning the remaining complete records.
+    const prefix = "p".repeat(32);
+    const partialLine = '{"type":"user","message":"this is a partial record that was cut';
+    const suffix = `${partialLine}\n${cwdLine}\n`;
+    const filler = "x".repeat(16 * 1024 - suffix.length);
+    writeFileSync(sessionFile, prefix + suffix + filler);
+
+    const canonicalProject = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: boundaryProject,
+      encoding: "utf8",
+    }).trim();
+
+    expect(readClaudeProjects(projectsDir, { homeDir })).toEqual([
+      { path: canonicalProject, name: "boundary-project", source: "claude" },
+    ]);
+  });
+
   it("orders Claude projects by newest session activity, not project directory mtime", () => {
     const tempRoot = createTempRoot();
     const homeDir = path.join(tempRoot, "home");

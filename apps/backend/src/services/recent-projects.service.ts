@@ -48,6 +48,7 @@ interface ListRecentProjectsOptions extends ReaderOptions {
 interface JsonlSuffixRead {
   contents: string;
   truncated: boolean;
+  leadingLinePartial: boolean;
 }
 
 function hasProjectCapacity(projects: RecentProject[], options: ReaderOptions): boolean {
@@ -263,9 +264,23 @@ function readJsonlSuffix(filePath: string, maxBytes = CLAUDE_JSONL_SCAN_BYTES): 
   try {
     const buffer = Buffer.alloc(maxBytes);
     const bytesRead = readSync(fileDescriptor, buffer, 0, maxBytes, start);
+
+    let leadingLinePartial = false;
+    if (start > 0 && bytesRead > 0) {
+      const prev = Buffer.alloc(1);
+      readSync(fileDescriptor, prev, 0, 1, start - 1);
+      // The leading line is partial only when the truncation cut mid-record: the byte
+      // just before the window is not a newline AND the partial record's body actually
+      // extends into the window (buffer does not itself start with a newline). When the
+      // byte before the window is a newline, truncation landed exactly between records
+      // and the leading line is a complete JSONL record that must be preserved.
+      leadingLinePartial = prev[0] !== 0x0a && buffer[0] !== 0x0a;
+    }
+
     return {
       contents: buffer.subarray(0, bytesRead).toString("utf8"),
       truncated: start > 0,
+      leadingLinePartial,
     };
   } finally {
     closeSync(fileDescriptor);
@@ -274,10 +289,10 @@ function readJsonlSuffix(filePath: string, maxBytes = CLAUDE_JSONL_SCAN_BYTES): 
 
 function extractClaudeCwdFromJsonl(filePath: string): string | null {
   try {
-    const { contents, truncated } = readJsonlSuffix(filePath);
+    const { contents, truncated, leadingLinePartial } = readJsonlSuffix(filePath);
     const lines = contents.split("\n").filter(Boolean);
 
-    if (truncated && !contents.startsWith("\n") && lines.length > 0) {
+    if (truncated && leadingLinePartial && lines.length > 0) {
       lines.shift();
     }
 
