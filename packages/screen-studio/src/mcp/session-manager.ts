@@ -376,6 +376,8 @@ export class SessionManager {
             outputPath: config.outputPath,
             outputFps: Math.min(config.fps, 30),
             speedRamp: true,
+            background: config.background,
+            deviceFrame: { type: config.deviceFrame },
           });
 
           videoProduced = true;
