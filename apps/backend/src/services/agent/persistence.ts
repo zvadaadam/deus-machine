@@ -424,15 +424,23 @@ export function persistAgentSessionId(
   }
 }
 
-/** Update session title and auto-set workspace title if not already set. */
+/** Adopt automatic titles only where Project ownership has not already named the conversation. */
 export function persistSessionTitle(sessionId: string, title: string): WriteResult<void> {
   const db = getDatabase();
   try {
     db.transaction(() => {
+      const managed = db
+        .prepare(
+          `SELECT COALESCE(w.title,w.slug) title FROM sessions s
+           JOIN project_agents a ON a.agent_id=s.workspace_id
+           JOIN workspaces w ON w.id=a.agent_id WHERE s.id=?`
+        )
+        .get(sessionId) as { title: string } | undefined;
       db.prepare(`UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?`).run(
-        title,
+        managed?.title ?? title,
         sessionId
       );
+      if (managed) return;
       // Auto-set workspace title only if not already set (preserves PR titles and user renames)
       db.prepare(
         `UPDATE workspaces SET title = ?

@@ -11,11 +11,14 @@ const actions = {
 export function WorkspacePanelButton({
   action,
   onClick,
+  label: labelOverride,
 }: {
   action: keyof typeof actions;
   onClick: () => void;
+  label?: string;
 }) {
-  const { icon: Icon, label } = actions[action];
+  const { icon: Icon, label: defaultLabel } = actions[action];
+  const label = labelOverride ?? defaultLabel;
   return (
     <Tooltip>
       <TooltipTrigger asChild>

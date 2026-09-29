@@ -75,7 +75,7 @@ deferred. The subsequent composer polish updates both the design and the app.
   and Check again. A failed account check offers retry; a successful check with no
   credentials offers Sign in. Local sign-in is separate from cloud accounts in AI Providers.
   The obsolete Cursor Agent row is removed; `47g` shows the local account-check states.
-- `47e` Projects: discovery failure has Try again and Browse Folder; selected cards expose
+- `47e` Repositories: discovery failure has Try again and Browse Folder; selected cards expose
   their selection state. `47h` shows discovery failure and `47j` shows the shared folder-error
   notification. Browse Folder sits beside Continue in the footer.
 - `47f` Finish: Back, Skip and Clone & Continue match the app; `47i` shows a failed save
@@ -139,8 +139,8 @@ revisions are historical metadata; credential values never appear in the panel.
   time deus.pen is the active Pen document. `46x` the ChatGPT/Cursor reference
   screenshots (PNGs in `references/automations/`, teardown notes in the captions).
 - `47a`…`47f` the full onboarding flow, in order: Welcome · Deus Cloud sign-in · Connect
-  GitHub · Connect your AI tools · Your Projects · Shape Deus with us. `47g`…`47j` show
-  account checks, failed project discovery, failed completion and folder errors. It has its own visual
+  GitHub · Connect your AI tools · Your repositories · Shape Deus with us. `47g`…`47j` show
+  account checks, failed repository discovery, failed completion and folder errors. It has its own visual
   language — pure black, a grain layer and translucent white surfaces — using the
   `onboarding-foreground` and `onboarding-contrast` tokens. These keep the same
   dark presentation in both app themes.
@@ -584,3 +584,152 @@ slot that those active-state instances enable. Stop stays available in `working`
 `needs_response`, and `needs_plan_response`; an unconfirmed cancellation leaves the
 request answerable until the native turn ends. The alert stays visible in all
 three active states, without replacing a waiting status with `working`.
+
+### Local Projects
+
+The local Projects surface adds `24p · DS — Projects`,
+`49q · Projects — coordinator and overview`, `66p · New project — shared prompt modal`, `66q · Project documents — shared tree and preview`, and
+`73p · Mobile — Project overview`. These map to `features/projects/ui/`:
+
+| Canvas component          | Source                                                       |
+| ------------------------- | ------------------------------------------------------------ |
+| `DS/ProjectsSidebar`      | `features/sidebar/ui/ProjectsSidebar.tsx`                    |
+| `DS/ProjectAgentRow`      | `ProjectOverview.tsx`                                        |
+| `DS/ProjectResult`        | `ProjectOverview.tsx`                                        |
+| `DS/ProjectComposer`      | `ProjectComposer.tsx` using shared `ComposerInput`           |
+| `DS/ProjectMessageQueue`  | `ProjectMessageQueue.tsx`                                    |
+| `DS/ProjectReturn`        | `WorkspaceHeader.tsx` and the content-only workspace toolbar |
+| `DS/ProjectContentTabBar` | `ProjectDetailView.tsx` using shared `ContentTabBar`         |
+| `DS/ProjectDocumentTree`  | `ProjectFilesView.tsx` using shared `FileTree`               |
+| `DS/ProjectFilePane`      | `ProjectFilePane.tsx` using shared `FilePreview`             |
+| `DS/ProjectFilesView`     | `ProjectFilesView.tsx`                                       |
+
+The coordinator uses the existing `SessionPanel` transcript, `WorkspaceHeader`
+(44px), `SessionTabBar` (40px), and `WorkspacePanels` with an equal initial split.
+The content half uses the existing 44px `ContentTabBar`: **Overview** and
+**Documents** precede the normal workspace tools, including Changes, Files,
+Terminal and Agent. Overview shows Project status and turn allowance above its
+agents and results inside the bordered scrolling pane. The Project
+composer uses the shared `ComposerInput` surface and circular send control, with a
+fixed provider/model label. It queues an owner-controlled message and has no native
+optimistic turn bubble or model picker. Agent workspaces use that same composer.
+An arrow labelled **Project** returns to the owning Project from desktop and mobile
+workspace headers, including the content-only toolbar. Historical conversations and
+archived Projects retain readable transcripts. At widths below 768px, Coordinator
+and Workspace become tabs; Workspace retains the same content tabs, and Overview
+remains a single scrolling column. `73s`
+shows the mobile coordinator and shared composer. Agent rows open their actual workspace/current session;
+result links retain the report's exact session and published file revision. PR links
+open externally. A submitted result becomes acceptable only after its source turn
+ends. **Ready for review** and **Done** remain distinct; accepted reports show their
+acceptance in the result card.
+
+`AppSidebar` places an expanded Projects section below Automations. The heading
+toggles disclosure, and its **+** opens New project. Individual project rows carry
+their status and open the coordinator; managed agent workspaces are omitted from
+repository groups. There is no separate all-projects page. `49p` and
+`Historical/ProjectListRow` preserve that removed surface as explicitly historical.
+`66p` now uses `NewWorkspacePromptModal` in Project mode: repository context row,
+brief textarea, Claude model picker and circular Start control. The title is derived
+from the brief. There is no separate name field, branch picker or cloud toggle.
+An empty brief cannot submit; creation errors preserve the entered brief.
+`66v` shows the inline connection error and preserved brief. Retrying uses the
+same creation request so a lost response does not create a second Project.
+The repository footer is
+labelled **Add repository**, and its create action **Create repository**, so these
+existing repository actions cannot be mistaken for coordinated Project creation.
+Home's empty state, local-folder action, and onboarding selection also use
+**repository**, including their error and success messages. Boards `45`, `46`, and
+`47e`/`47h`/`47j` mirror this wording; this is a label clarification, not a model rename.
+
+The Pull requests collection deduplicates report and workspace links. Only verified
+GitHub snapshots supply merge/review/CI state; reported-only links stay labelled
+**Reported link**. Original result links remain as provenance. Long report summaries
+start collapsed with **Read full report**, preserving access to the complete text.
+
+**Pending canvas sync (22 September 2026).** The code moved ahead of the frames
+above while `deus.pen` could not be opened (the Pen app was in use by another
+workspace's session). Until the canvas catches up, `apps/web` is authoritative for:
+
+- `66p`: Project mode has a **name** field (defaulting to the repository name) and
+  an optional brief; with no brief the coordinator opens with a welcome and the
+  first message becomes `brief.md`.
+- `49q`: before the coordinator conversation exists, the chat half shows the
+  `ProjectPreparation` checklist (worktree, environment, setup, coordinator). A
+  brief-less Project's Overview shows **Nothing to track yet** above Agents.
+- `49q`/`24p`: agents open as tabs in the `SessionTabBar` beside a pinned
+  **Coordinator** tab (new `DS/ProjectAgentTab` state). Files, Changes, Terminal and
+  the other workspace tabs follow the selected tab's worktree; Overview and
+  Documents stay Project-wide. `DS/ProjectAgentRow` gains a selected state and the
+  agent's `+A −D` line counts, which open its Changes.
+- Transcript: machine inputs render as quiet event rows (**Project started**,
+  **<Agent> reported a result · Open**), agent messages as captioned bubbles
+  (**Assignment from Coordinator**), and **Create agent** / message cards stay
+  outside the collapsed Activity group.
+
+`49r · Projects — visible queued instructions` and `73q · Mobile — visible queued
+instructions` show the expanded queue in the coordinator composer and Project
+overview. Queued human instructions retain their text and recipient and expose
+**Remove** while still undispatched. The overview shows recipients; a queue scoped
+to one composer's agent omits the repeated recipient label. The overview queue is
+below Agents and before Pull requests; the composer queue stays above its input.
+The historical `49p` also records
+**Waiting for direction** and **Work queued** list rows, separate from **Ready for
+review**.
+
+`30p · States — managed Project recovery` records the shared chat error actions:
+**Project controls** reveals the existing Project recovery controls; the embedded
+coordinator switches to Overview. **Log in** reveals the coordinator workspace
+terminal. Managed conversations do not offer a fresh session through the ordinary
+chat recovery action. **Stop all agents** appears in Project options only while
+work is active. There is no permanent Pause/Resume button. A stopped Project shows
+**Resume queued work** when instructions are queued, otherwise **Reopen project**;
+these actions stay disabled until active agents stop. A failed stop with uncertain
+active work exposes **Retry stopping agents**. Reopening permits dispatch again;
+cancelled tasks still need a new instruction or **Continue**. The `30p` recovery
+board records these contextual states.
+
+`66r · Project documents — publication conflict` and `66s · Project documents — compare
+retained draft` map to the editor in `ProjectFilePane.tsx`. A conflict preserves the draft and
+requires **Load latest version**. The latest published content is read-only above
+the editable draft; **Publish my draft** explicitly publishes against the loaded
+version. Another concurrent change returns to the same comparison flow. The
+comparison board expands the scrolling pane body so both text fields are visible
+on canvas; the app keeps them inside the shared content pane.
+
+Result artifact buttons show the path relative to the `results/<agent>/` prefix,
+while their full paths and pinned published revisions
+remain intact. `DS/ProjectResult` shows `review.md`. The Documents tab contains shared
+briefs, planning documents and published result files in the existing `FileTree`
+folder hierarchy. Overview keeps the agent and result collections; report links
+still open their pinned evidence. The normal Files tab remains the coordinator
+workspace's file browser. The tree initially keeps folders collapsed. Opening a
+report reveals its selected path; deliberate folder collapse remains under user
+control. `49s` shows the desktop Documents pane, with the preview on the left and
+the file tree on the right. `73r` shows the mobile preview with **Back to files**;
+`73t` shows its full-width tree. `66u` records a report's immutable revision,
+**Saved with this result** provenance, and revealed folder path.
+
+`66t · Project documents — immutable source preview` maps to the read-only non-Markdown branch of
+the shared `FilePreview.tsx`: source indentation and line breaks are preserved in a
+monospace viewer, with horizontal scrolling for long lines. The canvas shows the
+source state with line breaks preserved. Markdown files use the existing rendered
+document view with **Show raw markdown**, copy, and close controls. Both views retain the
+published version and **Saved with this result** provenance.
+
+Published Markdown and report summaries use the shared `markdown-content`
+typography. `66q` shows separated brief paragraphs; `66u` shows the report's heading
+and list hierarchy within the shared preview.
+
+`30q · States — Project queue and acceptance` records agents waiting for capacity,
+the managed composer's staged review prompt, and the error shown when an assignment
+still has queued or running work at acceptance. The existing Agent row and composer
+components are reused. Removing an undispatched instruction can make a completed
+result eligible for acceptance; accepting it preserves its published evidence.
+
+Workspace file links reveal the agent's normal Files pane on desktop and mobile.
+Preview links open the Browser pane only when available and enabled; otherwise they
+open separately and leave the Project visible. Published document links stay in
+Documents, retain their revision, and disable unavailable targets. Published
+context files expose **Edit file**; result paths and archived Projects remain
+read-only. Content updates preserve the selected snapshot and in-progress draft.

@@ -20,6 +20,7 @@ import { getSessionById, getWorkspaceById } from "../db/queries";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { autoProgressStatus } from "./workspace-status.service";
 import { invalidate } from "./query-engine";
+import { captureWorkspacePullRequest } from "./projects/pull-requests";
 
 interface PrSnapshotRow {
   pr_url: string | null;
@@ -39,7 +40,11 @@ interface PrSnapshotRow {
  * workspaces created from the GitHub PR picker store them before the branch
  * exists, and they act as the PR-linkage breadcrumb either way.
  */
-export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusResponse): void {
+export function applyPrStatusSideEffects(
+  workspaceId: string,
+  result: PrStatusResponse,
+  checkedAt = Date.now()
+): void {
   // gh unavailable / network error — keep the last known snapshot.
   if (result.error) return;
   // Inconclusive "no PR" (missing worktree, detached HEAD, unparseable gh
@@ -108,6 +113,9 @@ export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusRe
     needsInvalidation = true;
   }
 
+  const projectChanged = captureWorkspacePullRequest(db, workspaceId, result, checkedAt);
+  if (projectChanged) invalidate(["projects", "project"]);
+
   if (needsInvalidation) {
     invalidate(["workspaces", "stats"]);
   }
@@ -160,9 +168,10 @@ export function fetchAndApplyPrStatus(
   if (existing) return existing;
 
   const fetch = (async () => {
+    const checkedAt = Date.now();
     const result = await lookupPrStatus(workspaceId, workspacePath);
     lastRefreshAt.set(workspaceId, Date.now());
-    applyPrStatusSideEffects(workspaceId, result);
+    applyPrStatusSideEffects(workspaceId, result, checkedAt);
     return result;
   })();
 

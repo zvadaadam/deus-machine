@@ -6,6 +6,8 @@ interface BaseChatTab {
   agentHarness: AgentHarness;
   hasStarted: boolean;
   initialModel?: string;
+  /** False pins the tab open (a Project's coordinator). */
+  closable?: boolean;
 }
 
 export interface SessionChatTab extends BaseChatTab {

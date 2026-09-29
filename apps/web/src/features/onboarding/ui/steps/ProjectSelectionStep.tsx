@@ -65,14 +65,14 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
 
       const succeeded = added + alreadyPresent;
       if (succeeded === 0) {
-        toast.error("Couldn’t add any of the selected projects.");
+        toast.error("Couldn’t add any of the selected repositories.");
         return;
       }
 
       if (failed > 0) {
         const parts: string[] = [];
         if (added > 0) {
-          parts.push(`Added ${added} project${added > 1 ? "s" : ""}`);
+          parts.push(`Added ${added} ${added === 1 ? "repository" : "repositories"}`);
         }
         if (alreadyPresent > 0) {
           parts.push(`${alreadyPresent} already in Deus`);
@@ -100,7 +100,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       console.error("[Onboarding] Browse/add repo failed:", error);
 
       if (conflictKind === "already_cloned") {
-        toast.success("That project is already in Deus.");
+        toast.success("That repository is already in Deus.");
         onNext();
         return;
       }
@@ -119,8 +119,8 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
   return (
     <div className="flex w-full max-w-lg flex-col gap-6">
       <div className="space-y-2">
-        <h2 className="text-onboarding-foreground text-2xl font-semibold">Your Projects</h2>
-        <p className="text-onboarding-foreground/50 text-sm">Select projects to add to Deus.</p>
+        <h2 className="text-onboarding-foreground text-2xl font-semibold">Your repositories</h2>
+        <p className="text-onboarding-foreground/50 text-sm">Select repositories to add to Deus.</p>
       </div>
 
       {projectsQuery.isLoading ? (
@@ -130,7 +130,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       ) : projectsQuery.isError ? (
         <div role="alert" className="space-y-3 py-6 text-center">
           <p className="text-onboarding-foreground/70 text-sm">
-            Couldn’t load recent projects. You can try again or continue setup.
+            Couldn’t load recent repositories. You can try again or continue setup.
           </p>
           <button
             type="button"
@@ -144,7 +144,7 @@ export function ProjectSelectionStep({ onBack, onNext }: ProjectSelectionStepPro
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
           <FolderOpen className="text-onboarding-foreground/20 h-8 w-8" />
-          <p className="text-onboarding-foreground/40 text-sm">No recent projects found.</p>
+          <p className="text-onboarding-foreground/40 text-sm">No recent repositories found.</p>
         </div>
       ) : (
         <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">

@@ -170,7 +170,9 @@ describe("shared/events", () => {
       // Automations
       expect(QUERY_RESOURCES).toContain("automations");
       expect(QUERY_RESOURCES).toContain("automation_runs");
-      expect(QUERY_RESOURCES).toHaveLength(10);
+      expect(QUERY_RESOURCES).toContain("projects");
+      expect(QUERY_RESOURCES).toContain("project");
+      expect(QUERY_RESOURCES).toHaveLength(12);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {

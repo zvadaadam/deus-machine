@@ -37,6 +37,10 @@ import {
   useSessionComposerStore,
 } from "../store/sessionComposerStore";
 import { readThinkingLevel } from "@shared/protocol";
+import {
+  ProjectComposer,
+  type ManagedProjectComposer,
+} from "@/features/projects/ui/ProjectComposer";
 
 export interface SessionComposerRef {
   /** Send a message bypassing the UI event path. Used by the home-screen
@@ -52,6 +56,7 @@ export interface SessionComposerRef {
 interface SessionComposerProps {
   /** Active session — null renders a disabled pill. */
   sessionId: string | null;
+  managedProject?: ManagedProjectComposer;
   workspaceId?: string | null;
   workspacePath?: string | null;
   /** Target branch for createPR prompts (defaults to "main"). */
@@ -85,6 +90,16 @@ export const SessionComposer = forwardRef<SessionComposerRef, SessionComposerPro
   function SessionComposer(props, ref) {
     if (!props.sessionId) {
       return <DisabledComposerPlaceholder className={props.className} />;
+    }
+    if (props.managedProject) {
+      return (
+        <ProjectComposer
+          {...props.managedProject}
+          sessionId={props.sessionId}
+          onSendComplete={props.onSendComplete}
+          ref={ref}
+        />
+      );
     }
     return (
       <ActiveSessionComposer

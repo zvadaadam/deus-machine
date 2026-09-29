@@ -12,6 +12,8 @@
 // Each endpoint claims its own frames via `handleLine` BEFORE the upstream
 // wire sees the line; everything unclaimed passes through untouched.
 
+import type { ProjectToolOperation } from "./projects";
+
 // ============================================================================
 // Method names
 // ============================================================================
@@ -45,7 +47,18 @@ export const SIDE_CHANNEL = {
   /** One mode-discriminated automations tool (list/view/create/update/delete)
    *  — the ChatGPT `automation_update` shape, backed by automations.service. */
   automationUpdate: "deus/automation/update",
+  /** Project operations execute in the backend even when no UI is connected. */
+  projectTool: "deus/project/tool",
 } as const;
+
+export interface ProjectToolRequest {
+  sessionId: string;
+  turnId: string;
+  /** Durable invocation identity, captured at the MCP boundary before any await. */
+  toolCallId: string;
+  operation: ProjectToolOperation;
+  args: Record<string, unknown>;
+}
 
 /** Payload of the `deus/title` notification. */
 export interface SideChannelTitle {

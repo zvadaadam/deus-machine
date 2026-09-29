@@ -6,6 +6,8 @@ interface SidebarState {
   collapsedRepos: Set<string>;
   toggleRepoCollapse: (repoId: string) => void;
   expandRepo: (repoId: string) => void;
+  projectsCollapsed: boolean;
+  toggleProjectsCollapse: () => void;
 
   // Repos where user expanded the "Show more" stale workspaces
   expandedOldWorkspaces: Set<string>;
@@ -22,6 +24,9 @@ export const useSidebarStore = create<SidebarState>()(
     (set, get) => ({
       // Existing state
       collapsedRepos: new Set(),
+      projectsCollapsed: false,
+      toggleProjectsCollapse: () =>
+        set((state) => ({ projectsCollapsed: !state.projectsCollapsed })),
       toggleRepoCollapse: (repoId) =>
         set((state) => {
           const newCollapsed = new Set(state.collapsedRepos);
@@ -83,12 +88,14 @@ export const useSidebarStore = create<SidebarState>()(
       // Serialize Set properly for localStorage
       partialize: (state) => ({
         collapsedRepos: Array.from(state.collapsedRepos),
+        projectsCollapsed: state.projectsCollapsed,
         expandedOldWorkspaces: Array.from(state.expandedOldWorkspaces),
         repositoryOrder: state.repositoryOrder,
       }),
       merge: (persistedState: any, currentState) => ({
         ...currentState,
         collapsedRepos: new Set(persistedState?.collapsedRepos || []),
+        projectsCollapsed: persistedState?.projectsCollapsed === true,
         expandedOldWorkspaces: new Set(persistedState?.expandedOldWorkspaces || []),
         repositoryOrder: persistedState?.repositoryOrder || [],
       }),

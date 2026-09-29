@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { useSettings } from "@/features/settings/api/settings.queries";
@@ -8,7 +8,8 @@ import type { ContentTab } from "@/features/workspace/store";
 import { CONTENT_TABS, isTabVisible, type ContentTabItem } from "./content-tabs";
 
 interface ContentTabBarProps {
-  activeTab: ContentTab;
+  activeTab: ContentTab | null;
+  leadingTabs?: ReactNode;
   onTabChange: (tab: ContentTab) => void;
   workspaceId?: string | null;
   simulatorAvailable: boolean;
@@ -16,15 +17,15 @@ interface ContentTabBarProps {
   cloudSimulator: boolean;
 }
 
-function ContentTabButton({
+export function ContentTabButton({
   item,
   isActive,
   showDot,
   onClick,
 }: {
-  item: ContentTabItem;
+  item: Pick<ContentTabItem, "label" | "icon">;
   isActive: boolean;
-  showDot: boolean;
+  showDot?: boolean;
   onClick: () => void;
 }) {
   const Icon = item.icon;
@@ -63,6 +64,7 @@ function ContentTabButton({
 export function ContentTabBar({
   activeTab,
   onTabChange,
+  leadingTabs,
   workspaceId,
   simulatorAvailable,
   cloudSimulator,
@@ -92,6 +94,7 @@ export function ContentTabBar({
       className="no-drag scrollbar-hidden min-w-0 flex-1 overflow-x-auto"
     >
       <div className="flex w-max items-center gap-1" role="tablist" aria-label="Content panel">
+        {leadingTabs}
         {visibleItems.map((item) => {
           const isActive = activeTab === item.id;
           const showDot = item.id === "simulator" && simulatorActive;

@@ -8,7 +8,7 @@
 // typed HostRpc facade keeps the same method names so the deus-tools call
 // sites read identically.
 
-import type { SideChannelEndpoint } from "@shared/agent-side-channel";
+import type { ProjectToolRequest, SideChannelEndpoint } from "@shared/agent-side-channel";
 import { SIDE_CHANNEL } from "@shared/agent-side-channel";
 import type {
   AskUserQuestionRequest,
@@ -86,6 +86,10 @@ export function notifyHost(method: string, params: unknown): boolean {
  * later. Only data-fetch requests use timeouts.
  */
 export const HostRpc = {
+  requestProjectTool(r: ProjectToolRequest): Promise<unknown> {
+    // Creation acknowledges durable preparation; it does not wait for the child turn.
+    return requestHost(SIDE_CHANNEL.projectTool, r, AAP_LAUNCH_TIMEOUT_MS);
+  },
   requestExitPlanMode(r: ExitPlanModeRequest): Promise<ExitPlanModeResponse> {
     return requestHost(SIDE_CHANNEL.exitPlanMode, r);
   },

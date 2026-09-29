@@ -72,6 +72,8 @@ export interface WorkspaceWithDetailsRow {
   state: string;
   status: string;
   current_session_id: string | null;
+  project_id?: string | null;
+  project_title?: string | null;
   pr_url: string | null;
   pr_number: number | null;
   pr_state: string | null;

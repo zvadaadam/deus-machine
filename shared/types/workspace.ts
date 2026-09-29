@@ -28,6 +28,9 @@ export interface Workspace {
   state: WorkspaceState;
   status: WorkspaceStatus;
   current_session_id: string | null;
+  /** Project membership is authoritative for managed Agent controls. */
+  project_id?: string | null;
+  project_title?: string | null;
   session_status: SessionStatus | null;
   session_error_category: string | null;
   session_error_message: string | null;

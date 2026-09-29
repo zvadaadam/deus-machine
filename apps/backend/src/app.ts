@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import projectRoutes from "./routes/projects";
 import { cors } from "hono/cors";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { errorHandler } from "./middleware/error-handler";
@@ -39,6 +40,7 @@ export function createApp() {
 
   // Mount route groups
   app.route("/api", healthRoutes);
+  app.route("/api", projectRoutes);
   app.route("/api", authRoutes);
   app.route("/api", workspaceRoutes);
   app.route("/api", workspaceDiffRoutes);

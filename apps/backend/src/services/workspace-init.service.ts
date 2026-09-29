@@ -5,6 +5,8 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { getRepositoryById, getWorkspaceRaw } from "../db";
 import { prepareLocalEnvironment } from "./project-environment.service";
 import { invalidate } from "./query-engine";
 
@@ -21,6 +23,8 @@ export interface InitContext {
   worktreeBase: string;
   parentBranch: string;
   repoOriginUrl?: string | null;
+  /** Project operations reserve the initial conversation before preparing files. */
+  sessionId?: string;
 }
 
 interface InitStage {
@@ -93,6 +97,27 @@ const STAGES: InitStage[] = [
     label: "Creating worktree...",
     fatal: true,
     async run(ctx) {
+      if (ctx.sessionId && fs.existsSync(ctx.workspacePath)) {
+        // A retry may follow a crash after git completed but before SQL did.
+        // Never adopt an unrelated directory or reset its changes.
+        const [workspaceRoot, branch, commonDir, repoCommonDir] = await Promise.all([
+          execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: ctx.workspacePath }),
+          execFileAsync("git", ["symbolic-ref", "--short", "HEAD"], { cwd: ctx.workspacePath }),
+          execFileAsync("git", ["rev-parse", "--git-common-dir"], { cwd: ctx.workspacePath }),
+          execFileAsync("git", ["rev-parse", "--git-common-dir"], { cwd: ctx.repoRootPath }),
+        ]);
+        if (
+          fs.realpathSync(workspaceRoot.stdout.trim()) !== fs.realpathSync(ctx.workspacePath) ||
+          branch.stdout.trim() !== ctx.branchName ||
+          fs.realpathSync(path.resolve(ctx.workspacePath, commonDir.stdout.trim())) !==
+            fs.realpathSync(path.resolve(ctx.repoRootPath, repoCommonDir.stdout.trim()))
+        ) {
+          throw new ConflictError(
+            "The reserved Project workspace path belongs to another checkout."
+          );
+        }
+        return;
+      }
       await execFileAsync(
         "git",
         ["worktree", "add", "-b", ctx.branchName, ctx.workspacePath, ctx.worktreeBase],
@@ -129,6 +154,17 @@ const STAGES: InitStage[] = [
     label: "Running setup…",
     fatal: false,
     async run(ctx) {
+      if (ctx.sessionId) {
+        const workspace = getDatabase()
+          .prepare("SELECT setup_status FROM workspaces WHERE id = ?")
+          .get(ctx.workspaceId) as { setup_status: string };
+        // Setup commands may have external effects. Completed/failed preparation
+        // is not rerun because a later session transaction needs a retry.
+        if (workspace.setup_status === "completed" || workspace.setup_status === "failed") return;
+        if (workspace.setup_status === "running") {
+          throw new ConflictError("Workspace setup was interrupted. Review setup before retrying.");
+        }
+      }
       await prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl);
     },
   },
@@ -139,14 +175,35 @@ const STAGES: InitStage[] = [
     async run(ctx) {
       // Setup has finished or reported its error; the agent can now work or repair it.
       const db = getDatabase();
-      const sessionId = uuidv7();
+      const sessionId = ctx.sessionId ?? uuidv7();
 
       db.transaction(() => {
+        const existing = db
+          .prepare("SELECT workspace_id FROM sessions WHERE id = ?")
+          .get(sessionId) as { workspace_id: string } | undefined;
+        const workspace = db
+          .prepare("SELECT current_session_id FROM workspaces WHERE id = ?")
+          .get(ctx.workspaceId) as { current_session_id: string | null } | undefined;
+        if (!workspace) throw new NotFoundError("Workspace was removed during preparation.");
+        if (existing && existing.workspace_id !== ctx.workspaceId) {
+          throw new ConflictError("Reserved conversation belongs to another workspace.");
+        }
+        if (
+          ctx.sessionId &&
+          workspace.current_session_id &&
+          workspace.current_session_id !== sessionId
+        ) {
+          throw new ConflictError("Project workspace already has another current conversation.");
+        }
+        if (!existing) {
+          db.prepare(
+            "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
+          ).run(sessionId, ctx.workspaceId);
+        }
         db.prepare(
-          "INSERT INTO sessions (id, workspace_id, status, updated_at) VALUES (?, ?, 'idle', datetime('now'))"
-        ).run(sessionId, ctx.workspaceId);
-        db.prepare(
-          "UPDATE workspaces SET state = 'ready', current_session_id = ? WHERE id = ?"
+          `UPDATE workspaces SET state = 'ready', current_session_id = ?,
+            error_message = CASE WHEN setup_status = 'failed' THEN error_message ELSE NULL END
+            WHERE id = ?`
         ).run(sessionId, ctx.workspaceId);
       })();
 
@@ -158,7 +215,7 @@ const STAGES: InitStage[] = [
 
 // ─── Pipeline Runner ────────────────────────────────────────────
 
-export async function initializeWorkspace(ctx: InitContext): Promise<void> {
+async function runInitialization(ctx: InitContext): Promise<void> {
   const completed: InitStage[] = [];
 
   for (const stage of STAGES) {
@@ -177,9 +234,9 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
     } catch (err) {
       console.error(`[WORKSPACE] Stage "${stage.name}" failed:`, err);
 
-      if (stage.fatal) {
+      if (stage.fatal || (ctx.sessionId && stage.name === "setup")) {
         // Reverse-order cleanup of completed stages
-        for (const done of [...completed].reverse()) {
+        for (const done of ctx.sessionId ? [] : [...completed].reverse()) {
           if (done.cleanup) {
             await done
               .cleanup(ctx)
@@ -214,4 +271,81 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
 
   // Background stages finished — push final state to all connected clients.
   invalidate(["workspaces", "stats"]);
+}
+
+const preparing = new Map<string, { request: string; promise: Promise<void> }>();
+
+export function initializeWorkspace(ctx: InitContext): Promise<void> {
+  if (!ctx.sessionId) return runInitialization(ctx);
+  const request = JSON.stringify(ctx);
+  const pending = preparing.get(ctx.workspaceId);
+  if (pending) {
+    if (pending.request !== request) {
+      return Promise.reject(new ConflictError("Workspace preparation is already in progress."));
+    }
+    return pending.promise;
+  }
+  const promise = runInitialization(ctx).finally(() => preparing.delete(ctx.workspaceId));
+  preparing.set(ctx.workspaceId, { request, promise });
+  return promise;
+}
+
+/** Resolve once before reserving a Project operation; retries use the saved commit. */
+export async function resolveProjectBaseCommit(repositoryId: string, sourceBranch?: string) {
+  const repository = getRepositoryById(getDatabase(), repositoryId);
+  if (!repository) throw new NotFoundError("Repository not found");
+  const branch = sourceBranch ?? repository.git_default_branch;
+  const { stdout } = await execFileAsync(
+    "git",
+    ["rev-parse", "--verify", "--end-of-options", `${branch}^{commit}`],
+    { cwd: repository.root_path, timeout: 5_000 }
+  );
+  return { baseCommit: stdout.trim(), sourceBranch: branch };
+}
+
+/** Prepare a shell already reserved atomically with Project membership and work. */
+export async function prepareProjectWorkspace(input: {
+  workspaceId: string;
+  sessionId: string;
+  repositoryId: string;
+  baseCommit: string;
+  sourceBranch?: string;
+}): Promise<{ workspaceId: string; sessionId: string; workspacePath: string }> {
+  const db = getDatabase();
+  const workspace = getWorkspaceRaw(db, input.workspaceId);
+  const repository = getRepositoryById(db, input.repositoryId);
+  if (!workspace || !repository)
+    throw new NotFoundError("Reserved workspace or repository not found");
+  if (
+    workspace.kind !== "worktree" ||
+    workspace.repository_id !== input.repositoryId ||
+    !workspace.git_branch
+  ) {
+    throw new ValidationError("Projects require a reserved local repository workspace.");
+  }
+  if (workspace.state === "archived") throw new ConflictError("Project workspace is archived.");
+  const workspacePath = path.join(repository.root_path, ".deus", workspace.slug);
+  if (workspace.state === "ready") {
+    if (workspace.current_session_id !== input.sessionId) {
+      throw new ConflictError("Project workspace has a different current conversation.");
+    }
+    return { workspaceId: input.workspaceId, sessionId: input.sessionId, workspacePath };
+  }
+  db.prepare("UPDATE workspaces SET state = 'initializing' WHERE id = ?").run(input.workspaceId);
+  await initializeWorkspace({
+    workspaceId: input.workspaceId,
+    repositoryId: input.repositoryId,
+    sessionId: input.sessionId,
+    repoRootPath: repository.root_path,
+    workspacePath,
+    branchName: workspace.git_branch,
+    worktreeBase: input.baseCommit,
+    parentBranch: input.sourceBranch ?? repository.git_default_branch,
+    repoOriginUrl: repository.git_origin_url,
+  });
+  const prepared = getWorkspaceRaw(db, input.workspaceId);
+  if (prepared?.state !== "ready" || prepared.current_session_id !== input.sessionId) {
+    throw new ConflictError(prepared?.error_message ?? "Project workspace preparation failed.");
+  }
+  return { workspaceId: input.workspaceId, sessionId: input.sessionId, workspacePath };
 }

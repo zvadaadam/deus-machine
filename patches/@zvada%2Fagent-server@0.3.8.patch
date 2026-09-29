@@ -1,0 +1,1489 @@
+diff --git a/src/core/agents/acp/acp-agent.ts b/src/core/agents/acp/acp-agent.ts
+index aa91ae821..0456f844c 100644
+--- a/src/core/agents/acp/acp-agent.ts
++++ b/src/core/agents/acp/acp-agent.ts
+@@ -148,6 +148,8 @@ export class AcpAgent extends BaseAgent {
+ 		options: AgentExecuteOptions,
+ 		signal: AbortSignal,
+ 	): Promise<AcpSession> {
++		if (signal.aborted) throw new Error("turn aborted");
++		await this.sessions.waitForClose(options.sessionId);
+ 		if (signal.aborted) throw new Error("turn aborted");
+ 		const launch = await this.agentOptions.resolveLaunch();
+ 		if (signal.aborted) throw new Error("turn aborted");
+@@ -178,7 +180,7 @@ export class AcpAgent extends BaseAgent {
+ 			) {
+ 				resumeTarget = existing.acpSessionId;
+ 			}
+-			this.sessions.close(options.sessionId);
++			await this.sessions.close(options.sessionId);
+ 		}
+ 
+ 		const clientOptions: AcpClientOptions = {
+@@ -192,6 +194,7 @@ export class AcpAgent extends BaseAgent {
+ 			: await AcpClient.create(clientOptions);
+ 		if (signal.aborted) {
+ 			client.close();
++			await client.waitForExit();
+ 			throw new Error("turn aborted");
+ 		}
+ 		client.onClose(() => this.sessions.dropIfCurrent(options.sessionId, client));
+@@ -247,6 +250,7 @@ export class AcpAgent extends BaseAgent {
+ 			return session;
+ 		} catch (error) {
+ 			client.close();
++			await client.waitForExit();
+ 			throw signal.aborted ? new Error("turn aborted") : error;
+ 		} finally {
+ 			signal.removeEventListener("abort", onAbort);
+@@ -332,14 +336,19 @@ export class AcpAgent extends BaseAgent {
+ 			}
+ 
+ 			for await (const event of queue) {
++				// A forced close may enqueue a cancellation before its child exits.
++				// Do not let that terminal release ownership of the still-live agent.
++				if (client.closed) await client.waitForExit();
+ 				yield event;
+ 			}
+ 		} catch (error) {
+ 			if (!controller.signal.aborted) throw error;
++			if (session?.client.closed) await session.client.waitForExit();
+ 			yield { method: "session/prompt_result", params: { stopReason: "cancelled" } };
+ 		} finally {
+ 			if (cancelTimer) clearTimeout(cancelTimer);
+ 			for (const off of unsubscribe) off();
++			if (session?.client.closed) await session.client.waitForExit();
+ 			if (session) session.turn = undefined;
+ 			this.endTurn(options.sessionId, controller);
+ 			if (session && !session.client.closed) {
+@@ -354,11 +363,11 @@ export class AcpAgent extends BaseAgent {
+ 
+ 	override async release(sessionId: string): Promise<void> {
+ 		await super.release(sessionId);
+-		this.sessions.close(sessionId);
++		await this.sessions.close(sessionId);
+ 	}
+ 
+ 	override async terminateAll(): Promise<void> {
+ 		await super.terminateAll();
+-		this.sessions.closeAll();
++		await this.sessions.closeAll();
+ 	}
+ }
+diff --git a/src/core/agents/acp/client.ts b/src/core/agents/acp/client.ts
+index b2ddcac16..ad5acb51d 100644
+--- a/src/core/agents/acp/client.ts
++++ b/src/core/agents/acp/client.ts
+@@ -1,4 +1,4 @@
+-import { type ChildProcess, spawn } from "node:child_process";
++import { spawn } from "node:child_process";
+ import { Readable, Writable } from "node:stream";
+ import type {
+ 	AgentNotificationMethod,
+@@ -11,6 +11,7 @@ import type {
+ 	RequestPermissionResponse,
+ 	SessionNotification,
+ } from "@agentclientprotocol/sdk";
++import { ChildProcessLifetime } from "../session-store.ts";
+ 
+ /**
+  * How to start one ACP agent subprocess. Operator-level only — the wire never
+@@ -60,7 +61,7 @@ export interface AcpClientOptions {
+  * codex-app-server client's `setRequestHandler` pattern).
+  */
+ export class AcpClient {
+-	private proc?: ChildProcess;
++	private lifetime?: ChildProcessLifetime;
+ 	private connection?: ClientConnection;
+ 	private readonly updateHandlers = new Set<SessionUpdateHandler>();
+ 	private readonly closeHandlers = new Set<(error?: Error) => void>();
+@@ -141,13 +142,11 @@ export class AcpClient {
+ 	}
+ 
+ 	close(): void {
+-		const proc = this.proc;
+ 		const wasOpen = !this.exited;
+ 		this.exited = true;
+-		this.proc = undefined;
+ 		this.connection?.close();
+ 		this.connection = undefined;
+-		if (proc && !proc.killed) proc.kill("SIGTERM");
++		this.lifetime?.terminate();
+ 		if (wasOpen) this.notifyClosed();
+ 	}
+ 
+@@ -159,9 +158,10 @@ export class AcpClient {
+ 			env: { ...process.env, ...launch.env, ...this.opts.env },
+ 			stdio: ["pipe", "pipe", "pipe"],
+ 		});
+-		this.proc = proc;
++		this.lifetime = new ChildProcessLifetime(proc);
+ 		if (!proc.stdin || !proc.stdout) {
+-			proc.kill("SIGTERM");
++			this.close();
++			await this.waitForExit();
+ 			throw new Error("acp agent subprocess has no stdio");
+ 		}
+ 		// Drain stderr so the agent can't block on a full pipe; its logs are not ours.
+@@ -197,11 +197,17 @@ export class AcpClient {
+ 		);
+ 	}
+ 
++	/** Closing the transport does not prove that its subprocess stopped. */
++	waitForExit(): Promise<void> {
++		return this.lifetime?.exited ?? Promise.resolve();
++	}
++
+ 	private onExit(error: Error): void {
+ 		if (this.exited) return;
+ 		this.exited = true;
+ 		this.connection?.close(error);
+ 		this.connection = undefined;
++		this.lifetime?.terminate();
+ 		this.notifyClosed(error);
+ 	}
+ 
+diff --git a/src/core/agents/base.ts b/src/core/agents/base.ts
+index 981392a7a..35eb3550e 100644
+--- a/src/core/agents/base.ts
++++ b/src/core/agents/base.ts
+@@ -120,6 +120,7 @@ export abstract class BaseAgent implements Agent {
+ 	 * removes only the specific controller it created.
+ 	 */
+ 	protected readonly inflight = new Map<string, Set<AbortController>>();
++	private readonly detachExternal = new WeakMap<AbortController, () => void>();
+ 
+ 	abstract execute(
+ 		input: AgentInput,
+@@ -139,14 +140,14 @@ export abstract class BaseAgent implements Agent {
+ 
+ 	async release(sessionId: string): Promise<void> {
+ 		await this.cancel(sessionId);
+-		this.inflight.delete(sessionId);
++		this.endTurn(sessionId);
+ 	}
+ 
+ 	async terminateAll(): Promise<void> {
+ 		for (const set of this.inflight.values()) {
+ 			for (const controller of set) controller.abort();
+ 		}
+-		this.inflight.clear();
++		for (const sessionId of this.inflight.keys()) this.endTurn(sessionId);
+ 	}
+ 
+ 	/** Create a per-turn controller bound to `sessionId`, optionally chained to an external signal. */
+@@ -160,7 +161,11 @@ export abstract class BaseAgent implements Agent {
+ 		set.add(controller);
+ 		if (external) {
+ 			if (external.aborted) controller.abort();
+-			else external.addEventListener("abort", () => controller.abort(), { once: true });
++			else {
++				const abort = () => controller.abort();
++				external.addEventListener("abort", abort, { once: true });
++				this.detachExternal.set(controller, () => external.removeEventListener("abort", abort));
++			}
+ 		}
+ 		return controller;
+ 	}
+@@ -168,8 +173,11 @@ export abstract class BaseAgent implements Agent {
+ 	protected endTurn(sessionId: string, controller?: AbortController): void {
+ 		const set = this.inflight.get(sessionId);
+ 		if (!set) return;
+-		if (controller) set.delete(controller);
+-		else set.clear();
++		for (const current of controller ? [controller] : set) {
++			this.detachExternal.get(current)?.();
++			this.detachExternal.delete(current);
++			set.delete(current);
++		}
+ 		if (set.size === 0) this.inflight.delete(sessionId);
+ 	}
+ }
+diff --git a/src/core/agents/claude-code/adapter.ts b/src/core/agents/claude-code/adapter.ts
+index aec5c1f36..1aa39171d 100644
+--- a/src/core/agents/claude-code/adapter.ts
++++ b/src/core/agents/claude-code/adapter.ts
+@@ -281,10 +281,10 @@ export class ClaudeCodeTransformer implements EventTransformer<unknown> {
+ 	}
+ 
+ 	finish(): TransformResult {
+-		// error_during_execution + null stop_reason is cancellation ONLY when the
+-		// agent confirmed an interrupt; otherwise it is a real failure (a silent
++		// error_during_execution is cancellation ONLY when the agent emitted its
++		// interruption marker; otherwise it is a real failure (a silent
+ 		// "cancelled" here is how a bad resume id used to vanish without a trace).
+-		// A confirmed interrupt with NO result at all (aborted before the SDK
++		// An interruption with NO result at all (aborted before the SDK
+ 		// emitted one) is also a cancellation, not a completed turn.
+ 		const cancelled = this.interrupted && (this.execFailure || !this.sawResult);
+ 		const error =
+@@ -525,9 +525,10 @@ export class ClaudeCodeTransformer implements EventTransformer<unknown> {
+ 		this.finishReason = msg.stop_reason ?? msg.subtype ?? this.finishReason;
+ 		this.stopReason = mapClaudeStopReason(msg.stop_reason, msg.subtype);
+ 		if (msg.subtype && msg.subtype !== "success") {
+-			if (msg.subtype === "error_during_execution" && msg.stop_reason === null) {
++			if (msg.subtype === "error_during_execution") {
+ 				// Ambiguous shape: an interrupt AND an execution failure (e.g. a bad
+-				// resume id) both surface this way. The agent's `turn_interrupted`
++				// resume id) both surface this way. An interrupt may retain the prior
++				// model stop reason (e.g. tool_use). Only the agent's `turn_interrupted`
+ 				// marker (which arrives after this message) disambiguates in finish().
+ 				this.execFailure = true;
+ 			} else if (msg.subtype === "error_max_turns") {
+diff --git a/src/core/agents/claude-code/claude-agent.ts b/src/core/agents/claude-code/claude-agent.ts
+index 790596c83..065c99bc1 100644
+--- a/src/core/agents/claude-code/claude-agent.ts
++++ b/src/core/agents/claude-code/claude-agent.ts
+@@ -5,6 +5,7 @@ import { type DiagnosticHandler, emitDiagnostic } from "../../diagnostics.ts";
+ import type { AgentExecuteOptions, CancelResult, RawAgentEvent } from "../base.ts";
+ import { BaseAgent } from "../base.ts";
+ import type {
++	ClaudeEventTap,
+ 	ClaudeHooksFactory,
+ 	ClaudeSessionEndReason,
+ 	ClaudeSessionExtras,
+@@ -180,6 +181,9 @@ export class ClaudeCodeAgent extends BaseAgent {
+ 					},
+ 					this.sessionExtras(),
+ 				);
++				// A cancel can be confirmed while start() has no SDK query to
++				// interrupt. Do not enqueue that turn when the spawn completes.
++				if (controller.signal.aborted) break;
+ 
+ 				let reported = false;
+ 				const report = (id: string) => {
+@@ -197,31 +201,40 @@ export class ClaudeCodeAgent extends BaseAgent {
+ 				// handler AFTER it resolves can't clobber a still-running turn's
+ 				// handler. The SDK processes the turn on later async tasks, so the
+ 				// handler is in place before canUseTool can fire.
+-				const tap = await session.sendMessage(content, options.turnId);
++				let tap: ClaudeEventTap;
++				try {
++					tap = await session.sendMessage(content, options.turnId, controller.signal);
++				} catch (error) {
++					if (controller.signal.aborted) break;
++					throw error;
++				}
+ 				session.permissionHandler = options.onPermissionRequest;
+ 				// An abort that landed while we were spawning/sending has no listener
+ 				// yet — interrupt directly, then arm the listener for later aborts.
+-				if (controller.signal.aborted) void session.interruptTurn();
+-				controller.signal.addEventListener("abort", () => void session.interruptTurn(), {
+-					once: true,
+-				});
++				const interrupt = () => void session.interruptTurn();
++				if (controller.signal.aborted) interrupt();
++				controller.signal.addEventListener("abort", interrupt, { once: true });
+ 
+ 				let sawOutput = false;
+ 				let resumeFailed = false;
+-				for await (const event of tap.events) {
+-					const msg = event as { type?: string; session_id?: string };
+-					if (msg.type === "assistant" || msg.type === "stream_event") sawOutput = true;
+-					if (
+-						attemptedResume &&
+-						!sawOutput &&
+-						!controller.signal.aborted &&
+-						claudeResumeFailed(event)
+-					) {
+-						resumeFailed = true;
+-						continue;
++				try {
++					for await (const event of tap.events) {
++						const msg = event as { type?: string; session_id?: string };
++						if (msg.type === "assistant" || msg.type === "stream_event") sawOutput = true;
++						if (
++							attemptedResume &&
++							!sawOutput &&
++							!controller.signal.aborted &&
++							claudeResumeFailed(event)
++						) {
++							resumeFailed = true;
++							continue;
++						}
++						if (msg.session_id && (!resuming || sawOutput)) report(msg.session_id);
++						yield event as RawAgentEvent;
+ 					}
+-					if (msg.session_id && (!resuming || sawOutput)) report(msg.session_id);
+-					yield event as RawAgentEvent;
++				} finally {
++					controller.signal.removeEventListener("abort", interrupt);
+ 				}
+ 
+ 				if (!resumeFailed) break;
+@@ -237,10 +250,9 @@ export class ClaudeCodeAgent extends BaseAgent {
+ 				await this.manager.terminate(options.sessionId);
+ 			}
+ 
+-			// Ground truth for the adapter: an interrupted turn and a turn that
+-			// failed during execution (e.g. a bad resume id) end with the SAME
+-			// result shape (error_during_execution, null stop_reason). Only the
+-			// agent knows whether an interrupt was actually requested.
++			// Ground truth for the adapter: interrupted turns and execution failures
++			// (e.g. bad resume ids) can share error_during_execution. Only the agent
++			// knows whether an interrupt was actually requested.
+ 			if (controller.signal.aborted) yield { type: "turn_interrupted" };
+ 		} finally {
+ 			this.endTurn(options.sessionId, controller);
+diff --git a/src/core/agents/claude-code/generator-session.ts b/src/core/agents/claude-code/generator-session.ts
+index 4ec8ac09e..0bed8860c 100644
+--- a/src/core/agents/claude-code/generator-session.ts
++++ b/src/core/agents/claude-code/generator-session.ts
+@@ -1,3 +1,6 @@
++import { spawn } from "node:child_process";
++import { randomUUID } from "node:crypto";
++import { StringDecoder } from "node:string_decoder";
+ import type { Query as CCQuery, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+ import type {
+ 	Options as CCOptions,
+@@ -5,6 +8,8 @@ import type {
+ 	McpSetServersResult,
+ 	PermissionResult,
+ 	PermissionUpdate,
++	SpawnOptions,
++	SpawnedProcess,
+ } from "@anthropic-ai/claude-agent-sdk";
+ import { AsyncQueue } from "../../../protocol/index.ts";
+ import type { McpServerConfig } from "../../../protocol/index.ts";
+@@ -75,6 +80,13 @@ export interface ClaudeSessionExtras {
+ type SessionState = "starting" | "idle" | "busy" | "terminated";
+ type ClaudeContent = SDKUserMessage["message"]["content"];
+ 
++// Emitted by the pinned CLI, but not yet declared in the SDK's SDKMessage union.
++type ClaudeCommandLifecycle = {
++	type: "command_lifecycle";
++	command_uuid: string;
++	state: "queued" | "started" | "completed" | "cancelled";
++};
++
+ /** Per-turn handle: iterate `events` until the turn's `result` arrives (or the turn errors). */
+ export interface ClaudeEventTap {
+ 	readonly events: AsyncIterable<SDKMessage>;
+@@ -94,7 +106,10 @@ export class ClaudeGeneratorSession {
+ 	private config: ClaudeSessionConfig;
+ 
+ 	private readonly promptQueue = new AsyncQueue<SDKUserMessage>();
++	private readonly process = new ClaudeProcessTracker();
+ 	private query: CCQuery | null = null;
++	private interruption?: { promptId: string | undefined; promise: Promise<void> };
++	private termination?: Promise<void>;
+ 	/** Set per turn (inside sendMessage, after the idle wait) for hook contexts. */
+ 	currentTurnId?: string;
+ 	/** Resolved once at spawn; re-merged into every hot-swap. */
+@@ -104,6 +119,8 @@ export class ClaudeGeneratorSession {
+ 	private cumulativeCost: number | undefined = 0;
+ 
+ 	private currentTap: AsyncQueue<SDKMessage> | null = null;
++	private currentPromptId?: string;
++	private currentPromptStarted = false;
+ 	private readonly idleWaiters: Array<() => void> = [];
+ 
+ 	/**
+@@ -192,6 +209,9 @@ export class ClaudeGeneratorSession {
+ 			policy: this.extras?.toolPolicy,
+ 			getBroker: () => this.permissionHandler,
+ 		});
++		// Session release can race the asynchronous embedder factories above.
++		if (this.currentState !== "starting") return;
++		this.process.attach(options);
+ 		this.query = sdk.query({
+ 			prompt: this.promptQueue as AsyncIterable<SDKUserMessage>,
+ 			options,
+@@ -202,10 +222,16 @@ export class ClaudeGeneratorSession {
+ 	}
+ 
+ 	/** Push a user message; returns a tap that streams this turn's events. */
+-	async sendMessage(content: ClaudeContent, turnId?: string): Promise<ClaudeEventTap> {
++	async sendMessage(
++		content: ClaudeContent,
++		turnId?: string,
++		signal?: AbortSignal,
++	): Promise<ClaudeEventTap> {
++		signal?.throwIfAborted();
+ 		while (this.state !== "idle") {
+ 			if (this.state === "terminated") throw new Error("Session is terminated");
+-			await this.waitForIdle();
++			await this.waitForIdle(signal);
++			signal?.throwIfAborted();
+ 		}
+ 		this.clearIdleTimer();
+ 		this.state = "busy";
+@@ -214,8 +240,11 @@ export class ClaudeGeneratorSession {
+ 
+ 		const tap = new AsyncQueue<SDKMessage>();
+ 		this.currentTap = tap;
++		this.currentPromptId = randomUUID();
++		this.currentPromptStarted = false;
+ 		this.promptQueue.push({
+ 			type: "user",
++			uuid: this.currentPromptId,
+ 			message: { role: "user", content },
+ 			parent_tool_use_id: null,
+ 			...(this.nativeSessionId ? { session_id: this.nativeSessionId } : {}),
+@@ -231,18 +260,29 @@ export class ClaudeGeneratorSession {
+ 	}
+ 
+ 	/**
+-	 * Stop the in-flight turn without killing the session. Returns whether the
+-	 * interrupt was CONFIRMED: true when there was nothing to interrupt or the
+-	 * SDK acknowledged it; false when the round-trip timed out or failed — the
+-	 * subprocess may still be running its turn and the caller must report that
+-	 * honestly instead of assuming a clean cancel.
++	 * Interrupt an admitted prompt, or stop the process if the prompt is still
++	 * queued: the public SDK interrupt deliberately leaves queued prompts running.
++	 * A process stop is confirmed only after exit, never merely after close().
+ 	 */
+ 	async interruptTurn(timeoutMs = 2000): Promise<boolean> {
+-		if ((this.state !== "busy" && this.state !== "starting") || !this.query) return true;
++		let operation =
++			this.termination ??
++			(this.interruption?.promptId === this.currentPromptId
++				? this.interruption?.promise
++				: undefined);
++		if (!operation) {
++			if ((this.state !== "busy" && this.state !== "starting") || !this.query) return true;
++			operation = this.interruptCurrentTurn();
++			this.interruption = { promptId: this.currentPromptId, promise: operation };
++			const clear = () => {
++				if (this.interruption?.promise === operation) this.interruption = undefined;
++			};
++			void operation.then(clear, clear);
++		}
+ 		let timer: ReturnType<typeof setTimeout> | undefined;
+ 		try {
+ 			await Promise.race([
+-				this.query.interrupt(),
++				operation,
+ 				new Promise<never>((_, reject) => {
+ 					timer = setTimeout(() => reject(new Error("interrupt timeout")), timeoutMs);
+ 				}),
+@@ -255,34 +295,69 @@ export class ClaudeGeneratorSession {
+ 		}
+ 	}
+ 
+-	async terminate(reason: ClaudeSessionEndReason = "released"): Promise<void> {
+-		if (this.state === "terminated") return;
++	private async interruptCurrentTurn(): Promise<void> {
++		const query = this.query;
++		const promptId = this.currentPromptId;
++		if (!query) return;
++		if (promptId && !this.currentPromptStarted) {
++			await this.terminate("released", true);
++			return;
++		}
++		const receipt = await query.interrupt();
++		if (promptId && this.currentPromptId === promptId && receipt?.still_queued.includes(promptId)) {
++			await this.terminate("released", true);
++		}
++	}
++
++	terminate(reason: ClaudeSessionEndReason = "released", cancelQueued = false): Promise<void> {
++		if (this.termination) {
++			if (cancelQueued) this.process.terminate();
++			return this.termination;
++		}
+ 		this.clearIdleTimer();
+ 		this.state = "terminated";
+ 		const query = this.query;
+ 		this.query = null;
+ 		this.promptQueue.end();
+-		this.currentTap?.end();
+-		this.currentTap = null;
+-		for (const w of this.idleWaiters) w();
+-		this.idleWaiters.length = 0;
++		let forceTerminate = cancelQueued;
+ 		try {
+-			// The SDK documents close() as the forceful subprocess/MCP cleanup path.
++			// Arm the SDK's shutdown fallback before sending an immediate signal.
+ 			query?.close();
+-		} finally {
++		} catch {
++			forceTerminate = true;
++		}
++		if (forceTerminate) this.process.terminate();
++		this.termination = this.process.waitForExit().then(() => {
++			// close() ends the SDK stream before the subprocess exits. Keep the tap
++			// open until exit so the runtime cannot admit a competing successor.
++			this.currentTap?.end();
++			this.currentTap = null;
++			for (const w of this.idleWaiters.splice(0)) w();
+ 			try {
+ 				this.onTerminated?.(reason);
+ 			} catch {
+ 				// Observer failures (incl. the host's onSessionEnd) must never make
+ 				// terminate() reject — the idle timer calls it unawaited.
+ 			}
+-		}
++		});
++		return this.termination;
+ 	}
+ 
+ 	private async consumeEvents(): Promise<void> {
+ 		if (!this.query) return;
+ 		try {
+ 			for await (const event of this.query) {
++				if (this.state === "terminated") continue;
++				const native = event as SDKMessage | ClaudeCommandLifecycle;
++				if (
++					this.currentPromptId &&
++					((native.type === "user" && native.uuid === this.currentPromptId) ||
++						(native.type === "command_lifecycle" &&
++							native.command_uuid === this.currentPromptId &&
++							native.state === "started"))
++				) {
++					this.currentPromptStarted = true;
++				}
+ 				if (event.type === "system" && event.subtype === "init" && event.session_id) {
+ 					this.nativeSessionId = event.session_id;
+ 				}
+@@ -301,14 +376,42 @@ export class ClaudeGeneratorSession {
+ 						this.cumulativeCost !== undefined && event.total_cost_usd < this.cumulativeCost
+ 							? undefined
+ 							: event.total_cost_usd;
++					// Resuming may drain background-task notifications before the stdin
++					// prompt. Their successful results do not finish that prompt: the
++					// CLI's matching `started` lifecycle marks admission even when a
++					// UserPromptSubmit hook blocks before any user replay is emitted.
++					// User replays remain a fallback for CLIs without lifecycle frames.
++					// Startup errors can precede admission and must still fail the turn.
++					if (
++						event.subtype === "success" &&
++						(!this.currentPromptStarted ||
++							(event.user_message_uuid && event.user_message_uuid !== this.currentPromptId))
++					) {
++						continue;
++					}
+ 					this.currentTap?.push(result);
+ 					this.onTurnComplete();
+ 				} else {
+ 					this.currentTap?.push(event);
+ 				}
+ 			}
++			if (this.currentTap && this.state !== "terminated") {
++				throw new Error("Claude stream ended before the requested prompt returned a result");
++			}
+ 		} catch (err) {
+-			this.currentTap?.fail(err);
++			if (this.state !== "terminated") {
++				// An SDK stream error is not a process-exit acknowledgment either.
++				// Keep the failed turn active until the child can no longer execute.
++				const tap = this.currentTap;
++				this.currentTap = null;
++				await this.terminate("released", true);
++				const detail = this.process.stderrTail;
++				tap?.fail(
++					detail && err instanceof Error
++						? new Error(`${err.message}\n${detail}`, { cause: err })
++						: err,
++				);
++			}
+ 		} finally {
+ 			await this.terminate();
+ 		}
+@@ -317,25 +420,40 @@ export class ClaudeGeneratorSession {
+ 	private onTurnComplete(): void {
+ 		this.currentTap?.end();
+ 		this.currentTap = null;
++		this.currentPromptId = undefined;
++		this.currentPromptStarted = false;
+ 		this.state = "idle";
+ 		this.resetIdleTimer();
+-		this.idleWaiters.shift()?.();
++		// Wake every contender: a cancelled first waiter must not strand the
++		// remaining prompts while idle. sendMessage rechecks state before enqueue.
++		for (const waiter of this.idleWaiters.splice(0)) waiter();
+ 	}
+ 
+-	private waitForIdle(timeoutMs = 60_000): Promise<void> {
++	private waitForIdle(signal?: AbortSignal, timeoutMs = 60_000): Promise<void> {
+ 		return new Promise<void>((resolve, reject) => {
++			if (signal?.aborted) return reject(signal.reason);
+ 			if (this.state === "idle") return resolve();
+ 			if (this.state === "terminated") return reject(new Error("terminated while waiting"));
+-			const timer = setTimeout(() => {
++			const cleanup = () => {
++				clearTimeout(timer);
++				signal?.removeEventListener("abort", onAbort);
+ 				const idx = this.idleWaiters.indexOf(onIdle);
+ 				if (idx >= 0) this.idleWaiters.splice(idx, 1);
++			};
++			const timer = setTimeout(() => {
++				cleanup();
+ 				reject(new Error("timeout waiting for idle"));
+ 			}, timeoutMs);
+ 			const onIdle = () => {
+-				clearTimeout(timer);
++				cleanup();
+ 				resolve();
+ 			};
++			const onAbort = () => {
++				cleanup();
++				reject(signal?.reason);
++			};
+ 			this.idleWaiters.push(onIdle);
++			signal?.addEventListener("abort", onAbort, { once: true });
+ 		});
+ 	}
+ 
+@@ -355,6 +473,77 @@ export class ClaudeGeneratorSession {
+ 	}
+ }
+ 
++/** The SDK's close() ends its stream before the subprocess has actually exited. */
++export class ClaudeProcessTracker {
++	private exited: Promise<void> = Promise.resolve();
++	private closed = false;
++	private tail = "";
++	private child?: SpawnedProcess;
++
++	get stderrTail(): string {
++		return this.tail;
++	}
++
++	attach(options: CCOptions): void {
++		const customSpawn = options.spawnClaudeCodeProcess;
++		options.spawnClaudeCodeProcess = (params) => {
++			if (this.closed) throw new Error("Claude session was closed before process startup");
++			const child = customSpawn ? customSpawn(params) : this.spawnLocal(params, options.stderr);
++			this.child = child;
++			this.exited = new Promise<void>((resolve) => {
++				const exited = () => {
++					if (this.child === child) this.child = undefined;
++					resolve();
++				};
++				child.once("exit", exited);
++				child.on("error", (error) => {
++					// A spawn failure created no process. Abort/kill errors do not
++					// establish exit; the SDK still owns shutdown and its fallback.
++					if ((error as NodeJS.ErrnoException).syscall?.startsWith("spawn")) exited();
++				});
++				if (child.exitCode !== null || child.signalCode != null) exited();
++			});
++			return child;
++		};
++	}
++
++	/** Call after query.close() arms its fallback, before its EOF grace can run queued work. */
++	terminate(): void {
++		this.closed = true;
++		const child = this.child;
++		if (child && child.exitCode === null && child.signalCode == null) child.kill("SIGTERM");
++	}
++
++	/** Call after query.close(); its grace/kill policy still owns termination. */
++	waitForExit(): Promise<void> {
++		this.closed = true;
++		return this.exited;
++	}
++
++	private spawnLocal(params: SpawnOptions, stderr: CCOptions["stderr"]): SpawnedProcess {
++		const child = spawn(params.command, params.args, {
++			cwd: params.cwd,
++			env: params.env,
++			signal: params.signal,
++			stdio: ["pipe", "pipe", "pipe"],
++			windowsHide: true,
++		});
++		const decoder = new StringDecoder("utf8");
++		const append = (text: string) => {
++			this.tail = (this.tail + text).slice(-2048);
++			if (text) stderr?.(text);
++		};
++		child.stderr.on("data", (chunk: Buffer) => append(decoder.write(chunk)));
++		child.stderr.once("end", () => append(decoder.end()));
++		// The SDK handles protocol failures. Keep pipe errors during shutdown
++		// from becoming unhandled EventEmitter errors in the host process.
++		child.stdin.on("error", () => {});
++		child.stdout.on("error", () => {});
++		child.stderr.on("error", () => {});
++		return child;
++	}
++}
++
+ /**
+  * The SDK approval callback: host `toolPolicy` first (full native
+  * PermissionResult power), then the engine's interactive broker. The SDK
+diff --git a/src/core/agents/claude-code/options.ts b/src/core/agents/claude-code/options.ts
+index e8a45afff..784f0ef7c 100644
+--- a/src/core/agents/claude-code/options.ts
++++ b/src/core/agents/claude-code/options.ts
+@@ -166,6 +166,9 @@ export function buildClaudeOptions(
+ 	if (config.thinkingLevel !== "off") {
+ 		options.extraArgs = { "thinking-display": "summarized", ...options.extraArgs };
+ 	}
++	// Retain processed-message acknowledgments for CLIs without command lifecycle
++	// frames. A resumed query can emit unrelated background-task results first.
++	options.extraArgs = { ...options.extraArgs, "replay-user-messages": null };
+ 
+ 	return options;
+ }
+diff --git a/src/core/agents/claude-code/session-manager.ts b/src/core/agents/claude-code/session-manager.ts
+index 01c7bfe21..6bf37b4f6 100644
+--- a/src/core/agents/claude-code/session-manager.ts
++++ b/src/core/agents/claude-code/session-manager.ts
+@@ -83,6 +83,9 @@ export class ClaudeSessionManager {
+ 	): Promise<ClaudeSessionSpawn> {
+ 		let startConfig = config;
+ 		const existing = this.sessions.get(sessionId);
++		// The SDK stream can fail before its subprocess exits. Replacement must
++		// wait for that shutdown, just as it does for an explicit config restart.
++		if (existing?.currentState === "terminated") await existing.terminate();
+ 		if (existing && existing.currentState !== "terminated") {
+ 			if (this.needsRestart(existing.currentConfig, config)) {
+ 				startConfig = claudeRestartConfig(
+diff --git a/src/core/agents/codex-app-server/client.ts b/src/core/agents/codex-app-server/client.ts
+index 3e576eef5..1410bf783 100644
+--- a/src/core/agents/codex-app-server/client.ts
++++ b/src/core/agents/codex-app-server/client.ts
+@@ -1,5 +1,6 @@
+ import { type ChildProcess, spawn as nodeSpawn } from "node:child_process";
+ import { StringDecoder } from "node:string_decoder";
++import { ChildProcessLifetime } from "../session-store.ts";
+ 
+ /** Cap the retained stderr tail — enough for the CLI's error, never a log flood. */
+ const STDERR_TAIL_MAX = 2048;
+@@ -59,6 +60,7 @@ export class CodexAppServerClient {
+ 	private readonly closeHandlers = new Set<(error?: Error) => void>();
+ 	private requestHandler?: ServerRequestHandler;
+ 	private exited = false;
++	private lifetime?: ChildProcessLifetime;
+ 	/** Bounded rolling tail of the subprocess's stderr — folded into the exit
+ 	 *  error so failures carry the CLI's own explanation. */
+ 	private stderrTail = "";
+@@ -89,6 +91,11 @@ export class CodexAppServerClient {
+ 		return this.exited;
+ 	}
+ 
++	/** Logical close rejects RPCs immediately; execution ownership lasts until exit. */
++	waitForExit(): Promise<void> {
++		return this.lifetime?.exited ?? Promise.resolve();
++	}
++
+ 	async initialize(): Promise<void> {
+ 		this.start();
+ 		await this.request(
+@@ -122,16 +129,14 @@ export class CodexAppServerClient {
+ 	}
+ 
+ 	close(): void {
+-		const proc = this.proc;
+ 		const wasOpen = !this.exited;
+-		this.proc = undefined;
+ 		this.exited = true;
+ 		for (const [id, p] of this.pending) {
+ 			if (p.timer) clearTimeout(p.timer);
+ 			p.reject(new Error(`codex app-server closed before '${p.method}'`));
+ 			this.pending.delete(id);
+ 		}
+-		if (proc && !proc.killed) proc.kill("SIGTERM");
++		this.lifetime?.terminate();
+ 		if (wasOpen) this.notifyClosed();
+ 	}
+ 
+@@ -142,6 +147,7 @@ export class CodexAppServerClient {
+ 
+ 	private start(): void {
+ 		if (this.proc && !this.exited) return;
++		if (this.exited) throw new Error("cannot restart a closed codex app-server client");
+ 		this.exited = false;
+ 		const spawnProcess = this.opts.spawnProcess ?? nodeSpawn;
+ 		const proc = spawnProcess(this.opts.codexPath ?? "codex", ["app-server"], {
+@@ -150,6 +156,7 @@ export class CodexAppServerClient {
+ 			stdio: ["pipe", "pipe", "pipe"],
+ 		});
+ 		this.proc = proc;
++		this.lifetime = new ChildProcessLifetime(proc);
+ 		this.stderrTail = "";
+ 		this.stderrDecoder = new StringDecoder("utf8");
+ 		proc.stdout?.on("data", (chunk: Buffer) => this.onStdout(chunk));
+@@ -179,6 +186,7 @@ export class CodexAppServerClient {
+ 	}
+ 
+ 	private onStdout(chunk: Buffer): void {
++		if (this.exited) return;
+ 		this.buffer += this.decoder.write(chunk);
+ 		let nl = this.buffer.indexOf("\n");
+ 		while (nl !== -1) {
+@@ -241,9 +249,12 @@ export class CodexAppServerClient {
+ 			this.pending.delete(id);
+ 		}
+ 		this.notifyClosed(error);
++		// A broken stdin/stdout can arrive while the subprocess is still alive.
++		// Own its termination just as for an explicit close.
++		this.close();
+ 	}
+ 
+ 	private write(payload: unknown): void {
+-		this.proc?.stdin?.write(`${JSON.stringify(payload)}\n`);
++		if (!this.exited) this.proc?.stdin?.write(`${JSON.stringify(payload)}\n`);
+ 	}
+ }
+diff --git a/src/core/agents/codex-app-server/codex-app-server-agent.ts b/src/core/agents/codex-app-server/codex-app-server-agent.ts
+index 7415ef58d..62cf3c14a 100644
+--- a/src/core/agents/codex-app-server/codex-app-server-agent.ts
++++ b/src/core/agents/codex-app-server/codex-app-server-agent.ts
+@@ -233,6 +233,8 @@ export class CodexAppServerAgent extends BaseAgent {
+ 	): Promise<AppServerSession> {
+ 		const { signal } = turn;
+ 		signal.throwIfAborted();
++		await this.sessions.waitForClose(options.sessionId);
++		signal.throwIfAborted();
+ 		const approvalPolicy = approvalPolicyFor(options);
+ 		const sandbox = mapSandbox(options.permissionMode);
+ 		const existing = this.sessions.get(options.sessionId);
+@@ -253,6 +255,7 @@ export class CodexAppServerAgent extends BaseAgent {
+ 				} catch (error) {
+ 					existing.turn = undefined;
+ 					existing.client.close();
++					await existing.client.waitForExit();
+ 					throw error;
+ 				} finally {
+ 					signal.removeEventListener("abort", onAbort);
+@@ -267,7 +270,7 @@ export class CodexAppServerAgent extends BaseAgent {
+ 			) {
+ 				resumeThreadId = existing.threadId;
+ 			}
+-			this.sessions.close(options.sessionId);
++			await this.sessions.close(options.sessionId);
+ 		}
+ 
+ 		const clientOptions: CodexAppServerClientOptions = {
+@@ -313,15 +316,22 @@ export class CodexAppServerAgent extends BaseAgent {
+ 			if (options.systemPromptAppend)
+ 				startParams.developerInstructions = options.systemPromptAppend;
+ 
+-			// A dead/unknown resume target falls back to a fresh thread. Auth was
+-			// established above, outside this fallback, so a login failure cannot
+-			// silently start a different conversation or use ambient credentials.
++			// Only a proven missing rollout can fall back to a fresh thread (the
++			// same policy as codex-sdk). Transport/auth/model failures must remain
++			// visible rather than silently discarding the requested conversation.
+ 			let threadId: string | undefined;
+ 			if (resumeThreadId) {
+ 				threadId = await client
+ 					.request("thread/resume", { threadId: resumeThreadId, ...startParams })
+ 					.then((r) => (r as { thread?: { id?: string } })?.thread?.id ?? resumeThreadId)
+-					.catch(() => undefined);
++					.catch((error: unknown) => {
++						const missingId =
++							error instanceof Error
++								? /no rollout found for thread id ([^\s]+)/.exec(error.message)?.[1]
++								: undefined;
++						if (missingId !== resumeThreadId) throw error;
++						return undefined;
++					});
+ 			}
+ 			signal.throwIfAborted();
+ 			if (!threadId) {
+@@ -339,6 +349,7 @@ export class CodexAppServerAgent extends BaseAgent {
+ 			session.turn = undefined;
+ 			client.setRequestHandler(undefined);
+ 			client.close();
++			await client.waitForExit();
+ 			throw error;
+ 		} finally {
+ 			signal.removeEventListener("abort", onAbort);
+@@ -563,6 +574,7 @@ export class CodexAppServerAgent extends BaseAgent {
+ 			clearStall();
+ 			if (cancelTimer) clearTimeout(cancelTimer);
+ 			for (const off of unsubscribe) off();
++			if (session?.client.closed) await session.client.waitForExit();
+ 			this.endTurn(options.sessionId, controller);
+ 			if (session?.turn === turn) {
+ 				session.turn = undefined;
+@@ -595,11 +607,11 @@ export class CodexAppServerAgent extends BaseAgent {
+ 
+ 	override async release(sessionId: string): Promise<void> {
+ 		await super.release(sessionId);
+-		this.sessions.close(sessionId);
++		await this.sessions.close(sessionId);
+ 	}
+ 
+ 	override async terminateAll(): Promise<void> {
+ 		await super.terminateAll();
+-		this.sessions.closeAll();
++		await this.sessions.closeAll();
+ 	}
+ }
+diff --git a/src/core/agents/session-store.ts b/src/core/agents/session-store.ts
+index 7e920d8ce..a194c8509 100644
+--- a/src/core/agents/session-store.ts
++++ b/src/core/agents/session-store.ts
+@@ -1,6 +1,39 @@
++import type { ChildProcess } from "node:child_process";
++
++/** Actual subprocess lifetime for transports whose signal policy we own. */
++export class ChildProcessLifetime {
++	readonly exited: Promise<void>;
++	private stopped = false;
++	private killTimer?: ReturnType<typeof setTimeout>;
++
++	constructor(private readonly proc: ChildProcess) {
++		this.exited = new Promise<void>((resolve) => {
++			const onExit = () => {
++				this.stopped = true;
++				if (this.killTimer) clearTimeout(this.killTimer);
++				resolve();
++			};
++			proc.once("exit", onExit);
++			// close also follows a failed spawn, where exit is never emitted.
++			proc.once("close", onExit);
++		});
++	}
++
++	terminate(): void {
++		if (this.stopped || this.killTimer) return;
++		// `killed` records signal delivery, not exit. Keep this deadline armed
++		// even when the child ignores SIGTERM or closes its output early.
++		this.killTimer = setTimeout(() => {
++			if (!this.stopped) this.proc.kill("SIGKILL");
++		}, 2_000);
++		this.killTimer.unref?.();
++		this.proc.kill("SIGTERM");
++	}
++}
++
+ /** The slice of a session a SessionStore manages: a closable client + idle timer. */
+ export interface StoredSession {
+-	client: { closed: boolean; close(): void };
++	client: { closed: boolean; close(): void; waitForExit?(): Promise<void> };
+ 	idleTimer?: ReturnType<typeof setTimeout>;
+ }
+ 
+@@ -13,6 +46,7 @@ export interface StoredSession {
+ export class SessionStore<S extends StoredSession> {
+ 	private readonly sessions = new Map<string, S>();
+ 	private readonly pending = new Map<string, Set<S["client"]>>();
++	private readonly closing = new Map<string, Map<S["client"], Promise<void>>>();
+ 	private closed = false;
+ 
+ 	/** Own a client before its initialization RPCs have completed. */
+@@ -57,26 +91,56 @@ export class SessionStore<S extends StoredSession> {
+ 		if (current && current.client === client) {
+ 			this.clearIdle(current);
+ 			this.sessions.delete(sessionId);
++			this.trackClose(sessionId, client);
++		}
++	}
++
++	private trackClose(sessionId: string, client: S["client"]): void {
++		if (!client.waitForExit) return;
++		let clients = this.closing.get(sessionId);
++		if (!clients) {
++			clients = new Map();
++			this.closing.set(sessionId, clients);
+ 		}
++		if (clients.has(client)) return;
++		const done = client.waitForExit();
++		clients.set(client, done);
++		const remove = () => {
++			clients.delete(client);
++			if (!clients.size && this.closing.get(sessionId) === clients) this.closing.delete(sessionId);
++		};
++		void done.then(remove, remove);
++	}
++
++	/** Drain earlier teardown even after its session mapping has been removed. */
++	async waitForClose(sessionId: string): Promise<void> {
++		await Promise.all(this.closing.get(sessionId)?.values() ?? []);
+ 	}
+ 
+ 	/** Tear down one session: cancel its idle timer, unmap it, close its client. */
+-	close(sessionId: string): void {
++	close(sessionId: string): Promise<void> {
+ 		const pending = this.pending.get(sessionId);
+ 		this.pending.delete(sessionId);
+ 		const session = this.sessions.get(sessionId);
+ 		this.sessions.delete(sessionId);
+ 		if (session) this.clearIdle(session);
+-		for (const client of pending ?? []) client.close();
+-		session?.client.close();
++		const clients = new Set(pending);
++		if (session) clients.add(session.client);
++		for (const client of clients) {
++			this.trackClose(sessionId, client);
++			client.close();
++		}
++		return this.waitForClose(sessionId);
+ 	}
+ 
+ 	/** Tear down ready and initializing clients; refuse subsequent registrations. */
+-	closeAll(): void {
++	async closeAll(): Promise<void> {
+ 		this.closed = true;
+-		for (const id of new Set([...this.sessions.keys(), ...this.pending.keys()])) {
+-			this.close(id);
+-		}
++		await Promise.all(
++			[...new Set([...this.sessions.keys(), ...this.pending.keys(), ...this.closing.keys()])].map(
++				(id) => this.close(id),
++			),
++		);
+ 	}
+ 
+ 	/** Shut the session down after `idleMs` unless another turn claims it first. */
+@@ -84,8 +148,7 @@ export class SessionStore<S extends StoredSession> {
+ 		this.clearIdle(session);
+ 		session.idleTimer = setTimeout(() => {
+ 			if (this.sessions.get(sessionId) !== session) return;
+-			this.sessions.delete(sessionId);
+-			session.client.close();
++			void this.close(sessionId);
+ 		}, idleMs);
+ 		session.idleTimer.unref?.();
+ 	}
+diff --git a/src/core/index.ts b/src/core/index.ts
+index 20d391dd5..38758ee8a 100644
+--- a/src/core/index.ts
++++ b/src/core/index.ts
+@@ -115,6 +115,8 @@ export {
+ 	CliProvisionError,
+ 	HarnessNotFoundError,
+ 	TurnConflictError,
++	TurnActiveError,
++	SessionClosingError,
+ } from "./utils/errors.ts";
+ 
+ // Re-export the wire contract for convenience.
+diff --git a/src/core/runtime/agent-runtime.ts b/src/core/runtime/agent-runtime.ts
+index 08e6182b9..84aaa8ad0 100644
+--- a/src/core/runtime/agent-runtime.ts
++++ b/src/core/runtime/agent-runtime.ts
+@@ -20,7 +20,7 @@ import { DEFAULT_TOKEN_USAGE, generateUUIDv7 } from "../../protocol/index.ts";
+ import type { AgentExecuteOptions, CancelResult, PermissionDecision } from "../agents/base.ts";
+ import type { AgentRegistry } from "../agents/registry.ts";
+ import { type DiagnosticHandler, emitDiagnostic } from "../diagnostics.ts";
+-import { TurnConflictError } from "../utils/errors.ts";
++import { SessionClosingError, TurnActiveError, TurnConflictError } from "../utils/errors.ts";
+ import { EventProcessor } from "./event-processor.ts";
+ import type { EventSink } from "./event-sink.ts";
+ 
+@@ -84,6 +84,7 @@ const PERMISSION_OPTIONS: PermissionOption[] = [
+ 
+ interface PendingPermission {
+ 	sessionId: string;
++	turnId: string;
+ 	/** Resolves the request and emits `permission.resolved`; await the returned
+ 	 * promise to order that emit (the turn-end drain does, so it lands before
+ 	 * `turn.ended`). */
+@@ -101,10 +102,18 @@ export class AgentRuntime {
+ 	/** Standing per-session `*_always` answers: sessionId -> toolName -> verdict. */
+ 	private readonly alwaysDecisions = new Map<string, Map<string, "allow" | "deny">>();
+ 	private readonly activeRuns = new Set<Promise<RunSummary>>();
++	/** Execution ownership ends before terminal delivery, which may start the next turn. */
++	private readonly activeTurns = new Map<string, { turnId: string; harness: AgentHarness }>();
+ 	/** In-flight turns by turn key — the convergence target for retried runs. */
+ 	private readonly inflightTurns = new Map<
+ 		string,
+-		{ inputKey: string; promise: Promise<RunSummary> }
++		{
++			inputKey: string;
++			promise: Promise<RunSummary>;
++			sessionId: string;
++			harness: AgentHarness;
++			controller: AbortController;
++		}
+ 	>();
+ 	/** Recently completed turns per session (bounded LRU) — retries converge on the stored summary. */
+ 	private readonly completedTurns = new Map<
+@@ -114,6 +123,7 @@ export class AgentRuntime {
+ 	/** Per-session convergence window; old turns fall out and a stale retry would re-execute. */
+ 	private static readonly COMPLETED_TURN_MEMORY = 16;
+ 	private shutdownPromise?: Promise<void>;
++	private readonly closingSessions = new Map<string, { promise: Promise<void>; failed: boolean }>();
+ 
+ 	constructor(
+ 		private readonly registry: AgentRegistry,
+@@ -143,10 +153,13 @@ export class AgentRuntime {
+ 	 * Probe how `run()` would admit this request WITHOUT executing anything:
+ 	 * `new` (would run), `inflight`/`completed` (an identical request was
+ 	 * already admitted — a retry must converge, not re-execute). Throws
+-	 * `TurnConflictError` when this turnId was admitted with DIFFERENT input.
++	 * `TurnConflictError` when this turnId was admitted with DIFFERENT input,
++	 * or `TurnActiveError` when another turn owns the logical session.
+ 	 * Wire seats use this to quick-ack a duplicate instead of starting it.
+ 	 */
+ 	admission(request: RunRequest): TurnAdmission {
++		if (this.closingSessions.has(request.sessionId))
++			throw new SessionClosingError(request.sessionId);
+ 		const inflight = this.inflightTurns.get(turnKeyOf(request.sessionId, request.turnId));
+ 		if (inflight) {
+ 			if (inflight.inputKey !== inputKeyOf(request)) {
+@@ -161,6 +174,8 @@ export class AgentRuntime {
+ 			}
+ 			return { status: "completed", summary: done.summary };
+ 		}
++		const active = this.activeTurns.get(request.sessionId);
++		if (active) throw new TurnActiveError(request.sessionId, active.turnId);
+ 		return { status: "new" };
+ 	}
+ 
+@@ -189,27 +204,48 @@ export class AgentRuntime {
+ 			return this.inflightTurns.get(turnKey)?.promise ?? this.run(request, sink, opts);
+ 		}
+ 		const inputKey = inputKeyOf(request);
++		// Runtime admission precedes the harness's first execute() step. Own
++		// cancellation now so a stop during turn.started/user-echo delivery is
++		// not lost before the harness installs its own turn controller.
++		const controller = new AbortController();
++		const abort = () => controller.abort();
++		if (opts.signal?.aborted) abort();
++		else opts.signal?.addEventListener("abort", abort, { once: true });
+ 		// Deferred one microtask so the admission maps are registered BEFORE the
+ 		// turn emits anything: a synchronous sink that reenters run() from
+ 		// turn.started must converge, not double-execute.
+-		const running = Promise.resolve().then(() => this.executeRun(request, sink, opts));
+-		this.inflightTurns.set(turnKey, { inputKey, promise: running });
++		const running = Promise.resolve().then(() =>
++			this.executeRun(request, sink, { signal: controller.signal }),
++		);
++		this.activeTurns.set(request.sessionId, {
++			turnId: request.turnId,
++			harness: request.config.harness,
++		});
++		this.inflightTurns.set(turnKey, {
++			inputKey,
++			promise: running,
++			sessionId: request.sessionId,
++			harness: request.config.harness,
++			controller,
++		});
+ 		this.activeRuns.add(running);
++		const cleanup = () => {
++			this.releaseTurn(request.sessionId, request.turnId);
++			opts.signal?.removeEventListener("abort", abort);
++			this.inflightTurns.delete(turnKey);
++			this.activeRuns.delete(running);
++		};
+ 		// One handler, not a .finally chain: the inflight→completed transition
+ 		// must be atomic within a single microtask, or a concurrent admission
+ 		// probe could observe the settled turn as still inflight.
+ 		running.then(
+ 			(summary) => {
+ 				this.rememberTurn(request.sessionId, request.turnId, inputKey, summary);
+-				this.inflightTurns.delete(turnKey);
+-				this.activeRuns.delete(running);
++				cleanup();
+ 			},
+ 			// A rejected run is NOT memoized: it died before executing the turn
+ 			// loop (registry/setup), so a retry is allowed to try again.
+-			() => {
+-				this.inflightTurns.delete(turnKey);
+-				this.activeRuns.delete(running);
+-			},
++			cleanup,
+ 		);
+ 		return running;
+ 	}
+@@ -251,6 +287,7 @@ export class AgentRuntime {
+ 		// Isolate sink failures: a misbehaving transport must never break the
+ 		// turn's lifecycle bracketing (turn.started ... turn.ended).
+ 		const emit = async (e: LifecycleEvent) => {
++			if (e.type === "turn.ended") this.releaseTurn(sessionId, turnId);
+ 			try {
+ 				await sink.emit(e);
+ 			} catch (err) {
+@@ -330,7 +367,7 @@ export class AgentRuntime {
+ 				settleEmits.push(emitted);
+ 				return emitted;
+ 			};
+-			this.pendingPermissions.set(requestId, { sessionId, settle });
++			this.pendingPermissions.set(requestId, { sessionId, turnId, settle });
+ 			turnRequestIds.add(requestId);
+ 			permOpts?.signal?.addEventListener("abort", () => void settle({ outcome: "cancelled" }), {
+ 				once: true,
+@@ -422,6 +459,7 @@ export class AgentRuntime {
+ 		let errored: { category: ErrorCategory; message: string } | undefined;
+ 
+ 		try {
++			opts.signal?.throwIfAborted();
+ 			for await (const raw of agent.execute(input, options)) {
+ 				await flushSession();
+ 				if (config.includeRaw) {
+@@ -497,19 +535,67 @@ export class AgentRuntime {
+ 	 * Cancel the session's in-flight turn. An idle session is a clean no-op ack
+ 	 * (`{confirmed: true, hadTurn: false}`); `confirmed: false` means a turn
+ 	 * existed but the harness did not acknowledge the interrupt — the agent may
+-	 * still be running; `turn.ended` remains the source of truth.
++	 * still be running; `turn.ended` remains the source of truth. Pass the
++	 * intended turnId so a delayed cancel is a no-op once its successor starts.
+ 	 */
+-	async cancel(harness: AgentHarness, sessionId: string): Promise<CancelResult> {
++	async cancel(harness: AgentHarness, sessionId: string, turnId?: string): Promise<CancelResult> {
++		const active = this.activeTurns.get(sessionId);
++		if (active && active.harness !== harness) return { confirmed: true, hadTurn: false };
++		if (turnId !== undefined && (active?.harness !== harness || active.turnId !== turnId)) {
++			return { confirmed: true, hadTurn: false };
++		}
++		const targetTurnId = turnId ?? active?.turnId;
++		this.abortTurns(harness, sessionId, targetTurnId);
+ 		// Unblock any harness parked on an approval before (and regardless of)
+ 		// the agent-level abort. `settle` removes the entry from the map itself.
+ 		for (const pending of [...this.pendingPermissions.values()]) {
+-			if (pending.sessionId === sessionId) void pending.settle({ outcome: "cancelled" });
++			if (
++				pending.sessionId === sessionId &&
++				(targetTurnId === undefined || pending.turnId === targetTurnId)
++			) {
++				void pending.settle({ outcome: "cancelled" });
++			}
+ 		}
+ 		return await this.registry.getAgent(harness).cancel(sessionId);
+ 	}
+ 
++	private releaseTurn(sessionId: string, turnId: string): void {
++		if (this.activeTurns.get(sessionId)?.turnId === turnId) this.activeTurns.delete(sessionId);
++	}
++
++	private abortTurns(harness: AgentHarness, sessionId: string, turnId?: string): void {
++		const turns =
++			turnId === undefined
++				? this.inflightTurns.values()
++				: [this.inflightTurns.get(turnKeyOf(sessionId, turnId))];
++		for (const turn of turns) {
++			if (turn?.harness === harness && turn.sessionId === sessionId) turn.controller.abort();
++		}
++	}
++
+ 	/** Dispose one idle logical session and its harness-native resources. */
+-	async closeSession(harness: AgentHarness, sessionId: string): Promise<void> {
++	closeSession(harness: AgentHarness, sessionId: string): Promise<void> {
++		const existing = this.closingSessions.get(sessionId);
++		if (existing && !existing.failed) return existing.promise;
++		// Register before release can yield or reenter through a cancellation sink.
++		const promise = Promise.resolve().then(() => this.releaseSession(harness, sessionId));
++		const closing = { promise, failed: false };
++		this.closingSessions.set(sessionId, closing);
++		void promise.then(
++			() => {
++				if (this.closingSessions.get(sessionId) === closing) this.closingSessions.delete(sessionId);
++			},
++			() => {
++				// Failed teardown is not proof the old writer stopped. A later
++				// close may retry, but new execution remains blocked until success.
++				closing.failed = true;
++			},
++		);
++		return promise;
++	}
++
++	private async releaseSession(harness: AgentHarness, sessionId: string): Promise<void> {
++		this.abortTurns(harness, sessionId);
+ 		this.completedTurns.delete(sessionId);
+ 		this.alwaysDecisions.delete(sessionId);
+ 		await Promise.all(
+@@ -534,6 +620,7 @@ export class AgentRuntime {
+ 	}
+ 
+ 	private async performShutdown(drainTimeoutMs: number): Promise<void> {
++		for (const turn of this.inflightTurns.values()) turn.controller.abort();
+ 		await Promise.all(
+ 			[...this.pendingPermissions.values()].map((pending) =>
+ 				pending.settle({ outcome: "cancelled" }),
+diff --git a/src/core/utils/errors.ts b/src/core/utils/errors.ts
+index d3d920414..b584a5dd0 100644
+--- a/src/core/utils/errors.ts
++++ b/src/core/utils/errors.ts
+@@ -47,6 +47,25 @@ export class TurnConflictError extends AgentServerError {
+ 	}
+ }
+ 
++/** A different turn already owns this logical session; the caller retains queued input. */
++export class TurnActiveError extends AgentServerError {
++	constructor(
++		readonly sessionId: string,
++		readonly turnId: string,
++	) {
++		super(`session ${sessionId} already has active turn ${turnId}`, "TURN_ACTIVE");
++		this.name = "TurnActiveError";
++	}
++}
++
++/** The session's native resources are still being released. */
++export class SessionClosingError extends AgentServerError {
++	constructor(readonly sessionId: string) {
++		super(`session ${sessionId} is closing`, "SESSION_CLOSING");
++		this.name = "SessionClosingError";
++	}
++}
++
+ export class AgentExecutionError extends AgentServerError {
+ 	constructor(message: string, options?: { cause?: unknown }) {
+ 		super(message, "AGENT_EXECUTION_ERROR");
+diff --git a/src/server/acp/binding.ts b/src/server/acp/binding.ts
+index 85782301b..7777ee2cc 100644
+--- a/src/server/acp/binding.ts
++++ b/src/server/acp/binding.ts
+@@ -6,13 +6,8 @@ import type {
+ 	RequestPermissionResponse,
+ } from "@agentclientprotocol/sdk";
+ import type { AgentRuntime, EventSink } from "../../core/index.ts";
+-import { generateUUIDv7 } from "../../core/index.ts";
+-import type {
+-	AgentHarness,
+-	LifecycleEvent,
+-	PermissionMode,
+-	PermissionOutcome,
+-} from "../../protocol/index.ts";
++import { SessionClosingError, TurnActiveError, generateUUIDv7 } from "../../core/index.ts";
++import type { AgentHarness, LifecycleEvent, PermissionMode } from "../../protocol/index.ts";
+ import { AcpUpdateTranslator, fromAcpMcpServers, fromPromptBlocks } from "./translate.ts";
+ 
+ /** ACP protocol major version this binding speaks. */
+@@ -97,28 +92,32 @@ export async function createAcpAgentApp(options: AcpBindingOptions): Promise<Age
+ 			const sink: EventSink = {
+ 				emit: async (event: LifecycleEvent) => {
+ 					if (event.type === "permission.requested") {
+-						// Round-trip to the ACP client; its outcome shape matches ours.
+-						let outcome: PermissionOutcome = { outcome: "cancelled" };
+-						try {
+-							const response: RequestPermissionResponse = await ctx.client.request(
+-								"session/request_permission",
+-								{
+-									sessionId: ctx.params.sessionId,
+-									toolCall: {
+-										toolCallId: event.toolCall?.toolCallId ?? event.requestId,
+-										title: event.title,
+-										status: "pending",
+-										...(event.toolCall?.kind && { kind: event.toolCall.kind }),
+-										...(event.toolCall?.rawInput && { rawInput: event.toolCall.rawInput }),
+-									},
+-									options: event.options,
++						// The runtime broker owns waiting and cancellation. Blocking this
++						// sink on a human answer would prevent it receiving its own cancel.
++						void ctx.client
++							.request("session/request_permission", {
++								sessionId: ctx.params.sessionId,
++								toolCall: {
++									toolCallId: event.toolCall?.toolCallId ?? event.requestId,
++									title: event.title,
++									status: "pending",
++									...(event.toolCall?.kind && { kind: event.toolCall.kind }),
++									...(event.toolCall?.rawInput && { rawInput: event.toolCall.rawInput }),
+ 								},
++								options: event.options,
++							})
++							.then(
++								(response) =>
++									runtime.respondPermission(
++										ctx.params.sessionId,
++										event.requestId,
++										(response as RequestPermissionResponse).outcome,
++									),
++								() =>
++									runtime.respondPermission(ctx.params.sessionId, event.requestId, {
++										outcome: "cancelled",
++									}),
+ 							);
+-							outcome = response.outcome;
+-						} catch {
+-							// Client refused/disconnected — fall through to cancelled.
+-						}
+-						runtime.respondPermission(ctx.params.sessionId, event.requestId, outcome);
+ 						return;
+ 					}
+ 					for (const update of translator.translate(event)) {
+@@ -129,21 +128,37 @@ export async function createAcpAgentApp(options: AcpBindingOptions): Promise<Age
+ 					}
+ 				},
+ 			};
+-			const summary = await runtime.run(
+-				{
+-					sessionId: ctx.params.sessionId,
+-					turnId: generateUUIDv7(),
+-					input: fromPromptBlocks(ctx.params.prompt),
+-					config: {
+-						harness,
+-						cwd: session.cwd,
+-						model: options.model,
+-						permissionMode: options.permissionMode ?? "default",
+-						mcpServers: session.mcpServers,
++			const summary = await runtime
++				.run(
++					{
++						sessionId: ctx.params.sessionId,
++						turnId: generateUUIDv7(),
++						input: fromPromptBlocks(ctx.params.prompt),
++						config: {
++							harness,
++							cwd: session.cwd,
++							model: options.model,
++							permissionMode: options.permissionMode ?? "default",
++							mcpServers: session.mcpServers,
++						},
+ 					},
+-				},
+-				sink,
+-			);
++					sink,
++				)
++				.catch((error: unknown) => {
++					if (error instanceof SessionClosingError) {
++						throw acp.RequestError.invalidRequest(
++							{ code: error.code, sessionId: error.sessionId },
++							error.message,
++						);
++					}
++					if (error instanceof TurnActiveError) {
++						throw acp.RequestError.invalidRequest(
++							{ code: error.code, sessionId: error.sessionId, turnId: error.turnId },
++							error.message,
++						);
++					}
++					throw error;
++				});
+ 			// ACP v1's StopReason set is closed and has no `error` member. Map our
+ 			// open stopReason onto it: `error` reports as an ended turn with the
+ 			// failure in `_meta` (an ACP client must see a stop, not a JSON-RPC
+diff --git a/src/server/agent-server.ts b/src/server/agent-server.ts
+index 34b428a5f..2b4233d08 100644
+--- a/src/server/agent-server.ts
++++ b/src/server/agent-server.ts
+@@ -1,4 +1,10 @@
+-import { type AgentRuntime, TurnConflictError, callbackSink } from "../core/index.ts";
++import {
++	type AgentRuntime,
++	SessionClosingError,
++	TurnActiveError,
++	TurnConflictError,
++	callbackSink,
++} from "../core/index.ts";
+ import {
+ 	type AgentCapabilities,
+ 	type AgentHarness,
+@@ -232,6 +238,18 @@ export class AgentServer {
+ 						return transport.send(encodeResponse(id, { sessionId, turnId, deduplicated: true }));
+ 					}
+ 				} catch (err) {
++					if (err instanceof SessionClosingError) {
++						return transport.send(
++							encodeErrorResponse(id, WIRE_ERROR_CODES.sessionClosing, err.message),
++						);
++					}
++					if (err instanceof TurnActiveError) {
++						return transport.send(
++							encodeErrorResponse(id, WIRE_ERROR_CODES.turnActive, err.message, {
++								turnId: err.turnId,
++							}),
++						);
++					}
+ 					if (err instanceof TurnConflictError) {
+ 						return transport.send(
+ 							encodeErrorResponse(id, WIRE_ERROR_CODES.turnConflict, err.message, { turnId }),
+@@ -288,13 +306,14 @@ export class AgentServer {
+ 				const { confirmed, hadTurn } = await this.runtime.cancel(
+ 					active.harness,
+ 					parsed.data.sessionId,
++					active.turnId,
+ 				);
+ 				// An unacknowledged interrupt is NOT a cancel: the agent may still be
+ 				// running and `turn.ended` stays the source of truth. `hadTurn: false`
+ 				// while the server tracks an active turn is the pre-first-yield window
+ 				// (between the turn/start quick-ack and the harness registering its
+-				// abortable turn) — the abort landed on nothing and the turn may run
+-				// to completion, so it must report `unconfirmed`, never a clean cancel.
++				// abortable turn). The runtime retains that cancellation, but this
++				// response stays conservative until the terminal event confirms it.
+ 				return transport.send(
+ 					encodeResponse(id, {
+ 						outcome: confirmed && hadTurn ? "cancelled" : "unconfirmed",

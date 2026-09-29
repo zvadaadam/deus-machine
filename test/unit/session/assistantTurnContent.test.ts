@@ -72,3 +72,17 @@ it("labels current activity without classifying streamed prose as a final answer
   expect(result.currentActivity).toBe("Running tests");
   expect(result.content.map((p) => p.id)).toEqual(["progress"]);
 });
+
+it("keeps a Project coordinator's delegation visible while other Project reads fold away", () => {
+  const delegation = [
+    tool("create", { toolName: "mcp__deus__create_agent" }),
+    tool("message", { toolName: "mcp__deus__send_to_agent" }),
+  ];
+  const reads = [
+    tool("status", { toolName: "mcp__deus__get_agent_status" }),
+    tool("transcript", { toolName: "mcp__deus__read_agent_transcript" }),
+  ];
+  const result = assistantTurnContent([message("a", [...delegation, ...reads])]);
+  expect(result.content).toEqual(delegation);
+  expect(result.activity).toEqual(reads);
+});

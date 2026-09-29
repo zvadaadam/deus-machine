@@ -4,21 +4,19 @@
  * Renders a single message in the chat:
  * - Assistant messages: rendered via PartsRenderer (Parts model)
  * - User messages: iMessage-style bubble with text + images
+ * - Project conversations: machine inputs inside the user echo render as events
  */
 
 import type { Message } from "@/shared/types";
+import { parseProjectPrompt } from "@shared/project-prompt";
 import { readUserMessageContent } from "../lib/userMessageContent";
+import { useProjectConversation } from "../context/ProjectConversationContext";
 import { PartsRenderer } from "./blocks";
-import { TextBlock } from "./blocks/TextBlock";
+import { ProjectInputMessage } from "./ProjectInputMessage";
+import { UserBubble } from "./UserBubble";
 
 import { cn } from "@/shared/lib/utils";
-import { Copy, ChevronDown, ChevronUp } from "lucide-react";
-import { ActionButton } from "./ActionButton";
-import { useCopyToClipboard } from "@/shared/hooks";
-import { useMemo, memo, useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
-
-const COLLAPSE_MAX_HEIGHT = 144;
+import { useMemo, memo } from "react";
 
 interface MessageItemProps {
   message: Message;
@@ -49,109 +47,21 @@ const AssistantMessage = memo(function AssistantMessage({
 
 /** User message — iMessage-style bubble. */
 const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
-  const { copy, copied } = useCopyToClipboard();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [shouldCollapse, setShouldCollapse] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-
   /**
    * `parts` is the source of truth — the engine's user echo, and the composer's
    * optimistic bubble, which builds the same shapes locally.
    */
   const { images, texts } = useMemo(() => readUserMessageContent(message), [message]);
-
-  const hasTextContent = texts.length > 0;
-
-  useEffect(() => {
-    if (contentRef.current) {
-      setShouldCollapse(contentRef.current.scrollHeight > COLLAPSE_MAX_HEIGHT);
-    }
-  }, [images, texts]);
-
-  const handleCopy = () => copy(texts.join("\n"));
-
-  return (
-    <div className="group relative flex flex-col items-end">
-      <div
-        className={cn(
-          "max-w-[85%]",
-          "bg-accent hover:bg-accent/80 ml-auto w-fit backdrop-blur-sm transition-colors duration-200 ease-out motion-reduce:transition-none",
-          "relative rounded-xl",
-          "px-3 py-2",
-          "min-w-0"
-        )}
-      >
-        <div className="pointer-events-none absolute top-1.5 right-1.5 z-10 opacity-0 transition-opacity duration-200 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-          <ActionButton
-            icon={Copy}
-            label={copied ? "Copied" : "Copy"}
-            onClick={handleCopy}
-            active={copied}
-            showLabel={false}
-            className="bg-accent/80 rounded-md backdrop-blur-sm"
-          />
-        </div>
-
-        {images.length > 0 && (
-          <div className={cn("flex flex-wrap gap-1.5", hasTextContent && "mb-2")}>
-            {images.map((src, idx) => (
-              <div
-                key={`${message.id}:img:${idx}`}
-                className="border-border/60 h-[80px] w-[80px] shrink-0 overflow-hidden rounded-lg border"
-              >
-                <img src={src} alt="Pasted image" className="h-full w-full object-cover" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {hasTextContent && (
-          <motion.div
-            ref={contentRef}
-            id={`message-content-${message.id}`}
-            className="relative min-w-0 overflow-hidden"
-            animate={
-              shouldCollapse
-                ? { height: isExpanded ? "auto" : COLLAPSE_MAX_HEIGHT }
-                : { height: "auto" }
-            }
-            initial={false}
-            transition={{ duration: 0.2, ease: [0.165, 0.84, 0.44, 1] }}
-          >
-            {texts.map((text, idx) => (
-              <TextBlock key={`${message.id}:text:${idx}`} block={text} role="user" />
-            ))}
-
-            {shouldCollapse && !isExpanded && (
-              <div className="from-accent via-accent/60 pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
-            )}
-          </motion.div>
-        )}
-
-        {shouldCollapse && (
-          <button
-            type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-muted-foreground hover:text-foreground mt-2 flex items-center gap-1 text-xs font-normal transition-colors duration-200"
-            aria-expanded={isExpanded}
-            aria-controls={`message-content-${message.id}`}
-          >
-            {isExpanded ? (
-              <>
-                Show less
-                <ChevronUp className="h-3 w-3" />
-              </>
-            ) : (
-              <>
-                Show more
-                <ChevronDown className="h-3 w-3" />
-              </>
-            )}
-          </button>
-        )}
-      </div>
-    </div>
+  // Only a Project agent's conversation receives machine inputs.
+  const project = useProjectConversation();
+  const segments = useMemo(
+    () => (project && images.length === 0 ? texts.flatMap(parseProjectPrompt) : null),
+    [project, images.length, texts]
   );
+
+  if (segments?.some((segment) => segment.type === "input"))
+    return <ProjectInputMessage messageId={message.id} segments={segments} />;
+  return <UserBubble id={message.id} texts={texts} images={images} />;
 });
 
 /** Route to AssistantMessage or UserMessage based on role. */

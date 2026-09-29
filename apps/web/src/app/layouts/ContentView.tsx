@@ -29,7 +29,7 @@ import type { Workspace } from "@/shared/types";
 
 interface ContentViewProps {
   workspace: Workspace;
-  activeTab: ContentTab;
+  activeTab: ContentTab | null;
   panelVisible?: boolean;
   toolbarAction?: ReactNode;
   /** Whether file watcher is active */

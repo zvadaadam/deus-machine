@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../../../src/middleware/error-handler";
+import { ConflictError } from "../../../src/lib/errors";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
@@ -44,6 +45,10 @@ vi.mock("../../../src/services/workspace-init.service", () => ({
 
 vi.mock("../../../src/services/query-engine", () => ({
   invalidate: (...args: unknown[]) => mockInvalidate(...args),
+}));
+const managed = vi.hoisted(() => ({ assertUnmanaged: vi.fn() }));
+vi.mock("../../../src/services/managed-workspace", () => ({
+  assertUnmanagedWorkspace: managed.assertUnmanaged,
 }));
 
 const cloud = vi.hoisted(() => ({ pause: vi.fn(), wake: vi.fn() }));
@@ -412,6 +417,22 @@ describe("POST /workspaces", () => {
 });
 
 describe("PATCH /workspaces/:id", () => {
+  it("rejects unmanaged lifecycle and new-conversation routes for a Project Agent", async () => {
+    managed.assertUnmanaged.mockImplementation(() => {
+      throw new ConflictError("Use Project controls");
+    });
+    mockStmt.get.mockReturnValue(MOCK_CREATED_WORKSPACE);
+    const patch = await app.request("/workspaces/ws-test-uuid", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: "ready" }),
+    });
+    const create = await app.request("/workspaces/ws-test-uuid/sessions", { method: "POST" });
+    expect(patch.status).toBe(409);
+    expect(create.status).toBe(409);
+    expect(mockStmt.run).not.toHaveBeenCalled();
+    managed.assertUnmanaged.mockReset();
+  });
   it("rejects session-only state values like working", async () => {
     const res = await app.request("/workspaces/ws-test-uuid", {
       method: "PATCH",

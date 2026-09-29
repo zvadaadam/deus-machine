@@ -21,10 +21,9 @@
 
 import type { SessionStatus } from "@/shared/types";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
-import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
-import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
+import { Minimize2, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
 import { useSlashCommand } from "../hooks/useSlashCommand";
 import { useSessionComposer } from "../hooks/useSessionComposer";
@@ -36,12 +35,6 @@ import {
   processImageFiles,
   buildMessageContent,
 } from "../lib/imageAttachments";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { PastedTextCard } from "./PastedTextCard";
@@ -62,6 +55,7 @@ import { ThinkingPicker } from "./ThinkingPicker";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
+import { ComposerInput } from "./ComposerInput";
 
 // Long pastes (20+ lines) are shown as collapsed cards instead of inline text
 const PASTE_LINE_THRESHOLD = 20;
@@ -220,8 +214,6 @@ export function MessageInput({
   defaultThinking = "high",
   className,
 }: MessageInputProps) {
-  const isMobile = useIsMobile();
-
   // Composer content — subscribed from the store, mutated via bound setters.
   const composer = useSessionComposer(sessionId, {
     initialModel: initialModel ?? DEFAULT_MODEL,
@@ -315,17 +307,6 @@ export function MessageInput({
       e.preventDefault();
       return;
     }
-    if (
-      e.key === "Enter" &&
-      !isMobile &&
-      !e.shiftKey &&
-      !e.metaKey &&
-      !e.ctrlKey &&
-      !e.nativeEvent.isComposing
-    ) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
@@ -392,9 +373,70 @@ export function MessageInput({
         )}
       </AnimatePresence>
 
-      <InputGroup
-        data-no-ring={true}
-        className="bg-bg-muted/75 ring-border-subtle relative overflow-visible rounded-2xl border-0 shadow-sm ring-1 backdrop-blur-xl"
+      <ComposerInput
+        textarea={{
+          value: draft,
+          onChange: (e) => {
+            composer.setDraft(e.target.value);
+            fileMention.handleCursorChange(e);
+          },
+          onPaste: handlePaste,
+          // @ files and / skills require a connected backend.
+          placeholder: isCloudDirectWebMode()
+            ? "Ask a follow-up…"
+            : isClaudeAgent
+              ? "Ask a follow-up… (@ files, / skills)"
+              : "Ask a follow-up… (@ files)",
+          onKeyDown: handleKeyDown,
+          onSelect: fileMention.handleCursorChange,
+          onClick: fileMention.handleCursorChange,
+        }}
+        hasContent={hasContent}
+        sending={sending}
+        onSend={handleSend}
+        onStop={sessionStatus && ACTIVE_TURN_STATUSES.includes(sessionStatus) ? onStop : undefined}
+        modelControls={
+          <>
+            <ModelPicker
+              model={model}
+              hasMessages={hasMessages}
+              onModelChange={composer.setModel}
+              onOpenNewTab={onOpenNewTab}
+            />
+            {modelThinkingLevels.length > 0 && (
+              <ThinkingPicker
+                level={thinkingLevel}
+                levels={modelThinkingLevels}
+                onLevelChange={composer.setThinkingLevel}
+              />
+            )}
+            {showPlanMode && (
+              <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />
+            )}
+          </>
+        }
+        actions={
+          <>
+            {showCompactButton && (
+              <Button
+                onClick={onCompact}
+                disabled={sending}
+                title="Compact conversation"
+                variant="ghost"
+                size="sm"
+                className="text-warning border"
+              >
+                <Minimize2 className="size-3.5" />
+                <span className="text-xs font-normal">Compact</span>
+              </Button>
+            )}
+            <ContextTokenIndicator
+              contextTokenCount={contextTokenCount}
+              contextUsedPercent={contextUsedPercent}
+              onCompact={onCompact}
+            />
+          </>
+        }
       >
         <ComposerStagedContent
           skillMentions={skillMentions}
@@ -450,105 +492,7 @@ export function MessageInput({
             </motion.div>
           )}
         </AnimatePresence>
-
-        <InputGroupTextarea
-          value={draft}
-          onChange={(e) => {
-            composer.setDraft(e.target.value);
-            fileMention.handleCursorChange(e);
-          }}
-          onPaste={handlePaste}
-          // @ files and / skills read the Mac backend — web-direct has none, so
-          // the hint would promise pickers that come back empty.
-          placeholder={
-            isCloudDirectWebMode()
-              ? "Ask a follow-up…"
-              : isClaudeAgent
-                ? "Ask a follow-up… (@ files, / skills)"
-                : "Ask a follow-up… (@ files)"
-          }
-          disabled={sending}
-          onKeyDown={handleKeyDown}
-          onSelect={fileMention.handleCursorChange}
-          onClick={fileMention.handleCursorChange}
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          className="placeholder:text-placeholder max-h-48 min-h-12 overflow-y-auto px-4 py-3"
-        />
-
-        <InputGroupAddon
-          align="block-end"
-          className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 pt-0 pb-2"
-        >
-          <div className="flex items-center gap-0.5">
-            <ModelPicker
-              model={model}
-              hasMessages={hasMessages}
-              onModelChange={composer.setModel}
-              onOpenNewTab={onOpenNewTab}
-            />
-
-            {modelThinkingLevels.length > 0 && (
-              <ThinkingPicker
-                level={thinkingLevel}
-                levels={modelThinkingLevels}
-                onLevelChange={composer.setThinkingLevel}
-              />
-            )}
-            {showPlanMode && (
-              <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />
-            )}
-          </div>
-
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {showCompactButton && (
-              <Button
-                onClick={onCompact}
-                disabled={sending}
-                title="Compact conversation"
-                variant="ghost"
-                size="sm"
-                className="text-warning border"
-              >
-                <Minimize2 className="size-3.5" />
-                <span className="text-xs font-normal">Compact</span>
-              </Button>
-            )}
-
-            <ContextTokenIndicator
-              contextTokenCount={contextTokenCount}
-              contextUsedPercent={contextUsedPercent}
-              onCompact={onCompact}
-            />
-
-            {sessionStatus && ACTIVE_TURN_STATUSES.includes(sessionStatus) && (
-              <InputGroupButton
-                onClick={onStop}
-                variant="default"
-                size="icon-sm"
-                title="Stop execution"
-                aria-label="Stop execution"
-                className="rounded-full"
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </InputGroupButton>
-            )}
-
-            <InputGroupButton
-              onClick={handleSend}
-              disabled={sending || !hasContent}
-              variant={hasContent ? "default" : "outline"}
-              size="icon-sm"
-              title="Send message (Enter)"
-              aria-label="Send message"
-              className="rounded-full"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </InputGroupButton>
-          </div>
-        </InputGroupAddon>
-      </InputGroup>
+      </ComposerInput>
     </div>
   );
 }

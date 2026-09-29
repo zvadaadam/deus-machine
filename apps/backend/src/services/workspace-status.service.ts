@@ -1,6 +1,7 @@
 import { STICKY_STATUSES, STATUS_RANK, type WorkspaceStatus } from "@shared/enums";
 import { getDatabase } from "../lib/database";
 import { getWorkspaceRaw } from "../db";
+import { assertUnmanagedWorkspace } from "./managed-workspace";
 
 /**
  * Auto-progress a workspace's workflow status.
@@ -40,6 +41,7 @@ export function autoProgressStatus(
  * Used by the updateWorkspaceStatus mutation.
  */
 export function setWorkspaceStatus(workspaceId: string, status: WorkspaceStatus): void {
+  assertUnmanagedWorkspace(workspaceId);
   const db = getDatabase();
   db.prepare("UPDATE workspaces SET status = ? WHERE id = ?").run(status, workspaceId);
 }

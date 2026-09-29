@@ -194,7 +194,8 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
     onArchive?.(workspace.id);
   };
 
-  const canArchive = !isInitializing && workspace.state !== "archived" && !!onArchive;
+  const canArchive =
+    !workspace.project_id && !isInitializing && workspace.state !== "archived" && !!onArchive;
 
   const row = (
     <SidebarRow
@@ -242,7 +243,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           isInitializing && "animate-[shimmer_2s_ease-in-out_infinite]"
         )}
       >
-        {onStatusChange ? (
+        {onStatusChange && !workspace.project_id ? (
           <WorkspaceStatusMenu
             currentStatus={workspace.status}
             onStatusChange={(status) => onStatusChange(workspace.id, status)}

@@ -1,3 +1,4 @@
+import { wakeProjects } from "../projects/service";
 import { turnProviderCredentialSource } from "@shared/conversation-rows";
 // backend/src/services/agent/event-handler.ts
 // The single entry point for agent → backend data flow.
@@ -381,6 +382,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         .with({ type: "turn.ended" }, () => {
           // The agent may have created, updated or pushed a PR during the turn.
           refreshPrSnapshotForSession(sessionId);
+          wakeProjects();
         })
         .with({ type: "error" }, (e) => {
           // A recoverable error means the turn is still running (and

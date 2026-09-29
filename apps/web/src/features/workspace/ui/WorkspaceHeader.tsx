@@ -42,8 +42,10 @@ import { uiActions } from "@/shared/stores/uiStore";
 
 interface WorkspaceHeaderProps {
   repositoryId: string;
+  leadingActions?: ReactNode;
   trailingActions?: ReactNode;
   title?: string;
+  titleAs?: "span" | "h1";
   repositoryName?: string;
   branch?: string;
   workspacePath?: string;
@@ -76,8 +78,10 @@ interface WorkspaceHeaderProps {
  */
 export function WorkspaceHeader({
   repositoryId,
+  leadingActions,
   trailingActions,
   title,
+  titleAs: Title = "span",
   repositoryName,
   branch,
   workspacePath,
@@ -134,6 +138,8 @@ export function WorkspaceHeader({
           </Tooltip>
         )}
 
+        {leadingActions}
+
         {workspaceStatus && onStatusChange && (
           <WorkspaceStatusMenu currentStatus={workspaceStatus} onStatusChange={onStatusChange}>
             <button
@@ -146,14 +152,14 @@ export function WorkspaceHeader({
         )}
 
         {title && (
-          <span
+          <Title
             className={cn(
               "text-foreground mr-0.5 min-w-0 shrink truncate text-sm font-medium",
               !mobile && "max-w-[200px]"
             )}
           >
             {title}
-          </span>
+          </Title>
         )}
 
         {kind === "cloud" &&
@@ -329,9 +335,9 @@ export function WorkspaceHeader({
       </div>
 
       {/* Right: Run + Open buttons (desktop only) */}
-      {!mobile && (
+      {(!mobile || trailingActions) && (
         <div className="flex shrink-0 items-center gap-2">
-          {onRunTask && (
+          {!mobile && onRunTask && (
             <HeaderRunButton
               tasks={tasks ?? []}
               disabled={setupStatus === "running"}
@@ -344,7 +350,7 @@ export function WorkspaceHeader({
               }
             />
           )}
-          {workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
+          {!mobile && workspacePath && <HeaderOpenButton workspacePath={workspacePath} />}
           {trailingActions}
         </div>
       )}

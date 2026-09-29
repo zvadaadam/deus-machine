@@ -2,11 +2,15 @@ import type { Message } from "@/shared/types";
 import type { Part } from "@shared/protocol-types";
 
 // These renderers expose an answer/action or media that must stay visible.
+// A Project's delegation (a new agent, or instructions to one) is the
+// coordinator's main action, and its card opens that agent.
 const VISIBLE_TOOLS = new Set([
   "AskUserQuestion",
   "ExitPlanMode",
   "BrowserScreenshot",
   "recording_stop",
+  "create_agent",
+  "send_to_agent",
 ]);
 
 function isActivity(part: Part): boolean {

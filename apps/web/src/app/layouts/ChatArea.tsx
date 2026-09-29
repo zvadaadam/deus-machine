@@ -18,6 +18,7 @@ import { useWorkingSessionIds } from "@/features/session/api/session.queries";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
 import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
+import { ProjectConversationScope } from "@/features/projects/ui/ProjectConversationScope";
 import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "./useChatTabs";
 
@@ -105,6 +106,39 @@ export function ChatArea({
     [tabs, handleTabChange]
   );
 
+  const sessionPanel = tabSessionId ? (
+    <SessionPanel
+      key={tabSessionId}
+      ref={workspaceChatPanelRef}
+      sessionId={tabSessionId}
+      managedProject={
+        workspace.project_id
+          ? {
+              projectId: workspace.project_id,
+              agentId: workspace.id,
+              current: tabSessionId === workspace.current_session_id,
+            }
+          : undefined
+      }
+      workspaceId={workspace.id}
+      workspaceKind={workspace.kind}
+      workspacePath={workspace.workspace_path}
+      workspaceRepoName={workspace.repo_name}
+      workspaceParentBranch={workspace.git_target_branch}
+      workspaceDefaultBranch={workspace.git_default_branch}
+      isFirstSession={workspace.latest_message_sent_at === null}
+      embedded={true}
+      initialModel={activeTab?.initialModel}
+      onAgentHarnessChange={(agentHarness) =>
+        activeTab && updateChatTabAgentHarness(activeTab.id, agentHarness)
+      }
+      onSessionStarted={() => activeTab && markChatTabStarted(activeTab.id)}
+      onOpenNewTab={workspace.project_id ? undefined : handleTabAdd}
+      onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
+      onSendAgentMessage={(handler) => onSendAgentMessageHandlerChange(() => handler)}
+    />
+  ) : null;
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       <SessionTabBar
@@ -118,36 +152,21 @@ export function ChatArea({
         // No + in web-direct — session creation needs the Mac backend, and an
         // affordance that can only toast is clutter (handleTabAdd still guards
         // the Cmd+T path).
-        onTabAdd={isCloudDirectWebMode() ? undefined : handleTabAdd}
+        onTabAdd={isCloudDirectWebMode() || workspace.project_id ? undefined : handleTabAdd}
         onTabReorder={handleTabReorder}
         closedTabs={closedTabs}
         onTabRestore={handleTabRestore}
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {tabSessionId && (
-          <SessionPanel
-            key={tabSessionId}
-            ref={workspaceChatPanelRef}
-            sessionId={tabSessionId}
-            workspaceId={workspace.id}
-            workspaceKind={workspace.kind}
-            workspacePath={workspace.workspace_path}
-            workspaceRepoName={workspace.repo_name}
-            workspaceParentBranch={workspace.git_target_branch}
-            workspaceDefaultBranch={workspace.git_default_branch}
-            isFirstSession={workspace.latest_message_sent_at === null}
-            embedded={true}
-            initialModel={activeTab?.initialModel}
-            onAgentHarnessChange={(agentHarness) =>
-              activeTab && updateChatTabAgentHarness(activeTab.id, agentHarness)
-            }
-            onSessionStarted={() => activeTab && markChatTabStarted(activeTab.id)}
-            onOpenNewTab={handleTabAdd}
-            onCreatePR={(handler) => onCreatePRHandlerChange(() => handler)}
-            onSendAgentMessage={(handler) => onSendAgentMessageHandlerChange(() => handler)}
-          />
-        )}
+        {sessionPanel &&
+          (workspace.project_id ? (
+            <ProjectConversationScope projectId={workspace.project_id}>
+              {sessionPanel}
+            </ProjectConversationScope>
+          ) : (
+            sessionPanel
+          ))}
 
         {/* Workspace still initializing — show the same empty state with init progress */}
         {!tabSessionId && (

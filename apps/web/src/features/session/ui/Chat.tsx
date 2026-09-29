@@ -35,6 +35,8 @@ interface ChatProps {
   onStop?: () => void; // Callback to stop/cancel the session
   onOpenLoginTerminal?: () => void;
   onRetryInNewChat?: () => void;
+  /** Supported recovery for conversations whose lifecycle is managed elsewhere. */
+  errorRecoveryAction?: { label: string; onClick: () => void };
   /** True when there are older messages beyond the loaded window */
   hasOlder?: boolean;
   /** True when a load-older request is in flight */
@@ -71,6 +73,7 @@ export function Chat({
   latestMessageSentAt,
   onOpenLoginTerminal,
   onRetryInNewChat,
+  errorRecoveryAction,
   hasOlder = false,
   loadingOlder = false,
   onLoadOlder,
@@ -433,11 +436,13 @@ export function Chat({
                         <p className="text-foreground/80 mt-0.5 text-sm break-words">
                           {errorMessage}
                         </p>
-                        {errorCategory === "rate_limit" && (
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            Start a new chat to try again.
-                          </p>
-                        )}
+                        {errorCategory === "rate_limit" &&
+                          retryInNewChat &&
+                          !errorRecoveryAction && (
+                            <p className="text-muted-foreground mt-1 text-xs">
+                              Start a new chat to try again.
+                            </p>
+                          )}
                         {errorCategory === "process_exit" && (
                           <p className="text-muted-foreground mt-1 text-xs">
                             The agent process exited unexpectedly. Try sending your message again.
@@ -445,51 +450,57 @@ export function Chat({
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        {match(errorCategory)
-                          .with("auth", () =>
-                            onOpenLoginTerminal ? (
-                              <Button variant="outline" size="xs" onClick={onOpenLoginTerminal}>
-                                <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
-                                Log in
-                              </Button>
-                            ) : null
-                          )
-                          .with("context_limit", () =>
-                            retryInNewChat ? (
-                              <Button variant="outline" size="xs" onClick={retryInNewChat}>
-                                <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
-                                New session
-                              </Button>
-                            ) : null
-                          )
-                          .with("rate_limit", () =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )
-                          .with("network", () =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )
-                          .with("process_exit", () =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )
-                          .otherwise(() =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )}
+                        {errorRecoveryAction && errorCategory !== "auth" ? (
+                          <Button variant="outline" size="xs" onClick={errorRecoveryAction.onClick}>
+                            {errorRecoveryAction.label}
+                          </Button>
+                        ) : (
+                          match(errorCategory)
+                            .with("auth", () =>
+                              onOpenLoginTerminal ? (
+                                <Button variant="outline" size="xs" onClick={onOpenLoginTerminal}>
+                                  <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
+                                  Log in
+                                </Button>
+                              ) : null
+                            )
+                            .with("context_limit", () =>
+                              retryInNewChat ? (
+                                <Button variant="outline" size="xs" onClick={retryInNewChat}>
+                                  <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
+                                  New session
+                                </Button>
+                              ) : null
+                            )
+                            .with("rate_limit", () =>
+                              retryInNewChat ? (
+                                <Button variant="ghost" size="xs" onClick={retryInNewChat}>
+                                  Retry in new chat
+                                </Button>
+                              ) : null
+                            )
+                            .with("network", () =>
+                              retryInNewChat ? (
+                                <Button variant="ghost" size="xs" onClick={retryInNewChat}>
+                                  Retry in new chat
+                                </Button>
+                              ) : null
+                            )
+                            .with("process_exit", () =>
+                              retryInNewChat ? (
+                                <Button variant="ghost" size="xs" onClick={retryInNewChat}>
+                                  Retry in new chat
+                                </Button>
+                              ) : null
+                            )
+                            .otherwise(() =>
+                              retryInNewChat ? (
+                                <Button variant="ghost" size="xs" onClick={retryInNewChat}>
+                                  Retry in new chat
+                                </Button>
+                              ) : null
+                            )
+                        )}
                       </div>
                     </div>
                   </m.div>

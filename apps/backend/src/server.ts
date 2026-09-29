@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node";
+import { startProjects, stopProjects } from "./services/projects/service";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
@@ -122,6 +123,8 @@ async function onListening(port: number): Promise<void> {
     console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
   }
 
+  startProjects();
+
   // CRITICAL: Machine-readable port output for Electron main process and dev.
   // Emitted after agent-server startup so launchers see a fully wired runtime.
   console.log(`[BACKEND_PORT]${port}`);
@@ -199,6 +202,7 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log("\nShutting down...");
+  stopProjects();
   agentService.shutdown();
   void stopManagedAgentServer().finally(() => {
     stopAllApps();

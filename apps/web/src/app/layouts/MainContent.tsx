@@ -12,6 +12,7 @@ import { useSimulatorCapabilities } from "@/features/simulator";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
+import { ProjectBackLink } from "@/features/projects/ui/ProjectBackLink";
 import { ContentTabBar } from "./ContentTabBar";
 import { CONTENT_TABS, isTabVisible, anyContentTabVisible } from "./content-tabs";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -197,7 +198,7 @@ export function MainContent({
       ghStatus={ghStatus}
       onCreatePR={createPRHandler ? handleCreatePR : undefined}
       onSendAgentMessage={sendAgentMessageHandler ? handleSendAgentMessage : undefined}
-      onArchive={handleArchive}
+      onArchive={selectedWorkspace.project_id ? undefined : handleArchive}
       targetBranch={selectedTargetBranch}
       onTargetBranchChange={setSelectedTargetBranch}
       repoId={selectedWorkspace.repository_id}
@@ -260,7 +261,7 @@ export function MainContent({
               environmentTasks={environmentTasks}
               onRunTask={handleRunTask}
               onStatusChange={
-                webDirect
+                webDirect || selectedWorkspace.project_id
                   ? undefined
                   : (status) => statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
               }
@@ -269,7 +270,7 @@ export function MainContent({
               prStatus={prStatus}
               ghStatus={ghStatus}
               onCreatePR={createPRHandler ? handleCreatePR : undefined}
-              onArchive={handleArchive}
+              onArchive={selectedWorkspace.project_id ? undefined : handleArchive}
               targetBranch={selectedTargetBranch}
               onTargetBranchChange={setSelectedTargetBranch}
             />
@@ -283,6 +284,14 @@ export function MainContent({
                   <>
                     <WorkspaceHeader
                       repositoryId={selectedWorkspace.repository_id}
+                      leadingActions={
+                        selectedWorkspace.project_id && (
+                          <ProjectBackLink
+                            projectId={selectedWorkspace.project_id}
+                            projectTitle={selectedWorkspace.project_title}
+                          />
+                        )
+                      }
                       title={selectedWorkspace.title ?? undefined}
                       repositoryName={selectedWorkspace.repo_name}
                       branch={selectedWorkspace.git_branch ?? undefined}
@@ -311,7 +320,7 @@ export function MainContent({
                       }
                       workspaceStatus={selectedWorkspace.status}
                       onStatusChange={
-                        webDirect
+                        webDirect || selectedWorkspace.project_id
                           ? undefined
                           : (status) =>
                               statusMutation.mutate({ workspaceId: selectedWorkspace.id, status })
@@ -389,10 +398,18 @@ export function MainContent({
                         className="drag-region flex h-11 shrink-0 items-center gap-2 px-2"
                       >
                         {view === "content" && (
-                          <WorkspacePanelButton
-                            action="hide"
-                            onClick={() => setPanelMode("chat")}
-                          />
+                          <>
+                            {selectedWorkspace.project_id && (
+                              <ProjectBackLink
+                                projectId={selectedWorkspace.project_id}
+                                projectTitle={selectedWorkspace.project_title}
+                              />
+                            )}
+                            <WorkspacePanelButton
+                              action="hide"
+                              onClick={() => setPanelMode("chat")}
+                            />
+                          </>
                         )}
                         <ContentTabBar
                           activeTab={effectiveContentTab}

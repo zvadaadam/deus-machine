@@ -20,6 +20,7 @@ import { CloudSimulatorPanel } from "@/features/simulator/cloud/CloudSimulatorPa
 import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
+import { ProjectBackLink } from "@/features/projects/ui/ProjectBackLink";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@/features/workspace/api/workspace.service";
@@ -137,6 +138,14 @@ export function MobileLayout({
       <div className="flex min-w-0 flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
           repositoryId={workspace.repository_id}
+          leadingActions={
+            workspace.project_id && (
+              <ProjectBackLink
+                projectId={workspace.project_id}
+                projectTitle={workspace.project_title}
+              />
+            )
+          }
           title={workspace.title ?? undefined}
           repositoryName={workspace.repo_name}
           branch={workspace.git_branch ?? undefined}

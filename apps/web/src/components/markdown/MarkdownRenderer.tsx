@@ -189,7 +189,9 @@ export function MarkdownRenderer({
       a({ href, children, ...props }: any) {
         const label = getLinkLabel(children);
         const resolvedLink =
-          href && resolveFileLink && onFileLinkOpen ? resolveFileLink(href, label) : null;
+          typeof href === "string" && resolveFileLink && onFileLinkOpen
+            ? resolveFileLink(href, label)
+            : null;
         const fileLink =
           typeof resolvedLink === "string"
             ? ({ path: resolvedLink, target: "file" } satisfies MarkdownFileLink)

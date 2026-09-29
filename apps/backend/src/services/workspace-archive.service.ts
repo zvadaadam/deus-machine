@@ -8,9 +8,11 @@ import {
 } from "./cloud-workspace-init.service";
 import { invalidate } from "./query-engine";
 import { autoProgressStatus } from "./workspace-status.service";
+import { assertUnmanagedWorkspace } from "./managed-workspace";
 
 /** Both HTTP and WS archive the same way. Cloud archive preserves its recovery data. */
 async function performArchive(workspaceId: string): Promise<void> {
+  assertUnmanagedWorkspace(workspaceId);
   const db = getDatabase();
   const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new Error("Workspace not found");
@@ -58,6 +60,7 @@ export function archiveWorkspace(workspaceId: string): Promise<void> {
 
 export function wakeWorkspace(workspaceId: string) {
   return changeWorkspaceState(workspaceId, async () => {
+    assertUnmanagedWorkspace(workspaceId);
     const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind !== "cloud" || !workspace.provider_workspace_id) {
@@ -75,6 +78,7 @@ export function wakeWorkspace(workspaceId: string) {
 
 export function unarchiveWorkspace(workspaceId: string): Promise<void> {
   return changeWorkspaceState(workspaceId, async () => {
+    assertUnmanagedWorkspace(workspaceId);
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
     if (!workspace) throw new Error("Workspace not found");

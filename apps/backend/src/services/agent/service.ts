@@ -94,6 +94,9 @@ async function establishLink(url: string, handler: AgentEventHandler): Promise<v
           console.log(
             `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
           );
+          // The connection callback runs before the link assignment below. The
+          // scheduler's deferred wake runs after it and also handles reconnects.
+          void import("../projects/service").then(({ wakeProjects }) => wakeProjects());
         },
         onDisconnected: () => {
           console.log("[AgentService] Disconnected from agent-server");
@@ -252,6 +255,11 @@ async function handleToolRequest(
   // SAME service the q:mutate arms use — one service, two callers.
   if (method === "automation/update") {
     return handleAutomationToolRequest(params);
+  }
+
+  if (method === "project/tool") {
+    const { handleProjectTool } = await import("../projects/service");
+    return handleProjectTool(params);
   }
 
   // Simulator context is backend state — no frontend relay.

@@ -9,6 +9,7 @@ import { createWorkspaceTools } from "./workspace";
 import { createBrowserTools } from "./browser";
 import { createAppsTools } from "./apps";
 import { createAutomationTools } from "./automations";
+import { createProjectTools, type ProjectToolSource } from "./projects";
 
 import { createSimulatorTools } from "./simulator";
 import { createRecordingTools, getSessionManager } from "./recording";
@@ -29,7 +30,10 @@ import { RecordingBridge } from "./recording-bridge";
  *   - recording_start/stop tools call bridge.setActiveSession() to activate/deactivate
  *   - Browser tool executions automatically emit recording events via the bridge
  */
-export function createDeusMCPServer(sessionId: string) {
+export function createDeusMCPServer(
+  sessionId: string,
+  projectSource: ProjectToolSource = { currentTurnId: () => undefined }
+) {
   // Create the recording bridge that connects browser tools to the recording engine
   const bridge = new RecordingBridge(() => getSessionManager());
 
@@ -80,6 +84,7 @@ export function createDeusMCPServer(sessionId: string) {
       ...createSimulatorTools(sessionId),
       ...createAppsTools(sessionId),
       ...createAutomationTools(sessionId),
+      ...createProjectTools(sessionId, projectSource),
       ...wrappedRecordingTools,
     ],
   });

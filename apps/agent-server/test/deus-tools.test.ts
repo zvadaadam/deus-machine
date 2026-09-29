@@ -76,7 +76,7 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator + apps + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(43);
+    expect(toolNames).toHaveLength(50);
     // Workspace tools
     expect(toolNames).toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -84,6 +84,8 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("GetTerminalOutput");
     // Automations
     expect(toolNames).toContain("automation_update");
+    expect(toolNames).toContain("create_agent");
+    expect(toolNames).toContain("publish_context");
     // AAP lifecycle tools
     expect(toolNames).toContain("list_apps");
     expect(toolNames).toContain("launch_app");

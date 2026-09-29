@@ -330,6 +330,25 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     expect(seen).toEqual([{ method: SIDE_CHANNEL.getDiff, params: { sessionId: "sess-1" } }]);
   });
 
+  it("preserves Project invocation and source identities over the host side channel", async () => {
+    const seen: unknown[] = [];
+    await connectBackendStyle(async (method, params) => {
+      expect(method).toBe(SIDE_CHANNEL.projectTool);
+      seen.push(params);
+      return { inputId: "input-1" };
+    });
+    const request = {
+      sessionId: "project-session",
+      turnId: "source-turn",
+      toolCallId: "invocation-1",
+      operation: "send_to_agent" as const,
+      args: { agentId: "coordinator", message: "Need a decision", kind: "question" },
+    };
+
+    await expect(HostRpc.requestProjectTool(request)).resolves.toEqual({ inputId: "input-1" });
+    expect(seen).toEqual([request]);
+  });
+
   it("answers deus/provider-auth on the side channel (codex → unsupported)", async () => {
     await connectBackendStyle();
     const result = await sideChannel!.request<{ error?: string }>(

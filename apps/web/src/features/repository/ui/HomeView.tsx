@@ -325,7 +325,7 @@ export function HomeView({
         transition={{ duration: 0.3, ease: EASE_OUT_QUART }}
         className="text-text-primary mb-6 w-full max-w-[720px] px-4 text-center text-2xl font-medium tracking-tight sm:px-6"
       >
-        {hasRepos ? "What are we building?" : "Start with a project"}
+        {hasRepos ? "What are we building?" : "Start with a repository"}
       </motion.h1>
 
       {/* Input Card — the gravitational center */}
@@ -490,7 +490,7 @@ export function HomeView({
                               className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
                             >
                               <FolderGit2 className="size-4 shrink-0" />
-                              <span>Start new project</span>
+                              <span>Create repository</span>
                             </button>
                           )}
                           {onCloneRepository && (
@@ -606,7 +606,7 @@ export function HomeView({
                                 className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
                               >
                                 <FolderGit2 className="size-3 shrink-0" />
-                                <span>Start new project</span>
+                                <span>Create repository</span>
                               </button>
                             )}
                             {onCloneRepository && (
@@ -642,10 +642,10 @@ export function HomeView({
                   )}
                 </div>
               ) : (
-                /* Zero repos — "Add a project" label */
+                /* Zero repos — "Add a repository" label */
                 <span className="text-text-muted flex items-center gap-1.5 px-2.5 py-1.5 text-xs">
                   <FolderOpen className="size-3" />
-                  <span className="font-medium">Add a project</span>
+                  <span className="font-medium">Add a repository</span>
                 </span>
               )}
 
@@ -711,7 +711,7 @@ export function HomeView({
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder={
-                hasRepos ? "Describe what you'd like to do..." : "Add a project to get started"
+                hasRepos ? "Describe what you'd like to do..." : "Add a repository to get started"
               }
               disabled={!hasRepos || isSubmitting}
               aria-label="Message to start a new workspace"
@@ -815,7 +815,7 @@ export function HomeView({
               className="mt-6 w-full max-w-[560px] px-4 sm:px-6"
             >
               <p className="text-text-muted mb-4 text-sm">
-                Add a project to start working with your AI coding agent.
+                Add a repository to start working with your AI coding agent.
               </p>
 
               <div className="border-border-subtle bg-bg-elevated/60 overflow-hidden rounded-xl border">
@@ -829,9 +829,9 @@ export function HomeView({
                       <FolderGit2 className="text-text-tertiary h-4 w-4" />
                     </div>
                     <div>
-                      <h3 className="text-text-primary text-sm font-medium">Start a new project</h3>
+                      <h3 className="text-text-primary text-sm font-medium">Create a repository</h3>
                       <p className="text-text-muted mt-0.5 text-xs">
-                        Create a project from scratch or a template
+                        Create a repository from scratch or a template
                       </p>
                     </div>
                   </button>
@@ -876,7 +876,7 @@ export function HomeView({
                     </div>
                     <div>
                       <h3 className="text-text-primary text-sm font-medium">
-                        Open a local project
+                        Open a local repository
                       </h3>
                       <p className="text-text-muted mt-0.5 text-xs">
                         Browse your filesystem for an existing codebase
@@ -910,7 +910,7 @@ export function HomeView({
                     onClick={onStartNewProject}
                     className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
                   >
-                    Start new project
+                    Create repository
                   </button>
                   {(onCloneRepository || (capabilities.nativeFolderPicker && onOpenProject)) && (
                     <span className="bg-foreground/10 inline-block h-1 w-1 rounded-full" />
@@ -937,7 +937,7 @@ export function HomeView({
                   onClick={onOpenProject}
                   className="text-text-disabled hover:text-text-muted text-xs underline-offset-4 transition-colors duration-150 hover:underline"
                 >
-                  Open local project
+                  Open local repository
                 </button>
               )}
             </div>

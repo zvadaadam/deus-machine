@@ -13,6 +13,7 @@ import {
 import type { SdkMcpServers } from "@zvada/agent-server/core";
 import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { createDeusMCPServer } from "../deus-tools";
+import type { ProjectToolSource } from "../deus-tools/projects";
 import { trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
 import { decideToolUse } from "./tool-policy";
@@ -22,6 +23,11 @@ let runtime: AgentRuntime | undefined;
 
 /** AAP-registered MCP servers, applied to every claude turn + live-swapped. */
 let aapServers: Record<string, McpServerConfig> = {};
+
+// The engine calls sdkMcpServers, then hooks, once per session spawn. Bind the
+// MCP closure to that engine instance's reader; an old server must never read
+// a replacement instance's turn merely because it has the same session ID.
+const pendingProjectSources = new Map<string, ProjectToolSource>();
 
 function checkpointHook(kind: "start" | "end", sessionId: string, turnId: string | undefined) {
   const state = trackedSessions.get(sessionId);
@@ -37,8 +43,11 @@ export function getRegistry(): AgentRegistry {
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
     provision: { mode: "pinned" },
     claudeCode: {
-      sdkMcpServers: ({ sessionId }) =>
-        ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
+      sdkMcpServers: ({ sessionId }) => {
+        const source: ProjectToolSource = { currentTurnId: () => undefined };
+        pendingProjectSources.set(sessionId, source);
+        return { deus: createDeusMCPServer(sessionId, source) } as unknown as SdkMcpServers;
+      },
       // Legacy-handler parity: deus can't render AskUserQuestion, and
       // sub-agent text must reach the wire.
       //
@@ -53,28 +62,33 @@ export function getRegistry(): AgentRegistry {
         forwardSubagentText: true,
       }),
       toolPolicy: decideToolUse,
-      hooks: ({ sessionId, currentTurnId }) => ({
-        UserPromptSubmit: [
-          {
-            hooks: [
-              async () => {
-                checkpointHook("start", sessionId, currentTurnId());
-                return {};
-              },
-            ],
-          },
-        ],
-        Stop: [
-          {
-            hooks: [
-              async () => {
-                checkpointHook("end", sessionId, currentTurnId());
-                return {};
-              },
-            ],
-          },
-        ],
-      }),
+      hooks: ({ sessionId, currentTurnId }) => {
+        const source = pendingProjectSources.get(sessionId);
+        if (source) source.currentTurnId = currentTurnId;
+        pendingProjectSources.delete(sessionId);
+        return {
+          UserPromptSubmit: [
+            {
+              hooks: [
+                async () => {
+                  checkpointHook("start", sessionId, currentTurnId());
+                  return {};
+                },
+              ],
+            },
+          ],
+          Stop: [
+            {
+              hooks: [
+                async () => {
+                  checkpointHook("end", sessionId, currentTurnId());
+                  return {};
+                },
+              ],
+            },
+          ],
+        };
+      },
       // AAP MCP servers ride the wire config: the wire bridge injects
       // currentAapServers() into every claude turn/start (see wire.ts).
     },

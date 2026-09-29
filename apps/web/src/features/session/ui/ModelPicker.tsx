@@ -24,6 +24,8 @@ interface ModelPickerProps {
   onModelChange?: (model: string) => void;
   /** Opens a new tab when switching to a locked agent group */
   onOpenNewTab?: (initialModel?: string) => void;
+  /** Managed conversations display their model without offering a change. */
+  readOnly?: boolean;
 }
 
 function renderAgentLogo(type: AgentHarness, sizeClass: string) {
@@ -34,11 +36,30 @@ function renderAgentLogo(type: AgentHarness, sizeClass: string) {
   return <Logo className={cn("flex-shrink-0", sizeClass)} />;
 }
 
-export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }: ModelPickerProps) {
+export function ModelPicker({
+  model,
+  hasMessages,
+  onModelChange,
+  onOpenNewTab,
+  readOnly = false,
+}: ModelPickerProps) {
   const modelLabel = getModelLabel(model);
   const selectedOption = getModelOption(model);
   const selectedOptionValue = selectedOption?.value;
   const currentGroup = selectedOption?.agentHarness ?? "claude-code";
+
+  if (readOnly) {
+    return (
+      <span
+        className="text-text-secondary inline-flex h-8 items-center gap-1.5 px-2 text-sm"
+        aria-label={`Fixed model: ${modelLabel}`}
+        title="Model selected for this project"
+      >
+        {renderAgentLogo(currentGroup, "size-3.5")}
+        <span>{modelLabel}</span>
+      </span>
+    );
+  }
 
   return (
     <DropdownMenu>

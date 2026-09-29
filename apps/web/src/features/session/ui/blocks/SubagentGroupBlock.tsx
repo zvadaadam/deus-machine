@@ -35,7 +35,8 @@ export function SubagentGroupBlock({
   childMessages,
   subagent,
 }: SubagentGroupBlockProps) {
-  const { sessionStatus, workspaceId, workspacePath, subagentMessages } = useSession();
+  const { sessionStatus, workspaceId, workspacePath, subagentMessages, openResource } =
+    useSession();
   // The protocol normalizes subagent metadata onto the tool part; the raw
   // tool input is the fallback for harnesses that report neither.
   const { description, prompt, subagent_type } = toolUse.input ?? {};
@@ -146,6 +147,7 @@ export function SubagentGroupBlock({
               workspacePath={workspacePath}
               subagentMessages={subagentMessages}
               insideSubagent={true}
+              onOpenResource={openResource}
             >
               <SubagentMessageList messages={childMessages} />
             </SessionProvider>
