@@ -7,7 +7,7 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type { SettingsSection } from "@shared/types/settings";
 
-export type NewWorkspaceMode = "default" | "from-github";
+export type NewWorkspaceMode = "default" | "from-github" | "project";
 
 export interface EnvironmentSetupRequest {
   repoId: string;
@@ -35,6 +35,9 @@ interface UIState {
   automationsOpen: boolean;
   /** Deep-link: open straight onto this automation's detail (consumed once). */
   automationsFocusId: string | null;
+
+  projectsOpen: boolean;
+  selectedProjectId: string | null;
 
   /** MainLayout creates a workspace and sends the setup instructions as turn one. */
   pendingEnvSetup: EnvironmentSetupRequest | null;
@@ -64,6 +67,8 @@ interface UIState {
   openAutomations: (automationId?: string) => void;
   closeAutomations: () => void;
   clearAutomationsFocus: () => void;
+  openProjects: (projectId: string) => void;
+  closeProjects: () => void;
 
   closeAllModals: () => void;
 }
@@ -82,6 +87,8 @@ export const useUIStore = create<UIState>()(
       environmentSettingsTarget: null,
       automationsOpen: false,
       automationsFocusId: null,
+      projectsOpen: false,
+      selectedProjectId: null,
       pendingEnvSetup: null,
 
       // Modal actions
@@ -99,6 +106,7 @@ export const useUIStore = create<UIState>()(
             newWorkspaceMode: "default" as NewWorkspaceMode,
             newWorkspaceDraft: draft,
             automationsOpen: false,
+            projectsOpen: false,
           },
           false,
           "ui/openNewWorkspaceModalWithDraft"
@@ -133,13 +141,18 @@ export const useUIStore = create<UIState>()(
       // Settings view actions — settings and automations are both full-page
       // takeovers, so opening one closes the other.
       openSettings: () =>
-        set({ settingsOpen: true, automationsOpen: false }, false, "ui/openSettings"),
+        set(
+          { settingsOpen: true, automationsOpen: false, projectsOpen: false },
+          false,
+          "ui/openSettings"
+        ),
 
       openEnvironmentSettings: (repoId, location) =>
         set(
           {
             settingsOpen: true,
             automationsOpen: false,
+            projectsOpen: false,
             activeSettingsSection: "environment",
             environmentSettingsTarget: { repoId, location },
           },
@@ -156,6 +169,7 @@ export const useUIStore = create<UIState>()(
           {
             automationsOpen: true,
             settingsOpen: false,
+            projectsOpen: false,
             automationsFocusId: automationId ?? null,
           },
           false,
@@ -166,6 +180,20 @@ export const useUIStore = create<UIState>()(
 
       clearAutomationsFocus: () =>
         set({ automationsFocusId: null }, false, "ui/clearAutomationsFocus"),
+
+      openProjects: (projectId) =>
+        set(
+          {
+            projectsOpen: true,
+            selectedProjectId: projectId,
+            settingsOpen: false,
+            automationsOpen: false,
+          },
+          false,
+          "ui/openProjects"
+        ),
+
+      closeProjects: () => set({ projectsOpen: false }, false, "ui/closeProjects"),
 
       setActiveSettingsSection: (section) =>
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
@@ -189,6 +217,7 @@ export const useUIStore = create<UIState>()(
             settingsOpen: false,
             environmentSettingsTarget: null,
             automationsOpen: false,
+            projectsOpen: false,
           },
           false,
           "ui/closeAllModals"
@@ -224,6 +253,8 @@ export const uiActions = {
   closeSettings: () => useUIStore.getState().closeSettings(),
   openAutomations: (automationId?: string) => useUIStore.getState().openAutomations(automationId),
   closeAutomations: () => useUIStore.getState().closeAutomations(),
+  openProjects: (projectId: string) => useUIStore.getState().openProjects(projectId),
+  closeProjects: () => useUIStore.getState().closeProjects(),
   openCommandPalette: () => useUIStore.getState().openCommandPalette(),
   closeCommandPalette: () => useUIStore.getState().closeCommandPalette(),
   toggleCommandPalette: () => useUIStore.getState().toggleCommandPalette(),

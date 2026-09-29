@@ -108,6 +108,7 @@ export const ADDITIVE_COLUMNS = {
     // outcome: a stored inline token past its 1-hour life only shadows the
     // org PAT, so it may be stripped even when the remint result is unknown.
     last_inline_mint_at: "INTEGER",
+    conversation_generation: "INTEGER NOT NULL DEFAULT 0",
   },
   sessions: {
     // agnt session id for cloud-workspace sessions (null for local).
@@ -154,6 +155,7 @@ export const SCHEMA_SQL = `
     kind TEXT NOT NULL DEFAULT 'worktree',
     provider_workspace_id TEXT,
     last_inline_mint_at INTEGER,
+    conversation_generation INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -305,6 +307,171 @@ export const SCHEMA_SQL = `
     cost REAL,
     summary TEXT
   );
+
+
+  -- Persistent Project coordination. Sessions/turns remain transcript/execution authority.
+  CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY NOT NULL,
+    creation_request_id TEXT NOT NULL UNIQUE,
+    creation_hash TEXT NOT NULL,
+    title TEXT NOT NULL,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE RESTRICT,
+    coordinator_agent_id TEXT,
+    lifecycle TEXT NOT NULL DEFAULT 'active' CHECK(lifecycle IN ('active','archived')),
+    model TEXT NOT NULL,
+    paused_at INTEGER,
+    pause_revision INTEGER NOT NULL DEFAULT 0,
+    dispatch_limit INTEGER NOT NULL CHECK(dispatch_limit >= 0),
+    concurrency_limit INTEGER NOT NULL CHECK(concurrency_limit BETWEEN 1 AND 8),
+    revision INTEGER NOT NULL DEFAULT 0,
+    content_head_revision INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS project_agents (
+    agent_id TEXT PRIMARY KEY NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    creation_operation_id TEXT NOT NULL,
+    paused_at INTEGER,
+    created_at INTEGER NOT NULL,
+    UNIQUE(project_id, agent_id)
+  );
+  CREATE TABLE IF NOT EXISTS project_operations (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    kind TEXT NOT NULL,
+    actor_session_id TEXT,
+    actor_turn_id TEXT,
+    target_agent_id TEXT,
+    request_hash TEXT NOT NULL,
+    request_json TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','succeeded','failed')),
+    receipt_json TEXT,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS project_assignments (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    agent_id TEXT NOT NULL REFERENCES project_agents(agent_id) ON DELETE RESTRICT,
+    initiating_input_id TEXT NOT NULL,
+    brief_revision INTEGER NOT NULL,
+    state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','accepted','cancelled')),
+    accepted_report_id TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS project_inputs (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    agent_id TEXT NOT NULL REFERENCES project_agents(agent_id) ON DELETE RESTRICT,
+    session_id TEXT NOT NULL,
+    generation INTEGER NOT NULL,
+    assignment_id TEXT REFERENCES project_assignments(id),
+    kind TEXT NOT NULL,
+    origin TEXT NOT NULL CHECK(origin IN ('human','agent','system')),
+    source_session_id TEXT,
+    source_turn_id TEXT,
+    payload_json TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    reply_to TEXT,
+    resolved_by TEXT,
+    created_at INTEGER NOT NULL,
+    superseded_at INTEGER,
+    UNIQUE(project_id,dedup_key)
+  );
+  CREATE TABLE IF NOT EXISTS project_dispatches (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    agent_id TEXT NOT NULL REFERENCES project_agents(agent_id) ON DELETE RESTRICT,
+    session_id TEXT NOT NULL,
+    generation INTEGER NOT NULL,
+    assignment_id TEXT NOT NULL REFERENCES project_assignments(id),
+    request_json TEXT NOT NULL,
+    content_revision INTEGER NOT NULL,
+    phase TEXT NOT NULL CHECK(phase IN ('prepared','submitting','admitted','finished','uncertain','revoked')),
+    outcome_json TEXT,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    admitted_at INTEGER,
+    closed_at INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS project_dispatch_inputs (
+    dispatch_id TEXT NOT NULL REFERENCES project_dispatches(id) ON DELETE RESTRICT,
+    input_id TEXT NOT NULL REFERENCES project_inputs(id) ON DELETE RESTRICT,
+    position INTEGER NOT NULL,
+    PRIMARY KEY(dispatch_id,input_id),
+    UNIQUE(input_id),
+    UNIQUE(dispatch_id,position)
+  );
+  CREATE TABLE IF NOT EXISTS project_content_revisions (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    revision INTEGER NOT NULL,
+    manifest_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(project_id,revision)
+  );
+  CREATE TABLE IF NOT EXISTS project_reports (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    operation_id TEXT NOT NULL UNIQUE REFERENCES project_operations(id),
+    assignment_id TEXT NOT NULL REFERENCES project_assignments(id),
+    agent_id TEXT NOT NULL REFERENCES project_agents(agent_id),
+    session_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    content_revision INTEGER NOT NULL,
+    files_json TEXT NOT NULL,
+    pr_urls_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(project_id,content_revision) REFERENCES project_content_revisions(project_id,revision)
+  );
+  -- Each Project retains its PR associations separately from immutable source evidence.
+  CREATE TABLE IF NOT EXISTS project_pull_requests (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    provider TEXT NOT NULL DEFAULT 'github' CHECK(provider = 'github'),
+    host TEXT NOT NULL,
+    repository TEXT NOT NULL,
+    pr_number INTEGER NOT NULL CHECK(pr_number > 0),
+    canonical_url TEXT NOT NULL,
+    title TEXT,
+    state TEXT CHECK(state IN ('open','closed','merged')),
+    is_draft INTEGER CHECK(is_draft IN (0,1)),
+    review_status TEXT,
+    ci_status TEXT,
+    has_conflicts INTEGER CHECK(has_conflicts IN (0,1)),
+    checked_at INTEGER,
+    linked_at INTEGER NOT NULL,
+    UNIQUE(project_id,host,repository,pr_number),
+    UNIQUE(project_id,id)
+  );
+  CREATE TABLE IF NOT EXISTS project_pr_sources (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    pr_link_id TEXT NOT NULL,
+    report_id TEXT REFERENCES project_reports(id) ON DELETE RESTRICT,
+    assignment_id TEXT,
+    agent_id TEXT NOT NULL,
+    session_id TEXT,
+    turn_id TEXT,
+    relation TEXT NOT NULL CHECK(relation IN ('report','workspace')),
+    original_url TEXT NOT NULL,
+    dedup_key TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(project_id,dedup_key),
+    FOREIGN KEY(project_id,pr_link_id) REFERENCES project_pull_requests(project_id,id) ON DELETE RESTRICT
+  );
+  CREATE INDEX IF NOT EXISTS idx_project_pr_sources_link ON project_pr_sources(pr_link_id);
+  CREATE INDEX IF NOT EXISTS idx_project_pr_sources_report ON project_pr_sources(report_id);
+  CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_project_agents_project ON project_agents(project_id);
+  CREATE INDEX IF NOT EXISTS idx_project_operations_pending ON project_operations(state,created_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_project_open_assignment ON project_assignments(agent_id) WHERE state='open';
+  CREATE INDEX IF NOT EXISTS idx_project_inputs_pending ON project_inputs(project_id,agent_id,created_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_project_open_dispatch ON project_dispatches(agent_id) WHERE closed_at IS NULL;
+  CREATE INDEX IF NOT EXISTS idx_project_dispatches_source ON project_dispatches(session_id,id);
+  CREATE INDEX IF NOT EXISTS idx_project_reports_project ON project_reports(project_id,created_at);
 
   -- Indexes (17)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);

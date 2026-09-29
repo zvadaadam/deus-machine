@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   stopApps: vi.fn(),
   run: vi.fn(),
   status: vi.fn(),
+  unmanaged: vi.fn(),
 }));
 vi.mock("../../../src/db", () => ({ getWorkspaceRaw: mocks.workspace }));
 vi.mock("../../../src/lib/database", () => ({
@@ -24,6 +25,9 @@ vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
 vi.mock("../../../src/services/workspace-status.service", () => ({
   autoProgressStatus: mocks.status,
+}));
+vi.mock("../../../src/services/managed-workspace", () => ({
+  assertUnmanagedWorkspace: mocks.unmanaged,
 }));
 
 beforeEach(() => {
@@ -39,6 +43,16 @@ beforeEach(() => {
 });
 
 describe("workspace archive", () => {
+  it("rejects managed lifecycle changes before cleanup or state writes", async () => {
+    mocks.unmanaged.mockImplementation(() => {
+      throw new Error("Use Project controls");
+    });
+    await expect(archiveWorkspace("workspace")).rejects.toThrow("Use Project controls");
+    await expect(unarchiveWorkspace("workspace")).rejects.toThrow("Use Project controls");
+    expect(mocks.pause).not.toHaveBeenCalled();
+    expect(mocks.stopApps).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalled();
+  });
   it("waits for cloud suspension before marking the workspace archived", async () => {
     let resume!: () => void;
     mocks.pause.mockReturnValueOnce(

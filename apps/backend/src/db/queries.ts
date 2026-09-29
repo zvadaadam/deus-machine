@@ -32,6 +32,7 @@ const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
     w.git_target_branch, w.kind, w.provider_workspace_id,
     w.state, w.status, w.current_session_id,
+    p.id as project_id, p.title as project_title,
     w.pr_url, w.pr_number,
     w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
     w.setup_status, w.error_message, w.init_stage,
@@ -46,6 +47,8 @@ const WORKSPACE_JOINS = `
   FROM workspaces w
   LEFT JOIN repositories r ON w.repository_id = r.id
   LEFT JOIN sessions s ON w.current_session_id = s.id
+  LEFT JOIN project_agents pa ON pa.agent_id = w.id
+  LEFT JOIN projects p ON p.id = pa.project_id
 `;
 
 const WORKSPACE_DETAILS_SELECT = `
@@ -112,9 +115,12 @@ export function getWorkspaceForMiddleware(
   return db
     .prepare(
       `
-    SELECT w.*, r.root_path, r.git_default_branch, r.name as repo_name
+    SELECT w.*, r.root_path, r.git_default_branch, r.name as repo_name,
+      p.id as project_id, p.title as project_title
     FROM workspaces w
     LEFT JOIN repositories r ON w.repository_id = r.id
+    LEFT JOIN project_agents pa ON pa.agent_id = w.id
+    LEFT JOIN projects p ON p.id = pa.project_id
     WHERE w.id = ?
   `
     )
@@ -139,23 +145,8 @@ export function getWorkspacesBySessionIds(
   return db
     .prepare(
       `
-    SELECT
-      w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.kind, w.provider_workspace_id,
-      w.state, w.status, w.current_session_id,
-      w.pr_url, w.pr_number,
-      w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
-      w.setup_status, w.error_message, w.init_stage,
-      w.updated_at,
-      r.name as repo_name, r.sort_order as repo_sort_order, r.root_path,
-      r.git_default_branch, r.git_origin_url,
-      s.status as session_status,
-      s.error_category as session_error_category,
-      s.error_message as session_error_message,
-      s.last_user_message_at as latest_message_sent_at
-    FROM workspaces w
-    LEFT JOIN repositories r ON w.repository_id = r.id
-    LEFT JOIN sessions s ON w.current_session_id = s.id
+    SELECT ${WORKSPACE_ROW_COLUMNS}, r.sort_order as repo_sort_order
+    ${WORKSPACE_JOINS}
     WHERE w.current_session_id IN (${placeholders})
   `
     )

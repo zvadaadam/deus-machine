@@ -61,6 +61,7 @@ const TOOL_REQUEST_METHODS: Record<string, string> = {
   [SIDE_CHANNEL.aapStopApp]: "aap/stop-app",
   [SIDE_CHANNEL.aapReadAppSkill]: "aap/read-app-skill",
   [SIDE_CHANNEL.automationUpdate]: "automation/update",
+  [SIDE_CHANNEL.projectTool]: "project/tool",
 };
 
 const SIDE_CHANNEL_REQUEST_TIMEOUT_MS = 30_000;
@@ -147,6 +148,25 @@ export class AgentLink {
     this.connected = true;
     // Mark this connection as THE deus host for tool round-trips.
     sideChannel.notify(SIDE_CHANNEL.hello, {});
+
+    if (this.client) {
+      // The upstream client installs this returned transport, clears its old
+      // handshake, and initializes again. Observe that handshake on the next
+      // task so reconnects notify owners only after negotiation succeeds.
+      setTimeout(() => {
+        if (this.disposed || this.sideChannel !== sideChannel) return;
+        void this.client
+          ?.initialize()
+          .then((init) => {
+            if (this.disposed || this.sideChannel !== sideChannel) return;
+            this.agents = toAgentInfos(init);
+            this.options.onConnected?.(this.agents);
+          })
+          .catch(() => {
+            // The upstream client owns retries after a rejected handshake.
+          });
+      }, 0);
+    }
 
     return claimSideChannel(transport, sideChannel);
   }

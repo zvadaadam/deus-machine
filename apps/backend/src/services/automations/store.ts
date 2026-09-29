@@ -6,6 +6,7 @@
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../../lib/database";
 import type { AutomationRow, AutomationRunRow, AutomationWithDetailsRow } from "../../db/types";
+import { assertUnmanagedWorkspace } from "../managed-workspace";
 
 // ─── automations ─────────────────────────────────────────────
 
@@ -180,6 +181,7 @@ export function upsertRuns(rows: AutomationRunRow[]): void {
  *  Returns true when anything changed (caller invalidates). */
 export function reviveAdoptedWorkspace(workspaceId: string, sessionId: string): boolean {
   const db = getDatabase();
+  assertUnmanagedWorkspace(workspaceId);
   const revived = db
     .prepare(
       "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
@@ -223,6 +225,7 @@ export function adoptRunRows(input: {
     let workspaceId: string;
     if (session) {
       workspaceId = session.workspace_id;
+      assertUnmanagedWorkspace(workspaceId);
       db.prepare(
         "UPDATE workspaces SET state = 'ready', updated_at = datetime('now') WHERE id = ? AND state = 'archived'"
       ).run(workspaceId);
@@ -234,6 +237,7 @@ export function adoptRunRows(input: {
         .get(input.providerWorkspaceId) as { id: string } | undefined;
       if (found) {
         workspaceId = found.id;
+        assertUnmanagedWorkspace(workspaceId);
       } else {
         workspaceId = uuidv7();
         db.prepare(

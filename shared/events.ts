@@ -59,6 +59,8 @@ export const GIT_INIT_PROGRESS = "git-init-progress" as const;
  *  Derive the type from the const array so runtime validators and
  *  compile-time checks always stay in sync. */
 export const QUERY_RESOURCES = [
+  "projects",
+  "project",
   "workspaces",
   "stats",
   "sessions",

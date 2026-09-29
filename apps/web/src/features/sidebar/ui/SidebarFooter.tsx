@@ -10,7 +10,7 @@ import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import type { SidebarFooterProps } from "../model/types";
 
 /**
- * SidebarFooter — "Add project" + ambient AI provider status indicator.
+ * SidebarFooter — "Add repository" + ambient AI provider status indicator.
  * The status indicator renders nothing when all providers are healthy.
  */
 export function SidebarFooter({
@@ -29,11 +29,11 @@ export function SidebarFooter({
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label="Add project"
+              aria-label="Add repository"
               className="text-text-muted hover:text-text-tertiary flex items-center gap-2 transition-colors duration-150"
             >
               <Plus className="h-4 w-4 shrink-0" />
-              <span className="text-sm">Add project</span>
+              <span className="text-sm">Add repository</span>
             </button>
           </PopoverTrigger>
           <PopoverContent side="top" align="start" className="w-60 p-2">
@@ -47,7 +47,7 @@ export function SidebarFooter({
             >
               <FolderGit2 className="text-text-muted h-4 w-4 shrink-0" />
               <div className="min-w-0 text-left">
-                <p className="text-text-primary text-sm font-medium">Start new project</p>
+                <p className="text-text-primary text-sm font-medium">Create repository</p>
                 <p className="text-text-muted text-xs">Create from scratch or template</p>
               </div>
             </button>
@@ -76,7 +76,7 @@ export function SidebarFooter({
               >
                 <FolderPlus className="text-text-muted h-4 w-4 shrink-0" />
                 <div className="min-w-0 text-left">
-                  <p className="text-text-primary text-sm font-medium">Open local project</p>
+                  <p className="text-text-primary text-sm font-medium">Open local repository</p>
                   <p className="text-text-muted text-xs">Add an existing repository</p>
                 </div>
               </button>

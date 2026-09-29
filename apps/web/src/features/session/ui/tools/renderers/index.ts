@@ -60,3 +60,14 @@ export {
 // Deus MCP tools — Recording
 export { RecordingStartToolRenderer, RecordingStopToolRenderer } from "./RecordingToolRenderers";
 export { AutomationToolRenderer } from "./AutomationToolRenderer";
+
+// Deus MCP tools — Projects
+export {
+  CreateAgentToolRenderer,
+  SendToAgentToolRenderer,
+  StopAgentToolRenderer,
+  AgentStatusToolRenderer,
+  ReadAgentTranscriptToolRenderer,
+  ReportResultToolRenderer,
+  PublishContextToolRenderer,
+} from "./ProjectToolRenderers";

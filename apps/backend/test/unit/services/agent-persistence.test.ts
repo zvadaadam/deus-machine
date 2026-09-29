@@ -629,10 +629,49 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
       persistSessionTitle(SESSION, "Auto title");
 
+      expect(db.prepare(`SELECT title FROM sessions WHERE id = ?`).get(SESSION)).toEqual({
+        title: "Auto title",
+      });
       expect(db.prepare(`SELECT title FROM workspaces WHERE id = 'w1'`).get()).toEqual({
         title: "Mine",
       });
     });
+
+    it.each(["coordinator", "contributor"])(
+      "keeps a managed %s conversation named after its assigned workspace",
+      (role) => {
+        db.prepare(
+          `INSERT INTO projects(id,creation_request_id,creation_hash,title,repository_id,model,
+           dispatch_limit,concurrency_limit,created_at,updated_at,coordinator_agent_id)
+           VALUES('project','create-project','hash','Human Project','r1','claude',40,2,1,1,?)`
+        ).run(role === "coordinator" ? "w1" : null);
+        db.prepare(
+          `INSERT INTO project_agents(agent_id,project_id,creation_operation_id,created_at)
+           VALUES('w1','project','create-agent',1)`
+        ).run();
+        const assignedTitle = role === "coordinator" ? "Human Project" : "Implement CSV export";
+        db.prepare("UPDATE workspaces SET title=? WHERE id='w1'").run(assignedTitle);
+
+        expect(
+          persistSessionTitle(SESSION, "[system/turn_outcome; input input-1] machine outcome")
+        ).toEqual({ ok: true, value: undefined });
+        expect(db.prepare("SELECT title FROM sessions WHERE id=?").get(SESSION)).toEqual({
+          title: assignedTitle,
+        });
+        expect(db.prepare("SELECT title FROM workspaces WHERE id='w1'").get()).toEqual({
+          title: assignedTitle,
+        });
+
+        // Existing sessions can already carry an outcome-derived title from an earlier run.
+        db.prepare(
+          "UPDATE sessions SET title='[system/turn_outcome] previous summary' WHERE id=?"
+        ).run(SESSION);
+        persistSessionTitle(SESSION, "Another automatic summary");
+        expect(db.prepare("SELECT title FROM sessions WHERE id=?").get(SESSION)).toEqual({
+          title: assignedTitle,
+        });
+      }
+    );
   });
 
   // --------------------------------------------------------------------------

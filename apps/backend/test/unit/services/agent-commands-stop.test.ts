@@ -21,15 +21,17 @@ const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 import { SCHEMA_SQL } from "@shared/schema";
 
-const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
+const { mockGetDatabase, mockInvalidate, routeProjectStop } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
   mockInvalidate: vi.fn(),
+  routeProjectStop: vi.fn(async () => false),
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/projects/service", () => ({ routeProjectStop }));
 
-import { runCommand } from "../../../src/services/agent/commands";
+import { runCommand, stopProjectSession } from "../../../src/services/agent/commands";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 
@@ -59,6 +61,7 @@ describeWithDb("stopSession", () => {
   beforeEach(() => {
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
+    routeProjectStop.mockResolvedValue(false);
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
     vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -82,6 +85,29 @@ describeWithDb("stopSession", () => {
     await runCommand("stopSession", { sessionId: SESSION });
 
     expect(status()).toBe("idle");
+  });
+
+  it("routes public Project Stop through the durable pause owner", async () => {
+    routeProjectStop.mockResolvedValueOnce(true);
+    const stop = vi.spyOn(agentService, "stopSession");
+    await runCommand("stopSession", { sessionId: SESSION });
+    expect(routeProjectStop).toHaveBeenCalledWith(SESSION);
+    expect(stop).not.toHaveBeenCalled();
+    expect(status()).toBe("working");
+  });
+
+  it("preserves the exact cancellation outcome for the Project scheduler", async () => {
+    const stop = vi.spyOn(agentService, "stopSession").mockResolvedValue({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    await expect(stopProjectSession(SESSION, "turn-1")).resolves.toEqual({
+      outcome: "unconfirmed",
+      turnId: "turn-1",
+    });
+    expect(stop).toHaveBeenCalledWith({ sessionId: SESSION, turnId: "turn-1" });
+    expect(routeProjectStop).not.toHaveBeenCalled();
+    expect(status()).toBe("working");
   });
 
   it("goes idle when there was no active turn to cancel", async () => {

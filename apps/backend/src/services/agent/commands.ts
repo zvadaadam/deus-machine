@@ -15,6 +15,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import { uuidv7 } from "@shared/lib/uuid";
 import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { getDatabase } from "../../lib/database";
@@ -361,7 +362,24 @@ export async function runCommand(
 
 // ---- sendMessage ----
 
-async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
+interface ProjectDispatchAuthority {
+  projectId: string;
+  dispatchId: string;
+  systemPromptAppend?: string;
+}
+
+/** Only the Project scheduler uses this path; public commands cannot supply authority. */
+export function sendProjectMessage(
+  params: QueryParams,
+  authority: ProjectDispatchAuthority
+): Promise<CommandResult> {
+  return handleSendMessage(params, authority);
+}
+
+async function handleSendMessage(
+  params: QueryParams,
+  authority?: ProjectDispatchAuthority
+): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "sendMessage");
   const content = requireParam(params, "content", "sendMessage");
   const model = requireParam(params, "model", "sendMessage");
@@ -369,6 +387,19 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   const permissionMode = readPermissionMode(params.permissionMode);
   if (params.permissionMode !== undefined && permissionMode === undefined) {
     throw new Error("Unsupported permission mode");
+  }
+
+  const projects = await import("../projects/service");
+  if (authority) {
+    projects.assertProjectDispatch(
+      sessionId,
+      requireParam(params, "turnId", "Project dispatch"),
+      authority.projectId,
+      authority.dispatchId
+    );
+  } else {
+    const queued = await projects.routeProjectMessage(sessionId, params);
+    if (queued) return queued;
   }
 
   const db = getDatabase();
@@ -608,6 +639,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
           : undefined,
         resume: existingAgentSessionId || readString(params, "resume"),
         resumeSessionAt: readString(params, "resumeSessionAt"),
+        systemPromptAppend: authority?.systemPromptAppend,
       });
     } catch (err) {
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
@@ -620,6 +652,8 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
         );
+        // The scheduler must distinguish a definitive rejection from lost admission.
+        if (authority) throw err;
         throw new Error("The agent is still working — wait for the current turn to finish.");
       }
       // Every other rejection — harness unavailable, shutting down, invalid
@@ -640,7 +674,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   // timestamp has no such undo, so it waits instead.
   // `failed()` logs its own error — a stamp that misses is a stale sidebar
   // ordering, not a reason to reject a turn the engine is already running.
-  if (persistLastUserMessageAt(sessionId, sentAt).ok) {
+  if (!authority && persistLastUserMessageAt(sessionId, sentAt).ok) {
     invalidate(["workspaces", "sessions"], { sessionIds: [sessionId] });
   }
 
@@ -671,11 +705,26 @@ const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
 async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   const sessionId = requireParam(params, "sessionId", "stopSession");
 
+  const { routeProjectStop } = await import("../projects/service");
+  if (await routeProjectStop(sessionId)) return {};
+
+  const result = await stopProjectSession(sessionId, agentService.liveTurnId(sessionId));
+  return result.outcome === "unconfirmed" ? { unconfirmed: true } : {};
+}
+
+/** Cancel one exact execution. Project ownership/pause is established by its caller. */
+export type SessionCancelResult =
+  | Exclude<TurnCancelResult, { outcome: "unconfirmed" }>
+  | { outcome: "unconfirmed"; turnId?: string };
+
+export async function stopProjectSession(
+  sessionId: string,
+  targetTurnId: string | undefined
+): Promise<SessionCancelResult> {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
 
-  const targetTurnId = agentService.liveTurnId(sessionId);
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;
   if (isCloudSession(sessionId)) {
     try {
@@ -697,7 +746,11 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
   )
-    return {};
+    return {
+      outcome: "no_active_turn",
+      activeTurnId:
+        live ?? (result?.outcome === "no_active_turn" ? result.activeTurnId : undefined),
+    };
 
   if (result && result.outcome !== "unconfirmed") {
     db.prepare(
@@ -705,7 +758,7 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
        WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
     ).run(sessionId, ...ACTIVE_TURN_STATUSES);
     invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-    return {};
+    return result;
   }
 
   console.warn(
@@ -713,7 +766,7 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
   );
   // Armed for the turn being cancelled, not for the session — see below.
   scheduleUnconfirmedCancelWatchdog(sessionId, targetTurnId);
-  return { unconfirmed: true };
+  return { outcome: "unconfirmed", ...(targetTurnId ? { turnId: targetTurnId } : {}) };
 }
 
 /** Bounded fallback for an unconfirmed cancel that no turn.ended ever settles. */

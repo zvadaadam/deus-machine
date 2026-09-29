@@ -34,8 +34,6 @@ import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences
 import { InspectElementPill } from "../InspectElementPill";
 import { DiffCommentPill } from "../DiffCommentPill";
 import { useSession } from "../../context";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
 import { getBaseURL } from "@/shared/config/api.config";
 
 export type TextWeight = "muted" | "normal";
@@ -49,7 +47,7 @@ interface TextBlockProps {
 }
 
 export function TextBlock({ block: text, role = "assistant", weight = "normal" }: TextBlockProps) {
-  const { workspaceId, workspacePath } = useSession();
+  const { workspaceId, workspacePath, openResource } = useSession();
 
   const referenceSegments = useMemo(
     () =>
@@ -68,10 +66,9 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
       if (!workspaceId) return;
       const url = resolveBrowserLinkUrl(href);
       if (!url) return;
-      workspaceLayoutActions.openContentTab(workspaceId, "browser");
-      browserWindowActions.requestNewTab(workspaceId, url);
+      openResource({ kind: "url", url });
     },
-    [workspaceId]
+    [workspaceId, openResource]
   );
 
   const resolveFileLink = useCallback(
@@ -106,14 +103,13 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
       if (isBrowserPreviewPath(path)) {
         const baseUrl = await getBaseURL();
         const url = createWorkspacePreviewUrl(baseUrl, workspaceId, path);
-        workspaceLayoutActions.openContentTab(workspaceId, "browser");
-        browserWindowActions.requestNewTab(workspaceId, url);
+        openResource({ kind: "url", url });
         return;
       }
 
-      workspaceLayoutActions.openFileInContent(workspaceId, path, "files");
+      openResource({ kind: "file", path, target: "files" });
     },
-    [workspaceId]
+    [workspaceId, openResource]
   );
 
   if (!text || text.trim() === "") {

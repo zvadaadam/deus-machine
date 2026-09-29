@@ -34,6 +34,8 @@ export interface AppSidebarProps {
   onNewSession?: () => void;
   onOpenAutomations?: () => void;
   automationsActive?: boolean;
+  onOpenProjects?: (projectId: string) => void;
+  projectsActive?: boolean;
   profile?: SidebarProfile;
 }
 

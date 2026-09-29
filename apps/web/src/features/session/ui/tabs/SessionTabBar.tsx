@@ -162,7 +162,7 @@ export function SessionTabBar({
                     isActive={isActive}
                     isWorking={isWorking}
                     isUnread={isUnread}
-                    canClose={canCloseTabs}
+                    canClose={canCloseTabs && tab.closable !== false}
                     onSelect={() => onTabChange(tab.id)}
                     onClose={onTabClose ? () => onTabClose(tab.id) : undefined}
                     onKeyDown={(event) => handleTabKeyDown(event, tab.id)}

@@ -8,6 +8,7 @@
 // to the correct callback.
 
 import { match } from "ts-pattern";
+import { listProjects, getProject } from "./projects/service";
 import { AppError } from "../lib/errors";
 import { getDatabase } from "../lib/database";
 import {
@@ -439,6 +440,8 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
 
   return (
     match(resource)
+      .with("projects", () => listProjects())
+      .with("project", () => getProject(requireParam(params, "projectId", "project")))
       .with("workspaces", () => {
         // 'error' is in the default: a failed provision must stay VISIBLE
         // (red state + error message), not silently vanish from the sidebar.
@@ -524,7 +527,7 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         if (!workspace) throw new Error("Workspace not found");
 
         db.prepare("UPDATE workspaces SET title = ? WHERE id = ?").run(title, workspaceId);
-        invalidate(["workspaces"]);
+        invalidate(["workspaces", "projects", "project"]);
         return { success: true };
       })
       // ---- New mutations delegated to existing routes ----

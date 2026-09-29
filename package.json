@@ -214,5 +214,8 @@
     "*.{json,md,html,css}": [
       "prettier --write"
     ]
+  },
+  "patchedDependencies": {
+    "@zvada/agent-server@0.3.8": "patches/@zvada%2Fagent-server@0.3.8.patch"
   }
 }

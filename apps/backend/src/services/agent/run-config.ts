@@ -77,6 +77,8 @@ export interface DeusTurnOptions {
   resumeSessionAt?: string;
   /** From the initialize handshake — whether this harness accepts image parts. */
   supportsImages?: boolean;
+  /** Trusted backend-owned coordination instructions, never a public command parameter. */
+  systemPromptAppend?: string;
 }
 
 /** Assemble the wire params for one turn (ids are minted by the caller). */
@@ -98,7 +100,12 @@ export function buildTurnStartParams(
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
-      systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd),
+      systemPromptAppend: [
+        buildSystemPromptAppend(agentHarness, options.cwd),
+        options.systemPromptAppend,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
       // Deus runs with full access by default, like its cloud runtime.
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",

@@ -8,7 +8,7 @@
  * the imperative model methods.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type { FileTreeRowDecorationRenderer, GitStatusEntry } from "@pierre/trees";
 import "@pierre/trees/web-components";
@@ -100,19 +100,15 @@ export function FileTree({
     fileLookupRef.current = fileLookup;
   }, [onFileClick, fileLookup]);
 
-  // When we programmatically `.select()` a path to mirror controlled state,
-  // Pierre still emits onSelectionChange. Record the path we just pushed so
-  // we can ignore its echo and avoid an onFileClick loop.
-  const programmaticSelectRef = useRef<string | null>(null);
+  // Controlled selection updates must not navigate the host back to an old
+  // selection while Pierre emits intermediate deselection/selection callbacks.
+  const syncingSelection = useRef(false);
 
   const handleSelectionChange = useMemo(
     () => (selectedPaths: readonly string[]) => {
       const path = selectedPaths[0];
       if (!path || path.endsWith("/")) return;
-      if (programmaticSelectRef.current === path) {
-        programmaticSelectRef.current = null;
-        return;
-      }
+      if (syncingSelection.current) return;
       onFileClickRef.current?.(path);
     },
     []
@@ -175,27 +171,38 @@ export function FileTree({
     hasMountedRef.current = true;
   }, []);
 
-  useEffect(() => {
-    if (!selectedPath) return;
-    const handle = model.getItem(selectedPath);
-    if (!handle || handle.isSelected()) return;
-    programmaticSelectRef.current = selectedPath;
-    handle.select();
-  }, [selectedPath, model]);
+  const syncSelection = useCallback(
+    (path: string | null) => {
+      const current = model.getSelectedPaths();
+      if (current.length === (path ? 1 : 0) && (!path || current[0] === path)) return;
+      syncingSelection.current = true;
+      try {
+        for (const selected of current) model.getItem(selected)?.deselect();
+        if (path) model.getItem(path)?.select();
+      } finally {
+        syncingSelection.current = false;
+      }
+    },
+    [model]
+  );
 
-  // focusPath expands ancestors + emits a focus change; Pierre's scroll
-  // target helper then scrolls the row into view. We also select so the
-  // FileViewer switches to the revealed file.
+  useEffect(() => {
+    syncSelection(selectedPath ?? null);
+  }, [selectedPath, syncSelection]);
+
+  // Expand ancestors before focusing: Pierre can only focus a visible row.
+  // Keep the selection controlled so revealing a file does not navigate twice.
   useEffect(() => {
     if (!revealRequestId || !revealPath) return;
-    model.focusPath(revealPath);
-    const handle = model.getItem(revealPath);
-    if (handle && !handle.isSelected()) {
-      programmaticSelectRef.current = revealPath;
-      handle.select();
+    const segments = revealPath.split("/");
+    for (let index = 1; index < segments.length; index++) {
+      const ancestor = model.getItem(`${segments.slice(0, index).join("/")}/`);
+      if (ancestor && "expand" in ancestor) ancestor.expand();
     }
+    model.focusPath(revealPath);
+    syncSelection(revealPath);
     onRevealConsumed?.(revealRequestId);
-  }, [revealRequestId, revealPath, model, onRevealConsumed]);
+  }, [revealRequestId, revealPath, model, onRevealConsumed, syncSelection]);
 
   return <PierreFileTree model={model} style={fileTreeThemeStyles} />;
 }

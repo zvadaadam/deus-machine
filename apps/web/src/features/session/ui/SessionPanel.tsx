@@ -27,11 +27,18 @@ import type { WorkspaceKind } from "@shared/enums";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "../store/sessionComposerStore";
 import { processImageFiles } from "../lib/imageAttachments";
+import type { ManagedProjectComposer } from "@/features/projects/ui/ProjectComposer";
+import { uiActions } from "@/shared/stores/uiStore";
+import type { WorkspaceResource } from "../lib/openWorkspaceResource";
+import { useSettings } from "@/features/settings/api";
+import { isTabVisible } from "@/app/layouts/content-tabs";
+import { useIsMobile } from "@/shared/hooks/use-mobile";
 
 const CONTENT_WIDTH_CLASSES = "w-full max-w-[960px] mx-auto min-w-0";
 
 interface SessionPanelProps {
   sessionId: string;
+  managedProject?: ManagedProjectComposer;
   workspacePath: string;
   workspaceId?: string;
   /** Discriminates the cloud lane (sandbox copy + env progress) from worktree. */
@@ -51,6 +58,11 @@ interface SessionPanelProps {
   onSessionStarted?: () => void;
   /** Opens a new chat tab with the given model pre-selected */
   onOpenNewTab?: (initialModel?: string) => void;
+  /** Reveal the workspace when this conversation is embedded in another page. */
+  onRevealWorkspace?: () => void;
+  onOpenResource?: (resource: WorkspaceResource) => void;
+  /** Reveal this managed Agent's controls in its Project overview. */
+  onOpenProjectControls?: () => void;
   /** Model to pre-select when this tab was created from the locked-group picker */
   initialModel?: string;
 }
@@ -69,6 +81,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
   (
     {
       sessionId,
+      managedProject,
       workspacePath,
       workspaceId,
       workspaceKind,
@@ -84,11 +97,17 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       onStop,
       onAgentHarnessChange,
       onOpenNewTab,
+      onRevealWorkspace,
+      onOpenResource,
+      onOpenProjectControls,
       onSessionStarted,
       initialModel,
     },
     ref
   ) => {
+    const settings = useSettings().data;
+    const isMobile = useIsMobile();
+    const browserAvailable = !isMobile && isTabVisible("browser", settings);
     // Agent RPC handler — listens for WS tool requests and manages pending UI state.
     // sessionWorkspaces maps this session's ID to its workspace so getDiff can
     // auto-respond via backend HTTP.
@@ -219,9 +238,13 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
       (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        if (managedProject) {
+          e.dataTransfer.dropEffect = "none";
+          return;
+        }
         if (!isDragging) setIsDragging(true);
       },
-      [isDragging]
+      [isDragging, managedProject]
     );
 
     const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -244,6 +267,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         e.preventDefault();
         e.stopPropagation();
         setIsDragging(false);
+        if (managedProject) return;
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
           const processed = await processImageFiles(files);
@@ -252,7 +276,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           }
         }
       },
-      [sessionId]
+      [sessionId, managedProject]
     );
 
     // Native drag-drop — Electron handles file drops via standard HTML5 drag-drop
@@ -305,11 +329,22 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
         panelMode: "split",
       });
       workspaceLayoutActions.setPendingTerminalCommand(workspaceId, "claude login");
-    }, [workspaceId]);
+      onRevealWorkspace?.();
+    }, [workspaceId, onRevealWorkspace]);
 
     const handleRetryInNewChat = useCallback(() => {
       onOpenNewTab?.();
     }, [onOpenNewTab]);
+
+    const handleOpenProjectControls = useCallback(() => {
+      if (!managedProject) return;
+      if (onOpenProjectControls) onOpenProjectControls();
+      else uiActions.openProjects(managedProject.projectId);
+    }, [managedProject, onOpenProjectControls]);
+
+    const errorRecoveryAction = managedProject
+      ? { label: "Project controls", onClick: handleOpenProjectControls }
+      : undefined;
 
     // Pending agent request for THIS session (plan approval or questions)
     const pendingRequest = pendingRequests.get(sessionId) ?? null;
@@ -357,6 +392,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
           workspaceId={workspaceId ?? null}
           workspacePath={workspacePath}
           subagentMessages={subagentMessages}
+          onOpenResource={onOpenResource}
+          browserAvailable={browserAvailable}
         >
           <div
             className={`${CONTENT_WIDTH_CLASSES} relative flex min-h-0 flex-1 flex-col`}
@@ -381,7 +418,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               onLoadOlder={handleLoadOlder}
               onStop={() => composerRef.current?.stopSession()}
               onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
-              onRetryInNewChat={handleRetryInNewChat}
+              onRetryInNewChat={!managedProject && onOpenNewTab ? handleRetryInNewChat : undefined}
+              errorRecoveryAction={errorRecoveryAction}
               workspaceRepoName={workspaceRepoName}
               workspaceParentBranch={workspaceParentBranch}
               isFirstSession={isFirstSession}
@@ -418,6 +456,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
               ref={composerRef}
               sessionId={sessionId}
               workspaceId={workspaceId}
+              managedProject={managedProject}
               workspacePath={workspacePath}
               targetBranch={workspaceParentBranch ?? undefined}
               initialModel={initialModel}
@@ -471,6 +510,8 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                 workspaceId={workspaceId ?? null}
                 workspacePath={workspacePath}
                 subagentMessages={subagentMessages}
+                onOpenResource={onOpenResource}
+                browserAvailable={browserAvailable}
               >
                 <div className={`${CONTENT_WIDTH_CLASSES} mx-auto flex min-h-0 flex-1 flex-col`}>
                   <Chat
@@ -488,7 +529,10 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                     onLoadOlder={handleLoadOlder}
                     onStop={() => composerRef.current?.stopSession()}
                     onOpenLoginTerminal={workspaceId ? handleOpenLoginTerminal : undefined}
-                    onRetryInNewChat={handleRetryInNewChat}
+                    onRetryInNewChat={
+                      !managedProject && onOpenNewTab ? handleRetryInNewChat : undefined
+                    }
+                    errorRecoveryAction={errorRecoveryAction}
                     workspaceRepoName={workspaceRepoName}
                     workspaceParentBranch={workspaceParentBranch}
                     contextLost={contextLost}
@@ -521,6 +565,7 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
                   <SessionComposer
                     ref={composerRef}
                     sessionId={sessionId}
+                    managedProject={managedProject}
                     workspaceId={workspaceId}
                     workspacePath={workspacePath}
                     targetBranch={workspaceParentBranch ?? undefined}

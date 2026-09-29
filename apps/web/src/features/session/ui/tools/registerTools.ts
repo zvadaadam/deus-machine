@@ -64,6 +64,14 @@ import {
   RecordingStopToolRenderer,
   // Deus MCP — Automations
   AutomationToolRenderer,
+  // Deus MCP — Projects
+  CreateAgentToolRenderer,
+  SendToAgentToolRenderer,
+  StopAgentToolRenderer,
+  AgentStatusToolRenderer,
+  ReadAgentTranscriptToolRenderer,
+  ReportResultToolRenderer,
+  PublishContextToolRenderer,
 } from "./renderers";
 
 // Idempotency guard - prevent double registration during HMR/dev
@@ -189,6 +197,15 @@ export function registerAllTools() {
 
   // Deus MCP — Automations (mcp__deus__automation_update normalizes to this)
   toolRegistry.register("automation_update", AutomationToolRenderer);
+
+  // Deus MCP — Projects (mcp__deus__create_agent normalizes to create_agent, …)
+  toolRegistry.register("create_agent", CreateAgentToolRenderer);
+  toolRegistry.register("send_to_agent", SendToAgentToolRenderer);
+  toolRegistry.register("stop_agent", StopAgentToolRenderer);
+  toolRegistry.register("get_agent_status", AgentStatusToolRenderer);
+  toolRegistry.register("read_agent_transcript", ReadAgentTranscriptToolRenderer);
+  toolRegistry.register("report_result", ReportResultToolRenderer);
+  toolRegistry.register("publish_context", PublishContextToolRenderer);
 }
 
 // Auto-initialize on import (idempotent)

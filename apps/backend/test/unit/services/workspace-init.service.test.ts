@@ -17,7 +17,10 @@ vi.mock("../../../src/services/agent/cloud/config", () => ({ getCloudConfig: moc
 vi.mock("../../../src/services/cloud-environment.service", () => ({
   getCloudEnvironmentInfo: mocks.saved,
 }));
-import { initializeWorkspace } from "../../../src/services/workspace-init.service";
+import {
+  initializeWorkspace,
+  type InitContext,
+} from "../../../src/services/workspace-init.service";
 import {
   readLocalProjectEnvironment,
   prepareLocalEnvironment,
@@ -41,7 +44,20 @@ function row() {
     unknown
   >;
 }
-async function initialize() {
+function initContext(overrides: Partial<InitContext> = {}): InitContext {
+  return {
+    workspaceId,
+    repositoryId: "repo",
+    repoRootPath: root,
+    workspacePath: path.join(root, ".deus", "workspace"),
+    branchName: "test-workspace",
+    worktreeBase: "main",
+    parentBranch: "main",
+    repoOriginUrl: "https://github.com/test/app",
+    ...overrides,
+  };
+}
+async function initialize(overrides: Partial<InitContext> = {}) {
   git("add", ".");
   git(
     "-c",
@@ -53,16 +69,7 @@ async function initialize() {
     "fixture"
   );
   const directory = path.join(root, ".deus", "workspace");
-  await initializeWorkspace({
-    workspaceId,
-    repositoryId: "repo",
-    repoRootPath: root,
-    workspacePath: directory,
-    branchName: "test-workspace",
-    worktreeBase: "main",
-    parentBranch: "main",
-    repoOriginUrl: "https://github.com/test/app",
-  });
+  await initializeWorkspace(initContext(overrides));
   return directory;
 }
 beforeEach(() => {
@@ -78,7 +85,7 @@ beforeEach(() => {
   mocks.saved.mockReset();
   mocks.db = new Database(":memory:");
   mocks.db.exec(
-    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, init_stage TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
+    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, init_stage TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT PRIMARY KEY, workspace_id TEXT, status TEXT, updated_at TEXT)"
   );
   mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
 });
@@ -88,6 +95,49 @@ afterEach(() => {
 });
 
 describe("local project environment journey", () => {
+  it("recovers a reserved conversation without deleting the prepared checkout or rerunning setup", async () => {
+    project({ version: 1, setup: "printf 'setup\\n' >> proof.txt" });
+    mocks
+      .db!.prepare("INSERT INTO sessions (id, workspace_id) VALUES ('reserved', 'another')")
+      .run();
+    const directory = await initialize({ sessionId: "reserved" });
+    expect(row().state).toBe("error");
+    expect(row().error_message).toContain("another workspace");
+    expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("setup\n");
+    fs.appendFileSync(path.join(directory, "tracked.txt"), "work to preserve\n");
+
+    mocks.db!.prepare("DELETE FROM sessions WHERE id = 'reserved'").run();
+    const context = initContext({ sessionId: "reserved" });
+    await Promise.all([initializeWorkspace(context), initializeWorkspace(context)]);
+    expect(row()).toMatchObject({
+      state: "ready",
+      current_session_id: "reserved",
+      error_message: null,
+    });
+    expect(mocks.db!.prepare("SELECT COUNT(*) AS count FROM sessions").get()).toEqual({ count: 1 });
+    expect(fs.readFileSync(path.join(directory, "proof.txt"), "utf8")).toBe("setup\n");
+    expect(fs.readFileSync(path.join(directory, "tracked.txt"), "utf8")).toContain(
+      "work to preserve"
+    );
+  });
+  it("does not adopt or remove an unrelated directory during managed preparation", async () => {
+    const directory = path.join(root, ".deus", "workspace");
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, "keep.txt"), "other files");
+    await initialize({ sessionId: "reserved" });
+    expect(row().state).toBe("error");
+    expect(fs.readFileSync(path.join(directory, "keep.txt"), "utf8")).toBe("other files");
+    expect(mocks.db!.prepare("SELECT COUNT(*) AS count FROM sessions").get()).toEqual({ count: 0 });
+  });
+  it("does not rerun setup left running by an interrupted process", async () => {
+    project({ version: 1, setup: "printf started > proof.txt" });
+    mocks.db!.prepare("UPDATE workspaces SET setup_status = 'running'").run();
+    const directory = await initialize({ sessionId: "reserved" });
+    expect(row()).toMatchObject({ state: "error", init_stage: "setup", setup_status: "running" });
+    expect(row().error_message).toContain("interrupted");
+    expect(fs.existsSync(path.join(directory, "proof.txt"))).toBe(false);
+    expect(mocks.db!.prepare("SELECT COUNT(*) AS count FROM sessions").get()).toEqual({ count: 0 });
+  });
   it("checks out a real branch, copies local secrets before setup, runs one local script and preserves tracked changes", async () => {
     project({
       version: 1,

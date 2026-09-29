@@ -29,17 +29,25 @@ const describeWithDb = canUseDatabase ? describe : describe.skip;
 
 import { SCHEMA_SQL } from "@shared/schema";
 
-const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
-  mockGetDatabase: vi.fn(),
-  mockInvalidate: vi.fn(),
-}));
+const { mockGetDatabase, mockInvalidate, routeProjectMessage, assertProjectDispatch } = vi.hoisted(
+  () => ({
+    mockGetDatabase: vi.fn(),
+    mockInvalidate: vi.fn(),
+    routeProjectMessage: vi.fn(async () => null as { commandId: string } | null),
+    assertProjectDispatch: vi.fn(),
+  })
+);
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/projects/service", () => ({
+  routeProjectMessage,
+  assertProjectDispatch,
+}));
 
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
-import { runCommand } from "../../../src/services/agent/commands";
+import { runCommand, sendProjectMessage } from "../../../src/services/agent/commands";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 
@@ -90,6 +98,8 @@ describeWithDb("sendMessage", () => {
   beforeEach(() => {
     db = createTestDb();
     mockGetDatabase.mockReturnValue(db);
+    routeProjectMessage.mockResolvedValue(null);
+    assertProjectDispatch.mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -111,6 +121,84 @@ describeWithDb("sendMessage", () => {
     // engine's user echo will come back under.
     expect(startTurn.mock.calls[0][1]).toBe("turn-1");
     expect(row(SESSION).status).toBe("working");
+  });
+
+  it("queues a managed session message before the ordinary busy guard", async () => {
+    db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
+    routeProjectMessage.mockResolvedValue({ commandId: "durable-input" });
+    const startTurn = vi.spyOn(agentService, "startTurn");
+
+    await expect(send(SESSION)).resolves.toEqual({ commandId: "durable-input" });
+
+    expect(startTurn).not.toHaveBeenCalled();
+    expect(row(SESSION).status).toBe("working");
+  });
+
+  it("does not allow a public command to supply its own Project admission authority", async () => {
+    routeProjectMessage.mockRejectedValueOnce(new Error("Historical Project conversation"));
+    const startTurn = vi.spyOn(agentService, "startTurn");
+
+    await expect(
+      runCommand("sendMessage", {
+        sessionId: SESSION,
+        content: "hello",
+        model: "claude-opus-4-6",
+        agentHarness: "claude-code",
+        turnId: "turn-1",
+        projectId: "spoofed-project",
+        dispatchId: "spoofed-dispatch",
+      })
+    ).rejects.toThrow("Historical Project conversation");
+    expect(assertProjectDispatch).not.toHaveBeenCalled();
+    expect(startTurn).not.toHaveBeenCalled();
+  });
+
+  it("validates scheduler admission and does not label automatic work as a user prompt", async () => {
+    vi.spyOn(agentService, "isConnected").mockReturnValue(true);
+    vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined);
+
+    await sendProjectMessage(
+      {
+        sessionId: SESSION,
+        content: "Child outcome",
+        model: "claude-opus-4-6",
+        agentHarness: "claude-code",
+        turnId: "turn-auto",
+      },
+      { projectId: "project-1", dispatchId: "dispatch-1" }
+    );
+
+    expect(assertProjectDispatch).toHaveBeenCalledWith(
+      SESSION,
+      "turn-auto",
+      "project-1",
+      "dispatch-1"
+    );
+    expect(routeProjectMessage).not.toHaveBeenCalled();
+    expect(
+      db.prepare("SELECT last_user_message_at FROM sessions WHERE id = ?").get(SESSION)
+    ).toEqual({ last_user_message_at: null });
+  });
+
+  it("rejects a revoked scheduler reservation before changing session state", async () => {
+    assertProjectDispatch.mockImplementationOnce(() => {
+      throw new Error("Project paused");
+    });
+    const startTurn = vi.spyOn(agentService, "startTurn");
+    await expect(
+      sendProjectMessage(
+        {
+          sessionId: SESSION,
+          content: "Child outcome",
+          model: "claude-opus-4-6",
+          agentHarness: "claude-code",
+          turnId: "turn-auto",
+        },
+        { projectId: "project-1", dispatchId: "dispatch-1" }
+      )
+    ).rejects.toThrow("Project paused");
+    expect(row(SESSION).status).toBe("idle");
+    expect(startTurn).not.toHaveBeenCalled();
   });
 
   it.each(["read-only", "bypassPermissions", "", null, 123])(

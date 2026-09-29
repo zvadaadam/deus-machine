@@ -43,6 +43,9 @@ import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
 import { AutomationsPage, useAutomations } from "@/features/automations";
+import { ProjectsPage } from "@/features/projects";
+import { NewProjectDialog } from "@/features/projects/ui/NewProjectDialog";
+import type { ProjectAgent } from "@shared/projects";
 import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
@@ -103,6 +106,9 @@ export function MainLayout() {
   const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
+  const projectsOpen = useUIStore((s) => s.projectsOpen);
+  const selectedProjectId = useUIStore((s) => s.selectedProjectId);
+  const openProjects = useUIStore((s) => s.openProjects);
   const openAutomations = useUIStore((s) => s.openAutomations);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
@@ -184,8 +190,17 @@ export function MainLayout() {
 
   // --- Extracted hooks ---
 
+  const revealWorkspace = useCallback(
+    (workspaceId: string | null) => {
+      uiActions.closeProjects();
+      uiActions.closeAutomations();
+      selectWorkspace(workspaceId);
+    },
+    [selectWorkspace]
+  );
+
   const repoActions = useRepoActions({
-    selectWorkspace,
+    selectWorkspace: revealWorkspace,
     openNewWorkspaceModal,
     closeNewWorkspaceModal,
   });
@@ -218,14 +233,14 @@ export function MainLayout() {
         );
         // Store pending message — will be sent when workspace gets a session
         pendingWelcomeMessagesRef.current.set(workspace.id, { message, model });
-        selectWorkspace(workspace.id);
+        revealWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
       } catch (error) {
         console.error("Failed to create workspace from home:", error);
         toast.error(getErrorMessage(error));
       }
     },
-    [welcomeCreateMutation, selectWorkspace, expandRepo]
+    [welcomeCreateMutation, revealWorkspace, expandRepo]
   );
 
   // Settings uses the same creation/send path as the home composer.
@@ -449,8 +464,7 @@ export function MainLayout() {
     (workspace: Workspace) => {
       // The Automations view overlays MainContent — a workspace click while
       // it is open must land ON the workspace, not silently under the view.
-      uiActions.closeAutomations();
-      selectWorkspace(workspace.id);
+      revealWorkspace(workspace.id);
       expandRepo(workspace.repository_id);
       // Only mark the active tab's session as read — other tabs keep their
       // unread dots until the user actually switches to them.
@@ -460,7 +474,28 @@ export function MainLayout() {
         unreadActions.markRead(activeSessionId);
       }
     },
-    [selectWorkspace, expandRepo]
+    [revealWorkspace, expandRepo]
+  );
+
+  const handleOpenProjectAgent = useCallback(
+    (agent: ProjectAgent) => {
+      const workspace = repoGroups
+        .flatMap((group) => group.workspaces)
+        .find((item) => item.id === agent.workspaceId);
+      if (!workspace) {
+        toast.error("This workspace is still preparing. Try opening it again shortly.");
+        return;
+      }
+      if (agent.sessionId) {
+        const layout = workspaceLayoutActions.getLayout(workspace.id);
+        const sessions = layout.chatTabSessionIds.includes(agent.sessionId)
+          ? layout.chatTabSessionIds
+          : [...layout.chatTabSessionIds, agent.sessionId];
+        workspaceLayoutActions.setChatTabState(workspace.id, sessions, agent.sessionId);
+      }
+      handleWorkspaceClick(workspace);
+    },
+    [repoGroups, handleWorkspaceClick]
   );
 
   return (
@@ -482,7 +517,9 @@ export function MainLayout() {
       ) : (
         <AppSidebar
           repositories={repoGroups}
-          selectedWorkspaceId={selectedWorkspace?.id || null}
+          selectedWorkspaceId={
+            projectsOpen || automationsOpen ? null : selectedWorkspace?.id || null
+          }
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
           onNewWorkspace={repoActions.handleNewWorkspace}
@@ -493,11 +530,12 @@ export function MainLayout() {
           onArchive={webDirect ? undefined : archiveWorkspace}
           onStatusChange={webDirect ? undefined : handleStatusChange}
           onNewSession={() => {
-            uiActions.closeAutomations();
-            selectWorkspace(null);
+            revealWorkspace(null);
           }}
           onOpenAutomations={openAutomations}
           automationsActive={automationsOpen}
+          onOpenProjects={openProjects}
+          projectsActive={projectsOpen}
           profile={sidebarProfile}
         />
       )}
@@ -510,6 +548,13 @@ export function MainLayout() {
         <SettingsPage />
       ) : automationsOpen ? (
         <AutomationsPage />
+      ) : projectsOpen && selectedProjectId ? (
+        <ProjectsPage
+          projectId={selectedProjectId}
+          workspaces={repoGroups.flatMap((group) => group.workspaces)}
+          diffStats={bulkDiffStatsQuery.data}
+          onOpenWorkspace={handleOpenProjectAgent}
+        />
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}
@@ -530,7 +575,20 @@ export function MainLayout() {
       )}
 
       {/* Modals */}
-      {newWorkspaceMode === "from-github" ? (
+      {newWorkspaceMode === "project" ? (
+        showNewWorkspaceModal && (
+          <NewProjectDialog
+            repos={repos}
+            selectedRepoId={repoActions.selectedRepoId}
+            onRepoChange={repoActions.setSelectedRepoId}
+            onClose={closeNewWorkspaceModal}
+            onCreated={(projectId) => {
+              closeNewWorkspaceModal();
+              openProjects(projectId);
+            }}
+          />
+        )
+      ) : newWorkspaceMode === "from-github" ? (
         <NewWorkspaceModal
           show={showNewWorkspaceModal}
           repos={repos}

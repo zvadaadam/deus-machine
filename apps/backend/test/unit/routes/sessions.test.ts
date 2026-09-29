@@ -25,6 +25,8 @@ import { SCHEMA_SQL } from "@shared/schema";
 
 const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
+const command = vi.hoisted(() => ({ run: vi.fn() }));
+vi.mock("../../../src/services/agent/commands", () => ({ runCommand: command.run }));
 
 import app from "../../../src/routes/sessions";
 
@@ -94,6 +96,15 @@ describeWithDb("GET /sessions/:id/messages", () => {
     // and nothing about the response says so.
     expect(body.compactions.map((c) => c.compaction_id)).toEqual(["c1", "c2"]);
     expect(body.compactions[0]).toMatchObject({ turn_id: "turn-1", status: "completed" });
+  });
+
+  it("awaits actual cancellation without advertising a still-running session as idle", async () => {
+    db.prepare("UPDATE sessions SET status = 'working' WHERE id = ?").run(SESSION);
+    command.run.mockResolvedValueOnce({ stopRequested: true });
+    const response = await app.request(`/sessions/${SESSION}/stop`, { method: "POST" });
+    expect(response.status).toBe(200);
+    expect(command.run).toHaveBeenCalledWith("stopSession", { sessionId: SESSION });
+    expect(await response.json()).toMatchObject({ session: { status: "working" } });
   });
 
   it("answers an empty list, not a missing field, when nothing has compacted", async () => {

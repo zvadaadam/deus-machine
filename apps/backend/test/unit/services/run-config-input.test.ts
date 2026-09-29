@@ -5,7 +5,19 @@
 // carries the prompt as one string. Part validity itself belongs to the
 // engine's schema and is tested there.
 import { describe, expect, it, vi } from "vitest";
-import { toEngineInput } from "../../../src/services/agent/run-config";
+import { buildTurnStartParams, toEngineInput } from "../../../src/services/agent/run-config";
+
+describe("Project turn context", () => {
+  it("keeps backend coordination instructions separate from the echoed prompt", () => {
+    const turn = buildTurnStartParams("session-1", "turn-1", "claude-code", "Implement the page", {
+      cwd: "/workspace",
+      systemPromptAppend: "Project role: coordinator. Use create_agent for delegation.",
+    });
+    expect(turn.input).toBe("Implement the page");
+    expect(turn.config.systemPromptAppend).toContain("Project role: coordinator.");
+    expect(turn.config.systemPromptAppend).toContain("You are working inside Deus");
+  });
+});
 
 describe("toEngineInput", () => {
   it("passes plain prompts through untouched", () => {

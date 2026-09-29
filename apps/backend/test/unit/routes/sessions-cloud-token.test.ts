@@ -19,6 +19,7 @@ vi.mock("../../../src/db", () => ({
   attachParts: vi.fn(),
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
+vi.mock("../../../src/services/agent/commands", () => ({ runCommand: vi.fn() }));
 vi.mock("../../../src/services/agent/cloud/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/services/agent/cloud/config")>()),
   // The workspace-init service registers its pre-connect refresh at import.

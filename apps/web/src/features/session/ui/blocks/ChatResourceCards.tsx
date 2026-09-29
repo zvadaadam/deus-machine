@@ -18,14 +18,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
 import { useSession } from "@/features/session/context";
 import {
   createWorkspacePreviewUrl,
   type ChatResource,
   type ResourceAction,
 } from "@/features/session/lib/chatResources";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import { getBaseURL } from "@/shared/config/api.config";
 import { cn } from "@/shared/lib/utils";
 import { native } from "@/platform/native";
@@ -35,15 +33,14 @@ interface ChatResourceCardsProps {
 }
 
 export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
-  const { workspaceId } = useSession();
+  const { workspaceId, openResource } = useSession();
 
   const openBrowserUrl = useCallback(
     (url: string) => {
       if (!workspaceId) return;
-      workspaceLayoutActions.openContentTab(workspaceId, "browser");
-      browserWindowActions.requestNewTab(workspaceId, url);
+      openResource({ kind: "url", url });
     },
-    [workspaceId]
+    [workspaceId, openResource]
   );
 
   const getBrowserPreviewUrl = useCallback(
@@ -80,7 +77,7 @@ export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
       }
 
       if (action.kind === "deus-file") {
-        workspaceLayoutActions.openFileInContent(workspaceId, action.path, action.target);
+        openResource({ kind: "file", path: action.path, target: action.target });
         return;
       }
 
@@ -93,7 +90,7 @@ export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
 
       await native.files.revealInFinder(target);
     },
-    [getBrowserPreviewUrl, openBrowserUrl, workspaceId]
+    [getBrowserPreviewUrl, openBrowserUrl, workspaceId, openResource]
   );
 
   if (resources.length === 0) return null;

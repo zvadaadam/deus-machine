@@ -38,6 +38,7 @@ import {
 import type { WorkspaceWithDetailsRow } from "../db";
 import { invalidate } from "../services/query-engine";
 import { groupWorkspacesByRepo } from "../lib/workspace-grouping";
+import { assertUnmanagedWorkspace } from "../services/managed-workspace";
 
 const execFileAsync = promisify(execFile);
 
@@ -99,6 +100,8 @@ app.patch("/workspaces/:id", async (c) => {
   const db = getDatabase();
   const id = c.req.param("id");
   const { state, status } = parseBody(PatchWorkspaceBody, await c.req.json());
+
+  if (state || status) assertUnmanagedWorkspace(id);
 
   if (status) {
     setWorkspaceStatus(id, status);
@@ -286,6 +289,7 @@ app.post("/workspaces/:id/sessions", (c) => {
 
   const workspace = getWorkspaceRaw(db, workspaceId);
   if (!workspace) throw new NotFoundError("Workspace not found");
+  assertUnmanagedWorkspace(workspaceId);
 
   const sessionId = uuidv7();
 
@@ -313,6 +317,7 @@ app.get("/workspaces/:id/environment", withWorkspace, async (c) =>
 
 app.post("/workspaces/:id/retry-setup", withWorkspace, (c) => {
   const workspace = c.get("workspace");
+  assertUnmanagedWorkspace(workspace.id);
   if (workspace.kind === "cloud")
     throw new ValidationError("Prepare the cloud environment in a new workspace.");
   if (workspace.setup_status !== "failed")

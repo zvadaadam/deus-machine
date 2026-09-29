@@ -47,6 +47,8 @@ export function AgentLogo({ type, className }: { type: AgentHarness; className?:
 interface ModelPickerProps {
   model: string;
   onModelChange: (value: string) => void;
+  agentHarness?: AgentHarness;
+  disabled?: boolean;
 }
 
 /** Grouped model list — one markup, sized for the containing surface. */
@@ -54,66 +56,73 @@ function ModelOptionList({
   model,
   onSelect,
   size,
+  agentHarness,
 }: {
   model: string;
   onSelect: (value: string) => void;
   size: "sm" | "lg";
+  agentHarness?: AgentHarness;
 }) {
   const selected = getModelOption(model);
   const lg = size === "lg";
   return (
     <>
-      {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-        <div key={agentConfig.id}>
-          {groupIdx > 0 && (
-            <div className={cn("bg-border/70 h-px", lg ? "mx-2 my-2" : "mx-1 my-1.5")} />
-          )}
-          <div
-            className={cn(
-              "text-text-muted/90 font-normal tracking-wide",
-              lg ? "px-2 py-1.5 text-xs" : "text-2xs px-2 py-1"
+      {MODEL_PICKER_GROUPS.filter((group) => !agentHarness || group.id === agentHarness).map(
+        (agentConfig, groupIdx) => (
+          <div key={agentConfig.id}>
+            {groupIdx > 0 && (
+              <div className={cn("bg-border/70 h-px", lg ? "mx-2 my-2" : "mx-1 my-1.5")} />
             )}
-          >
-            {agentConfig.label}
-          </div>
-          {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map((option) => {
-            const isSelected = selected?.value === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onSelect(option.value)}
-                className={cn(
-                  "control-interaction flex w-full items-center rounded-lg",
-                  "hover:bg-bg-raised/45",
-                  "px-2 text-sm",
-                  lg ? "gap-2.5 py-2.5" : "gap-2 py-1.5",
-                  isSelected ? "text-text-primary" : "text-text-secondary"
-                )}
-              >
-                <AgentLogo type={option.agentHarness} className={lg ? "h-4 w-4" : "h-3.5 w-3.5"} />
-                <span className="font-normal">{option.label}</span>
-                {option.isNew && (
-                  <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                    New
-                  </span>
-                )}
-                <span className="ml-auto">
-                  {isSelected && (
-                    <Check className={cn("text-text-primary", lg ? "size-3.5" : "size-3")} />
+            <div
+              className={cn(
+                "text-text-muted/90 font-normal tracking-wide",
+                lg ? "px-2 py-1.5 text-xs" : "text-2xs px-2 py-1"
+              )}
+            >
+              {agentConfig.label}
+            </div>
+            {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map((option) => {
+              const isSelected = selected?.value === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onSelect(option.value)}
+                  className={cn(
+                    "control-interaction flex w-full items-center rounded-lg",
+                    "hover:bg-bg-raised/45",
+                    "px-2 text-sm",
+                    lg ? "gap-2.5 py-2.5" : "gap-2 py-1.5",
+                    isSelected ? "text-text-primary" : "text-text-secondary"
                   )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ))}
+                >
+                  <AgentLogo
+                    type={option.agentHarness}
+                    className={lg ? "h-4 w-4" : "h-3.5 w-3.5"}
+                  />
+                  <span className="font-normal">{option.label}</span>
+                  {option.isNew && (
+                    <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
+                      New
+                    </span>
+                  )}
+                  <span className="ml-auto">
+                    {isSelected && (
+                      <Check className={cn("text-text-primary", lg ? "size-3.5" : "size-3")} />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )
+      )}
     </>
   );
 }
 
 /** Model picker trigger + surface: bottom sheet on mobile, popover on desktop. */
-export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
+export function ModelPicker({ model, onModelChange, agentHarness, disabled }: ModelPickerProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
   const selectedOption = getModelOption(model);
@@ -121,6 +130,7 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
   const trigger = (
     <button
       type="button"
+      disabled={disabled}
       onClick={isMobile ? () => setOpen(true) : undefined}
       className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm"
     >
@@ -153,7 +163,12 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
               </SheetDescription>
             </SheetHeader>
             <div className="max-h-[50vh] overflow-y-auto p-2">
-              <ModelOptionList model={model} onSelect={select} size="lg" />
+              <ModelOptionList
+                model={model}
+                onSelect={select}
+                size="lg"
+                agentHarness={agentHarness}
+              />
             </div>
           </SheetContent>
         </Sheet>
@@ -172,7 +187,7 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
           "shadow-[var(--shadow-elevated)]"
         )}
       >
-        <ModelOptionList model={model} onSelect={select} size="sm" />
+        <ModelOptionList model={model} onSelect={select} size="sm" agentHarness={agentHarness} />
       </PopoverContent>
     </Popover>
   );

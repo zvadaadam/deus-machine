@@ -2,10 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useMemo } from "react";
 import { useSession } from "@/features/session/context";
 import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
-import {
-  workspaceLayoutActions,
-  type FileNavigationTarget,
-} from "@/features/workspace/store/workspaceLayoutStore";
+import type { FileNavigationTarget } from "@/features/workspace/store/workspaceLayoutStore";
 import { cn } from "@/shared/lib/utils";
 
 interface ToolFileLinkProps {
@@ -41,7 +38,7 @@ function normalizeToolFilePath(path: string, workspacePath: string | null): stri
 }
 
 export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
-  const { workspaceId, workspacePath } = useSession();
+  const { workspaceId, workspacePath, openResource } = useSession();
 
   const normalizedPath = useMemo(
     () => normalizeToolFilePath(path, workspacePath),
@@ -60,7 +57,7 @@ export function ToolFileLink({ path, target, className }: ToolFileLinkProps) {
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        workspaceLayoutActions.openFileInContent(workspaceId, normalizedPath, target);
+        openResource({ kind: "file", path: normalizedPath, target });
       }}
       onKeyDown={(event) => {
         event.stopPropagation();

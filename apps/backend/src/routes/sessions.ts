@@ -12,7 +12,7 @@ import {
   hasNewerMessages,
   attachParts,
 } from "../db";
-import { invalidate } from "../services/query-engine";
+import { runCommand } from "../services/agent/commands";
 import { getCloudConfig } from "../services/agent/cloud/config";
 import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
 import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
@@ -82,23 +82,19 @@ app.get("/sessions/:id/messages", (c) => {
 /**
  * POST /sessions/:id/stop
  *
- * Marks session as idle and cancels latest user message.
- * Actual agent cancellation is done via WebSocket → agent-server.
+ * Uses the same actual cancellation and Project policy as the WebSocket command.
  */
-app.post("/sessions/:id/stop", (c) => {
+app.post("/sessions/:id/stop", async (c) => {
   const db = getDatabase();
   const sessionId = c.req.param("id");
 
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new NotFoundError("Session not found");
 
-  db.prepare("UPDATE sessions SET status = 'idle', updated_at = datetime('now') WHERE id = ?").run(
-    sessionId
-  );
-  invalidate(["workspaces", "sessions", "stats"]);
+  const result = await runCommand("stopSession", { sessionId });
 
   const updatedSession = getSessionRaw(db, sessionId);
-  return c.json({ success: true, session: updatedSession });
+  return c.json({ success: true, session: updatedSession, result });
 });
 
 /**

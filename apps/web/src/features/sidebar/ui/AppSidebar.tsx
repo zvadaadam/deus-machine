@@ -26,6 +26,7 @@ import { DraggableRepository } from "./DraggableRepository";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarRow, SidebarRowMain } from "./SidebarRow";
+import { ProjectsSidebar } from "./ProjectsSidebar";
 
 export function AppSidebar({
   repositories,
@@ -41,11 +42,14 @@ export function AppSidebar({
   onNewSession,
   onOpenAutomations,
   automationsActive,
+  onOpenProjects,
+  projectsActive,
   diffStatsMap,
   profile,
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const openSettings = useUIStore((s) => s.openSettings);
+  const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const collapsedRepos = useSidebarStore((s) => s.collapsedRepos);
   const toggleRepoCollapse = useSidebarStore((s) => s.toggleRepoCollapse);
   const repositoryOrder = useSidebarStore((s) => s.repositoryOrder);
@@ -70,7 +74,13 @@ export function AppSidebar({
   // User's drag-drop order is the final word.
   // Status is shown visually (badges, colors) — not by re-sorting after drag.
   const orderedRepositories = React.useMemo(
-    () => reorderRepositories(repositories),
+    () =>
+      reorderRepositories(
+        repositories.map((repository) => ({
+          ...repository,
+          workspaces: repository.workspaces.filter((workspace) => !workspace.project_id),
+        }))
+      ),
     [repositories, repositoryOrder, reorderRepositories]
   );
 
@@ -119,65 +129,77 @@ export function AppSidebar({
         isExpanded={isExpanded}
       />
 
-      {/* App-level nav — sits under the header, above the repo list */}
-      {!webDirect && (
-        <div className="px-1.5 pb-1">
-          <SidebarRow variant="action" isActive={automationsActive} asChild>
-            <button
-              type="button"
-              onClick={() => {
-                onOpenAutomations?.();
-                // Same mobile behavior as workspace selection: the off-canvas
-                // sheet must not stay open over the page it just navigated to.
+      <SidebarContent className="scrollbar-hidden">
+        {/* App navigation and its expanded lists share the repository scroll area. */}
+        {!webDirect && (
+          <div className="px-1.5 pb-1">
+            <SidebarRow variant="action" isActive={automationsActive} asChild>
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenAutomations?.();
+                  // Same mobile behavior as workspace selection: the off-canvas
+                  // sheet must not stay open over the page it just navigated to.
+                  if (isMobile) setOpenMobile(false);
+                }}
+              >
+                <SidebarRowMain>
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                    <ClockFading
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        automationsActive ? "text-text-primary" : "text-text-muted"
+                      )}
+                    />
+                  </span>
+                  <span
+                    className={cn(
+                      "truncate text-sm",
+                      automationsActive ? "text-text-primary font-medium" : "text-text-secondary"
+                    )}
+                  >
+                    Automations
+                  </span>
+                </SidebarRowMain>
+              </button>
+            </SidebarRow>
+            <ProjectsSidebar
+              isActive={projectsActive}
+              sidebarExpanded={isExpanded}
+              onOpen={(projectId) => {
+                onOpenProjects?.(projectId);
                 if (isMobile) setOpenMobile(false);
               }}
-            >
-              <SidebarRowMain>
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  <ClockFading
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      automationsActive ? "text-text-primary" : "text-text-muted"
-                    )}
-                  />
-                </span>
-                <span
-                  className={cn(
-                    "truncate text-sm",
-                    automationsActive ? "text-text-primary font-medium" : "text-text-secondary"
-                  )}
-                >
-                  Automations
-                </span>
-              </SidebarRowMain>
-            </button>
-          </SidebarRow>
-        </div>
-      )}
+              onCreate={() => {
+                openNewWorkspaceModal("project");
+                if (isMobile) setOpenMobile(false);
+              }}
+            />
+          </div>
+        )}
 
-      {/* Repositories List or Empty State */}
-      {repositories.length === 0 ? (
-        <SidebarContent className="flex h-full items-center justify-center">
-          <div className="flex flex-col items-center gap-3 px-6 text-center">
-            {webDirect ? (
-              <Cloud className="text-text-muted/30 h-10 w-10" />
-            ) : (
-              <FolderOpen className="text-text-muted/30 h-10 w-10" />
-            )}
-            <div className="space-y-1">
-              <p className="text-text-secondary text-sm font-medium">
-                {webDirect ? "No cloud sessions yet" : "No projects yet"}
-              </p>
-              <p className="text-text-muted text-xs">
-                {webDirect
-                  ? "Start one from the Deus desktop app"
-                  : "Add your first project to get started"}
-              </p>
+        {/* Repositories List or Empty State */}
+        {repositories.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex flex-col items-center gap-3 px-6 text-center">
+              {webDirect ? (
+                <Cloud className="text-text-muted/30 h-10 w-10" />
+              ) : (
+                <FolderOpen className="text-text-muted/30 h-10 w-10" />
+              )}
+              <div className="space-y-1">
+                <p className="text-text-secondary text-sm font-medium">
+                  {webDirect ? "No cloud sessions yet" : "No repositories yet"}
+                </p>
+                <p className="text-text-muted text-xs">
+                  {webDirect
+                    ? "Start one from the Deus desktop app"
+                    : "Add your first repository to get started"}
+                </p>
+              </div>
             </div>
           </div>
-        </SidebarContent>
-      ) : (
-        <SidebarContent className="scrollbar-hidden">
+        ) : (
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -208,8 +230,8 @@ export function AppSidebar({
               </SidebarMenu>
             </SortableContext>
           </DndContext>
-        </SidebarContent>
-      )}
+        )}
+      </SidebarContent>
 
       <SidebarFooter
         onAddRepository={onAddRepository}
