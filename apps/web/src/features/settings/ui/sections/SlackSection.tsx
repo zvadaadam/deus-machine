@@ -557,14 +557,19 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
       });
     };
     save.mutateAsync({ orgId: deletedIn, environmentId: rule.id, description: null }).then(
-      () =>
+      () => {
+        // The row went, and with it the focused button: keep keyboard users in the card.
+        if (document.activeElement === document.body) {
+          card.current?.querySelector<HTMLElement>("button[aria-label^='Refresh']")?.focus();
+        }
         toast("Routing rule deleted", {
           duration: 5000,
           action: {
             label: "Undo",
             onClick: () => void undo().catch((error: Error) => toast.error(error.message)),
           },
-        }),
+        });
+      },
       (error: Error) => toast.error(error.message)
     );
   }
