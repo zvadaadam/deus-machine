@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +46,12 @@ import {
   stopSharingCompanyModelAccount,
   type SlackInstallation,
 } from "../../api/slack.service";
+import {
+  dropRoutingRuleDraft,
+  readRoutingRuleDraft,
+  routingRuleDraftKey,
+  writeRoutingRuleDraft,
+} from "../../lib/routing-rule-drafts";
 import { routingTarget } from "../../lib/slack-routing";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -426,6 +432,8 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
   // Closed, adding a rule (null), or editing the rule the person clicked. The
   // rule is kept as it was then, so a refetch can't turn an edit into an add.
   const [dialog, setDialog] = useState<{ rule: SharedEnvironment | null } | null>(null);
+  // The dialog opens from plain buttons, so Radix has no trigger to return focus to.
+  const opener = useRef<HTMLElement | null>(null);
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
@@ -488,7 +496,10 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
             ready && canEdit ? (
               <Button
                 size="sm"
-                onClick={() => setDialog({ rule: null })}
+                onClick={(event) => {
+                  opener.current = event.currentTarget;
+                  setDialog({ rule: null });
+                }}
                 disabled={rules.length === shared.length}
               >
                 Add rule
@@ -542,14 +553,22 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
                         <p className={canEdit ? "line-clamp-2 break-words" : "break-words"}>
                           {rule.description}
                         </p>
-                        <p className="text-text-muted mt-0.5 truncate text-xs @lg/rules:hidden">
+                        <p
+                          className={`text-text-muted mt-0.5 text-xs @lg/rules:hidden ${canEdit ? "truncate" : "break-all"}`}
+                        >
                           {target.detail ? `${target.label} · ${target.detail}` : target.label}
                         </p>
                       </td>
                       <td className="hidden px-3 py-2.5 align-top @lg/rules:table-cell">
-                        <p className="text-text-secondary truncate">{target.label}</p>
+                        <p className={`text-text-secondary ${canEdit ? "truncate" : "break-all"}`}>
+                          {target.label}
+                        </p>
                         {target.detail && (
-                          <p className="text-text-muted truncate text-xs">{target.detail}</p>
+                          <p
+                            className={`text-text-muted text-xs ${canEdit ? "truncate" : "break-all"}`}
+                          >
+                            {target.detail}
+                          </p>
                         )}
                       </td>
                       {canEdit && (
@@ -559,7 +578,10 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
                             size="icon-xs"
                             className="text-text-muted"
                             aria-label={`Edit the rule for ${target.label}`}
-                            onClick={() => setDialog({ rule })}
+                            onClick={(event) => {
+                              opener.current = event.currentTarget;
+                              setDialog({ rule });
+                            }}
                           >
                             <Pencil className="size-3.5" />
                           </Button>
@@ -590,10 +612,12 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
       {dialog && (
         <RoutingRuleDialog
           key={dialog.rule?.id ?? "new"}
+          draftKey={routingRuleDraftKey(accountId, dialog.rule?.id ?? null)}
           rule={dialog.rule ?? undefined}
           choices={shared.filter((environment) => !environment.description)}
           shared={shared}
           onClose={() => setDialog(null)}
+          returnFocus={() => opener.current?.focus()}
           onSave={(rule) => save.mutateAsync(rule)}
         />
       )}
@@ -610,21 +634,36 @@ type SharedEnvironment = {
 
 /** Add a rule for an environment without one, or edit one rule's description. */
 function RoutingRuleDialog({
+  draftKey,
   rule,
   choices,
   shared,
   onClose,
+  returnFocus,
   onSave,
 }: {
+  draftKey: string;
   rule: SharedEnvironment | undefined;
   choices: SharedEnvironment[];
   shared: SharedEnvironment[];
   onClose: () => void;
+  returnFocus: () => void;
   onSave: (rule: { environmentId: string; description: string }) => Promise<unknown>;
 }) {
+  const draft = readRoutingRuleDraft(draftKey);
   // No preselected target: a default nobody noticed would route requests to it.
-  const [environmentId, setEnvironmentId] = useState(rule?.id ?? "");
-  const [description, setDescription] = useState(rule?.description ?? "");
+  const [environmentId, setEnvironmentId] = useState(draft?.environmentId ?? rule?.id ?? "");
+  const [description, setDescription] = useState(draft?.description ?? rule?.description ?? "");
+  const edit = (next: { environmentId?: string; description?: string }) => {
+    const value = { environmentId, description, ...next };
+    setEnvironmentId(value.environmentId);
+    setDescription(value.description);
+    writeRoutingRuleDraft(draftKey, value);
+  };
+  const close = () => {
+    dropRoutingRuleDraft(draftKey);
+    onClose();
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const trimmed = description.trim();
@@ -640,7 +679,7 @@ function RoutingRuleDialog({
     try {
       await onSave({ environmentId, description: trimmed });
       toast.success(rule ? "Routing rule saved" : "Routing rule added");
-      onClose();
+      close();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save the rule");
       setSaving(false);
@@ -648,8 +687,14 @@ function RoutingRuleDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open onOpenChange={(open) => !open && !saving && close()}>
+      <DialogContent
+        className="sm:max-w-md"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          returnFocus();
+        }}
+      >
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{rule ? "Edit routing rule" : "Add routing rule"}</DialogTitle>
@@ -662,7 +707,7 @@ function RoutingRuleDialog({
             <Textarea
               id="routing-rule-description"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => edit({ description: event.target.value })}
               placeholder="Requests about the backend API, billing or database migrations"
               maxLength={1000}
               disabled={saving}
@@ -676,7 +721,11 @@ function RoutingRuleDialog({
                 {describe(rule)}
               </p>
             ) : (
-              <Select value={environmentId} onValueChange={setEnvironmentId} disabled={saving}>
+              <Select
+                value={environmentId}
+                onValueChange={(next) => edit({ environmentId: next })}
+                disabled={saving}
+              >
                 <SelectTrigger id="routing-rule-target" className="w-full">
                   <SelectValue placeholder="Choose a repository" />
                 </SelectTrigger>
@@ -696,7 +745,7 @@ function RoutingRuleDialog({
             </p>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+            <Button type="button" variant="outline" onClick={close} disabled={saving}>
               Cancel
             </Button>
             <Button
