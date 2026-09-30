@@ -2,8 +2,18 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { writeDescriptionDraft } from "@/features/settings/lib/slack-description-drafts";
 import { SlackSection } from "@/features/settings/ui/sections/SlackSection";
 import { queryKeys } from "@/shared/api/queryKeys";
+
+const sessionState = vi.hoisted(() => ({
+  data: { signedIn: true, accountId: "account" } as {
+    signedIn: boolean;
+    accountId: string | null;
+    vaultLocked?: boolean;
+  },
+  isError: false,
+}));
 
 const providerState = vi.hoisted(() => ({
   error: null as Error | null,
@@ -55,14 +65,18 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("@/shared/hooks/useDeusCloudSession", () => ({
   useDeusCloudSession: () => ({
-    data: { signedIn: true, accountId: "account" },
+    data: sessionState.isError ? undefined : sessionState.data,
     isPending: false,
+    isError: sessionState.isError,
+    refetch: vi.fn(),
   }),
 }));
 vi.mock("@/shared/hooks/useDeusCloudSignIn", () => ({
   useDeusCloudSignIn: () => ({ mutate: vi.fn(), isPending: false }),
 }));
-vi.mock("@/platform", () => ({ native: { window: { openExternal: vi.fn() } } }));
+vi.mock("@/platform", () => ({
+  native: { window: { openExternal: vi.fn(), onFocus: () => () => {} } },
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/features/settings/api/provider-accounts.queries", () => ({
   PROVIDER_ACCOUNTS_QUERY_KEY: ["settings", "provider-accounts"],
@@ -112,6 +126,8 @@ function seedBase() {
 
 beforeEach(() => {
   client = new QueryClient();
+  sessionState.data = { signedIn: true, accountId: "account" };
+  sessionState.isError = false;
   providerState.data = defaultProviderData();
   providerState.error = null;
   seedBase();
@@ -238,4 +254,39 @@ it("shows repository descriptions read-only for non-admins", () => {
   expect(html).toContain("Only owners and admins can edit descriptions.");
   expect(html).toContain("API and database migrations");
   expect(html).not.toContain(">Save</button>");
+});
+
+it("asks to unlock a locked keyring instead of signing in again", () => {
+  sessionState.data = { signedIn: false, accountId: null, vaultLocked: true };
+  const html = render();
+  expect(html).toContain("Unlock your computer&#x27;s keyring, then reopen Deus.");
+  expect(html).not.toContain("Sign in to Deus Cloud");
+});
+
+it("offers a retry, not a sign-in, when the session check fails", () => {
+  sessionState.isError = true;
+  const html = render();
+  expect(html).toContain("Couldn&#x27;t check your Deus Cloud session.");
+  expect(html).toContain("Retry");
+  expect(html).not.toContain("Sign in to Deus Cloud");
+});
+
+it("signed out, it offers sign-in", () => {
+  sessionState.data = { signedIn: false, accountId: null };
+  expect(render()).toContain("Sign in to Deus Cloud");
+});
+
+it("brings back a description typed before leaving the section, still unsaved", () => {
+  client.setQueryData(queryKeys.settings.slack.installations("account", "org"), {
+    configured: true,
+    installations: [],
+  });
+  writeDescriptionDraft("account", "env", "billing and invoices", "API and database migrations");
+
+  const html = render();
+
+  expect(html).toContain(">billing and invoices</textarea>");
+  const save = html.match(/<button[^>]*>Save<\/button>/)?.[0];
+  expect(save).toBeDefined();
+  expect(save).not.toContain("disabled");
 });

@@ -66,6 +66,24 @@ export function openExternalPending(): PendingExternalWindow {
   };
 }
 
+/**
+ * Call `listener` each time the window regains focus; returns the unsubscribe.
+ * The desktop window stays visible while the system browser is in front, so
+ * it needs the focus event: TanStack Query's focus refetch listens only to
+ * `visibilitychange`, which a browser tab gets when it comes back into view.
+ */
+export function onFocus(listener: () => void): () => void {
+  if (capabilities.nativeWindowChrome) {
+    window.addEventListener("focus", listener);
+    return () => window.removeEventListener("focus", listener);
+  }
+  const onVisibilityChange = () => {
+    if (!document.hidden) listener();
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+}
+
 function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);

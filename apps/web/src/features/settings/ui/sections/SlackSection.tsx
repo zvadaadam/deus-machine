@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -45,6 +45,11 @@ import {
   stopSharingCompanyModelAccount,
   type SlackInstallation,
 } from "../../api/slack.service";
+import {
+  clearDescriptionDraft,
+  readDescriptionDraft,
+  writeDescriptionDraft,
+} from "../../lib/slack-description-drafts";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -65,39 +70,37 @@ export function SlackSection() {
     );
   }
 
-  if (!accountId) {
-    return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">Slack</h3>
-          <p className="text-text-muted mt-1 text-sm">Sign in to Deus Cloud to connect Slack.</p>
-        </div>
+  if (accountId) return <SlackSettings accountId={accountId} />;
+
+  // A failed read or a locked keyring is not "signed out": the session is still on this device.
+  const locked = session.data?.vaultLocked === true;
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">Slack</h3>
+        <p className="text-text-muted mt-1 text-sm">
+          {session.isError
+            ? "Couldn't check your Deus Cloud session."
+            : locked
+              ? "Unlock your computer's keyring, then reopen Deus."
+              : "Sign in to Deus Cloud to connect Slack."}
+        </p>
+      </div>
+      {session.isError ? (
+        <Button size="sm" variant="outline" onClick={() => void session.refetch()}>
+          Retry
+        </Button>
+      ) : locked ? null : (
         <Button size="sm" onClick={() => signIn.mutate()} disabled={signIn.isPending}>
           {signIn.isPending ? "Waiting for browser…" : "Sign in to Deus Cloud"}
         </Button>
-      </div>
-    );
-  }
-
-  return <SlackSettings accountId={accountId} />;
+      )}
+    </div>
+  );
 }
 
 function SlackSettings({ accountId }: { accountId: string }) {
   const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
-  const [unsaved, setUnsaved] = useState<ReadonlySet<string>>(() => new Set());
-  const markUnsaved = useCallback((environmentId: string, dirty: boolean) => {
-    setUnsaved((current) => {
-      if (current.has(environmentId) === dirty) return current;
-      const next = new Set(current);
-      if (dirty) next.add(environmentId);
-      else next.delete(environmentId);
-      return next;
-    });
-  }, []);
-  function selectOrganization(id: string) {
-    if (unsaved.size > 0 && !window.confirm("Discard unsaved repository descriptions?")) return;
-    setSelectedOrg(id);
-  }
   const organizations = useQuery({
     queryKey: queryKeys.settings.environments.organizations(accountId),
     queryFn: ({ signal }) => listSecretOrganizations(signal),
@@ -120,7 +123,7 @@ function SlackSettings({ accountId }: { accountId: string }) {
           </p>
         </div>
         {(organizations.data?.items.length ?? 0) > 1 && (
-          <Select value={orgId ?? ""} onValueChange={selectOrganization}>
+          <Select value={orgId ?? ""} onValueChange={setSelectedOrg}>
             <SelectTrigger aria-label="Slack organization" className="w-auto max-w-full">
               <SelectValue />
             </SelectTrigger>
@@ -150,11 +153,7 @@ function SlackSettings({ accountId }: { accountId: string }) {
         <>
           <WorkspaceCard accountId={accountId} orgId={orgId} />
           <CompanyAccountCard accountId={accountId} orgId={orgId} />
-          <SlackRepositoriesCard
-            accountId={accountId}
-            orgId={orgId}
-            onUnsavedChange={markUnsaved}
-          />
+          <SlackRepositoriesCard accountId={accountId} orgId={orgId} />
         </>
       )}
     </div>
@@ -168,10 +167,11 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
     queryKey: queryKeys.settings.slack.installations(accountId, orgId),
     queryFn: ({ signal }) => listSlackInstallations(orgId, signal),
     staleTime: 30_000,
-    // "always": returning from Slack's consent within staleTime must still show the result.
-    refetchOnWindowFocus: "always",
     retry: false,
   });
+  const { refetch: refetchInstallations } = installations;
+  // Coming back from Slack's consent shows the new workspace, however recently the list loaded.
+  useEffect(() => native.window.onFocus(() => void refetchInstallations()), [refetchInstallations]);
   const connect = useMutation({
     // The tab is reserved in the click itself: a browser blocks one opened after the request.
     mutationFn: async (tab: PendingExternalWindow) => {
@@ -183,6 +183,8 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
         throw error;
       }
     },
+    // A retry would reuse the tab the failure closed, and can't open one outside the click.
+    retry: false,
     onSuccess: () => toast.info("Approve Deus in Slack, then come back to Settings"),
     onError: (error) => toast.error(error instanceof Error ? error.message : "Couldn't open Slack"),
   });
@@ -422,15 +424,7 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
   );
 }
 
-function SlackRepositoriesCard({
-  accountId,
-  orgId,
-  onUnsavedChange,
-}: {
-  accountId: string;
-  orgId: string;
-  onUnsavedChange: (environmentId: string, dirty: boolean) => void;
-}) {
+function SlackRepositoriesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
@@ -470,10 +464,10 @@ function SlackRepositoriesCard({
           {sharedEnvironments.map((environment) => (
             <DescriptionRow
               key={`${environment.id}:${environment.description ?? ""}`}
+              accountId={accountId}
               orgId={orgId}
               environment={environment}
               canEdit={settings.data.canManageShared}
-              onUnsavedChange={onUnsavedChange}
             />
           ))}
         </div>
@@ -483,18 +477,25 @@ function SlackRepositoriesCard({
 }
 
 function DescriptionRow({
+  accountId,
   orgId,
   environment,
   canEdit,
-  onUnsavedChange,
 }: {
+  accountId: string;
   orgId: string;
   environment: { id: string; name: string; repo: string | null; description: string | null };
   canEdit: boolean;
-  onUnsavedChange: (environmentId: string, dirty: boolean) => void;
 }) {
   const queryClient = useQueryClient();
-  const [value, setValue] = useState(environment.description ?? "");
+  const current = environment.description ?? "";
+  const [value, setValue] = useState(
+    () => readDescriptionDraft(accountId, environment.id) ?? current
+  );
+  const edit = (next: string) => {
+    setValue(next);
+    writeDescriptionDraft(accountId, environment.id, next, current);
+  };
   const save = useMutation({
     mutationFn: (description: string | null) =>
       saveSlackEnvironmentDescription(
@@ -504,6 +505,7 @@ function DescriptionRow({
         new AbortController().signal
       ),
     onSuccess: async (saved) => {
+      clearDescriptionDraft(accountId, environment.id);
       setValue(saved.description ?? "");
       toast.success("Repository description saved");
       await queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all });
@@ -511,13 +513,8 @@ function DescriptionRow({
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Couldn't save description"),
   });
-  const current = environment.description ?? "";
   const trimmed = value.trim();
   const changed = trimmed !== current;
-  useEffect(() => {
-    onUnsavedChange(environment.id, changed);
-    return () => onUnsavedChange(environment.id, false);
-  }, [environment.id, changed, onUnsavedChange]);
 
   return (
     <div className="space-y-3 py-4">
@@ -531,7 +528,7 @@ function DescriptionRow({
         placeholder="backend API, billing, database migrations"
         value={value}
         readOnly={!canEdit}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => edit(event.target.value)}
       />
       {canEdit && (
         <div className="flex flex-wrap gap-2">
@@ -546,7 +543,7 @@ function DescriptionRow({
             size="sm"
             variant="ghost"
             onClick={() => {
-              setValue("");
+              edit("");
               save.mutate(null);
             }}
             disabled={!current || save.isPending}
