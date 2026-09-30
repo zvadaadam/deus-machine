@@ -527,7 +527,8 @@ function DescriptionRow({
         maxLength={1000}
         placeholder="backend API, billing, database migrations"
         value={value}
-        readOnly={!canEdit}
+        // Held while saving: the save's result replaces the text, so nothing typed meanwhile is lost.
+        readOnly={!canEdit || save.isPending}
         onChange={(event) => edit(event.target.value)}
       />
       {canEdit && (
