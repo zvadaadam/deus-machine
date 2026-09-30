@@ -293,7 +293,7 @@ it("invites a first rule when no environment has a description", () => {
     { id: "web", name: "Web", repo: "https://github.com/acme/web", description: null },
   ]);
   const html = render();
-  expect(html).toContain("No rules yet.");
+  expect(html).toContain("No rules yet, so Slack requests run without a repository");
   expect(html).not.toContain("<table");
   expect(html).toContain(">Add rule</button>");
 });

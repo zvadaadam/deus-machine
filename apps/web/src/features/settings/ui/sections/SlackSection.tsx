@@ -481,7 +481,7 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
         <CardHeader
           id="slack-routing-heading"
           title="Repository routing"
-          description="Rules that help Deus pick the right repository for a Slack request. A repository without a rule is only used when a request names it."
+          description="Rules that help Deus pick the right repository for a Slack request. A repository without a rule is only used when a request names it, and a request that fits no rule runs without a repository."
           refreshing={settings.isFetching}
           onRefresh={() => void settings.refetch()}
           action={
@@ -511,7 +511,7 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
       {ready &&
         (rules.length === 0 ? (
           <p className="border-border-subtle text-text-muted border-t px-4 py-6 text-center text-sm">
-            No rules yet. Add one so Deus can pick a repository without being told.
+            No rules yet, so Slack requests run without a repository unless they name one.
           </p>
         ) : (
           <div className="border-border-subtle @container/rules border-t">
