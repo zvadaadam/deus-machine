@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Trash2, Unlink, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -46,10 +47,12 @@ import {
   type SlackInstallation,
 } from "../../api/slack.service";
 import {
-  clearDescriptionDraft,
-  readDescriptionDraft,
-  writeDescriptionDraft,
-} from "../../lib/slack-description-drafts";
+  dropRoutingRuleDraft,
+  readRoutingRuleDraft,
+  routingRuleDraftKey,
+  writeRoutingRuleDraft,
+} from "../../lib/routing-rule-drafts";
+import { routingTarget } from "../../lib/slack-routing";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -153,7 +156,7 @@ function SlackSettings({ accountId }: { accountId: string }) {
         <>
           <WorkspaceCard accountId={accountId} orgId={orgId} />
           <CompanyAccountCard accountId={accountId} orgId={orgId} />
-          <SlackRepositoriesCard accountId={accountId} orgId={orgId} />
+          <RoutingRulesCard accountId={accountId} orgId={orgId} />
         </>
       )}
     </div>
@@ -192,89 +195,108 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
     mutationFn: (installationId: string) =>
       disconnectSlackInstallation(orgId, installationId, new AbortController().signal),
     onSuccess: async () => {
-      setDisconnecting(null);
       toast.success("Slack workspace disconnected");
+      // Close once the row is gone, so focus lands on a control that stays.
       await queryClient.invalidateQueries({
         queryKey: queryKeys.settings.slack.installations(accountId, orgId),
       });
+      setDisconnecting(null);
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Couldn't disconnect Slack"),
   });
 
+  const ready = !installations.isError && !installations.isPending && installations.data.configured;
+  const connected = ready ? installations.data.installations : [];
+  // The disconnect dialog opens from a plain button, so Radix has no trigger to return focus to.
+  const opener = useRef<HTMLElement | null>(null);
+  const card = useRef<HTMLElement | null>(null);
+
   return (
+    // Laid out like the routing rules: the action in the header, rows edge to edge below.
     <section
+      ref={card}
       aria-labelledby="slack-workspace-heading"
-      className="border-border-subtle space-y-4 rounded-xl border p-4"
+      className="border-border-subtle overflow-hidden rounded-xl border"
     >
-      <CardHeader
-        id="slack-workspace-heading"
-        title="Workspace"
-        description="Connect the Slack workspace where members mention Deus."
-        refreshing={installations.isFetching}
-        onRefresh={() => void installations.refetch()}
-      />
-      {installations.isError ? (
-        <SettingsError
-          message={installations.error.message}
-          retry={() => void installations.refetch()}
+      <div className="p-4">
+        <CardHeader
+          id="slack-workspace-heading"
+          title="Workspaces"
+          description="The Slack workspaces where members can mention Deus."
+          refreshing={installations.isFetching}
+          onRefresh={() => void installations.refetch()}
+          action={
+            ready ? (
+              <Button
+                size="sm"
+                onClick={() => connect.mutate(native.window.openExternalPending())}
+                disabled={connect.isPending}
+              >
+                {connect.isPending ? "Opening…" : "Connect workspace"}
+              </Button>
+            ) : null
+          }
         />
-      ) : installations.isPending ? (
-        <p role="status" className="text-text-muted text-sm">
-          Loading Slack workspace…
-        </p>
-      ) : !installations.data.configured ? (
-        <p className="text-text-muted text-sm">
-          Slack isn&apos;t set up for this Deus deployment yet.
-        </p>
-      ) : installations.data.installations.length === 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-muted text-sm">
-            You&apos;ll confirm in your browser, then approve Deus in Slack.
+        {installations.isError ? (
+          <div className="mt-4">
+            <SettingsError
+              message={installations.error.message}
+              retry={() => void installations.refetch()}
+            />
+          </div>
+        ) : installations.isPending ? (
+          <p role="status" className="text-text-muted mt-4 text-sm">
+            Loading Slack workspaces…
           </p>
-          <Button
-            size="sm"
-            onClick={() => connect.mutate(native.window.openExternalPending())}
-            disabled={connect.isPending}
-          >
-            {connect.isPending ? "Opening…" : "Connect Slack"}
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="divide-border-subtle divide-y">
-            {installations.data.installations.map((installation) => (
-              <div
+        ) : !installations.data.configured ? (
+          <p className="text-text-muted mt-4 text-sm">
+            Slack isn&apos;t set up for this Deus deployment yet.
+          </p>
+        ) : null}
+      </div>
+      {ready &&
+        (connected.length === 0 ? (
+          <p className="border-border-subtle text-text-muted border-t px-4 py-6 text-center text-sm">
+            No workspace connected yet. You&apos;ll confirm in your browser, then approve Deus in
+            Slack.
+          </p>
+        ) : (
+          <ul className="border-border-subtle divide-border-subtle divide-y border-t">
+            {connected.map((installation) => (
+              <li
                 key={installation.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
+                className="flex items-center justify-between gap-3 px-4 py-2.5"
               >
                 <div className="min-w-0">
-                  <p className="text-text-primary truncate text-sm font-medium">
-                    {installation.teamName}
-                  </p>
-                  <p className="text-text-muted mt-0.5 text-xs">
+                  <p className="text-text-primary truncate text-sm">{installation.teamName}</p>
+                  <p className="text-text-muted mt-0.5 truncate text-xs">
                     Connected by {installation.installedBy?.name ?? "Unknown"} ·{" "}
                     {dateFormatter.format(new Date(installation.createdAt))}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setDisconnecting(installation)}>
-                  Disconnect
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-text-muted hover:text-destructive shrink-0"
+                  aria-label={`Disconnect ${installation.teamName}`}
+                  title={`Disconnect ${installation.teamName}`}
+                  onClick={(event) => {
+                    opener.current = event.currentTarget;
+                    setDisconnecting(installation);
+                  }}
+                >
+                  <Unplug className="size-3.5" />
                 </Button>
-              </div>
+              </li>
             ))}
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => connect.mutate(native.window.openExternalPending())}
-            disabled={connect.isPending}
-          >
-            {connect.isPending ? "Opening…" : "Connect another workspace"}
-          </Button>
-        </div>
-      )}
+          </ul>
+        ))}
       <Dialog open={!!disconnecting} onOpenChange={(open) => !open && setDisconnecting(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onCloseAutoFocus={(event) => restoreFocus(event, opener.current, card.current)}
+        >
           <DialogHeader>
             <DialogTitle>Disconnect {disconnecting?.teamName}?</DialogTitle>
             <DialogDescription>
@@ -345,11 +367,17 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
       toast.error(error instanceof Error ? error.message : "Couldn't share Claude account");
     },
   });
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  // The confirmation opens from a plain button, so Radix has no trigger to return focus to.
+  const opener = useRef<HTMLElement | null>(null);
+  const card = useRef<HTMLElement | null>(null);
   const stopSharing = useMutation({
     mutationFn: () => stopSharingCompanyModelAccount(orgId, new AbortController().signal),
     onSuccess: async () => {
       toast.success("Claude account is no longer shared");
+      // Close once the row is gone, so focus lands on a control that stays.
       await refresh();
+      setConfirmingStop(false);
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Couldn't stop sharing"),
@@ -359,202 +387,493 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
     !providerAccounts.isLoading &&
     (!hasClaudeAccount || missingProvider);
 
+  const sharedAccount = organization.data?.companyModelAccount ?? null;
+  const loadError = organization.isError
+    ? { message: organization.error.message, retry: () => void organization.refetch() }
+    : !sharedAccount && providerAccounts.isError
+      ? { message: providerAccounts.error.message, retry: () => void providerAccounts.refetch() }
+      : null;
+  const ready = !loadError && !organization.isPending && !providerAccounts.isLoading;
+
   return (
+    // Laid out like the other cards: the action in the header, the account as a row below.
     <section
+      ref={card}
       aria-labelledby="slack-billing-heading"
-      className="border-border-subtle space-y-4 rounded-xl border p-4"
+      className="border-border-subtle overflow-hidden rounded-xl border"
     >
-      <CardHeader
-        id="slack-billing-heading"
-        title="Who pays"
-        description="Turns started from Slack run on the organization's shared Claude account."
-        refreshing={organization.isFetching || providerAccounts.isFetching}
-        onRefresh={() => void refresh()}
-      />
-      {organization.isError ? (
-        <SettingsError
-          message={organization.error.message}
-          retry={() => void organization.refetch()}
+      <div className="p-4">
+        <CardHeader
+          id="slack-billing-heading"
+          title="Who pays"
+          description="Turns started from Slack run on the organization's shared Claude account."
+          refreshing={organization.isFetching || providerAccounts.isFetching}
+          onRefresh={() => void refresh()}
+          action={
+            !ready || sharedAccount ? null : needsClaudeAccount ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => uiActions.setActiveSettingsSection("ai")}
+              >
+                Open AI settings
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => share.mutate()} disabled={share.isPending}>
+                {share.isPending ? "Sharing…" : "Share my Claude account"}
+              </Button>
+            )
+          }
         />
-      ) : !organization.data?.companyModelAccount && providerAccounts.isError ? (
-        <SettingsError
-          message={providerAccounts.error.message}
-          retry={() => void providerAccounts.refetch()}
-        />
-      ) : organization.isPending || providerAccounts.isLoading ? (
-        <p role="status" className="text-text-muted text-sm">
-          Loading shared account…
-        </p>
-      ) : organization.data?.companyModelAccount ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-primary text-sm">
-            {organization.data.companyModelAccount.name}&apos;s Claude account
+        {loadError ? (
+          <div className="mt-4">
+            <SettingsError message={loadError.message} retry={loadError.retry} />
+          </div>
+        ) : !ready ? (
+          <p role="status" className="text-text-muted mt-4 text-sm">
+            Loading shared account…
           </p>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => stopSharing.mutate()}
-            disabled={stopSharing.isPending}
-          >
-            {stopSharing.isPending ? "Stopping…" : "Stop sharing"}
-          </Button>
-        </div>
-      ) : needsClaudeAccount ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-muted text-sm">Connect a Claude account first</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => uiActions.setActiveSettingsSection("ai")}
-          >
-            Open AI settings
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-muted text-sm">
-            No shared account yet. Slack requests can&apos;t start until a member shares one.
+        ) : null}
+      </div>
+      {ready &&
+        (sharedAccount ? (
+          <div className="border-border-subtle flex items-center justify-between gap-3 border-t px-4 py-2.5">
+            <div className="min-w-0">
+              <p className="text-text-primary truncate text-sm">
+                {sharedAccount.name}&apos;s Claude account
+              </p>
+              <p className="text-text-muted mt-0.5 text-xs">
+                Every turn started from Slack runs on it.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-text-muted hover:text-destructive shrink-0"
+              aria-label={`Stop sharing ${sharedAccount.name}'s Claude account`}
+              title="Stop sharing"
+              onClick={(event) => {
+                opener.current = event.currentTarget;
+                setConfirmingStop(true);
+              }}
+            >
+              <Unlink className="size-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <p className="border-border-subtle text-text-muted border-t px-4 py-6 text-center text-sm">
+            {needsClaudeAccount
+              ? "Connect a Claude account first, then share it here."
+              : "No shared account yet. Slack requests can't start until a member shares one."}
           </p>
-          <Button size="sm" onClick={() => share.mutate()} disabled={share.isPending}>
-            {share.isPending ? "Sharing…" : "Share my Claude account"}
-          </Button>
-        </div>
-      )}
+        ))}
+      <Dialog open={confirmingStop} onOpenChange={(open) => !open && setConfirmingStop(false)}>
+        <DialogContent
+          className="sm:max-w-md"
+          onCloseAutoFocus={(event) => restoreFocus(event, opener.current, card.current)}
+        >
+          <DialogHeader>
+            <DialogTitle>Stop sharing {sharedAccount?.name}&apos;s Claude account?</DialogTitle>
+            <DialogDescription>
+              Slack requests can&apos;t start until a member shares an account again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setConfirmingStop(false)}
+              disabled={stopSharing.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => stopSharing.mutate()}
+              disabled={stopSharing.isPending}
+            >
+              {stopSharing.isPending ? "Stopping…" : "Stop sharing"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
 
-function SlackRepositoriesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
+function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
+  const queryClient = useQueryClient();
+  // Closed, adding a rule (null), or editing the rule the person clicked. The
+  // rule is kept as it was then, so a refetch can't turn an edit into an add.
+  const [dialog, setDialog] = useState<{ rule: SharedEnvironment | null } | null>(null);
+  // The dialog opens from plain buttons, so Radix has no trigger to return focus to.
+  const opener = useRef<HTMLElement | null>(null);
+  const card = useRef<HTMLElement | null>(null);
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
     staleTime: 30_000,
     retry: false,
   });
-  const sharedEnvironments =
+  // The organization travels with each save: an Undo clicked after switching
+  // organization still writes where the rule was deleted.
+  const save = useMutation({
+    mutationFn: (rule: { orgId: string; environmentId: string; description: string | null }) =>
+      saveSlackEnvironmentDescription(
+        rule.orgId,
+        rule.environmentId,
+        rule.description,
+        new AbortController().signal
+      ),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all }),
+  });
+  // A rule is a shared environment's description; the router reads nothing else.
+  const shared =
     settings.data?.environments.filter((environment) => environment.ownerType === "ORG") ?? [];
+  const rules = shared.filter((environment) => environment.description);
+  const canEdit = settings.data?.canManageShared ?? false;
+
+  // Promises, not mutate()'s per-call callbacks: those fire only for the
+  // latest call, so a save made meanwhile would swallow this toast and its Undo.
+  function remove(rule: { id: string; description: string | null }) {
+    const deletedIn = orgId;
+    // Undo restores only while nothing replaced the rule: one written meanwhile wins.
+    const undo = async () => {
+      const latest = await queryClient.fetchQuery({
+        queryKey: queryKeys.settings.environments.detail(accountId, deletedIn, null),
+        queryFn: ({ signal }) => getEnvironmentSecretSettings(deletedIn, null, signal),
+        staleTime: 0,
+      });
+      if (latest.environments.find((environment) => environment.id === rule.id)?.description) {
+        toast.info("That repository has a newer rule, so there is nothing to undo");
+        return;
+      }
+      await save.mutateAsync({
+        orgId: deletedIn,
+        environmentId: rule.id,
+        description: rule.description,
+      });
+    };
+    save.mutateAsync({ orgId: deletedIn, environmentId: rule.id, description: null }).then(
+      () => {
+        // The row went, and with it the focused button: keep keyboard users in the card.
+        if (document.activeElement === document.body) {
+          card.current?.querySelector<HTMLElement>("button[aria-label^='Refresh']")?.focus();
+        }
+        toast("Routing rule deleted", {
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () => void undo().catch((error: Error) => toast.error(error.message)),
+          },
+        });
+      },
+      (error: Error) => toast.error(error.message)
+    );
+  }
+
+  const ready = !settings.isError && !settings.isPending && shared.length > 0;
 
   return (
+    // The table is this card's body, edge to edge under one divider: a second
+    // bordered box inside the card read as a card in a card.
     <section
-      aria-labelledby="slack-repositories-heading"
-      className="border-border-subtle space-y-4 rounded-xl border p-4"
+      ref={card}
+      aria-labelledby="slack-routing-heading"
+      className="border-border-subtle overflow-hidden rounded-xl border"
     >
-      <CardHeader
-        id="slack-repositories-heading"
-        title="Repositories"
-        description="Deus picks the repository whose description matches the request. A repository without a description is only used when a request names it."
-        refreshing={settings.isFetching}
-        onRefresh={() => void settings.refetch()}
-      />
-      {settings.isError ? (
-        <SettingsError message={settings.error.message} retry={() => void settings.refetch()} />
-      ) : settings.isPending ? (
-        <p role="status" className="text-text-muted text-sm">
-          Loading repositories…
+      <div className="p-4">
+        <CardHeader
+          id="slack-routing-heading"
+          title="Repository routing"
+          description="Rules that help Deus pick the right repository for a Slack request. A repository without a rule is only used when a request names it, and a request that fits no rule runs without a repository."
+          refreshing={settings.isFetching}
+          onRefresh={() => void settings.refetch()}
+          action={
+            ready && canEdit ? (
+              <Button
+                size="sm"
+                onClick={(event) => {
+                  opener.current = event.currentTarget;
+                  setDialog({ rule: null });
+                }}
+                disabled={rules.length === shared.length}
+              >
+                Add rule
+              </Button>
+            ) : null
+          }
+        />
+        {settings.isError ? (
+          <div className="mt-4">
+            <SettingsError message={settings.error.message} retry={() => void settings.refetch()} />
+          </div>
+        ) : settings.isPending ? (
+          <p role="status" className="text-text-muted mt-4 text-sm">
+            Loading routing rules…
+          </p>
+        ) : shared.length === 0 ? (
+          <p className="text-text-muted mt-4 text-sm">No shared repository environments yet.</p>
+        ) : null}
+      </div>
+      {ready &&
+        (rules.length === 0 ? (
+          <p className="border-border-subtle text-text-muted border-t px-4 py-6 text-center text-sm">
+            No rules yet, so Slack requests run without a repository unless they name one.
+          </p>
+        ) : (
+          <div className="border-border-subtle @container/rules border-t">
+            {/* Narrower than 32rem, the target moves under its description. */}
+            <table className="w-full table-fixed text-sm">
+              <thead>
+                <tr className="border-border-subtle text-text-muted border-b text-left text-xs">
+                  <th scope="col" className="py-2 pr-3 pl-4 font-normal @lg/rules:w-1/2">
+                    Description
+                  </th>
+                  <th scope="col" className="hidden px-3 py-2 font-normal @lg/rules:table-cell">
+                    Target
+                  </th>
+                  {canEdit && (
+                    <th scope="col" className="w-20 py-2 pr-4 pl-2">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-border-subtle divide-y">
+                {rules.map((rule) => {
+                  const target = routingTarget(rule, shared);
+                  return (
+                    <tr key={rule.id}>
+                      <td className="text-text-primary py-2.5 pr-3 pl-4 align-top">
+                        {/* Clamped only where Edit shows the whole text. */}
+                        <p className={canEdit ? "line-clamp-2 break-words" : "break-words"}>
+                          {rule.description}
+                        </p>
+                        <p
+                          className={`text-text-muted mt-0.5 text-xs @lg/rules:hidden ${canEdit ? "truncate" : "break-all"}`}
+                        >
+                          {target.detail ? `${target.label} · ${target.detail}` : target.label}
+                        </p>
+                      </td>
+                      <td className="hidden px-3 py-2.5 align-top @lg/rules:table-cell">
+                        <p className={`text-text-secondary ${canEdit ? "truncate" : "break-all"}`}>
+                          {target.label}
+                        </p>
+                        {target.detail && (
+                          <p
+                            className={`text-text-muted text-xs ${canEdit ? "truncate" : "break-all"}`}
+                          >
+                            {target.detail}
+                          </p>
+                        )}
+                      </td>
+                      {canEdit && (
+                        <td className="py-1.5 pr-4 pl-2 text-right align-top whitespace-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            className="text-text-muted"
+                            aria-label={`Edit the rule for ${target.label}`}
+                            onClick={(event) => {
+                              opener.current = event.currentTarget;
+                              setDialog({ rule });
+                            }}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            className="text-text-muted hover:text-destructive"
+                            aria-label={`Delete the rule for ${target.label}`}
+                            onClick={() => remove(rule)}
+                            disabled={save.isPending}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      {ready && !canEdit && (
+        <p className="border-border-subtle text-text-muted border-t px-4 py-3 text-xs">
+          Only owners and admins can change routing rules.
         </p>
-      ) : sharedEnvironments.length === 0 ? (
-        <p className="text-text-muted text-sm">No shared repository environments yet.</p>
-      ) : (
-        <div className="divide-border-subtle divide-y">
-          {!settings.data.canManageShared && (
-            <p className="text-text-muted pb-3 text-sm">
-              Only owners and admins can edit descriptions.
-            </p>
-          )}
-          {sharedEnvironments.map((environment) => (
-            <DescriptionRow
-              key={`${environment.id}:${environment.description ?? ""}`}
-              accountId={accountId}
-              orgId={orgId}
-              environment={environment}
-              canEdit={settings.data.canManageShared}
-            />
-          ))}
-        </div>
+      )}
+      {dialog && (
+        <RoutingRuleDialog
+          key={dialog.rule?.id ?? "new"}
+          draftKey={routingRuleDraftKey(accountId, orgId, dialog.rule?.id ?? null)}
+          rule={dialog.rule ?? undefined}
+          choices={shared.filter((environment) => !environment.description)}
+          shared={shared}
+          onClose={() => setDialog(null)}
+          focusAfterClose={(event) => restoreFocus(event, opener.current, card.current)}
+          onSave={(rule) => save.mutateAsync({ orgId, ...rule })}
+        />
       )}
     </section>
   );
 }
 
-function DescriptionRow({
-  accountId,
-  orgId,
-  environment,
-  canEdit,
+type SharedEnvironment = {
+  id: string;
+  name: string;
+  repo: string | null;
+  description: string | null;
+};
+
+/** Add a rule for an environment without one, or edit one rule's description. */
+function RoutingRuleDialog({
+  draftKey,
+  rule,
+  choices,
+  shared,
+  onClose,
+  focusAfterClose,
+  onSave,
 }: {
-  accountId: string;
-  orgId: string;
-  environment: { id: string; name: string; repo: string | null; description: string | null };
-  canEdit: boolean;
+  draftKey: string;
+  rule: SharedEnvironment | undefined;
+  choices: SharedEnvironment[];
+  shared: SharedEnvironment[];
+  onClose: () => void;
+  focusAfterClose: (event: Event) => void;
+  onSave: (rule: { environmentId: string; description: string }) => Promise<unknown>;
 }) {
-  const queryClient = useQueryClient();
-  const current = environment.description ?? "";
-  const [value, setValue] = useState(
-    () => readDescriptionDraft(accountId, environment.id) ?? current
-  );
-  const edit = (next: string) => {
-    setValue(next);
-    writeDescriptionDraft(accountId, environment.id, next, current);
+  const draft = readRoutingRuleDraft(draftKey);
+  // A new rule's drafted target may have gained a rule meanwhile; keep the text only.
+  const draftTarget =
+    draft && choices.some((choice) => choice.id === draft.environmentId)
+      ? draft.environmentId
+      : undefined;
+  // No preselected target: a default nobody noticed would route requests to it.
+  const [environmentId, setEnvironmentId] = useState(rule?.id ?? draftTarget ?? "");
+  const [description, setDescription] = useState(draft?.description ?? rule?.description ?? "");
+  const edit = (next: { environmentId?: string; description?: string }) => {
+    const value = { environmentId, description, ...next };
+    setEnvironmentId(value.environmentId);
+    setDescription(value.description);
+    writeRoutingRuleDraft(draftKey, value);
   };
-  const save = useMutation({
-    mutationFn: (description: string | null) =>
-      saveSlackEnvironmentDescription(
-        orgId,
-        environment.id,
-        description,
-        new AbortController().signal
-      ),
-    onSuccess: async (saved) => {
-      clearDescriptionDraft(accountId, environment.id);
-      setValue(saved.description ?? "");
-      toast.success("Repository description saved");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all });
-    },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Couldn't save description"),
-  });
-  const trimmed = value.trim();
-  const changed = trimmed !== current;
+  const close = () => {
+    dropRoutingRuleDraft(draftKey);
+    onClose();
+  };
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = description.trim();
+  const describe = (environment: SharedEnvironment) => {
+    const target = routingTarget(environment, shared);
+    return target.detail ? `${target.label} · ${target.detail}` : target.label;
+  };
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ environmentId, description: trimmed });
+      toast.success(rule ? "Routing rule saved" : "Routing rule added");
+      close();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the rule");
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="space-y-3 py-4">
-      <div>
-        <p className="text-text-primary text-sm font-medium">{environment.name}</p>
-        {environment.repo && <p className="text-text-muted mt-0.5 text-xs">{environment.repo}</p>}
-      </div>
-      <Textarea
-        aria-label={`${environment.name} Slack routing description`}
-        maxLength={1000}
-        placeholder="backend API, billing, database migrations"
-        value={value}
-        // Held while saving: the save's result replaces the text, so nothing typed meanwhile is lost.
-        readOnly={!canEdit || save.isPending}
-        onChange={(event) => edit(event.target.value)}
-      />
-      {canEdit && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => save.mutate(trimmed || null)}
-            disabled={!changed || value.length > 1000 || save.isPending}
-          >
-            {save.isPending ? "Saving…" : "Save"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              edit("");
-              save.mutate(null);
-            }}
-            disabled={!current || save.isPending}
-          >
-            Clear
-          </Button>
-        </div>
-      )}
-    </div>
+    <Dialog open onOpenChange={(open) => !open && !saving && close()}>
+      <DialogContent className="sm:max-w-md" onCloseAutoFocus={focusAfterClose}>
+        <form onSubmit={(event) => void submit(event)} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>{rule ? "Edit routing rule" : "Add routing rule"}</DialogTitle>
+            <DialogDescription>
+              Deus works in the target repository when a Slack request matches the description.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="routing-rule-description">Description</Label>
+            <Textarea
+              id="routing-rule-description"
+              value={description}
+              onChange={(event) => edit({ description: event.target.value })}
+              placeholder="Requests about the backend API, billing or database migrations"
+              maxLength={1000}
+              disabled={saving}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="routing-rule-target">Target</Label>
+            {rule ? (
+              <p id="routing-rule-target" className="text-text-secondary text-sm">
+                {describe(rule)}
+              </p>
+            ) : (
+              <Select
+                value={environmentId}
+                onValueChange={(next) => edit({ environmentId: next })}
+                disabled={saving}
+              >
+                <SelectTrigger id="routing-rule-target" className="w-full">
+                  <SelectValue placeholder="Choose a repository" />
+                </SelectTrigger>
+                <SelectContent>
+                  {choices.map((environment) => (
+                    <SelectItem key={environment.id} value={environment.id}>
+                      {describe(environment)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          {error && (
+            <p role="alert" className="text-destructive text-sm">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={close} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                !environmentId || !trimmed || trimmed === (rule?.description ?? "") || saving
+              }
+            >
+              {saving ? "Saving…" : rule ? "Save rule" : "Add rule"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
+}
+
+/**
+ * Where focus goes when one of a card's dialogs closes: the button that opened
+ * it, or the card's Refresh when that button went away (its row was removed)
+ * or can't take focus (it is disabled once every environment has a rule).
+ */
+function restoreFocus(event: Event, opener: HTMLElement | null, card: HTMLElement | null) {
+  const target =
+    opener?.isConnected && !opener.matches(":disabled")
+      ? opener
+      : card?.querySelector<HTMLElement>("button[aria-label^='Refresh']");
+  if (!target) return;
+  event.preventDefault();
+  target.focus();
 }
 
 function CardHeader({
@@ -563,12 +882,15 @@ function CardHeader({
   description,
   refreshing,
   onRefresh,
+  action,
 }: {
   id: string;
   title: string;
   description: string;
   refreshing: boolean;
   onRefresh: () => void;
+  /** The card's main action, next to refresh. */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
@@ -578,15 +900,18 @@ function CardHeader({
         </h4>
         <p className="text-text-muted mt-1 text-sm">{description}</p>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label={`Refresh ${title.toLowerCase()}`}
-        disabled={refreshing}
-        onClick={onRefresh}
-      >
-        <RefreshCw className="size-3.5" />
-      </Button>
+      <div className="flex shrink-0 items-center gap-1">
+        {action}
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Refresh ${title.toLowerCase()}`}
+          disabled={refreshing}
+          onClick={onRefresh}
+        >
+          <RefreshCw className="size-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
