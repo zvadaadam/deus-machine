@@ -273,6 +273,7 @@ it("lists described environments as routing rules, and only those", () => {
   expect(html).not.toContain("acme/web");
   expect(html).toContain('aria-label="Edit the rule for acme/backend"');
   expect(html).toContain('aria-label="Delete the rule for acme/backend"');
+  expect(html).toContain("line-clamp-2");
   expect(html).toContain(">Add rule</button>");
 });
 
@@ -315,6 +316,8 @@ it("shows routing rules read-only for non-admins", () => {
   const html = render();
   expect(html).toContain("API and database migrations");
   expect(html).toContain("Only owners and admins can change routing rules.");
+  // No Edit to open, so the whole description shows.
+  expect(html).not.toContain("line-clamp-2");
   expect(html).not.toContain("Add rule");
   expect(html).not.toContain("Edit the rule");
   expect(html).not.toContain("Delete the rule");

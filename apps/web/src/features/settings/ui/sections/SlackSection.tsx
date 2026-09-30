@@ -449,24 +449,22 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
   const rules = shared.filter((environment) => environment.description);
   const canEdit = settings.data?.canManageShared ?? false;
 
+  // Promises, not mutate()'s per-call callbacks: those fire only for the
+  // latest call, so a save made meanwhile would swallow this toast and its Undo.
   function remove(rule: { id: string; description: string | null }) {
-    save.mutate(
-      { environmentId: rule.id, description: null },
-      {
-        onSuccess: () =>
-          toast("Routing rule deleted", {
-            duration: 5000,
-            action: {
-              label: "Undo",
-              onClick: () =>
-                save.mutate(
-                  { environmentId: rule.id, description: rule.description },
-                  { onError: (error) => toast.error(error.message) }
-                ),
-            },
-          }),
-        onError: (error) => toast.error(error.message),
-      }
+    save.mutateAsync({ environmentId: rule.id, description: null }).then(
+      () =>
+        toast("Routing rule deleted", {
+          duration: 5000,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              void save
+                .mutateAsync({ environmentId: rule.id, description: rule.description })
+                .catch((error: Error) => toast.error(error.message)),
+          },
+        }),
+      (error: Error) => toast.error(error.message)
     );
   }
 
@@ -535,7 +533,10 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
                     return (
                       <tr key={rule.id}>
                         <td className="text-text-primary px-3 py-2.5 align-top">
-                          <p className="line-clamp-2 break-words">{rule.description}</p>
+                          {/* Clamped only where Edit shows the whole text. */}
+                          <p className={canEdit ? "line-clamp-2 break-words" : "break-words"}>
+                            {rule.description}
+                          </p>
                           <p className="text-text-muted mt-0.5 truncate text-xs @lg/rules:hidden">
                             {target.detail ? `${target.label} · ${target.detail}` : target.label}
                           </p>
