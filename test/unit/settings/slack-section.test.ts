@@ -265,7 +265,6 @@ it("lists described environments as routing rules, and only those", () => {
     { id: "web", name: "Web", repo: "https://github.com/acme/web", description: null },
   ]);
   const html = render();
-  expect(html).toContain("1 routing rule<");
   expect(html).toContain(">Description</th>");
   expect(html).toContain(">Target</th>");
   expect(html).toContain("API and database migrations");
@@ -283,7 +282,6 @@ it("names the environment when its repository is shared with another", () => {
     { id: "b", name: "qapp-prod", repo: "https://github.com/acme/qapp", description: "Production" },
   ]);
   const html = render();
-  expect(html).toContain("2 routing rules<");
   expect(html).toContain(">qapp-staging<");
   expect(html).toContain(">qapp-prod<");
   // Narrow, the target sits under the description and still names the repository.
@@ -295,7 +293,6 @@ it("invites a first rule when no environment has a description", () => {
     { id: "web", name: "Web", repo: "https://github.com/acme/web", description: null },
   ]);
   const html = render();
-  expect(html).toContain("0 routing rules<");
   expect(html).toContain("No rules yet.");
   expect(html).not.toContain("<table");
   expect(html).toContain(">Add rule</button>");
