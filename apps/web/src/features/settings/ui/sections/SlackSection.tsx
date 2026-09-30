@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, RefreshCw, Trash2, Unplug } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Trash2, Unlink, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { Button } from "@/components/ui/button";
@@ -369,9 +369,13 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
       toast.error(error instanceof Error ? error.message : "Couldn't share Claude account");
     },
   });
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  // The confirmation opens from a plain button, so Radix has no trigger to return focus to.
+  const opener = useRef<HTMLElement | null>(null);
   const stopSharing = useMutation({
     mutationFn: () => stopSharingCompanyModelAccount(orgId, new AbortController().signal),
     onSuccess: async () => {
+      setConfirmingStop(false);
       toast.success("Claude account is no longer shared");
       await refresh();
     },
@@ -383,67 +387,121 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
     !providerAccounts.isLoading &&
     (!hasClaudeAccount || missingProvider);
 
+  const sharedAccount = organization.data?.companyModelAccount ?? null;
+  const loadError = organization.isError
+    ? { message: organization.error.message, retry: () => void organization.refetch() }
+    : !sharedAccount && providerAccounts.isError
+      ? { message: providerAccounts.error.message, retry: () => void providerAccounts.refetch() }
+      : null;
+  const ready = !loadError && !organization.isPending && !providerAccounts.isLoading;
+
   return (
+    // Laid out like the other cards: the action in the header, the account as a row below.
     <section
       aria-labelledby="slack-billing-heading"
-      className="border-border-subtle space-y-4 rounded-xl border p-4"
+      className="border-border-subtle overflow-hidden rounded-xl border"
     >
-      <CardHeader
-        id="slack-billing-heading"
-        title="Who pays"
-        description="Turns started from Slack run on the organization's shared Claude account."
-        refreshing={organization.isFetching || providerAccounts.isFetching}
-        onRefresh={() => void refresh()}
-      />
-      {organization.isError ? (
-        <SettingsError
-          message={organization.error.message}
-          retry={() => void organization.refetch()}
+      <div className="p-4">
+        <CardHeader
+          id="slack-billing-heading"
+          title="Who pays"
+          description="Turns started from Slack run on the organization's shared Claude account."
+          refreshing={organization.isFetching || providerAccounts.isFetching}
+          onRefresh={() => void refresh()}
+          action={
+            !ready || sharedAccount ? null : needsClaudeAccount ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => uiActions.setActiveSettingsSection("ai")}
+              >
+                Open AI settings
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => share.mutate()} disabled={share.isPending}>
+                {share.isPending ? "Sharing…" : "Share my Claude account"}
+              </Button>
+            )
+          }
         />
-      ) : !organization.data?.companyModelAccount && providerAccounts.isError ? (
-        <SettingsError
-          message={providerAccounts.error.message}
-          retry={() => void providerAccounts.refetch()}
-        />
-      ) : organization.isPending || providerAccounts.isLoading ? (
-        <p role="status" className="text-text-muted text-sm">
-          Loading shared account…
-        </p>
-      ) : organization.data?.companyModelAccount ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-primary text-sm">
-            {organization.data.companyModelAccount.name}&apos;s Claude account
+        {loadError ? (
+          <div className="mt-4">
+            <SettingsError message={loadError.message} retry={loadError.retry} />
+          </div>
+        ) : !ready ? (
+          <p role="status" className="text-text-muted mt-4 text-sm">
+            Loading shared account…
           </p>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => stopSharing.mutate()}
-            disabled={stopSharing.isPending}
-          >
-            {stopSharing.isPending ? "Stopping…" : "Stop sharing"}
-          </Button>
-        </div>
-      ) : needsClaudeAccount ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-muted text-sm">Connect a Claude account first</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => uiActions.setActiveSettingsSection("ai")}
-          >
-            Open AI settings
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-muted text-sm">
-            No shared account yet. Slack requests can&apos;t start until a member shares one.
+        ) : null}
+      </div>
+      {ready &&
+        (sharedAccount ? (
+          <div className="border-border-subtle flex items-center justify-between gap-3 border-t px-4 py-2.5">
+            <div className="min-w-0">
+              <p className="text-text-primary truncate text-sm">
+                {sharedAccount.name}&apos;s Claude account
+              </p>
+              <p className="text-text-muted mt-0.5 text-xs">
+                Every turn started from Slack runs on it.
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-text-muted hover:text-destructive shrink-0"
+              aria-label={`Stop sharing ${sharedAccount.name}'s Claude account`}
+              title="Stop sharing"
+              onClick={(event) => {
+                opener.current = event.currentTarget;
+                setConfirmingStop(true);
+              }}
+            >
+              <Unlink className="size-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <p className="border-border-subtle text-text-muted border-t px-4 py-6 text-center text-sm">
+            {needsClaudeAccount
+              ? "Connect a Claude account first, then share it here."
+              : "No shared account yet. Slack requests can't start until a member shares one."}
           </p>
-          <Button size="sm" onClick={() => share.mutate()} disabled={share.isPending}>
-            {share.isPending ? "Sharing…" : "Share my Claude account"}
-          </Button>
-        </div>
-      )}
+        ))}
+      <Dialog open={confirmingStop} onOpenChange={(open) => !open && setConfirmingStop(false)}>
+        <DialogContent
+          className="sm:max-w-md"
+          onCloseAutoFocus={(event) => {
+            // After stopping, the row is gone; there is nothing to return to.
+            if (!opener.current?.isConnected) return;
+            event.preventDefault();
+            opener.current.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Stop sharing {sharedAccount?.name}&apos;s Claude account?</DialogTitle>
+            <DialogDescription>
+              Slack requests can&apos;t start until a member shares an account again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setConfirmingStop(false)}
+              disabled={stopSharing.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => stopSharing.mutate()}
+              disabled={stopSharing.isPending}
+            >
+              {stopSharing.isPending ? "Stopping…" : "Stop sharing"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
