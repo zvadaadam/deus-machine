@@ -27,3 +27,10 @@ it("tells environments apart when their remotes name one repository differently"
   expect(routingTarget(ssh, [ssh, https])).toEqual({ label: "app-staging", detail: "Acme/App" });
   expect(routingTarget(https, [ssh, https])).toEqual({ label: "app-prod", detail: "acme/app" });
 });
+
+it("tells environments apart when two hosts have the same repository path", () => {
+  const github = { id: "a", name: "app-github", repo: "https://github.com/acme/app" };
+  const gitlab = { id: "b", name: "app-gitlab", repo: "https://gitlab.com/acme/app" };
+  expect(routingTarget(github, [github, gitlab]).label).toBe("app-github");
+  expect(routingTarget(gitlab, [github, gitlab]).label).toBe("app-gitlab");
+});

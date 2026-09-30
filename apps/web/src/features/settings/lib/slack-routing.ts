@@ -1,4 +1,4 @@
-import { httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
+import { httpsOrigin } from "@shared/git-origin";
 
 interface RoutableEnvironment {
   id: string;
@@ -27,10 +27,10 @@ export function routingTarget(
   shared: readonly RoutableEnvironment[]
 ): { label: string; detail: string | null } {
   const slug = repositorySlug(environment.repo);
-  // One repository however its remote is written: ssh or https, any case, with or without .git.
-  const identity = (repo: string | null) => (repo ? normalizeRepoRef(httpsOrigin(repo)) : null);
+  // Judged on what the label shows: one repository written two ways (ssh or
+  // https, any case) or two hosts with the same path would read the same.
+  const shown = (repo: string | null) => repositorySlug(repo)?.toLowerCase() ?? null;
   const unique =
-    slug &&
-    shared.filter((other) => identity(other.repo) === identity(environment.repo)).length === 1;
+    slug && shared.filter((other) => shown(other.repo) === shown(environment.repo)).length === 1;
   return unique ? { label: slug, detail: null } : { label: environment.name, detail: slug };
 }
