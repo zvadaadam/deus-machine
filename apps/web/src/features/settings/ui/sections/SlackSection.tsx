@@ -423,8 +423,9 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
 
 function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
   const queryClient = useQueryClient();
-  // Closed, adding a rule (null), or editing the rule of one environment.
-  const [dialog, setDialog] = useState<{ environmentId: string | null } | null>(null);
+  // Closed, adding a rule (null), or editing the rule the person clicked. The
+  // rule is kept as it was then, so a refetch can't turn an edit into an add.
+  const [dialog, setDialog] = useState<{ rule: SharedEnvironment | null } | null>(null);
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
@@ -447,9 +448,6 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
     settings.data?.environments.filter((environment) => environment.ownerType === "ORG") ?? [];
   const rules = shared.filter((environment) => environment.description);
   const canEdit = settings.data?.canManageShared ?? false;
-  const editing = dialog?.environmentId
-    ? shared.find((environment) => environment.id === dialog.environmentId)
-    : undefined;
 
   function remove(rule: { id: string; description: string | null }) {
     save.mutate(
@@ -501,7 +499,7 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
             {canEdit && (
               <Button
                 size="sm"
-                onClick={() => setDialog({ environmentId: null })}
+                onClick={() => setDialog({ rule: null })}
                 disabled={rules.length === shared.length}
               >
                 Add rule
@@ -539,7 +537,7 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
                         <td className="text-text-primary px-3 py-2.5 align-top">
                           <p className="line-clamp-2 break-words">{rule.description}</p>
                           <p className="text-text-muted mt-0.5 truncate text-xs @lg/rules:hidden">
-                            {target.label}
+                            {target.detail ? `${target.label} · ${target.detail}` : target.label}
                           </p>
                         </td>
                         <td className="hidden px-3 py-2.5 align-top @lg/rules:table-cell">
@@ -555,7 +553,7 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
                               size="icon-xs"
                               className="text-text-muted"
                               aria-label={`Edit the rule for ${target.label}`}
-                              onClick={() => setDialog({ environmentId: rule.id })}
+                              onClick={() => setDialog({ rule })}
                             >
                               <Pencil className="size-3.5" />
                             </Button>
@@ -587,8 +585,8 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
       )}
       {dialog && (
         <RoutingRuleDialog
-          key={dialog.environmentId ?? "new"}
-          rule={editing}
+          key={dialog.rule?.id ?? "new"}
+          rule={dialog.rule ?? undefined}
           choices={shared.filter((environment) => !environment.description)}
           shared={shared}
           onClose={() => setDialog(null)}

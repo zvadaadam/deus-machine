@@ -285,6 +285,8 @@ it("names the environment when its repository is shared with another", () => {
   expect(html).toContain("2 routing rules<");
   expect(html).toContain(">qapp-staging<");
   expect(html).toContain(">qapp-prod<");
+  // Narrow, the target sits under the description and still names the repository.
+  expect(html).toContain(">qapp-staging · acme/qapp<");
 });
 
 it("invites a first rule when no environment has a description", () => {
