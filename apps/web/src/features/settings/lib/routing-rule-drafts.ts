@@ -4,14 +4,18 @@ export interface RoutingRuleDraft {
 }
 
 /**
- * The routing rule dialog's unsaved text, by account and rule (or a new one).
- * It lives outside the dialog because browser Back unmounts Settings without
- * closing it; saving, Cancel and Escape close the dialog and drop the draft.
+ * The routing rule dialog's unsaved text, by account, organization and rule
+ * (or a new one). It lives outside the dialog because browser Back unmounts
+ * Settings without closing it; saving, Cancel and Escape close the dialog and
+ * drop the draft.
  */
 const drafts = new Map<string, RoutingRuleDraft>();
 
-export const routingRuleDraftKey = (accountId: string, environmentId: string | null) =>
-  `${accountId}:${environmentId ?? "new"}`;
+export const routingRuleDraftKey = (
+  accountId: string,
+  orgId: string,
+  environmentId: string | null
+) => `${accountId}:${orgId}:${environmentId ?? "new"}`;
 
 export function readRoutingRuleDraft(key: string): RoutingRuleDraft | undefined {
   return drafts.get(key);

@@ -19,3 +19,11 @@ it("targets the repository, or the environment when the repository doesn't tell 
   expect(routingTarget(staging, shared)).toEqual({ label: "qapp-staging", detail: "acme/qapp" });
   expect(routingTarget(scratch, shared)).toEqual({ label: "Scratch", detail: null });
 });
+
+it("tells environments apart when their remotes name one repository differently", () => {
+  const ssh = { id: "a", name: "app-staging", repo: "git@github.com:Acme/App.git" };
+  const https = { id: "b", name: "app-prod", repo: "https://github.com/acme/app" };
+  expect(repositorySlug(ssh.repo)).toBe("Acme/App");
+  expect(routingTarget(ssh, [ssh, https])).toEqual({ label: "app-staging", detail: "Acme/App" });
+  expect(routingTarget(https, [ssh, https])).toEqual({ label: "app-prod", detail: "acme/app" });
+});

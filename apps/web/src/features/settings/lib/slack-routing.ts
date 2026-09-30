@@ -1,14 +1,16 @@
+import { httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
+
 interface RoutableEnvironment {
   id: string;
   name: string;
   repo: string | null;
 }
 
-/** `owner/name` for a repository URL; the URL itself when it doesn't parse. */
+/** `owner/name` for a repository URL, ssh or https; the URL itself when it doesn't parse. */
 export function repositorySlug(repo: string | null): string | null {
   if (!repo) return null;
   try {
-    const url = new URL(repo);
+    const url = new URL(httpsOrigin(repo));
     return url.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "") || url.host;
   } catch {
     return repo;
@@ -25,6 +27,10 @@ export function routingTarget(
   shared: readonly RoutableEnvironment[]
 ): { label: string; detail: string | null } {
   const slug = repositorySlug(environment.repo);
-  const unique = slug && shared.filter((other) => repositorySlug(other.repo) === slug).length === 1;
+  // One repository however its remote is written: ssh or https, any case, with or without .git.
+  const identity = (repo: string | null) => (repo ? normalizeRepoRef(httpsOrigin(repo)) : null);
+  const unique =
+    slug &&
+    shared.filter((other) => identity(other.repo) === identity(environment.repo)).length === 1;
   return unique ? { label: slug, detail: null } : { label: environment.name, detail: slug };
 }

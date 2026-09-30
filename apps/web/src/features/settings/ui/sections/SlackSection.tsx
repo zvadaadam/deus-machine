@@ -195,11 +195,12 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
     mutationFn: (installationId: string) =>
       disconnectSlackInstallation(orgId, installationId, new AbortController().signal),
     onSuccess: async () => {
-      setDisconnecting(null);
       toast.success("Slack workspace disconnected");
+      // Close once the row is gone, so focus lands on a control that stays.
       await queryClient.invalidateQueries({
         queryKey: queryKeys.settings.slack.installations(accountId, orgId),
       });
+      setDisconnecting(null);
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Couldn't disconnect Slack"),
@@ -209,10 +210,12 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
   const connected = ready ? installations.data.installations : [];
   // The disconnect dialog opens from a plain button, so Radix has no trigger to return focus to.
   const opener = useRef<HTMLElement | null>(null);
+  const card = useRef<HTMLElement | null>(null);
 
   return (
     // Laid out like the routing rules: the action in the header, rows edge to edge below.
     <section
+      ref={card}
       aria-labelledby="slack-workspace-heading"
       className="border-border-subtle overflow-hidden rounded-xl border"
     >
@@ -292,12 +295,7 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
       <Dialog open={!!disconnecting} onOpenChange={(open) => !open && setDisconnecting(null)}>
         <DialogContent
           className="sm:max-w-md"
-          onCloseAutoFocus={(event) => {
-            // After a disconnect the row is gone; there is nothing to return to.
-            if (!opener.current?.isConnected) return;
-            event.preventDefault();
-            opener.current.focus();
-          }}
+          onCloseAutoFocus={(event) => restoreFocus(event, opener.current, card.current)}
         >
           <DialogHeader>
             <DialogTitle>Disconnect {disconnecting?.teamName}?</DialogTitle>
@@ -372,12 +370,14 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
   const [confirmingStop, setConfirmingStop] = useState(false);
   // The confirmation opens from a plain button, so Radix has no trigger to return focus to.
   const opener = useRef<HTMLElement | null>(null);
+  const card = useRef<HTMLElement | null>(null);
   const stopSharing = useMutation({
     mutationFn: () => stopSharingCompanyModelAccount(orgId, new AbortController().signal),
     onSuccess: async () => {
-      setConfirmingStop(false);
       toast.success("Claude account is no longer shared");
+      // Close once the row is gone, so focus lands on a control that stays.
       await refresh();
+      setConfirmingStop(false);
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : "Couldn't stop sharing"),
@@ -398,6 +398,7 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
   return (
     // Laid out like the other cards: the action in the header, the account as a row below.
     <section
+      ref={card}
       aria-labelledby="slack-billing-heading"
       className="border-border-subtle overflow-hidden rounded-xl border"
     >
@@ -469,12 +470,7 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
       <Dialog open={confirmingStop} onOpenChange={(open) => !open && setConfirmingStop(false)}>
         <DialogContent
           className="sm:max-w-md"
-          onCloseAutoFocus={(event) => {
-            // After stopping, the row is gone; there is nothing to return to.
-            if (!opener.current?.isConnected) return;
-            event.preventDefault();
-            opener.current.focus();
-          }}
+          onCloseAutoFocus={(event) => restoreFocus(event, opener.current, card.current)}
         >
           <DialogHeader>
             <DialogTitle>Stop sharing {sharedAccount?.name}&apos;s Claude account?</DialogTitle>
@@ -513,16 +509,19 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
   const [dialog, setDialog] = useState<{ rule: SharedEnvironment | null } | null>(null);
   // The dialog opens from plain buttons, so Radix has no trigger to return focus to.
   const opener = useRef<HTMLElement | null>(null);
+  const card = useRef<HTMLElement | null>(null);
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
     staleTime: 30_000,
     retry: false,
   });
+  // The organization travels with each save: an Undo clicked after switching
+  // organization still writes where the rule was deleted.
   const save = useMutation({
-    mutationFn: (rule: { environmentId: string; description: string | null }) =>
+    mutationFn: (rule: { orgId: string; environmentId: string; description: string | null }) =>
       saveSlackEnvironmentDescription(
-        orgId,
+        rule.orgId,
         rule.environmentId,
         rule.description,
         new AbortController().signal
@@ -539,16 +538,31 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
   // Promises, not mutate()'s per-call callbacks: those fire only for the
   // latest call, so a save made meanwhile would swallow this toast and its Undo.
   function remove(rule: { id: string; description: string | null }) {
-    save.mutateAsync({ environmentId: rule.id, description: null }).then(
+    const deletedIn = orgId;
+    // Undo restores only while nothing replaced the rule: one written meanwhile wins.
+    const undo = async () => {
+      const latest = await queryClient.fetchQuery({
+        queryKey: queryKeys.settings.environments.detail(accountId, deletedIn, null),
+        queryFn: ({ signal }) => getEnvironmentSecretSettings(deletedIn, null, signal),
+        staleTime: 0,
+      });
+      if (latest.environments.find((environment) => environment.id === rule.id)?.description) {
+        toast.info("That repository has a newer rule, so there is nothing to undo");
+        return;
+      }
+      await save.mutateAsync({
+        orgId: deletedIn,
+        environmentId: rule.id,
+        description: rule.description,
+      });
+    };
+    save.mutateAsync({ orgId: deletedIn, environmentId: rule.id, description: null }).then(
       () =>
         toast("Routing rule deleted", {
           duration: 5000,
           action: {
             label: "Undo",
-            onClick: () =>
-              void save
-                .mutateAsync({ environmentId: rule.id, description: rule.description })
-                .catch((error: Error) => toast.error(error.message)),
+            onClick: () => void undo().catch((error: Error) => toast.error(error.message)),
           },
         }),
       (error: Error) => toast.error(error.message)
@@ -561,6 +575,7 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
     // The table is this card's body, edge to edge under one divider: a second
     // bordered box inside the card read as a card in a card.
     <section
+      ref={card}
       aria-labelledby="slack-routing-heading"
       className="border-border-subtle overflow-hidden rounded-xl border"
     >
@@ -691,13 +706,13 @@ function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: stri
       {dialog && (
         <RoutingRuleDialog
           key={dialog.rule?.id ?? "new"}
-          draftKey={routingRuleDraftKey(accountId, dialog.rule?.id ?? null)}
+          draftKey={routingRuleDraftKey(accountId, orgId, dialog.rule?.id ?? null)}
           rule={dialog.rule ?? undefined}
           choices={shared.filter((environment) => !environment.description)}
           shared={shared}
           onClose={() => setDialog(null)}
-          returnFocus={() => opener.current?.focus()}
-          onSave={(rule) => save.mutateAsync(rule)}
+          focusAfterClose={(event) => restoreFocus(event, opener.current, card.current)}
+          onSave={(rule) => save.mutateAsync({ orgId, ...rule })}
         />
       )}
     </section>
@@ -718,7 +733,7 @@ function RoutingRuleDialog({
   choices,
   shared,
   onClose,
-  returnFocus,
+  focusAfterClose,
   onSave,
 }: {
   draftKey: string;
@@ -726,12 +741,17 @@ function RoutingRuleDialog({
   choices: SharedEnvironment[];
   shared: SharedEnvironment[];
   onClose: () => void;
-  returnFocus: () => void;
+  focusAfterClose: (event: Event) => void;
   onSave: (rule: { environmentId: string; description: string }) => Promise<unknown>;
 }) {
   const draft = readRoutingRuleDraft(draftKey);
+  // A new rule's drafted target may have gained a rule meanwhile; keep the text only.
+  const draftTarget =
+    draft && choices.some((choice) => choice.id === draft.environmentId)
+      ? draft.environmentId
+      : undefined;
   // No preselected target: a default nobody noticed would route requests to it.
-  const [environmentId, setEnvironmentId] = useState(draft?.environmentId ?? rule?.id ?? "");
+  const [environmentId, setEnvironmentId] = useState(rule?.id ?? draftTarget ?? "");
   const [description, setDescription] = useState(draft?.description ?? rule?.description ?? "");
   const edit = (next: { environmentId?: string; description?: string }) => {
     const value = { environmentId, description, ...next };
@@ -767,13 +787,7 @@ function RoutingRuleDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !saving && close()}>
-      <DialogContent
-        className="sm:max-w-md"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          returnFocus();
-        }}
-      >
+      <DialogContent className="sm:max-w-md" onCloseAutoFocus={focusAfterClose}>
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{rule ? "Edit routing rule" : "Add routing rule"}</DialogTitle>
@@ -840,6 +854,21 @@ function RoutingRuleDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Where focus goes when one of a card's dialogs closes: the button that opened
+ * it, or the card's Refresh when that button went away (its row was removed)
+ * or can't take focus (it is disabled once every environment has a rule).
+ */
+function restoreFocus(event: Event, opener: HTMLElement | null, card: HTMLElement | null) {
+  const target =
+    opener?.isConnected && !opener.matches(":disabled")
+      ? opener
+      : card?.querySelector<HTMLElement>("button[aria-label^='Refresh']");
+  if (!target) return;
+  event.preventDefault();
+  target.focus();
 }
 
 function CardHeader({
