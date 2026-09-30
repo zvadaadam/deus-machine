@@ -81,6 +81,13 @@ export const queryKeys = {
       installation: (accountId: string, orgId: string) =>
         ["settings", "environment-secrets", accountId, orgId, "github-install"] as const,
     },
+    slack: {
+      all: ["settings", "slack"] as const,
+      installations: (accountId: string | null, orgId: string | null) =>
+        ["settings", "slack", accountId, orgId, "installations"] as const,
+      organization: (accountId: string | null, orgId: string | null) =>
+        ["settings", "slack", accountId, orgId, "organization"] as const,
+    },
   },
 
   // Agent Config (scope-aware config management)

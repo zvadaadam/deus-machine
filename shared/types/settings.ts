@@ -59,5 +59,6 @@ export type SettingsSection =
   | "ai"
   | "cloud"
   | "environment"
+  | "slack"
   | "experimental"
   | "access";

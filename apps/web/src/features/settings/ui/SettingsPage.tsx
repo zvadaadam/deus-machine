@@ -19,6 +19,7 @@ import {
   AISection,
   CloudSection,
   EnvironmentSection,
+  SlackSection,
   ExperimentalSection,
   AccessSection,
 } from "./sections";
@@ -38,8 +39,8 @@ export function SettingsPage() {
 
   const settings = settingsQuery.data || {};
   const loading =
-    activeSection === "environment"
-      ? false // EnvironmentSection manages its own loading state
+    activeSection === "environment" || activeSection === "slack"
+      ? false // These cloud sections manage their own loading state.
       : settingsQuery.isLoading;
   const saving = updateSettingsMutation.isPending;
 
@@ -94,6 +95,7 @@ export function SettingsPage() {
       .with("ai", () => <AISection {...sectionProps} cloudOnly={cloudOnly} />)
       .with("cloud", () => <CloudSection />)
       .with("environment", () => <EnvironmentSection />)
+      .with("slack", () => <SlackSection />)
       .with("experimental", () => <ExperimentalSection {...sectionProps} />)
       .with("access", () => <AccessSection {...sectionProps} />)
       .exhaustive();

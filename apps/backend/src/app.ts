@@ -20,6 +20,7 @@ import settingsRoutes from "./routes/settings";
 import providerAccountRoutes from "./routes/provider-accounts";
 import computeUsageRoutes from "./routes/compute-usage";
 import environmentSecretRoutes from "./routes/environment-secrets";
+import slackRoutes from "./routes/slack";
 import statsRoutes from "./routes/stats";
 import onboardingRoutes from "./routes/onboarding";
 import authRoutes from "./routes/remote-auth";
@@ -49,6 +50,7 @@ export function createApp() {
   app.route("/api", settingsRoutes);
   app.route("/api", providerAccountRoutes);
   app.route("/api", environmentSecretRoutes);
+  app.route("/api", slackRoutes);
   app.route("/api", computeUsageRoutes);
   app.route("/api", statsRoutes);
   app.route("/api", filesRoutes);

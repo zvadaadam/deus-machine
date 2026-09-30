@@ -31,15 +31,18 @@ export async function requestCloudSettings(
     });
     const data = response.ok ? await response.json() : await response.json().catch(() => null);
     identity.throwIfAborted();
-    if (!response.ok)
+    if (!response.ok) {
+      const errorBody = data as { message?: unknown; code?: unknown } | null;
       throw new AppError(
         response.status,
-        typeof data?.message === "string"
-          ? data.message
+        typeof errorBody?.message === "string"
+          ? errorBody.message
           : !init.method || init.method === "GET"
             ? "Couldn't load cloud settings."
-            : "Couldn't update cloud settings."
+            : "Couldn't update cloud settings.",
+        typeof errorBody?.code === "string" ? { code: errorBody.code } : undefined
       );
+    }
     return toCamelCaseKeys(data, { opaqueKeys: ["project"] });
   } catch (error) {
     if (identity.aborted) throw new AppError(409, "Your Deus account changed. Try again.");
