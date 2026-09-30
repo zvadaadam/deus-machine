@@ -2,7 +2,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { writeDescriptionDraft } from "@/features/settings/lib/slack-description-drafts";
 import { SlackSection } from "@/features/settings/ui/sections/SlackSection";
 import { queryKeys } from "@/shared/api/queryKeys";
 
@@ -227,7 +226,15 @@ it("shows a failed Claude-account lookup as an error, not as a missing account",
   expect(html).not.toContain("Connect a Claude account first");
 });
 
-it("shows repository descriptions read-only for non-admins", () => {
+function seedEnvironments(
+  environments: Array<{
+    id: string;
+    name: string;
+    repo: string | null;
+    description: string | null;
+  }>,
+  canManageShared = true
+) {
   client.setQueryData(queryKeys.settings.slack.installations("account", "org"), {
     configured: true,
     installations: [],
@@ -235,25 +242,80 @@ it("shows repository descriptions read-only for non-admins", () => {
   client.setQueryData(queryKeys.settings.environments.detail("account", "org", null), {
     accountId: "account",
     organizationId: "org",
-    canManageShared: false,
+    canManageShared,
     selectedEnvironment: null,
-    environments: [
-      {
-        id: "env",
-        name: "Backend",
-        repo: "acme/backend",
-        description: "API and database migrations",
-        ownerType: "ORG",
-        isRepositoryDefault: false,
-      },
-    ],
+    environments: environments.map((environment) => ({
+      ...environment,
+      ownerType: "ORG",
+      isRepositoryDefault: false,
+    })),
     secrets: [],
     required: [],
   });
+}
+
+it("lists described environments as routing rules, and only those", () => {
+  seedEnvironments([
+    {
+      id: "backend",
+      name: "Backend",
+      repo: "https://github.com/acme/backend.git",
+      description: "API and database migrations",
+    },
+    { id: "web", name: "Web", repo: "https://github.com/acme/web", description: null },
+  ]);
   const html = render();
-  expect(html).toContain("Only owners and admins can edit descriptions.");
+  expect(html).toContain("1 routing rule<");
+  expect(html).toContain(">Description</th>");
+  expect(html).toContain(">Target</th>");
   expect(html).toContain("API and database migrations");
-  expect(html).not.toContain(">Save</button>");
+  expect(html).toContain(">acme/backend<");
+  expect(html).not.toContain("acme/web");
+  expect(html).toContain('aria-label="Edit the rule for acme/backend"');
+  expect(html).toContain('aria-label="Delete the rule for acme/backend"');
+  expect(html).toContain(">Add rule</button>");
+});
+
+it("names the environment when its repository is shared with another", () => {
+  seedEnvironments([
+    { id: "a", name: "qapp-staging", repo: "https://github.com/acme/qapp", description: "Staging" },
+    { id: "b", name: "qapp-prod", repo: "https://github.com/acme/qapp", description: "Production" },
+  ]);
+  const html = render();
+  expect(html).toContain("2 routing rules<");
+  expect(html).toContain(">qapp-staging<");
+  expect(html).toContain(">qapp-prod<");
+});
+
+it("invites a first rule when no environment has a description", () => {
+  seedEnvironments([
+    { id: "web", name: "Web", repo: "https://github.com/acme/web", description: null },
+  ]);
+  const html = render();
+  expect(html).toContain("0 routing rules<");
+  expect(html).toContain("No rules yet.");
+  expect(html).not.toContain("<table");
+  expect(html).toContain(">Add rule</button>");
+});
+
+it("shows routing rules read-only for non-admins", () => {
+  seedEnvironments(
+    [
+      {
+        id: "backend",
+        name: "Backend",
+        repo: "https://github.com/acme/backend",
+        description: "API and database migrations",
+      },
+    ],
+    false
+  );
+  const html = render();
+  expect(html).toContain("API and database migrations");
+  expect(html).toContain("Only owners and admins can change routing rules.");
+  expect(html).not.toContain("Add rule");
+  expect(html).not.toContain("Edit the rule");
+  expect(html).not.toContain("Delete the rule");
 });
 
 it("asks to unlock a locked keyring instead of signing in again", () => {
@@ -274,19 +336,4 @@ it("offers a retry, not a sign-in, when the session check fails", () => {
 it("signed out, it offers sign-in", () => {
   sessionState.data = { signedIn: false, accountId: null };
   expect(render()).toContain("Sign in to Deus Cloud");
-});
-
-it("brings back a description typed before leaving the section, still unsaved", () => {
-  client.setQueryData(queryKeys.settings.slack.installations("account", "org"), {
-    configured: true,
-    installations: [],
-  });
-  writeDescriptionDraft("account", "env", "billing and invoices", "API and database migrations");
-
-  const html = render();
-
-  expect(html).toContain(">billing and invoices</textarea>");
-  const save = html.match(/<button[^>]*>Save<\/button>/)?.[0];
-  expect(save).toBeDefined();
-  expect(save).not.toContain("disabled");
 });

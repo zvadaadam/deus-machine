@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -45,11 +46,7 @@ import {
   stopSharingCompanyModelAccount,
   type SlackInstallation,
 } from "../../api/slack.service";
-import {
-  clearDescriptionDraft,
-  readDescriptionDraft,
-  writeDescriptionDraft,
-} from "../../lib/slack-description-drafts";
+import { routingTarget } from "../../lib/slack-routing";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -153,7 +150,7 @@ function SlackSettings({ accountId }: { accountId: string }) {
         <>
           <WorkspaceCard accountId={accountId} orgId={orgId} />
           <CompanyAccountCard accountId={accountId} orgId={orgId} />
-          <SlackRepositoriesCard accountId={accountId} orgId={orgId} />
+          <RoutingRulesCard accountId={accountId} orgId={orgId} />
         </>
       )}
     </div>
@@ -424,25 +421,66 @@ function CompanyAccountCard({ accountId, orgId }: { accountId: string; orgId: st
   );
 }
 
-function SlackRepositoriesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
+function RoutingRulesCard({ accountId, orgId }: { accountId: string; orgId: string }) {
+  const queryClient = useQueryClient();
+  // Closed, adding a rule (null), or editing the rule of one environment.
+  const [dialog, setDialog] = useState<{ environmentId: string | null } | null>(null);
   const settings = useQuery({
     queryKey: queryKeys.settings.environments.detail(accountId, orgId, null),
     queryFn: ({ signal }) => getEnvironmentSecretSettings(orgId, null, signal),
     staleTime: 30_000,
     retry: false,
   });
-  const sharedEnvironments =
+  const save = useMutation({
+    mutationFn: (rule: { environmentId: string; description: string | null }) =>
+      saveSlackEnvironmentDescription(
+        orgId,
+        rule.environmentId,
+        rule.description,
+        new AbortController().signal
+      ),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all }),
+  });
+  // A rule is a shared environment's description; the router reads nothing else.
+  const shared =
     settings.data?.environments.filter((environment) => environment.ownerType === "ORG") ?? [];
+  const rules = shared.filter((environment) => environment.description);
+  const canEdit = settings.data?.canManageShared ?? false;
+  const editing = dialog?.environmentId
+    ? shared.find((environment) => environment.id === dialog.environmentId)
+    : undefined;
+
+  function remove(rule: { id: string; description: string | null }) {
+    save.mutate(
+      { environmentId: rule.id, description: null },
+      {
+        onSuccess: () =>
+          toast("Routing rule deleted", {
+            duration: 5000,
+            action: {
+              label: "Undo",
+              onClick: () =>
+                save.mutate(
+                  { environmentId: rule.id, description: rule.description },
+                  { onError: (error) => toast.error(error.message) }
+                ),
+            },
+          }),
+        onError: (error) => toast.error(error.message),
+      }
+    );
+  }
 
   return (
     <section
-      aria-labelledby="slack-repositories-heading"
+      aria-labelledby="slack-routing-heading"
       className="border-border-subtle space-y-4 rounded-xl border p-4"
     >
       <CardHeader
-        id="slack-repositories-heading"
-        title="Repositories"
-        description="Deus picks the repository whose description matches the request. A repository without a description is only used when a request names it."
+        id="slack-routing-heading"
+        title="Repository routing"
+        description="Rules that help Deus pick the right repository for a Slack request. A repository without a rule is only used when a request names it."
         refreshing={settings.isFetching}
         onRefresh={() => void settings.refetch()}
       />
@@ -450,110 +488,227 @@ function SlackRepositoriesCard({ accountId, orgId }: { accountId: string; orgId:
         <SettingsError message={settings.error.message} retry={() => void settings.refetch()} />
       ) : settings.isPending ? (
         <p role="status" className="text-text-muted text-sm">
-          Loading repositories…
+          Loading routing rules…
         </p>
-      ) : sharedEnvironments.length === 0 ? (
+      ) : shared.length === 0 ? (
         <p className="text-text-muted text-sm">No shared repository environments yet.</p>
       ) : (
-        <div className="divide-border-subtle divide-y">
-          {!settings.data.canManageShared && (
-            <p className="text-text-muted pb-3 text-sm">
-              Only owners and admins can edit descriptions.
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-text-secondary text-sm">
+              {rules.length} routing {rules.length === 1 ? "rule" : "rules"}
+            </p>
+            {canEdit && (
+              <Button
+                size="sm"
+                onClick={() => setDialog({ environmentId: null })}
+                disabled={rules.length === shared.length}
+              >
+                Add rule
+              </Button>
+            )}
+          </div>
+          {rules.length === 0 ? (
+            <p className="text-text-muted text-sm">
+              No rules yet. Add one so Deus can pick a repository without being told.
+            </p>
+          ) : (
+            <div className="border-border-subtle @container/rules overflow-hidden rounded-lg border">
+              {/* Narrower than 32rem, the target moves under its description. */}
+              <table className="w-full table-fixed text-sm">
+                <thead>
+                  <tr className="border-border-subtle text-text-muted border-b text-left text-xs">
+                    <th scope="col" className="px-3 py-2 font-normal @lg/rules:w-1/2">
+                      Description
+                    </th>
+                    <th scope="col" className="hidden px-3 py-2 font-normal @lg/rules:table-cell">
+                      Target
+                    </th>
+                    {canEdit && (
+                      <th scope="col" className="w-18 px-3 py-2">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-border-subtle divide-y">
+                  {rules.map((rule) => {
+                    const target = routingTarget(rule, shared);
+                    return (
+                      <tr key={rule.id}>
+                        <td className="text-text-primary px-3 py-2.5 align-top">
+                          <p className="line-clamp-2 break-words">{rule.description}</p>
+                          <p className="text-text-muted mt-0.5 truncate text-xs @lg/rules:hidden">
+                            {target.label}
+                          </p>
+                        </td>
+                        <td className="hidden px-3 py-2.5 align-top @lg/rules:table-cell">
+                          <p className="text-text-secondary truncate">{target.label}</p>
+                          {target.detail && (
+                            <p className="text-text-muted truncate text-xs">{target.detail}</p>
+                          )}
+                        </td>
+                        {canEdit && (
+                          <td className="px-2 py-1.5 text-right align-top whitespace-nowrap">
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="text-text-muted"
+                              aria-label={`Edit the rule for ${target.label}`}
+                              onClick={() => setDialog({ environmentId: rule.id })}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="text-text-muted hover:text-destructive"
+                              aria-label={`Delete the rule for ${target.label}`}
+                              onClick={() => remove(rule)}
+                              disabled={save.isPending}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!canEdit && (
+            <p className="text-text-muted text-xs">
+              Only owners and admins can change routing rules.
             </p>
           )}
-          {sharedEnvironments.map((environment) => (
-            <DescriptionRow
-              key={`${environment.id}:${environment.description ?? ""}`}
-              accountId={accountId}
-              orgId={orgId}
-              environment={environment}
-              canEdit={settings.data.canManageShared}
-            />
-          ))}
         </div>
+      )}
+      {dialog && (
+        <RoutingRuleDialog
+          key={dialog.environmentId ?? "new"}
+          rule={editing}
+          choices={shared.filter((environment) => !environment.description)}
+          shared={shared}
+          onClose={() => setDialog(null)}
+          onSave={(rule) => save.mutateAsync(rule)}
+        />
       )}
     </section>
   );
 }
 
-function DescriptionRow({
-  accountId,
-  orgId,
-  environment,
-  canEdit,
+type SharedEnvironment = {
+  id: string;
+  name: string;
+  repo: string | null;
+  description: string | null;
+};
+
+/** Add a rule for an environment without one, or edit one rule's description. */
+function RoutingRuleDialog({
+  rule,
+  choices,
+  shared,
+  onClose,
+  onSave,
 }: {
-  accountId: string;
-  orgId: string;
-  environment: { id: string; name: string; repo: string | null; description: string | null };
-  canEdit: boolean;
+  rule: SharedEnvironment | undefined;
+  choices: SharedEnvironment[];
+  shared: SharedEnvironment[];
+  onClose: () => void;
+  onSave: (rule: { environmentId: string; description: string }) => Promise<unknown>;
 }) {
-  const queryClient = useQueryClient();
-  const current = environment.description ?? "";
-  const [value, setValue] = useState(
-    () => readDescriptionDraft(accountId, environment.id) ?? current
-  );
-  const edit = (next: string) => {
-    setValue(next);
-    writeDescriptionDraft(accountId, environment.id, next, current);
+  // No preselected target: a default nobody noticed would route requests to it.
+  const [environmentId, setEnvironmentId] = useState(rule?.id ?? "");
+  const [description, setDescription] = useState(rule?.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = description.trim();
+  const describe = (environment: SharedEnvironment) => {
+    const target = routingTarget(environment, shared);
+    return target.detail ? `${target.label} · ${target.detail}` : target.label;
   };
-  const save = useMutation({
-    mutationFn: (description: string | null) =>
-      saveSlackEnvironmentDescription(
-        orgId,
-        environment.id,
-        description,
-        new AbortController().signal
-      ),
-    onSuccess: async (saved) => {
-      clearDescriptionDraft(accountId, environment.id);
-      setValue(saved.description ?? "");
-      toast.success("Repository description saved");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.settings.environments.all });
-    },
-    onError: (error) =>
-      toast.error(error instanceof Error ? error.message : "Couldn't save description"),
-  });
-  const trimmed = value.trim();
-  const changed = trimmed !== current;
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ environmentId, description: trimmed });
+      toast.success(rule ? "Routing rule saved" : "Routing rule added");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the rule");
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="space-y-3 py-4">
-      <div>
-        <p className="text-text-primary text-sm font-medium">{environment.name}</p>
-        {environment.repo && <p className="text-text-muted mt-0.5 text-xs">{environment.repo}</p>}
-      </div>
-      <Textarea
-        aria-label={`${environment.name} Slack routing description`}
-        maxLength={1000}
-        placeholder="backend API, billing, database migrations"
-        value={value}
-        // Held while saving: the save's result replaces the text, so nothing typed meanwhile is lost.
-        readOnly={!canEdit || save.isPending}
-        onChange={(event) => edit(event.target.value)}
-      />
-      {canEdit && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => save.mutate(trimmed || null)}
-            disabled={!changed || value.length > 1000 || save.isPending}
-          >
-            {save.isPending ? "Saving…" : "Save"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              edit("");
-              save.mutate(null);
-            }}
-            disabled={!current || save.isPending}
-          >
-            Clear
-          </Button>
-        </div>
-      )}
-    </div>
+    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={(event) => void submit(event)} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>{rule ? "Edit routing rule" : "Add routing rule"}</DialogTitle>
+            <DialogDescription>
+              Deus works in the target repository when a Slack request matches the description.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="routing-rule-description">Description</Label>
+            <Textarea
+              id="routing-rule-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Requests about the backend API, billing or database migrations"
+              maxLength={1000}
+              disabled={saving}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="routing-rule-target">Target</Label>
+            {rule ? (
+              <p id="routing-rule-target" className="text-text-secondary text-sm">
+                {describe(rule)}
+              </p>
+            ) : (
+              <Select value={environmentId} onValueChange={setEnvironmentId} disabled={saving}>
+                <SelectTrigger id="routing-rule-target" className="w-full">
+                  <SelectValue placeholder="Choose a repository" />
+                </SelectTrigger>
+                <SelectContent>
+                  {choices.map((environment) => (
+                    <SelectItem key={environment.id} value={environment.id}>
+                      {describe(environment)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          {error && (
+            <p role="alert" className="text-destructive text-sm">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                !environmentId || !trimmed || trimmed === (rule?.description ?? "") || saving
+              }
+            >
+              {saving ? "Saving…" : rule ? "Save rule" : "Add rule"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
