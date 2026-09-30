@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { Button } from "@/components/ui/button";
@@ -205,79 +205,100 @@ function WorkspaceCard({ accountId, orgId }: { accountId: string; orgId: string 
       toast.error(error instanceof Error ? error.message : "Couldn't disconnect Slack"),
   });
 
+  const ready = !installations.isError && !installations.isPending && installations.data.configured;
+  const connected = ready ? installations.data.installations : [];
+  // The disconnect dialog opens from a plain button, so Radix has no trigger to return focus to.
+  const opener = useRef<HTMLElement | null>(null);
+
   return (
+    // Laid out like the routing rules: the action in the header, rows edge to edge below.
     <section
       aria-labelledby="slack-workspace-heading"
-      className="border-border-subtle space-y-4 rounded-xl border p-4"
+      className="border-border-subtle overflow-hidden rounded-xl border"
     >
-      <CardHeader
-        id="slack-workspace-heading"
-        title="Workspace"
-        description="Connect the Slack workspace where members mention Deus."
-        refreshing={installations.isFetching}
-        onRefresh={() => void installations.refetch()}
-      />
-      {installations.isError ? (
-        <SettingsError
-          message={installations.error.message}
-          retry={() => void installations.refetch()}
+      <div className="p-4">
+        <CardHeader
+          id="slack-workspace-heading"
+          title="Workspaces"
+          description="The Slack workspaces where members can mention Deus."
+          refreshing={installations.isFetching}
+          onRefresh={() => void installations.refetch()}
+          action={
+            ready ? (
+              <Button
+                size="sm"
+                onClick={() => connect.mutate(native.window.openExternalPending())}
+                disabled={connect.isPending}
+              >
+                {connect.isPending ? "Opening…" : "Connect workspace"}
+              </Button>
+            ) : null
+          }
         />
-      ) : installations.isPending ? (
-        <p role="status" className="text-text-muted text-sm">
-          Loading Slack workspace…
-        </p>
-      ) : !installations.data.configured ? (
-        <p className="text-text-muted text-sm">
-          Slack isn&apos;t set up for this Deus deployment yet.
-        </p>
-      ) : installations.data.installations.length === 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-text-muted text-sm">
-            You&apos;ll confirm in your browser, then approve Deus in Slack.
+        {installations.isError ? (
+          <div className="mt-4">
+            <SettingsError
+              message={installations.error.message}
+              retry={() => void installations.refetch()}
+            />
+          </div>
+        ) : installations.isPending ? (
+          <p role="status" className="text-text-muted mt-4 text-sm">
+            Loading Slack workspaces…
           </p>
-          <Button
-            size="sm"
-            onClick={() => connect.mutate(native.window.openExternalPending())}
-            disabled={connect.isPending}
-          >
-            {connect.isPending ? "Opening…" : "Connect Slack"}
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="divide-border-subtle divide-y">
-            {installations.data.installations.map((installation) => (
-              <div
+        ) : !installations.data.configured ? (
+          <p className="text-text-muted mt-4 text-sm">
+            Slack isn&apos;t set up for this Deus deployment yet.
+          </p>
+        ) : null}
+      </div>
+      {ready &&
+        (connected.length === 0 ? (
+          <p className="border-border-subtle text-text-muted border-t px-4 py-6 text-center text-sm">
+            No workspace connected yet. You&apos;ll confirm in your browser, then approve Deus in
+            Slack.
+          </p>
+        ) : (
+          <ul className="border-border-subtle divide-border-subtle divide-y border-t">
+            {connected.map((installation) => (
+              <li
                 key={installation.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3"
+                className="flex items-center justify-between gap-3 px-4 py-2.5"
               >
                 <div className="min-w-0">
-                  <p className="text-text-primary truncate text-sm font-medium">
-                    {installation.teamName}
-                  </p>
-                  <p className="text-text-muted mt-0.5 text-xs">
+                  <p className="text-text-primary truncate text-sm">{installation.teamName}</p>
+                  <p className="text-text-muted mt-0.5 truncate text-xs">
                     Connected by {installation.installedBy?.name ?? "Unknown"} ·{" "}
                     {dateFormatter.format(new Date(installation.createdAt))}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setDisconnecting(installation)}>
-                  Disconnect
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-text-muted hover:text-destructive shrink-0"
+                  aria-label={`Disconnect ${installation.teamName}`}
+                  title={`Disconnect ${installation.teamName}`}
+                  onClick={(event) => {
+                    opener.current = event.currentTarget;
+                    setDisconnecting(installation);
+                  }}
+                >
+                  <Unplug className="size-3.5" />
                 </Button>
-              </div>
+              </li>
             ))}
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => connect.mutate(native.window.openExternalPending())}
-            disabled={connect.isPending}
-          >
-            {connect.isPending ? "Opening…" : "Connect another workspace"}
-          </Button>
-        </div>
-      )}
+          </ul>
+        ))}
       <Dialog open={!!disconnecting} onOpenChange={(open) => !open && setDisconnecting(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="sm:max-w-md"
+          onCloseAutoFocus={(event) => {
+            // After a disconnect the row is gone; there is nothing to return to.
+            if (!opener.current?.isConnected) return;
+            event.preventDefault();
+            opener.current.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Disconnect {disconnecting?.teamName}?</DialogTitle>
             <DialogDescription>

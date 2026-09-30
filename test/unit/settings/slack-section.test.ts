@@ -153,8 +153,8 @@ it("shows the connect action when Slack is configured but not installed", () => 
     installations: [],
   });
   const html = render();
-  expect(html).toContain("Connect Slack");
-  expect(html).toContain("You&#x27;ll confirm in your browser");
+  expect(html).toContain(">Connect workspace</button>");
+  expect(html).toContain("No workspace connected yet. You&#x27;ll confirm in your browser");
 });
 
 it("shows installed workspaces with disconnect actions", () => {
@@ -172,7 +172,8 @@ it("shows installed workspaces with disconnect actions", () => {
   });
   const html = render();
   expect(html).toContain("Acme Slack");
-  expect(html).toContain("Disconnect");
+  expect(html).toContain('aria-label="Disconnect Acme Slack"');
+  expect(html).toContain(">Connect workspace</button>");
 });
 
 it("shows a shared Claude account", () => {
