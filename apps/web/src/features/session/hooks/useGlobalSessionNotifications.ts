@@ -56,6 +56,9 @@ function navigateToWorkspace(workspaceId: string, sessionId: string): void {
   unreadActions.markRead(sessionId);
   showWindow();
   useWorkspaceStore.getState().selectWorkspace(workspaceId);
+  // Mirror the unread-clearing side effect of MainLayout.handleWorkspaceClick /
+  // ChatArea.handleTabChangeWithRead: navigating to a session marks it read.
+  unreadActions.markRead(sessionId);
   // Only update chat tabs if workspace has existing layout state.
   // Stale notification clicks (workspace archived) skip this to avoid orphaned entries.
   const existing = useWorkspaceLayoutStore.getState().layouts[workspaceId];
