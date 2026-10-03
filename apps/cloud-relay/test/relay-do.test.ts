@@ -3,7 +3,6 @@ import {
   createTestDO,
   createMockWebSocket,
   registerServer,
-  connectAndAuthClient,
   getSentMessages,
   getLastSent,
   type MockDOState,
