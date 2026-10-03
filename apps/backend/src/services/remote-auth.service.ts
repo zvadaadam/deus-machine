@@ -493,6 +493,22 @@ export function listDevices(): Omit<PairedDevice, "token_hash">[] {
   return rows;
 }
 
+/**
+ * Get a single paired device by id (token_hash excluded). Returns null if not found.
+ * Used to scope the pairedDevices request to the caller's own device for relay
+ * clients, so an authenticated remote paired device cannot discover other
+ * paired devices' ids.
+ */
+export function getDeviceById(id: string): Omit<PairedDevice, "token_hash"> | null {
+  const db = getDatabase();
+  const row = db
+    .prepare(
+      "SELECT id, name, ip_address, user_agent, last_seen_at, created_at FROM paired_devices WHERE id = ?"
+    )
+    .get(id) as Omit<PairedDevice, "token_hash"> | undefined;
+  return row ?? null;
+}
+
 /** Revoke (delete) a paired device by id. Returns true if a row was deleted. */
 export function revokeDevice(id: string): boolean {
   const db = getDatabase();
