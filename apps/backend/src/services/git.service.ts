@@ -130,6 +130,11 @@ export function resolveWorkspaceRelativePath(
 ): string | null {
   if (!filePath || typeof filePath !== "string") return null;
   if (filePath.includes("\0")) return null;
+  // An empty root silently degrades containment to process.cwd() (path.resolve("")
+  // and fs.realpathSync("") both bottom out at cwd instead of throwing), so
+  // refuse it here. Cloud workspaces pass an empty workspacePath through
+  // withWorkspace; local-FS consumers must not treat "" as a valid root.
+  if (!workspacePath) return null;
 
   const normalized = path.normalize(filePath);
   if (path.isAbsolute(normalized)) return null;
