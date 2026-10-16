@@ -1,5 +1,11 @@
 import { vi, afterEach } from "vitest";
 
+vi.mock("@sentry/node", () => ({
+  captureException: vi.fn(),
+  close: vi.fn(() => Promise.resolve()),
+  init: vi.fn(),
+}));
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
