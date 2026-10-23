@@ -83,6 +83,19 @@ check(
   "bun run setup"
 );
 
+// Electron's postinstall downloads the binary and writes path.txt last. An
+// install interrupted mid-download leaves a partial dist/ that Bun treats as
+// done, and `bun run dev` then fails with "Electron uninstall".
+check(
+  "required",
+  "Electron binary downloaded",
+  existsSync(join(rootDir, "node_modules", "electron", "path.txt")),
+  existsSync(join(rootDir, "node_modules", "electron", "path.txt"))
+    ? "present"
+    : "missing (interrupted install)",
+  "node node_modules/electron/install.js"
+);
+
 // ── Optional ────────────────────────────────────────────────────────────
 if (process.platform === "darwin") {
   const developerDir = out("xcode-select", ["-p"]) ?? "";

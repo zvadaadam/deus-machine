@@ -183,7 +183,9 @@ app.post("/repos", async (c) => {
     inspectedRepo.defaultBranch,
     inspectedRepo.originUrl
   );
-  invalidate(["stats"] as QueryResource[]);
+  // "workspaces" carries every repository summary (the sidebar's project
+  // list), so other connected clients only see the new repo through it.
+  invalidate(["workspaces", "stats"] as QueryResource[]);
   return c.json(repo, 201);
 });
 
