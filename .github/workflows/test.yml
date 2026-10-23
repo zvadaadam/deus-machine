@@ -50,7 +50,11 @@ jobs:
         run: cd apps/cloud-relay && bun install --frozen-lockfile && bunx tsc --noEmit && bunx vitest run
 
       - name: Test (screen-studio)
-        run: bun run test:screen-studio
+        # The renderer and pipeline tests encode real video.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          bun run test:screen-studio
 
   runtime-macos:
     name: Native Runtime Smoke (macOS)
