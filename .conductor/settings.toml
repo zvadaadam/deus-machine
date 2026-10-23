@@ -1,0 +1,21 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "bun run setup"
+# Every workspace shares one SQLite database (see DEVELOPMENT.md), so only one
+# dev stack should run at a time.
+run_mode = "nonconcurrent"
+
+[scripts.run.web]
+command = "bun run dev:web"
+default = true
+icon = "globe"
+
+[scripts.run.desktop]
+available_in = [ "local" ]
+command = "bun run dev"
+icon = "monitor"
+
+[scripts.run.test]
+command = "bun run test"
+icon = "test-tube"

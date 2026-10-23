@@ -89,7 +89,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install relay dependencies
         run: cd apps/cloud-relay && bun install --frozen-lockfile
@@ -129,7 +129,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -171,7 +171,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install landing dependencies
         run: cd apps/landing && bun install --frozen-lockfile

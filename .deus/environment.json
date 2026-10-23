@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "setup": "bun install --frozen-lockfile",
+  "setup": "bun run setup",
   "run": "bun run dev:web",
   "env": {
     "NODE_ENV": "development"

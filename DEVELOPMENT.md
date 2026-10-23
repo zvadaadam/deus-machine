@@ -1,5 +1,31 @@
 # Development Guide
 
+## Machine Setup
+
+```bash
+bun run setup    # root + apps/cloud-relay + apps/landing dependencies
+bun run doctor   # verifies the toolchain below
+```
+
+| Tool                     | Needed for                                                | Notes                                                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node 22.x                | everything                                                | Pinned in `.node-version`. Newer majors (Homebrew's default `node`) fail to compile `better-sqlite3`. Use `brew install node@22 && brew link --overwrite --force node@22`, or fnm/mise. |
+| Bun                      | everything                                                | CI pins the version in `package.json` `packageManager`. A newer local Bun works; don't commit lockfile rewrites.                                                                        |
+| Xcode Command Line Tools | native modules                                            | `xcode-select --install`                                                                                                                                                                |
+| Full Xcode               | iOS simulator, `bun run build:all`, `bun run package:mac` | The simulator helpers are universal binaries; Command Line Tools cannot link the x86_64 slice. `bun install` skips them without Xcode.                                                  |
+| `jq`, `gh`               | `scripts/bump-version.sh`, releases                       |                                                                                                                                                                                         |
+| Developer ID certificate | signing locally                                           | Not needed normally: releases are signed and notarized in CI. See [docs/releases.md](docs/releases.md).                                                                                 |
+
+`apps/cloud-relay` and `apps/landing` are standalone packages with their own lockfiles, so a plain
+root `bun install` does not cover them and `bun run typecheck:all` fails until `bun run setup` has run.
+
+The dev backend opens the same database as the installed app
+(`~/Library/Application Support/com.deus.app/deus.db`), shared by every checkout. Set
+`DATABASE_PATH=/some/other/deus.db` before `bun run dev` / `bun run dev:web` to isolate a branch
+that changes the schema.
+
+---
+
 ## Quick Start
 
 ### Desktop App Development
@@ -48,7 +74,7 @@ bun run dev
 ### Web Development
 
 ```
-bun run dev:web (./scripts/dev.sh)
+bun run dev:web (scripts/runtime/dev.ts)
   ├─> Starts backend with PORT=0
   │   └─> Captures port from log: [BACKEND_PORT]51176
   └─> Starts Vite with VITE_BACKEND_PORT=51176
@@ -170,5 +196,5 @@ bun run dev
 
 ### Vite not hot-reloading
 
-**Cause:** Vite wasn't started by electron-vite/dev.sh
+**Cause:** Vite wasn't started by electron-vite or `bun run dev:web`
 **Fix:** Stop everything, use `bun run dev`

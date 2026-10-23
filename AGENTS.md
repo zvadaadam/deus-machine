@@ -15,11 +15,13 @@ Electron desktop app + React frontend + Node.js backend. Monorepo under `apps/`.
 ## Running the App
 
 ```bash
-bun run dev:web   # Web: backend + frontend (dev.sh)
+bun run dev:web   # Web: backend + frontend (scripts/runtime/dev.ts)
 bun run dev       # Desktop: Vite + backend + Electron
 ```
 
 Never run `bun run dev:frontend` alone — it skips the backend.
+
+New machine or broken toolchain? `bun run doctor` checks Node (22.x, see `.node-version`), Bun, Xcode and the rest; `bun run setup` installs the root, `apps/cloud-relay` and `apps/landing` dependencies.
 
 - Frontend: http://localhost:1420 (Vite auto-increments if taken)
 - Backend: dynamic port (check terminal output)
@@ -43,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and `[AgentService] Connected, agents: [claude, codex-sdk, codex-server]` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and `[AgentService] Connected, agents: [claude-code, codex-sdk, codex-app-server]` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 
@@ -85,7 +87,7 @@ The agent-server runs on the upstream **[`@zvada/agent-server`](https://github.c
 When debugging agent-server behavior (event shapes, turn admission, cancel semantics, resume, provisioning), **read the package source — you have full access**:
 
 - `node_modules/@zvada/agent-server/src/` — the package ships readable TypeScript source, not compiled JS. This is the fastest reference and always matches the installed version.
-- Local clone at `~/Developer/agent/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
+- Local clone at `~/Developer/agent-server` (Conductor-managed; work lives on branches/origin, the main checkout is a stale empty worktree) and https://github.com/zvadaadam/agent-server for history, DESIGN.md, and plans/.
 - Engine bugs belong upstream (branch + PR there, then bump the pin here); deus consumes the engine protocol natively (no translate layer) — consumer-side behavior lives in the backend's `services/agent/` fold-and-persist path and the frontend's `agentEventFold` projection.
 
 ### WebSocket Query Protocol

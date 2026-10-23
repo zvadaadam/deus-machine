@@ -4,15 +4,17 @@ Thanks for your interest in contributing to Deus! This document covers everythin
 
 ## Prerequisites
 
-- **Node.js** 22+
+- **Node.js** 22.x exactly (see `.node-version`; newer majors fail to compile native modules)
 - **Bun** 1.2+ (package manager — never use npm or yarn)
+- **Xcode Command Line Tools** on macOS; full Xcode only for the iOS simulator and local packaging
 
 ## Setup
 
 ```bash
 git clone https://github.com/zvadaadam/deus-machine.git
 cd deus-machine
-bun install
+bun run setup
+bun run doctor
 ```
 
 ## Development

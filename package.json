@@ -10,12 +10,17 @@
   },
   "repository": "github:zvadaadam/deus-machine",
   "packageManager": "bun@1.2.19",
+  "engines": {
+    "node": "22.x"
+  },
   "type": "module",
   "main": "./out/main/index.js",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
+    "setup": "bun install --frozen-lockfile && (cd apps/cloud-relay && bun install --frozen-lockfile) && (cd apps/landing && bun install --frozen-lockfile)",
+    "doctor": "node scripts/doctor.mjs",
     "dev": "bun run native:electron && bun scripts/runtime/prepare-dev-agent-clis.ts && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
     "dev:cloud-local": "DEUS_CLOUD_ENV=local bun run dev",
     "dev:web": "bun run native:node && bun scripts/runtime/prepare-dev-agent-clis.ts && bun scripts/runtime/dev.ts",
@@ -62,7 +67,7 @@
     "test:agent-server:unit": "node node_modules/vitest/vitest.mjs run --config apps/agent-server/vitest.config.ts --exclude '**/e2e.test.ts'",
     "test:agent-server:e2e": "node node_modules/vitest/vitest.mjs run --config apps/agent-server/vitest.config.ts test/e2e.test.ts",
     "test:agent-server:watch": "node node_modules/vitest/vitest.mjs --config apps/agent-server/vitest.config.ts",
-    "test:screen-studio": "node node_modules/vitest/vitest.mjs run --config packages/screen-studio/vitest.config.ts",
+    "test:screen-studio": "node node_modules/vitest/vitest.mjs run --root packages/screen-studio",
     "typecheck": "bun node_modules/typescript/bin/tsc -b",
     "typecheck:backend": "bun node_modules/typescript/bin/tsc --noEmit --project apps/backend/tsconfig.json",
     "typecheck:agent-server": "bun node_modules/typescript/bin/tsc --noEmit --project apps/agent-server/tsconfig.json",

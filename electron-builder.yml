@@ -10,6 +10,8 @@ afterPack: "scripts/runtime/electron-builder-after-pack.cjs"
 afterSign: "scripts/verify-packaged-agent-clis.cjs"
 files:
   - "out/**/*"
+  # Renderer/main source maps are "hidden" (unreferenced); shipping them only adds size.
+  - "!out/**/*.map"
   - "resources/**/*"
   - "!apps/**/*"
   - "!node_modules/device-use/native/.build/**"

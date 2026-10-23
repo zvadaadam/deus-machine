@@ -20,17 +20,14 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Lint (ESLint)
-        # TODO: eslint-plugin-react-hooks v7 added React Compiler rules that
-        # report 19 false positives as errors (refs-in-render, setState-in-effect).
-        # These cannot be downgraded to warnings in v7. Once the component patterns
-        # are updated or we pin to v5, remove "|| true" to make lint blocking.
-        run: bun run lint || true
+        # Errors block; the existing warnings do not.
+        run: bun run lint
 
       - name: Dead code check (Knip)
         # Non-blocking while we clean up existing unused files/exports.
@@ -52,6 +49,9 @@ jobs:
       - name: Typecheck & test (cloud-relay)
         run: cd apps/cloud-relay && bun install --frozen-lockfile && bunx tsc --noEmit && bunx vitest run
 
+      - name: Test (screen-studio)
+        run: bun run test:screen-studio
+
   runtime-macos:
     name: Native Runtime Smoke (macOS)
     runs-on: macos-14
@@ -62,15 +62,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Test device-use
+        run: cd packages/device-use && bun test
 
       - name: Build staged native runtime
         run: bun run build:runtime
@@ -147,12 +150,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -199,12 +202,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -239,12 +242,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -267,12 +270,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version-file: package.json
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

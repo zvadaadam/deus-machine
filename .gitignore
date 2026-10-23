@@ -18,7 +18,7 @@ electron.vite.config.d.ts
 # TypeScript build info
 *.tsbuildinfo
 
-# Agent-server build artifact (built via `bun run build:sidecar`)
+# Agent-server build artifact (built via `bun run build:agent-server`)
 apps/agent-server/dist/
 
 # CLI build artifacts
@@ -73,7 +73,7 @@ tmp/
 temp/
 *.tmp
 
-# Generated device chrome assets (built via `bun run prepare:device-chrome`)
+# Generated device chrome assets
 apps/web/public/device-chrome/
 
 # AI tools — session logs, transcripts, agent memory
