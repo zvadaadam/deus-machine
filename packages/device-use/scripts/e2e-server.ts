@@ -231,8 +231,11 @@ async function run(): Promise<void> {
 
   // ---- Step 3: list + pin simulator -------------------------------------
   log("\nSTEP 3 · list + pin simulator");
+  // simctl answers slowly right after a CI runner boots a simulator.
   const listDev = await invoke<{ devices: Array<{ udid: string; name: string; state: string }> }>(
-    "list_devices"
+    "list_devices",
+    {},
+    { timeoutMs: 120_000 }
   );
   // Honor $E2E_SIM_UDID when set (CI); else prefer a booted iPhone; else
   // any iPhone. Excludes leftover test-pool names (e.g. "radon-…").
