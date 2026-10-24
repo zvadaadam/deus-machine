@@ -299,10 +299,23 @@ async function run(): Promise<void> {
   // ---- Step 7: wait for UI, snapshot ------------------------------------
   await sleep(1500); // let the app draw
   log("\nSTEP 7 · snapshot");
-  const snap = await invoke<{
+  type Snapshot = {
     counts: { total: number; interactive: number };
     refs: Array<{ ref: string; label?: string; type?: string }>;
-  }>("snapshot", { format: "compact", interactiveOnly: true });
+  };
+  // A just-launched app can take a while to become frontmost on a CI runner;
+  // retry only that condition, for up to ~30s.
+  let snap: Snapshot | undefined;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      snap = await invoke<Snapshot>("snapshot", { format: "compact", interactiveOnly: true });
+      break;
+    } catch (error) {
+      const notFrontmost = error instanceof TestError && error.message.includes("frontmost");
+      if (!notFrontmost || attempt >= 15) throw error;
+      await sleep(2000);
+    }
+  }
   log("  counts", JSON.stringify(snap.counts));
   log("  refs", String(snap.refs.length));
   if (snap.refs.length === 0) fail("snapshot-refs", "no interactive refs");
