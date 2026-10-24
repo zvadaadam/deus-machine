@@ -109,6 +109,21 @@ function swiftAvailable() {
   }
 }
 
+// The helpers are universal (arm64 + x86_64). Command Line Tools ship arm64-only
+// Swift compatibility libraries, so the x86_64 link only succeeds with full Xcode.
+function fullXcodeSelected() {
+  try {
+    const developerDir = execFileSync("xcode-select", ["-p"], { encoding: "utf8" }).trim();
+    return developerDir.includes(".app/");
+  } catch {
+    return false;
+  }
+}
+
+const XCODE_HINT =
+  "full Xcode is required to build the simulator helpers (Command Line Tools cannot link the x86_64 slice). " +
+  "Install Xcode, then: sudo xcode-select -s /Applications/Xcode.app";
+
 function helperReady(filePath) {
   return existsSync(filePath) && hasRequiredMacArchitectures(filePath);
 }
@@ -120,6 +135,10 @@ if (force && process.platform === "darwin") {
     log(
       "Swift not found (install Xcode CLT: xcode-select --install). Cannot force-refresh native helpers."
     );
+    process.exit(1);
+  }
+  if (!fullXcodeSelected()) {
+    log(`${XCODE_HINT}. Cannot force-refresh native helpers.`);
     process.exit(1);
   }
   log("rebuilding native simulator helpers...");
@@ -139,6 +158,10 @@ if (force && process.platform === "darwin") {
   } else if (!swiftAvailable()) {
     log(
       "Swift not found (install Xcode CLT: xcode-select --install). Using any existing staged helpers."
+    );
+  } else if (!fullXcodeSelected()) {
+    log(
+      `skipping native simulator helpers: ${XCODE_HINT}. The iOS simulator is unavailable until then.`
     );
   } else {
     log("building native simulator helpers...");

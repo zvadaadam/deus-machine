@@ -53,7 +53,7 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForHealth(timeoutMs = 20_000): Promise<void> {
+async function waitForHealth(timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -231,8 +231,11 @@ async function run(): Promise<void> {
 
   // ---- Step 3: list + pin simulator -------------------------------------
   log("\nSTEP 3 · list + pin simulator");
+  // simctl answers slowly right after a CI runner boots a simulator.
   const listDev = await invoke<{ devices: Array<{ udid: string; name: string; state: string }> }>(
-    "list_devices"
+    "list_devices",
+    {},
+    { timeoutMs: 120_000 }
   );
   // Honor $E2E_SIM_UDID when set (CI); else prefer a booted iPhone; else
   // any iPhone. Excludes leftover test-pool names (e.g. "radon-…").
@@ -296,10 +299,26 @@ async function run(): Promise<void> {
   // ---- Step 7: wait for UI, snapshot ------------------------------------
   await sleep(1500); // let the app draw
   log("\nSTEP 7 · snapshot");
-  const snap = await invoke<{
+  type Snapshot = {
     counts: { total: number; interactive: number };
     refs: Array<{ ref: string; label?: string; type?: string }>;
-  }>("snapshot", { format: "compact", interactiveOnly: true });
+  };
+  // A just-launched app can take a while to become frontmost on a CI runner;
+  // retry only that condition, for up to ~30s.
+  let snap: Snapshot | undefined;
+  let snapshotRetries = 0;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      snap = await invoke<Snapshot>("snapshot", { format: "compact", interactiveOnly: true });
+      break;
+    } catch (error) {
+      const notFrontmost =
+        error instanceof TestError && error.message.includes("No frontmost application");
+      if (!notFrontmost || attempt >= 15) throw error;
+      snapshotRetries++;
+      await sleep(2000);
+    }
+  }
   log("  counts", JSON.stringify(snap.counts));
   log("  refs", String(snap.refs.length));
   if (snap.refs.length === 0) fail("snapshot-refs", "no interactive refs");
@@ -343,7 +362,9 @@ async function run(): Promise<void> {
     log(`  ${tool}`, `started=${started} completed=${completed} failed=${failed}`);
     if (started < 1) fail(`ws:${tool}:started`, `missing started event`);
     if (completed < 1) fail(`ws:${tool}:completed`, `missing completed event`);
-    if (failed > 0) fail(`ws:${tool}:failed`, `saw ${failed} failure(s)`);
+    // Snapshot attempts retried above each emit their own failed event.
+    const expectedFailures = tool === "snapshot" ? snapshotRetries : 0;
+    if (failed > expectedFailures) fail(`ws:${tool}:failed`, `saw ${failed} failure(s)`);
   }
 
   if (toolLogs.length === 0) fail("ws:tool-log", "expected at least one tool-log frame from build");

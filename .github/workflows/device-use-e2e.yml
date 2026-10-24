@@ -39,13 +39,10 @@ jobs:
           fi
           echo "Picked simulator: $UDID"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$UDID" || true
-          # Wait until the sim actually reports Booted, max ~30s.
-          for _ in $(seq 1 30); do
-            STATE=$(xcrun simctl list devices | grep "$UDID" | grep -oE '\((Booted|Booting|Shutdown)\)' | tr -d '()')
-            [ "$STATE" = "Booted" ] && break
-            sleep 1
-          done
+          # `bootstatus -b` boots if needed and blocks until the system has
+          # finished launching; "Booted" in `simctl list` only means the boot
+          # started.
+          xcrun simctl bootstatus "$UDID" -b
           xcrun simctl list devices | grep "$UDID"
 
       - name: Run e2e against the real sim

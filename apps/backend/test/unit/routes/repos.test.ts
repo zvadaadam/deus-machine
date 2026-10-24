@@ -137,7 +137,7 @@ describe("POST /repos", () => {
     const body = await res.json();
     expect(body.id).toBe("test-uuid-1234");
     expect(body.name).toBe("my-project");
-    expect(mockInvalidate).toHaveBeenCalledWith(["stats"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "stats"]);
   });
 
   it("returns 409 when repo already exists", async () => {

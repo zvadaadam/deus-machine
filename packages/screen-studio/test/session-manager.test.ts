@@ -7,13 +7,16 @@ vi.mock("../src/mcp/ffmpeg-recorder.js", async (importOriginal) => {
   return {
     ...orig,
     detectFfmpeg: vi.fn().mockResolvedValue("6.0"),
-    FfmpegRecorder: vi.fn().mockImplementation(() => ({
-      startCapture: vi.fn().mockResolvedValue(undefined),
-      stopCapture: vi.fn().mockResolvedValue("/tmp/raw-test.mp4"),
-      isCapturing: vi.fn().mockReturnValue(false),
-      cleanup: vi.fn().mockResolvedValue(undefined),
-      kill: vi.fn(),
-    })),
+    // `function`, not an arrow: SessionManager calls this with `new`.
+    FfmpegRecorder: vi.fn().mockImplementation(function () {
+      return {
+        startCapture: vi.fn().mockResolvedValue(undefined),
+        stopCapture: vi.fn().mockResolvedValue("/tmp/raw-test.mp4"),
+        isCapturing: vi.fn().mockReturnValue(false),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+        kill: vi.fn(),
+      };
+    }),
   };
 });
 

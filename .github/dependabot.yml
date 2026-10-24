@@ -1,0 +1,11 @@
+# Keeps the pinned GitHub Actions current. Package dependencies are bumped by
+# hand: several are version-locked to bundled CLIs (see docs/runtime-agent-cli-ownership.md).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
