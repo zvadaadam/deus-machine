@@ -306,6 +306,7 @@ async function run(): Promise<void> {
   // A just-launched app can take a while to become frontmost on a CI runner;
   // retry only that condition, for up to ~30s.
   let snap: Snapshot | undefined;
+  let snapshotRetries = 0;
   for (let attempt = 1; ; attempt++) {
     try {
       snap = await invoke<Snapshot>("snapshot", { format: "compact", interactiveOnly: true });
@@ -313,6 +314,7 @@ async function run(): Promise<void> {
     } catch (error) {
       const notFrontmost = error instanceof TestError && error.message.includes("frontmost");
       if (!notFrontmost || attempt >= 15) throw error;
+      snapshotRetries++;
       await sleep(2000);
     }
   }
@@ -359,7 +361,9 @@ async function run(): Promise<void> {
     log(`  ${tool}`, `started=${started} completed=${completed} failed=${failed}`);
     if (started < 1) fail(`ws:${tool}:started`, `missing started event`);
     if (completed < 1) fail(`ws:${tool}:completed`, `missing completed event`);
-    if (failed > 0) fail(`ws:${tool}:failed`, `saw ${failed} failure(s)`);
+    // Snapshot attempts retried above each emit their own failed event.
+    const expectedFailures = tool === "snapshot" ? snapshotRetries : 0;
+    if (failed > expectedFailures) fail(`ws:${tool}:failed`, `saw ${failed} failure(s)`);
   }
 
   if (toolLogs.length === 0) fail("ws:tool-log", "expected at least one tool-log frame from build");
