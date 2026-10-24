@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "setup": "bun install --frozen-lockfile && (cd apps/cloud-relay && bun install --frozen-lockfile) && (cd apps/landing && bun install --frozen-lockfile)",
-    "doctor": "node scripts/doctor.mjs",
+    "doctor": "bun scripts/doctor.mjs",
     "dev": "bun run native:electron && bun scripts/runtime/prepare-dev-agent-clis.ts && ([ -f apps/agent-server/dist/index.bundled.cjs ] || bun run build:agent-server) && electron-vite dev",
     "dev:cloud-local": "DEUS_CLOUD_ENV=local bun run dev",
     "dev:web": "bun run native:node && bun scripts/runtime/prepare-dev-agent-clis.ts && bun scripts/runtime/dev.ts",

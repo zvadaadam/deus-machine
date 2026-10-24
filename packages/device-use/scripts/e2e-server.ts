@@ -312,7 +312,8 @@ async function run(): Promise<void> {
       snap = await invoke<Snapshot>("snapshot", { format: "compact", interactiveOnly: true });
       break;
     } catch (error) {
-      const notFrontmost = error instanceof TestError && error.message.includes("frontmost");
+      const notFrontmost =
+        error instanceof TestError && error.message.includes("No frontmost application");
       if (!notFrontmost || attempt >= 15) throw error;
       snapshotRetries++;
       await sleep(2000);

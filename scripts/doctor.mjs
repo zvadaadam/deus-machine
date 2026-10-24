@@ -59,12 +59,18 @@ if (bunVersion && wantBun && bunVersion !== wantBun) {
   );
 }
 
+// On macOS, ask xcode-select first: calling the /usr/bin/clang shim without
+// the Command Line Tools opens the "install developer tools" dialog.
+const toolchain =
+  process.platform === "darwin"
+    ? out("xcode-select", ["-p"])
+    : (out("gcc", ["--version"]) ?? out("clang", ["--version"]))?.split("\n")[0];
 check(
   "required",
   "C/C++ toolchain",
-  Boolean(out("clang", ["--version"]) ?? out("gcc", ["--version"])),
-  out("xcode-select", ["-p"]) ?? "not found",
-  "xcode-select --install"
+  Boolean(toolchain),
+  toolchain ?? "not found",
+  process.platform === "darwin" ? "xcode-select --install" : "Install gcc/g++ and make."
 );
 
 check(
@@ -78,17 +84,21 @@ check(
 check(
   "required",
   "Dependencies installed",
-  existsSync(join(rootDir, "node_modules", "electron")),
-  existsSync(join(rootDir, "node_modules")) ? "node_modules present" : "node_modules missing",
+  existsSync(join(rootDir, "node_modules", "electron")) &&
+    existsSync(join(rootDir, "node_modules", "better-sqlite3")),
+  existsSync(join(rootDir, "node_modules", "electron"))
+    ? "node_modules present"
+    : "node_modules incomplete",
   "bun run setup"
 );
 
 // Electron's postinstall downloads the binary and writes path.txt last. An
 // install interrupted mid-download leaves a partial dist/ that Bun treats as
-// done, and `bun run dev` then fails with "Electron uninstall".
+// done, and `bun run dev` then fails with "Electron uninstall". Optional:
+// web-only and cloud setups (`bun run dev:web`) never need the binary.
 check(
-  "required",
-  "Electron binary downloaded",
+  "optional",
+  "Electron binary downloaded (bun run dev)",
   existsSync(join(rootDir, "node_modules", "electron", "path.txt")),
   existsSync(join(rootDir, "node_modules", "electron", "path.txt"))
     ? "present"
@@ -147,12 +157,13 @@ for (const app of ["cloud-relay", "landing"]) {
 
 check(
   "optional",
-  "Agent login (Claude or Codex)",
+  "Agent CLI or API key (Claude or Codex)",
   Boolean(out("claude", ["--version"]) ?? out("codex", ["--version"])) ||
     Boolean(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY),
   [out("claude", ["--version"]), out("codex", ["--version"])].filter(Boolean).join(", ") ||
-    "no CLI login or API key found",
-  "Sign in with `claude` / `codex`, or set ANTHROPIC_API_KEY / OPENAI_API_KEY (see .env.example)."
+    "no CLI or API key found",
+  "Install and sign in to `claude` / `codex`, or set ANTHROPIC_API_KEY / OPENAI_API_KEY (see .env.example). " +
+    "This checks the CLI is installed, not that it is signed in."
 );
 
 // ── Report ──────────────────────────────────────────────────────────────
