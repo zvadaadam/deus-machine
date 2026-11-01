@@ -145,7 +145,7 @@ jobs:
   # ── Step 2a: Build macOS (arm64 + x64), sign, notarize ─────────────
   build-macos:
     needs: validate-and-bump
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

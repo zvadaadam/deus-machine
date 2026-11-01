@@ -63,7 +63,7 @@ jobs:
 
   runtime-macos:
     name: Native Runtime Smoke (macOS)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
