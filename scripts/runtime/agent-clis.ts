@@ -18,14 +18,14 @@ import { get } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_PINS } from "@zvada/agent-server/core";
+import { runInstall } from "@zvada/agent-server/server";
 import { resolveRuntimeStagePaths } from "../../shared/runtime";
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const VERIFY_TIMEOUT_MS = 20_000;
 const VERIFY_STOP_TIMEOUT_MS = 5_000;
-// Keep in sync with apps/agent-server/agents/codex-server/codex-server-discovery.ts.
-const MIN_CODEX_APP_SERVER_VERSION = "0.128.0";
 const VERSION_CHECK_ENV_DENYLIST = [
   "AGENT_SERVER_CWD",
   "AGENT_SERVER_ENTRY",
@@ -78,9 +78,6 @@ interface AgentCliTarget {
     | "bin/agent-browser-darwin-arm64"
     | "bin/agent-browser-darwin-x64"
     | "bin/agent-browser-linux-x64";
-  codexAliasPackage: string;
-  codexTriple: string;
-  claudePackageName: string;
 }
 
 interface LockedPackage {
@@ -100,7 +97,8 @@ interface StagedAgentCli {
   source: {
     package: string;
     version: string;
-    integrity: string;
+    /** The lockfile's, for what Deus fetches itself; agent-server checks what it installs. */
+    integrity?: string;
     entry: string;
   };
   versionOutput?: string;
@@ -133,27 +131,18 @@ export const AGENT_CLI_TARGETS: readonly AgentCliTarget[] = [
     fileFormat: "Mach-O 64-bit executable",
     fileArch: "arm64",
     agentBrowserEntry: "bin/agent-browser-darwin-arm64",
-    codexAliasPackage: "@openai/codex-darwin-arm64",
-    codexTriple: "aarch64-apple-darwin",
-    claudePackageName: "@anthropic-ai/claude-agent-sdk-darwin-arm64",
   },
   {
     runtimeKey: "darwin-x64",
     fileFormat: "Mach-O 64-bit executable",
     fileArch: "x86_64",
     agentBrowserEntry: "bin/agent-browser-darwin-x64",
-    codexAliasPackage: "@openai/codex-darwin-x64",
-    codexTriple: "x86_64-apple-darwin",
-    claudePackageName: "@anthropic-ai/claude-agent-sdk-darwin-x64",
   },
   {
     runtimeKey: "linux-x64",
     fileFormat: "ELF 64-bit",
     fileArch: "x86-64",
     agentBrowserEntry: "bin/agent-browser-linux-x64",
-    codexAliasPackage: "@openai/codex-linux-x64",
-    codexTriple: "x86_64-unknown-linux-musl",
-    claudePackageName: "@anthropic-ai/claude-agent-sdk-linux-x64",
   },
 ] as const;
 
@@ -207,33 +196,6 @@ function readLockedPackage(projectRoot: string, lockKey: string): LockedPackage 
     version: parsed.version,
     integrity: match[2],
   };
-}
-
-function readSemver(version: string): string | null {
-  return version.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
-}
-
-function isVersionAtLeast(version: string | null, minimum: string): boolean {
-  if (!version) return false;
-  const currentParts = version.split(".").map(Number);
-  const minimumParts = minimum.split(".").map(Number);
-
-  for (let i = 0; i < minimumParts.length; i++) {
-    const current = currentParts[i] ?? 0;
-    const required = minimumParts[i] ?? 0;
-    if (current > required) return true;
-    if (current < required) return false;
-  }
-  return true;
-}
-
-function assertCodexAppServerCompatible(version: string, label: string): void {
-  const semver = readSemver(version);
-  if (isVersionAtLeast(semver, MIN_CODEX_APP_SERVER_VERSION)) return;
-
-  throw new Error(
-    `${label} requires @openai/codex >= ${MIN_CODEX_APP_SERVER_VERSION} for the codex app-server harness; found ${version}`
-  );
 }
 
 function nodeModulesPackagePath(projectRoot: string, packageName: string): string {
@@ -645,6 +607,42 @@ function assertManifestEntry(
   }
 }
 
+/**
+ * Claude Code and Codex for one target, as agent-server installs them: the
+ * builds its engine pins, each checked against its release table (Claude's
+ * binary also against Anthropic's signed manifest), and staged from there in
+ * Deus's flat layout.
+ */
+async function installEngineClis(
+  projectRoot: string,
+  runtimeKey: AgentCliTarget["runtimeKey"],
+  log: (line: string) => void
+): Promise<{
+  claude: { path: string; version: string };
+  codex: { root: string; version: string };
+}> {
+  // A build cache, outside dist/runtime, which a full build starts over.
+  const dir = path.join(projectRoot, "node_modules", ".cache", "agent-server-clis");
+  mkdirSync(dir, { recursive: true });
+  log(`Installing ${runtimeKey} claude and codex with agent-server`);
+  const results = await runInstall({
+    dir,
+    platforms: [runtimeKey],
+    harnesses: ["claude-code", "codex-app-server"],
+  });
+  const installed = (tool: "claude" | "codex") => {
+    const cli = results.find((result) => result.tool === tool)?.cli;
+    if (!cli?.version) throw new Error(`agent-server installed no ${tool} for ${runtimeKey}`);
+    return { path: cli.path, version: cli.version };
+  };
+  const codex = installed("codex");
+  return {
+    claude: installed("claude"),
+    // <dir>/codex/<version>-<platform>/bin/codex: the package's vendor tree.
+    codex: { root: path.dirname(path.dirname(codex.path)), version: codex.version },
+  };
+}
+
 export async function prepareAgentClis(
   options: PrepareAgentCliOptions = {}
 ): Promise<AgentCliManifest> {
@@ -663,109 +661,77 @@ export async function prepareAgentClis(
     );
     mkdirSync(targetDir, { recursive: true });
 
-    const lockedCodex = readLockedPackage(projectRoot, target.codexAliasPackage);
-    assertCodexAppServerCompatible(lockedCodex.version, target.runtimeKey);
-    const vendorEntry = path.join("vendor", target.codexTriple);
-    const codexPackage = await resolvePackageRoot(
-      projectRoot,
-      lockedCodex,
-      path.join(vendorEntry, "bin", "codex"),
-      log
-    );
-    try {
-      // Codex discovers its helper, shell and resources relative to the real
-      // executable. Keep the upstream package intact; flat CLI aliases are for PATH.
-      const payloadDir = path.join(targetDir, "codex-runtime");
-      rmSync(payloadDir, { recursive: true, force: true });
-      cpSync(path.join(codexPackage.packageRoot, vendorEntry), payloadDir, {
-        recursive: true,
-        mode: constants.COPYFILE_FICLONE,
-      });
-      for (const [alias, entry] of [
-        ["codex", "bin/codex"],
-        ["rg", "codex-path/rg"],
-      ]) {
-        const aliasPath = path.join(targetDir, alias);
-        rmSync(aliasPath, { force: true });
-        symlinkSync(`codex-runtime/${entry}`, aliasPath);
-      }
-      for (const tool of bundledTools(target.runtimeKey).filter(
-        (tool) => tool !== "claude" && tool !== "agent-browser"
-      )) {
-        const stagedPath = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, tool);
-        const entry =
-          tool === "codex"
-            ? "bin/codex"
-            : tool === "rg"
-              ? "codex-path/rg"
-              : tool.slice("codex-runtime/".length);
-        const record: StagedAgentCli = {
-          tool,
-          runtimeKey: target.runtimeKey,
-          path: relativeFromProjectRoot(projectRoot, stagedPath),
-          ...inspectStaticExecutable(
-            projectRoot,
-            stagedPath,
-            `${target.runtimeKey}/${tool}`,
-            target.fileFormat,
-            target.fileArch
-          ),
-          source: {
-            package: lockedCodex.packageName,
-            version: lockedCodex.version,
-            integrity: lockedCodex.integrity,
-            entry: path.join(vendorEntry, entry).split(path.sep).join("/"),
-          },
-        };
-        if (tool === "codex" && verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
-          record.versionOutput = await verifyStagedAgentCliVersionBounded("codex", stagedPath);
-        }
-        manifestTargets.push(record);
-      }
-      log(`✓ ${target.runtimeKey}/codex package staged from ${codexPackage.sourceDescription}`);
-    } finally {
-      codexPackage.cleanup();
-    }
+    const engine = await installEngineClis(projectRoot, target.runtimeKey, log);
 
-    const lockedClaude = readLockedPackage(projectRoot, target.claudePackageName);
-    const claudePackage = await resolvePackageRoot(projectRoot, lockedClaude, "claude", log);
-    try {
-      const stagedClaude = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "claude");
-      copyExecutable(path.join(claudePackage.packageRoot, "claude"), stagedClaude);
-      const claudeInspection = inspectStaticExecutable(
+    // Codex discovers its helper, shell and resources relative to the real
+    // executable. Keep the installed tree intact; flat CLI aliases are for PATH.
+    const payloadDir = path.join(targetDir, "codex-runtime");
+    rmSync(payloadDir, { recursive: true, force: true });
+    cpSync(engine.codex.root, payloadDir, { recursive: true, mode: constants.COPYFILE_FICLONE });
+    for (const [alias, entry] of [
+      ["codex", "bin/codex"],
+      ["rg", "codex-path/rg"],
+    ]) {
+      const aliasPath = path.join(targetDir, alias);
+      rmSync(aliasPath, { force: true });
+      symlinkSync(`codex-runtime/${entry}`, aliasPath);
+    }
+    for (const tool of bundledTools(target.runtimeKey).filter(
+      (tool) => tool !== "claude" && tool !== "agent-browser"
+    )) {
+      const stagedPath = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, tool);
+      const entry =
+        tool === "codex"
+          ? "bin/codex"
+          : tool === "rg"
+            ? "codex-path/rg"
+            : tool.slice("codex-runtime/".length);
+      const record: StagedAgentCli = {
+        tool,
+        runtimeKey: target.runtimeKey,
+        path: relativeFromProjectRoot(projectRoot, stagedPath),
+        ...inspectStaticExecutable(
+          projectRoot,
+          stagedPath,
+          `${target.runtimeKey}/${tool}`,
+          target.fileFormat,
+          target.fileArch
+        ),
+        source: { package: "@openai/codex", version: engine.codex.version, entry },
+      };
+      if (tool === "codex" && verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
+        record.versionOutput = await verifyStagedAgentCliVersionBounded("codex", stagedPath);
+      }
+      manifestTargets.push(record);
+    }
+    log(`✓ ${target.runtimeKey}/codex ${engine.codex.version} staged`);
+
+    const stagedClaude = resolveStagedAgentCliPath(projectRoot, target.runtimeKey, "claude");
+    copyExecutable(engine.claude.path, stagedClaude);
+    const claudeRecord: StagedAgentCli = {
+      tool: "claude",
+      runtimeKey: target.runtimeKey,
+      path: relativeFromProjectRoot(projectRoot, stagedClaude),
+      ...inspectStaticExecutable(
         projectRoot,
         stagedClaude,
         `${target.runtimeKey}/claude`,
         target.fileFormat,
         target.fileArch
-      );
-
-      const claudeRecord: StagedAgentCli = {
-        tool: "claude",
-        runtimeKey: target.runtimeKey,
-        path: relativeFromProjectRoot(projectRoot, stagedClaude),
-        ...claudeInspection,
-        source: {
-          package: lockedClaude.packageName,
-          version: lockedClaude.version,
-          integrity: lockedClaude.integrity,
-          entry: "claude",
-        },
-      };
-
-      if (verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
-        claudeRecord.versionOutput = await verifyStagedAgentCliVersionBounded(
-          "claude",
-          stagedClaude
-        );
-        log(`✓ ${target.runtimeKey}/claude ${claudeRecord.versionOutput}`);
-      } else {
-        log(`✓ ${target.runtimeKey}/claude staged from ${claudePackage.sourceDescription}`);
-      }
-      manifestTargets.push(claudeRecord);
-    } finally {
-      claudePackage.cleanup();
+      ),
+      source: {
+        package: "@anthropic-ai/claude-agent-sdk",
+        version: engine.claude.version,
+        entry: "claude",
+      },
+    };
+    if (verifyRunnable && shouldVerifyRuntimeKey(target.runtimeKey)) {
+      claudeRecord.versionOutput = await verifyStagedAgentCliVersionBounded("claude", stagedClaude);
+      log(`✓ ${target.runtimeKey}/claude ${claudeRecord.versionOutput}`);
+    } else {
+      log(`✓ ${target.runtimeKey}/claude ${engine.claude.version} staged`);
     }
+    manifestTargets.push(claudeRecord);
 
     const lockedAgentBrowser = readLockedPackage(projectRoot, "agent-browser");
     const agentBrowserPackage = await resolvePackageRoot(
@@ -889,7 +855,12 @@ export function validateStagedAgentClis(options: ValidateAgentCliOptions = {}): 
     if (!codexEntry) {
       throw new Error(`Agent CLI manifest is missing ${runtimeKey}/codex`);
     }
-    assertCodexAppServerCompatible(codexEntry.source.version, `${runtimeKey}/codex`);
+    // An override runs whatever it names: a stale bundle would not be caught at runtime.
+    if (codexEntry.source.version !== DEFAULT_PINS.codex) {
+      throw new Error(
+        `${runtimeKey}/codex is ${codexEntry.source.version}, but agent-server runs ${DEFAULT_PINS.codex}: stage the CLIs again`
+      );
+    }
 
     const tools = bundledTools(runtimeKey);
     for (const tool of tools) {

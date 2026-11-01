@@ -62,3 +62,16 @@ describe("edit guard path resolution", () => {
     expect(result?.behavior).toBe("deny");
   });
 });
+
+describe("what the user answers", () => {
+  it.each([
+    ["ExitPlanMode", { plan: "1. do it" }],
+    ["AskUserQuestion", { questions: [{ question: "Which?", options: [] }] }],
+  ])("leaves %s to the engine, which puts it to the user", async (toolName, input) => {
+    const result = await decideToolUse(toolName, input, {
+      sessionId: SID,
+      toolUseId: "tc",
+    } as never);
+    expect(result).toBeUndefined();
+  });
+});

@@ -2,15 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { OnboardingService } from "./onboarding.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 
-export function useCliCheck(toolName: string) {
-  return useQuery({
-    queryKey: ["onboarding", "cli-check", toolName],
-    queryFn: () => OnboardingService.checkCliTool(toolName),
-    staleTime: Infinity,
-    retry: false,
-  });
-}
-
 export function useStartGhAuthLogin() {
   const queryClient = useQueryClient();
 

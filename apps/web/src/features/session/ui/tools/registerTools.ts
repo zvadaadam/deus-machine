@@ -103,6 +103,8 @@ export function registerAllTools() {
   // Plan mode lifecycle tools
   toolRegistry.register("EnterPlanMode", EnterPlanModeToolRenderer);
   toolRegistry.register("ExitPlanMode", ExitPlanModeToolRenderer);
+  // Codex's plan: the engine's switch_mode part, `{ plan }` as Claude's.
+  toolRegistry.register("plan", ExitPlanModeToolRenderer);
 
   // Deus MCP — Browser automation tools
   toolRegistry.register("BrowserSnapshot", BrowserSnapshotToolRenderer);

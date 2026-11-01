@@ -228,7 +228,13 @@ describe("shared/events", () => {
       // Cloud simulator (hosted device)
       expect(COMMAND_NAMES).toContain("cloudSim:start");
       expect(COMMAND_NAMES).toContain("cloudSim:stop");
-      expect(COMMAND_NAMES).toHaveLength(34);
+      // The local agents' logins
+      expect(COMMAND_NAMES).toContain("agentSignIn");
+      expect(COMMAND_NAMES).toContain("agentLoginCode");
+      expect(COMMAND_NAMES).toContain("agentLoginCancel");
+      expect(COMMAND_NAMES).toContain("agentLogout");
+      expect(COMMAND_NAMES).toContain("agentPrepareClis");
+      expect(COMMAND_NAMES).toHaveLength(39);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -293,7 +299,9 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("cloud:simulator");
       expect(PROTOCOL_EVENTS).toContain("cloud:preview");
       expect(PROTOCOL_EVENTS).toContain("cloud:identity");
-      expect(PROTOCOL_EVENTS).toHaveLength(22);
+      expect(PROTOCOL_EVENTS).toContain("agent:auth");
+      expect(PROTOCOL_EVENTS).toContain("agent:cli");
+      expect(PROTOCOL_EVENTS).toHaveLength(24);
     });
 
     it("has no deus-dialect part/message event names left", () => {

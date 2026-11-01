@@ -15,7 +15,7 @@ import {
   claimSideChannel,
   wsLineTransport,
 } from "@shared/agent-side-channel";
-import { AgentServer } from "../upstream-server";
+import { AgentServer } from "@zvada/agent-server/server";
 import { bridgeWsConnection, observeEvents } from "../wire";
 import { HostRpc } from "../host-link";
 import { trackedSessions } from "../session-tracker";
@@ -25,15 +25,17 @@ const T = 1_700_000_000_000;
 /** Scripted engine: turn/start replays a fixed event sequence. */
 function fakeRuntime(script: (sessionId: string, turnId: string) => LifecycleEvent[]) {
   return {
-    harnesses: ["claude-code", "codex-sdk", "codex-app-server"],
+    harnesses: ["claude-code", "codex-app-server"],
     capabilities: () => ({
       multiTurn: true,
       sessionResume: true,
-      modelSwitch: "in-session",
+      modelSwitch: "in_session",
       thinkingLevels: true,
       images: true,
+      files: [],
       mcpServers: true,
       permissionRequests: false,
+      rejectionMessages: false,
     }),
     async run(
       request: { sessionId: string; turnId: string },
@@ -51,6 +53,12 @@ function fakeRuntime(script: (sessionId: string, turnId: string) => LifecycleEve
     },
     async closeSession() {},
     respondPermission: () => false,
+    async authStatus(harnesses: string[]) {
+      return harnesses.map((harness) => ({ harness, state: "signed_out", methods: [] }));
+    },
+    // The server tells every connection of CLI installs and login changes.
+    onCliProgress: () => () => {},
+    onAuthUpdated: () => () => {},
     async shutdown() {},
   } as never;
 }
@@ -95,7 +103,6 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
   let port: number;
   let wireServer: AgentServer;
   let client: AgentServerClient | null = null;
-  let sideChannel: SideChannelEndpoint | null = null;
   let clientWs: WebSocket | null = null;
 
   beforeEach(async () => {
@@ -121,7 +128,6 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
   afterEach(async () => {
     await client?.close();
     client = null;
-    sideChannel = null;
     clientWs?.close();
     clientWs = null;
     wss.close();
@@ -148,7 +154,6 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
         channel.onRequest(method, (params) => onToolRequest(method, params));
       }
     }
-    sideChannel = channel;
     channel.notify(SIDE_CHANNEL.hello, {});
 
     client = await AgentServerClient.attach(claimSideChannel(transport, channel));
@@ -158,14 +163,10 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     return client;
   }
 
-  it("handshakes and reports the three deus harnesses", async () => {
+  it("handshakes and reports the two deus harnesses", async () => {
     const c = await connectBackendStyle();
     const init = await c.initialize();
-    expect(Object.keys(init.harnesses).sort()).toEqual([
-      "claude-code",
-      "codex-app-server",
-      "codex-sdk",
-    ]);
+    expect(Object.keys(init.harnesses).sort()).toEqual(["claude-code", "codex-app-server"]);
     expect(init.server.name).toBe("test-agent-server");
   });
 
@@ -256,11 +257,13 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
       capabilities: () => ({
         multiTurn: true,
         sessionResume: true,
-        modelSwitch: "in-session",
+        modelSwitch: "in_session",
         thinkingLevels: true,
         images: true,
+        files: [],
         mcpServers: true,
         permissionRequests: false,
+        rejectionMessages: false,
       }),
       async run(
         request: { sessionId: string; turnId: string },
@@ -280,6 +283,8 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
       },
       async closeSession() {},
       respondPermission: () => false,
+      onCliProgress: () => () => {},
+      onAuthUpdated: () => () => {},
       async shutdown() {},
     } as never;
     const slowServer = new AgentServer(hangingRuntime, {});
@@ -330,14 +335,11 @@ describe("Integration: standard wire + deus side channel over a real WebSocket",
     expect(seen).toEqual([{ method: SIDE_CHANNEL.getDiff, params: { sessionId: "sess-1" } }]);
   });
 
-  it("answers deus/provider-auth on the side channel (codex → unsupported)", async () => {
-    await connectBackendStyle();
-    const result = await sideChannel!.request<{ error?: string }>(
-      SIDE_CHANNEL.providerAuth,
-      { agentHarness: "codex-sdk", cwd: "/tmp" },
-      5_000
-    );
-    expect(result).toMatchObject({ error: "unsupported" });
+  it("passes the engine's auth/* through the side-channel bridge", async () => {
+    const c = await connectBackendStyle();
+    await expect(c.authStatus({ harnesses: ["claude-code"] })).resolves.toEqual([
+      { harness: "claude-code", state: "signed_out", methods: [] },
+    ]);
   });
 
   it("side-channel frames never reach the upstream wire (and vice versa)", async () => {

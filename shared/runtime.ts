@@ -10,8 +10,6 @@ export const CLI_RUNTIME_DEPENDENCIES = [
   "@anthropic-ai/claude-agent-sdk",
   "@hono/node-server",
   "@napi-rs/canvas",
-  "@openai/codex",
-  "@openai/codex-sdk",
   "@sentry/node",
   "agent-browser",
   "better-sqlite3",

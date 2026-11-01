@@ -295,7 +295,7 @@ function applyEvent(
   if (!isUnknownEvent(event) && event.type === "message.part.delta") {
     if (!live) return;
     for (const change of changes) {
-      if (change.kind === "part-upserted") fold.dirtyMessages.add(change.messageId);
+      if (change.kind === "part_upserted") fold.dirtyMessages.add(change.messageId);
     }
     if (fold.dirtyMessages.size > 0) ctx.scheduleFlush();
     return;
@@ -315,12 +315,12 @@ function applyChanges(
 ): void {
   for (const change of changes) {
     switch (change.kind) {
-      case "message-upserted":
+      case "message_upserted":
         // Causally ordered before the part that forced the shell, so a row
         // always exists by the time its parts land.
         writeMessage(ctx.queryClient, sessionId, fold.state, change.messageId, { seed: live });
         break;
-      case "part-upserted":
+      case "part_upserted":
         // The folded message carries its parts, so the row write IS the part
         // write — no splicing a part into a copy of an array the state has.
         writeMessage(ctx.queryClient, sessionId, fold.state, change.messageId, { seed: false });
@@ -328,10 +328,10 @@ function applyChanges(
         // flush for this message.
         fold.dirtyMessages.delete(change.messageId);
         break;
-      case "turn-updated":
+      case "turn_updated":
         writeTurn(ctx.queryClient, sessionId, fold.state, change.turnId, providerCredentialSource);
         break;
-      case "compaction-upserted":
+      case "compaction_upserted":
         // Compactions live in a table of their own beside the message page.
         // Project the folded entity into that list so the direct lane (no
         // backend to page from) shows the "context compacted" divider; the Mac

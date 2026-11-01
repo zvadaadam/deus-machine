@@ -5,7 +5,8 @@ import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas
 import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { getCloudModelLists } from "../services/agent/cloud/models";
 import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
-import { checkAuth, isConnected, getAgents } from "../services/agent";
+import { getLocalAgents } from "../services/agent";
+import type { AgentAuthAnswer } from "@shared/agent-auth";
 import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
@@ -34,41 +35,17 @@ app.post("/settings", async (c) => {
   return c.json({ success: true, key, value });
 });
 
-// Check agent provider auth status (Claude / Codex)
+// Each local agent's CLI and login, and the sign-ins under way.
 app.get("/settings/agent-auth", async (c) => {
-  if (!isConnected()) {
-    return c.json({
-      agents: [],
-      claude: null,
-      codex: null,
-      error: "Agent server not connected",
-    });
-  }
-
-  // Only harnesses the engine actually registered appear in the handshake —
-  // presence IS availability, so there is no separate `initialized` flag.
-  const agents = getAgents();
-  const claudeInstalled = agents.some((a) => a.type === "claude-code");
-
-  const cwd = process.cwd();
-  const [claudeResult, codexResult] = await Promise.allSettled([
-    claudeInstalled ? checkAuth({ agentHarness: "claude-code", cwd }) : Promise.resolve(null),
-    // Auth introspection is a Claude-only feature today (the SDK exposes
-    // accountInfo); codex reports nothing to check.
-    Promise.resolve(null),
-  ]);
-
-  return c.json({
-    agents: agents.map((a) => ({ type: a.type, installed: true })),
-    claude:
-      claudeResult.status === "fulfilled"
-        ? claudeResult.value
-        : { error: String(claudeResult.reason) },
-    codex:
-      codexResult.status === "fulfilled"
-        ? codexResult.value
-        : { error: String(codexResult.reason) },
-  });
+  const answer: AgentAuthAnswer = await Promise.resolve()
+    .then(() => getLocalAgents().status())
+    .catch((err: unknown) => ({
+      auth: [],
+      clis: [],
+      logins: [],
+      error: err instanceof Error ? err.message : String(err),
+    }));
+  return c.json(answer);
 });
 
 // ── Cloud workspaces ────────────────────────────────────────────────

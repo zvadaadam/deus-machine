@@ -54,9 +54,9 @@ describe("the cloud lane's vocabulary", () => {
     expect(readCloudThinkingLevel("ultra")).toBe("ultra");
     expect(readCloudThinkingLevel("extreme")).toBeUndefined();
     expect(readCloudThinkingLevel(undefined)).toBeUndefined();
-    // The two lanes stay apart: on the engine deus embeds (0.3.8) a local turn
-    // cannot name `max`. Bumping it to one that can (0.3.14+) fails this on purpose.
-    expect(readThinkingLevel("max")).toBeUndefined();
+    // The engine deus embeds (0.3.19) names `max` and `ultra` too: a local
+    // turn reads them as the cloud lane does.
+    expect(readThinkingLevel("max")).toBe("max");
   });
 });
 

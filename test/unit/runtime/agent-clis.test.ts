@@ -35,6 +35,49 @@ vi.mock("node:child_process", async (importOriginal) => {
   };
 });
 
+// agent-server's installer, offline: the trees `install --dir` lays out, at the
+// versions the engine pins.
+vi.mock("@zvada/agent-server/server", async () => {
+  const { DEFAULT_PINS } = await import("@zvada/agent-server/core");
+  return {
+    runInstall: async ({ dir, platforms }: { dir: string; platforms: string[] }) => {
+      const [platform] = platforms;
+      const codex = path.join(dir, "codex", `${DEFAULT_PINS.codex}-${platform}`);
+      write(
+        path.join(codex, "codex-package.json"),
+        JSON.stringify({ layoutVersion: 1, entrypoint: "bin/codex" })
+      );
+      for (const entry of [
+        "bin/codex",
+        "bin/codex-code-mode-host",
+        "codex-path/rg",
+        "codex-resources/zsh/bin/zsh",
+        ...(platform?.startsWith("linux-") ? ["codex-resources/bwrap"] : []),
+      ]) {
+        write(path.join(codex, entry), entry, true);
+      }
+      const claude = path.join(dir, "claude", `${DEFAULT_PINS.claude}-${platform}`, "claude");
+      write(claude, "claude", true);
+      return [
+        {
+          tool: "claude",
+          platform,
+          cli: { path: claude, source: "cache", version: DEFAULT_PINS.claude },
+        },
+        {
+          tool: "codex",
+          platform,
+          cli: {
+            path: path.join(codex, "bin/codex"),
+            source: "cache",
+            version: DEFAULT_PINS.codex,
+          },
+        },
+      ];
+    },
+  };
+});
+
 const require = createRequire(import.meta.url);
 const { FileMatcher, copyFiles } = require("app-builder-lib/out/fileMatcher.js");
 const roots: string[] = [];
@@ -51,32 +94,11 @@ function write(file: string, content: string, executable = false) {
 async function stage(target: (typeof AGENT_CLI_TARGETS)[number]) {
   const root = mkdtempSync(path.join(os.tmpdir(), "deus-codex-package-"));
   roots.push(root);
-  const packages = [target.codexAliasPackage, target.claudePackageName, "agent-browser"];
+  // agent-browser is still staged from the lockfile; Codex and Claude come from agent-server.
   write(
     path.join(root, "bun.lock"),
-    packages.map((name) => `  "${name}": ["${name}@0.153.4", "", {}, "sha512-fixture"],`).join("\n")
+    `  "agent-browser": ["agent-browser@0.21.4", "", {}, "sha512-fixture"],`
   );
-  const vendor = path.join(
-    root,
-    "node_modules",
-    target.codexAliasPackage,
-    "vendor",
-    target.codexTriple
-  );
-  write(
-    path.join(vendor, "codex-package.json"),
-    JSON.stringify({ layoutVersion: 1, entrypoint: "bin/codex" })
-  );
-  for (const entry of [
-    "bin/codex",
-    "bin/codex-code-mode-host",
-    "codex-path/rg",
-    "codex-resources/zsh/bin/zsh",
-    ...(target.runtimeKey.startsWith("linux-") ? ["codex-resources/bwrap"] : []),
-  ]) {
-    write(path.join(vendor, entry), entry, true);
-  }
-  write(path.join(root, "node_modules", target.claudePackageName, "claude"), "claude", true);
   write(
     path.join(root, "node_modules", "agent-browser", target.agentBrowserEntry),
     "agent-browser",

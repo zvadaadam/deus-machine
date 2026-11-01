@@ -25,15 +25,6 @@ const REQUIRED_RUNTIME_IMPORTS = [
     },
   },
   {
-    name: "@openai/codex-sdk",
-    load: async () => {
-      const module = await import("@openai/codex-sdk");
-      if (typeof module.Codex !== "function") {
-        throw new Error("missing Codex export");
-      }
-    },
-  },
-  {
     name: "@hono/node-server",
     load: async () => {
       const module = await import("@hono/node-server");

@@ -3,9 +3,6 @@ import { native } from "@/platform";
 import type { RecentProject } from "../types";
 
 export const OnboardingService = {
-  /** Check if a CLI tool is installed. Returns safe default on failure or in web mode. */
-  checkCliTool: native.cli.checkCliTool,
-
   /** Start GitHub auth through the browser flow using the resolved gh executable. */
   startGhAuthLogin: native.cli.startGhAuthLogin,
 

@@ -1,37 +1,63 @@
 import { match } from "ts-pattern";
-import { useCliCheck } from "../../api";
 import { CliStatusRow } from "../components/CliStatusRow";
-import { useAgentAuth } from "@/features/settings/api/settings.queries";
-import { readLocalProviderAuth } from "@/features/settings/lib/local-provider-auth";
-import { openProviderLogin } from "@/features/settings/lib/open-provider-login";
+import { useAgentAuth, useAgentAuthEvents } from "@/features/settings/api/settings.queries";
+import {
+  canSignIn,
+  installLocalAgents,
+  readLocalAgent,
+  signInLocalAgent,
+  type LocalAgentState,
+} from "@/features/settings/lib/local-agent-login";
+import type { LocalHarness } from "@shared/agent-auth";
 
 interface AIToolsCheckStepProps {
   onNext: () => void;
   onBack: () => void;
 }
 
+/** What the row says under the agent's name. */
+function detailOf(state: LocalAgentState): string {
+  return match(state)
+    .with({ status: "checking" }, () => "Checking…")
+    .with({ status: "failed" }, () => "Couldn’t check account")
+    .with(
+      { status: "installing" },
+      ({ percent }) => `Installing${percent !== undefined ? ` · ${percent}%` : "…"}`
+    )
+    .with({ status: "not-installed" }, ({ error }) => error ?? "Not installed yet")
+    .with({ status: "signed-out" }, ({ login }) =>
+      login ? "Waiting for sign-in…" : "Sign in on this computer"
+    )
+    .with({ status: "signed-in" }, ({ account }) => account)
+    .exhaustive();
+}
+
 export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
-  const claudeCheck = useCliCheck("claude");
-  const codexCheck = useCliCheck("codex");
   const auth = useAgentAuth();
-  const claudeAuth = readLocalProviderAuth(auth, "claude");
+  useAgentAuthEvents();
 
-  const claudeInstalled = claudeCheck.isLoading ? null : (claudeCheck.data?.installed ?? false);
-  const codexInstalled = codexCheck.isLoading ? null : (codexCheck.data?.installed ?? false);
-
-  function claudeDetail(): string {
-    if (claudeCheck.data?.webMode) return "CLI checks require the desktop app";
-    if (claudeInstalled === null) return "Checking availability…";
-    if (!claudeInstalled) return "Unavailable · Restart Deus and check again";
-    return match(claudeAuth)
-      .with({ status: "checking" }, () => "Checking account…")
-      .with({ status: "failed" }, () => "Couldn’t check account")
-      .with({ status: "signed-out" }, () => "Sign in on this computer")
-      .with(
-        { status: "signed-in" },
-        ({ accountInfo }) => accountInfo.email ?? "Signed in on this computer"
-      )
-      .exhaustive();
+  /** Each agent as the engine has it: its CLI (installed by the engine), then its login. */
+  function row(harness: LocalHarness) {
+    const state = readLocalAgent(auth, harness);
+    const offerSignIn = state.status === "signed-out" && !state.login && canSignIn(state.auth);
+    const action = offerSignIn
+      ? { label: "Sign in", run: () => void signInLocalAgent(harness, state.auth) }
+      : state.status === "not-installed"
+        ? { label: state.error ? "Try again" : "Install", run: () => void installLocalAgents() }
+        : undefined;
+    return {
+      installed:
+        state.status === "checking" || state.status === "installing"
+          ? null
+          : state.status !== "not-installed",
+      detail: detailOf(state),
+      actionLabel: action?.label,
+      onAction: action?.run,
+      onRetry: () => void auth.refetch(),
+      showRetry: state.status === "failed" || state.status === "signed-out",
+      retryLabel: "Check again",
+      retryWhenUnavailable: false,
+    };
   }
 
   return (
@@ -48,39 +74,13 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
         <CliStatusRow
           name="Claude Code"
           description="Anthropic's coding agent"
-          installed={claudeInstalled}
-          detail={claudeDetail()}
-          actionLabel={
-            claudeInstalled && claudeAuth.status === "signed-out" ? "Sign in" : undefined
-          }
-          onAction={claudeInstalled ? () => void openProviderLogin("claude") : undefined}
-          onRetry={() => {
-            void claudeCheck.refetch();
-            void auth.refetch();
-          }}
-          showRetry={
-            claudeInstalled === true &&
-            (claudeAuth.status === "failed" || claudeAuth.status === "signed-out")
-          }
-          retryLabel="Check again"
+          {...row("claude-code")}
         />
 
         <CliStatusRow
           name="Codex"
           description="OpenAI's coding agent"
-          installed={codexInstalled}
-          detail={
-            codexCheck.data?.webMode
-              ? "CLI checks require the desktop app"
-              : codexInstalled === null
-                ? "Checking availability…"
-                : codexInstalled
-                  ? "Login managed by Codex"
-                  : "Unavailable · Restart Deus and check again"
-          }
-          actionLabel={codexInstalled ? "Sign in" : undefined}
-          onAction={codexInstalled ? () => void openProviderLogin("codex") : undefined}
-          onRetry={() => codexCheck.refetch()}
+          {...row("codex-app-server")}
         />
       </div>
 

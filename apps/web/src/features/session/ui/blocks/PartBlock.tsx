@@ -6,8 +6,9 @@ import type {
   ToolPart,
   ImagePart,
   FilePart,
+  SubagentPart,
 } from "@shared/protocol-types";
-import { Paperclip } from "lucide-react";
+import { Bot, Paperclip } from "lucide-react";
 import { TextBlock } from "./TextBlock";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { StreamingReasoningBlock } from "./StreamingReasoningBlock";
@@ -45,6 +46,13 @@ export function PartBlock({ part, isStreaming = false }: { part: Part; isStreami
         <div key={p.id} className="flex items-center gap-2 px-2 py-1 text-xs opacity-70">
           <Paperclip className="h-3 w-3" />
           <span>{p.filename ?? p.mimeType}</span>
+        </div>
+      ))
+      // A sub-agent the agent started (Codex): its work streams in its own thread.
+      .with({ type: "subagent" }, (p: SubagentPart) => (
+        <div key={p.id} className="flex items-center gap-2 px-2 py-1 text-xs opacity-70">
+          <Bot className="h-3 w-3" />
+          <span>Sub-agent {p.activity}</span>
         </div>
       ))
       .exhaustive()

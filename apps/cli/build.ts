@@ -35,7 +35,6 @@ async function main() {
       "ws",
       "@sentry/node",
       "@openai/codex",
-      "@openai/codex-sdk",
       "@napi-rs/canvas",
       "agent-browser",
     ],

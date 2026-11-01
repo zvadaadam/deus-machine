@@ -1,7 +1,7 @@
 const WebSocket = require("ws");
 
 // Engine harness names on the standard @zvada/agent-server wire.
-const DEFAULT_REQUIRED_HARNESSES = ["claude-code", "codex-sdk", "codex-app-server"];
+const DEFAULT_REQUIRED_HARNESSES = ["claude-code", "codex-app-server"];
 const JSON_RPC_TIMEOUT_MS = 5_000;
 
 function requestJsonRpc(listenUrl, method, params) {

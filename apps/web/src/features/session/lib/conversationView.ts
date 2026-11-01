@@ -61,6 +61,7 @@ export function conversationView(messages: Message[], working: boolean): Convers
             },
           ],
     permissions: [],
+    elicitations: [],
     totals: { input: 0, output: 0 },
     errors: [],
     unknownEvents: [],

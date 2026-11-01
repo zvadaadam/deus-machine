@@ -3,7 +3,7 @@
 // @zvada/agent-server wire: AgentServerClient (typed quick-ack turns,
 // per-session seq dedupe, gap healing via events/replay, reconnect) over a
 // WebSocket transport, with the deus/* side channel multiplexed on the same
-// pipe (tool round-trips, AAP MCP hot-swap, provider auth, titles — see
+// pipe (tool round-trips, AAP MCP hot-swap, titles — see
 // shared/agent-side-channel.ts).
 
 import { WebSocket } from "ws";
@@ -22,7 +22,7 @@ import {
   type LineTransport,
   type SideChannelTitle,
 } from "@shared/agent-side-channel";
-import { AgentHarnessSchema, type AgentHarness } from "@shared/enums";
+import { AgentHarnessSchema } from "@shared/enums";
 import type { AgentInfo } from "@shared/agent-info";
 
 // ============================================================================
@@ -42,7 +42,7 @@ export interface AgentLinkOptions {
   onConnected?: (agents: AgentInfo[]) => void;
   onDisconnected?: () => void;
   /** Tool round-trips from the agent's in-process deus MCP suite. The method
-   *  arrives un-prefixed (exitPlanMode, getDiff, aap/list-apps, …). */
+   *  arrives un-prefixed (getDiff, aap/list-apps, …). */
   onToolRequest: (method: string, params: Record<string, unknown>) => Promise<unknown>;
   /** Session title pushed by the agent-server (claude SDK auto-summary). */
   onTitle: (payload: SideChannelTitle) => void;
@@ -50,8 +50,6 @@ export interface AgentLinkOptions {
 
 /** Side-channel methods that dispatch into onToolRequest, keyed by wire name. */
 const TOOL_REQUEST_METHODS: Record<string, string> = {
-  [SIDE_CHANNEL.exitPlanMode]: "exitPlanMode",
-  [SIDE_CHANNEL.askUserQuestion]: "askUserQuestion",
   [SIDE_CHANNEL.getDiff]: "getDiff",
   [SIDE_CHANNEL.diffComment]: "diffComment",
   [SIDE_CHANNEL.getTerminalOutput]: "getTerminalOutput",
@@ -96,6 +94,10 @@ export class AgentLink {
       if (options.onEventGap) client.onEventGap(options.onEventGap);
       const init = await client.initialize();
       link.agents = toAgentInfos(init);
+      // The backend is this agent-server's only client: it hears every
+      // session, not only while a turn it started runs (wire protocol 6), and
+      // the client subscribes again after a redial.
+      await client.subscribeAll();
     } catch (err) {
       // A failed handshake must not leak a dialing client (its reconnect loop
       // would keep the dead link alive) — the caller retries from scratch.
@@ -167,15 +169,12 @@ export class AgentLink {
     return this.requireClient().cancelTurn(sessionId, turnId);
   }
 
-  // ---- Side channel (backend → agent-server) ----
-
-  async providerAuth(params: { agentHarness: AgentHarness; cwd: string }): Promise<unknown> {
-    return this.requireSideChannel().request(
-      SIDE_CHANNEL.providerAuth,
-      params,
-      SIDE_CHANNEL_REQUEST_TIMEOUT_MS
-    );
+  /** The engine's own client, for what the standard wire carries beyond turns (logins). */
+  get engine(): AgentServerClient {
+    return this.requireClient();
   }
+
+  // ---- Side channel (backend → agent-server) ----
 
   async aapRegisterMcp(serverName: string, url: string): Promise<void> {
     await this.requireSideChannel().request(

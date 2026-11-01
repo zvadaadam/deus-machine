@@ -14,7 +14,7 @@
 // native session ids, and the title watcher.
 
 import type { WebSocket } from "ws";
-import type { AgentServer } from "./upstream-server";
+import type { AgentServer } from "@zvada/agent-server/server";
 import { decodeWireMessage, encodeRequest } from "@zvada/agent-server/protocol";
 import {
   SIDE_CHANNEL,
@@ -26,7 +26,6 @@ import { registerAppMcp, unregisterAppMcp } from "./app-registrar";
 import { createCheckpoint } from "./agents/core/checkpoint";
 import { currentAapServers } from "./agents/core/engine";
 import { clearHost, setHost } from "./host-link";
-import { providerAuth } from "./provider-auth";
 import { RegisterAppMcpRequestSchema, UnregisterAppMcpRequestSchema } from "./rpc-schemas";
 import { observeLifecycleEvent, observeTurnStart, trackedSessions } from "./session-tracker";
 import { maybeFetchTitle } from "./title-watch";
@@ -121,7 +120,6 @@ export function bridgeWsConnection(ws: WebSocket, agentServer: AgentServer): voi
 
   const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "agent-server");
   sideChannel.onNotification(SIDE_CHANNEL.hello, () => setHost(sideChannel));
-  sideChannel.onRequest(SIDE_CHANNEL.providerAuth, providerAuth);
   sideChannel.onRequest(SIDE_CHANNEL.aapRegisterMcp, async (params) => {
     const parsed = RegisterAppMcpRequestSchema.parse(params);
     await registerAppMcp(parsed.serverName, parsed.url);

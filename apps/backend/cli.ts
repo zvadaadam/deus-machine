@@ -47,6 +47,13 @@ import {
   type SessionFacts,
 } from "./src/services/agent/event-facts";
 import { uuidv7 } from "@shared/lib/uuid";
+import {
+  allowOnce,
+  cardQuestions,
+  isPlanRequest,
+  planAnswer,
+  questionAnswer,
+} from "@shared/agent-asks";
 import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/database";
 import { persistChanges } from "./src/services/agent/persistence";
 import type { ConversationChange } from "@zvada/agent-server/protocol";
@@ -312,7 +319,6 @@ async function main() {
   const transport = wsLineTransport(ws);
 
   const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "cli-backend");
-  sideChannel.onRequest(SIDE_CHANNEL.exitPlanMode, () => ({ approved: true }));
   sideChannel.onNotification(SIDE_CHANNEL.title, (params) => {
     const { title } = (params ?? {}) as { title?: string };
     console.log(`${ts()} ${c.magenta}◂ deus/title${c.reset} "${title}"`);
@@ -388,7 +394,26 @@ async function main() {
     }
   };
 
-  client.onEvent((envelope) => handleEvent(envelope.event));
+  client.onEvent((envelope) => {
+    handleEvent(envelope.event);
+    // A plan is approved, a tool allowed and a question answered with its first
+    // option(s), where the backend would ask the user.
+    const event = envelope.event;
+    if (isUnknownEvent(event)) return;
+    if (event.type === "permission.requested") {
+      const outcome = isPlanRequest(event.options) ? planAnswer(true) : allowOnce(event.options);
+      void client.respondPermission(event.sessionId, event.requestId, outcome);
+    }
+    if (event.type === "elicitation.requested") {
+      const questions = event.questions ?? [];
+      const answers = cardQuestions(questions).map((q) => q.options[0] ?? "");
+      void client.respondElicitation(
+        event.sessionId,
+        event.requestId,
+        event.mode === "question" ? questionAnswer(questions, answers) : { action: "decline" }
+      );
+    }
+  });
 
   // 6. Start the turn with the backend's REAL run-config assembly
   banner("Sending Turn");

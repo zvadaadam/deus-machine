@@ -242,7 +242,7 @@ async function testCreateWorkspace() {
 
         const wsResponse = await request('GET', `/api/workspaces/${testWorkspaceId}`);
         if (wsResponse.body.state === 'ready') {
-          testSessionId = wsResponse.body.active_session_id;
+          testSessionId = wsResponse.body.current_session_id;
           logSuccess(`Workspace is ready! Session ID: ${testSessionId}`);
           return true;
         } else if (wsResponse.body.state === 'error') {

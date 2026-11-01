@@ -93,8 +93,10 @@ export function buildTurnStartParams(
     turnId,
     input: options.supportsImages ? input : withoutImageParts(input),
     config: {
-      // The harness id IS the engine's — no alias map in between.
-      harness: agentHarness,
+      // The harness id IS the engine's, but for one: the engine retired
+      // `codex-sdk` (0.3.19), so a session begun on it continues on the
+      // app-server, the engine's one Codex harness.
+      harness: agentHarness === "codex-sdk" ? "codex-app-server" : agentHarness,
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
@@ -103,6 +105,9 @@ export function buildTurnStartParams(
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",
       maxTurns: options.maxTurns ?? 1000,
+      // The agent's questions reach the question card (the service answers
+      // `elicitation.requested`), Claude's and Codex's alike.
+      elicitation: true,
       additionalDirectories: options.additionalDirectories,
       resumeSessionId: options.resume,
       resumeSessionAt: options.resumeSessionAt,

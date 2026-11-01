@@ -11,16 +11,12 @@
 import type { SideChannelEndpoint } from "@shared/agent-side-channel";
 import { SIDE_CHANNEL } from "@shared/agent-side-channel";
 import type {
-  AskUserQuestionRequest,
-  AskUserQuestionResponse,
   GetDiffRequest,
   GetDiffResponse,
   DiffCommentRequest,
   DiffCommentResponse,
   GetTerminalOutputRequest,
   GetTerminalOutputResponse,
-  ExitPlanModeRequest,
-  ExitPlanModeResponse,
   ListAppsRequest,
   ListAppsResponse,
   LaunchAppRequest,
@@ -80,18 +76,8 @@ export function notifyHost(method: string, params: unknown): boolean {
   return true;
 }
 
-/**
- * Typed request facade to the backend. User-facing requests (plan approval,
- * questions) wait indefinitely — the user may close the laptop and return
- * later. Only data-fetch requests use timeouts.
- */
+/** Typed request facade to the backend: the deus MCP tools' data fetches. */
 export const HostRpc = {
-  requestExitPlanMode(r: ExitPlanModeRequest): Promise<ExitPlanModeResponse> {
-    return requestHost(SIDE_CHANNEL.exitPlanMode, r);
-  },
-  requestAskUserQuestion(r: AskUserQuestionRequest): Promise<AskUserQuestionResponse> {
-    return requestHost(SIDE_CHANNEL.askUserQuestion, r);
-  },
   requestGetDiff(r: GetDiffRequest): Promise<GetDiffResponse> {
     return requestHost(SIDE_CHANNEL.getDiff, r, DATA_QUERY_TIMEOUT_MS);
   },

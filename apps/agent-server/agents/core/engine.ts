@@ -31,7 +31,7 @@ function checkpointHook(kind: "start" | "end", sessionId: string, turnId: string
 
 export function getRegistry(): AgentRegistry {
   registry ??= createAgentRegistry({
-    harnesses: ["claude-code", "codex-sdk", "codex-app-server"],
+    harnesses: ["claude-code", "codex-app-server"],
     // Deterministic CLIs: always the engine's tested pins (sha-verified,
     // cached downloads), never whatever binary the host happens to have.
     // Operator escape hatches ($CLAUDE_CLI_PATH / $CODEX_CLI_PATH) still win.
@@ -39,19 +39,10 @@ export function getRegistry(): AgentRegistry {
     claudeCode: {
       sdkMcpServers: ({ sessionId }) =>
         ({ deus: createDeusMCPServer(sessionId) }) as unknown as SdkMcpServers,
-      // Legacy-handler parity: deus can't render AskUserQuestion, and
-      // sub-agent text must reach the wire.
-      //
-      // The harness's own Cron* tools are disallowed because deus HAS a
-      // scheduler surface: Automations (the deus MCP automation_update tool,
-      // backed by the cloud platform). A harness-level cron job is invisible
-      // to the Deus UI and unmanaged — and with both available, the model
-      // reliably grabs the built-in one for "schedule this" asks (observed
-      // live: ToolSearch → CronCreate → confident false success).
-      sdkOptions: () => ({
-        disallowedTools: ["AskUserQuestion", "CronCreate", "CronList", "CronDelete"],
-        forwardSubagentText: true,
-      }),
+      // Sub-agent text must reach the wire. Claude's own Cron* tools are off by
+      // agent-server (CLAUDE_CODE_DISABLE_CRON): scheduling is Automations'
+      // (the deus MCP automation_update tool).
+      sdkOptions: () => ({ forwardSubagentText: true }),
       toolPolicy: decideToolUse,
       hooks: ({ sessionId, currentTurnId }) => ({
         UserPromptSubmit: [
