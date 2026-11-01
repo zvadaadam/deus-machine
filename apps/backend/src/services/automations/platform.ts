@@ -20,6 +20,8 @@ import {
   type AutomationRunSummary,
   type AutomationSpec,
 } from "@deus-hq/sdk";
+import type { AutomationSpecInput } from "@deus-hq/api";
+import type { CloudThinkingLevel } from "@shared/cloud-models";
 import { getCloudConfig } from "../agent/cloud/config";
 import type { AutomationRow, AutomationRunRow } from "../../db/types";
 
@@ -89,6 +91,7 @@ export function summaryToRow(
     paused_reason: summary.pausedReason,
     session_policy: summary.spec.sessionPolicy,
     model: summary.spec.model ?? null,
+    thinking_level: summary.spec.thinkingLevel ?? null,
     next_run_at: summary.nextRunAt,
     last_run_at: summary.lastRunAt,
     consecutive_failures: summary.consecutiveFailures,
@@ -153,7 +156,8 @@ export interface CreatePlatformAutomationInput {
   cron: string;
   timezone: string | null;
   environment: string;
-  model: string | null;
+  model: string;
+  thinkingLevel: CloudThinkingLevel;
   sessionPolicy: "fresh_session" | "same_session";
 }
 
@@ -188,7 +192,8 @@ export async function createPlatformAutomation(
     cron: input.cron,
     ...(input.timezone ? { timezone: input.timezone } : {}),
     environment: input.environment,
-    ...(input.model ? { model: input.model } : {}),
+    model: input.model,
+    thinkingLevel: input.thinkingLevel,
     sessionPolicy: input.sessionPolicy,
   };
   try {
@@ -208,9 +213,11 @@ export async function createPlatformAutomation(
   }
 }
 
+/** A written spec names its runs' model and thinking level (`AutomationSpecInput`); a read
+ *  one (`AutomationSpec`) may predate that rule and name neither. */
 export async function updatePlatformAutomation(
   id: string,
-  update: { description?: string; spec?: AutomationSpec; status?: "active" | "paused" }
+  update: { description?: string; spec?: AutomationSpecInput; status?: "active" | "paused" }
 ): Promise<void> {
   await sdkUpdateAutomation(id, { ...requireAutomationPlatform(), ...update });
 }

@@ -46,6 +46,9 @@ vi.mock("@/features/session/cloud/cloudSessionSocket", () => ({
   },
 }));
 
+/** What every direct send names: AGNT refuses a turn without its harness, model and level. */
+const TURN = { agentHarness: "claude-code", model: "opus", thinkingLevel: "high" };
+
 let cleanup: void | (() => void);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -108,7 +111,7 @@ describe("direct cloud session published frames", () => {
       has_older: false,
       has_newer: false,
     });
-    getDirectSession(sessionId)!.sendMessage("Hello", "pending", {});
+    getDirectSession(sessionId)!.sendMessage("Hello", "pending", TURN);
     setState.mockClear();
     onFrame({
       type: "error",
@@ -130,7 +133,7 @@ describe("direct cloud session published frames", () => {
       []
     );
     expect(setState).toHaveBeenCalledWith("MESSAGE_SEND_FAILED: Account unavailable");
-    getDirectSession(sessionId)!.sendMessage("Retry", "retry", {});
+    getDirectSession(sessionId)!.sendMessage("Retry", "retry", TURN);
     setState.mockClear();
     onFrame({
       type: "error",
@@ -142,7 +145,7 @@ describe("direct cloud session published frames", () => {
   });
 
   it("ignores a delayed send refusal after native admission", () => {
-    getDirectSession("deus-direct-1")!.sendMessage("Hello", "accepted", {});
+    getDirectSession("deus-direct-1")!.sendMessage("Hello", "accepted", TURN);
     onFrame({ type: "turn.started", turnId: "accepted", timestamp: 1 });
     setState.mockClear();
     onFrame({
@@ -167,7 +170,7 @@ describe("direct cloud session published frames", () => {
       has_older: false,
       has_newer: false,
     });
-    getDirectSession(sessionId)!.sendMessage("Hello", "ours", {});
+    getDirectSession(sessionId)!.sendMessage("Hello", "ours", TURN);
     onFrame({ type: "turn.started", turnId: "other-client", timestamp: 1 });
     setState.mockClear();
     onFrame({
@@ -184,7 +187,7 @@ describe("direct cloud session published frames", () => {
     expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toMatchObject({
       status: "working",
     });
-    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", {})).toThrow(
+    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", TURN)).toThrow(
       "The agent is still working"
     );
     onFrame({
@@ -218,12 +221,12 @@ describe("direct cloud session published frames", () => {
     expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toMatchObject({
       status: "idle",
     });
-    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", {})).not.toThrow();
+    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", TURN)).not.toThrow();
   });
 
   it("accepts our send from a snapshot and releases its pending marker when it ends", () => {
     const sessionId = "deus-direct-1";
-    getDirectSession(sessionId)!.sendMessage("Hello", "accepted", {});
+    getDirectSession(sessionId)!.sendMessage("Hello", "accepted", TURN);
     onFrame({
       type: "session.snapshot",
       state: { sessionId: "agnt-direct-1", status: "running", currentTurnId: "accepted" },
@@ -238,7 +241,7 @@ describe("direct cloud session published frames", () => {
     });
     expect(setState).not.toHaveBeenCalled();
     onFrame({ type: "turn.ended", turnId: "accepted", stopReason: "end_turn", timestamp: 2 });
-    expect(() => getDirectSession(sessionId)!.sendMessage("Next", "next", {})).not.toThrow();
+    expect(() => getDirectSession(sessionId)!.sendMessage("Next", "next", TURN)).not.toThrow();
   });
 
   it("restores the device and refreshes it when reconnect reports it stopped", () => {
@@ -454,7 +457,7 @@ describe("direct cloud session published frames", () => {
   it("does not let a previous turn's error interrupt a new send awaiting admission", () => {
     onFrame({ type: "turn.started", turnId: "turn-previous", timestamp: 1 });
     onFrame({ type: "turn.ended", turnId: "turn-previous", stopReason: "end_turn", timestamp: 2 });
-    getDirectSession("deus-direct-1")!.sendMessage("Next request", "turn-next", {});
+    getDirectSession("deus-direct-1")!.sendMessage("Next request", "turn-next", TURN);
     setState.mockClear();
     onFrame({
       type: "session.error",

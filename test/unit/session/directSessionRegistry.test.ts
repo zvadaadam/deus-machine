@@ -42,51 +42,44 @@ describe("directSessionRegistry", () => {
 });
 
 describe("buildMessageSendFrame", () => {
-  it("builds the claude message.send frame with turn-id idempotency and no options when bare", () => {
-    const frame = buildMessageSendFrame("hello", "turn-1", {});
+  it("builds the message.send frame with turn-id idempotency and the turn's selection", () => {
+    const frame = buildMessageSendFrame("hello", "turn-1", {
+      agentHarness: "claude-code",
+      model: "claude-opus-4-8",
+      thinkingLevel: "high",
+    });
     expect(frame).toEqual({
       type: "message.send",
       text: "hello",
       turnId: "turn-1",
       messageId: "turn-1",
       idempotencyKey: "turn-1", // == turnId, so a socket redelivery replays, not duplicates
-    });
-    // A bare claude send carries no options object at all.
-    expect(frame.options).toBeUndefined();
-  });
-
-  it("always rides the harness on the wire (so a non-claude turn isn't run as claude)", () => {
-    const frame = buildMessageSendFrame("hi", "turn-2", {
-      model: "claude-opus-4-8",
-      thinkingLevel: "high",
-      agentHarness: "claude-code",
-    });
-    expect(frame.options).toEqual({
-      harness: "claude-code",
-      model: "claude-opus-4-8",
-      thinkingLevel: "high",
+      options: { harness: "claude-code", model: "claude-opus-4-8", thinkingLevel: "high" },
     });
   });
 
-  it("rides the harness on the wire for codex (agnt keys the credential lookup on it)", () => {
+  it("names a codex turn's harness (agnt keys the credential lookup on it) and no credential", () => {
     const frame = buildMessageSendFrame("run", "turn-3", {
       agentHarness: "codex-app-server",
-      model: "gpt-5",
-    });
-    expect(frame.options).toEqual({ harness: "codex-app-server", model: "gpt-5" });
-  });
-
-  it("sends only turn preferences (the platform selects the personal account)", () => {
-    const frame = buildMessageSendFrame("secret?", "turn-4", {
-      agentHarness: "codex-app-server",
-      model: "gpt-5",
-      thinkingLevel: "low",
+      model: "gpt-6.1-sol",
+      // The platform's level; the local engine's vocabulary has no `ultra`.
+      thinkingLevel: "ultra",
     });
     expect(frame.options).toEqual({
       harness: "codex-app-server",
-      model: "gpt-5",
-      thinkingLevel: "low",
+      model: "gpt-6.1-sol",
+      thinkingLevel: "ultra",
     });
+  });
+
+  it.each([
+    [{ agentHarness: "claude-code", model: "opus", thinkingLevel: "" }, /thinking level/],
+    [{ agentHarness: "claude-code", model: "", thinkingLevel: "high" }, /model/],
+    // Claude's alias for the account's own default: AGNT runs no turn on it.
+    [{ agentHarness: "claude-code", model: "default", thinkingLevel: "high" }, /model/],
+    [{ agentHarness: "codex-sdk", model: "gpt-5", thinkingLevel: "low" }, /cloud workspaces/],
+  ])("refuses a turn AGNT would refuse (%j) before anything is sent", (options, message) => {
+    expect(() => buildMessageSendFrame("hi", "turn-5", options)).toThrow(message);
   });
 });
 

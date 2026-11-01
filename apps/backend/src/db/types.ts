@@ -195,6 +195,7 @@ export interface AutomationRow {
   paused_reason: string | null;
   session_policy: string;
   model: string | null;
+  thinking_level: string | null;
   next_run_at: string | null;
   last_run_at: string | null;
   consecutive_failures: number;

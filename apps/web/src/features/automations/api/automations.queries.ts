@@ -28,6 +28,7 @@ export interface AutomationFormInput {
   timezone?: string | null;
   session_policy?: "fresh_session" | "same_session";
   model?: string | null;
+  thinking_level?: string | null;
 }
 
 export function useAutomations(): { data: Automation[] | undefined; isLoading: boolean } {

@@ -44,6 +44,7 @@ const {
     listAutomationRuns: vi.fn(),
     getSession: vi.fn(),
     createEnvironment: vi.fn(),
+    listModels: vi.fn(),
   },
 }));
 
@@ -88,6 +89,8 @@ import {
 } from "../../../src/services/automations/service";
 import { summaryToRow, runSummaryToRow } from "../../../src/services/automations/platform";
 import * as store from "../../../src/services/automations/store";
+import { resetCloudModelListsForTests } from "../../../src/services/agent/cloud/models";
+import { handleAutomationToolRequest } from "../../../src/services/automations/agent-rpc";
 
 // ============================================================================
 // Fixtures
@@ -111,6 +114,45 @@ const CLAUDE_ACCOUNT = {
   isDefault: true,
 };
 const WEEKDAYS_9 = "0 9 * * 1-5";
+/** Every automation names its runs' model and thinking level; deus fills in neither. */
+const RUN = { model: "claude-opus-5", thinking_level: "high" } as const;
+
+/** What the platform's GET /models answers: the models runs may name, with their levels. */
+const MODEL_LISTS = [
+  {
+    harness: "claude-code",
+    source: "catalog",
+    fetchedAt: 1,
+    models: [
+      {
+        id: "claude-opus-5",
+        harness: "claude-code",
+        label: "Opus 5",
+        thinking: { levels: ["low", "medium", "high", "xhigh", "max"] },
+      },
+      {
+        id: "claude-opus-4-6",
+        harness: "claude-code",
+        label: "Opus 4.6",
+        thinking: { levels: ["low", "medium", "high", "max"] },
+      },
+      { id: "haiku", harness: "claude-code", label: "Haiku 4.5", thinking: { levels: [] } },
+    ],
+  },
+  {
+    harness: "codex-app-server",
+    source: "catalog",
+    fetchedAt: 1,
+    models: [
+      {
+        id: "gpt-6.1-sol",
+        harness: "codex-app-server",
+        label: "GPT-6.1-Sol",
+        thinking: { levels: ["low", "medium", "high", "xhigh", "max", "ultra"] },
+      },
+    ],
+  },
+];
 
 async function* gen<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item;
@@ -129,6 +171,7 @@ function summaryFixture(over: Record<string, unknown> = {}) {
       prompt: "Review open PRs.",
       environment: "repo-acme-widgets-abc12345",
       model: "claude-opus-5",
+      thinkingLevel: "high",
       sessionPolicy: "fresh_session",
       overlapPolicy: "skip",
     },
@@ -186,6 +229,8 @@ beforeEach(async () => {
   envName = await environmentNameForRepo(ORIGIN);
   mockGetCloudEnvironmentInfo.mockResolvedValue({ configured: true, name: envName });
   for (const fn of Object.values(sdk)) fn.mockReset();
+  resetCloudModelListsForTests();
+  sdk.listModels.mockResolvedValue(MODEL_LISTS);
   db.prepare(
     `INSERT INTO repositories (id, name, root_path, git_origin_url) VALUES ('r1', 'widgets', '/tmp/widgets', ?)`
   ).run(ORIGIN);
@@ -354,6 +399,7 @@ describeWithDb("createAutomation", () => {
   it("creates on the platform and mirrors back with created_by", async () => {
     const created = await createAutomation(
       {
+        ...RUN,
         repository_id: "r1",
         name: "Morning PR review",
         prompt: "Review open PRs.",
@@ -369,6 +415,9 @@ describeWithDb("createAutomation", () => {
         description: "Morning PR review",
         cron: WEEKDAYS_9,
         environment: envName,
+        // The caller's choice, passed through: nothing is filled in.
+        model: "claude-opus-5",
+        thinkingLevel: "high",
       })
     );
     // The environment already existed — no lazy create.
@@ -381,7 +430,7 @@ describeWithDb("createAutomation", () => {
     mockGetCloudEnvironmentInfo.mockResolvedValue({ configured: false, name: envName });
     sdk.createEnvironment.mockResolvedValue({ id: "env-1", name: envName });
     await createAutomation(
-      { repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 },
+      { ...RUN, repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 },
       "user"
     );
     expect(sdk.createEnvironment).toHaveBeenCalledWith(
@@ -416,7 +465,7 @@ describeWithDb("createAutomation", () => {
       });
       await expect(
         createAutomation(
-          { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+          { ...RUN, repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
           "user"
         )
       ).rejects.toThrow(/Choose a connected Claude account/);
@@ -429,7 +478,7 @@ describeWithDb("createAutomation", () => {
     mockGetCloudConfig.mockReturnValue(AUTH);
     await expect(
       createAutomation(
-        { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+        { ...RUN, repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
         "user"
       )
     ).rejects.toThrow(/Sign in to Deus Cloud/);
@@ -451,7 +500,7 @@ describeWithDb("createAutomation", () => {
       });
       await expect(
         createAutomation(
-          { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+          { ...RUN, repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
           "user"
         )
       ).rejects.toThrow(/account changed/);
@@ -482,6 +531,7 @@ describeWithDb("createAutomation", () => {
       await expect(
         createAutomation(
           {
+            ...RUN,
             repository_id: "r1",
             name: "Private audit",
             prompt: "Private prompt",
@@ -498,7 +548,7 @@ describeWithDb("createAutomation", () => {
   it("keeps an accepted create when its follow-up read fails under the same account", async () => {
     sdk.getAutomation.mockRejectedValueOnce(new Error("Temporarily unavailable"));
     const created = await createAutomation(
-      { repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
+      { ...RUN, repository_id: "r1", name: "Audit", prompt: "Audit deps.", cron: WEEKDAYS_9 },
       "user"
     );
     expect(created).toMatchObject({ name: "Audit", prompt: "Audit deps.", status: "active" });
@@ -508,19 +558,202 @@ describeWithDb("createAutomation", () => {
   it("rejects without cloud credentials, a remote, or a sane schedule", async () => {
     mockGetCloudConfig.mockReturnValue(null);
     await expect(
-      createAutomation({ repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 }, "user")
+      createAutomation(
+        { ...RUN, repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 },
+        "user"
+      )
     ).rejects.toThrow(/Deus Cloud/);
 
     mockGetCloudConfig.mockReturnValue(CLOUD_CONFIG);
     db.prepare("UPDATE repositories SET git_origin_url = NULL WHERE id = 'r1'").run();
     await expect(
-      createAutomation({ repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 }, "user")
+      createAutomation(
+        { ...RUN, repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 },
+        "user"
+      )
     ).rejects.toThrow(/git remote/);
 
     db.prepare("UPDATE repositories SET git_origin_url = ? WHERE id = 'r1'").run(ORIGIN);
     await expect(
-      createAutomation({ repository_id: "r1", name: "X", prompt: "y", cron: "* * * * *" }, "user")
+      createAutomation(
+        { ...RUN, repository_id: "r1", name: "X", prompt: "y", cron: "* * * * *" },
+        "user"
+      )
     ).rejects.toThrow(/5 minutes/);
+  });
+});
+
+describeWithDb("automation model choice", () => {
+  beforeEach(() => {
+    store.upsertAutomation(summaryToRow(localSummary() as never, new Map([[envName, "r1"]])));
+    sdk.getAutomation.mockResolvedValue(localSummary());
+    sdk.listAutomationRuns.mockReturnValue(gen([]));
+  });
+
+  it("refuses to create one that leaves out its model or thinking level", async () => {
+    const task = { repository_id: "r1", name: "X", prompt: "y", cron: WEEKDAYS_9 };
+    await expect(createAutomation({ ...task, thinking_level: "high" }, "user")).rejects.toThrow(
+      /Choose the Claude model/
+    );
+    await expect(createAutomation({ ...task, model: "claude-opus-5" }, "agent")).rejects.toThrow(
+      /Choose the thinking level/
+    );
+    expect(sdk.createAutomation).not.toHaveBeenCalled();
+  });
+
+  it("saves one stored before AGNT required a thinking level only once it is chosen", async () => {
+    // Saved before the rule: the platform's spec names its model but no thinking level.
+    const { thinkingLevel: _unset, ...savedBeforeTheRule } = (
+      localSummary() as { spec: Record<string, unknown> }
+    ).spec;
+    sdk.getAutomation.mockResolvedValue(localSummary({ spec: savedBeforeTheRule }));
+    await expect(updateAutomation("auto-1", { name: "Renamed" })).rejects.toThrow(
+      /Choose the model and thinking level/
+    );
+    expect(sdk.updateAutomation).not.toHaveBeenCalled();
+
+    await updateAutomation("auto-1", { name: "Renamed", thinking_level: "medium" });
+    expect(sdk.updateAutomation.mock.lastCall?.[1]?.spec).toMatchObject({
+      model: "claude-opus-5",
+      thinkingLevel: "medium",
+    });
+  });
+
+  it("refuses a model Deus Cloud does not list, naming the ones it does", async () => {
+    await expect(
+      createAutomation(
+        {
+          repository_id: "r1",
+          name: "X",
+          prompt: "y",
+          cron: WEEKDAYS_9,
+          model: "claude-fable-5[1m]",
+          thinking_level: "high",
+        },
+        "agent"
+      )
+    ).rejects.toThrow(/doesn't run "claude-fable-5\[1m\]".*claude-opus-5, claude-opus-4-6, haiku/);
+    expect(sdk.createAutomation).not.toHaveBeenCalled();
+  });
+
+  it("refuses a level the model does not list instead of letting the platform run another", async () => {
+    // AGNT would run Opus 4.6's nearest level, `high`, in place of the `xhigh` asked for.
+    await expect(
+      createAutomation(
+        {
+          repository_id: "r1",
+          name: "X",
+          prompt: "y",
+          cron: WEEKDAYS_9,
+          model: "claude-opus-4-6",
+          thinking_level: "xhigh",
+        },
+        "user"
+      )
+    ).rejects.toThrow(/Opus 4\.6 runs thinking low, medium, high, max/);
+    expect(sdk.createAutomation).not.toHaveBeenCalled();
+  });
+
+  it("names the platform's levels the local engine lacks, and off for a model with none", async () => {
+    sdk.createAutomation.mockResolvedValue({ id: "auto-1" });
+    sdk.getAutomation.mockResolvedValue(localSummary());
+    await createAutomation(
+      {
+        ...RUN,
+        thinking_level: "max",
+        repository_id: "r1",
+        name: "X",
+        prompt: "y",
+        cron: WEEKDAYS_9,
+      },
+      "user"
+    );
+    expect(sdk.createAutomation).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: "claude-opus-5", thinkingLevel: "max" })
+    );
+
+    await createAutomation(
+      {
+        model: "haiku",
+        thinking_level: "off",
+        repository_id: "r1",
+        name: "Y",
+        prompt: "y",
+        cron: WEEKDAYS_9,
+      },
+      "user"
+    );
+    expect(sdk.createAutomation).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: "haiku", thinkingLevel: "off" })
+    );
+  });
+
+  it("keeps a saved model the list no longer names, and checks a new level against a listed one", async () => {
+    sdk.getAutomation.mockResolvedValue(
+      localSummary({
+        spec: {
+          ...(localSummary() as { spec: Record<string, unknown> }).spec,
+          model: "claude-opus-4-1",
+          thinkingLevel: "xhigh",
+        },
+      })
+    );
+    // Carried over, not chosen now: the platform still judges it.
+    await updateAutomation("auto-1", { thinking_level: "low" });
+    expect(sdk.updateAutomation.mock.lastCall?.[1]?.spec).toMatchObject({
+      model: "claude-opus-4-1",
+      thinkingLevel: "low",
+    });
+
+    sdk.updateAutomation.mockClear();
+    // A model chosen now keeps the saved level, which Opus 4.6 does not list.
+    await expect(updateAutomation("auto-1", { model: "claude-opus-4-6" })).rejects.toThrow(
+      /Opus 4\.6 runs thinking/
+    );
+    await expect(updateAutomation("auto-1", { model: "claude-opus-4-1" })).rejects.toThrow(
+      /doesn't run "claude-opus-4-1"/
+    );
+    expect(sdk.updateAutomation).not.toHaveBeenCalled();
+  });
+
+  it("leaves the choice to the platform when its list cannot be read", async () => {
+    sdk.listModels.mockRejectedValue(new Error("platform unavailable"));
+    sdk.createAutomation.mockResolvedValue({ id: "auto-1" });
+    sdk.getAutomation.mockResolvedValue(localSummary());
+    await createAutomation(
+      {
+        ...RUN,
+        model: "claude-opus-4-1",
+        repository_id: "r1",
+        name: "X",
+        prompt: "y",
+        cron: WEEKDAYS_9,
+      },
+      "agent"
+    );
+    expect(sdk.createAutomation).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "claude-opus-4-1", thinkingLevel: "high" })
+    );
+  });
+
+  it("lists the models runs can use for the agent's tool, with each one's levels", async () => {
+    await expect(handleAutomationToolRequest({ sessionId: "s1", mode: "models" })).resolves.toEqual(
+      {
+        models: [
+          {
+            id: "claude-opus-5",
+            label: "Opus 5",
+            thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+          },
+          {
+            id: "claude-opus-4-6",
+            label: "Opus 4.6",
+            thinkingLevels: ["low", "medium", "high", "max"],
+          },
+          { id: "haiku", label: "Haiku 4.5", thinkingLevels: ["off"] },
+        ],
+      }
+    );
   });
 });
 

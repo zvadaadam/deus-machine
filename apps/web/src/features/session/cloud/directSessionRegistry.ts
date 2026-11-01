@@ -19,18 +19,20 @@
 //
 // Wire contract: agnt's `handleClientCommand` (`message.send` → `postMessage`,
 // `agent.cancel` → `requestCancel`). The frame mirrors the desktop backend's own
-// cloud driver (`services/agent/cloud/driver.ts::startCloudTurn`). Both send only
-// the harness and per-turn preferences; the platform selects the signed-in user's
-// default provider account when admitting the turn.
+// cloud driver (`services/agent/cloud/driver.ts::startCloudTurn`). Both send the
+// turn's harness, model and thinking level — agnt chooses none of them and refuses
+// a turn that leaves one out — and no credential: the platform selects the
+// signed-in user's default provider account when admitting the turn.
 
-/** Per-turn overrides the composer offers — never a credential (agnt resolves that). */
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import { answeredAskUserQuestionInput, isCancelledAnswers } from "@shared/ask-user-question";
+import { readCloudTurnSelection } from "@shared/cloud-models";
 
+/** What the composer chose for this turn — never a credential (agnt resolves that). */
 export interface DirectTurnOptions {
-  model?: string;
-  agentHarness?: string;
-  thinkingLevel?: string;
+  model: string;
+  agentHarness: string;
+  thinkingLevel: string;
 }
 
 export interface DirectSessionChannel {
@@ -77,27 +79,33 @@ export function getDirectSession(sessionId: string): DirectSessionChannel | unde
  * driver does), so an at-least-once socket redelivery replays the same admission
  * instead of minting a second turn. Provider credentials stay on the platform —
  * admission selects the signed-in account, and execution resolves its credential.
+ *
+ * Throws when the turn does not name all three of its harness, model and
+ * thinking level: agnt would refuse it after the bubble went up, so the send's
+ * own rollback runs instead.
  */
 export function buildMessageSendFrame(
   prompt: string,
   turnId: string,
   options: DirectTurnOptions
 ): Record<string, unknown> {
-  const wsOptions: Record<string, unknown> = {};
-  // Always send the harness the turn should run: agnt keys the dispatch-time
-  // credential lookup on it, so anything but claude-code (codex-sdk,
-  // codex-app-server) would otherwise resolve the CLAUDE credential and run as
-  // claude. Explicit beats relying on the wire default; the engine validates it.
-  if (options.agentHarness) wsOptions.harness = options.agentHarness;
-  if (options.model) wsOptions.model = options.model;
-  if (options.thinkingLevel) wsOptions.thinkingLevel = options.thinkingLevel;
+  const read = readCloudTurnSelection({
+    harness: options.agentHarness,
+    model: options.model,
+    thinkingLevel: options.thinkingLevel,
+  });
+  if (!read.ok) throw new Error(read.message);
   return {
     type: "message.send",
     text: prompt,
     messageId: turnId,
     turnId,
     idempotencyKey: turnId,
-    ...(Object.keys(wsOptions).length > 0 ? { options: wsOptions } : {}),
+    options: {
+      harness: read.selection.harness,
+      model: read.selection.model,
+      thinkingLevel: read.selection.thinkingLevel,
+    },
   };
 }
 

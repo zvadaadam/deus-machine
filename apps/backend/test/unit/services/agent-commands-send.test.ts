@@ -327,9 +327,16 @@ describeWithDb("sendMessage", () => {
       const push = vi.spyOn(cloudDriver, "pushCloudSessionFacts").mockImplementation(() => {});
       db.prepare(`UPDATE workspaces SET kind = 'cloud', state = 'ready' WHERE id = 'w1'`).run();
 
-      await expect(sendWith("codex-app-server", "turn-1")).resolves.toEqual({
-        commandId: "turn-1",
-      });
+      await expect(
+        runCommand("sendMessage", {
+          sessionId: SESSION,
+          content: "hello",
+          model: "gpt-6.1-sol",
+          agentHarness: "codex-app-server",
+          thinkingLevel: "medium",
+          turnId: "turn-1",
+        })
+      ).resolves.toEqual({ commandId: "turn-1" });
 
       expect(harness()).toBe("codex-app-server");
       expect(push).toHaveBeenCalledWith(SESSION, { harness: "codex-app-server" });
@@ -345,6 +352,57 @@ describeWithDb("sendMessage", () => {
       expect(harness()).toBe("claude-code");
       expect(startTurn).not.toHaveBeenCalled();
     });
+  });
+
+  describe("cloud turns", () => {
+    const cloudSend = (thinkingLevel: unknown, model = "opus") =>
+      runCommand("sendMessage", {
+        sessionId: SESSION,
+        content: "hello",
+        model,
+        agentHarness: "claude-code",
+        turnId: "turn-1",
+        ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+      });
+
+    beforeEach(() => {
+      db.prepare(`UPDATE workspaces SET kind = 'cloud', state = 'ready' WHERE id = 'w1'`).run();
+      vi.spyOn(cloudDriver, "hasLiveCloudSession").mockReturnValue(true);
+    });
+
+    it("hands the driver the turn's harness, model and thinking level, in the platform's vocabulary", async () => {
+      const startCloudTurn = vi
+        .spyOn(cloudDriver, "startCloudTurn")
+        .mockResolvedValue(undefined as never);
+
+      // `max` is AGNT's level; the engine deus runs locally has no such level.
+      await expect(cloudSend("max")).resolves.toEqual({ commandId: "turn-1" });
+
+      expect(startCloudTurn).toHaveBeenCalledWith(SESSION, "turn-1", "hello", {
+        harness: "claude-code",
+        model: "opus",
+        thinkingLevel: "max",
+      });
+    });
+
+    it.each([
+      [undefined, "opus", /thinking level/],
+      ["extreme", "opus", /thinking level/],
+      // Claude's alias for whatever the account's default is — no model at all.
+      ["high", "default", /model/],
+    ])(
+      "refuses a send naming thinking %s on model %s before changing anything",
+      async (thinkingLevel, model, message) => {
+        const startCloudTurn = vi.spyOn(cloudDriver, "startCloudTurn");
+        const before = db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION);
+
+        await expect(cloudSend(thinkingLevel, model)).rejects.toThrow(message);
+
+        expect(startCloudTurn).not.toHaveBeenCalled();
+        expect(mockInvalidate).not.toHaveBeenCalled();
+        expect(db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION)).toEqual(before);
+      }
+    );
   });
 
   it("still refuses a send while a turn is running, from every active status", async () => {

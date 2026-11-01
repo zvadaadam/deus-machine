@@ -52,6 +52,7 @@ import { SkillMentionCard } from "./SkillMentionCard";
 import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
   DEFAULT_MODEL,
+  DEFAULT_THINKING_LEVEL,
   getAgentHarnessForModel,
   getModelOption,
   getThinkingLevelsForModel,
@@ -217,7 +218,7 @@ export function MessageInput({
   onCompact,
   onStop,
   onOpenNewTab,
-  defaultThinking = "high",
+  defaultThinking = DEFAULT_THINKING_LEVEL,
   className,
 }: MessageInputProps) {
   const isMobile = useIsMobile();

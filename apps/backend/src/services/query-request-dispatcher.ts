@@ -111,6 +111,7 @@ export async function runRequest(
         );
       })
       .with("cloudRepoAccess", () => repoGet("/cloud-access"))
+      .with("cloudModels", () => delegateToRoute("GET", "/api/settings/cloud/models"))
       // The computer's host template — the backend's in-memory latest (nothing
       // is persisted; the socket is its only source — see shared/events.ts).
       .with("cloudPreview", () =>

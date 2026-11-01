@@ -35,8 +35,12 @@ export interface Automation {
   status: AutomationStatus;
   paused_reason: AutomationPausedReason | null;
   session_policy: AutomationSessionPolicy;
-  /** Engine model id from the spec; null = platform default. */
+  /** Claude model id from the spec. Null only for one saved before AGNT required a model:
+   *  its runs fail until the user chooses one. */
   model: string | null;
+  /** Thinking level from the spec, in the platform's vocabulary (`max` and `ultra`
+   *  included — shared/cloud-models.ts); null like `model`. */
+  thinking_level: string | null;
   next_run_at: string | null;
   last_run_at: string | null;
   /** Platform-derived: failed runs since the last success/fence — 5 auto-pauses. */

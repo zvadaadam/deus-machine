@@ -2,13 +2,15 @@
  * AutomationEditor — the right panel of the split (board 46b): create + edit.
  * Prompt-first, schedule as presets (custom cron behind the last option).
  * Cloud-only: runs happen in Deus Cloud sandboxes (Claude models), so the
- * repository needs a git remote and there is no lane to pick.
+ * repository needs a git remote and there is no lane to pick. The models and
+ * their thinking levels are the platform's list (useCloudModels), not deus's.
  */
 
 import { useState } from "react";
 import { ChevronLeft, Cloud } from "lucide-react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
+import type { CloudThinkingLevel } from "@shared/cloud-models";
 import {
   Button,
   Input,
@@ -22,9 +24,10 @@ import {
   Textarea,
 } from "@/components/ui";
 import { useRepos } from "@/features/repository/api";
-import { AGENT_CONFIGS } from "@/shared/agents";
+import { useCloudModels } from "@/shared/hooks/useCloudModels";
 import type { Automation } from "@/shared/types";
 import { useSaveAutomation } from "../api/automations.queries";
+import { automationModelChoice, thinkingLevelsFor } from "../lib/model-choice";
 import { SCHEDULE_PRESETS, buildCron, parseSchedule, type ScheduleForm } from "../lib/schedule";
 
 export interface EditorPrefill {
@@ -33,17 +36,29 @@ export interface EditorPrefill {
   cron?: string;
 }
 
-const CLAUDE_MODELS = AGENT_CONFIGS["claude-code"].models;
+const THINKING_LABELS: Record<CloudThinkingLevel, string> = {
+  off: "Off",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+  ultra: "Ultra",
+};
 
-/** Select sentinel for model: null — runs use the platform default. */
-const PLATFORM_DEFAULT_MODEL = "__platform_default__";
+/** A level's label; one this build has no name for (a newer platform's) shows as sent. */
+function thinkingLabel(level: string): string {
+  return THINKING_LABELS[level as CloudThinkingLevel] ?? level;
+}
 
 interface FormState {
   name: string;
   prompt: string;
   repositoryId: string;
-  /** Engine model id (Claude — cloud sandboxes run claude-code). */
+  /** A model id from Deus Cloud's Claude list (runs use claude-code). Empty until chosen. */
   model: string;
+  /** Empty until chosen: AGNT runs no automation without one, and none is assumed. */
+  thinkingLevel: string;
   schedule: ScheduleForm;
   sessionPolicy: "fresh_session" | "same_session";
 }
@@ -54,7 +69,9 @@ function initialForm(automation: Automation | null, prefill?: EditorPrefill): Fo
       name: automation.name,
       prompt: automation.prompt,
       repositoryId: automation.repository_id ?? "",
-      model: automation.model ?? PLATFORM_DEFAULT_MODEL,
+      // Null only for one saved before AGNT required them: the user chooses before saving.
+      model: automation.model ?? "",
+      thinkingLevel: automation.thinking_level ?? "",
       schedule: parseSchedule(automation.cron ?? "0 9 * * 1-5"),
       sessionPolicy: automation.session_policy,
     };
@@ -63,7 +80,8 @@ function initialForm(automation: Automation | null, prefill?: EditorPrefill): Fo
     name: prefill?.name ?? "",
     prompt: prefill?.prompt ?? "",
     repositoryId: "",
-    model: CLAUDE_MODELS[0].model,
+    model: "",
+    thinkingLevel: "",
     schedule: prefill?.cron
       ? parseSchedule(prefill.cron)
       : { preset: "weekdays", time: "09:00", cron: "" },
@@ -84,13 +102,31 @@ export function AutomationEditor({
 }) {
   const [form, setForm] = useState<FormState>(() => initialForm(automation, prefill));
   // The pristine snapshot: edits submit ONLY what changed, so untouched
-  // nulls (UTC timezone, platform-default model, a webhook-only cron)
+  // nulls (UTC timezone, a webhook-only cron)
   // survive a rename instead of being resurrected as concrete values.
   const [initial] = useState<FormState>(() => initialForm(automation, prefill));
   const reposQuery = useRepos();
   // Cloud sandboxes clone from the remote — a repo without one can't be a target.
   const repos = (reposQuery.data ?? []).filter((repo) => repo.git_origin_url);
   const save = useSaveAutomation();
+
+  const cloudModels = useCloudModels();
+  // The saved model and level stay what they are when the list does not offer
+  // them — shown and kept, never swapped for listed ones behind the user's back.
+  const { listLoaded, models, savedModel, savedModelUnlisted, levelOptions } =
+    automationModelChoice({
+      catalog: cloudModels.data,
+      savedModel: initial.model,
+      model: form.model,
+      thinkingLevel: form.thinkingLevel,
+    });
+  const modelHint = cloudModels.isError
+    ? `Couldn't load Deus Cloud's models: ${getErrorMessage(cloudModels.error)}`
+    : cloudModels.data && !cloudModels.data.configured
+      ? "Sign in to Deus Cloud to choose a model."
+      : savedModelUnlisted && form.model === savedModel
+        ? "Deus Cloud no longer lists this model — choose another if its runs fail."
+        : undefined;
 
   const patch = (update: Partial<FormState>) => setForm((f) => ({ ...f, ...update }));
   const patchSchedule = (update: Partial<ScheduleForm>) =>
@@ -102,8 +138,6 @@ export function AutomationEditor({
   // one keeps the automation's stored timezone (null = UTC) by omission.
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const timezoneHint = scheduleChanged ? browserTimezone : (automation?.timezone ?? "UTC");
-
-  const modelValue = (value: string) => (value === PLATFORM_DEFAULT_MODEL ? null : value);
 
   const handleSave = () => {
     const input = automation
@@ -118,7 +152,10 @@ export function AutomationEditor({
           ...(form.sessionPolicy !== initial.sessionPolicy
             ? { session_policy: form.sessionPolicy }
             : {}),
-          ...(form.model !== initial.model ? { model: modelValue(form.model) } : {}),
+          ...(form.model !== initial.model ? { model: form.model } : {}),
+          ...(form.thinkingLevel !== initial.thinkingLevel
+            ? { thinking_level: form.thinkingLevel }
+            : {}),
         }
       : {
           repository_id: form.repositoryId,
@@ -127,7 +164,8 @@ export function AutomationEditor({
           cron: buildCron(form.schedule),
           timezone: browserTimezone,
           session_policy: form.sessionPolicy,
-          model: modelValue(form.model),
+          model: form.model,
+          thinking_level: form.thinkingLevel,
         };
     if (automation && Object.keys(input).length === 1) {
       onSaved(automation);
@@ -144,6 +182,8 @@ export function AutomationEditor({
 
   const canSave =
     form.name.trim().length > 0 &&
+    form.model.length > 0 &&
+    form.thinkingLevel.length > 0 &&
     form.prompt.trim().length > 0 &&
     // The repository rides the environment and is only needed when creating
     // (or retargeting) — a synced automation whose repo isn't on this Mac
@@ -207,7 +247,7 @@ export function AutomationEditor({
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Field
               label="Repository"
               hint={
@@ -227,16 +267,54 @@ export function AutomationEditor({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Model">
-              <Select value={form.model} onValueChange={(v) => patch({ model: v })}>
+            <Field label="Model" hint={modelHint}>
+              <Select
+                value={form.model}
+                onValueChange={(v) =>
+                  // A level the new model lacks is cleared, never swapped for another.
+                  patch({
+                    model: v,
+                    thinkingLevel: thinkingLevelsFor(models, v, listLoaded).includes(
+                      form.thinkingLevel
+                    )
+                      ? form.thinkingLevel
+                      : "",
+                  })
+                }
+                disabled={models.length === 0 && !savedModel}
+              >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Model" />
+                  <SelectValue
+                    placeholder={cloudModels.isLoading ? "Loading models…" : "Choose a model"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={PLATFORM_DEFAULT_MODEL}>Platform default</SelectItem>
-                  {CLAUDE_MODELS.map((option) => (
-                    <SelectItem key={option.model} value={option.model}>
+                  {models.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
                       Claude · {option.label}
+                    </SelectItem>
+                  ))}
+                  {savedModel && (
+                    <SelectItem value={savedModel}>
+                      {savedModelUnlisted ? `${savedModel} · not listed` : savedModel}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Thinking">
+              <Select
+                value={form.thinkingLevel}
+                onValueChange={(v) => patch({ thinkingLevel: v })}
+                disabled={!form.model}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose a level" />
+                </SelectTrigger>
+                <SelectContent>
+                  {levelOptions.map((level) => (
+                    <SelectItem key={level} value={level}>
+                      {thinkingLabel(level)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -6,6 +6,12 @@
 // the q:mutate arms and the agent's deus/automation/* tool both land here.
 
 import { Cron } from "croner";
+import {
+  AUTOMATION_HARNESS,
+  cloudModelChoiceProblem,
+  readCloudThinkingLevel,
+  type CloudThinkingLevel,
+} from "@shared/cloud-models";
 import { uuidv7 } from "@shared/lib/uuid";
 import { AutomationSessionPolicySchema } from "@shared/enums";
 import type { Automation, AutomationRun } from "@shared/types";
@@ -21,6 +27,7 @@ import * as store from "./store";
 import { getProviderAccounts } from "../provider-accounts.service";
 import { defaultProviderAccount } from "@shared/types/provider-account";
 import { getCloudConnectionIdentity } from "../agent/cloud/config";
+import { getCloudModelLists } from "../agent/cloud/models";
 
 /** Platform parity: next-fire gaps must be at least 5 minutes apart. */
 export const MIN_FIRE_INTERVAL_MS = 5 * 60 * 1000;
@@ -234,6 +241,7 @@ export interface AutomationInput {
   timezone?: string | null;
   session_policy?: string;
   model?: string | null;
+  thinking_level?: string | null;
 }
 
 interface ValidatedInput {
@@ -243,11 +251,52 @@ interface ValidatedInput {
   cron: string;
   timezone: string | null;
   session_policy: "fresh_session" | "same_session";
-  model: string | null;
+  model: string;
+  thinking_level: CloudThinkingLevel;
 }
 
 const NAME_MAX = 120;
 const PROMPT_MAX = 32_768;
+
+// AGNT runs no automation that leaves out its model or thinking level, and deus chooses
+// neither for the user: whoever creates or edits the automation names both. Runs only
+// ever execute in Deus Cloud, so the level is read in the platform's vocabulary.
+function requireModel(value: string | null | undefined): string {
+  const model = value?.trim();
+  if (!model) throw new Error("Choose the Claude model its runs use.");
+  return model;
+}
+
+function requireThinkingLevel(value: string | null | undefined): CloudThinkingLevel {
+  const level = readCloudThinkingLevel(value);
+  if (!level) throw new Error("Choose the thinking level its runs use.");
+  return level;
+}
+
+/**
+ * Refuse a model or level Deus Cloud would not run as named: an unattended run
+ * should fail here, where someone is looking, not at 3 a.m. in the run ledger.
+ * Checked against the platform's list (listModels(), cached briefly); a list
+ * that cannot be read leaves the platform to judge, as it does anyway.
+ */
+async function assertCloudRunsChoice(
+  model: string,
+  thinkingLevel: CloudThinkingLevel,
+  requireListed: boolean
+): Promise<void> {
+  const lists = await getCloudModelLists().catch((err: unknown) => {
+    console.warn("[Automations] model list unavailable, leaving the check to the platform:", err);
+    return null;
+  });
+  if (!lists) return;
+  const problem = cloudModelChoiceProblem(lists, {
+    harness: AUTOMATION_HARNESS,
+    model,
+    thinkingLevel,
+    requireListed,
+  });
+  if (problem) throw new Error(problem);
+}
 
 function validateInput(input: AutomationInput): ValidatedInput {
   const name = input.name?.trim();
@@ -265,7 +314,8 @@ function validateInput(input: AutomationInput): ValidatedInput {
     cron: input.cron.trim(),
     timezone,
     session_policy: AutomationSessionPolicySchema.parse(input.session_policy ?? "fresh_session"),
-    model: input.model?.trim() || null,
+    model: requireModel(input.model),
+    thinking_level: requireThinkingLevel(input.thinking_level),
   };
 }
 
@@ -276,6 +326,7 @@ export async function createAutomation(
   platform.requireAutomationPlatform();
   const identity = getCloudConnectionIdentity();
   const valid = validateInput(input);
+  await assertCloudRunsChoice(valid.model, valid.thinking_level, true);
   // Automations currently run Claude. A different provider or an unselected
   // account cannot make that scheduled turn runnable.
   const accounts = await getProviderAccounts();
@@ -293,6 +344,7 @@ export async function createAutomation(
     timezone: valid.timezone,
     environment,
     model: valid.model,
+    thinkingLevel: valid.thinking_level,
     sessionPolicy: valid.session_policy,
   });
   assertCurrentAccount(identity);
@@ -323,6 +375,7 @@ export async function createAutomation(
       paused_reason: null,
       session_policy: valid.session_policy,
       model: valid.model,
+      thinking_level: valid.thinking_level,
       next_run_at: null,
       last_run_at: null,
       consecutive_failures: 0,
@@ -373,10 +426,18 @@ export async function updateAutomation(
   if (input.session_policy !== undefined) {
     spec.sessionPolicy = AutomationSessionPolicySchema.parse(input.session_policy);
   }
-  if (input.model !== undefined) {
-    const model = input.model?.trim();
-    if (model) spec.model = model;
-    else delete spec.model;
+  const model = input.model !== undefined ? requireModel(input.model) : spec.model;
+  const thinkingLevel =
+    input.thinking_level !== undefined
+      ? requireThinkingLevel(input.thinking_level)
+      : spec.thinkingLevel;
+  // One saved before AGNT required them must have both chosen before it saves again.
+  if (!model || !thinkingLevel) {
+    throw new Error("Choose the model and thinking level its runs use.");
+  }
+  // Only a choice made now is checked: an untouched spec stays as the platform holds it.
+  if (input.model !== undefined || input.thinking_level !== undefined) {
+    await assertCloudRunsChoice(model, thinkingLevel, input.model !== undefined);
   }
   const retargeted =
     input.repository_id !== undefined && input.repository_id !== existing.repository_id;
@@ -385,7 +446,10 @@ export async function updateAutomation(
   }
 
   assertCurrentAccount(identity);
-  await platform.updatePlatformAutomation(id, { description: name, spec });
+  await platform.updatePlatformAutomation(id, {
+    description: name,
+    spec: { ...spec, model, thinkingLevel },
+  });
   assertCurrentAccount(identity);
   // Only AFTER the platform accepted the retarget: the held sandbox belongs
   // to the old repo, but a failed update must not strip the provenance link.

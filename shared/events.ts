@@ -118,6 +118,10 @@ export const REQUEST_RESOURCES = [
   // { workspaceId } → string | null. Nothing is persisted: the platform
   // replays it on every connect.
   "cloudPreview",
+  // Cloud models: what Deus Cloud runs, per harness, as the platform lists it
+  // (listModels(), cached a few minutes by the backend). No params →
+  // CloudModelCatalog (shared/cloud-models.ts).
+  "cloudModels",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 

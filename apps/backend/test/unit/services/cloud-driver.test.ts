@@ -1078,8 +1078,10 @@ function currentSessionRow() {
 }
 
 describe("cloud driver turn API", () => {
+  const SELECTION = { harness: "claude-code", model: "opus", thinkingLevel: "high" } as const;
+
   it("sends message.send with the deus turnId as both turn id and idempotency key", async () => {
-    await startCloudTurn("deus-session-1", "turn-42", "hello", {});
+    await startCloudTurn("deus-session-1", "turn-42", "hello", SELECTION);
 
     expect(handler.beginTurn).toHaveBeenCalledWith("deus-session-1", "turn-42");
     const frame = mockSend.mock.calls.at(-1)![0];
@@ -1089,28 +1091,28 @@ describe("cloud driver turn API", () => {
       turnId: "turn-42",
       idempotencyKey: "turn-42",
     });
-    expect(frame.options).toBeUndefined();
   });
 
-  it.each(["claude-code", "codex-app-server"])(
-    "sends only turn preferences for %s",
-    async (agentHarness) => {
-      await startCloudTurn("deus-session-1", "turn-preferences", "hello", {
-        agentHarness,
+  it.each(["claude-code", "codex-app-server"] as const)(
+    "names the turn's harness, model and thinking level for %s, and no credential",
+    async (harness) => {
+      // `max` is the platform's level: the cloud lane speaks AGNT's vocabulary.
+      await startCloudTurn("deus-session-1", "turn-selection", "hello", {
+        harness,
         model: "selected-model",
-        thinkingLevel: "high",
+        thinkingLevel: "max",
       });
       expect(mockSend.mock.calls.at(-1)![0].options).toEqual({
-        harness: agentHarness,
+        harness,
         model: "selected-model",
-        thinkingLevel: "high",
+        thinkingLevel: "max",
       });
     }
   );
 
   it("rejects a send while a turn is live (agnt would queue, deus's contract is one turn)", async () => {
     handler.liveTurnId.mockReturnValue("busy-turn");
-    await expect(startCloudTurn("deus-session-1", "turn-43", "hi", {})).rejects.toThrow(
+    await expect(startCloudTurn("deus-session-1", "turn-43", "hi", SELECTION)).rejects.toThrow(
       /still working/
     );
     expect(mockSend).not.toHaveBeenCalled();

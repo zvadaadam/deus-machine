@@ -116,8 +116,13 @@ export const MODEL_PICKER_GROUPS = [
   AGENT_CONFIGS["codex-app-server"],
 ] as const satisfies readonly AgentConfig[];
 
+// Deus's own defaults for a new chat: product choices, made here in the open
+// and shown in the composer's pickers. Every turn then names its model and
+// thinking level — Deus Cloud refuses one that doesn't, and locally the CLI
+// would choose instead. Settings → AI changes the level.
 export const DEFAULT_AGENT_HARNESS = "claude-code" satisfies AgentHarness;
 export const DEFAULT_MODEL = `${DEFAULT_AGENT_HARNESS}:${AGENT_CONFIGS[DEFAULT_AGENT_HARNESS].models[0].model}`;
+export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 
 export function getKnownAgentConfig(agentHarness: AgentHarness): AgentConfig {
   return AGENT_CONFIGS[agentHarness];
