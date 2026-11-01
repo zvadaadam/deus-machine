@@ -61,7 +61,7 @@ async function assertInitializedAgents(listenUrl, requiredHarnesses = DEFAULT_RE
     // Must match the engine's WIRE_PROTOCOL_VERSION (this plain-node probe
     // cannot import the TS constant; the server rejects a mismatch loudly,
     // which is exactly how a stale value here surfaces).
-    protocolVersion: 2,
+    protocolVersion: 6,
     client: { name: "runtime-smoke" },
   });
   const harnesses =
