@@ -104,6 +104,9 @@ jobs:
 
       - name: Build Electron desktop outputs
         run: bun run build
+        # The macOS runners have 7 GB: Node's default heap runs out building the app.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Select macOS package architecture
         run: |
