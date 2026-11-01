@@ -18,9 +18,24 @@
 
 import path from "path";
 import type { AgentHarness } from "@shared/enums";
-import type { TurnCancelResult } from "@zvada/agent-server/protocol";
-import type { ProviderAuthRequest, AgentInfo } from "@shared/agent-info";
+import type {
+  ElicitationOutcome,
+  ElicitationRequestedEvent,
+  PermissionOutcome,
+  PermissionRequestedEvent,
+  TurnCancelResult,
+} from "@zvada/agent-server/protocol";
+import {
+  allowOnce,
+  cardQuestions,
+  isPlanRequest,
+  planAnswer,
+  questionAnswer,
+} from "@shared/agent-asks";
+import { isUnknownEvent } from "@shared/protocol-types";
+import type { AgentInfo } from "@shared/agent-info";
 import { AgentLink } from "./client";
+import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, type DeusTurnOptions } from "./run-config";
@@ -42,6 +57,7 @@ import { computeWorkspacePath } from "../../middleware/workspace-loader";
 // ---- Singleton ----
 
 let link: AgentLink | null = null;
+let localAgents: LocalAgents | null = null;
 let events: AgentEventHandler | null = null;
 let disposed = false;
 
@@ -71,7 +87,13 @@ async function establishLink(url: string, handler: AgentEventHandler): Promise<v
     try {
       const connected = await AgentLink.connect({
         url,
-        onEnvelope: (envelope) => handler.handle(envelope),
+        onEnvelope: (envelope) => {
+          handler.handle(envelope);
+          const { event } = envelope;
+          if (isUnknownEvent(event)) return;
+          if (event.type === "permission.requested") void answerPermission(event);
+          if (event.type === "elicitation.requested") void answerElicitation(event);
+        },
         onEventGap: (gap) => {
           const turnId = handler.handleEventGap(gap);
           if (!turnId || gap.reason !== "replay_failed") return;
@@ -108,6 +130,7 @@ async function establishLink(url: string, handler: AgentEventHandler): Promise<v
         return;
       }
       link = connected;
+      localAgents = new LocalAgents(connected.engine);
       return;
     } catch (err) {
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
@@ -123,6 +146,8 @@ async function establishLink(url: string, handler: AgentEventHandler): Promise<v
 export function shutdown(): void {
   disposed = true;
   shutdownCloudDriver();
+  localAgents?.dispose();
+  localAgents = null;
   void link?.close();
   link = null;
   events = null;
@@ -212,10 +237,65 @@ export function liveTurnId(sessionId: string): string | undefined {
   return events?.liveTurnId(sessionId);
 }
 
-/** Check authentication status for an agent provider. */
-export async function checkAuth(params: ProviderAuthRequest): Promise<unknown> {
-  if (!link) throw new Error("Agent service not initialized");
-  return link.providerAuth(params);
+/**
+ * What the engine asks Deus: a plan is the user's to approve, on the plan card
+ * (`exitPlanMode`, as the UI knows it); a tool's approval is allowed.
+ */
+async function answerPermission(event: PermissionRequestedEvent): Promise<void> {
+  const outcome = isPlanRequest(event.options) ? await askPlan(event) : allowOnce(event.options);
+  try {
+    await link?.engine.respondPermission(event.sessionId, event.requestId, outcome);
+  } catch (error) {
+    console.warn("[AgentService] Permission answer failed:", error);
+  }
+}
+
+async function askPlan(event: PermissionRequestedEvent): Promise<PermissionOutcome> {
+  try {
+    const answer = (await handleToolRequest("exitPlanMode", {
+      sessionId: event.sessionId,
+      toolInput: event.toolCall?.rawInput ?? {},
+    })) as { approved?: unknown } | undefined;
+    return planAnswer(answer?.approved === true);
+  } catch {
+    // The card went away unanswered (the turn stopped, the relay was cleared).
+    return { outcome: "cancelled" };
+  }
+}
+
+/**
+ * The agent's questions go to the question card (`askUserQuestion`, as the UI
+ * knows it); what else an MCP server asks for (a form, a URL) Deus has no card
+ * for, and declines.
+ */
+async function answerElicitation(event: ElicitationRequestedEvent): Promise<void> {
+  const outcome = await askQuestions(event);
+  try {
+    await link?.engine.respondElicitation(event.sessionId, event.requestId, outcome);
+  } catch (error) {
+    console.warn("[AgentService] Question answer failed:", error);
+  }
+}
+
+async function askQuestions(event: ElicitationRequestedEvent): Promise<ElicitationOutcome> {
+  if (event.mode !== "question" || !event.questions?.length) return { action: "decline" };
+  try {
+    const answer = (await handleToolRequest("askUserQuestion", {
+      sessionId: event.sessionId,
+      questions: cardQuestions(event.questions),
+    })) as { answers?: unknown } | undefined;
+    const answers = Array.isArray(answer?.answers) ? (answer.answers as (string | string[])[]) : [];
+    return questionAnswer(event.questions, answers);
+  } catch {
+    // The card went away unanswered (the turn stopped, the relay was cleared).
+    return { action: "cancel" };
+  }
+}
+
+/** The local agents' CLIs and logins, once the agent-server is connected. */
+export function getLocalAgents(): LocalAgents {
+  if (!localAgents) throw new Error("Agent server not connected");
+  return localAgents;
 }
 
 /** Returns the agents discovered during the initialize handshake. */

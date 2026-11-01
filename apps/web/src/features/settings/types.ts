@@ -8,26 +8,5 @@ export type {
   AgentItem as Agent,
 } from "@shared/types/agent-config";
 
-/** Auth status returned by the agent-server for each provider */
-export interface AgentProviderAuth {
-  type: string;
-  agentHarness: string;
-  accountInfo?: {
-    email?: string;
-    orgName?: string;
-    [key: string]: unknown;
-  };
-  error?: string;
-}
-
-export interface AgentInstallInfo {
-  type: string;
-  installed: boolean;
-}
-
-export interface AgentAuthStatus {
-  agents: AgentInstallInfo[];
-  claude: AgentProviderAuth | null;
-  codex: AgentProviderAuth | null;
-  error?: string;
-}
+/** Each local agent's login, as the engine read it from the agent's CLI. */
+export type { AgentAuthAnswer } from "@shared/agent-auth";

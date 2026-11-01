@@ -45,7 +45,9 @@ function broadcast(): Promise<void> {
  */
 export function registerAppMcp(serverName: string, url: string): Promise<void> {
   return enqueueRegistryUpdate(async () => {
-    registeredServers.set(serverName, { type: "http", url });
+    // An app's server can die with its app: a turn goes on without its tools
+    // (said as a recoverable error) instead of failing on it.
+    registeredServers.set(serverName, { type: "http", url, required: false });
     console.log(
       `[AAP-Registrar] Registered ${serverName} → ${url} (${registeredServers.size} total)`
     );

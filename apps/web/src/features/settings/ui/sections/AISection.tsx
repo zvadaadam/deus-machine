@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, Loader2, RefreshCw, ExternalLink, Terminal } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,55 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { useAgentAuth } from "../../api/settings.queries";
+import { useAgentAuth, useAgentAuthEvents } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import { readThinkingLevel } from "@shared/protocol";
 import { DEFAULT_THINKING_LEVEL } from "@/shared/agents";
 import { ProviderAccounts } from "./ProviderAccounts";
-import { readLocalProviderAuth, type LocalProviderAuthState } from "../../lib/local-provider-auth";
-import { openProviderLogin } from "../../lib/open-provider-login";
-
-function AuthBadge({
-  auth,
-  installed,
-}: {
-  auth: LocalProviderAuthState;
-  installed: boolean | undefined;
-}) {
-  if (auth.status === "checking") {
-    return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
-  }
-
-  if (installed === undefined || auth.status === "failed") {
-    return <span className="text-muted-foreground text-xs font-medium">Status unavailable</span>;
-  }
-
-  // Not installed at all
-  if (installed === false) {
-    return (
-      <div className="text-muted-foreground flex items-center gap-1.5">
-        <XCircle className="size-4" />
-        <span className="text-xs font-medium">Not installed</span>
-      </div>
-    );
-  }
-
-  if (auth.status === "signed-in") {
-    return (
-      <div className="text-accent-green flex items-center gap-1.5">
-        <CheckCircle2 className="size-4" />
-        <span className="text-xs font-medium">Connected</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="text-muted-foreground flex items-center gap-1.5">
-      <XCircle className="size-4" />
-      <span className="text-xs font-medium">Not connected</span>
-    </div>
-  );
-}
+import { LocalAgentRow } from "./LocalAgentRow";
+import { readLocalAgent } from "../../lib/local-agent-login";
 
 export function AISection({
   settings,
@@ -65,16 +23,7 @@ export function AISection({
   cloudOnly = false,
 }: SettingsSectionProps & { cloudOnly?: boolean }) {
   const agentAuthQuery = useAgentAuth(!cloudOnly);
-  const authStatus =
-    agentAuthQuery.isError || agentAuthQuery.data?.error ? undefined : agentAuthQuery.data;
-  const claudeAuth = readLocalProviderAuth(agentAuthQuery, "claude");
-  const codexAuthState = readLocalProviderAuth(agentAuthQuery, "codex");
-  const codexAuth = authStatus?.codex;
-  const agents = authStatus?.agents;
-  const claudeInstalled = agents?.some((a) => a.type === "claude-code" && a.installed);
-  const codexInstalled = agents?.some(
-    (a) => (a.type === "codex-app-server" || a.type === "codex-sdk") && a.installed
-  );
+  useAgentAuthEvents();
 
   if (cloudOnly) {
     return (
@@ -119,88 +68,18 @@ export function AISection({
           Local agents use their own CLI login. Cloud account defaults do not change it.
         </p>
       </div>
-      <div className="border-border-subtle space-y-4 rounded-lg border p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Claude Code</p>
-            <p className="text-muted-foreground text-sm">Anthropic</p>
-            {claudeAuth.status === "signed-in" && claudeAuth.accountInfo.email && (
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                {claudeAuth.accountInfo.email}
-                {claudeAuth.accountInfo.orgName ? ` · ${claudeAuth.accountInfo.orgName}` : ""}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <AuthBadge auth={claudeAuth} installed={claudeInstalled} />
-            {!agentAuthQuery.isLoading && claudeInstalled === false && (
-              <Button
-                variant="outline"
-                size="xs"
-                className="gap-1.5"
-                onClick={() =>
-                  window.open("https://docs.anthropic.com/en/docs/claude-code/overview", "_blank")
-                }
-              >
-                Install
-                <ExternalLink className="size-3" />
-              </Button>
-            )}
-            {claudeInstalled && claudeAuth.status === "signed-out" && (
-              <Button
-                variant="outline"
-                size="xs"
-                className="gap-1.5"
-                onClick={() => void openProviderLogin("claude")}
-              >
-                <Terminal className="size-3" />
-                Sign in
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ================================================================
-          Codex
-          ================================================================ */}
-      <div className="border-border-subtle space-y-4 rounded-lg border p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Codex</p>
-            <p className="text-muted-foreground text-sm">OpenAI</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!agentAuthQuery.isLoading && codexInstalled && codexAuth == null ? (
-              <span className="text-text-muted text-xs">Login managed by Codex</span>
-            ) : (
-              <AuthBadge auth={codexAuthState} installed={codexInstalled} />
-            )}
-            {!agentAuthQuery.isLoading && codexInstalled === false && (
-              <Button
-                variant="outline"
-                size="xs"
-                className="gap-1.5"
-                onClick={() => window.open("https://developers.openai.com/codex/cli", "_blank")}
-              >
-                Install
-                <ExternalLink className="size-3" />
-              </Button>
-            )}
-            {codexInstalled && codexAuthState.status === "signed-out" && (
-              <Button
-                variant="outline"
-                size="xs"
-                className="gap-1.5"
-                onClick={() => void openProviderLogin("codex")}
-              >
-                <Terminal className="size-3" />
-                Sign in
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      <LocalAgentRow
+        harness="claude-code"
+        title="Claude Code"
+        vendor="Anthropic"
+        state={readLocalAgent(agentAuthQuery, "claude-code")}
+      />
+      <LocalAgentRow
+        harness="codex-app-server"
+        title="Codex"
+        vendor="OpenAI"
+        state={readLocalAgent(agentAuthQuery, "codex-app-server")}
+      />
       <div className="space-y-4">
         <Separator />
 

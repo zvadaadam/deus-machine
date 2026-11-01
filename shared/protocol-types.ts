@@ -64,6 +64,7 @@ export type {
   ToolPart,
   ImagePart,
   FilePart,
+  SubagentPart,
   SubagentMetadata,
   // ---- tool state ----
   ToolState,

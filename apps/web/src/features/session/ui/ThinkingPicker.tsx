@@ -16,6 +16,8 @@ const LEVEL_LABELS: Record<ThinkingLevel, string> = {
   medium: "Medium",
   high: "High",
   xhigh: "Extra high",
+  max: "Max",
+  ultra: "Ultra",
 };
 
 interface ThinkingPickerProps {

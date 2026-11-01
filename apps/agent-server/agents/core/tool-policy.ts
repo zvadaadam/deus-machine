@@ -1,16 +1,16 @@
 // agent-server/agents/core/tool-policy.ts
 // Deus's answers to Claude tool-use questions, ported from the legacy
-// canUseTool. Deus has no interactive permission UI, so nothing may fall
-// through to the engine's broker — an unanswered `permission.requested` parks
-// the turn forever. Policy:
-//   - ExitPlanMode rides the deus/exitPlanMode side-channel round-trip;
+// canUseTool. Policy:
+//   - ExitPlanMode and AskUserQuestion go to the engine, which puts them to
+//     the user as Codex's (`permission.requested`, `elicitation.requested`);
+//     the backend answers from the plan and question cards
+//     (shared/agent-asks.ts);
 //   - edit tools are denied outside cwd + additionalDirectories;
 //   - everything else is allowed.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ClaudeToolPolicy } from "@zvada/agent-server/core";
-import { HostRpc } from "../../host-link";
 import { trackedSessions } from "../../session-tracker";
 
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
@@ -38,36 +38,7 @@ function realpathOrResolve(p: string, base?: string): string {
 }
 
 export const decideToolUse: ClaudeToolPolicy = async (toolName, input, ctx) => {
-  if (toolName === "ExitPlanMode") {
-    try {
-      const response = await HostRpc.requestExitPlanMode({
-        sessionId: ctx.sessionId,
-        toolInput: input,
-      });
-      if (response.approved) {
-        return {
-          behavior: "allow",
-          updatedInput: input,
-          updatedPermissions: [{ type: "setMode", mode: "default", destination: "session" }],
-        };
-      }
-      // interrupt: the user rejected the plan and will send an explanation —
-      // the agent must stop this turn, not keep planning (legacy parity).
-      return {
-        behavior: "deny",
-        message: "Plan denied by user. Please await a further message for an explanation.",
-        interrupt: true,
-      };
-    } catch {
-      return {
-        behavior: "deny",
-        message:
-          "Plan approval request failed (frontend may be unavailable or timed out). " +
-          "Please wait for the user to reconnect and try again.",
-        interrupt: true,
-      };
-    }
-  }
+  if (toolName === "ExitPlanMode" || toolName === "AskUserQuestion") return undefined;
 
   if (EDIT_TOOLS.has(toolName)) {
     const state = trackedSessions.get(ctx.sessionId);

@@ -37,7 +37,6 @@ interface Window {
       callback: (state: import("@shared/types/updates").UpdateState) => void
     ) => () => void;
     openExternal: (url: string) => Promise<void>;
-    openTerminal: (command: string) => Promise<"opened" | "copied">;
     confirm: (message: string, detail?: string) => Promise<boolean>;
     startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;

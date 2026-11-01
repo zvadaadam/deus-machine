@@ -10,7 +10,7 @@ export {
   startTurn,
   stopSession,
   isConnected,
-  checkAuth,
+  getLocalAgents,
   getAgents,
   registerAapMcp,
   unregisterAapMcp,

@@ -201,6 +201,16 @@ export const COMMAND_NAMES = [
   // (kind status) and the `cloudSimulator` read.
   "cloudSim:start",
   "cloudSim:stop",
+  // The local agents' logins, run by the engine through each CLI (shared/agent-auth.ts).
+  // agentSignIn { harness, method, apiKey? } → AgentSignInAnswer; agentLoginCode
+  // { loginId, code } → { auth }; agentLoginCancel { loginId }; agentLogout { harness } → { auth }.
+  // How a sign-in ends rides q:event "agent:auth". agentPrepareClis installs
+  // the CLIs turns run, answered at once; the install rides q:event "agent:cli".
+  "agentPrepareClis",
+  "agentSignIn",
+  "agentLoginCode",
+  "agentLoginCancel",
+  "agentLogout",
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
@@ -266,6 +276,11 @@ export const PROTOCOL_EVENTS = [
   // previous account's. Clients drop their cloud caches; a mounted panel
   // re-seeds under the new identity. Payload: CloudIdentityEvent.
   "cloud:identity",
+  // A local agent's login changed, or a sign-in ended, whoever caused it.
+  // Payload: AgentAuthEvent (shared/agent-auth.ts).
+  "agent:auth",
+  // A local agent's CLI installing. Payload: HarnessCliProgress.
+  "agent:cli",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 

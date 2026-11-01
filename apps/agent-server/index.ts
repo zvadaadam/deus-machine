@@ -20,7 +20,7 @@ Sentry.init({
 
 import { createServer as createHttpServer } from "http";
 import { WebSocketServer } from "ws";
-import { AgentServer as WireServer } from "./upstream-server";
+import { AgentServer as WireServer } from "@zvada/agent-server/server";
 
 import { adoptBundledClis } from "./agents/core/bundled-clis";
 import { applyShellEnvironment } from "./agents/environment";

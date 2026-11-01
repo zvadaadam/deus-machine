@@ -228,7 +228,7 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     await killAgentServer(srv);
   });
 
-  it("handshakes on the standard wire (current protocol version, three harnesses)", async () => {
+  it("handshakes on the standard wire (current protocol version, two harnesses)", async () => {
     const conn = await connectBackendStyle(srv.wsUrl);
     const init = await conn.client.initialize();
     // The LITERAL deus targets, not the package constant. Comparing the
@@ -237,15 +237,11 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     // the wire version out from under the backend client. A deliberate bump is
     // a one-line edit here plus a look at what changed; a silent one is what
     // this pins against.
-    expect(init.protocolVersion).toBe(2);
+    expect(init.protocolVersion).toBe(6);
     // Sanity: the installed package agrees with what deus targets.
-    expect(WIRE_PROTOCOL_VERSION).toBe(2);
+    expect(WIRE_PROTOCOL_VERSION).toBe(6);
     expect(init.server.name).toBe("deus-agent-server");
-    expect(Object.keys(init.harnesses).sort()).toEqual([
-      "claude-code",
-      "codex-app-server",
-      "codex-sdk",
-    ]);
+    expect(Object.keys(init.harnesses).sort()).toEqual(["claude-code", "codex-app-server"]);
     await conn.close();
   });
 
@@ -279,17 +275,6 @@ describe.skipIf(!bundleExists)("E2E: Agent Server Process", () => {
     expect(alive.error?.code).toBe(-32601);
     ws.close();
   });
-
-  it("answers deus/provider-auth on the side channel (codex → unsupported)", async () => {
-    const conn = await connectBackendStyle(srv.wsUrl);
-    const result = await conn.sideChannel.request<{ error?: string }>(
-      SIDE_CHANNEL.providerAuth,
-      { agentHarness: "codex-sdk", cwd: WORKSPACE_ROOT },
-      10_000
-    );
-    expect(result).toMatchObject({ error: "unsupported" });
-    await conn.close();
-  });
 });
 
 // ============================================================================
@@ -303,8 +288,6 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
   beforeAll(async () => {
     srv = await spawnAgentServer();
     conn = await connectBackendStyle(srv.wsUrl, async (method) => {
-      // Approve everything user-facing so live turns never park.
-      if (method === SIDE_CHANNEL.exitPlanMode) return { approved: true };
       throw new Error(`e2e host does not implement ${method}`);
     });
   }, 60_000);
@@ -314,13 +297,11 @@ describe.skipIf(!bundleExists || !claudeCliAvailable)("E2E: Real Claude Integrat
     await killAgentServer(srv);
   });
 
-  it("returns real account info via the provider-auth side channel", async () => {
-    const result = await conn.sideChannel.request<{
-      accountInfo?: unknown;
-      error?: string;
-    }>(SIDE_CHANNEL.providerAuth, { agentHarness: "claude-code", cwd: WORKSPACE_ROOT }, 30_000);
-    expect(result).toHaveProperty("accountInfo");
-    expect((result as { error?: string }).error).toBeUndefined();
+  it("reads the real Claude login over auth/status", async () => {
+    const [auth] = await conn.client.authStatus({ harnesses: ["claude-code"] });
+    expect(auth?.harness).toBe("claude-code");
+    expect(["signed_in", "signed_out"]).toContain(auth?.state);
+    expect(auth?.error).toBeUndefined();
   }, 30_000);
 
   it("runs a real turn and streams the full lifecycle", async () => {
@@ -427,7 +408,7 @@ describe.skipIf(!bundleExists || !codexIntegrationEnabled)("E2E: Real Codex Inte
     const turn = await conn.client.runTurn({
       sessionId: "e2e-codex-1",
       input: 'Reply with exactly the text "E2E_OK" and nothing else.',
-      config: { harness: "codex-sdk", cwd: WORKSPACE_ROOT },
+      config: { harness: "codex-app-server", cwd: WORKSPACE_ROOT },
     });
     const ended = await turn.result;
     expect(ended.stopReason).toBe("end_turn");
@@ -444,7 +425,7 @@ describe.skipIf(!bundleExists || !codexIntegrationEnabled)("E2E: Real Codex Inte
       sessionId: "e2e-codex-cancel",
       turnId: "cancel-turn",
       input: "Count slowly from 1 to 1000, one number per line.",
-      config: { harness: "codex-sdk", cwd: WORKSPACE_ROOT },
+      config: { harness: "codex-app-server", cwd: WORKSPACE_ROOT },
     });
     await new Promise((r) => setTimeout(r, 3_000));
     await conn.client.cancelTurn("e2e-codex-cancel");

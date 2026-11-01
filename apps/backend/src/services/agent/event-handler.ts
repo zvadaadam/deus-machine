@@ -102,11 +102,9 @@ const TURN_END_RESOURCES: QueryResource[] = [
  * five reach the UI another way or not at all: the context gauge and the
  * session's terminal state are session COLUMNS (q:delta carries them), the
  * "working" flip is written optimistically by the send command before
- * `turn.started` could arrive, the ClaudeToolPolicy in
- * apps/agent-server/agents/core/tool-policy.ts answers every tool-use
- * question in-process (deus has no interactive permission UI, so nothing may
- * fall through to the engine's broker), and deus never sets
- * `RunConfig.includeRaw`.
+ * `turn.started` could arrive, the service answers a permission request (a
+ * plan goes to the plan card as `tool:request`, a tool's approval is allowed:
+ * shared/agent-permissions.ts), and deus never sets `RunConfig.includeRaw`.
  */
 const NOT_PUSHED = new Set([
   "session.ended",
@@ -137,10 +135,10 @@ const NOT_PUSHED = new Set([
  * not `messages`), so the saving is per subscription, not per client.
  */
 const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]>> = {
-  "message-upserted": MESSAGE_RESOURCES,
-  "turn-updated": TURN_END_RESOURCES,
-  "usage-updated": SESSION_RESOURCES,
-  "compaction-upserted": MESSAGE_RESOURCES,
+  message_upserted: MESSAGE_RESOURCES,
+  turn_updated: TURN_END_RESOURCES,
+  usage_updated: SESSION_RESOURCES,
+  compaction_upserted: MESSAGE_RESOURCES,
 };
 
 // ---- Helpers ----

@@ -21,16 +21,16 @@ describe("app-registrar (core engine)", () => {
     await registerAppMcp("deus_mobile_use", "http://localhost:4001/mcp");
     await registerAppMcp("deus_web", "http://localhost:4002/mcp");
     expect(broadcasts).toHaveBeenNthCalledWith(1, {
-      deus_mobile_use: { type: "http", url: "http://localhost:4001/mcp" },
+      deus_mobile_use: { type: "http", url: "http://localhost:4001/mcp", required: false },
     });
     expect(broadcasts).toHaveBeenNthCalledWith(2, {
-      deus_mobile_use: { type: "http", url: "http://localhost:4001/mcp" },
-      deus_web: { type: "http", url: "http://localhost:4002/mcp" },
+      deus_mobile_use: { type: "http", url: "http://localhost:4001/mcp", required: false },
+      deus_web: { type: "http", url: "http://localhost:4002/mcp", required: false },
     });
 
     await unregisterAppMcp("deus_mobile_use");
     expect(broadcasts).toHaveBeenNthCalledWith(3, {
-      deus_web: { type: "http", url: "http://localhost:4002/mcp" },
+      deus_web: { type: "http", url: "http://localhost:4002/mcp", required: false },
     });
   });
 
@@ -44,8 +44,8 @@ describe("app-registrar (core engine)", () => {
     await registerAppMcp("a", "http://a/mcp").catch(() => {});
     await registerAppMcp("b", "http://b/mcp");
     expect(broadcasts).toHaveBeenLastCalledWith({
-      a: { type: "http", url: "http://a/mcp" },
-      b: { type: "http", url: "http://b/mcp" },
+      a: { type: "http", url: "http://a/mcp", required: false },
+      b: { type: "http", url: "http://b/mcp", required: false },
     });
   });
 });

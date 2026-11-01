@@ -3,8 +3,12 @@
  * TanStack Query hooks for settings management
  */
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
+import { toast } from "sonner";
+import type { AgentAuthAnswer, AgentAuthEvent, HarnessCliProgress } from "@shared/agent-auth";
+import { onEvent } from "@/platform/ws";
 import { SettingsService } from "./settings.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
@@ -22,15 +26,68 @@ export function useSettings() {
 }
 
 /**
- * Fetch agent provider auth status (Claude / Codex)
+ * Each local agent's login (Claude Code / Codex), as the engine reads it from
+ * the agent's CLI, and the sign-ins under way
  */
 export function useAgentAuth(enabled = true) {
   return useQuery({
     queryKey: queryKeys.settings.agentAuth,
     queryFn: () => SettingsService.fetchAgentAuth(),
-    staleTime: 60000, // Cache for 60s — auth status changes infrequently
+    staleTime: 60000, // Cache for 60s — agent-server says when a login changes
     enabled,
   });
+}
+
+/** An install's progress, as the CLI it makes ready (a missed one is read again at its end). */
+function withProgress(answer: AgentAuthAnswer, progress: HarnessCliProgress): AgentAuthAnswer {
+  const state =
+    progress.phase === "ready" ? "ready" : progress.phase === "failed" ? "failed" : "installing";
+  return {
+    ...answer,
+    clis: answer.clis.map((cli) =>
+      cli.harness === progress.harness
+        ? {
+            harness: cli.harness,
+            state,
+            version: progress.version,
+            receivedBytes: progress.receivedBytes,
+            ...(progress.totalBytes !== undefined && { totalBytes: progress.totalBytes }),
+            ...(progress.error && { error: progress.error }),
+          }
+        : cli
+    ),
+  };
+}
+
+/**
+ * Follows the local agents: a CLI installing (its progress, then the agent's
+ * login once it is ready), a login changing, a sign-in ending (and how one
+ * failed).
+ */
+export function useAgentAuthEvents(): void {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      onEvent((event, data) => {
+        if (event === "agent:cli") {
+          const progress = data as HarnessCliProgress;
+          queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
+            answer ? withProgress(answer, progress) : answer
+          );
+          if (progress.phase === "ready" || progress.phase === "failed") {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
+          }
+          return;
+        }
+        if (event !== "agent:auth") return;
+        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
+        const login = (data as AgentAuthEvent | undefined)?.login;
+        if (login && (login.outcome === "failed" || login.outcome === "expired")) {
+          toast.error(login.error ?? "The sign-in didn’t finish");
+        }
+      }),
+    [queryClient]
+  );
 }
 
 /**

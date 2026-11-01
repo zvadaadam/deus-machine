@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.hoisted ensures mockFrontendAPI is available when the vi.mock factory runs (local mock variable name kept for brevity)
 const { mockFrontendAPI } = vi.hoisted(() => ({
   mockFrontendAPI: {
-    requestAskUserQuestion: vi.fn(),
     requestGetDiff: vi.fn(),
     requestDiffComment: vi.fn(),
     requestGetTerminalOutput: vi.fn(),
@@ -76,9 +75,9 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator + apps + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(43);
-    // Workspace tools
-    expect(toolNames).toContain("AskUserQuestion");
+    expect(toolNames).toHaveLength(42);
+    // Workspace tools (questions are Claude's own AskUserQuestion, through the engine)
+    expect(toolNames).not.toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
     expect(toolNames).toContain("DiffComment");
     expect(toolNames).toContain("GetTerminalOutput");
@@ -123,80 +122,6 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("recording_stop");
     expect(toolNames).toContain("recording_chapter");
     expect(toolNames).toContain("recording_status");
-  });
-
-  // ==========================================================================
-  // AskUserQuestion
-  // ==========================================================================
-
-  describe("AskUserQuestion", () => {
-    it("calls EventBroadcaster.requestAskUserQuestion with sessionId and questions", async () => {
-      mockFrontendAPI.requestAskUserQuestion.mockResolvedValue({
-        answers: ["Option A"],
-      });
-
-      const tool = getRegisteredTools(server.instance)["AskUserQuestion"];
-      const result = await tool.handler({
-        questions: [{ question: "Which option?", options: ["Option A", "Option B"] }],
-      });
-
-      expect(mockFrontendAPI.requestAskUserQuestion).toHaveBeenCalledWith({
-        sessionId: SESSION_ID,
-        questions: [{ question: "Which option?", options: ["Option A", "Option B"] }],
-      });
-      expect(result.content[0].text).toContain("User responses:");
-      expect(result.content[0].text).toContain("Option A");
-    });
-
-    it("handles user cancellation", async () => {
-      mockFrontendAPI.requestAskUserQuestion.mockResolvedValue({
-        answers: ["USER_CANCELLED"],
-      });
-
-      const tool = getRegisteredTools(server.instance)["AskUserQuestion"];
-      const result = await tool.handler({
-        questions: [{ question: "Continue?", options: ["Yes", "No"] }],
-      });
-
-      expect(result.content[0].text).toContain("User cancelled");
-    });
-
-    it("formats multiple answers correctly", async () => {
-      mockFrontendAPI.requestAskUserQuestion.mockResolvedValue({
-        answers: ["Yes", "Blue"],
-      });
-
-      const tool = getRegisteredTools(server.instance)["AskUserQuestion"];
-      const result = await tool.handler({
-        questions: [
-          { question: "Continue?", options: ["Yes", "No"] },
-          { question: "Color?", options: ["Red", "Blue"] },
-        ],
-      });
-
-      expect(result.content[0].text).toContain("1. Yes");
-      expect(result.content[0].text).toContain("2. Blue");
-    });
-
-    it("formats multi-select array answers", async () => {
-      mockFrontendAPI.requestAskUserQuestion.mockResolvedValue({
-        answers: [["Option A", "Option C"]],
-      });
-
-      const tool = getRegisteredTools(server.instance)["AskUserQuestion"];
-      const result = await tool.handler({
-        questions: [
-          {
-            question: "Which?",
-            options: ["Option A", "Option B", "Option C"],
-            multiSelect: true,
-          },
-        ],
-      });
-
-      expect(result.content[0].text).toContain("Option A");
-      expect(result.content[0].text).toContain("Option C");
-    });
   });
 
   // ==========================================================================

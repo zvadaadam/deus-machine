@@ -68,13 +68,13 @@ function stubPersistChanges(
 ): ChangeWrite[] {
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
-    if (change.kind === "turn-updated") {
+    if (change.kind === "turn_updated") {
       const turn = state.turns.find((t) => t.turnId === change.turnId);
       if (!turn || turn.status !== "ended") continue;
       const outcome = outcomeFor(turn);
       if (outcome) outcomes.push({ turn, outcome });
     }
-    if (change.kind === "usage-updated" && !state.usage) continue;
+    if (change.kind === "usage_updated" && !state.usage) continue;
     writes.push({ change, result: { ok: true, value: null } });
   }
   return writes;
@@ -307,7 +307,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(echo));
 
       const [, state, changes] = mockPersistChanges.mock.calls[0];
-      expect(changes).toEqual([{ kind: "message-upserted", messageId: "user-msg", turnId: TURN }]);
+      expect(changes).toEqual([{ kind: "message_upserted", messageId: "user-msg", turnId: TURN }]);
       expect((state as ConversationState).timeline[0]).toMatchObject({
         messageId: "user-msg",
         role: "user",
@@ -335,7 +335,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     it("skips invalidation when the write failed", () => {
       mockPersistChanges.mockReturnValueOnce([
         {
-          change: { kind: "message-upserted", messageId: "msg-1", turnId: TURN },
+          change: { kind: "message_upserted", messageId: "msg-1", turnId: TURN },
           result: { ok: false, error: "no session" },
         },
       ] as never);
@@ -357,7 +357,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       expect(mockPersistChanges.mock.calls.at(-1)![2]).toEqual([
         {
-          kind: "part-upserted",
+          kind: "part_upserted",
           messageId: "msg-1",
           partId: "part-1",
           outputIndex: 1,
@@ -377,9 +377,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(partEvent));
 
       expect(mockPersistChanges.mock.calls[0][2]).toEqual([
-        { kind: "message-upserted", messageId: "msg-1", turnId: TURN },
+        { kind: "message_upserted", messageId: "msg-1", turnId: TURN },
         {
-          kind: "part-upserted",
+          kind: "part_upserted",
           messageId: "msg-1",
           partId: "part-1",
           outputIndex: 1,
@@ -620,7 +620,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(event));
 
       const [, state, changes] = mockPersistChanges.mock.calls[0];
-      expect(changes).toEqual([{ kind: "usage-updated" }]);
+      expect(changes).toEqual([{ kind: "usage_updated" }]);
       expect((state as ConversationState).usage).toMatchObject({ used: 1234, size: 200_000 });
       expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "session", "stats"], {
         sessionIds: [SESSION],
@@ -671,7 +671,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(event));
 
       const [, state, changes] = mockPersistChanges.mock.calls[0];
-      expect(changes).toEqual([{ kind: "compaction-upserted", compactionId: "cmp-1" }]);
+      expect(changes).toEqual([{ kind: "compaction_upserted", compactionId: "cmp-1" }]);
       expect((state as ConversationState).timeline[0]).toMatchObject({
         kind: "compaction",
         compactionId: "cmp-1",

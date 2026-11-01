@@ -209,6 +209,8 @@ export function describeEvent(event: AnyLifecycleEvent): string {
       (e) => `used=${e.used}${e.size !== undefined ? `/${e.size}` : ""}`
     )
     .with({ type: "session.compaction" }, (e) => `id=${e.compactionId} status=${e.status}`)
+    .with({ type: "session.limits" }, (e) => `windows=${e.windows.length}`)
+    .with({ type: "session.mode" }, (e) => `permissionMode=${e.permissionMode}`)
     .with(
       { type: "error" },
       (e) =>
@@ -216,6 +218,11 @@ export function describeEvent(event: AnyLifecycleEvent): string {
     )
     .with({ type: "permission.requested" }, (e) => `requestId=${e.requestId} "${e.title}"`)
     .with({ type: "permission.resolved" }, (e) => `requestId=${e.requestId}`)
+    .with({ type: "elicitation.requested" }, (e) => `requestId=${e.requestId} mode=${e.mode}`)
+    .with(
+      { type: "elicitation.resolved" },
+      (e) => `requestId=${e.requestId} action=${e.outcome.action}`
+    )
     .with({ type: "raw" }, (e) => `harness=${e.harness}`)
     .exhaustive();
 }

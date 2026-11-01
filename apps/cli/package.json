@@ -39,11 +39,9 @@
     "build": "bunx tsx build.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.131",
+    "@anthropic-ai/claude-agent-sdk": "0.3.288",
     "@hono/node-server": "^1.19.9",
     "@napi-rs/canvas": "^0.1.97",
-    "@openai/codex": "0.153.4",
-    "@openai/codex-sdk": "0.153.4",
     "@sentry/node": "^10.40.0",
     "agent-browser": "^0.21.4",
     "better-sqlite3": "^12.4.1",

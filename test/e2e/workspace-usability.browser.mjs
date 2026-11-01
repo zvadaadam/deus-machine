@@ -238,13 +238,39 @@ const server = await createServer({
             return failAgentAuth
               ? json({}, 503)
               : json({
-                  agents: [],
-                  claude: {
-                    type: "claude",
-                    agentHarness: "claude-code",
-                    accountInfo: { tokenSource: "none", apiProvider: "firstParty" },
-                  },
-                  codex: null,
+                  auth: [
+                    {
+                      harness: "claude-code",
+                      state: "signed_out",
+                      methods: [
+                        {
+                          id: "claudeai",
+                          kind: "browser",
+                          label: "Claude subscription",
+                          credential: "subscription",
+                        },
+                      ],
+                    },
+                    {
+                      harness: "codex-app-server",
+                      state: "signed_in",
+                      credential: "subscription",
+                      source: "login",
+                      label: "ChatGPT Pro",
+                      email: "fixture@example.com",
+                      methods: [],
+                    },
+                  ],
+                  clis: [
+                    { harness: "claude-code", state: "ready", version: "0.3.288", source: "cache" },
+                    {
+                      harness: "codex-app-server",
+                      state: "ready",
+                      version: "0.160.0",
+                      source: "cache",
+                    },
+                  ],
+                  logins: [],
                 });
           if (req.url === "/api/query/session") {
             const respond = () =>
@@ -664,7 +690,6 @@ try {
   // The normal-profile credentials and filesystem are never used by this test.
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.addInitScript(() => {
-    window.loginCommands = [];
     window.electronAPI = {
       invoke: async (command) =>
         command === "check_cli_tool"
@@ -672,10 +697,6 @@ try {
           : command === "native:pickFolder"
             ? "/fixture/not-git"
             : undefined,
-      openTerminal: async (command) => {
-        window.loginCommands.push(command);
-        return "opened";
-      },
     };
   });
   await page.goto(server.resolvedUrls.local[0] + "?onboarding");
@@ -687,18 +708,19 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("heading", { name: "Connect your AI tools", exact: true }).waitFor();
   const signIns = page.getByRole("button", { name: "Sign in", exact: true });
-  await page.getByText("Couldn’t check account", { exact: true }).waitFor();
-  assert.equal(await signIns.count(), 1, "A failed Claude probe must offer retry, not sign-in");
+  await page.getByText("Couldn’t check account", { exact: true }).first().waitFor();
+  assert.equal(await signIns.count(), 0, "A failed login read must offer retry, not sign-in");
   failAgentAuth = false;
   await page.getByRole("button", { name: "Check again", exact: true }).first().click();
   await page.getByText("Sign in on this computer", { exact: true }).waitFor();
-  assert.equal(await signIns.count(), 2, "The SDK no-credentials account is signed out");
+  await page.getByText("ChatGPT Pro · fixture@example.com", { exact: true }).waitFor();
+  assert.equal(await signIns.count(), 1, "Only the signed-out agent offers a sign-in");
+  await page.screenshot({ path: path.join(artifacts, "onboarding-agents.png") });
   await signIns.first().click();
-  await signIns.last().click();
-  assert.deepEqual(await page.evaluate(() => window.loginCommands), [
-    "claude auth login",
-    "codex login",
-  ]);
+  assert.deepEqual(
+    await page.evaluate(() => window.welcomeCommands.filter(({ name }) => name === "agentSignIn")),
+    [{ name: "agentSignIn", params: { harness: "claude-code", method: "claudeai" } }]
+  );
   assert.equal(await page.getByText("/bundled/cli", { exact: false }).count(), 0);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "Couldn’t load recent projects" }).waitFor();

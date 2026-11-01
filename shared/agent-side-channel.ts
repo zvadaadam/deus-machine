@@ -27,13 +27,10 @@ export const SIDE_CHANNEL = {
   title: "deus/title",
 
   // Requests, backend → agent-server
-  providerAuth: "deus/provider-auth",
   aapRegisterMcp: "deus/aap/register-mcp",
   aapUnregisterMcp: "deus/aap/unregister-mcp",
 
   // Requests, agent-server → backend (deus MCP tool round-trips)
-  exitPlanMode: "deus/exitPlanMode",
-  askUserQuestion: "deus/askUserQuestion",
   getDiff: "deus/getDiff",
   diffComment: "deus/diffComment",
   getTerminalOutput: "deus/getTerminalOutput",

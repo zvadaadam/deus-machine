@@ -526,13 +526,13 @@ export function persistChanges(
   const writes: ChangeWrite[] = [];
   for (const change of changes) {
     switch (change.kind) {
-      case "message-upserted": {
+      case "message_upserted": {
         const message = findConversationMessage(state, change.messageId);
         if (!message) break;
         writes.push({ change, result: persistMessage(sessionId, message) });
         break;
       }
-      case "part-upserted": {
+      case "part_upserted": {
         const message = findConversationMessage(state, change.messageId);
         const part = message?.parts.find((p) => p.id === change.partId);
         if (!part) break;
@@ -542,7 +542,7 @@ export function persistChanges(
         });
         break;
       }
-      case "turn-updated": {
+      case "turn_updated": {
         const turn = state.turns.find((t) => t.turnId === change.turnId);
         if (!turn) break;
         writes.push({
@@ -556,14 +556,14 @@ export function persistChanges(
         });
         break;
       }
-      case "usage-updated": {
+      case "usage_updated": {
         // Also emitted when an ended turn's billing rolls into the totals,
         // which moves no session column.
         if (!state.usage) break;
         writes.push({ change, result: persistSessionUsage(sessionId, state.usage) });
         break;
       }
-      case "compaction-upserted": {
+      case "compaction_upserted": {
         const entry = findConversationCompaction(state, change.compactionId);
         if (!entry) break;
         writes.push({ change, result: persistCompaction(sessionId, entry) });

@@ -1,5 +1,4 @@
 export {
-  useCliCheck,
   useStartGhAuthLogin,
   useRecentProjects,
   useCompleteOnboarding,

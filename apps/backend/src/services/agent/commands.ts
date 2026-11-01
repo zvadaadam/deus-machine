@@ -50,6 +50,7 @@ import { runAutomationNow, refreshAutomations, openAutomationRun } from "../auto
 import { broadcast as wsBroadcast } from "../ws.service";
 import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
 import type { CommandName } from "@shared/types/query-protocol";
+import { isLocalHarness, type LocalHarness } from "@shared/agent-auth";
 import {
   type QueryParams,
   readStringParam as readString,
@@ -66,6 +67,12 @@ const execFileAsync = promisify(execFile);
 
 export interface CommandContext {
   relayClient?: boolean;
+}
+
+function readLocalHarness(params: QueryParams): LocalHarness {
+  const harness = params.harness;
+  if (!isLocalHarness(harness)) throw new Error(`not a local agent: ${String(harness)}`);
+  return harness;
 }
 
 // ---- Command Dispatch ----
@@ -356,6 +363,33 @@ export async function runCommand(
         const opened = await openAutomationRun(runId);
         return { commandId: runId, ...opened };
       })
+      // ---- The local agents: their CLIs and logins, run by the engine ----
+      .with("agentPrepareClis", () => {
+        agentService.getLocalAgents().prepareClis();
+        return {};
+      })
+      .with("agentSignIn", async () => {
+        const harness = readLocalHarness(params);
+        const method = requireParam(params, "method", "agentSignIn");
+        const apiKey = readString(params, "apiKey")?.trim();
+        return {
+          ...(await agentService.getLocalAgents().signIn(harness, method, apiKey || undefined)),
+        };
+      })
+      .with("agentLoginCode", async () => {
+        const loginId = requireParam(params, "loginId", "agentLoginCode");
+        const code = requireParam(params, "code", "agentLoginCode");
+        return { auth: await agentService.getLocalAgents().complete(loginId, code) };
+      })
+      .with("agentLoginCancel", async () => {
+        await agentService
+          .getLocalAgents()
+          .cancel(requireParam(params, "loginId", "agentLoginCancel"));
+        return {};
+      })
+      .with("agentLogout", async () => ({
+        auth: await agentService.getLocalAgents().logout(readLocalHarness(params)),
+      }))
       .exhaustive()
   );
 }

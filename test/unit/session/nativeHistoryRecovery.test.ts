@@ -115,8 +115,10 @@ describe("native replay through the published engine, SQLite and desktop fold", 
           modelSwitch: "unsupported" as const,
           thinkingLevels: false,
           images: false,
+          files: [],
           mcpServers: false,
           permissionRequests: true,
+          rejectionMessages: false,
         };
         async *execute(_input: unknown, options: AgentExecuteOptions) {
           options.onNativeSession?.("native-original");

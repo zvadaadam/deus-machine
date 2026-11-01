@@ -789,7 +789,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       };
 
       // Start and end update the same turn; messages remain transcript content.
-      expect(run()).toEqual(["turn-updated", "message-upserted", "part-upserted", "turn-updated"]);
+      expect(run()).toEqual(["turn_updated", "message_upserted", "part_upserted", "turn_updated"]);
       const before = db.prepare(`SELECT * FROM messages ORDER BY seq`).all();
       const parts = db.prepare(`SELECT * FROM parts ORDER BY id`).all();
 
@@ -800,7 +800,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
       // not — the reducer never compares snapshots, it upserts them — so the
       // row is written again with identical content. That is why the parts
       // upsert has to be idempotent SQL and not an INSERT.
-      expect(second).toEqual(["part-upserted"]);
+      expect(second).toEqual(["part_upserted"]);
       expect(db.prepare(`SELECT * FROM messages ORDER BY seq`).all()).toEqual(before);
       expect(db.prepare(`SELECT * FROM parts ORDER BY id`).all()).toEqual(parts);
       expect(db.prepare("SELECT COUNT(*) AS n, SUM(cost) AS cost FROM turns").get()).toEqual({
@@ -869,7 +869,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
         timestamp: T,
       });
 
-      expect(writes.map((w) => w.change.kind)).toEqual(["compaction-upserted"]);
+      expect(writes.map((w) => w.change.kind)).toEqual(["compaction_upserted"]);
       expect(
         db
           .prepare(`SELECT status, trigger, pre_tokens FROM compactions WHERE compaction_id='c1'`)
@@ -906,7 +906,7 @@ describeWithDb("agent persistence (canonical events → SQLite)", () => {
 
       // turn.started and message.started are rows; the bracket marker, the
       // buffered tool input and the permission are not.
-      expect(writes.map((w) => w.change.kind)).toEqual(["turn-updated", "message-upserted"]);
+      expect(writes.map((w) => w.change.kind)).toEqual(["turn_updated", "message_upserted"]);
     });
   });
 });

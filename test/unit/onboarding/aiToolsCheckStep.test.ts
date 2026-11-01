@@ -2,86 +2,108 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AIToolsCheckStep } from "@/features/onboarding/ui/steps/AIToolsCheckStep";
-import type { AgentAuthStatus } from "@/features/settings/types";
+import type { AgentAuthAnswer, HarnessAuth, HarnessCli } from "@shared/agent-auth";
 
 const auth = vi.hoisted(() => ({
-  data: undefined as AgentAuthStatus | undefined,
+  data: undefined as AgentAuthAnswer | undefined,
   isLoading: false,
   isError: false,
 }));
-vi.mock("@/features/onboarding/api", () => ({
-  useCliCheck: (tool: string) => ({
-    data: { installed: tool === "claude" },
-    isLoading: false,
-    refetch: vi.fn(),
-  }),
-}));
 vi.mock("@/features/settings/api/settings.queries", () => ({
   useAgentAuth: () => ({ ...auth, refetch: vi.fn() }),
+  useAgentAuthEvents: () => {},
 }));
+
+const browser = { id: "claudeai", kind: "browser", label: "Claude", credential: "subscription" };
+const claude = (overrides: Partial<HarnessAuth> = {}): HarnessAuth => ({
+  harness: "claude-code",
+  state: "signed_out",
+  methods: [browser],
+  ...overrides,
+});
+
+const clis: HarnessCli[] = [
+  { harness: "claude-code", state: "ready", version: "0.3.288", source: "cache" },
+  { harness: "codex-app-server", state: "missing" },
+];
 
 beforeEach(() => {
   auth.isLoading = false;
   auth.isError = false;
-  auth.data = {
-    agents: [{ type: "claude-code", installed: true }],
-    claude: {
-      type: "claude_auth_output",
-      agentHarness: "claude-code",
-      accountInfo: { tokenSource: "none", apiProvider: "firstParty" },
-    },
-    codex: null,
-  };
+  auth.data = { auth: [claude()], clis, logins: [] };
 });
 
 const render = () =>
   renderToStaticMarkup(createElement(AIToolsCheckStep, { onNext: vi.fn(), onBack: vi.fn() }));
 
 describe("onboarding Claude account status", () => {
-  it("offers sign-in for the SDK's successful no-credentials account object", () => {
+  it("offers sign-in for a signed-out Claude", () => {
     const html = render();
     expect(html).toContain("Sign in on this computer");
     expect(html).toContain(">Sign in</button>");
     expect(html).toContain(">Check again</button>");
   });
 
-  it("offers sign-in when a successful probe has no account", () => {
-    auth.data!.claude = null;
-    expect(render()).toContain(">Sign in</button>");
-  });
-
-  it.each([
-    { tokenSource: "CLAUDE_CODE_OAUTH_TOKEN" },
-    { tokenSource: "none", apiKeySource: "ANTHROPIC_API_KEY" },
-  ])("preserves signed-in token/API-key accounts: %j", (accountInfo) => {
-    auth.data!.claude!.accountInfo = accountInfo;
+  it("shows who a signed-in Claude runs as, whatever signed it in", () => {
+    auth.data = {
+      auth: [
+        claude({
+          state: "signed_in",
+          source: "environment",
+          label: "Claude Max",
+          email: "member@example.com",
+        }),
+      ],
+      clis,
+      logins: [],
+    };
     const html = render();
-    expect(html).toContain("Signed in on this computer");
+    expect(html).toContain("Claude Max · member@example.com");
     expect(html).not.toContain(">Sign in</button>");
     expect(html).not.toContain(">Check again</button>");
   });
 
-  it("preserves the signed-in account email", () => {
-    auth.data!.claude!.accountInfo = { email: "member@example.com" };
-    expect(render()).toContain("member@example.com");
+  it("shows a sign-in under way rather than offering another", () => {
+    auth.data!.logins = [
+      {
+        loginId: "login-1",
+        harness: "claude-code",
+        method: "claudeai",
+        url: "https://claude.ai/oauth",
+        expiresAt: 1,
+      },
+    ];
+    const html = render();
+    expect(html).toContain("Waiting for sign-in…");
+    expect(html).not.toContain(">Sign in</button>");
   });
 
-  it("waits for the account probe before offering an action", () => {
+  it("offers to install an agent whose CLI the engine has not installed", () => {
+    const html = render();
+    expect(html).toContain("Not installed yet");
+    expect(html).toContain(">Install</button>");
+  });
+
+  it("waits for the login read before offering an action", () => {
     auth.data = undefined;
     auth.isLoading = true;
     const html = render();
-    expect(html).toContain("Checking account…");
+    expect(html).toContain("Checking…");
     expect(html).not.toContain(">Sign in</button>");
     expect(html).not.toContain(">Check again</button>");
   });
 
-  it.each(["request", "envelope", "provider"])(
-    "offers another check after a %s failure, even with a cached account",
+  it.each(["request", "envelope", "unknown"])(
+    "offers another check after a %s failure, even with a cached login",
     (failure) => {
-      auth.data!.claude!.accountInfo = { email: "member@example.com" };
+      auth.data = {
+        auth: [claude({ state: "signed_in", email: "member@example.com" })],
+        clis,
+        logins: [],
+      };
       if (failure === "request") auth.isError = true;
-      if (failure === "envelope") auth.data!.error = "Agent server not connected";
-      if (failure === "provider") auth.data!.claude!.error = "auth check timed out";
+      if (failure === "envelope") auth.data.error = "Agent server not connected";
+      if (failure === "unknown") auth.data.auth[0] = claude({ state: "unknown" });
       const html = render();
       expect(html).toContain("Couldn’t check account");
       expect(html).toContain(">Check again</button>");
