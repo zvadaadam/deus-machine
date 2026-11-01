@@ -152,7 +152,8 @@ jobs:
 
   desktop-runtime-tests:
     name: Desktop Runtime Unit Tests
-    runs-on: ubuntu-latest
+    # Playwright's Chromium does not support ubuntu-latest's 26.04 yet.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
