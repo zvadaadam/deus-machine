@@ -22,7 +22,7 @@ import {
 } from "@deus-hq/api";
 import type { TurnCancelResult } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
-import type { ThinkingLevel } from "@shared/protocol";
+import type { CloudTurnSelection } from "@shared/cloud-models";
 import {
   CloudEnvStateSchema,
   type CloudEnvEvent,
@@ -1076,19 +1076,16 @@ export function pushCloudSessionTitle(deusSessionId: string, title: string): voi
 
 // ---- Turn API (mirrors the local agentService surface) ----
 
-export interface CloudTurnOptions {
-  /** Model override — agnt's sidecar honors options.model (else its default). */
-  model?: string;
-  /** Which engine harness runs the turn; the wire defaults to claude-code. */
-  agentHarness?: string;
-  thinkingLevel?: ThinkingLevel;
-}
-
+/**
+ * Start a turn on the session's sandbox. `selection` names its harness, model
+ * and thinking level: AGNT chooses none of them and refuses a turn that leaves
+ * one out, so the command layer reads all three before anything is written.
+ */
 export async function startCloudTurn(
   deusSessionId: string,
   turnId: string,
   prompt: string,
-  options: CloudTurnOptions = {}
+  selection: CloudTurnSelection
 ): Promise<void> {
   if (!handler) throw new Error("Cloud driver not initialized");
   const config = getCloudConfig();
@@ -1106,18 +1103,19 @@ export async function startCloudTurn(
     throw new Error("The agent is still working — wait for the current turn to finish.");
   }
   try {
-    const wsOptions: Record<string, unknown> = {};
-    // The platform selects the signed-in user's provider account at admission.
-    if (options.agentHarness) wsOptions.harness = options.agentHarness;
-    if (options.model) wsOptions.model = options.model;
-    if (options.thinkingLevel) wsOptions.thinkingLevel = options.thinkingLevel;
+    // The turn names its selection and no credential: the platform selects the
+    // signed-in user's provider account at admission.
     session.socket.send({
       type: "message.send",
       text: prompt,
       messageId: turnId,
       turnId,
       idempotencyKey: turnId,
-      ...(Object.keys(wsOptions).length > 0 ? { options: wsOptions } : {}),
+      options: {
+        harness: selection.harness,
+        model: selection.model,
+        thinkingLevel: selection.thinkingLevel,
+      },
     });
   } catch (err) {
     handler.abortTurn(deusSessionId, turnId);

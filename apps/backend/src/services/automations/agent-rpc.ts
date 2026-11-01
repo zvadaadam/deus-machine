@@ -1,10 +1,12 @@
 // backend/src/services/automations/agent-rpc.ts
 // The agent's automation_update tool lands here (deus/automation/update on the
-// side channel). Defaults resolve from the CALLING session — repository and
-// model — so the agent never guesses ids it doesn't have. Writes go through
-// the same service the q:mutate arms use; everything executes in Deus Cloud.
+// side channel). The repository resolves from the CALLING session, so the
+// agent never guesses ids it doesn't have; the model and thinking level are
+// the agent's to name, from what mode=models lists. Writes go through the
+// same service the q:mutate arms use; everything executes in Deus Cloud.
 
 import { match } from "ts-pattern";
+import { AUTOMATION_HARNESS, cloudModelThinkingLevels, cloudModelsFor } from "@shared/cloud-models";
 import { getDatabase } from "../../lib/database";
 import { readStringParam, requireParam } from "../../lib/query-params";
 import { getSessionRaw, getWorkspaceRaw } from "../../db";
@@ -20,10 +22,10 @@ import {
   type AutomationInput,
 } from "./service";
 import { getAutomationRaw } from "./store";
+import { getCloudModelLists } from "../agent/cloud/models";
 
 interface SessionDefaults {
   repository_id: string;
-  model: string | null;
 }
 
 function defaultsFromSession(sessionId: string): SessionDefaults {
@@ -32,20 +34,7 @@ function defaultsFromSession(sessionId: string): SessionDefaults {
   if (!session) throw new Error(`automation: session not found: ${sessionId}`);
   const workspace = getWorkspaceRaw(db, session.workspace_id);
   if (!workspace) throw new Error(`automation: workspace not found: ${session.workspace_id}`);
-  // The session's current model lives on its message rows (model is per-turn).
-  // Automation runs are Claude sandboxes, so only a claude-code session's
-  // model carries over; anything else falls back to the platform default.
-  const lastModel = db
-    .prepare(
-      `SELECT model FROM messages
-        WHERE session_id = ? AND model IS NOT NULL
-        ORDER BY seq DESC LIMIT 1`
-    )
-    .get(sessionId) as { model: string } | undefined;
-  return {
-    repository_id: workspace.repository_id,
-    model: session.agent_harness === "claude-code" ? (lastModel?.model ?? null) : null,
-  };
+  return { repository_id: workspace.repository_id };
 }
 
 /** Resolve an automationId that may be an agnt id or an exact display name. */
@@ -61,8 +50,24 @@ function resolveAutomationId(ref: string): string {
   throw new Error(`automation: not found: ${ref}`);
 }
 
-const MODES = ["list", "view", "create", "update", "delete"] as const;
+const MODES = ["list", "view", "create", "update", "delete", "models"] as const;
 type Mode = (typeof MODES)[number];
+
+/** The Claude models automation runs can use, as Deus Cloud lists them. */
+async function automationModels(): Promise<
+  Array<{ id: string; label: string; description?: string; thinkingLevels: readonly string[] }>
+> {
+  const lists = await getCloudModelLists();
+  if (!lists) {
+    throw new Error("Automations run in Deus Cloud — sign in under Settings → Cloud to use them.");
+  }
+  return cloudModelsFor(lists, AUTOMATION_HARNESS).map((model) => ({
+    id: model.id,
+    label: model.label,
+    ...(model.description ? { description: model.description } : {}),
+    thinkingLevels: cloudModelThinkingLevels(model),
+  }));
+}
 
 export async function handleAutomationToolRequest(
   params: Record<string, unknown>
@@ -97,7 +102,8 @@ export async function handleAutomationToolRequest(
         cron: readStringParam(params, "cron") ?? "",
         timezone: readStringParam(params, "timezone") ?? null,
         session_policy: readStringParam(params, "sessionPolicy"),
-        model: readStringParam(params, "model") ?? defaults.model,
+        model: readStringParam(params, "model"),
+        thinking_level: readStringParam(params, "thinkingLevel"),
       };
       return { automation: await createAutomation(input, "agent") };
     })
@@ -114,6 +120,9 @@ export async function handleAutomationToolRequest(
       if ("timezone" in params) patch.timezone = readStringParam(params, "timezone") ?? null;
       if (sessionPolicy !== undefined) patch.session_policy = sessionPolicy;
       if ("model" in params) patch.model = readStringParam(params, "model") ?? null;
+      if ("thinkingLevel" in params) {
+        patch.thinking_level = readStringParam(params, "thinkingLevel") ?? null;
+      }
 
       let automation =
         Object.keys(patch).length > 0 ? await updateAutomation(id, patch) : getAutomation(id);
@@ -128,5 +137,6 @@ export async function handleAutomationToolRequest(
       await deleteAutomation(id);
       return { deleted: true };
     })
+    .with("models", async () => ({ models: await automationModels() }))
     .exhaustive();
 }

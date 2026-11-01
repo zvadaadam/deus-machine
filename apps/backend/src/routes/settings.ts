@@ -1,7 +1,9 @@
 import { Hono } from "hono";
+import type { CloudModelCatalog } from "@shared/cloud-models";
 import { getAllSettings, saveSetting } from "../services/settings.service";
 import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas";
 import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
+import { getCloudModelLists } from "../services/agent/cloud/models";
 import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
 import { checkAuth, isConnected, getAgents } from "../services/agent";
 import {
@@ -9,7 +11,7 @@ import {
   saveCloudGithubToken,
 } from "../services/cloud-workspace-init.service";
 import { initAutomations } from "../services/automations";
-import { ValidationError } from "../lib/errors";
+import { AppError, ValidationError } from "../lib/errors";
 
 const app = new Hono();
 
@@ -73,6 +75,18 @@ app.get("/settings/agent-auth", async (c) => {
 
 app.get("/settings/cloud", async (c) => {
   return c.json(await getCloudSettingsStatus());
+});
+
+// The models Deus Cloud runs, per harness, as the platform lists them.
+app.get("/settings/cloud/models", async (c) => {
+  const lists = await getCloudModelLists().catch((err: unknown) => {
+    // The platform being unreachable is not a backend fault: say what failed.
+    throw new AppError(502, err instanceof Error ? err.message : String(err));
+  });
+  const catalog: CloudModelCatalog = lists
+    ? { configured: true, lists }
+    : { configured: false, lists: [] };
+  return c.json(catalog);
 });
 
 app.post("/settings/cloud/github-token", async (c) => {

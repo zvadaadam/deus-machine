@@ -45,14 +45,7 @@ export function projectCloudSnapshot(snapshot: SessionSnapshotEvent): {
   // no-ops on replay overlap. The stamp is connect-time — the true start rode
   // an event this client never saw, and nothing reads an active turn's clock.
   for (const turn of snapshot.state.turns ?? []) {
-    if (turn.startedAt !== undefined)
-      route({
-        type: "turn.started",
-        sessionId: "",
-        turnId: turn.turnId,
-        timestamp: turn.startedAt,
-        ...(turn.execution && { execution: turn.execution }),
-      });
+    if (turn.startedAt !== undefined) route(turnStartedEvent(turn, turn.startedAt));
   }
   if (currentTurnId) {
     route({
@@ -140,6 +133,23 @@ function messagePartEvent(
     partIndex,
     part,
     timestamp: message.createdAt,
+  } as unknown as AnyLifecycleEvent;
+}
+
+/**
+ * A restated `turn.started`. Cast like the events around it: the snapshot is
+ * AGNT's schema, written by a newer engine than the one folding here, so its
+ * `execution` may name a thinking level this build's vocabulary lacks (`max`,
+ * `ultra`) and fields it does not read (`appliedThinkingLevel`). The fold
+ * keeps `execution` as it arrives.
+ */
+function turnStartedEvent(turn: SnapshotTurn, startedAt: number): AnyLifecycleEvent {
+  return {
+    type: "turn.started",
+    sessionId: "",
+    turnId: turn.turnId,
+    timestamp: startedAt,
+    ...(turn.execution && { execution: turn.execution }),
   } as unknown as AnyLifecycleEvent;
 }
 

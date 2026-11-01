@@ -37,11 +37,11 @@ export function getAutomationWithDetails(id: string): AutomationWithDetailsRow |
 const UPSERT_AUTOMATION_SQL = `
   INSERT INTO automations (
     id, name, prompt, cron, timezone, environment, repository_id, status,
-    paused_reason, session_policy, model, next_run_at, last_run_at,
+    paused_reason, session_policy, model, thinking_level, next_run_at, last_run_at,
     consecutive_failures, created_by, workspace_id, synced_at, updated_at
   ) VALUES (
     @id, @name, @prompt, @cron, @timezone, @environment, @repository_id, @status,
-    @paused_reason, @session_policy, @model, @next_run_at, @last_run_at,
+    @paused_reason, @session_policy, @model, @thinking_level, @next_run_at, @last_run_at,
     @consecutive_failures, @created_by, @workspace_id, @synced_at, @updated_at
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -49,7 +49,8 @@ const UPSERT_AUTOMATION_SQL = `
     timezone = excluded.timezone, environment = excluded.environment,
     repository_id = excluded.repository_id, status = excluded.status,
     paused_reason = excluded.paused_reason, session_policy = excluded.session_policy,
-    model = excluded.model, next_run_at = excluded.next_run_at,
+    model = excluded.model, thinking_level = excluded.thinking_level,
+    next_run_at = excluded.next_run_at,
     last_run_at = excluded.last_run_at,
     consecutive_failures = excluded.consecutive_failures,
     synced_at = excluded.synced_at, updated_at = excluded.updated_at`;

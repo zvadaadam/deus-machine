@@ -138,6 +138,7 @@ describe("direct lane round-trip (connect → render → send → reply)", () =>
     getDirectSession(SESSION)!.sendMessage("what is 2+2?", "turn-live", {
       model: "claude-opus-4-8",
       agentHarness: "claude-code",
+      thinkingLevel: "medium",
     });
     const outbound = mock.sent.filter((s) => s !== "ping").map((s) => JSON.parse(s));
     expect(outbound).toContainEqual({
@@ -146,7 +147,7 @@ describe("direct lane round-trip (connect → render → send → reply)", () =>
       turnId: "turn-live",
       messageId: "turn-live",
       idempotencyKey: "turn-live",
-      options: { harness: "claude-code", model: "claude-opus-4-8" },
+      options: { harness: "claude-code", model: "claude-opus-4-8", thinkingLevel: "medium" },
     });
 
     // 3) agnt admits the turn and streams the reply back over the SAME socket —

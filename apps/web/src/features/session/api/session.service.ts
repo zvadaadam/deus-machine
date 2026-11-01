@@ -76,7 +76,9 @@ export const SessionService = {
     content: string,
     model: string,
     agentHarness: AgentHarness,
-    turnId: string
+    turnId: string,
+    /** Required like the turn id: a cloud turn without its thinking level is refused by AGNT. */
+    options: { permissionMode?: string; thinkingLevel: string }
   ): Promise<Message> => {
     const result = await sendCommand("sendMessage", {
       sessionId: id,
@@ -84,6 +86,7 @@ export const SessionService = {
       model,
       agentHarness,
       turnId,
+      ...options,
     });
     if (!result.accepted) throw new Error(result.error || "Failed to send message");
     return result as unknown as Message;

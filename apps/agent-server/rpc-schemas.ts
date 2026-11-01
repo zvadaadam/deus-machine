@@ -147,13 +147,15 @@ export const ReadAppSkillResponseSchema = z.object({
 // Automations
 //
 // One mode-discriminated request (the ChatGPT `automation_update` shape). The
-// backend resolves every default from the calling session — repo, lane,
-// harness, model — so the agent never guesses ids it doesn't have.
+// backend resolves the repository from the calling session, so the agent never
+// guesses ids it doesn't have. The model and thinking level are the agent's to
+// name — nothing fills them in — from what mode=models lists.
 // ============================================================================
 
 export const AutomationUpdateRequestSchema = z.object({
   sessionId: z.string(),
-  mode: z.enum(["list", "view", "create", "update", "delete"]),
+  /** `models`: the Claude models Deus Cloud runs, with each one's thinking levels. */
+  mode: z.enum(["list", "view", "create", "update", "delete", "models"]),
   /** Automation id (preferred) or exact name. Required for view/update/delete. */
   automationId: z.string().optional(),
   name: z.string().optional(),
@@ -164,6 +166,7 @@ export const AutomationUpdateRequestSchema = z.object({
   timezone: z.string().nullable().optional(),
   sessionPolicy: z.enum(["fresh_session", "same_session"]).optional(),
   model: z.string().nullable().optional(),
+  thinkingLevel: z.string().nullable().optional(),
   status: z.enum(["active", "paused"]).optional(),
 });
 
@@ -173,6 +176,7 @@ export const AutomationUpdateResponseSchema = z.object({
   automations: z.array(z.unknown()).optional(),
   automation: z.unknown().optional(),
   deleted: z.boolean().optional(),
+  models: z.array(z.unknown()).optional(),
 });
 
 // --- Inbound (backend → agent-server) ---

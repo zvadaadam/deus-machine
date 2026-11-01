@@ -262,7 +262,8 @@ export interface SendMessageVariables {
   /** Minted by the caller with `newTurnId()` — see useSessionActions. */
   turnId: string;
   permissionMode?: string;
-  thinkingLevel?: string;
+  /** Every turn names one: a cloud turn without it is refused (AGNT chooses none). */
+  thinkingLevel: string;
 }
 
 /**
@@ -337,7 +338,10 @@ export function useSendMessage() {
         // Transport failure only: fall back through the legacy service wrapper,
         // keeping the same runtime routing fields so backend validation
         // behaves identically.
-        return SessionService.sendMessage(sessionId, content, model, agentHarness, turnId);
+        return SessionService.sendMessage(sessionId, content, model, agentHarness, turnId, {
+          permissionMode,
+          thinkingLevel,
+        });
       }
     },
 

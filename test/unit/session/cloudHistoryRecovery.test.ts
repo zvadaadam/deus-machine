@@ -72,6 +72,8 @@ import { buildChatTimeline } from "@/features/session/lib/chatTimeline";
 import { attachParts, getMessages } from "../../../apps/backend/src/db/queries";
 
 const SESSION = "deus-history";
+/** Every cloud turn names these; AGNT chooses none of them. */
+const SELECTION = { harness: "claude-code", model: "opus", thinkingLevel: "high" } as const;
 const PROVIDER = "agnt-history";
 const T = Date.parse("2026-09-06T12:00:00Z");
 type SnapshotMessage = NonNullable<SessionSnapshotEvent["messages"]>[number];
@@ -334,6 +336,25 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     ).not.toHaveProperty("account");
   });
 
+  it("keeps a turn's execution in the platform's vocabulary, which the local engine's lacks", () => {
+    // AGNT's engine names `ultra` and fits it to what Opus runs (`max`); the
+    // engine this build folds with has neither level, and carries both as sent.
+    const execution = {
+      harness: "claude-code" as const,
+      model: "opus",
+      thinkingLevel: "ultra" as const,
+      appliedThinkingLevel: "max" as const,
+      reportedModels: ["claude-opus-5-5"],
+    };
+    onFrame(
+      snapshot([message("prompt", 0, "turn-1", "user"), message("answer", 1)], {
+        turns: [{ ...ended("turn-1", { execution }), startedAt: T }],
+      })
+    );
+    expect(turn("turn-1")).toMatchObject({ execution });
+    expect(page().turns.find((row) => row.turnId === "turn-1")).toMatchObject({ execution });
+  });
+
   it("releases a rejected send and its optimistic prompt so retry works after reconnect", async () => {
     ui.queryClient.setQueryData<PaginatedMessages>(messagesKey(SESSION), {
       messages: [
@@ -345,7 +366,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       has_newer: false,
     });
     persistSessionWorking(SESSION);
-    await startCloudTurn(SESSION, "rejected", "Hello");
+    await startCloudTurn(SESSION, "rejected", "Hello", SELECTION);
     onFrame({
       type: "error",
       code: "MESSAGE_SEND_FAILED",
@@ -361,14 +382,14 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
     expect(rows()).toEqual([]);
     expect(page().messages).toEqual([]);
     onFrame(snapshot([]));
-    await expect(startCloudTurn(SESSION, "retry", "Hello")).resolves.toBeUndefined();
+    await expect(startCloudTurn(SESSION, "retry", "Hello", SELECTION)).resolves.toBeUndefined();
     expect(handler.liveTurnId(SESSION)).toBe("retry");
   });
 
   it.each(["turn.started", "snapshot"])(
     "ignores a delayed rejection after %s proves admission",
     async (admission) => {
-      await startCloudTurn(SESSION, "accepted", "Hello");
+      await startCloudTurn(SESSION, "accepted", "Hello", SELECTION);
       const messageId = send.mock.calls.at(-1)![0].messageId;
       const prompt = message("echo-accepted", 0, "accepted", "user");
       if (admission === "turn.started") {
@@ -394,10 +415,10 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   );
 
   it("ignores a previous send's rejection while another send awaits admission", async () => {
-    await startCloudTurn(SESSION, "first", "First");
+    await startCloudTurn(SESSION, "first", "First", SELECTION);
     const firstMessageId = send.mock.calls.at(-1)![0].messageId;
     onFrame(snapshot([], { turns: [ended("first")] }));
-    await startCloudTurn(SESSION, "second", "Second");
+    await startCloudTurn(SESSION, "second", "Second", SELECTION);
     persistSessionWorking(SESSION);
     onFrame({
       type: "error",

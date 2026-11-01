@@ -6,9 +6,13 @@ vi.mock("../../../src/services/settings.service", () => ({
   getAllSettings: vi.fn(() => ({ theme: "dark", lang: "en" })),
   saveSetting: vi.fn(),
 }));
+vi.mock("../../../src/services/agent/cloud/models", () => ({
+  getCloudModelLists: vi.fn(),
+}));
 
 import settingsRoutes from "../../../src/routes/settings";
 import { getAllSettings, saveSetting } from "../../../src/services/settings.service";
+import { getCloudModelLists } from "../../../src/services/agent/cloud/models";
 
 // Wrap the sub-app with error handler like the real app does
 const app = new Hono();
@@ -70,5 +74,44 @@ describe("POST /settings", () => {
       body: JSON.stringify({ key: "", value: "light" }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /settings/cloud/models", () => {
+  const LISTS = [
+    {
+      harness: "claude-code",
+      source: "catalog",
+      fetchedAt: 1,
+      models: [
+        {
+          id: "opus",
+          harness: "claude-code",
+          label: "Opus 5.5",
+          thinking: { levels: ["low", "medium", "high", "xhigh", "max"] },
+        },
+      ],
+    },
+  ];
+
+  it("answers the platform's lists as listModels() returns them", async () => {
+    vi.mocked(getCloudModelLists).mockResolvedValue(LISTS as never);
+    const res = await app.request("/settings/cloud/models");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ configured: true, lists: LISTS });
+  });
+
+  it("answers no lists, not an error, without a cloud account to ask", async () => {
+    vi.mocked(getCloudModelLists).mockResolvedValue(null);
+    const res = await app.request("/settings/cloud/models");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ configured: false, lists: [] });
+  });
+
+  it("says what failed when the platform cannot be read", async () => {
+    vi.mocked(getCloudModelLists).mockRejectedValue(new Error("Request timed out"));
+    const res = await app.request("/settings/cloud/models");
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Request timed out" });
   });
 });

@@ -113,6 +113,10 @@ export const ADDITIVE_COLUMNS = {
     // agnt session id for cloud-workspace sessions (null for local).
     provider_session_id: "TEXT",
   },
+  automations: {
+    // The spec's thinking level; AGNT runs no automation that names none.
+    thinking_level: "TEXT",
+  },
 } as const satisfies Record<string, Record<string, string>>;
 
 export const SCHEMA_SQL = `
@@ -276,6 +280,7 @@ export const SCHEMA_SQL = `
     paused_reason TEXT,
     session_policy TEXT NOT NULL DEFAULT 'fresh_session',
     model TEXT,
+    thinking_level TEXT,
     next_run_at TEXT,
     last_run_at TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,

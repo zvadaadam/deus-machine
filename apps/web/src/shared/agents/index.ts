@@ -6,13 +6,19 @@
 // cannot switch mid-session. The UI currently exposes Claude Code and Codex;
 // the legacy codex-sdk harness remains registered for backend/CLI compatibility.
 
-import { AGENT_CONFIGS, MODEL_PICKER_GROUPS, getKnownAgentConfig } from "@shared/agent-catalog";
+import {
+  AGENT_CONFIGS,
+  DEFAULT_THINKING_LEVEL,
+  MODEL_PICKER_GROUPS,
+  getKnownAgentConfig,
+} from "@shared/agent-catalog";
 import type { AgentConfig, AgentHarness, ThinkingLevel } from "@shared/agent-catalog";
 import type { SessionTurn } from "@shared/types/session";
 
 export {
   AGENT_CONFIGS,
   DEFAULT_MODEL,
+  DEFAULT_THINKING_LEVEL,
   MODEL_PICKER_GROUPS,
   type AgentConfig,
   type AgentHarness,
@@ -189,7 +195,7 @@ export function clampThinkingLevel(
   current: ThinkingLevel,
   agentHarness: AgentHarness,
   model: string,
-  fallback: ThinkingLevel = "high"
+  fallback: ThinkingLevel = DEFAULT_THINKING_LEVEL
 ): ThinkingLevel {
   const supported = getThinkingLevelsForModel(agentHarness, model);
   if (supported.length === 0) return "off";

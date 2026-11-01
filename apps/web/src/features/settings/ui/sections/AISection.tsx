@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAgentAuth } from "../../api/settings.queries";
 import type { SettingsSectionProps } from "./types";
 import { readThinkingLevel } from "@shared/protocol";
+import { DEFAULT_THINKING_LEVEL } from "@/shared/agents";
 import { ProviderAccounts } from "./ProviderAccounts";
 import { readLocalProviderAuth, type LocalProviderAuthState } from "../../lib/local-provider-auth";
 import { openProviderLogin } from "../../lib/open-provider-login";
@@ -213,7 +214,7 @@ export function AISection({
             the thinking indicator next to the model picker.
           </p>
           <Select
-            value={readThinkingLevel(settings.default_thinking_level) ?? "high"}
+            value={readThinkingLevel(settings.default_thinking_level) ?? DEFAULT_THINKING_LEVEL}
             onValueChange={(value) => saveSetting("default_thinking_level", value)}
           >
             <SelectTrigger id="thinking-level" className="w-full">

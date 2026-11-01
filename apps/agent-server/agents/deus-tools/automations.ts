@@ -19,7 +19,7 @@ function textResult(text: string) {
 
 const DESCRIPTION = `Create, update, view, list, or delete Deus automations — recurring agent runs on a schedule ("review open PRs every morning", "nightly dependency audit", a reminder, a monitor). Use this whenever the user asks for a scheduled task, recurring run, automation, reminder, or asks you to watch something, check back later, or keep working on a cadence. This is THE scheduler in Deus — always use it for scheduling, never any built-in cron or task tools.
 
-An automation is a prompt Deus Cloud runs on a schedule in a sandbox — it fires even when this machine is closed. It targets a repository (defaults to THIS session's repo, which needs a git remote) and runs Claude with the given model (defaults to this session's model). Requires the user to be signed in to Deus Cloud.
+An automation is a prompt Deus Cloud runs on a schedule in a sandbox — it fires even when this machine is closed. It targets a repository (defaults to THIS session's repo, which needs a git remote) and runs Claude with the model and thinking level you name: both are required on create, and nothing fills them in. Name a model Deus Cloud runs and one of that model's thinking levels — mode=models lists both. Prefer this session's model when it is listed, unless the user asked for another; ask the user when unsure. Requires the user to be signed in to Deus Cloud.
 
 Rules:
 - \`cron\` is a 5-field cron expression evaluated in \`timezone\` (IANA; omit for UTC). Fires must be ≥5 minutes apart. NEVER show raw cron to the user — describe schedules in words ("weekdays at 9:00").
@@ -35,8 +35,10 @@ export function createAutomationTools(sessionId: string): SdkMcpToolDefinition<a
       DESCRIPTION,
       {
         mode: z
-          .enum(["list", "view", "create", "update", "delete"])
-          .describe("list = all automations; view/update/delete need automationId."),
+          .enum(["list", "view", "create", "update", "delete", "models"])
+          .describe(
+            "list = all automations; view/update/delete need automationId; models = the Claude models runs can use, with their thinking levels."
+          ),
         automationId: z
           .string()
           .optional()
@@ -63,7 +65,14 @@ export function createAutomationTools(sessionId: string): SdkMcpToolDefinition<a
           .string()
           .nullable()
           .optional()
-          .describe("Claude model id for runs. Defaults to this session's current model."),
+          .describe("Claude model id for runs, as mode=models lists it. Required on create."),
+        thinkingLevel: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "Thinking level for runs: one of the model's levels from mode=models (off for a model that lists none). Required on create."
+          ),
         status: z
           .enum(["active", "paused"])
           .optional()

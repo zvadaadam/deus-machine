@@ -17,6 +17,7 @@ import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 import { uuidv7 } from "@shared/lib/uuid";
 import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
+import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
 import { getDatabase } from "../../lib/database";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
@@ -420,6 +421,20 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       "This agent isn't available in cloud workspaces — pick a Claude or Codex model, or use a local workspace."
     );
   }
+  // AGNT chooses no harness, model or thinking level and refuses a turn that
+  // leaves one out. Read all three in the platform's vocabulary here, before
+  // the same writes, so a send without them is refused like the one above
+  // instead of failing on the socket after the session flipped to working.
+  let cloudSelection: CloudTurnSelection | undefined;
+  if (isCloud) {
+    const read = readCloudTurnSelection({
+      harness: agentHarness,
+      model,
+      thinkingLevel: params.thinkingLevel,
+    });
+    if (!read.ok) throw new Error(read.message);
+    cloudSelection = read.selection;
+  }
 
   // New sessions default to Claude at creation time because the user may pick
   // the actual harness in the composer before the first send. Persist that
@@ -493,10 +508,11 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   // passes it through message.send so agnt derives the SAME echo ids.
   const turnId = readString(params, "turnId") ?? uuidv7();
 
-  if (isCloud) {
-    // Cloud lane. agnt queues overlapping sends instead of rejecting, so the
-    // driver enforces deus's one-live-turn contract itself; every throw here
-    // answers `accepted: false` — the same rejection contract as the wire path
+  if (isCloud && cloudSelection) {
+    // Cloud lane (its selection was read above, so this is every cloud send).
+    // agnt queues overlapping sends instead of rejecting, so the driver
+    // enforces deus's one-live-turn contract itself; every throw here answers
+    // `accepted: false` — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
     // Above the try: the catch's honest revert needs to know which stage the
     // optimistic Waking flip replaced.
@@ -535,12 +551,8 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       }
       // permissionMode/maxTurns/additionalDirectories/resume have no cloud
       // channel equivalent (permissions auto-allow like the local policy;
-      // resume is agnt-internal) — model and thinking DO travel.
-      await startCloudTurn(sessionId, turnId, content, {
-        model,
-        agentHarness,
-        thinkingLevel: readThinkingLevel(params.thinkingLevel),
-      });
+      // resume is agnt-internal) — the harness, model and thinking DO travel.
+      await startCloudTurn(sessionId, turnId, content, cloudSelection);
     } catch (err) {
       // The optimistic "Waking" flip above must not outlive a failed wake:
       // the prompt is rolled back, so a stuck Waking chip would promise a
