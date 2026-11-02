@@ -25,7 +25,6 @@
 // signed-in user's default provider account when admitting the turn.
 
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
-import { answeredAskUserQuestionInput, isCancelledAnswers } from "@shared/ask-user-question";
 import { readCloudTurnSelection } from "@shared/cloud-models";
 
 /** What the composer chose for this turn — never a credential (agnt resolves that). */
@@ -181,14 +180,11 @@ export function buildMcpAnswerFrame(
 }
 
 /**
- * The `permission.response` client command. AskUserQuestion answers ride
- * `result.updatedInput` (see shared/ask-user-question); every other tool is
- * allowed as-is — parity with the Mac driver, since the sandbox VM is the
- * isolation boundary and deus has no interactive permission UI.
+ * The `permission.response` client command: every tool is allowed as-is —
+ * parity with the Mac driver, since the sandbox VM is the isolation boundary
+ * and deus has no interactive permission UI.
  */
-export type PermissionResponseResult =
-  | { behavior: "allow"; updatedInput?: Record<string, unknown> }
-  | { behavior: "deny"; message: string };
+export type PermissionResponseResult = { behavior: "allow" };
 
 export function buildPermissionResponseFrame(
   requestId: string,
@@ -196,21 +192,4 @@ export function buildPermissionResponseFrame(
   result: PermissionResponseResult
 ): Record<string, unknown> {
   return { type: "permission.response", data: { requestId, sessionId: providerSessionId, result } };
-}
-
-/**
- * The result that answers a built-in AskUserQuestion: allow with the answers
- * folded into the tool's input, or an honest deny when the overlay was
- * dismissed — its USER_CANCELLED sentinel must not ride along as an answer.
- */
-export function askUserQuestionPermissionResult(
-  input: unknown,
-  answers: unknown
-): PermissionResponseResult {
-  return isCancelledAnswers(answers)
-    ? { behavior: "deny", message: "The user dismissed the question" }
-    : {
-        behavior: "allow",
-        updatedInput: answeredAskUserQuestionInput(input, answers as unknown[]),
-      };
 }
