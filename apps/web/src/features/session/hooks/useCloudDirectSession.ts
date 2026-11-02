@@ -42,7 +42,6 @@ import { connectCloudSessionSocket } from "../cloud/cloudSessionSocket";
 import { hasParkedDirectQuestion, setDirectQuestionParked } from "../cloud/directQuestionState";
 import { makeCloudFrameHandler } from "../cloud/cloudFrameHandler";
 import { dropOptimisticMessage } from "../lib/optimisticMessage";
-import { match } from "ts-pattern";
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import {
   registerDirectSession,
@@ -51,10 +50,8 @@ import {
   buildCancelFrame,
   buildMcpAnswerFrame,
   buildPermissionResponseFrame,
-  askUserQuestionPermissionResult,
   toolRequestFromMcpQuestion,
 } from "../cloud/directSessionRegistry";
-import { questionsFromAskUserQuestionInput } from "@shared/ask-user-question";
 import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
 import {
   TOOL_CANCEL_EVENT,
@@ -72,30 +69,21 @@ import {
 import type { QueryClient } from "@tanstack/react-query";
 
 // ---- Question round-trip ----------------------------------------------------
-// The agent's questions reach the browser as frames on the direct socket: the
-// sidecar's MCP question tool as `mcp.question`, Claude Code's built-in
-// AskUserQuestion as a `permission.request` (its answers ride back in
-// `updatedInput`). The Mac lane relays these to the renderer as a `tool:request`
-// q:event and answers over its own socket; here the renderer IS the client, so
-// each frame is handed to the same handlers locally and the answer goes back on
-// whichever socket serves the session WHEN the user answers — a remount, a
-// reconnect or a brief outage must not lose the correlation. One registry per
-// renderer, keyed by the LOCAL request id the overlay sees; `sendToolResponse`
-// consults it before the (dark) q: lane.
-type PendingQuestionKind =
-  | { kind: "mcp" }
-  | {
-      kind: "permission";
-      /** Echoed back with the answers folded in (the tool's own contract). */
-      input: unknown;
-    };
+// The agent's questions (Claude's AskUserQuestion, Codex's request_user_input)
+// reach the browser as `mcp.question` frames on the direct socket. The Mac lane
+// relays these to the renderer as a `tool:request` q:event and answers over its
+// own socket; here the renderer IS the client, so each frame is handed to the
+// same handlers locally and the answer goes back on whichever socket serves the
+// session WHEN the user answers — a remount, a reconnect or a brief outage must
+// not lose the correlation. One registry per renderer, keyed by the LOCAL
+// request id the overlay sees; `sendToolResponse` consults it before the
+// (dark) q: lane.
 interface PendingDirectQuestion {
-  /** The id agnt correlates on (questionId / permission requestId). */
+  /** The id agnt correlates on (`questionId`). */
   wireRequestId: string;
   sessionId: string;
   providerSessionId: string;
   queryClient: QueryClient;
-  ask: PendingQuestionKind;
   /** The turn that was live when the question arrived (the wire carries no
    *  turn id; the fold's active turn is the binding). A reconnect snapshot
    *  re-presents the question only for THAT turn — undefined (no admitted
@@ -177,29 +165,12 @@ setToolResponseInterceptor((requestId, result, error) => {
   const pending = pendingDirectQuestions.get(requestId);
   if (!pending) return false;
   pendingDirectQuestions.delete(requestId);
-  const answers =
-    error === undefined && result && typeof result === "object"
-      ? (result as { answers?: unknown }).answers
-      : undefined;
-  const frame = match(pending.ask)
-    .with({ kind: "permission" }, ({ input }) =>
-      // Built-in AskUserQuestion: the answers fold into the tool's input; a
-      // dismissal (empty, or the overlay's sentinel) is an honest deny.
-      buildPermissionResponseFrame(
-        pending.wireRequestId,
-        pending.providerSessionId,
-        askUserQuestionPermissionResult(input, answers)
-      )
-    )
-    .with({ kind: "mcp" }, () =>
-      // An error response still UNBLOCKS the agent (schema-valid cancellation).
-      buildMcpAnswerFrame(
-        pending.wireRequestId,
-        pending.providerSessionId,
-        error === undefined ? result : undefined
-      )
-    )
-    .exhaustive();
+  // An error response still UNBLOCKS the agent (schema-valid cancellation).
+  const frame = buildMcpAnswerFrame(
+    pending.wireRequestId,
+    pending.providerSessionId,
+    error === undefined ? result : undefined
+  );
   // Whichever socket serves the session NOW — the one the question arrived on
   // may be gone. If none is open, keep the answer's question parked and put
   // the overlay back so the user can answer once the lane is up again.
@@ -386,47 +357,20 @@ export function useCloudDirectSession(
             providerSessionId,
             queryClient,
             turnId: activeTurnId(sessionId),
-            ask: { kind: "mcp" },
             request: rest,
           });
         }
         return;
       }
-      // The permission bridge: the sidecar forwards EVERY SDK approval request.
-      // Claude Code's built-in AskUserQuestion is one of them — its questions
-      // ride `input`, its answers ride back in `updatedInput` — and it is the
-      // question tool the model actually reaches for. Everything else is
-      // allowed on the spot (the sandbox is the isolation boundary; parity
-      // with the Mac driver), or the agent would park on the sidecar's timeout.
+      // An approval the sidecar asks for is allowed on the spot (the sandbox
+      // is the isolation boundary; parity with the Mac driver), or the agent
+      // would park on the sidecar's timeout.
       if (frame.type === "permission.request") {
-        const data = (frame.data ?? {}) as {
-          requestId?: unknown;
-          toolName?: unknown;
-          input?: unknown;
-        };
+        const data = (frame.data ?? {}) as { requestId?: unknown };
         if (typeof data.requestId !== "string" || !data.requestId) return;
-        const questions =
-          data.toolName === "AskUserQuestion" ? questionsFromAskUserQuestionInput(data.input) : [];
-        if (questions.length === 0) {
-          socket.send(
-            buildPermissionResponseFrame(data.requestId, providerSessionId, { behavior: "allow" })
-          );
-          return;
-        }
-        parkDirectQuestion({
-          wireRequestId: data.requestId,
-          sessionId,
-          providerSessionId,
-          queryClient,
-          turnId: activeTurnId(sessionId),
-          ask: { kind: "permission", input: data.input },
-          request: {
-            sessionId,
-            method: "askUserQuestion",
-            params: { sessionId, questions },
-            timeoutMs: 24 * 60 * 60 * 1000,
-          },
-        });
+        socket.send(
+          buildPermissionResponseFrame(data.requestId, providerSessionId, { behavior: "allow" })
+        );
         return;
       }
       // The computer's host template rides workspace.state: one store for every
