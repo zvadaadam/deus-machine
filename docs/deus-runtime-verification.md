@@ -1,5 +1,7 @@
 # Deus Runtime Verification Notes
 
+> **Since 2026-11-01 the backend runs the agent engine in its own process.** `deus-runtime agent-server`, its `LISTEN_URL` and the agent-server bundle are gone; the runtime smokes check the backend's `[AgentService] Engine started, agents: [...]` line instead. What follows records the two-process runtime as it was built.
+
 The packaged macOS runtime is validated in two layers:
 
 - Static/local checks prove the staged and packaged files are present, fresh, signed, and wired into Electron.

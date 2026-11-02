@@ -1,15 +1,8 @@
 // agent-server/host-link.ts
-// The agent-server's handle on the Deus backend ("the host"): the one
-// connected side-channel endpoint that answers tool round-trips. The backend
-// marks itself with a `deus/hello` notification after connecting; a debug CLI
-// that doesn't hello never receives tool traffic.
-//
-// This module replaces the request half of the old EventBroadcaster — the
-// typed HostRpc facade keeps the same method names so the deus-tools call
-// sites read identically.
+// The deus MCP tools' handle on the backend, which runs the engine in its own
+// process: the backend registers itself once (`setHost`, from `startEngine`),
+// and each tool's request is a call into it, bounded by the tool's deadline.
 
-import type { SideChannelEndpoint } from "@shared/agent-side-channel";
-import { SIDE_CHANNEL } from "@shared/agent-side-channel";
 import type {
   GetDiffRequest,
   GetDiffResponse,
@@ -29,6 +22,21 @@ import type {
   AutomationUpdateResponse,
 } from "./rpc-schemas";
 
+/** A session's title, from Claude's own summary. */
+export interface SessionTitle {
+  sessionId: string;
+  agentHarness: string;
+  title: string;
+}
+
+/** What the backend answers for the engine. */
+export interface DeusHost {
+  /** A deus MCP tool's request (getDiff, aap/list-apps, …). */
+  request(method: string, params: Record<string, unknown>): Promise<unknown>;
+  /** A session's title, to name the session and an untitled workspace. */
+  title(payload: SessionTitle): void;
+}
+
 /** Timeout for data-fetching requests that should resolve quickly. */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
 
@@ -41,72 +49,72 @@ const AAP_LAUNCH_TIMEOUT_MS = 60_000;
  *  a lazy environment create before the automation itself. */
 const AUTOMATION_TIMEOUT_MS = 30_000;
 
-let host: SideChannelEndpoint | null = null;
+let host: DeusHost | null = null;
 
-/** Mark a connection as the Deus host (it sent `deus/hello`). */
-export function setHost(endpoint: SideChannelEndpoint): void {
-  host = endpoint;
-  console.log("[host-link] Deus host attached");
+/** The backend, or none (it stopped the engine). */
+export function setHost(next: DeusHost | null): void {
+  host = next;
 }
 
-/** Clear the host when its transport closes (only if it still IS the host). */
-export function clearHost(endpoint: SideChannelEndpoint): void {
-  if (host === endpoint) {
-    host = null;
-    console.log("[host-link] Deus host detached");
-  }
+function requestHost<T>(method: string, params: unknown, timeoutMs: number): Promise<T> {
+  if (!host) return Promise.reject(new Error("Deus host not connected."));
+  const answer = host.request(method, params as Record<string, unknown>);
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${method} timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
+    answer.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value as T);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
 }
 
-export function hasHost(): boolean {
-  return host !== null;
-}
-
-function requestHost<T>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
-  if (!host) {
-    return Promise.reject(new Error("Deus host not connected."));
-  }
-  return host.request<T>(method, params, timeoutMs);
-}
-
-/** Fire-and-forget notification to the host. Returns false when no host is
- *  attached (the notification was dropped) so callers can retry later. */
-export function notifyHost(method: string, params: unknown): boolean {
+/** A session's title for the backend; false when none is registered (the next turn end retries). */
+export function notifyTitle(payload: SessionTitle): boolean {
   if (!host) return false;
-  host.notify(method, params);
+  host.title(payload);
   return true;
 }
 
 /** Typed request facade to the backend: the deus MCP tools' data fetches. */
 export const HostRpc = {
   requestGetDiff(r: GetDiffRequest): Promise<GetDiffResponse> {
-    return requestHost(SIDE_CHANNEL.getDiff, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("getDiff", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestDiffComment(r: DiffCommentRequest): Promise<DiffCommentResponse> {
-    return requestHost(SIDE_CHANNEL.diffComment, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("diffComment", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestGetTerminalOutput(r: GetTerminalOutputRequest): Promise<GetTerminalOutputResponse> {
-    return requestHost(SIDE_CHANNEL.getTerminalOutput, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("getTerminalOutput", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestSimulatorContext(r: {
     sessionId: string;
   }): Promise<{ udid: string; port?: number; streaming: boolean } | null> {
-    return requestHost(SIDE_CHANNEL.getSimulatorContext, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("getSimulatorContext", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestListApps(r: ListAppsRequest): Promise<ListAppsResponse> {
-    return requestHost(SIDE_CHANNEL.aapListApps, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("aap/list-apps", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestLaunchApp(r: LaunchAppRequest): Promise<LaunchAppResponse> {
-    return requestHost(SIDE_CHANNEL.aapLaunchApp, r, AAP_LAUNCH_TIMEOUT_MS);
+    return requestHost("aap/launch-app", r, AAP_LAUNCH_TIMEOUT_MS);
   },
   requestStopApp(r: StopAppRequest): Promise<StopAppResponse> {
-    return requestHost(SIDE_CHANNEL.aapStopApp, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("aap/stop-app", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestReadAppSkill(r: ReadAppSkillRequest): Promise<ReadAppSkillResponse> {
-    return requestHost(SIDE_CHANNEL.aapReadAppSkill, r, DATA_QUERY_TIMEOUT_MS);
+    return requestHost("aap/read-app-skill", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestAutomationUpdate(r: AutomationUpdateRequest): Promise<AutomationUpdateResponse> {
     // Cloud round-trips: a create may lazily provision the repo's platform
     // environment before the automation itself — give it real headroom.
-    return requestHost(SIDE_CHANNEL.automationUpdate, r, AUTOMATION_TIMEOUT_MS);
+    return requestHost("automation/update", r, AUTOMATION_TIMEOUT_MS);
   },
 };

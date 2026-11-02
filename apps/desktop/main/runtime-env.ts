@@ -2,8 +2,6 @@ import { delimiter, join } from "path";
 import { PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 
 export const PACKAGED_RUNTIME_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",

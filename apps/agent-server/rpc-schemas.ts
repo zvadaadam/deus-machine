@@ -1,7 +1,6 @@
 // agent-server/rpc-schemas.ts
-// Zod schemas and inferred types for MCP-facing RPC communication
-// between the agent-server and frontend (browser automation, simulator,
-// diff, terminal, plan mode, user questions).
+// Zod schemas and inferred types for the deus MCP tools' requests to the
+// backend (diff, terminal, apps, automations).
 //
 // Extracted from protocol.ts for cleaner separation of constants vs schemas.
 
@@ -54,12 +53,9 @@ export const GetTerminalOutputResponseSchema = z.object({
 // ============================================================================
 // AAP (Agentic Apps) Schemas
 //
-// Two directions:
-//   - Outbound (agent-server → backend): the 3 deus-tools call into apps.service
-//     via these RPCs: `aap/list-apps`, `aap/launch-app`, `aap/stop-app`.
-//   - Inbound (backend → agent-server): `aap/register-mcp`, `aap/unregister-mcp`
-//     — the mcp-bridge fires these when an app transitions to "ready" / exits,
-//     and the registrar calls `query.setMcpServers` on every active Claude Query.
+// The deus-tools call into apps.service through the backend: `aap/list-apps`,
+// `aap/launch-app`, `aap/stop-app`, `aap/read-app-skill`. (An app's MCP server
+// reaches the engine directly: the mcp-bridge calls `registerAppMcp`.)
 // ============================================================================
 
 /** Wire-schema for one installed-app row. The `satisfies` clause binds it to
@@ -154,26 +150,6 @@ export const AutomationUpdateResponseSchema = z.object({
   models: z.array(z.unknown()).optional(),
 });
 
-// --- Inbound (backend → agent-server) ---
-
-export const RegisterAppMcpRequestSchema = z.object({
-  serverName: z.string(),
-  url: z.string(),
-});
-
-export const RegisterAppMcpResponseSchema = z.object({
-  added: z.array(z.string()),
-  errors: z.record(z.string(), z.string()).optional(),
-});
-
-export const UnregisterAppMcpRequestSchema = z.object({
-  serverName: z.string(),
-});
-
-export const UnregisterAppMcpResponseSchema = z.object({
-  removed: z.array(z.string()),
-});
-
 // ============================================================================
 // Inferred Types (agent-server-local schemas only; RPC types re-exported in protocol.ts)
 // ============================================================================
@@ -199,7 +175,3 @@ export type ReadAppSkillRequest = z.infer<typeof ReadAppSkillRequestSchema>;
 export type ReadAppSkillResponse = z.infer<typeof ReadAppSkillResponseSchema>;
 export type AutomationUpdateRequest = z.infer<typeof AutomationUpdateRequestSchema>;
 export type AutomationUpdateResponse = z.infer<typeof AutomationUpdateResponseSchema>;
-export type RegisterAppMcpRequest = z.infer<typeof RegisterAppMcpRequestSchema>;
-export type RegisterAppMcpResponse = z.infer<typeof RegisterAppMcpResponseSchema>;
-export type UnregisterAppMcpRequest = z.infer<typeof UnregisterAppMcpRequestSchema>;
-export type UnregisterAppMcpResponse = z.infer<typeof UnregisterAppMcpResponseSchema>;

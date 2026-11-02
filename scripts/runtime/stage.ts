@@ -29,7 +29,6 @@ export interface RuntimeManifest {
   bundles: {
     common: {
       backend: string;
-      agentServer: string;
     };
   };
   nodeRuntimeDependencies: readonly string[];
@@ -60,7 +59,6 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
   const stagePaths = resolveRuntimeStagePaths(projectRoot);
   const sources = {
     backendBundle: path.join(projectRoot, "apps", "backend", "dist", "server.bundled.cjs"),
-    agentServerBundle: path.join(projectRoot, "apps", "agent-server", "dist", "index.bundled.cjs"),
   };
 
   for (const [label, sourcePath] of Object.entries(sources)) {
@@ -79,10 +77,8 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
   }
 
   mkdirSync(path.dirname(stagePaths.common.backendBundle), { recursive: true });
-  mkdirSync(path.dirname(stagePaths.common.agentServerBundle), { recursive: true });
 
   cpSync(sources.backendBundle, stagePaths.common.backendBundle);
-  cpSync(sources.agentServerBundle, stagePaths.common.agentServerBundle);
 
   const manifest: RuntimeManifest = {
     version: RUNTIME_MANIFEST_VERSION,
@@ -94,7 +90,6 @@ export function stageRuntime(options: StageRuntimeOptions = {}): RuntimeManifest
     bundles: {
       common: {
         backend: relativeFromProjectRoot(projectRoot, stagePaths.common.backendBundle),
-        agentServer: relativeFromProjectRoot(projectRoot, stagePaths.common.agentServerBundle),
       },
     },
     nodeRuntimeDependencies: CLI_RUNTIME_DEPENDENCIES,

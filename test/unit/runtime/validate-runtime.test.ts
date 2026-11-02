@@ -79,10 +79,6 @@ function writeExecutable(filePath: string, contents: string): void {
 function writeProjectFixture(projectRoot: string): void {
   writeFile(path.join(projectRoot, "apps", "backend", "dist", "server.bundled.cjs"), "backend");
   writeFile(
-    path.join(projectRoot, "apps", "agent-server", "dist", "index.bundled.cjs"),
-    "agent-server"
-  );
-  writeFile(
     path.join(projectRoot, "apps", "cli", "package.json"),
     JSON.stringify(
       {

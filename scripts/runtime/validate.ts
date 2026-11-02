@@ -190,10 +190,14 @@ function assertStagedGhCli(projectRoot: string): void {
       );
     }
     if (manifestEntry.sha256 !== hashFile(ghPath)) {
-      throw createBuildRuntimeError(`GitHub CLI manifest hash mismatch for ${target.runtimeKey}/gh`);
+      throw createBuildRuntimeError(
+        `GitHub CLI manifest hash mismatch for ${target.runtimeKey}/gh`
+      );
     }
     if (manifestEntry.size !== statSync(ghPath).size) {
-      throw createBuildRuntimeError(`GitHub CLI manifest size mismatch for ${target.runtimeKey}/gh`);
+      throw createBuildRuntimeError(
+        `GitHub CLI manifest size mismatch for ${target.runtimeKey}/gh`
+      );
     }
     if (manifestEntry.fileOutput !== fileOutput) {
       throw createBuildRuntimeError(
@@ -271,7 +275,6 @@ function buildExpectedManifest(projectRoot: string): RuntimeManifest {
     bundles: {
       common: {
         backend: relativeFromProjectRoot(projectRoot, stagePaths.common.backendBundle),
-        agentServer: relativeFromProjectRoot(projectRoot, stagePaths.common.agentServerBundle),
       },
     },
     nodeRuntimeDependencies: CLI_RUNTIME_DEPENDENCIES,
@@ -284,14 +287,11 @@ export function validateRuntimeStage(options: ValidateRuntimeStageOptions = {}):
   const stagePaths = resolveRuntimeStagePaths(projectRoot);
   const sources = {
     backendBundle: path.join(projectRoot, "apps", "backend", "dist", "server.bundled.cjs"),
-    agentServerBundle: path.join(projectRoot, "apps", "agent-server", "dist", "index.bundled.cjs"),
   };
 
   assertExists(sources.backendBundle, "runtime source bundle (backend)");
-  assertExists(sources.agentServerBundle, "runtime source bundle (agent-server)");
   assertExists(stagePaths.manifest, "staged runtime manifest");
   assertExists(stagePaths.common.backendBundle, "staged common backend bundle");
-  assertExists(stagePaths.common.agentServerBundle, "staged common agent-server bundle");
 
   const manifest = readManifest(stagePaths.manifest);
   const expectedManifest = buildExpectedManifest(projectRoot);
@@ -308,17 +308,7 @@ export function validateRuntimeStage(options: ValidateRuntimeStageOptions = {}):
     sources.backendBundle,
     "backend source bundle"
   );
-  assertNotStale(
-    projectRoot,
-    stagePaths.common.agentServerBundle,
-    "staged common agent-server bundle",
-    sources.agentServerBundle,
-    "agent-server source bundle"
-  );
-  const latestSourceMtime = Math.max(
-    statSync(sources.backendBundle).mtimeMs,
-    statSync(sources.agentServerBundle).mtimeMs
-  );
+  const latestSourceMtime = statSync(sources.backendBundle).mtimeMs;
   if (statSync(stagePaths.manifest).mtimeMs < latestSourceMtime) {
     throw createBuildRuntimeError(
       `Staged runtime manifest is stale: ${relativeFromProjectRoot(projectRoot, stagePaths.manifest)} is older than the source bundles`

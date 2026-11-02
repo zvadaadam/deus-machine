@@ -37,8 +37,6 @@ const REQUIRED_RUNTIME_ENTITLEMENTS = [
   "com.apple.security.cs.disable-library-validation",
 ] as const;
 const VERSION_CHECK_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",

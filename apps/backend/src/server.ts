@@ -21,7 +21,6 @@ import {
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
-import { startManagedAgentServer, stopManagedAgentServer } from "./runtime/agent-process";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -36,7 +35,7 @@ Sentry.init({
  * Deus Backend Server
  *
  * Handles workspace CRUD, sessions, repos, config, and stats.
- * Agent runtime (Claude SDK) is managed by the agent-server.
+ * Runs the agent engine (@zvada/agent-server) in this process.
  */
 
 // Initialize database
@@ -106,24 +105,17 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 0;
 const allowAgentless =
   process.env.AGENT_ALLOW_AGENTLESS === "1" || process.env.AGENT_ALLOW_AGENTLESS === "true";
 
-async function resolveAgentServerUrl(): Promise<string | null> {
-  if (process.env.AGENT_SERVER_URL) return process.env.AGENT_SERVER_URL;
-  if (allowAgentless) return null;
-  return startManagedAgentServer();
-}
-
 async function onListening(port: number): Promise<void> {
   actualServerPort = port;
 
-  const agentServerUrl = await resolveAgentServerUrl();
-  if (agentServerUrl) {
-    agentService.init(agentServerUrl);
+  if (!allowAgentless) {
+    await agentService.init();
   } else {
     console.warn("[server] Starting in explicit agentless mode (AGENT_ALLOW_AGENTLESS=true)");
   }
 
   // CRITICAL: Machine-readable port output for Electron main process and dev.
-  // Emitted after agent-server startup so launchers see a fully wired runtime.
+  // Emitted after the engine starts so launchers see a fully wired runtime.
   console.log(`[BACKEND_PORT]${port}`);
 
   console.log("\nDeus Backend Server");
@@ -179,7 +171,7 @@ process.on("uncaughtException", (error, origin) => {
     destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
-    void stopManagedAgentServer();
+    void agentService.shutdown();
     try {
       closeDatabase();
     } catch {}
@@ -199,8 +191,7 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log("\nShutting down...");
-  agentService.shutdown();
-  void stopManagedAgentServer().finally(() => {
+  void agentService.shutdown().finally(() => {
     stopAllApps();
     destroyAllSimulators();
     destroyAllPtySessions();

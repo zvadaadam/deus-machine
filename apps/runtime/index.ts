@@ -35,7 +35,7 @@ const REQUIRED_RUNTIME_IMPORTS = [
   },
 ] as const;
 
-type RuntimeCommand = "agent-server" | "backend" | "device-use" | "self-test";
+type RuntimeCommand = "backend" | "device-use" | "self-test";
 
 interface ParsedArgs {
   command: RuntimeCommand | "version" | "help";
@@ -50,7 +50,6 @@ function usage(): string {
     "Usage:",
     `  ${RUNTIME_NAME} --version`,
     `  ${RUNTIME_NAME} self-test`,
-    `  ${RUNTIME_NAME} agent-server`,
     `  ${RUNTIME_NAME} backend [--data-dir <path>]`,
     `  ${RUNTIME_NAME} device-use [...args]`,
   ].join("\n");
@@ -66,7 +65,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   }
   if (first === "self-test") return { command: "self-test" };
   if (first === "device-use") return { command: "device-use", passthroughArgs: rest };
-  if (first !== "agent-server" && first !== "backend") {
+  if (first !== "backend") {
     throw new Error(`Unknown command: ${first}`);
   }
 
@@ -330,16 +329,6 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   if (command === "backend") {
     process.env.AUTH_TOKEN ??= randomBytes(24).toString("hex");
     process.env.PORT ??= "0";
-    if (!isNativeRuntimeExecutable && layout.projectRoot) {
-      process.env.AGENT_SERVER_ENTRY ??= join(
-        layout.projectRoot,
-        "apps",
-        "agent-server",
-        "dist",
-        "index.bundled.cjs"
-      );
-      process.env.AGENT_SERVER_CWD ??= join(layout.projectRoot, "apps", "agent-server");
-    }
     if (dataDir) {
       process.env.DEUS_DATA_DIR = resolve(dataDir);
       process.env.DATABASE_PATH = join(resolve(dataDir), "deus.db");
@@ -444,11 +433,6 @@ async function run(
     ) {
       process.exit(1);
     }
-    return;
-  }
-
-  if (command === "agent-server") {
-    await import("../agent-server/index");
     return;
   }
 

@@ -30,7 +30,6 @@ export interface RuntimeStagePaths {
   common: {
     root: string;
     backendBundle: string;
-    agentServerBundle: string;
   };
   electron: {
     root: string;
@@ -76,7 +75,6 @@ export function resolveRuntimeStagePaths(projectRoot: string): RuntimeStagePaths
     common: {
       root: commonRoot,
       backendBundle: path.join(commonRoot, "server.bundled.cjs"),
-      agentServerBundle: path.join(commonRoot, "agent-server.bundled.cjs"),
     },
     electron: {
       root: electronRoot,

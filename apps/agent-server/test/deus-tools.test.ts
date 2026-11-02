@@ -15,8 +15,7 @@ const { mockFrontendAPI } = vi.hoisted(() => ({
 }));
 vi.mock("../host-link", () => ({
   HostRpc: mockFrontendAPI,
-  notifyHost: vi.fn(),
-  hasHost: () => true,
+  notifyTitle: vi.fn(),
 }));
 
 // Mock device-use/engine — the package is ESM-only, tests run in CJS context.

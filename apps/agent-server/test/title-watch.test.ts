@@ -1,18 +1,16 @@
 // Title fetch after a successful claude turn: claude-only, needs cwd +
-// native id, retries until the SDK summary materializes, pushes deus/title
-// over the side channel exactly once.
+// native id, retries until the SDK summary materializes, gives the backend
+// the title exactly once.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockNotifyHost, mockListSessions } = vi.hoisted(() => ({
-  mockNotifyHost: vi.fn(() => true),
+const { mockNotifyTitle, mockListSessions } = vi.hoisted(() => ({
+  mockNotifyTitle: vi.fn(() => true),
   mockListSessions: vi.fn(async () => [{ sessionId: "native-1", summary: "Fix login flow" }]),
 }));
 
 vi.mock("../host-link", () => ({
-  notifyHost: mockNotifyHost,
+  notifyTitle: mockNotifyTitle,
   setHost: vi.fn(),
-  clearHost: vi.fn(),
-  hasHost: () => true,
   HostRpc: {},
 }));
 
@@ -41,7 +39,7 @@ describe("maybeFetchTitle", () => {
     });
     maybeFetchTitle("s1");
     await vi.waitFor(() =>
-      expect(mockNotifyHost).toHaveBeenCalledWith("deus/title", {
+      expect(mockNotifyTitle).toHaveBeenCalledWith({
         sessionId: "s1",
         agentHarness: "claude-code",
         title: "Fix login flow",
@@ -49,21 +47,21 @@ describe("maybeFetchTitle", () => {
     );
     // Flag flips only on SUCCESS (a missing summary retries next turn).
     expect(trackedSessions.get("s1")?.titleFetched).toBe(true);
-    mockNotifyHost.mockClear();
+    mockNotifyTitle.mockClear();
     maybeFetchTitle("s1");
     await new Promise((r) => setImmediate(r));
-    expect(mockNotifyHost).not.toHaveBeenCalled();
+    expect(mockNotifyTitle).not.toHaveBeenCalled();
   });
 
   it("keeps retrying when the host is disconnected at push time", async () => {
-    mockNotifyHost.mockReturnValueOnce(false);
+    mockNotifyTitle.mockReturnValueOnce(false);
     trackedSessions.set("s1", {
       harness: "claude-code",
       cwd: "/tmp/w",
       nativeSessionId: "native-1",
     });
     maybeFetchTitle("s1");
-    await vi.waitFor(() => expect(mockNotifyHost).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(mockNotifyTitle).toHaveBeenCalledTimes(1));
     // Dropped push must not burn the attempt.
     expect(trackedSessions.get("s1")?.titleFetched).toBeFalsy();
     // Host back: next turn end delivers and latches.
@@ -90,7 +88,7 @@ describe("maybeFetchTitle", () => {
     trackedSessions.set("s1", { harness: "claude-code", cwd: "/tmp/w" });
     maybeFetchTitle("s1");
     await new Promise((r) => setImmediate(r));
-    expect(mockNotifyHost).not.toHaveBeenCalled();
+    expect(mockNotifyTitle).not.toHaveBeenCalled();
   });
 
   it("skips for codex harnesses", async () => {
@@ -101,6 +99,6 @@ describe("maybeFetchTitle", () => {
     });
     maybeFetchTitle("s2");
     await new Promise((r) => setImmediate(r));
-    expect(mockNotifyHost).not.toHaveBeenCalled();
+    expect(mockNotifyTitle).not.toHaveBeenCalled();
   });
 });

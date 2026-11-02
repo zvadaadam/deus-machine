@@ -8,8 +8,6 @@ const DEFAULT_RUNTIME_TIMEOUT_MS = 45_000;
 const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 const RUNTIME_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",
@@ -32,7 +30,6 @@ const OBSOLETE_RUNTIME_PATTERNS = [
   /spawn (codex|claude).*ENOENT/,
   /ELECTRON_RUN_AS_NODE/,
   /resources\/backend/,
-  /AGENT_SERVER_ENTRY/,
   /global CLI/,
 ];
 
@@ -121,19 +118,6 @@ function bundledAgentCliPatterns(binDir) {
   ];
 }
 
-function backendBundledAgentCliPatterns(binDir) {
-  return [
-    new RegExp(
-      `^\\[agent-server\\] BUNDLED_CLI_PATH claude=${escapeRegExp(path.join(binDir, "claude"))}`,
-      "m"
-    ),
-    new RegExp(
-      `^\\[agent-server\\] BUNDLED_CLI_PATH codex=${escapeRegExp(path.join(binDir, "codex"))}`,
-      "m"
-    ),
-  ];
-}
-
 function runDiagnostic(command, args) {
   const result = spawnSync(command, args, {
     cwd: PROJECT_ROOT,
@@ -172,13 +156,7 @@ function appDiagnostics(appPath, appBinary) {
   return [
     `file: ${runDiagnostic("file", [appBinary])}`,
     `codesign: ${runDiagnostic("codesign", ["-dv", "--verbose=4", appBinary])}`,
-    `spctl: ${runDiagnostic("spctl", [
-      "--assess",
-      "--type",
-      "execute",
-      "--verbose=4",
-      appPath,
-    ])}`,
+    `spctl: ${runDiagnostic("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath])}`,
     `xattr: ${runDiagnostic("xattr", ["-lr", appBinary]) || "none"}`,
   ].join("\n");
 }
@@ -577,7 +555,6 @@ module.exports = {
   assertHostRunnableArch,
   assertRegularFile,
   assertRuntimeSelfTest,
-  backendBundledAgentCliPatterns,
   bundledAgentCliPatterns,
   deterministicRuntimePath,
   escapeRegExp,

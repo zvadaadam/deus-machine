@@ -4,8 +4,8 @@
 // WITHOUT the frontend: the standard wire + the backend's REAL persistence.
 //
 // 1. Creates a workspace + session in the DB (the backend's own connection)
-// 2. Spawns the agent-server bundle
-// 3. Connects backend-style (AgentServerClient + deus side channel + hello)
+// 2. Starts the engine in this process, as the backend does
+// 3. Connects to it the backend's way (AgentServerClient on the in-process wire)
 // 4. Starts a turn with the backend's REAL run-config assembly
 // 5. Feeds every envelope through `services/agent/persistence.ts` and
 //    `services/agent/event-facts.ts` — the SAME functions the event handler
@@ -24,19 +24,8 @@
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
-import { spawn, type ChildProcess } from "child_process";
-import * as path from "path";
-import * as fs from "fs";
-import * as os from "os";
-import { fileURLToPath } from "url";
-import WebSocket from "ws";
 import { AgentServerClient } from "@zvada/agent-server/client";
-import {
-  SIDE_CHANNEL,
-  SideChannelEndpoint,
-  claimSideChannel,
-  wsLineTransport,
-} from "@shared/agent-side-channel";
+import { startEngine, stopEngine } from "../agent-server";
 import type { AgentHarness } from "@shared/enums";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
@@ -58,8 +47,6 @@ import { DB_PATH, closeDatabase, getDatabase, initDatabase } from "./src/lib/dat
 import { persistChanges } from "./src/services/agent/persistence";
 import type { ConversationChange } from "@zvada/agent-server/protocol";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Colors
@@ -279,53 +266,16 @@ async function main() {
 
   console.log(`  ${c.green}Session created:${c.reset} ${sessionId}`);
 
-  // 3. Spawn agent-server
-  const bundlePath = path.resolve(__dirname, "../agent-server/dist/index.bundled.cjs");
-  if (!fs.existsSync(bundlePath)) {
-    console.error(`${c.red}Run: bun run build:agent-server${c.reset}`);
-    process.exit(1);
-  }
-
-  const proc = spawn("node", [bundlePath], {
-    env: { ...process.env, LOG_LEVEL: "info" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  proc.stderr?.on("data", () => {});
-
-  const wsUrl = await new Promise<string>((resolve, reject) => {
-    let buffer = "";
-    const timeout = setTimeout(() => reject(new Error("Server startup timed out")), 15_000);
-    proc.stdout?.on("data", (data: Buffer) => {
-      buffer += data.toString();
-      const match = buffer.match(/LISTEN_URL=(.+)/);
-      if (match) {
-        clearTimeout(timeout);
-        resolve(match[1].trim());
-      }
-    });
-    proc.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
-  console.log(`  ${c.green}Agent-server:${c.reset} ${wsUrl}`);
-
-  // 4. Connect backend-style: typed client + deus side channel + hello
-  const ws = new WebSocket(wsUrl);
-  await new Promise<void>((resolve, reject) => {
-    ws.on("open", resolve);
-    ws.on("error", reject);
-  });
-  const transport = wsLineTransport(ws);
-
-  const sideChannel = new SideChannelEndpoint((line) => transport.send(line), "cli-backend");
-  sideChannel.onNotification(SIDE_CHANNEL.title, (params) => {
-    const { title } = (params ?? {}) as { title?: string };
-    console.log(`${ts()} ${c.magenta}◂ deus/title${c.reset} "${title}"`);
-  });
-  sideChannel.notify(SIDE_CHANNEL.hello, {});
-
-  const client = await AgentServerClient.attach(claimSideChannel(transport, sideChannel));
+  // 3. Start the engine in this process, and 4. connect the backend's way.
+  // The deus tools' requests are not answered here (no app to answer them).
+  const client = await AgentServerClient.attach(
+    startEngine({
+      request: async (method) => {
+        throw new Error(`${method} is not available in the CLI`);
+      },
+      title: ({ title }) => console.log(`${ts()} ${c.magenta}◂ title${c.reset} "${title}"`),
+    })
+  );
   const init = await client.initialize();
   console.log(
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
@@ -454,8 +404,7 @@ async function main() {
   );
 
   await client.close();
-  ws.close();
-  proc.kill("SIGTERM");
+  await stopEngine();
   closeDatabase();
   process.exit(partCount > 0 ? 0 : 1);
 }

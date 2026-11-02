@@ -8,7 +8,7 @@
  *
  * Commands:
  *   deus                    Auto-detect best mode
- *   deus start              Start headless server (backend + agent-server)
+ *   deus start              Start headless server (backend, with the agent engine)
  *   deus install            Download and install the desktop app
  *   deus pair               Generate a pairing code for remote access
  *   deus login              Configure AI agent authentication
@@ -34,7 +34,7 @@ function printHelp(version: string) {
   console.log(`  ${c.bold("Commands:")}`);
   console.log(`    ${c.cyan("(none)")}        Auto-detect: launch desktop app or start server`);
   console.log(
-    `    ${c.cyan("start")}        Start headless server ${c.dim("(backend + agent-server)")}`
+    `    ${c.cyan("start")}        Start headless server ${c.dim("(backend + agent engine)")}`
   );
   console.log(`    ${c.cyan("install")}      Download and install the desktop app`);
   console.log(`    ${c.cyan("pair")}         Generate a pairing code for remote access`);

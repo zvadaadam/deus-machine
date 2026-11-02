@@ -27,8 +27,6 @@ const defaultProjectRoot = path.resolve(runtimeDir, "../..");
 const VERIFY_TIMEOUT_MS = 20_000;
 const VERIFY_STOP_TIMEOUT_MS = 5_000;
 const VERSION_CHECK_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",

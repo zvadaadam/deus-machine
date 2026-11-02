@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDevStagedCliDirectory } from "../../shared/lib/cli-path";
@@ -28,20 +27,8 @@ function spawnCommand(
   });
 }
 
-async function ensureAgentServerBundle(): Promise<void> {
-  const bundlePath = path.join(projectRoot, "apps", "agent-server", "dist", "index.bundled.cjs");
-  if (existsSync(bundlePath)) return;
-
-  log("Building agent-server bundle...");
-  const code = await spawnCommand("bun", ["run", "build:agent-server"], {});
-  if (code !== 0) {
-    throw new Error(`build:agent-server failed with code ${code}`);
-  }
-}
-
 async function main(): Promise<void> {
   log("Starting Deus web development runtime");
-  await ensureAgentServerBundle();
 
   const backend = await startBackend();
   if (!backend) {
@@ -71,14 +58,6 @@ function startBackend(): Promise<{ process: ChildProcess; port: number } | null>
       env: {
         ...process.env,
         PORT: "0",
-        AGENT_SERVER_ENTRY: path.join(
-          projectRoot,
-          "apps",
-          "agent-server",
-          "dist",
-          "index.bundled.cjs"
-        ),
-        AGENT_SERVER_CWD: path.join(projectRoot, "apps", "agent-server"),
         DEUS_BUNDLED_BIN_DIR: getDevStagedCliDirectory(projectRoot) ?? "",
       },
     });

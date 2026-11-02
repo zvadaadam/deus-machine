@@ -8,8 +8,8 @@
  * - Auto-updater setup
  * - Shell environment sync (macOS PATH fix)
  *
- * Business logic stays in the Node.js backend and agent-server — the main process
- * is purely a desktop shell that spawns them and bridges native OS features.
+ * Business logic stays in the backend (which runs the agent engine) — the main
+ * process is purely a desktop shell that spawns it and bridges native OS features.
  */
 
 import { app, BrowserWindow, ipcMain, shell } from "electron";
@@ -287,7 +287,7 @@ app.whenReady().then(async () => {
     // there put a copy in a place the desktop cannot retract: sign-out clears
     // the vault and pushes an explicit null, but the backend's documented
     // null-falls-back-to-env rule then resurrected the revoked key until a
-    // restart — and every backend descendant (setup scripts, agent-server,
+    // restart — and every backend descendant (setup scripts, agent CLIs,
     // AAP processes) inherited it. provisionAtStartup pushes credentials over
     // the runtime route immediately below, which is retractable by design.
     const { port: backendPort, authToken } = await spawnBackend({
@@ -335,7 +335,7 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // Backend owns agent-server startup; Electron only supervises the packaged runtime entrypoint.
+  // The backend runs the agent engine; Electron only supervises the packaged runtime entrypoint.
 
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
