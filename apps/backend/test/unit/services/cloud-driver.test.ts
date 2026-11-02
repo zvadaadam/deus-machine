@@ -451,70 +451,6 @@ describe("cloud driver frame → fold contract", () => {
     expect(handler.handle).not.toHaveBeenCalled();
   });
 
-  it("relays the built-in AskUserQuestion (a permission request) through the overlay and answers in updatedInput", async () => {
-    mockRelay.mockResolvedValueOnce({ answers: ["A"] });
-    const input = {
-      questions: [
-        {
-          question: "Which letter?",
-          options: [{ label: "A" }, { label: "B" }],
-          multiSelect: false,
-        },
-      ],
-    };
-    capturedOnFrame!({
-      type: "permission.request",
-      data: { requestId: "req-q", toolName: "AskUserQuestion", input },
-    });
-    await vi.waitFor(() =>
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "permission.response",
-          data: expect.objectContaining({
-            requestId: "req-q",
-            result: {
-              behavior: "allow",
-              updatedInput: { ...input, answers: { "Which letter?": "A" } },
-            },
-          }),
-        })
-      )
-    );
-    // The overlay saw the question in the RPC handler's shape.
-    expect(mockRelay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: "askUserQuestion",
-        params: {
-          sessionId: "deus-session-1",
-          questions: [{ question: "Which letter?", options: ["A", "B"], multiSelect: false }],
-        },
-      })
-    );
-  });
-
-  it("denies a dismissed AskUserQuestion — the overlay's sentinel is not an answer", async () => {
-    mockRelay.mockResolvedValueOnce({ answers: ["USER_CANCELLED"] });
-    capturedOnFrame!({
-      type: "permission.request",
-      data: {
-        requestId: "req-c",
-        toolName: "AskUserQuestion",
-        input: { questions: [{ question: "Which?", options: ["A"] }] },
-      },
-    });
-    await vi.waitFor(() =>
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "permission.response",
-          data: expect.objectContaining({
-            requestId: "req-c",
-            result: { behavior: "deny", message: "The user dismissed the question" },
-          }),
-        })
-      )
-    );
-  });
-
   it("delivers an answer given after the socket dropped by reconnecting, not by dropping it", async () => {
     let settle: (value: { answers: string[] }) => void = () => {};
     mockRelay.mockImplementationOnce(
@@ -524,12 +460,8 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "permission.request",
-      data: {
-        requestId: "req-r",
-        toolName: "AskUserQuestion",
-        input: { questions: [{ question: "Which?", options: ["A"] }] },
-      },
+      type: "mcp.question",
+      data: { questionId: "req-r", questions: [{ text: "Which?", options: ["A"] }] },
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -544,11 +476,8 @@ describe("cloud driver frame → fold contract", () => {
     await vi.waitFor(() =>
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: "permission.response",
-          data: expect.objectContaining({
-            requestId: "req-r",
-            result: expect.objectContaining({ behavior: "allow" }),
-          }),
+          type: "mcp.answer",
+          data: expect.objectContaining({ questionId: "req-r", answers: ["A"] }),
         })
       )
     );
@@ -564,12 +493,8 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "permission.request",
-      data: {
-        requestId: "req-o",
-        toolName: "AskUserQuestion",
-        input: { questions: [{ question: "Which?", options: ["A"] }] },
-      },
+      type: "mcp.question",
+      data: { questionId: "req-o", questions: [{ text: "Which?", options: ["A"] }] },
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -578,16 +503,14 @@ describe("cloud driver frame → fold contract", () => {
     socketOpen = false;
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(mockSend).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "permission.response" })
-    );
+    expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: "mcp.answer" }));
 
     socketOpen = true;
     capturedOnOpen!();
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "permission.response",
-        data: expect.objectContaining({ requestId: "req-o" }),
+        type: "mcp.answer",
+        data: expect.objectContaining({ questionId: "req-o" }),
       })
     );
   });
@@ -601,12 +524,8 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "permission.request",
-      data: {
-        requestId: "req-x",
-        toolName: "AskUserQuestion",
-        input: { questions: [{ question: "Which?", options: ["A"] }] },
-      },
+      type: "mcp.question",
+      data: { questionId: "req-x", questions: [{ text: "Which?", options: ["A"] }] },
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -614,9 +533,7 @@ describe("cloud driver frame → fold contract", () => {
     socketOpen = false;
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(mockSend).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "permission.response" })
-    );
+    expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: "mcp.answer" }));
 
     // That socket gives up (terminal onDown) — the queue must not die with it.
     capturedOnDown!("session socket down after 8 retries");
@@ -631,8 +548,8 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnOpen!();
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "permission.response",
-        data: expect.objectContaining({ requestId: "req-x" }),
+        type: "mcp.answer",
+        data: expect.objectContaining({ questionId: "req-x" }),
       })
     );
   });
@@ -646,12 +563,8 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "permission.request",
-      data: {
-        requestId: "req-late",
-        toolName: "AskUserQuestion",
-        input: { questions: [{ question: "Which?", options: ["A"] }] },
-      },
+      type: "mcp.question",
+      data: { questionId: "req-late", questions: [{ text: "Which?", options: ["A"] }] },
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -662,9 +575,7 @@ describe("cloud driver frame → fold contract", () => {
     mockTokenExchange.mockRejectedValueOnce(new Error("mint failed"));
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(mockSend).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "permission.response" })
-    );
+    expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: "mcp.answer" }));
 
     // The next connect delivers it.
     socketOpen = true;
@@ -672,8 +583,8 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnOpen!();
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "permission.response",
-        data: expect.objectContaining({ requestId: "req-late" }),
+        type: "mcp.answer",
+        data: expect.objectContaining({ questionId: "req-late" }),
       })
     );
   });

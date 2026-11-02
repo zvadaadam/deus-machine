@@ -50,11 +50,6 @@ import {
   getCloudPreviewTemplate,
   type CloudPreviewSource,
 } from "./preview";
-import {
-  answeredAskUserQuestionInput,
-  questionsFromAskUserQuestionInput,
-  isCancelledAnswers,
-} from "@shared/ask-user-question";
 import { getCloudConfig, runCloudConnectHook, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import { mintCloudSessionToken } from "./session-token";
@@ -623,23 +618,10 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
     }
 
     case "permission.request": {
-      const data = (frame.data ?? {}) as {
-        requestId?: string;
-        toolName?: unknown;
-        input?: unknown;
-      };
+      const data = (frame.data ?? {}) as { requestId?: string };
       if (!data.requestId) return;
-      // Claude Code's built-in AskUserQuestion collects its answers THROUGH
-      // this bridge (questions in `input`, answers back in `updatedInput`) —
-      // and it is the question tool the model actually uses. Auto-allowing it
-      // returned an empty answer set: the agent reported the question as
-      // dismissed. Route it to the same overlay as the MCP question tool.
-      const questions =
-        data.toolName === "AskUserQuestion" ? questionsFromAskUserQuestionInput(data.input) : [];
-      if (questions.length > 0) {
-        void relayAskUserQuestionPermission(session, data.requestId, data.input, questions);
-        return;
-      }
+      // The agent's questions arrive as `mcp.question`; an approval is
+      // allowed (the sandbox VM is the isolation boundary).
       void sendPermissionResponse(session, data.requestId, { behavior: "allow" });
       return;
     }
@@ -712,15 +694,13 @@ function flushOutbox(session: CloudSession): void {
   }
 }
 
-/** Answer a permission request over the session's live socket. Never throws
- *  out of the relay's settle path: a failed delivery is logged and the
- *  sidecar's own timeout settles the request. */
+/** Answer a permission request over the session's live socket. Never throws:
+ *  a failed delivery is logged and the sidecar's own timeout settles the
+ *  request. */
 async function sendPermissionResponse(
   session: CloudSession,
   requestId: string,
-  result:
-    | { behavior: "allow"; updatedInput?: Record<string, unknown> }
-    | { behavior: "deny"; message: string }
+  result: { behavior: "allow" }
 ): Promise<void> {
   try {
     await sendOnLiveSocket(session.deusSessionId, {
@@ -730,49 +710,6 @@ async function sendPermissionResponse(
     });
   } catch (err) {
     console.warn(`[CloudDriver] permission response not delivered (${requestId}): ${String(err)}`);
-  }
-}
-
-/** The permission-bridge twin of `relayQuestion`: same overlay, answered as
- *  an allow whose `updatedInput` carries the answers (deny on cancel/failure —
- *  the agent sees "declined" rather than a silent empty answer set). */
-async function relayAskUserQuestionPermission(
-  session: CloudSession,
-  requestId: string,
-  input: unknown,
-  questions: ReturnType<typeof questionsFromAskUserQuestionInput>
-): Promise<void> {
-  const sessionId = session.deusSessionId;
-  const needs = persistSessionNeedsResponse(sessionId);
-  if (needs.ok)
-    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-  try {
-    const response = await relay({
-      requestId: crypto.randomUUID(),
-      sessionId,
-      method: "askUserQuestion",
-      params: { sessionId, questions },
-      timeoutMs: 24 * 60 * 60 * 1000,
-    });
-    const answers = extractAnswers(response);
-    const cancelled = isCancelledAnswers(answers);
-    await sendPermissionResponse(
-      session,
-      requestId,
-      cancelled
-        ? { behavior: "deny", message: "The user dismissed the question" }
-        : { behavior: "allow", updatedInput: answeredAskUserQuestionInput(input, answers) }
-    );
-  } catch (err) {
-    console.warn(`[CloudDriver] askUserQuestion (permission) relay failed: ${String(err)}`);
-    await sendPermissionResponse(session, requestId, {
-      behavior: "deny",
-      message: "Question relay failed",
-    });
-  } finally {
-    const back = persistSessionBackToWorking(sessionId);
-    if (back.ok)
-      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
   }
 }
 
