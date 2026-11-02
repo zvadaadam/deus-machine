@@ -1,5 +1,7 @@
 # Deus Runtime Completion Audit
 
+> **Since 2026-11-01 the backend runs the agent engine in its own process.** `deus-runtime agent-server`, its `LISTEN_URL` and the agent-server bundle are gone; the runtime smokes check the backend's `[AgentService] Engine started, agents: [...]` line instead. What follows records the two-process runtime as it was built.
+
 Status: complete for the `bun-runtime` branch runtime implementation. The runtime code head
 `1cbe37db947fe0cbef64e8d44d4ca7977f0cc7b0` passed the macOS runtime CI gate on
 2026-05-14, including direct native runtime execution, packaged app bundle

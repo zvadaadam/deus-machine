@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
+const { assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
   assertBackendDbRoute,
@@ -161,21 +161,6 @@ async function main() {
   }
   console.log(`[runtime-source-smoke] device-use command: ${deviceUseVersion}`);
 
-  const listenUrl = await waitForRuntimeLine(
-    ["agent-server"],
-    (line) => {
-      const match = line.match(/LISTEN_URL=(.+)$/);
-      return match ? match[1] : null;
-    },
-    {
-      requiredPatterns: BUNDLED_AGENT_CLI_PATTERNS,
-      onReady: (listenUrl) => assertInitializedAgents(listenUrl),
-    }
-  );
-  console.log(
-    `[runtime-source-smoke] agent-server resolved bundled CLIs and initialized agents: ${listenUrl}`
-  );
-
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-runtime-source-"));
   try {
     const backendPort = await waitForRuntimeLine(
@@ -189,22 +174,15 @@ async function main() {
           DEUS_DATA_DIR: dataDir,
           DATABASE_PATH: path.join(dataDir, "deus.db"),
         },
-        requiredPatterns: [
-          /^\[agent-server\] BUNDLED_CLI_PATH claude=.*\/claude/m,
-          /^\[agent-server\] BUNDLED_CLI_PATH codex=.*\/codex/m,
-        ],
+        requiredPatterns: BUNDLED_AGENT_CLI_PATTERNS,
         onReady: async (backendPort, output) => {
           await assertBackendDbRoute(backendPort);
-          const agentServerListenUrl = readAgentServerListenUrl(output);
-          if (!agentServerListenUrl) {
-            throw new Error("Backend runtime output did not include agent-server LISTEN_URL");
-          }
-          await assertInitializedAgents(agentServerListenUrl);
+          assertEngineStarted(output);
         },
       }
     );
     console.log(
-      `[runtime-source-smoke] backend resolved bundled CLIs, initialized agents, and served DB route: ${backendPort}`
+      `[runtime-source-smoke] backend resolved bundled CLIs, started the agent engine, and served DB route: ${backendPort}`
     );
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });

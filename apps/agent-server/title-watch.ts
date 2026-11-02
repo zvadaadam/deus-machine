@@ -2,11 +2,10 @@
 // Best-effort session title after a successful claude turn: the SDK
 // auto-summarizes sessions; the backend names the session AND an untitled
 // workspace from the pushed title. Runs agent-server-side because it needs
-// the claude SDK's listSessions against the session's cwd; the result rides
-// the deus/title side-channel notification. Fire-and-forget.
+// the claude SDK's listSessions against the session's cwd; the result goes to
+// the backend (`notifyTitle`). Fire-and-forget.
 
-import { SIDE_CHANNEL } from "@shared/agent-side-channel";
-import { notifyHost } from "./host-link";
+import { notifyTitle } from "./host-link";
 import { trackedSessions } from "./session-tracker";
 
 /** Sessions with a fetch in flight — rapid turn ends must not double-push. */
@@ -29,7 +28,7 @@ export function maybeFetchTitle(sessionId: string): void {
         // Flag only on DELIVERY: the SDK summary usually lags the first turn
         // (retry until one exists), and a backend disconnect at push time
         // must not burn the only attempt — the next turn end retries.
-        const delivered = notifyHost(SIDE_CHANNEL.title, {
+        const delivered = notifyTitle({
           sessionId,
           agentHarness: "claude-code",
           title,

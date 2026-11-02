@@ -45,7 +45,7 @@ bun run test:agent-server
 bun run dev:web
 ```
 
-`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend, lets the backend own agent-server startup, and then starts Vite with the emitted backend port. Confirm the terminal shows `[agent-server] LISTEN_URL=...`, `[BACKEND_PORT]...`, `Server ready!`, and `[AgentService] Connected, agents: [claude-code, codex-sdk, codex-app-server]` before opening the frontend URL.
+`bun run dev:web` is the preferred cloud smoke because it rebuilds the Node native module ABI, starts the backend (which runs the agent engine in its process), and then starts Vite with the emitted backend port. Confirm the terminal shows `[AgentService] Engine started, agents: [claude-code, codex-app-server]`, `[BACKEND_PORT]...` and `Server ready!` before opening the frontend URL.
 
 For browser-based UI smoke tests, install the Playwright browser after dependencies are installed:
 
@@ -61,7 +61,7 @@ bun run package:linux
 
 This should produce both `dist-electron/Deus-*.AppImage` and `dist-electron/deus_*_amd64.deb`. On Cursor Cloud, direct AppImage execution may fail without `libfuse.so.2`; use `APPIMAGE_EXTRACT_AND_RUN=1` for smoke tests in that environment.
 
-## Architecture (3 Processes)
+## Architecture (2 Processes)
 
 ```text
 Frontend (React)
@@ -69,20 +69,20 @@ Frontend (React)
   ├── Electron IPC → Desktop Main (apps/desktop/) — native ops only
   └── HTTP REST → Backend — fallback + workspace creation
 
-Backend → Agent-Server (apps/agent-server/) — JSON-RPC 2.0 over WebSocket
+Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire on an in-process channel
 ```
 
 **Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic.
 
-**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Routes under `/api`.
+**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Routes under `/api`. Runs the agent engine in its own process.
 
-**Agent-Server** — Stateless. Wraps Claude/Codex SDKs, emits canonical events to backend. No DB access, no direct frontend communication. Separate process for isolation.
+**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks, titles and AAP MCP servers. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop.
 
-**Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend or Agent-Server.
+**Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend (or the engine's seams, for what a turn runs).
 
 ### The @zvada/agent-server package (upstream engine + wire)
 
-The agent-server runs on the upstream **[`@zvada/agent-server`](https://github.com/zvadaadam/agent-server)** package (same author as this repo): `/core` is the engine (AgentRuntime + Claude/Codex/ACP harness adapters), `/protocol` the zod wire contract, `/server` the JSON-RPC 2.0 wire (per-session `seq`, bounded replay, quick-ack turns), `/client` the typed consumer the backend uses. Deus-specific traffic (tool round-trips, AAP MCP hot-swap, provider auth, titles) rides a `deus/*` side channel multiplexed on the same pipe — see `shared/agent-side-channel.ts`.
+The agent-server runs on the upstream **[`@zvada/agent-server`](https://github.com/zvadaadam/agent-server)** package (same author as this repo): `/core` is the engine (AgentRuntime + Claude/Codex/ACP harness adapters), `/protocol` the zod wire contract, `/server` the JSON-RPC 2.0 wire (per-session `seq`, bounded replay, quick-ack turns), `/client` the typed consumer the backend uses. The backend serves the engine on an in-process channel (`apps/agent-server/index.ts`: `startEngine`, `beginTurnStart`, `beforeCancel`) and talks to it through `AgentLink` (`apps/backend/src/services/agent/client.ts`); the deus tools' requests and titles are direct calls into the backend (`host-link.ts`).
 
 When debugging agent-server behavior (event shapes, turn admission, cancel semantics, resume, provisioning), **read the package source — you have full access**:
 

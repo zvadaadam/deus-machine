@@ -63,7 +63,7 @@ packages/         Internal packages (screen-studio)
 ```bash
 bun run test                    # All tests
 bun run test:backend            # Backend unit tests
-bun run test:agent-server:unit  # Agent-server unit tests
+bun run test:agent-server       # Agent engine tests (real agents opt-in)
 ```
 
 Tests live in dedicated test directories (`apps/backend/test/`, `apps/agent-server/test/`), not colocated with source code.

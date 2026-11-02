@@ -127,8 +127,6 @@ describe("desktop backend process", () => {
     (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
     process.env.PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin";
     process.env.ELECTRON_RUN_AS_NODE = "1";
-    process.env.AGENT_SERVER_ENTRY = "/tmp/dev-agent-server.cjs";
-    process.env.AGENT_SERVER_CWD = "/tmp/dev-agent-server";
     process.env.AUTH_TOKEN = "stale-auth-token";
     process.env.DATABASE_PATH = "/tmp/stale.db";
     process.env.DEUS_AUTH_TOKEN = "stale-main-auth-token";
@@ -138,7 +136,7 @@ describe("desktop backend process", () => {
     process.env.DEUS_PACKAGED = "stale-packaged";
     process.env.DEUS_RESOURCES_PATH = "/tmp/stale-resources";
     process.env.DEUS_RUNTIME = "1";
-    process.env.DEUS_RUNTIME_COMMAND = "agent-server";
+    process.env.DEUS_RUNTIME_COMMAND = "device-use";
     process.env.DEUS_RUNTIME_EXECUTABLE = "/tmp/stale-runtime";
     process.env.NODE_PATH = "/tmp/stale-node-modules";
     process.env.NODE_ENV = "development";
@@ -158,8 +156,6 @@ describe("desktop backend process", () => {
     expect(args).toEqual(["backend"]);
     expect(options.cwd).toBe("/Users/test/Library/Application Support/Deus");
     expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
-    expect(options.env.AGENT_SERVER_ENTRY).toBeUndefined();
-    expect(options.env.AGENT_SERVER_CWD).toBeUndefined();
     expect(options.env.DEUS_AUTH_TOKEN).toBeUndefined();
     expect(options.env.DEUS_BACKEND_PORT).toBeUndefined();
     expect(options.env.DEUS_DATA_DIR).toBeUndefined();

@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawn } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
+const { assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
   appDiagnostics,
@@ -24,7 +24,6 @@ const FORBIDDEN_LOG_PATTERNS = [
   /spawn (codex|claude).*ENOENT/,
   /ELECTRON_RUN_AS_NODE/,
   /resources\/backend/,
-  /AGENT_SERVER_ENTRY/,
   /global CLI/,
   /Backend spawn FAILED/,
 ];
@@ -112,17 +111,9 @@ function requiredLogPatterns(binDir) {
   return [
     /\[main\] App ready, starting initialization/,
     /\[main\] Spawning runtime stack/,
-    new RegExp(
-      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH claude=${pathPattern(
-        path.join(binDir, "claude")
-      )}`
-    ),
-    new RegExp(
-      `\\[backend\\] \\[agent-server\\] BUNDLED_CLI_PATH codex=${pathPattern(
-        path.join(binDir, "codex")
-      )}`
-    ),
-    /\[backend\] \[agent-server\] LISTEN_URL=/,
+    new RegExp(`\\[backend\\] BUNDLED_CLI_PATH claude=${pathPattern(path.join(binDir, "claude"))}`),
+    new RegExp(`\\[backend\\] BUNDLED_CLI_PATH codex=${pathPattern(path.join(binDir, "codex"))}`),
+    /\[backend\] \[AgentService\] Engine started, agents: /,
     /\[backend\] \[BACKEND_PORT\]\d+/,
     /\[main\] Backend started on port: \d+/,
     /\[main\] Window created/,
@@ -133,12 +124,6 @@ async function assertBackendDbRouteFromLog(logContents) {
   const match = logContents.match(/\[backend\] \[BACKEND_PORT\](\d+)/);
   if (!match) throw new Error("Packaged desktop log did not include [BACKEND_PORT]");
   await assertBackendDbRoute(Number(match[1]), "Packaged desktop backend DB route");
-}
-
-async function assertInitializedAgentsFromLog(logContents) {
-  const listenUrl = readAgentServerListenUrl(logContents);
-  if (!listenUrl) throw new Error("Packaged desktop log did not include agent-server LISTEN_URL");
-  await assertInitializedAgents(listenUrl);
 }
 
 function runAppCheck(appPath, options) {
@@ -322,10 +307,10 @@ async function smokePackagedDesktop(options) {
       appDiagnostics(launchAppPath, appBinary),
       getProcessOutput
     );
-    await assertInitializedAgentsFromLog(contents);
+    assertEngineStarted(contents);
     await assertBackendDbRouteFromLog(contents);
     console.log(
-      `[runtime-smoke] packaged desktop reached readiness, initialized agents, and served DB route; log=${logPath}`
+      `[runtime-smoke] packaged desktop reached readiness, started the agent engine, and served DB route; log=${logPath}`
     );
   } catch (error) {
     if (stderr.trim()) {

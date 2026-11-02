@@ -5,7 +5,7 @@ const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
 const { createServer } = require("node:net");
 const WebSocket = require("ws");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
+const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
   PACKAGED_SYSTEM_PATHS,
@@ -13,7 +13,6 @@ const {
   assertExecutable,
   assertHostRunnableArch,
   assertRuntimeSelfTest,
-  backendBundledAgentCliPatterns,
   bundledAgentCliPatterns,
   getJson,
   resolveDefaultAppPath,
@@ -82,12 +81,6 @@ function runAppCheck(appPath, options) {
     cwd: PROJECT_ROOT,
     stdio: "inherit",
   });
-}
-
-async function assertInitializedAgentsFromOutput(output, message) {
-  const listenUrl = readAgentServerListenUrl(output);
-  if (!listenUrl) throw new Error(message);
-  await assertInitializedAgents(listenUrl);
 }
 
 function readBackendPort(output) {
@@ -336,26 +329,6 @@ async function smokeBackendCommands(port, dataDir) {
   }
 }
 
-async function smokeAgentServer(runtimeBin, binDir) {
-  await waitForRuntimePatterns(
-    runtimeBin,
-    ["agent-server"],
-    binDir,
-    [...bundledAgentCliPatterns(binDir), /LISTEN_URL=/],
-    {
-      obsoleteLabel: "Packaged runtime smoke",
-      onReady: (output) =>
-        assertInitializedAgentsFromOutput(
-          output,
-          "Packaged runtime output did not include LISTEN_URL"
-        ),
-    }
-  );
-  console.log(
-    "[runtime-smoke] packaged runtime agent-server resolved bundled CLIs and initialized agents"
-  );
-}
-
 async function smokeBackend(runtimeBin, binDir) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-packaged-runtime-"));
   try {
@@ -363,20 +336,13 @@ async function smokeBackend(runtimeBin, binDir) {
       runtimeBin,
       ["backend", "--data-dir", dataDir],
       binDir,
-      [
-        ...backendBundledAgentCliPatterns(binDir),
-        /^\[agent-server\] LISTEN_URL=/m,
-        /^\[BACKEND_PORT\]\d+/m,
-      ],
+      [...bundledAgentCliPatterns(binDir), ENGINE_STARTED, /^\[BACKEND_PORT\]\d+/m],
       {
         obsoleteLabel: "Packaged runtime smoke",
         onReady: async (output) => {
           const port = readBackendPort(output);
           await assertBackendDbRouteFromOutput(output);
-          await assertInitializedAgentsFromOutput(
-            output,
-            "Packaged backend runtime output did not include agent-server LISTEN_URL"
-          );
+          assertEngineStarted(output);
           await smokeBackendCommands(port, dataDir);
         },
       }
@@ -385,7 +351,7 @@ async function smokeBackend(runtimeBin, binDir) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
   console.log(
-    "[runtime-smoke] packaged runtime backend resolved bundled CLIs, initialized agents, and served DB route"
+    "[runtime-smoke] packaged runtime backend resolved bundled CLIs, started the agent engine, and served DB route"
   );
 }
 
@@ -477,7 +443,6 @@ async function smokePackagedRuntime(options) {
   }
   console.log(`[runtime-smoke] packaged runtime device-use command: ${deviceUseVersion}`);
 
-  await smokeAgentServer(runtimeBin, binDir);
   await smokeBackend(runtimeBin, binDir);
   await smokeDeviceUseServe(runtimeBin);
 }

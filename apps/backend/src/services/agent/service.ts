@@ -1,15 +1,15 @@
 // backend/src/services/agent/service.ts
 // Composition root for agent-server communication.
 //
-// Wires the AgentLink (standard wire + deus side channel) straight into the
-// event handler: the engine's lifecycle envelopes go to persistence + WS push
-// with nothing in between. No circular imports — this module imports from its
-// dependencies, none of them import back.
+// Wires the AgentLink (the engine, in this process, on the standard wire)
+// straight into the event handler: the engine's lifecycle envelopes go to
+// persistence + WS push with nothing in between. No circular imports — this
+// module imports from its dependencies, none of them import back.
 //
 // Dependency graph (all arrows point down, no cycles):
 //
 //   service (this file)
-//       ├── client              (AgentLink: wire + side channel)
+//       ├── client              (AgentLink: the in-process engine)
 //       ├── event-handler       (factory: createAgentEventHandler)
 //       ├── run-config          (turn params assembly)
 //       └── tool-relay          (frontend RPC relay)
@@ -34,6 +34,7 @@ import {
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import type { AgentInfo } from "@shared/agent-info";
+import { registerAppMcp, unregisterAppMcp } from "../../../../agent-server";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -59,98 +60,66 @@ import { computeWorkspacePath } from "../../middleware/workspace-loader";
 let link: AgentLink | null = null;
 let localAgents: LocalAgents | null = null;
 let events: AgentEventHandler | null = null;
-let disposed = false;
 
-const RECONNECT_BASE_MS = 1_000;
-const RECONNECT_MAX_MS = 30_000;
-
-/** Initialize the agent service. Call once at startup. Connects in the
- *  background and keeps retrying — same contract as the legacy client. */
-export function init(agentServerUrl: string): void {
+/** Start the engine and connect the event handler to it. Call once at startup. */
+export async function init(): Promise<void> {
   if (link || events) {
     console.warn("[AgentService] Already initialized, skipping");
     return;
   }
-  disposed = false;
-
   const handler = createAgentEventHandler();
   events = handler;
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
 
-  void establishLink(agentServerUrl, handler);
+  link = await AgentLink.open({
+    onEnvelope: (envelope) => {
+      handler.handle(envelope);
+      const { event } = envelope;
+      if (isUnknownEvent(event)) return;
+      if (event.type === "permission.requested") void answerPermission(event);
+      if (event.type === "elicitation.requested") void answerElicitation(event);
+    },
+    onEventGap: (gap) => {
+      const turnId = handler.handleEventGap(gap);
+      if (!turnId || gap.reason !== "replay_failed") return;
+      // Replay exhaustion can hide the native terminal entirely. One
+      // targeted cancel reconciles it; a late reply cannot settle a successor.
+      void (async () => {
+        let confirmed = false;
+        try {
+          const result = await link?.cancelTurn(gap.sessionId, turnId);
+          confirmed =
+            result?.outcome === "cancelled" ||
+            (result?.outcome === "no_active_turn" && !result.activeTurnId);
+        } catch (error) {
+          console.warn("[AgentService] Replay recovery cancel failed:", error);
+        }
+        handler.settleEventGap(gap.sessionId, turnId, confirmed);
+      })();
+    },
+    onToolRequest: (method, params) => handleToolRequest(method, params),
+    onTitle: ({ sessionId, title }) => handler.handleTitle(sessionId, title),
+  });
+  localAgents = new LocalAgents(link.engine);
+  console.log(
+    `[AgentService] Engine started, agents: [${link
+      .getAgents()
+      .map((a) => a.type)
+      .join(", ")}]`
+  );
 }
 
-async function establishLink(url: string, handler: AgentEventHandler): Promise<void> {
-  for (let attempt = 0; !disposed; attempt++) {
-    try {
-      const connected = await AgentLink.connect({
-        url,
-        onEnvelope: (envelope) => {
-          handler.handle(envelope);
-          const { event } = envelope;
-          if (isUnknownEvent(event)) return;
-          if (event.type === "permission.requested") void answerPermission(event);
-          if (event.type === "elicitation.requested") void answerElicitation(event);
-        },
-        onEventGap: (gap) => {
-          const turnId = handler.handleEventGap(gap);
-          if (!turnId || gap.reason !== "replay_failed") return;
-          // Replay exhaustion can hide the native terminal entirely. One
-          // targeted cancel reconciles it; a late reply cannot settle a successor.
-          void (async () => {
-            let confirmed = false;
-            try {
-              const result = await link?.cancelTurn(gap.sessionId, turnId);
-              confirmed =
-                result?.outcome === "cancelled" ||
-                (result?.outcome === "no_active_turn" && !result.activeTurnId);
-            } catch (error) {
-              console.warn("[AgentService] Replay recovery cancel failed:", error);
-            }
-            handler.settleEventGap(gap.sessionId, turnId, confirmed);
-          })();
-        },
-        onConnected: (agents) => {
-          console.log(
-            `[AgentService] Connected, agents: [${agents.map((a) => a.type).join(", ")}]`
-          );
-        },
-        onDisconnected: () => {
-          console.log("[AgentService] Disconnected from agent-server");
-        },
-        onToolRequest: (method, params) => handleToolRequest(method, params),
-        onTitle: ({ sessionId, title }) => handler.handleTitle(sessionId, title),
-      });
-      // shutdown() may have run while the connect was in flight — a link
-      // assigned now would outlive the service with its reconnect loop alive.
-      if (disposed) {
-        await connected.close();
-        return;
-      }
-      link = connected;
-      localAgents = new LocalAgents(connected.engine);
-      return;
-    } catch (err) {
-      const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
-      console.error(
-        `[AgentService] Connect failed (${err instanceof Error ? err.message : err}); retrying in ${delay}ms`
-      );
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-}
-
-/** Gracefully shut down the agent link. */
-export function shutdown(): void {
-  disposed = true;
+/** Stop the engine: turns under way are cancelled, the agent CLIs stopped. */
+export async function shutdown(): Promise<void> {
   shutdownCloudDriver();
   localAgents?.dispose();
   localAgents = null;
-  void link?.close();
+  const closing = link;
   link = null;
   events = null;
+  await closing?.close();
 }
 
 // ---- Public API ----
@@ -304,20 +273,20 @@ export function getAgents(): ReadonlyArray<AgentInfo> {
   return link?.getAgents() ?? [];
 }
 
-/** Register an AAP app's MCP server with the agent-server (mid-turn hot-swap). */
+/** Register an AAP app's MCP server with the engine (mid-turn hot-swap). */
 export async function registerAapMcp(serverName: string, url: string): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  await link.aapRegisterMcp(serverName, url);
+  await registerAppMcp(serverName, url);
 }
 
 /** Unregister an AAP app's MCP server. */
 export async function unregisterAapMcp(serverName: string): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
-  await link.aapUnregisterMcp(serverName);
+  await unregisterAppMcp(serverName);
 }
 
 // ----------------------------------------------------------------------------
-// Side-channel tool dispatch (agent-server → backend)
+// Tool dispatch (the engine's deus MCP tools → backend)
 // ----------------------------------------------------------------------------
 
 /** Handle one tool round-trip from the agent's in-process deus MCP suite. */

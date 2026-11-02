@@ -23,10 +23,14 @@ let runtime: AgentRuntime | undefined;
 /** AAP-registered MCP servers, applied to every claude turn + live-swapped. */
 let aapServers: Record<string, McpServerConfig> = {};
 
-function checkpointHook(kind: "start" | "end", sessionId: string, turnId: string | undefined) {
+async function checkpointHook(
+  kind: "start" | "end",
+  sessionId: string,
+  turnId: string | undefined
+): Promise<void> {
   const state = trackedSessions.get(sessionId);
   const id = turnId ?? state?.turnId;
-  if (id && state?.cwd) createCheckpoint(sessionId, id, kind, state.cwd, "[core]");
+  if (id && state?.cwd) await createCheckpoint(sessionId, id, kind, state.cwd, "[core]");
 }
 
 export function getRegistry(): AgentRegistry {
@@ -49,7 +53,7 @@ export function getRegistry(): AgentRegistry {
           {
             hooks: [
               async () => {
-                checkpointHook("start", sessionId, currentTurnId());
+                await checkpointHook("start", sessionId, currentTurnId());
                 return {};
               },
             ],
@@ -59,15 +63,14 @@ export function getRegistry(): AgentRegistry {
           {
             hooks: [
               async () => {
-                checkpointHook("end", sessionId, currentTurnId());
+                await checkpointHook("end", sessionId, currentTurnId());
                 return {};
               },
             ],
           },
         ],
       }),
-      // AAP MCP servers ride the wire config: the wire bridge injects
-      // currentAapServers() into every claude turn/start (see wire.ts).
+      // AAP MCP servers ride each Claude turn's config (`beginTurnStart`).
     },
   });
   return registry;

@@ -2,13 +2,12 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { assertInitializedAgents, readAgentServerListenUrl } = require("./runtime-rpc.cjs");
+const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
   assertBackendDbRouteFromOutput,
   assertExecutable,
   assertRuntimeSelfTest,
-  backendBundledAgentCliPatterns,
   bundledAgentCliPatterns,
   runRuntimeCommand,
   waitForRuntimePatterns,
@@ -57,7 +56,7 @@ Options:
   --skip-validate          Skip bun run validate:runtime before executing
 
 Runs direct smokes against dist/runtime/electron/bin/<runtime-key>/deus-runtime:
---version, self-test, agent-server readiness, and backend readiness.`);
+--version, self-test, and backend readiness (with the agent engine in it).`);
 }
 
 function runValidateRuntime() {
@@ -67,32 +66,6 @@ function runValidateRuntime() {
   });
 }
 
-async function assertInitializedAgentsFromOutput(output, message) {
-  const listenUrl = readAgentServerListenUrl(output);
-  if (!listenUrl) throw new Error(message);
-  await assertInitializedAgents(listenUrl);
-}
-
-async function smokeAgentServer(runtimeBin, binDir) {
-  await waitForRuntimePatterns(
-    runtimeBin,
-    ["agent-server"],
-    binDir,
-    [...bundledAgentCliPatterns(binDir), /LISTEN_URL=/],
-    {
-      obsoleteLabel: "Native runtime smoke",
-      onReady: (output) =>
-        assertInitializedAgentsFromOutput(
-          output,
-          "Native runtime output did not include LISTEN_URL"
-        ),
-    }
-  );
-  console.log(
-    "[runtime-smoke] native runtime agent-server resolved bundled CLIs and initialized agents"
-  );
-}
-
 async function smokeBackend(runtimeBin, binDir) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-native-runtime-"));
   try {
@@ -100,19 +73,12 @@ async function smokeBackend(runtimeBin, binDir) {
       runtimeBin,
       ["backend", "--data-dir", dataDir],
       binDir,
-      [
-        ...backendBundledAgentCliPatterns(binDir),
-        /^\[agent-server\] LISTEN_URL=/m,
-        /^\[BACKEND_PORT\]\d+/m,
-      ],
+      [...bundledAgentCliPatterns(binDir), ENGINE_STARTED, /^\[BACKEND_PORT\]\d+/m],
       {
         obsoleteLabel: "Native runtime smoke",
         onReady: async (output) => {
           await assertBackendDbRouteFromOutput(output);
-          await assertInitializedAgentsFromOutput(
-            output,
-            "Native backend runtime output did not include agent-server LISTEN_URL"
-          );
+          assertEngineStarted(output);
         },
       }
     );
@@ -120,7 +86,7 @@ async function smokeBackend(runtimeBin, binDir) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
   console.log(
-    "[runtime-smoke] native runtime backend resolved bundled CLIs, initialized agents, and served DB route"
+    "[runtime-smoke] native runtime backend resolved bundled CLIs, started the agent engine, and served DB route"
   );
 }
 
@@ -150,7 +116,6 @@ async function smokeNativeRuntime(options) {
   });
   console.log(`[runtime-smoke] native runtime self-test binDir: ${selfTest.binDir}`);
 
-  await smokeAgentServer(runtimeBin, binDir);
   await smokeBackend(runtimeBin, binDir);
 }
 

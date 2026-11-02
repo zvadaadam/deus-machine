@@ -45,8 +45,6 @@ describe("desktop packaged runtime environment", () => {
 
   it("removes inherited dev runtime variables from packaged main", () => {
     const env: NodeJS.ProcessEnv = {
-      AGENT_SERVER_CWD: "/repo/apps/agent-server",
-      AGENT_SERVER_ENTRY: "/repo/apps/agent-server/dist/index.bundled.cjs",
       AUTH_TOKEN: "stale-auth-token",
       DATABASE_PATH: "/tmp/stale.db",
       DEUS_AUTH_TOKEN: "stale-main-auth-token",
@@ -71,8 +69,6 @@ describe("desktop packaged runtime environment", () => {
       env,
     });
 
-    expect(env.AGENT_SERVER_CWD).toBeUndefined();
-    expect(env.AGENT_SERVER_ENTRY).toBeUndefined();
     expect(env.AUTH_TOKEN).toBeUndefined();
     expect(env.DATABASE_PATH).toBeUndefined();
     expect(env.DEUS_AUTH_TOKEN).toBeUndefined();

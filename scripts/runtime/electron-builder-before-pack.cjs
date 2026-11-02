@@ -172,8 +172,6 @@ function assertPackagedMainRuntimeContents(contents, label = "Electron main buil
     "DEUS_RUNTIME_EXECUTABLE",
     "configurePackagedMainRuntimeEnv",
     "PACKAGED_RUNTIME_ENV_DENYLIST",
-    '"AGENT_SERVER_CWD"',
-    '"AGENT_SERVER_ENTRY"',
     '"AUTH_TOKEN"',
     '"BUN_OPTIONS"',
     '"DATABASE_PATH"',

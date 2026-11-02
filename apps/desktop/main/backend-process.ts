@@ -27,8 +27,6 @@ export interface BackendSpawnHooks {
 interface ElectronRuntimeEntries {
   backendEntry?: string;
   backendCwd: string;
-  agentServerEntry?: string;
-  agentServerCwd?: string;
   resourcesPath?: string;
   bundledBinDir?: string;
   runtimeExecutable?: string;
@@ -52,8 +50,6 @@ function resolveRuntimeEntries(): ElectronRuntimeEntries {
   return {
     backendEntry: join(projectRoot, "apps/backend/server.cjs"),
     backendCwd: join(projectRoot, "apps/backend"),
-    agentServerEntry: join(projectRoot, "apps/agent-server/dist/index.bundled.cjs"),
-    agentServerCwd: join(projectRoot, "apps/agent-server"),
     bundledBinDir: getDevStagedCliDirectory(projectRoot) ?? undefined,
   };
 }
@@ -190,12 +186,7 @@ export async function spawnBackend(
     ...(runtime.resourcesPath
       ? { DEUS_PACKAGED: "1", DEUS_RESOURCES_PATH: runtime.resourcesPath }
       : {}),
-    ...(runtime.runtimeExecutable
-      ? { DEUS_RUNTIME_EXECUTABLE: runtime.runtimeExecutable }
-      : {
-          AGENT_SERVER_ENTRY: runtime.agentServerEntry!,
-          AGENT_SERVER_CWD: runtime.agentServerCwd!,
-        }),
+    ...(runtime.runtimeExecutable ? { DEUS_RUNTIME_EXECUTABLE: runtime.runtimeExecutable } : {}),
     ...(runtime.bundledBinDir ? { DEUS_BUNDLED_BIN_DIR: runtime.bundledBinDir } : {}),
   };
   if (runtime.runtimeExecutable) {

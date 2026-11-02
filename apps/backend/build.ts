@@ -14,6 +14,15 @@ const external = [
   "ws",
   // Sentry uses native crash-reporter hooks.
   "@sentry/node",
+  // The agent engine's: the Claude SDK resolves its platform package at
+  // runtime; the ACP SDK is an optional peer deus never registers; device-use
+  // and its canvas are native/platform-specific.
+  "@anthropic-ai/claude-agent-sdk",
+  "@agentclientprotocol/sdk",
+  "@napi-rs/canvas",
+  "@napi-rs/canvas-darwin-arm64",
+  "@napi-rs/canvas-darwin-x64",
+  "device-use",
 ];
 
 const result = Bun.spawnSync({

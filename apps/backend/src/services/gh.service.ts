@@ -8,8 +8,6 @@ export { parseGitHubRepo };
 
 const execFileAsync = promisify(execFile);
 const GH_CHILD_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",

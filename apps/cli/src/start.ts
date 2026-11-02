@@ -1,14 +1,13 @@
 /**
- * Headless start mode — starts agent-server and backend.
+ * Headless start mode — starts the backend, which runs the agent engine.
  *
  * No web UI is served — remote users connect through app.deusmachine.ai via
  * the cloud relay. This keeps the headless CLI minimal.
  *
  * Process orchestration:
  * 1. Run onboarding (first run only — API key + remote access setup)
- * 2. Start agent-server → capture LISTEN_URL from stdout
- * 3. Start backend with AGENT_SERVER_URL → capture [BACKEND_PORT] from stdout
- * 4. Show pairing code + QR for remote access
+ * 2. Start the backend → capture [BACKEND_PORT] from stdout
+ * 3. Show pairing code + QR for remote access
  */
 
 import { execSync, spawn, type ChildProcess } from "node:child_process";
@@ -122,8 +121,6 @@ export async function start(options: StartOptions): Promise<void> {
     forceElectronRunAsNode: nodeCmd !== process.execPath,
     env: {
       DATABASE_PATH: dbPath,
-      AGENT_SERVER_ENTRY: paths.agentServer,
-      AGENT_SERVER_CWD: dirname(paths.agentServer),
       PORT: "0",
       ...extraEnv,
     },
@@ -148,7 +145,6 @@ export async function start(options: StartOptions): Promise<void> {
   writeServerInfo({
     pid: process.pid,
     backendPort: port,
-    agentServerUrl: "managed-by-backend",
     startedAt: new Date().toISOString(),
   });
 
@@ -197,19 +193,13 @@ export async function start(options: StartOptions): Promise<void> {
 
 // ── Bundle resolution ────────────────────────────────────────────────
 
-function resolveBundlePaths(): {
-  agentServer: string;
-  backend: string;
-} | null {
+function resolveBundlePaths(): { backend: string } | null {
   const cliRoot = resolve(__dirname, "..");
 
   // Bundled mode (npm package)
   const bundledDir = join(cliRoot, "bundles");
-  if (existsSync(join(bundledDir, "agent-server.bundled.cjs"))) {
-    return {
-      agentServer: join(bundledDir, "agent-server.bundled.cjs"),
-      backend: join(bundledDir, "server.bundled.cjs"),
-    };
+  if (existsSync(join(bundledDir, "server.bundled.cjs"))) {
+    return { backend: join(bundledDir, "server.bundled.cjs") };
   }
 
   // Dev mode (monorepo)
@@ -218,10 +208,7 @@ function resolveBundlePaths(): {
 
   try {
     validateRuntimeStage({ projectRoot: monorepoRoot, log: () => {} });
-    return {
-      agentServer: runtimePaths.common.agentServerBundle,
-      backend: runtimePaths.common.backendBundle,
-    };
+    return { backend: runtimePaths.common.backendBundle };
   } catch (error) {
     warn(
       `Staged runtime is missing or stale in monorepo mode: ${error instanceof Error ? error.message : String(error)}`

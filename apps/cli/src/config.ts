@@ -32,7 +32,6 @@ export interface DeusConfig {
 export interface ServerInfo {
   pid: number;
   backendPort: number;
-  agentServerUrl: string;
   startedAt: string;
 }
 

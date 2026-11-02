@@ -1,9 +1,11 @@
 // agent-server/checkpoint.ts
 // Creates git checkpoints at turn boundaries using direct git commands.
 // These checkpoints allow Deus to offer undo/revert for each AI turn.
-// Stored as private git refs under refs/deus-checkpoints/.
+// Stored as private git refs under refs/deus-checkpoints/. The git commands
+// run asynchronously: the engine shares the backend's process, whose event
+// loop serves the app.
 
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 import { getErrorMessage } from "@shared/lib/errors";
 
 const CHECKPOINT_SKIP_PATTERNS = [
@@ -13,6 +15,15 @@ const CHECKPOINT_SKIP_PATTERNS = [
   "error building trees",
   "resolve your current index first",
 ] as const;
+
+/** One git command's trimmed output; its stderr is in the error's message. */
+function git(cwd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("git", args, { cwd, encoding: "utf-8" }, (error, stdout) =>
+      error ? reject(error) : resolve(String(stdout).trim())
+    );
+  });
+}
 
 function shouldSkipCheckpoint(message: string): boolean {
   const normalized = message.toLowerCase();
@@ -36,13 +47,13 @@ function shouldSkipCheckpoint(message: string): boolean {
  * @param cwd           Working directory (must be inside a git repo)
  * @param logPrefix     Label used in log messages
  */
-export function createCheckpoint(
+export async function createCheckpoint(
   sessionId: string,
   turnId: string,
   checkpointType: "start" | "end",
   cwd: string,
   logPrefix: string
-): void {
+): Promise<void> {
   const checkpointId = `session-${sessionId}-turn-${turnId}-${checkpointType}`;
   const refName = `refs/deus-checkpoints/${checkpointId}`;
 
@@ -52,10 +63,10 @@ export function createCheckpoint(
 
   try {
     // Create a tree object from the current working directory state
-    const headRef = execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf-8" }).trim();
+    const headRef = await git(cwd, ["rev-parse", "HEAD"]);
 
     // Create a tree from the index (staged changes)
-    const indexTree = execFileSync("git", ["write-tree"], { cwd, encoding: "utf-8" }).trim();
+    const indexTree = await git(cwd, ["write-tree"]);
 
     // Create a checkpoint commit message with metadata
     const commitMessage = [
@@ -66,14 +77,17 @@ export function createCheckpoint(
     ].join("\n");
 
     // Create the commit object (using arg array avoids shell injection)
-    const commitHash = execFileSync(
-      "git",
-      ["commit-tree", indexTree, "-p", headRef, "-m", commitMessage],
-      { cwd, encoding: "utf-8" }
-    ).trim();
+    const commitHash = await git(cwd, [
+      "commit-tree",
+      indexTree,
+      "-p",
+      headRef,
+      "-m",
+      commitMessage,
+    ]);
 
     // Store it as a ref
-    execFileSync("git", ["update-ref", refName, commitHash], { cwd, encoding: "utf-8" });
+    await git(cwd, ["update-ref", refName, commitHash]);
 
     console.log(`${logPrefix} Created ${checkpointType} checkpoint: ${commitHash.substring(0, 8)}`);
   } catch (error: unknown) {

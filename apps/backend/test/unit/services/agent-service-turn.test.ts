@@ -20,14 +20,14 @@ import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
 
 const {
-  mockConnect,
+  mockOpen,
   mockLinkStartTurn,
   mockBeginTurn,
   mockAbortTurn,
   mockGetDatabase,
   mockInvalidate,
 } = vi.hoisted(() => ({
-  mockConnect: vi.fn(),
+  mockOpen: vi.fn(),
   mockLinkStartTurn: vi.fn(),
   mockBeginTurn: vi.fn(),
   mockAbortTurn: vi.fn(),
@@ -41,7 +41,7 @@ vi.mock("../../../src/lib/database", () => ({
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 vi.mock("../../../src/services/agent/client", () => ({
-  AgentLink: { connect: mockConnect },
+  AgentLink: { open: mockOpen },
 }));
 vi.mock("../../../src/services/agent/event-handler", () => ({
   createAgentEventHandler: () => ({
@@ -67,19 +67,18 @@ describe("agentService.startTurn", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
-    mockConnect.mockResolvedValue({
+    mockOpen.mockResolvedValue({
       startTurn: mockLinkStartTurn,
       getAgents: () => [],
       isConnected: () => true,
+      engine: { onAuthUpdated: () => () => {}, onCliProgress: () => () => {} },
       close: vi.fn().mockResolvedValue(undefined),
     });
-    agentService.init("ws://agent-server.test");
-    // init() connects in the background; let the resolved connect settle.
-    for (let i = 0; i < 50 && !agentService.isConnected(); i++) await Promise.resolve();
+    await agentService.init();
   });
 
-  afterEach(() => {
-    agentService.shutdown();
+  afterEach(async () => {
+    await agentService.shutdown();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });

@@ -132,8 +132,6 @@ async function buildArgs(args: string[]): Promise<string[]> {
  */
 const STREAM_PORT = "9223";
 const AGENT_BROWSER_CHILD_ENV_DENYLIST = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "DATABASE_PATH",
   "DEUS_AUTH_TOKEN",

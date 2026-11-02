@@ -20,8 +20,6 @@ const {
 
 const tempRoots: string[] = [];
 const packagedRuntimeDenylist = [
-  "AGENT_SERVER_CWD",
-  "AGENT_SERVER_ENTRY",
   "AUTH_TOKEN",
   "BUN_OPTIONS",
   "DATABASE_PATH",

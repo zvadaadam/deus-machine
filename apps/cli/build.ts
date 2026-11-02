@@ -2,7 +2,7 @@
  * Build script for @deus/cli
  *
  * 1. Bundle the CLI TypeScript → dist/cli.js (esbuild)
- * 2. Stage the shared runtime artifact (backend + agent-server bundles)
+ * 2. Stage the shared runtime artifact (the backend bundle, which runs the engine)
  * 3. Copy the staged runtime bundles into bundles/ for npm distribution
  */
 
@@ -63,11 +63,6 @@ async function main() {
   mkdirSync(bundlesDir, { recursive: true });
 
   const copies = [
-    {
-      src: runtimePaths.common.agentServerBundle,
-      dest: join(bundlesDir, "agent-server.bundled.cjs"),
-      name: "agent-server bundle",
-    },
     {
       src: runtimePaths.common.backendBundle,
       dest: join(bundlesDir, "server.bundled.cjs"),
