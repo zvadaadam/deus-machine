@@ -1,11 +1,5 @@
 import { toast } from "sonner";
-import type {
-  AgentAuthAnswer,
-  AgentSignInAnswer,
-  AuthLogin,
-  HarnessAuth,
-  LocalHarness,
-} from "@shared/agent-auth";
+import type { AgentAuthAnswer, AuthLogin, HarnessAuth, LocalHarness } from "@shared/agent-auth";
 import { openExternal } from "@/platform/native/window";
 import { sendCommand } from "@/platform/ws";
 
@@ -82,11 +76,12 @@ export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth)
   try {
     const ack = await sendCommand("agentSignIn", { harness, method: method.id }, 60_000);
     if (!ack.accepted) throw new Error(ack.error || "Couldn’t start the sign-in");
-    const answer = ack as unknown as AgentSignInAnswer;
-    if ("already" in answer) {
+    const answer = ack as unknown as Partial<{ already: HarnessAuth; login: AuthLogin }>;
+    if (answer.already) {
       toast.success(`Already signed in on this computer: ${accountLine(answer.already)}`);
       return;
     }
+    if (!answer.login) throw new Error("The sign-in didn’t start");
     const url = answer.login.url ?? answer.login.codeUrl;
     if (url) await openExternal(url);
   } catch (error) {

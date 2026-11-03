@@ -78,6 +78,21 @@ describe("onboarding Claude account status", () => {
     expect(html).not.toContain(">Sign in</button>");
   });
 
+  it("takes the code a sign-in page shows, to finish a sign-in from onboarding", () => {
+    auth.data!.logins = [
+      {
+        loginId: "login-1",
+        harness: "claude-code",
+        method: "claudeai",
+        codeUrl: "https://claude.ai/oauth/code",
+        expiresAt: 1,
+      },
+    ];
+    const html = render();
+    expect(html).toContain("Waiting for sign-in…");
+    expect(html).toContain("Paste the code the sign-in page shows");
+  });
+
   it("offers to install an agent whose CLI the engine has not installed", () => {
     const html = render();
     expect(html).toContain("Not installed yet");

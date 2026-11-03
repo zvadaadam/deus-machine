@@ -8,7 +8,13 @@ import {
   signInLocalAgent,
   type LocalAgentState,
 } from "@/features/settings/lib/local-agent-login";
+import { LoginCodeForm } from "@/features/settings/ui/sections/LoginCodeForm";
 import type { LocalHarness } from "@shared/agent-auth";
+
+const AGENTS: { harness: LocalHarness; name: string; description: string }[] = [
+  { harness: "claude-code", name: "Claude Code", description: "Anthropic's coding agent" },
+  { harness: "codex-app-server", name: "Codex", description: "OpenAI's coding agent" },
+];
 
 interface AIToolsCheckStepProps {
   onNext: () => void;
@@ -35,6 +41,13 @@ function detailOf(state: LocalAgentState): string {
 export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
   const auth = useAgentAuth();
   useAgentAuthEvents();
+
+  /** A sign-in under way that finishes with the code its page shows. */
+  function codeLogin(harness: LocalHarness) {
+    const state = readLocalAgent(auth, harness);
+    const login = state.status === "signed-out" ? state.login : undefined;
+    return login?.codeUrl && !login.url ? login : undefined;
+  }
 
   /** Each agent as the engine has it: its CLI (installed by the engine), then its login. */
   function row(harness: LocalHarness) {
@@ -71,17 +84,15 @@ export function AIToolsCheckStep({ onNext, onBack }: AIToolsCheckStepProps) {
       </div>
 
       <div className="flex flex-col gap-3">
-        <CliStatusRow
-          name="Claude Code"
-          description="Anthropic's coding agent"
-          {...row("claude-code")}
-        />
-
-        <CliStatusRow
-          name="Codex"
-          description="OpenAI's coding agent"
-          {...row("codex-app-server")}
-        />
+        {AGENTS.map(({ harness, name, description }) => {
+          const login = codeLogin(harness);
+          return (
+            <div key={harness} className="flex flex-col gap-2">
+              <CliStatusRow name={name} description={description} {...row(harness)} />
+              {login && <LoginCodeForm loginId={login.loginId} />}
+            </div>
+          );
+        })}
       </div>
 
       <p className="text-onboarding-foreground/30 text-xs">

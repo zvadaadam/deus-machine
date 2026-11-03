@@ -4,8 +4,8 @@
 // its progress) and its login (`auth/*`: as the CLI says it, a sign-in
 // through the CLI's own flow, the code a sign-in from another device shows,
 // cancel and sign out). Every window hears q:event "agent:cli" while a CLI
-// installs, and "agent:auth" when a login changes or a sign-in ends, whoever
-// caused it.
+// installs, and "agent:auth" when a login changes or a sign-in starts or
+// ends, whoever caused it.
 
 import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
 import { signedInBy, type AuthLogin, type HarnessAuth } from "@zvada/agent-server/protocol";
@@ -36,7 +36,11 @@ export class LocalAgents {
 
   constructor(private readonly client: AgentServerClient) {
     this.offs = [
-      client.onAuthUpdated((update) => tell("agent:auth", update satisfies AgentAuthEvent)),
+      client.onAuthUpdated((update) => {
+        // An ended sign-in leaves the list before the windows read it again.
+        if (update.login) this.handles.delete(update.login.loginId);
+        tell("agent:auth", update satisfies AgentAuthEvent);
+      }),
       client.onCliProgress((progress) => tell("agent:cli", progress)),
     ];
   }
@@ -75,6 +79,8 @@ export class LocalAgents {
     const handle = await this.client.login(harness, method, apiKey ? { apiKey } : {});
     const login = answerOf(handle);
     this.handles.set(login.loginId, handle);
+    // Every window shows it under way (Cancel, the code's form), not "Sign in".
+    tell("agent:auth", { started: login } satisfies AgentAuthEvent);
     void handle.done.then(
       () => this.handles.delete(login.loginId),
       (error: unknown) => {
