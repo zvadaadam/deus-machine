@@ -8,13 +8,13 @@
         "@agentclientprotocol/sdk": "^1.3.0",
         "@anthropic-ai/claude-agent-sdk": "0.3.288",
         "@anthropic-ai/sdk": "^0.93.0",
-        "@deus-hq/api": "3.1.0",
-        "@deus-hq/sdk": "3.1.0",
+        "@deus-hq/api": "3.4.0",
+        "@deus-hq/sdk": "3.4.0",
         "@hono/node-server": "^1.19.9",
         "@hono/node-ws": "^1.3.0",
         "@napi-rs/canvas": "^0.1.97",
         "@sentry/node": "^10.40.0",
-        "@zvada/agent-server": "0.3.20",
+        "@zvada/agent-server": "0.3.21",
         "agent-browser": "^0.21.4",
         "better-sqlite3": "^12.4.1",
         "chokidar": "^4.0.0",
@@ -268,9 +268,9 @@
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
-    "@deus-hq/api": ["@deus-hq/api@3.1.0", "", { "dependencies": { "@zvada/agent-server": "0.3.18", "zod": "^4.4.3" } }, "sha512-QTNiKkvNsHemWpwDf+HoNS/vQswCtXeIx8x+37AvlksfQwuwuVV90XmT8nwRoTH+ZyrRip6ltHzMWButplBOSg=="],
+    "@deus-hq/api": ["@deus-hq/api@3.4.0", "", { "dependencies": { "zod": "^4.6.7" } }, "sha512-v/kc2F925eNM1A/NOrOnHcnQaptXkcajL9Bt7hgBpwyvteq5vzQn6d+uQKSQS2njKcG5aVFKrfKrzuvpJJuFUw=="],
 
-    "@deus-hq/sdk": ["@deus-hq/sdk@3.1.0", "", { "dependencies": { "@deus-hq/api": "3.1.0", "@zvada/agent-server": "0.3.18", "ws": "^8", "zod": "^4.4.3" }, "peerDependencies": { "@chat-adapter/slack": "^4.41.0", "@chat-adapter/state-memory": "^4.41.0", "chat": "^4.41.0" }, "optionalPeers": ["@chat-adapter/slack", "@chat-adapter/state-memory", "chat"] }, "sha512-MspzQDOmq0S+YkuhUEQA97/YKt9NNpkSDknDEz7P4eDnnclgnG8aaRUKBwiYJFu9wqRIykVjNfLT7Ub/zoW4CQ=="],
+    "@deus-hq/sdk": ["@deus-hq/sdk@3.4.0", "", { "dependencies": { "@deus-hq/api": "3.4.0", "ws": "^8", "zod": "^4.6.7" }, "peerDependencies": { "@chat-adapter/slack": "^4.41.0", "@chat-adapter/state-memory": "^4.41.0", "chat": "^4.41.0" }, "optionalPeers": ["@chat-adapter/slack", "@chat-adapter/state-memory", "chat"] }, "sha512-Meb8U33nADX1Ui/kxNoPWuqVRWXZSnXcOBrecI+6qodvm0S6oTrU008ueeGPiwDiVreaXJg8rA67Xa7ln8gpHg=="],
 
     "@deus/screen-studio": ["@deus/screen-studio@workspace:packages/screen-studio"],
 
@@ -573,22 +573,6 @@
     "@npmcli/fs": ["@npmcli/fs@4.0.0", "", { "dependencies": { "semver": "^7.3.5" } }, "sha512-/xGlezI6xfGO9NwuJlnwz/K14qD1kCSAGtacBHnGzeAIuJGazcp45KP5NuyARXoKb7cwulAGWVsbeSxdG/cb0Q=="],
 
     "@number-flow/react": ["@number-flow/react@0.5.12", "", { "dependencies": { "esm-env": "^1.1.4", "number-flow": "0.5.10" }, "peerDependencies": { "react": "^18 || ^19", "react-dom": "^18 || ^19" } }, "sha512-34Kt3kd7kC5V3BqrDmxCJsqZlF43NFuOAUd8XZVjR75IJ1JPsgDMYArywqOHJm4gy/ZGzWQGFPxfYSSbscvppA=="],
-
-    "@openai/codex": ["@openai/codex@0.153.4", "", { "optionalDependencies": { "@openai/codex-darwin-arm64": "npm:@openai/codex@0.153.4-darwin-arm64", "@openai/codex-darwin-x64": "npm:@openai/codex@0.153.4-darwin-x64", "@openai/codex-linux-arm64": "npm:@openai/codex@0.153.4-linux-arm64", "@openai/codex-linux-x64": "npm:@openai/codex@0.153.4-linux-x64", "@openai/codex-win32-arm64": "npm:@openai/codex@0.153.4-win32-arm64", "@openai/codex-win32-x64": "npm:@openai/codex@0.153.4-win32-x64" }, "bin": { "codex": "bin/codex.js" } }, "sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w=="],
-
-    "@openai/codex-darwin-arm64": ["@openai/codex@0.153.4-darwin-arm64", "", { "os": "darwin", "cpu": "arm64" }, "sha512-B1qhN3fa1ay0R0wGziXqgwSkB5icpYChNKHhtBHff/0UtSTC7z+l8aTtvMlGjH3E8HEvY3+njIJelM9CAAoVWg=="],
-
-    "@openai/codex-darwin-x64": ["@openai/codex@0.153.4-darwin-x64", "", { "os": "darwin", "cpu": "x64" }, "sha512-vnSbbPzfoDZmmyzsxswsDDXQ06IVFBzkQU7/hroB3ji93Ok2utcsq8Psfk2tjF5r9mEx8RWFJhzuTGHG26/NDA=="],
-
-    "@openai/codex-linux-arm64": ["@openai/codex@0.153.4-linux-arm64", "", { "os": "linux", "cpu": "arm64" }, "sha512-QKdjYLYV4hXIuUQDP3P6F4NXuWFoKo9WUoV4nAREIx55kiUyi8UsYdsVobkeXir5n/maEQgYMCKLHVma4rNPiw=="],
-
-    "@openai/codex-linux-x64": ["@openai/codex@0.153.4-linux-x64", "", { "os": "linux", "cpu": "x64" }, "sha512-x1EcwBlY3AObM1VTUHNM2AzAJQsyreGdagpF+qFiYi/Oa30VBktvvG0C6tLtCzqW6hjZNWkGZQWmeVk7MuJKWg=="],
-
-    "@openai/codex-sdk": ["@openai/codex-sdk@0.153.4", "", { "dependencies": { "@openai/codex": "0.153.4" } }, "sha512-z0rN8WMQxwEHYHpDJyKHZwNNUtM/1pdnxmKopIJ3qMCZyyDestaIhSGDZ0v0RSjm+REujcFyNd95oWs78zWgRg=="],
-
-    "@openai/codex-win32-arm64": ["@openai/codex@0.153.4-win32-arm64", "", { "os": "win32", "cpu": "arm64" }, "sha512-/FBh42976ltF1kxDoPQBg1Q6+hwChRU5/sm5dfeC8kFVQMvOCGoGeY5d8rRZGVJE8XojlXo74VQb0sHowcfgBw=="],
-
-    "@openai/codex-win32-x64": ["@openai/codex@0.153.4-win32-x64", "", { "os": "win32", "cpu": "x64" }, "sha512-lMkB43kJZH0VFr+hoXc11qqR7QtQIbkr07ALgj4urKL1osNyUyuy1iXd3Vzz2iCYvBUCSw7I0l/W1cEPGx9euQ=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 
@@ -1328,7 +1312,7 @@
 
     "@xtuc/long": ["@xtuc/long@4.2.2", "", {}, "sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ=="],
 
-    "@zvada/agent-server": ["@zvada/agent-server@0.3.20", "", { "peerDependencies": { "@agentclientprotocol/sdk": ">=1.3.0", "@anthropic-ai/claude-agent-sdk": ">=0.3.277", "zod": "^4.0.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk"], "bin": { "agent-server": "src/server/bin.ts" } }, "sha512-ddpI6IT6pB0ECIkDTtnVa7Y2yzJIjDO+xqSczjdB80eJ9TTiTyZ8KtpgoSFO2eEyVyAMDYN9cYk1TV9LJyRucg=="],
+    "@zvada/agent-server": ["@zvada/agent-server@0.3.21", "", { "peerDependencies": { "@agentclientprotocol/sdk": ">=1.3.0", "@anthropic-ai/claude-agent-sdk": ">=0.3.277", "zod": "^4.0.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk"], "bin": { "agent-server": "src/server/bin.ts" } }, "sha512-+oWmQl5/5eBv5i8iy2wHTM8zmWUwp9Hf4BMLr83ZOabmMRUV7DXkmJodrMiGAoPPaA96n5fKwLtzELMjHP0k4A=="],
 
     "abbrev": ["abbrev@3.0.1", "", {}, "sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg=="],
 
@@ -3201,10 +3185,6 @@
     "@chevrotain/cst-dts-gen/lodash-es": ["lodash-es@4.17.21", "", {}, "sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw=="],
 
     "@chevrotain/gast/lodash-es": ["lodash-es@4.17.21", "", {}, "sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw=="],
-
-    "@deus-hq/api/@zvada/agent-server": ["@zvada/agent-server@0.3.18", "", { "dependencies": { "zod": "^4.0.0" }, "peerDependencies": { "@agentclientprotocol/sdk": ">=1.2.0", "@anthropic-ai/claude-agent-sdk": ">=0.2.0", "@openai/codex-sdk": ">=0.40.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"], "bin": { "agent-server": "src/server/bin.ts" } }, "sha512-t2+4Y7ZZqiX4ROOZgzV2CdH2coEJ9bL7KlvNyEQ08/NPvZH5WOw++KWnERDpLbX1e2uFWt3o9lZ6DTmZOhl/iw=="],
-
-    "@deus-hq/sdk/@zvada/agent-server": ["@zvada/agent-server@0.3.18", "", { "dependencies": { "zod": "^4.0.0" }, "peerDependencies": { "@agentclientprotocol/sdk": ">=1.2.0", "@anthropic-ai/claude-agent-sdk": ">=0.2.0", "@openai/codex-sdk": ">=0.40.0" }, "optionalPeers": ["@agentclientprotocol/sdk", "@anthropic-ai/claude-agent-sdk", "@openai/codex-sdk"], "bin": { "agent-server": "src/server/bin.ts" } }, "sha512-t2+4Y7ZZqiX4ROOZgzV2CdH2coEJ9bL7KlvNyEQ08/NPvZH5WOw++KWnERDpLbX1e2uFWt3o9lZ6DTmZOhl/iw=="],
 
     "@deus/screen-studio/vitest": ["vitest@3.2.4", "", { "dependencies": { "@types/chai": "^5.2.2", "@vitest/expect": "3.2.4", "@vitest/mocker": "3.2.4", "@vitest/pretty-format": "^3.2.4", "@vitest/runner": "3.2.4", "@vitest/snapshot": "3.2.4", "@vitest/spy": "3.2.4", "@vitest/utils": "3.2.4", "chai": "^5.2.0", "debug": "^4.4.1", "expect-type": "^1.2.1", "magic-string": "^0.30.17", "pathe": "^2.0.3", "picomatch": "^4.0.2", "std-env": "^3.9.0", "tinybench": "^2.9.0", "tinyexec": "^0.3.2", "tinyglobby": "^0.2.14", "tinypool": "^1.1.1", "tinyrainbow": "^2.0.0", "vite": "^5.0.0 || ^6.0.0 || ^7.0.0-0", "vite-node": "3.2.4", "why-is-node-running": "^2.3.0" }, "peerDependencies": { "@edge-runtime/vm": "*", "@types/debug": "^4.1.12", "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "@vitest/browser": "3.2.4", "@vitest/ui": "3.2.4", "happy-dom": "*", "jsdom": "*" }, "optionalPeers": ["@edge-runtime/vm", "@types/debug", "@types/node", "@vitest/browser", "@vitest/ui", "happy-dom", "jsdom"], "bin": { "vitest": "vitest.mjs" } }, "sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A=="],
 
