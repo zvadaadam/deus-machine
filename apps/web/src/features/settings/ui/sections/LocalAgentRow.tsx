@@ -1,18 +1,17 @@
 import { useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { openExternal } from "@/platform/native/window";
 import type { LocalHarness } from "@shared/agent-auth";
 import {
   canSignIn,
   cancelLocalSignIn,
-  finishLocalSignIn,
   installLocalAgents,
   signInLocalAgent,
   signOutLocalAgent,
   type LocalAgentState,
 } from "../../lib/local-agent-login";
+import { LoginCodeForm } from "./LoginCodeForm";
 
 function Badge({ state }: { state: LocalAgentState }) {
   if (state.status === "checking") {
@@ -73,7 +72,6 @@ export function LocalAgentRow({
   state: LocalAgentState;
 }) {
   const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState("");
   const run = (action: () => Promise<void>) => {
     setBusy(true);
     void action().finally(() => setBusy(false));
@@ -147,25 +145,7 @@ export function LocalAgentRow({
           )}
         </div>
       </div>
-      {login?.codeUrl && !login.url && (
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (code.trim()) run(() => finishLocalSignIn(login.loginId, code.trim()));
-          }}
-        >
-          <Input
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            placeholder="Paste the code the sign-in page shows"
-            className="h-8 text-xs"
-          />
-          <Button type="submit" variant="outline" size="xs" disabled={busy || !code.trim()}>
-            Continue
-          </Button>
-        </form>
-      )}
+      {login?.codeUrl && !login.url && <LoginCodeForm loginId={login.loginId} />}
     </div>
   );
 }

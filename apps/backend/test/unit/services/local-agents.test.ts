@@ -99,12 +99,12 @@ describe("LocalAgents", () => {
     await expect(logins.complete("login-1", "late")).rejects.toThrow("no longer under way");
   });
 
-  it("tells every window when a login changes, and when a sign-in lost the engine", async () => {
+  it("tells every window when a login changes, a sign-in starts, and a sign-in lost the engine", async () => {
     const { logins, settle, tellUpdate } = engine(signedOut);
     tellUpdate({ auth: signedIn, login: { loginId: "other", outcome: "succeeded" } });
     await logins.signIn("claude-code", "claudeai");
     settle().reject(new LoginError({ loginId: "login-1", outcome: "disconnected" }));
-    await vi.waitFor(() => expect(told()).toHaveLength(2));
+    await vi.waitFor(() => expect(told()).toHaveLength(3));
     expect(told()).toEqual([
       {
         type: "q:event",
@@ -114,9 +114,25 @@ describe("LocalAgents", () => {
       {
         type: "q:event",
         event: "agent:auth",
+        data: {
+          started: expect.objectContaining({ loginId: "login-1", url: "https://claude.ai/oauth" }),
+        },
+      },
+      {
+        type: "q:event",
+        event: "agent:auth",
         data: { login: { loginId: "login-1", outcome: "disconnected" } },
       },
     ]);
+  });
+
+  it("drops an ended sign-in before the windows read the status again", async () => {
+    const { logins, tellUpdate } = engine(signedOut);
+    await logins.signIn("claude-code", "claudeai");
+    expect((await logins.status()).logins).toHaveLength(1);
+    // The engine's notice can arrive before the handle's own end settles.
+    tellUpdate({ auth: signedIn, login: { loginId: "login-1", outcome: "succeeded" } });
+    expect((await logins.status()).logins).toEqual([]);
   });
 
   it("reads each CLI with its login, and installs them on request without waiting", async () => {

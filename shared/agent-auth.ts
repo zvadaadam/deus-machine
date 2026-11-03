@@ -47,11 +47,13 @@ export interface AgentAuthAnswer {
 export type AgentSignInAnswer = { already: HarnessAuth } | { login: AuthLogin };
 
 /**
- * q:event "agent:auth": a harness's login changed, or a sign-in ended
- * (`login`), whoever caused it; or a sign-in this backend followed lost the
- * engine (`disconnected`, no `auth`): read the status again.
+ * q:event "agent:auth": a harness's login changed, a sign-in started
+ * (`started`) or ended (`login`), whoever caused it; or a sign-in this
+ * backend followed lost the engine (`disconnected`, no `auth`): read the
+ * status again.
  */
 export interface AgentAuthEvent {
   auth?: HarnessAuth;
+  started?: AuthLogin;
   login?: AuthLoginEnd;
 }

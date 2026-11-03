@@ -5,7 +5,11 @@
 // system-prompt append, resume plumbing.
 
 import { parseAgentInput } from "@zvada/agent-server/protocol";
-import type { AgentInput, TurnStartParams } from "@zvada/agent-server/protocol";
+import type {
+  AgentHarness as EngineHarness,
+  AgentInput,
+  TurnStartParams,
+} from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
 import type { ThinkingLevel, PermissionMode } from "@shared/protocol";
 import { buildSystemPromptAppend } from "./system-prompt";
@@ -79,6 +83,15 @@ export interface DeusTurnOptions {
   supportsImages?: boolean;
 }
 
+/**
+ * The engine's harness for a deus one. The engine retired `codex-sdk`
+ * (0.3.19), so a session begun on it continues on the app-server, the
+ * engine's one Codex harness.
+ */
+export function engineHarness(agentHarness: AgentHarness): EngineHarness {
+  return agentHarness === "codex-sdk" ? "codex-app-server" : agentHarness;
+}
+
 /** Assemble the wire params for one turn (ids are minted by the caller). */
 export function buildTurnStartParams(
   sessionId: string,
@@ -93,10 +106,7 @@ export function buildTurnStartParams(
     turnId,
     input: options.supportsImages ? input : withoutImageParts(input),
     config: {
-      // The harness id IS the engine's, but for one: the engine retired
-      // `codex-sdk` (0.3.19), so a session begun on it continues on the
-      // app-server, the engine's one Codex harness.
-      harness: agentHarness === "codex-sdk" ? "codex-app-server" : agentHarness,
+      harness: engineHarness(agentHarness),
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
