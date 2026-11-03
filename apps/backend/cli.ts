@@ -5,7 +5,8 @@
 //
 // 1. Creates a workspace + session in the DB (the backend's own connection)
 // 2. Starts the engine in this process, as the backend does
-// 3. Connects to it the backend's way (AgentServerClient on the in-process wire)
+// 3. Connects to it the backend's way (AgentLink: the same turn bookkeeping,
+//    AAP servers and cancel checkpoint as the app)
 // 4. Starts a turn with the backend's REAL run-config assembly
 // 5. Feeds every envelope through `services/agent/persistence.ts` and
 //    `services/agent/event-facts.ts` — the SAME functions the event handler
@@ -24,8 +25,8 @@
 //   bun run cli:backend -- "Say hello"
 //   bun run cli:backend --db-only           # just dump latest session
 
-import { AgentServerClient } from "@zvada/agent-server/client";
-import { startEngine, stopEngine } from "../agent-server";
+import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
+import { AgentLink } from "./src/services/agent/client";
 import type { AgentHarness } from "@shared/enums";
 import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import { buildTurnStartParams } from "./src/services/agent/run-config";
@@ -266,16 +267,19 @@ async function main() {
 
   console.log(`  ${c.green}Session created:${c.reset} ${sessionId}`);
 
-  // 3. Start the engine in this process, and 4. connect the backend's way.
-  // The deus tools' requests are not answered here (no app to answer them).
-  const client = await AgentServerClient.attach(
-    startEngine({
-      request: async (method) => {
-        throw new Error(`${method} is not available in the CLI`);
-      },
-      title: ({ title }) => console.log(`${ts()} ${c.magenta}◂ title${c.reset} "${title}"`),
-    })
-  );
+  // 3. Start the engine in this process, and 4. connect the backend's way,
+  // through its AgentLink: a turn's cwd is recorded for the tool policy and
+  // the checkpoints as in the app. The deus tools' requests are not answered
+  // here (no app to answer them).
+  let onEnvelope: (envelope: DecodedWireEventEnvelope) => void = () => {};
+  const link = await AgentLink.open({
+    onEnvelope: (envelope) => onEnvelope(envelope),
+    onToolRequest: async (method) => {
+      throw new Error(`${method} is not available in the CLI`);
+    },
+    onTitle: ({ title }) => console.log(`${ts()} ${c.magenta}◂ title${c.reset} "${title}"`),
+  });
+  const client = link.engine;
   const init = await client.initialize();
   console.log(
     `  ${c.green}Handshake:${c.reset} v${init.protocolVersion} harnesses=[${Object.keys(init.harnesses).join(", ")}]`
@@ -344,7 +348,7 @@ async function main() {
     }
   };
 
-  client.onEvent((envelope) => {
+  onEnvelope = (envelope) => {
     handleEvent(envelope.event);
     // A plan is approved, a tool allowed and a question answered with its first
     // option(s), where the backend would ask the user.
@@ -363,7 +367,7 @@ async function main() {
         event.mode === "question" ? questionAnswer(questions, answers) : { action: "decline" }
       );
     }
-  });
+  };
 
   // 6. Start the turn with the backend's REAL run-config assembly
   banner("Sending Turn");
@@ -375,7 +379,7 @@ async function main() {
     permissionMode: "default",
     supportsImages: init.harnesses[opts.agent]?.images ?? false,
   });
-  await client.startTurn(params);
+  await link.startTurn(params);
 
   // 7. Wait for completion
   await new Promise<void>((resolve) => {
@@ -403,8 +407,7 @@ async function main() {
       : `  ${c.red}${c.bold}FAIL${c.reset}: No parts persisted`
   );
 
-  await client.close();
-  await stopEngine();
+  await link.close();
   closeDatabase();
   process.exit(partCount > 0 ? 0 : 1);
 }
