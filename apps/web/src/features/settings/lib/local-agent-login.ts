@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import type { AgentAuthAnswer, AuthLogin, HarnessAuth, LocalHarness } from "@shared/agent-auth";
-import { openExternal } from "@/platform/native/window";
+import { openExternalPending } from "@/platform/native/window";
 import { sendCommand } from "@/platform/ws";
 
 /** A local agent as the engine has it: its CLI, then its login, read from the CLI. */
@@ -73,18 +73,24 @@ export function canSignIn(auth: HarnessAuth): boolean {
 export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth): Promise<void> {
   const method = browserSignIn(auth);
   if (!method) return;
+  // A browser opens a tab only while it handles the click: take it now, blank,
+  // and send it to the sign-in page once the backend answers.
+  const page = openExternalPending();
   try {
     const ack = await sendCommand("agentSignIn", { harness, method: method.id }, 60_000);
     if (!ack.accepted) throw new Error(ack.error || "Couldn’t start the sign-in");
     const answer = ack as unknown as Partial<{ already: HarnessAuth; login: AuthLogin }>;
     if (answer.already) {
+      page.cancel();
       toast.success(`Already signed in on this computer: ${accountLine(answer.already)}`);
       return;
     }
     if (!answer.login) throw new Error("The sign-in didn’t start");
     const url = answer.login.url ?? answer.login.codeUrl;
-    if (url) await openExternal(url);
+    if (url) await page.open(url);
+    else page.cancel();
   } catch (error) {
+    page.cancel();
     toast.error(error instanceof Error ? error.message : "Couldn’t start the sign-in");
   }
 }
