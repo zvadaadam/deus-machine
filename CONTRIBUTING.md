@@ -27,7 +27,7 @@ bun run dev:web
 bun run dev
 ```
 
-Both commands start the full stack (frontend + backend + agent-server). Never run `bun run dev:frontend` alone — it won't have a backend.
+Both commands start the full stack: the frontend and the backend, which runs the agent engine in its own process. Never run `bun run dev:frontend` alone — it won't have a backend.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed setup, port configuration, and troubleshooting.
 
@@ -91,13 +91,12 @@ Tests live in dedicated test directories (`apps/backend/test/`, `apps/agent-serv
 
 ## Architecture Overview
 
-Deus is an Electron + React + Node.js monorepo with three main processes:
+Deus is an Electron + React + Node.js monorepo with two main processes:
 
 1. **Electron main** — thin desktop shell (windows, native dialogs, process lifecycle)
-2. **Node.js backend** — all business logic (database, API, agent coordination, tool relay)
-3. **Agent-server** — stateless SDK wrapper (Claude/Codex integration, canonical event emission)
+2. **Node.js backend** — all business logic (database, API, agent coordination, tool relay), and the agent engine (`apps/agent-server`: `@zvada/agent-server` with Deus's tools, tool policy and checkpoints) running in the same process
 
-Data flows through WebSocket push subscriptions (`q:subscribe` / `q:delta` / `q:snapshot`). The agent-server streams canonical events to the backend, which persists them and pushes updates to the frontend. See [CLAUDE.md](CLAUDE.md) for the full architecture documentation.
+Data flows through WebSocket push subscriptions (`q:subscribe` / `q:delta` / `q:snapshot`). The engine streams canonical events to the backend's event handler, which persists them and pushes updates to the frontend. See [CLAUDE.md](CLAUDE.md) for the full architecture documentation.
 
 ## License
 
