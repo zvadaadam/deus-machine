@@ -115,8 +115,11 @@ export class AgentLink {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    await this.client.close();
-    await stopEngine();
+    try {
+      await this.client.close();
+    } finally {
+      await stopEngine();
+    }
   }
 }
 

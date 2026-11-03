@@ -45,6 +45,7 @@ describe("createCheckpoint", () => {
       {
         cwd: "/test/repo",
         encoding: "utf-8",
+        timeout: 15_000,
       },
       expect.any(Function)
     );
@@ -55,6 +56,7 @@ describe("createCheckpoint", () => {
       {
         cwd: "/test/repo",
         encoding: "utf-8",
+        timeout: 15_000,
       },
       expect.any(Function)
     );

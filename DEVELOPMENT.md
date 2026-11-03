@@ -62,9 +62,7 @@ This runs both backend and frontend together with proper port configuration.
 bun run dev
   └─> electron-vite starts Electron + Vite
       ├─> Main process spawns Node.js backend as child process
-      │   └─> Backend runs on dynamic port (e.g., 51176)
-      ├─> Main process spawns agent-server as child process
-      │   └─> Agent-server connects via Unix socket
+      │   └─> Backend runs on dynamic port (e.g., 51176), with the agent engine in it
       ├─> Vite dev server runs renderer
       │   └─> Frontend runs on http://localhost:1420
       └─> Frontend gets backend port via IPC (getBackendPort)

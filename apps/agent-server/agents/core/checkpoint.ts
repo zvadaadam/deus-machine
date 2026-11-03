@@ -16,10 +16,13 @@ const CHECKPOINT_SKIP_PATTERNS = [
   "resolve your current index first",
 ] as const;
 
+/** How long one git command may take: a turn's hook waits for its checkpoint. */
+const GIT_TIMEOUT_MS = 15_000;
+
 /** One git command's trimmed output; its stderr is in the error's message. */
 function git(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("git", args, { cwd, encoding: "utf-8" }, (error, stdout) =>
+    execFile("git", args, { cwd, encoding: "utf-8", timeout: GIT_TIMEOUT_MS }, (error, stdout) =>
       error ? reject(error) : resolve(String(stdout).trim())
     );
   });
