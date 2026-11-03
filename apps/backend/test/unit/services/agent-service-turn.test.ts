@@ -123,7 +123,7 @@ describe("agentService.startTurn", () => {
   it("keeps a codex-sdk session's images: it runs on the app-server, which takes them", async () => {
     mockBeginTurn.mockReturnValue(true);
     mockLinkStartTurn.mockResolvedValue({ sessionId: SESSION, turnId: TURN });
-    const link = (await mockConnect.mock.results[0]!.value) as { getAgents: () => unknown };
+    const link = (await mockOpen.mock.results[0]!.value) as { getAgents: () => unknown };
     link.getAgents = () => [{ type: "codex-app-server", capabilities: { images: true } }];
     const image = { type: "image", mimeType: "image/png", data: "iVBORw0KGgo=" };
     await agentService.startTurn(SESSION, TURN, "codex-sdk", JSON.stringify([image]), {
