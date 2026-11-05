@@ -63,7 +63,7 @@ jobs:
       version: ${{ steps.validate.outputs.version }}
       tag: ${{ steps.validate.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -150,7 +150,7 @@ jobs:
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ !inputs.dry_run && needs.validate-and-bump.outputs.tag || github.ref }}
 
@@ -166,7 +166,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -340,7 +340,7 @@ jobs:
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: |
@@ -358,7 +358,7 @@ jobs:
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ !inputs.dry_run && needs.validate-and-bump.outputs.tag || github.ref }}
 
@@ -374,7 +374,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -408,7 +408,7 @@ jobs:
           file dist-electron/linux-unpacked/resources/bin/deus-runtime | grep 'ELF 64-bit'
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-artifacts
           path: |
@@ -423,7 +423,7 @@ jobs:
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -459,7 +459,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate-and-bump.outputs.tag }}
 
@@ -475,7 +475,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
