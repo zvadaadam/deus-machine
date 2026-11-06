@@ -26,6 +26,7 @@ const AUTH_TIMEOUT_MS = 5_000;
 const OFFLINE_WAIT_MS = 300_000; // 5 min — max time a client waits for server to reconnect
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PAIR_TIMEOUT_MS = 30_000;
+const WS_OPEN = 1; // WebSocket.OPEN
 
 export class RelayDO extends DurableObject {
   async fetch(request: Request): Promise<Response> {
@@ -210,7 +211,7 @@ export class RelayDO extends DurableObject {
     const tags = this.ctx.getTags(ws);
 
     if (tags.includes("tunnel")) {
-      await this.handleServerDisconnect();
+      await this.handleServerDisconnect(ws);
     } else if (tags.includes("pairer")) {
       const pairId = tags.find((t) => t !== "pairer");
       if (pairId) {
@@ -346,28 +347,30 @@ export class RelayDO extends DurableObject {
     // Mark tunnel as registered — gates auth_response/data processing
     await this.ctx.storage.put("tunnelRegistered", true);
 
-    // Clear reconnection state and notify clients server is back
-    const wasReconnecting = await this.ctx.storage.get<number>("serverDisconnectedAt");
+    // Clear reconnection state
     await this.ctx.storage.delete("serverDisconnectedAt");
 
     // Confirm registration to the WebSocket that sent it
     this.safeSend(ws, { type: "registered" });
 
-    // Notify already-authenticated clients that the server is back.
-    // Pending clients are notified via the normal auth flow (they'll get "authenticated").
-    if (wasReconnecting !== undefined) {
-      const clients = this.ctx.getWebSockets("client");
-      for (const clientWs of clients) {
-        const clientId = this.ctx.getTags(clientWs).find((t) => t !== "client");
-        if (!clientId) continue;
-        const isPending = await this.ctx.storage.get<number>(`pending:${clientId}`);
-        if (isPending !== undefined) continue;
-        this.safeSend(clientWs, { type: "server_connected" });
+    // A new tunnel is a fresh server session: it holds no connections for clients
+    // that authenticated through an earlier tunnel, and would drop their frames.
+    // Close them so they reconnect and authenticate again with their device token.
+    // Pending clients are re-forwarded below (they'll get "authenticated").
+    for (const clientWs of this.ctx.getWebSockets("client")) {
+      const clientId = this.ctx.getTags(clientWs).find((t) => t !== "client");
+      if (!clientId) continue;
+      const isPending = await this.ctx.storage.get<number>(`pending:${clientId}`);
+      if (isPending !== undefined) continue;
+      try {
+        clientWs.close(1012, "Server reconnected");
+      } catch (err) {
+        console.error("relay: failed to close client after server reconnect", err);
       }
     }
 
     // Always re-forward pending clients' stored auth tokens to the new tunnel.
-    // This handles both reconnection (wasReconnecting) and tunnel replacement
+    // This handles both reconnection and tunnel replacement
     // (where serverDisconnectedAt was never set because the old tunnel's close
     // handler saw the new tunnel already existed).
     const pendingClients = await this.getPendingClients();
@@ -523,10 +526,13 @@ export class RelayDO extends DurableObject {
     }
   }
 
-  private async handleServerDisconnect(): Promise<void> {
+  private async handleServerDisconnect(closing: WebSocket): Promise<void> {
     // If another tunnel is already active (e.g. old tunnel's close callback firing
-    // after handleTunnel replaced it), skip the disconnect flow.
-    const tunnels = this.ctx.getWebSockets("tunnel");
+    // after handleTunnel replaced it), skip the disconnect flow. The closing socket
+    // itself can still be listed while its close handler runs, so it doesn't count.
+    const tunnels = this.ctx
+      .getWebSockets("tunnel")
+      .filter((tunnel) => tunnel !== closing && tunnel.readyState === WS_OPEN);
     if (tunnels.length > 0) return;
 
     const existing = await this.ctx.storage.get<number>("serverDisconnectedAt");

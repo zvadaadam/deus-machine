@@ -1,4 +1,7 @@
-export const DEFAULT_RELAY_URL = "wss://relay.deusmachine.ai";
+// DEUS_RELAY_URL points a development backend at a local relay
+// (`bun run dev:relay`); a packaged app always uses the production relay.
+export const DEFAULT_RELAY_URL =
+  (process.env.DEUS_PACKAGED !== "1" && process.env.DEUS_RELAY_URL) || "wss://relay.deusmachine.ai";
 
 export function isLocalhost(ip: string | undefined): boolean {
   if (!ip) return false;
