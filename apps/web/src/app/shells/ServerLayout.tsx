@@ -68,6 +68,10 @@ export function ServerLayout() {
  * a valid device token before attempting the relay WS connection.
  */
 function ServerContent({ serverId }: { serverId: string }) {
+  // First, so the socket is already opening when the queries below fire their
+  // first requests. Pass serverId so the WS URL resolves to the right relay.
+  useQueryProtocol(serverId);
+
   const settingsQuery = useSettings();
 
   // The product shell mounted, so this browser is a user — mark it so the root
@@ -81,9 +85,6 @@ function ServerContent({ serverId }: { serverId: string }) {
   useGlobalSessionNotifications();
   useAgentEvents();
   useWorkspaceInitEvents();
-
-  // Pass serverId so the WS URL resolves to the correct relay endpoint
-  useQueryProtocol(serverId);
 
   useBackendRestart();
   useAnalyticsConsent();

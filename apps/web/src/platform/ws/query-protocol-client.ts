@@ -309,14 +309,40 @@ export function sendRequest<T = unknown>(
   const intercepted = requestInterceptor?.(resource, params);
   if (intercepted) return intercepted as Promise<T>;
 
+  const timeoutMs = options?.timeoutMs ?? 30_000;
+  // Asked while the socket is still opening (app startup, a reconnect attempt in
+  // flight): wait for it instead of failing into React Query's retry backoff,
+  // which held the first screen back by over a second on every launch.
+  if (!connected && connecting) {
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Request ${resource} timed out`)), timeoutMs);
+      connect().then(
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        (err: unknown) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    }).then(() => sendRequestFrame<T>(resource, params, timeoutMs));
+  }
+  return sendRequestFrame<T>(resource, params, timeoutMs);
+}
+
+function sendRequestFrame<T>(
+  resource: string,
+  params: Record<string, unknown> | undefined,
+  timeoutMs: number
+): Promise<T> {
   const id = `req_${++requestCounter}`;
-  const REQUEST_TIMEOUT_MS = options?.timeoutMs ?? 30_000;
 
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingRequests.delete(id);
       reject(new Error(`Request ${resource} timed out`));
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
 
     pendingRequests.set(id, {
       resolve: resolve as (data: unknown) => void,
