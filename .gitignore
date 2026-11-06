@@ -9,6 +9,9 @@ coverage/
 # Production
 dist/
 
+# Wrangler local dev state (bun run dev:relay)
+.wrangler/
+
 # Electron
 out/
 dist-electron/

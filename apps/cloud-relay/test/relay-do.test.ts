@@ -576,7 +576,21 @@ describe("server disconnect and reconnection", () => {
     expect(storage._data.get("tunnelRegistered")).toBe(true);
   });
 
-  it("reconnected server notifies authenticated clients with server_connected", async () => {
+  it("disconnect notifies clients even while the closing tunnel is still listed", async () => {
+    const tunnelWs = await registerServer(relay, state);
+    const clientId = "client-1";
+    const clientWs = createMockWebSocket(["client", clientId]);
+    state._websockets.set(clientWs, ["client", clientId]);
+
+    // The runtime can still list the socket whose close handler is running.
+    tunnelWs.readyState = 3; // CLOSED
+    await relay.webSocketClose(tunnelWs, 1006, "", false);
+
+    expect(storage._data.get("tunnelRegistered")).toBe(false);
+    expect((getLastSent(clientWs) as any).type).toBe("server_reconnecting");
+  });
+
+  it("reconnected server closes authenticated clients so they authenticate again", async () => {
     const tunnelWs1 = await registerServer(relay, state);
 
     // Add authenticated client
@@ -588,11 +602,32 @@ describe("server disconnect and reconnection", () => {
     state._websockets.delete(tunnelWs1);
     await relay.webSocketClose(tunnelWs1, 1000, "gone", true);
 
-    // Reconnect
-    const tunnelWs2 = await registerServer(relay, state);
+    // Reconnect: the new server session has no connection for this client.
+    await registerServer(relay, state);
 
-    const messages = getSentMessages(clientWs);
-    expect(messages).toContainEqual({ type: "server_connected" });
+    expect(clientWs.close).toHaveBeenCalledWith(1012, "Server reconnected");
+  });
+
+  it("a replacement tunnel also closes authenticated clients", async () => {
+    await registerServer(relay, state);
+    const clientWs = createMockWebSocket(["client", "client-1"]);
+    state._websockets.set(clientWs, ["client", "client-1"]);
+
+    // The server reconnects before the old tunnel's close is processed.
+    await registerServer(relay, state);
+
+    expect(clientWs.close).toHaveBeenCalledWith(1012, "Server reconnected");
+  });
+
+  it("reconnection leaves pending clients open for re-forwarding", async () => {
+    await registerServer(relay, state);
+    const clientWs = createMockWebSocket(["client", "client-pending"]);
+    state._websockets.set(clientWs, ["client", "client-pending"]);
+    await storage.put("pending:client-pending", Date.now() + 300000);
+
+    await registerServer(relay, state);
+
+    expect(clientWs.close).not.toHaveBeenCalled();
   });
 
   it("reconnection re-forwards pending clients stored auth tokens", async () => {
