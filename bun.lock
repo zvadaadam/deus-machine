@@ -8,8 +8,8 @@
         "@agentclientprotocol/sdk": "^1.3.0",
         "@anthropic-ai/claude-agent-sdk": "0.3.288",
         "@anthropic-ai/sdk": "^0.93.0",
-        "@deus-hq/api": "3.4.0",
-        "@deus-hq/sdk": "3.4.0",
+        "@deus-hq/api": "3.8.0",
+        "@deus-hq/sdk": "3.8.0",
         "@hono/node-server": "^1.19.9",
         "@hono/node-ws": "^1.3.0",
         "@napi-rs/canvas": "^0.1.97",
@@ -268,9 +268,9 @@
 
     "@chevrotain/utils": ["@chevrotain/utils@11.0.3", "", {}, "sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ=="],
 
-    "@deus-hq/api": ["@deus-hq/api@3.4.0", "", { "dependencies": { "zod": "^4.6.7" } }, "sha512-v/kc2F925eNM1A/NOrOnHcnQaptXkcajL9Bt7hgBpwyvteq5vzQn6d+uQKSQS2njKcG5aVFKrfKrzuvpJJuFUw=="],
+    "@deus-hq/api": ["@deus-hq/api@3.8.0", "", { "dependencies": { "zod": "^4.6.7" } }, "sha512-Fri8QsTnPweWUI/+UExD2g7YgkYof71NPc2S5+d8TJlgpB6DH7Rc5pUCDJ0U1ZrRzcUWxHFCuf4Tof3z879DAw=="],
 
-    "@deus-hq/sdk": ["@deus-hq/sdk@3.4.0", "", { "dependencies": { "@deus-hq/api": "3.4.0", "ws": "^8", "zod": "^4.6.7" }, "peerDependencies": { "@chat-adapter/slack": "^4.41.0", "@chat-adapter/state-memory": "^4.41.0", "chat": "^4.41.0" }, "optionalPeers": ["@chat-adapter/slack", "@chat-adapter/state-memory", "chat"] }, "sha512-Meb8U33nADX1Ui/kxNoPWuqVRWXZSnXcOBrecI+6qodvm0S6oTrU008ueeGPiwDiVreaXJg8rA67Xa7ln8gpHg=="],
+    "@deus-hq/sdk": ["@deus-hq/sdk@3.8.0", "", { "dependencies": { "@deus-hq/api": "3.8.0", "ws": "^8", "zod": "^4.6.7" }, "peerDependencies": { "@chat-adapter/slack": "^4.41.0", "@chat-adapter/state-memory": "^4.41.0", "chat": "^4.41.0" }, "optionalPeers": ["@chat-adapter/slack", "@chat-adapter/state-memory", "chat"] }, "sha512-wIU9kg1SI0RRh7ct+s35Oi4WtBQmC053VbMkhW6/S1kC8WIvgjMMtGCpKfUb88b6j7Pgo6dWnJ7ajNgXVbVGsw=="],
 
     "@deus/screen-studio": ["@deus/screen-studio@workspace:packages/screen-studio"],
 
