@@ -85,6 +85,38 @@ async function cleanupWorktree(
   }
 }
 
+/**
+ * Workspaces are worktrees inside the repository (`.deus/<name>`). Unless
+ * something ignores them, they show up in the main checkout's `git status`,
+ * and `git add -A` there stages each one as an embedded repository. Hide them
+ * through the repository's local exclude file, which is never committed;
+ * `.deus/environment.json` stays visible so it can still be shared.
+ */
+export async function excludeWorkspacesFromRepo(
+  repoRootPath: string,
+  workspacePath: string
+): Promise<void> {
+  try {
+    await execFileAsync("git", ["check-ignore", "-q", path.relative(repoRootPath, workspacePath)], {
+      cwd: repoRootPath,
+      timeout: 5_000,
+    });
+    return; // Already ignored: .gitignore, a global exclude or an earlier workspace.
+  } catch {
+    // Exit 1: not ignored.
+  }
+  const { stdout } = await execFileAsync("git", ["rev-parse", "--git-path", "info/exclude"], {
+    cwd: repoRootPath,
+    timeout: 5_000,
+  });
+  const excludeFile = path.resolve(repoRootPath, stdout.trim());
+  fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
+  fs.appendFileSync(
+    excludeFile,
+    "\n# Deus workspaces (local worktrees)\n/.deus/*\n!/.deus/environment.json\n"
+  );
+}
+
 // ─── Pipeline Stages ────────────────────────────────────────────
 
 const STAGES: InitStage[] = [
@@ -98,6 +130,9 @@ const STAGES: InitStage[] = [
         ["worktree", "add", "-b", ctx.branchName, ctx.workspacePath, ctx.worktreeBase],
         { cwd: ctx.repoRootPath, timeout: 30_000 }
       );
+      await excludeWorkspacesFromRepo(ctx.repoRootPath, ctx.workspacePath).catch((e) => {
+        console.warn("[WORKSPACE] Could not hide .deus workspaces from git status:", e);
+      });
     },
     async cleanup(ctx) {
       await cleanupWorktree(ctx.repoRootPath, ctx.workspacePath, ctx.branchName);

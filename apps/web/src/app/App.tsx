@@ -31,7 +31,7 @@ function useWindowShowSafetyNet() {
   useEffect(() => {
     if (shownRef.current || !capabilities.windowLifecycle) return;
     const timer = setTimeout(() => {
-      if (!shownRef.current) {
+      if (!shownRef.current && !native.window.hasRevealedWindow()) {
         shownRef.current = true;
         console.warn("[App] Safety net: force-showing window after timeout");
         native.window.show().catch(console.error);
