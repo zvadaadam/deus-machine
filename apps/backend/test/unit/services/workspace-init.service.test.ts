@@ -269,3 +269,26 @@ describe("workspace Run commands", () => {
     ]);
   });
 });
+
+describe("workspace folders in the repository's git status", () => {
+  const excludeFile = () => path.join(root, ".git", "info", "exclude");
+  const readExclude = () =>
+    fs.existsSync(excludeFile()) ? fs.readFileSync(excludeFile(), "utf8") : "";
+
+  it("hides them through the local exclude file when nothing ignores .deus", async () => {
+    fs.writeFileSync(path.join(root, ".gitignore"), ".env\n.env.local\n");
+    await initialize();
+
+    expect(git("status", "--porcelain")).not.toContain(".deus");
+    expect(readExclude()).toContain("/.deus/*");
+    // The shareable project file stays visible to git.
+    expect(() => git("check-ignore", "-q", ".deus/environment.json")).toThrow();
+  });
+
+  it("leaves the exclude file alone when the repository already ignores .deus", async () => {
+    const before = readExclude();
+    await initialize();
+
+    expect(readExclude()).toBe(before);
+  });
+});

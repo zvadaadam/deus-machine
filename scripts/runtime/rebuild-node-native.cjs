@@ -53,6 +53,16 @@ if (selectedPython) {
   console.log("[native:node] no validated Python found; falling back to node-gyp discovery");
 }
 
+// node-pty 1.1's published prebuilds ship spawn-helper without its executable
+// bit, so every terminal fails with "posix_spawnp failed" until something
+// rebuilds node-pty. `bun run dev` does (install-app-deps); `dev:web` and the
+// backend tests only come through here.
+const ptyPrebuilds = path.join(PROJECT_ROOT, "node_modules", "node-pty", "prebuilds");
+for (const target of fs.existsSync(ptyPrebuilds) ? fs.readdirSync(ptyPrebuilds) : []) {
+  const helper = path.join(ptyPrebuilds, target, "spawn-helper");
+  if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+}
+
 try {
   execFileSync(process.execPath, [NODE_GYP, "rebuild"], {
     cwd: SQLITE_ROOT,

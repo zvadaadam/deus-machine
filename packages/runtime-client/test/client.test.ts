@@ -60,6 +60,33 @@ describe("headless client", () => {
     expect(f.client).not.toHaveProperty("queryClient");
   });
 
+  it("sends a request made while connecting once the connection is up, not into a retry", async () => {
+    const f = fixture();
+    const ready = f.client.connect();
+    const read = f.client.sendRequest("settings");
+    await Promise.resolve();
+    expect(f.socket.frames("q:request")).toEqual([]);
+    f.socket.open();
+    f.socket.message({ type: "connected" });
+    await ready;
+    await Promise.resolve();
+    const [frame] = f.socket.frames("q:request");
+    expect(frame).toMatchObject({ resource: "settings" });
+    f.socket.message({ type: "q:response", id: frame.id, data: { theme: "dark" } });
+    expect(await read).toEqual({ theme: "dark" });
+  });
+
+  it("fails a request whose connection does not come up, and sends nothing", async () => {
+    const f = fixture();
+    const ready = f.client.connect();
+    const read = f.client.sendRequest("settings");
+    await Promise.resolve();
+    f.socket.close(1006);
+    await expect(ready).rejects.toMatchObject({ kind: "unavailable" });
+    await expect(read).rejects.toMatchObject({ kind: "unavailable" });
+    expect(f.socket.frames("q:request")).toEqual([]);
+  });
+
   it("keeps equal request IDs on different connections independent", async () => {
     const a = fixture(),
       b = fixture();

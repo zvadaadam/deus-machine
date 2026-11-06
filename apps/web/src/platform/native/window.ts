@@ -1,8 +1,19 @@
 import { capabilities } from "../capabilities";
 import { invoke } from "../electron/invoke";
 
+// Whether this renderer has put the main window on screen (the app or
+// onboarding). The startup safety net in App.tsx acts only when nothing has:
+// showing an already visible window also focuses it, pulling Deus to the
+// front over whatever the user switched to.
+let revealed = false;
+
+export function hasRevealedWindow(): boolean {
+  return revealed;
+}
+
 export async function show(): Promise<void> {
   if (!capabilities.windowLifecycle) return;
+  revealed = true;
   await invoke("show_main_window");
 }
 
@@ -95,6 +106,7 @@ function isHttpUrl(url: string): boolean {
 
 export async function enterOnboarding(): Promise<void> {
   if (!capabilities.nativeOnboarding) return;
+  revealed = true;
   await invoke("enter_onboarding_mode");
 }
 

@@ -111,6 +111,11 @@ export function ServerLayout() {
  * a stored device grant before attempting the host's authentication handshake.
  */
 function ServerContent() {
+  // First, so the socket is already opening when the queries below fire their
+  // first requests (they wait for it rather than fail into a retry). The route
+  // selected the runtime before mounting any data consumers.
+  useQueryProtocol();
+
   const settingsQuery = useSettings();
 
   // The product shell mounted, so this browser is a user — mark it so the root
@@ -124,9 +129,6 @@ function ServerContent() {
   useGlobalSessionNotifications();
   useAgentEvents();
   useWorkspaceInitEvents();
-
-  // The route selected the runtime before mounting any data consumers.
-  useQueryProtocol();
 
   useBackendRestart();
   useAnalyticsConsent();
