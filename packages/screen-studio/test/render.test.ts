@@ -149,6 +149,15 @@ describe("render", () => {
     expect(result.warnings.join(" ")).toMatch(/not painted for 5\.0 s/);
   });
 
+  it("never writes over the original media", async () => {
+    await expect(
+      renderBundle(dir, { output: join(dir, manifest.media!.path), plain: true })
+    ).rejects.toMatchObject({ code: "invalid_argument" });
+    expect((await probeMedia(join(dir, manifest.media!.path))).durationMs).toBe(
+      manifest.media!.durationMs
+    );
+  });
+
   it("rejects unknown presets with the valid ones", async () => {
     await expect(renderBundle(dir, { preset: "cinematic" })).rejects.toMatchObject({
       code: "invalid_argument",

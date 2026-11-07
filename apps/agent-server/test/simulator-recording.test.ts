@@ -97,7 +97,7 @@ describe("simulator tools for recording", () => {
     agentTools.current.mockReturnValue({
       manifest: { source: { kind: "ios-simulator", details: { udid: "UDID-1" } } },
     });
-    recordSimulatorAction("s1", tap);
+    recordSimulatorAction("s1", { ...tap, udid: "udid-1" }); // the agent's own spelling
     recordSimulatorAction("s1", { ...tap, toolName: "SimulatorScreenshot" });
     expect(agentTools.recordAction).toHaveBeenCalledTimes(1);
     expect(agentTools.recordAction).toHaveBeenCalledWith(

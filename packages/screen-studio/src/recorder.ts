@@ -223,12 +223,9 @@ export class Recording {
     });
     const capture = await this.starting;
     this.capture = capture;
-    // Stopped while starting (signal, lost source): finalize owns it now.
-    if (this.stopping) return;
     const m = this.manifestState;
-    await this.save({
+    const started: Manifest = {
       ...m,
-      status: "recording",
       capture: {
         ...m.capture,
         startedAt: capture.mediaStartEpochMs,
@@ -240,7 +237,14 @@ export class Recording {
         method: capture.clockMethod,
       },
       ...(capture.geometry ? { geometry: capture.geometry } : {}),
-    });
+    };
+    // Stopped while starting (signal, lost source): finalize owns it now, and
+    // completes it with this clock.
+    if (this.stopping) {
+      this.manifestState = started;
+      return;
+    }
+    await this.save({ ...started, status: "recording" });
     this.log(`recording; media zero at ${new Date(capture.mediaStartEpochMs).toISOString()}`);
     if (this.stopping) return;
 

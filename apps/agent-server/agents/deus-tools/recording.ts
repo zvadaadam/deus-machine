@@ -68,7 +68,9 @@ export function recordSimulatorAction(sessionId: string, action: SimulatorToolAc
   const agentTools = sessions.get(sessionId);
   const source = agentTools?.current()?.manifest.source;
   const type = SIMULATOR_ACTIONS[action.toolName];
-  if (!type || source?.kind !== "ios-simulator" || source.details.udid !== action.udid) return;
+  // The agent may spell a UDID in any case; the recording keeps the device list's.
+  const udid = String(source?.details.udid ?? "").toUpperCase();
+  if (!type || source?.kind !== "ios-simulator" || udid !== action.udid.toUpperCase()) return;
   // Simulator tools work in iOS points, the recording's viewport space.
   agentTools!.recordAction({
     type,

@@ -300,6 +300,11 @@ export async function renderBundle(
   const rendersDir = join(root, BUNDLE_FILES.renders);
   await mkdir(rendersDir, { recursive: true });
   const outputPath = options.output ? resolve(options.output) : join(rendersDir, `${name}.mp4`);
+  if (outputPath === mediaPath) {
+    throw new ScreenStudioError("invalid_argument", "A render cannot replace the original media", {
+      hint: "Choose another output path.",
+    });
+  }
   const planPath = join(rendersDir, `${name}.json`);
   const vttPath = chapters.length ? join(rendersDir, `${name}.vtt`) : null;
 

@@ -87,6 +87,27 @@ describe("recorder", () => {
     expect(unhandled).toEqual([]);
   });
 
+  it("keeps the clock of a recording stopped while it started", async () => {
+    const real = await resolveSource("test-pattern:320x240");
+    const controller = new AbortController();
+    const recording = await startRecording({
+      source: {
+        ...real,
+        start: async (context) => {
+          const capture = await real.start(context);
+          controller.abort(); // a stop arrives as the first frames do
+          return capture;
+        },
+      },
+      out: join(tempDir(), "bundle"),
+      signal: controller.signal,
+    });
+    const final = await recording.finished;
+    expect(final.status).toBe("complete");
+    expect(final.clock?.mediaStartEpochMs).toBeGreaterThan(0);
+    expect(final.capture.startedAt).toBe(final.clock?.mediaStartEpochMs);
+  });
+
   it("stops itself at the deadline", async () => {
     const dir = join(tempDir(), "bundle");
     const recording = await startRecording({
