@@ -21,7 +21,7 @@ import { PRESETS } from "../direct/presets.js";
 import { doctor } from "../doctor.js";
 import { ScreenStudioError, toErrorInfo } from "../errors.js";
 import { importVideo } from "../import.js";
-import { ownerIsGone, startRecording } from "../recorder.js";
+import { ownerIsGone, startRecording, type Recording } from "../recorder.js";
 import { inspectBundle } from "../render/inspect.js";
 import { renderBundle, type RenderOptions } from "../render/render.js";
 import { parseBytes, parseDuration, parseSize } from "../util/units.js";
@@ -233,7 +233,16 @@ async function cmdRecord(args: Args): Promise<void> {
   const maxDurationMs = parseDuration(
     flag(args, "max-duration") ?? (args.passthrough.length ? "10m" : "30s")
   );
-  const recording = await startRecording({
+  // Signals are handled from the start: a stop while capture starts still finalizes.
+  const abort = new AbortController();
+  let recording: Recording | null = null;
+  const onSignal = () => {
+    abort.abort();
+    void recording?.stop("signal");
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  recording = await startRecording({
     source: sourceSpec(args),
     out: dir,
     fps: numberFlag(args, "fps"),
@@ -241,11 +250,9 @@ async function cmdRecord(args: Args): Promise<void> {
     maxBytes: flag(args, "max-size") ? parseBytes(flag(args, "max-size")!) : undefined,
     reporter: "cli",
     log: (message) => process.stderr.write(`[screen-studio] ${message}\n`),
+    signal: abort.signal,
   });
   print({ type: "recording", ...summary(dir, recording.manifest) });
-  const onSignal = () => void recording.stop("signal");
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
   let exitCode: number | null = null;
   if (args.passthrough.length) {
     const [command, ...rest] = args.passthrough;

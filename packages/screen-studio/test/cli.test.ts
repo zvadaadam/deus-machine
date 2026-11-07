@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
@@ -130,6 +130,31 @@ describe("CLI", () => {
     await sleep(500);
     expect(isAlive(owner.pid)).toBe(false);
     expect(groupAlive(owner.pid)).toBe(false);
+    server.close();
+  }, 60_000);
+
+  it("finalizes a foreground record stopped while its source is starting", async () => {
+    const server = createServer((_req, res) => setTimeout(() => res.end("[]"), 4000));
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as AddressInfo).port;
+    const dir = join(tempDir(), "take");
+    const child = spawn(
+      "bun",
+      [CLI, "record", "--source", `browser:http://127.0.0.1:${port}`, "--out", dir],
+      {
+        stdio: ["ignore", "pipe", "ignore"],
+      }
+    );
+    let stdout = "";
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    await sleep(1500);
+    child.kill("SIGTERM"); // as a supervisor would
+    await new Promise((r) => child.once("close", r));
+    expect(JSON.parse(stdout.trim().split("\n").pop()!)).toMatchObject({
+      ok: false,
+      error: { code: "aborted" },
+    });
+    expect((await readManifest(dir)).status).toBe("failed");
     server.close();
   }, 60_000);
 
