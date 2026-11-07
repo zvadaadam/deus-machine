@@ -164,6 +164,18 @@ describe("cursor", () => {
     expect(frameAt(5900)).toBeNull();
   });
 
+  it("keeps the pointer on each target while it is pressed, however close the next", () => {
+    const actions = [
+      act("a", 1000, { x: 100, y: 100, width: 100, height: 40 }),
+      act("b", 1100, { x: 900, y: 600, width: 100, height: 40 }),
+    ];
+    const fps = 60;
+    const track = pointerTrack(actions, 3 * fps, fps, size, cursor);
+    const frameAt = (ms: number) => track[Math.round((ms * fps) / 1000)];
+    expect(frameAt(1000)).toMatchObject({ x: 150, y: 120 });
+    expect(frameAt(1100)).toMatchObject({ x: 950, y: 620 });
+  });
+
   it("shows touches only around taps", () => {
     const track = touchTrack(
       [act("t", 1000, { x: 100, y: 100, width: 40, height: 40 }, "tap")],

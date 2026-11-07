@@ -105,8 +105,10 @@ export function pointerTrack(
   // previous press settles, shrink travel when actions are close.
   const legs = stops.map((stop, i) => {
     const prev = stops[i - 1];
-    const arrive = stop.atMs - tokens.dwellMs;
     const earliest = prev ? Math.max(prev.endMs, prev.atMs + settle) : -Infinity;
+    // Actions closer than the dwell: stay on the earlier target until it is
+    // pressed, and arrive at the next one only as it happens.
+    const arrive = Math.max(stop.atMs - tokens.dwellMs, Math.min(earliest, stop.atMs));
     const travel = Math.min(tokens.travelMs, Math.max(0, arrive - earliest));
     const from = prev
       ? restingPoint(prev)
