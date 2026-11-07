@@ -104,6 +104,14 @@ async function startStream(
   try {
     if (pageWs && spec.observe !== false && context.onEvent) {
       page = await CdpClient.connect(pageWs);
+      // The stream can outlive the tab it showed: a closed tab ends the recording.
+      page.onClose((reason) => {
+        if (!stopped) context.onSourceLost(`browser tab disconnected: ${reason}`);
+      });
+      page.on("Inspector.detached", (params) => {
+        if (!stopped)
+          context.onSourceLost(`browser tab detached: ${String(params.reason ?? "unknown")}`);
+      });
       await page.send("Page.enable");
       stopObserving = await observePage(page, context.onEvent);
     }

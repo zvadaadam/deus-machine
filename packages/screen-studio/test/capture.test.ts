@@ -160,13 +160,24 @@ describe("CDP screencast", () => {
         ws.send(JSON.stringify({ id: msg.id, result: {} }));
         if (msg.method === "Runtime.addBinding") {
           // The page reports a press then a click on a button, as a driven tab
-          // would — then the span it went without being painted.
+          // would. Then it is hidden: an idle report from one document, a
+          // navigation, one from the next a second later, and its first painted
+          // frame. One busy pause reported twice in a moment (an overdue timer,
+          // then leaving the page) is not a gap. Hidden again, it never paints
+          // before the recording ends.
           const now = Date.now();
           const rect = { x: 10, y: 12, width: 30, height: 14 };
           for (const [delay, payload] of [
             [400, { t: "down", at: now + 400, x: 25, y: 19, rect, label: "Save" }],
             [480, { t: "click", at: now + 480, x: 25, y: 19, rect, label: "Save" }],
-            [520, { t: "unseen", at: now + 500, endAt: now + 2500 }],
+            [500, { t: "idle", at: now + 100, endAt: now + 200 }],
+            [505, { t: "idle", at: now + 300, endAt: now + 1000 }],
+            [510, { t: "painted", at: now + 1050 }],
+            [515, { t: "idle", at: now + 1060, endAt: now + 1100 }],
+            [520, { t: "idle", at: now + 1060, endAt: now + 1105 }],
+            [525, { t: "painted", at: now + 1110 }],
+            [530, { t: "idle", at: now + 1120, endAt: now + 1130 }],
+            [535, { t: "idle", at: now + 1120, endAt: now + 1900 }],
           ] as const) {
             setTimeout(() => {
               if (ws.readyState !== ws.OPEN) return;
@@ -246,7 +257,45 @@ describe("CDP screencast", () => {
       point: { x: 25, y: 19 },
     });
     expect(click?.kind === "action" && click.endAt! - click.at).toBe(80);
-    const hidden = events.find((e) => e.kind === "unseen");
-    expect(hidden?.kind === "unseen" && hidden.endAt - hidden.at).toBe(2000);
+    const unseen = events.flatMap((e) => (e.kind === "unseen" ? [e] : []));
+    expect(unseen).toHaveLength(2);
+    expect(unseen[0].endAt - unseen[0].at).toBe(950);
+    expect(unseen[1].endAt).toBeGreaterThan(unseen[1].at);
+  });
+
+  it("ends a joined frame stream when its tab closes", async () => {
+    // A viewer stream that keeps sending frames after the tab is gone.
+    const stream = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await new Promise((r) => stream.once("listening", r));
+    stream.on("connection", (ws) => {
+      const timer = setInterval(
+        () =>
+          ws.send(
+            JSON.stringify({
+              type: "frame",
+              data: frames[0].toString("base64"),
+              metadata: { deviceWidth: 64, deviceHeight: 48 },
+            })
+          ),
+        100
+      );
+      ws.on("close", () => clearInterval(timer));
+    });
+    try {
+      const recording = await startRecording({
+        source: {
+          kind: "browser-stream",
+          url: `ws://127.0.0.1:${(stream.address() as AddressInfo).port}`,
+          cdp: `http://127.0.0.1:${port}`,
+        },
+        out: join(tempDir(), "bundle"),
+      });
+      await sleep(500);
+      for (const socket of sockets) socket.close();
+      const final = await recording.finished;
+      expect(final.capture.stopReason).toBe("source-lost");
+    } finally {
+      stream.close();
+    }
   });
 });

@@ -14,6 +14,11 @@ import type { CdpClient } from "./cdp.js";
 const BINDING = "__screenStudioObserve";
 /** Shorter frame gaps are ordinary jank, not a hidden page. */
 const MIN_UNSEEN_MS = 500;
+/**
+ * Reports closer together are one pause seen twice (an overdue timer, then
+ * leaving the page or stopping); a hidden page's timers fire a second apart.
+ */
+const SEPARATE_REPORTS_MS = 700;
 const UNSEEN = "hidden tab, hidden view or minimized window";
 
 /** Runs in the page (top frame only; frame-relative boxes would be wrong). */
@@ -28,7 +33,8 @@ const PAGE_SCRIPT = `(() => {
     if (!el) return {};
     const r = el.getBoundingClientRect();
     const tag = el.tagName.toLowerCase();
-    const named = /^(button|a|summary|label)$/.test(tag) || el.getAttribute("role");
+    // An editable element's text is what was typed: never a label.
+    const named = !el.isContentEditable && (/^(button|a|summary|label)$/.test(tag) || el.getAttribute("role"));
     const label = (el.getAttribute("aria-label") || (named ? el.textContent : "") || el.getAttribute("placeholder") || el.getAttribute("name") || "")
       .trim().replace(/\\s+/g, " ").slice(0, 60);
     return { rect: { x: r.x, y: r.y, width: r.width, height: r.height }, label, tag };
@@ -63,29 +69,33 @@ const PAGE_SCRIPT = `(() => {
   });
   // A page that is not painted (hidden tab, hidden <webview>, minimized
   // window) runs no animation frames, while its timers still fire, throttled
-  // to about one a second. A gap between frames that timers ran through was
-  // not painted; a gap they could not run in was a busy main thread, which
-  // the recording shows as it was. The first frame after the gap ends it.
-  let lastFrame = Date.now(), lastTick = lastFrame, freeTicks = 0, live = true;
-  const hidden = () => Date.now() - lastFrame > ${MIN_UNSEEN_MS} && freeTicks >= 2;
+  // to about one a second. Whenever the main thread runs — a timer, leaving
+  // the page, the observer stopping — after half a second without a frame,
+  // the page reports idle; its first frame, and the next after idle, painted.
+  // The host decides, across navigations.
+  let lastFrame = Date.now(), idle = false, first = true, live = true;
+  const check = () => {
+    if (Date.now() - lastFrame > ${MIN_UNSEEN_MS}) { idle = true; send({ t: "idle", at: lastFrame, endAt: Date.now() }); }
+  };
   const frame = () => {
-    if (hidden()) send({ t: "unseen", at: lastFrame, endAt: Date.now() });
+    if (first || idle) send({ t: "painted", at: Date.now() });
     lastFrame = Date.now();
-    freeTicks = 0;
+    idle = first = false;
     if (live) requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
-  const beat = setInterval(() => { const now = Date.now(); if (now - lastTick < 1200) freeTicks++; lastTick = now; }, 250);
+  const beat = setInterval(check, 250);
+  addEventListener("pagehide", check);
   window.__screenStudioObserver = { off: () => {
-    live = false; clearInterval(beat);
+    live = false; clearInterval(beat); removeEventListener("pagehide", check);
     for (const [t, h] of listeners) removeEventListener(t, h, { capture: true });
     delete window.__screenStudioObserver;
-    return hidden() ? lastFrame : null;
+    check();
   } };
 })()`;
 
 interface Observed {
-  t: "down" | "click" | "context" | "input" | "key" | "scroll" | "unseen";
+  t: "down" | "click" | "context" | "input" | "key" | "scroll" | "idle" | "painted";
   at: number;
   endAt?: number;
   x?: number;
@@ -117,6 +127,17 @@ export async function observePage(
   emitEvent: (event: EventInput) => void
 ): Promise<() => Promise<void>> {
   const emit = (action: ActionInput) => emitEvent({ kind: "action", ...action } as EventInput);
+  // A gap between painted frames, kept here because it can outlive the
+  // documents that saw it. One idle report can be a busy main thread catching
+  // up before its next frame; two, a timer's beat apart, mean the page went
+  // unpainted while free.
+  let gap: { since: number; reports: number; lastReport: number } | null = null;
+  const closeGap = (until: number) => {
+    if (gap && gap.reports >= 2 && until > gap.since) {
+      emitEvent({ kind: "unseen", at: gap.since, endAt: until, reason: UNSEEN });
+    }
+    gap = null;
+  };
   let pressed: Observed | null = null;
   let typing: { first: Observed; last: Observed } | null = null;
   let scrolling: { first: Observed; last: Observed } | null = null;
@@ -169,10 +190,18 @@ export async function observePage(
 
   const receive = (e: Observed) => {
     switch (e.t) {
-      case "unseen":
-        if (e.endAt !== undefined && e.endAt > e.at) {
-          emitEvent({ kind: "unseen", at: e.at, endAt: e.endAt, reason: UNSEEN });
+      case "idle": {
+        const seen = e.endAt ?? e.at;
+        if (!gap) gap = { since: e.at, reports: 1, lastReport: seen };
+        gap.since = Math.min(gap.since, e.at);
+        if (seen - gap.lastReport >= SEPARATE_REPORTS_MS) {
+          gap.reports++;
+          gap.lastReport = seen;
         }
+        break;
+      }
+      case "painted":
+        closeGap(e.at);
         break;
       case "down":
         flushAll();
@@ -243,25 +272,17 @@ export async function observePage(
     if (flushTimer) clearTimeout(flushTimer);
     flushAll();
     const stoppedAt = Date.now();
-    const [off] = await Promise.all([
+    await Promise.all([
       client
-        .send<{
-          result?: { value?: unknown };
-        }>(
-          "Runtime.evaluate",
-          { expression: "window.__screenStudioObserver?.off()", returnByValue: true },
-          2_000
-        )
-        .catch(() => null),
+        .send("Runtime.evaluate", { expression: "window.__screenStudioObserver?.off()" }, 2_000)
+        .catch(() => {}),
       client
         .send("Page.removeScriptToEvaluateOnNewDocument", { identifier }, 2_000)
         .catch(() => {}),
       client.send("Runtime.removeBinding", { name: BINDING }, 2_000).catch(() => {}),
     ]);
-    // Still hidden when the recording stopped: the gap runs to the end.
-    const hiddenSince = off?.result?.value;
-    if (typeof hiddenSince === "number" && hiddenSince < stoppedAt) {
-      emitEvent({ kind: "unseen", at: hiddenSince, endAt: stoppedAt, reason: UNSEEN });
-    }
+    // Still unpainted when the recording stopped (off() reports it): the gap
+    // runs to the end.
+    closeGap(stoppedAt);
   };
 }
