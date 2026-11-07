@@ -113,8 +113,11 @@ export async function startRecording(options: StartRecordingOptions): Promise<Re
       throw new ScreenStudioError("aborted", "Stopped before capture started");
     }
     // A detached worker was registered as owner when it was spawned; keep it.
+    // If it reads the bundle before that registration lands, it is still a worker.
     const owner =
-      manifest.capture.owner?.pid === process.pid ? manifest.capture.owner : currentOwner("host");
+      manifest.capture.owner?.pid === process.pid
+        ? manifest.capture.owner
+        : currentOwner(options.existing ? "worker" : "host");
     manifest = {
       ...manifest,
       source: {

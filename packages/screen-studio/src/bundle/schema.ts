@@ -91,7 +91,8 @@ export const ManifestSchema = z.object({
     /** The process that owns the live recorder (CLI worker or host app). */
     owner: z
       .object({
-        pid: z.number(),
+        // Signalled as a process group on recovery: never 0, 1 or negative.
+        pid: z.number().int().min(2),
         hostname: z.string(),
         token: z.string(),
         /**
@@ -99,7 +100,7 @@ export const ManifestSchema = z.object({
          * server recording in-process — never signalled from outside.
          */
         kind: z.enum(["worker", "host"]).default("host"),
-        childPids: z.array(z.number()).default([]),
+        childPids: z.array(z.number().int().min(2)).default([]),
       })
       .optional(),
     progress: z.object({ frames: z.number(), bytes: z.number(), updatedAt: z.number() }).optional(),

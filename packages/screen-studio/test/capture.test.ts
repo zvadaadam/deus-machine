@@ -4,13 +4,14 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
-import { readEvents, readManifest } from "../src/bundle/bundle.js";
+import { createBundle, readEvents, readManifest } from "../src/bundle/bundle.js";
+import { ManifestSchema } from "../src/bundle/schema.js";
 import { resolvePageTarget } from "../src/capture/cdp.js";
 import { FramePump } from "../src/capture/frame-pump.js";
 import { parseSourceId, resolveSource } from "../src/capture/sources.js";
 import { startRecording } from "../src/recorder.js";
 import { probeMedia } from "../src/util/ffmpeg.js";
-import { jpegFrames, tempDir } from "./helpers.js";
+import { jpegFrames, manifest, tempDir } from "./helpers.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -129,6 +130,36 @@ describe("recorder", () => {
     });
     await sleep(300);
     expect((await recording.stop()).status).toBe("complete");
+  });
+
+  it("registers a detached worker as a worker, even before its spawner does", async () => {
+    // The worker can read the bundle before startDetached records it as owner.
+    const dir = join(tempDir(), "bundle");
+    await createBundle(dir, {
+      source: { id: "test-pattern", kind: "browser", backend: "pending", label: "t", details: {} },
+      capture: { fps: 30, maxDurationMs: 60_000, maxBytes: 1e9, requestedAt: 0, warnings: [] },
+    });
+    const recording = await startRecording({
+      source: "test-pattern:320x240",
+      out: dir,
+      existing: true,
+    });
+    expect((await readManifest(dir)).capture.owner).toMatchObject({
+      kind: "worker",
+      pid: process.pid,
+    });
+    await recording.stop();
+  });
+
+  it("refuses owner PIDs that would signal the wrong processes", () => {
+    const m = manifest();
+    const owner = { pid: 4242, hostname: "h", token: "t", kind: "worker", childPids: [] };
+    const parse = (o: object) =>
+      ManifestSchema.safeParse({ ...m, capture: { ...m.capture, owner: o } }).success;
+    expect(parse(owner)).toBe(true);
+    expect(parse({ ...owner, pid: -4242 })).toBe(false);
+    expect(parse({ ...owner, pid: 1 })).toBe(false);
+    expect(parse({ ...owner, childPids: [0] })).toBe(false);
   });
 
   it("stops itself at the deadline", async () => {

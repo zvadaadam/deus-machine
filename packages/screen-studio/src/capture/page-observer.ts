@@ -55,7 +55,9 @@ const PAGE_SCRIPT = `(() => {
   });
   const KEYS = ["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown"];
   on("keydown", (e) => {
-    const chord = e.metaKey || e.ctrlKey || e.altKey;
+    // AltGr and Option+key type characters (@, €, { on many layouts): typing, not a chord.
+    const typed = e.getModifierState("AltGraph") || (e.altKey && !e.metaKey && !e.ctrlKey && e.key.length === 1);
+    const chord = !typed && (e.metaKey || e.ctrlKey || e.altKey);
     if (!KEYS.includes(e.key) && !chord) return;
     const mods = [e.metaKey && "Meta", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift"].filter(Boolean);
     send({ t: "key", at: at(e), key: chord ? [...mods, e.key.length === 1 ? e.key.toUpperCase() : e.key].join("+") : e.key });
