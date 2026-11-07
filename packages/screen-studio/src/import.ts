@@ -68,18 +68,27 @@ export async function importVideo(
   await copyFile(source, join(dir, mediaRel));
   const decoded = await verifyDecodable(join(dir, mediaRel));
   const origin = options.startEpochMs ?? 0;
+  // Adapters time events from the start of the video; the bundle's clock may not.
+  const fromVideoStart = (input: EventInput): EventInput =>
+    input.kind === "action"
+      ? {
+          ...input,
+          ...(input.at !== undefined ? { at: input.at + origin } : {}),
+          ...(input.endAt !== undefined ? { endAt: input.endAt + origin } : {}),
+        }
+      : input;
 
   if (options.agentDeviceTelemetry) {
     const inputs = await agentDeviceEvents(options.agentDeviceTelemetry);
     await appendEvents(
       dir,
-      inputs.map((input) => makeEvent(input, "agent-device"))
+      inputs.map((input) => makeEvent(fromVideoStart(input), "agent-device"))
     );
   }
   if (cua)
     await appendEvents(
       dir,
-      cua.events.map((input) => makeEvent(input, "cua"))
+      cua.events.map((input) => makeEvent(fromVideoStart(input), "cua"))
     );
   if (options.eventsPath) {
     const lines = (await readFile(resolve(options.eventsPath), "utf8"))

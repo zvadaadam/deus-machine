@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { appendEvents, makeEvent } from "../src/bundle/bundle.js";
+import { appendEvents, makeEvent, readEvents } from "../src/bundle/bundle.js";
 import type { Manifest } from "../src/bundle/schema.js";
+import { buildTimeline } from "../src/edit/timeline.js";
 import { importVideo } from "../src/import.js";
 import { inspectBundle } from "../src/render/inspect.js";
 import { outputSize, renderBundle } from "../src/render/render.js";
@@ -70,6 +71,22 @@ describe("import", () => {
     expect(manifest.status).toBe("complete");
     expect(manifest.media).toMatchObject({ width: 640, height: 400, frames: 360 });
     expect(manifest.clock?.mediaStartEpochMs).toBe(0);
+  });
+
+  it("keeps adapter events on the video's clock when a start time is given", async () => {
+    const telemetry = join(tempDir(), "telemetry.json");
+    writeFileSync(
+      telemetry,
+      JSON.stringify({ events: [{ kind: "tap", tMs: 1500, x: 10, y: 20 }] })
+    );
+    const out = join(tempDir(), "bundle");
+    const imported = await importVideo(video, out, {
+      agentDeviceTelemetry: telemetry,
+      startEpochMs: 1_000_000,
+    });
+    const { events } = await readEvents(out);
+    expect(events[0]).toMatchObject({ kind: "action", at: 1_001_500 });
+    expect(buildTimeline(imported, events).actions[0].startMs).toBe(1500);
   });
 });
 
