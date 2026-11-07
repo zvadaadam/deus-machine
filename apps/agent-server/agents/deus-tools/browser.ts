@@ -162,37 +162,11 @@ function formatSnapshotResponse(
   return sections.join("\n");
 }
 
-/** Structured data emitted after each browser tool execution for recording. */
-export interface BrowserToolAction {
-  toolName: string;
-  elementBox?: ElementBox | null;
-  url?: string;
-  text?: string;
-  scrollDirection?: string;
-}
-
-/** Callback type for the recording bridge to snoop on browser tool executions. */
-export type OnBrowserAction = (action: BrowserToolAction) => void;
-
 /**
  * Creates the browser automation tool definitions for a given session.
- * @param onAction Optional callback fired after each successful browser tool
- *   execution with structured data for the recording bridge.
+ * Screen recordings watch the page's own input, so these tools report nothing.
  */
-export function createBrowserTools(
-  sessionId: string,
-  onAction?: OnBrowserAction
-): SdkMcpToolDefinition<any>[] {
-  /** Best-effort action emitter — never lets recording failures break the tool result. */
-  const emitAction = (action: BrowserToolAction): void => {
-    if (!onAction) return;
-    try {
-      onAction(action);
-    } catch (err) {
-      console.warn(`[browser] Failed to emit action: ${err instanceof Error ? err.message : err}`);
-    }
-  };
-
+export function createBrowserTools(sessionId: string): SdkMcpToolDefinition<any>[] {
   return [
     tool(
       "BrowserSnapshot",
@@ -313,12 +287,6 @@ Returns a page snapshot after clicking and the clicked element's bounding box (x
 
         const target = args.ref ?? `(${args.x}, ${args.y})`;
 
-        emitAction({
-          toolName: "BrowserClick",
-          elementBox: response.elementBox,
-          url: response.url,
-        });
-
         return textResult(
           formatSnapshotResponse(
             "click",
@@ -383,12 +351,6 @@ Returns a page snapshot and the input element's bounding box.`,
         ];
         if (args.submit) details.push("Form submitted: yes");
 
-        emitAction({
-          toolName: "BrowserType",
-          elementBox: finalResponse.elementBox,
-          text: `[${args.text.length} chars]`,
-        });
-
         return textResult(
           formatSnapshotResponse(
             "type",
@@ -415,11 +377,6 @@ Returns a page snapshot and the input element's bounding box.`,
         if (response.error) {
           return textResult(`Navigation failed: ${response.error}`);
         }
-
-        emitAction({
-          toolName: "BrowserNavigate",
-          url: response.url ?? args.url,
-        });
 
         return textResult(
           formatSnapshotResponse("navigate", response.snapshot, response.url, response.title)
@@ -590,11 +547,6 @@ Returns a page snapshot after all actions complete.`,
           if (failures.length > 5) details.push(`... (+${failures.length - 5} more)`);
         }
 
-        emitAction({
-          toolName: "BrowserBatchActions",
-          url: snap.url,
-        });
-
         return textResult(
           formatSnapshotResponse("batch", snap.snapshot, snap.url, snap.title, details)
         );
@@ -677,11 +629,6 @@ Returns a page snapshot after hovering and the element's bounding box.`,
           return textResult(`Hover failed: ${response.error}`);
         }
 
-        emitAction({
-          toolName: "BrowserHover",
-          elementBox: response.elementBox,
-        });
-
         return textResult(
           formatSnapshotResponse(
             "hover",
@@ -716,11 +663,6 @@ Returns a page snapshot after hovering and the element's bounding box.`,
           return textResult(`SelectOption failed: ${response.error}`);
         }
 
-        emitAction({
-          toolName: "BrowserSelectOption",
-          elementBox: response.elementBox,
-        });
-
         return textResult(
           formatSnapshotResponse(
             "select_option",
@@ -745,11 +687,6 @@ Returns a page snapshot after hovering and the element's bounding box.`,
         if (response.error) {
           return textResult(`NavigateBack failed: ${response.error}`);
         }
-
-        emitAction({
-          toolName: "BrowserNavigateBack",
-          url: response.url,
-        });
 
         return textResult(
           formatSnapshotResponse("navigate_back", response.snapshot, response.url, response.title)
@@ -890,12 +827,6 @@ Returns a fresh snapshot after scrolling.`,
         const detail = args.ref
           ? `Scrolled element into view: ${args.ref}`
           : `Scrolled ${args.direction ?? "down"} by ${args.amount ?? 600}px`;
-
-        emitAction(
-          args.ref
-            ? { toolName: "BrowserScroll", elementBox: response.elementBox }
-            : { toolName: "BrowserScroll", scrollDirection: args.direction ?? "down" }
-        );
 
         return textResult(
           formatSnapshotResponse("scroll", response.snapshot, response.url, response.title, [

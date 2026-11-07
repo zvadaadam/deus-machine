@@ -1,423 +1,292 @@
 # @deus/screen-studio
 
-Screen Studio-style camera engine and video compositing for AI agent screen recordings. Turns raw browser sessions into polished videos with auto-zoom, spring physics, device frames, and gradient backgrounds.
+Record what an agent does — a browser tab, an iOS Simulator, a display — into a
+**bundle** of original media and timed evidence. Then render polished, chaptered
+videos from it as many times as you like: waits sped up or cut, the camera on
+each action, a pointer or touches, a window frame on a background.
 
-Three ways to use it: **SDK** (embed in your app), **CLI** (script from shell), **MCP Server** (any AI agent).
+The agent keeps using its own tools (agent-browser, Playwright, device-use,
+agent-device, …). Screen Studio records the screen and takes a note of each
+action; it never drives the app and never injects input.
 
-## How it works
-
-1. An AI agent browses a website (clicks, types, scrolls, navigates)
-2. Each action feeds the **camera engine** which computes smooth zoom/pan transforms using spring physics
-3. The **compositor** applies device frames, backgrounds, and cursor overlays
-4. **ffmpeg** (or a canvas) renders the final video
-
-```
-Agent events → Camera Engine → Compositor → ffmpeg / Canvas → MP4 / Live preview
-(click @e5)    (spring zoom)   (device frame)  (crop+scale)
-```
-
-## Install
-
-```bash
-bun add @deus/screen-studio
+```text
+ your tools ──control──▶ tab / simulator / display
+                              │ pictures
+                              ▼
+ actions, chapters ──▶ screen-studio ──▶ bundle ──render──▶ walkthrough.mp4 (+ .json plan, .vtt chapters)
+                                            └──────────────▶ any editor (plain MP4 + JSON)
 ```
 
-Requires **ffmpeg** for video encoding (capture + post-processing). The SDK works without ffmpeg for real-time canvas rendering.
+## Quick start (CLI)
 
-## Quick start
+Requires FFmpeg with libx264. Styled renders use `@napi-rs/canvas` (an optional
+dependency); without it, renders fall back to FFmpeg-only.
 
-### SDK — real-time preview in a browser
+```sh
+screen-studio doctor                  # what is installed, what each piece enables
+screen-studio sources                 # recordable sources and their IDs
 
-```ts
-import { CameraEngine, Compositor, CanvasRenderer } from "@deus/screen-studio";
+screen-studio start --source agent-browser:demo --out ./captures/login --max-duration 3m
+#   …the agent works with its usual tools; report what it does:
+screen-studio chapter ./captures/login "Sign in"
+screen-studio action  ./captures/login --type click --rect 412,288,120,40 --label "Sign in"
+screen-studio focus   ./captures/login --rect 900,120,320,200 --label "Welcome banner"
+screen-studio stop    ./captures/login
 
-const engine = new CameraEngine({
-  sourceSize: { width: 1920, height: 1080 },
-});
-
-const compositor = new Compositor({
-  output: { width: 1920, height: 1080 },
-  source: { width: 1920, height: 1080 },
-  deviceFrame: { type: "browser-chrome", title: "https://example.com" },
-  background: { type: "gradient", colors: ["#0f0f23", "#1a1a3e"] },
-  cursor: { visible: true, size: 24, showClickRipple: true, rippleDuration: 400 },
-});
-
-const renderer = new CanvasRenderer(canvas.getContext("2d")!);
-
-// Feed agent actions
-engine.pushEvent({ type: "click", x: 500, y: 300, t: 0 });
-engine.pushEvent({ type: "type", x: 500, y: 320, t: 500 });
-
-// Render loop
-function frame() {
-  const camera = engine.step(1 / 60);
-  const cursor = engine.getCursorState();
-  const instructions = compositor.computeFrame(camera, cursor);
-  renderer.renderFrame(sourceImage, instructions, background);
-  requestAnimationFrame(frame);
-}
-frame();
+screen-studio render  ./captures/login --preset walkthrough   # or demo, review
+screen-studio inspect ./captures/login --contact-sheet        # a grid of frames to check
 ```
 
-### SDK — post-process with ffmpeg
+Every command prints one JSON object on stdout — including failures, as
+`{"ok":false,"error":{"code","message","hint"}}` — and logs on stderr. `start`
+returns only once video is actually flowing, and hands the recorder to a
+detached worker, so `start`, `chapter` and `stop` can be separate processes.
+`stop` is idempotent, works during a slow start, and only signals a process it
+has verified is that recording's worker; a recording an app or MCP server owns
+in-process is stopped there. A recording stops itself at `--max-duration` (default
+10 minutes) or `--max-size`, whatever the agent does.
 
-```ts
-import { CameraEngine, generateCropScaleFilter } from "@deus/screen-studio";
+For a scripted take, `record` runs in the foreground until the duration, Ctrl-C,
+or a command exits:
 
-const engine = new CameraEngine({
-  sourceSize: { width: 1920, height: 1080 },
-});
-
-// Batch-feed events
-events.forEach((e) => engine.pushEvent(e));
-
-// Generate timeline and ffmpeg filter
-const timeline = engine.processTimeline(30, 15); // 30fps, 15 seconds
-const filter = generateCropScaleFilter(
-  timeline.map((t, i) => ({
-    timestamp: i * (1000 / 30),
-    camera: t.camera,
-    cursor: t.cursor,
-  })),
-  { width: 1920, height: 1080 },
-  { width: 1920, height: 1080 },
-);
-
-// Apply with ffmpeg:
-// ffmpeg -i raw.mp4 -filter_complex "<filter>" -c:v libx264 output.mp4
+```sh
+screen-studio record --source ios-simulator:booted --out ./captures/onboarding -- bun demo.ts
+# demo.ts can call: screen-studio chapter "$SCREEN_STUDIO_BUNDLE" "Welcome"
 ```
 
-### SDK — full recording session
+## Sources
 
-```ts
-import { RecordingSession } from "@deus/screen-studio";
+| Source ID                         | Captures                        | Backend                 | Notes                                                                                                                               |
+| --------------------------------- | ------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-browser:<session>`         | The tab that session is driving | DevTools screencast     | Resolves `get cdp-url` + current URL. `agent-browser:<namespace>/<session>` works too.                                              |
+| `browser:<endpoint>`              | One Chromium tab                | DevTools screencast     | `http://127.0.0.1:9222`, a port, a browser or page `ws://…/devtools/…` URL. `--url-contains` picks the tab. Electron webviews work. |
+| `ios-simulator:<udid>` / `booted` | The simulated screen, no chrome | `simctl io recordVideo` | Finds Xcode outside `/Applications` (e.g. `~/Downloads`). Viewport in iOS points from the device profile.                           |
+| `display:<n>`                     | A macOS display                 | FFmpeg AVFoundation     | Needs Screen Recording permission for the app running the command.                                                                  |
+| `test-pattern:<WxH>`              | A synthetic moving pattern      | FFmpeg lavfi            | For tests and demos.                                                                                                                |
+| `screen-studio import <video>`    | An existing video (+ events)    | Copy                    | Bring footage from any tool into the same editor: agent-device telemetry and Cua driver trajectories are read directly.             |
 
-const session = new RecordingSession({
-  sourceSize: { width: 1920, height: 1080 },
-  outputSize: { width: 1920, height: 1080 },
-  elementResolver: async (ref) => queryBrowserForRect(ref),
-});
+**Sharing a tab is fine.** Two screencasts on one tab each kept 60 fps, and
+agent-browser's own viewer stream kept 60 fps while a recording ran. When an
+agent-browser session already streams its viewport, `agent-browser:<session>`
+joins that stream (`browser-stream:<ws-url>` does it directly) so the browser
+doesn't encode frames twice.
 
-session.start();
+**Background tabs are not painted.** A hidden tab, a hidden `<webview>` or a
+minimized window sends no frames, so the recording holds a frozen picture.
+The page observer notices — animation frames stop while timers still run —
+and records an `unseen` span with frame-exact edges; edits cut it, actions
+inside it are left out, and the render warns. Keep the recorded tab visible.
 
-// Feed MCP tool events directly
-await session.handleToolEvent({
-  method: "browserClick",
-  requestId: "r1",
-  params: { ref: "@e5" },
-});
+## Reporting actions
 
-// Real-time render loop
-const { camera, instructions } = session.tick();
+**Browser recordings report their own actions.** The browser source installs
+passive listeners in the recorded tab and records every trusted click, tap,
+key press, typing burst, scroll and navigation with the target's exact box —
+whichever tool (or person) drives the page. A mouse that rests on a menu or
+tooltip target for 600 ms without pressing is recorded as a hover. Typed text is never read, only
+its length. Pass `observe: false` in the source spec when a controller
+reports actions itself. Other sources need actions reported:
 
-// Or generate full timeline for encoding
-const timeline = session.renderTimeline(30);
-```
+An action is a moment and, ideally, a place:
 
-### CLI — record from shell
-
-```bash
-# Start a session
-SESSION=$(screen-studio start --device-frame browser-chrome | jq -r .session_id)
-
-# Log agent actions
-screen-studio chapter $SESSION --title "Navigate to dashboard"
-screen-studio event $SESSION --type navigate --x 960 --y 540 --url "https://app.example.com"
-screen-studio event $SESSION --type click --x 500 --y 300
-screen-studio event $SESSION --type type --x 500 --y 320 --text "hello"
-screen-studio chapter $SESSION --title "Search results"
-screen-studio event $SESSION --type scroll --x 960 --y 540 --direction down
-
-# Check status
-screen-studio status $SESSION
-
-# Stop and get output path
-screen-studio stop $SESSION
-# → { "output_path": "/tmp/recording-rec_abc123.mp4", ... }
-```
-
-### MCP Server — any AI agent
-
-Add to your MCP config:
-
-```json
+```jsonc
 {
-  "mcpServers": {
-    "screen-studio": {
-      "command": "node",
-      "args": ["node_modules/@deus/screen-studio/dist/mcp/index.js"]
-    }
-  }
+  "kind": "action",
+  "type": "click",
+  "at": 1793945714652,
+  "endAt": 1793945714781,
+  "rect": { "x": 412, "y": 288, "width": 120, "height": 40 },
+  "label": "Sign in",
 }
 ```
 
-The agent gets 5 tools:
+- `at`/`endAt` are epoch milliseconds on the recording machine — the same clock
+  the manifest maps to media time. Report the start and the completion: the edit
+  keeps everything from shortly before the start until the result has been on
+  screen long enough to read.
+- Coordinates are in the source's viewport: CSS pixels for browsers, iOS points
+  for simulators. A tool that reports in another space adds `"space": {"width",
+"height"}` and Screen Studio scales.
+- Types: `click`, `double-click`, `right-click`, `hover`, `type`, `key`, `scroll`,
+  `navigate`, `drag`, `tap`, `long-press`, `swipe`, `pinch`, `other`. Drags and
+  swipes can carry a `path`.
+- Typed text is never needed; store a label instead (Deus records `[12 chars]`).
 
-| Tool | Description |
-|------|-------------|
-| `recording_start` | Begin a session. Configure device frame, background, resolution, capture method |
-| `recording_event` | Log a browser action (click, type, scroll, navigate). Drives camera zoom/pan |
-| `recording_chapter` | Mark a chapter point with a title |
-| `recording_status` | Check recording state, duration, event/chapter counts |
-| `recording_stop` | Stop, post-process with ffmpeg, return MP4 path |
+Adapters can stream events: `screen-studio action DIR --stdin` reads JSON Lines.
 
-Example agent workflow:
+Footage another tool recorded comes in with its actions:
 
-```
-Agent: recording_start({ deviceFrame: "browser-chrome" })
-→ { sessionId: "rec_a1b2c3", status: "recording" }
-
-Agent: recording_event({ sessionId: "rec_a1b2c3", type: "click", x: 500, y: 300 })
-Agent: recording_event({ sessionId: "rec_a1b2c3", type: "type", x: 500, y: 320, text: "hello" })
-Agent: recording_chapter({ sessionId: "rec_a1b2c3", title: "Filled form" })
-
-Agent: recording_stop({ sessionId: "rec_a1b2c3" })
-→ { outputPath: "/tmp/recording-rec_a1b2c3.mp4", duration: 12.5, eventCount: 2, chapterCount: 1 }
+```sh
+screen-studio import demo.mp4 --out ./captures/ios --agent-device-telemetry demo.telemetry.json
+screen-studio import --cua-trajectory ./trajectory --out ./captures/desktop
 ```
 
-## Camera engine
+A Cua trajectory's turns become actions with their times and the tool's own
+summary as the label (typed text is counted, never copied); refused turns
+are left out. Its click points are relative to a window screenshot, so they
+carry no place on the display: the edit cuts the waits between turns and the
+camera stays wide.
 
-The camera engine is the core of the package. It computes smooth zoom and pan transforms from discrete agent events using spring physics.
+Intent beyond actions:
 
-### Spring physics
+| Event     | Meaning                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
+| `chapter` | A section starts now. Chapters follow their picture through every edit.                                             |
+| `focus`   | The camera should show this region — usually a result away from the click. A semantic hint, not camera coordinates. |
+| `hold`    | Keep the next N seconds at normal speed.                                                                            |
+| `note`    | An annotation for editors.                                                                                          |
 
-Camera position and zoom are driven by damped harmonic oscillators. The spring smoothly animates between targets with configurable stiffness (`omega`) and damping (`zeta`).
+## Rendering
+
+```sh
+screen-studio render DIR --preset demo --target-duration 30s
+screen-studio render DIR --plan        # write the decisions without rendering
+```
+
+| Preset        | Pacing                                    | Camera     | Look                                                |
+| ------------- | ----------------------------------------- | ---------- | --------------------------------------------------- |
+| `walkthrough` | still waits 6×, motion 2×, long waits cut | up to 1.6× | Frame on a gradient, 1920×1080                      |
+| `demo`        | still waits 8×, long waits cut sooner     | up to 1.8× | Same                                                |
+| `replay`      | same as walkthrough                       | static     | Source size, pointer only — session replays, audits |
+| `review`      | original timing                           | static     | Source size, pointer markers only                   |
+
+Portrait sources (phones) get a portrait canvas, 1080×1920, unless `--size`
+is given. Source-size output keeps within a 1920-pixel long edge.
+
+Everything that decides the picture is written to `renders/<name>.json` before
+any frame is drawn, with a reason for each choice:
+
+- **Pacing.** Each action is kept at 1× from 0.7 s before it starts until 1.2 s
+  after it completes, so its result is seen; so are holds, focus hints and the
+  first second of each chapter. Everything else is a wait. Motion analysis
+  (FFmpeg `freezedetect` on a 256-px copy, so carets and spinners count as
+  still) separates still waits from moving ones: an animation plays at 2×, a
+  frozen screen at 6×. A wait that would still take more than 2 s keeps a
+  sped-up head and tail and cuts the middle. `--target-duration` tightens
+  pacing step by step and reports `targetMet: false` rather than cutting actions.
+- **Edit map.** One map from source to output time drives the FFmpeg retime,
+  the camera, the pointer, chapters and event times, so they cannot drift.
+- **Camera.** Actions close in time and on screen share one shot that fits all
+  their targets; navigation and scrolling go wide; a focus hint overrides
+  action framing while it lasts; shots that would not settle (< 700 ms) are
+  dropped with a warning. Springs run in output time, zoom in log space.
+  Phone recordings keep a static camera by default (`--zoom` to override):
+  zooming into a narrow screen crops the UI sideways.
+- **Pointer.** Generated between recorded targets — travel, a short rest,
+  press, ripple, then a fade so results aren't covered — and labelled as
+  presentation in the plan, never as an observed path. Phones get touch
+  indicators instead. Default pointer: the Cua cursor in black with a white
+  outline (see NOTICE).
+- **Results.** Motion analysis marks each moment the picture changes after a
+  still stretch. A change 0.3–30 s after an action is that action's result:
+  it plays at 1× with reading time, and the camera frames the region that
+  changed (or goes wide when most of the screen did) — measured only for
+  results, so long recordings stay cheap. A `focus` hint near it takes
+  precedence. No tool has to report it.
+- **Unseen spans** (hidden tab, minimized window) are cut in every edited
+  preset; `review` keeps original timing, frozen frames and all.
+- **Chapters** are embedded in the MP4 and written as WebVTT; a chapter whose
+  moment was cut starts where the cut lands.
+
+Renders stream one frame at a time (flat memory for any length). Painting
+costs ~5.5 ms of main-thread time per 1080p frame; decoding, compression and
+encoding run off-thread or in FFmpeg — safe inside a host that also serves an
+app. The original media is never modified.
+
+## The bundle
+
+```text
+login/
+  manifest.json      source, clock, geometry, media facts, outcome
+  events.jsonl       actions, chapters, holds, focus, notes (append-only)
+  media/screen.mp4   the original capture
+  analysis/          derived and replaceable (motion ranges, contact sheets)
+  renders/           walkthrough.mp4 · walkthrough.json (plan + edit map) · .vtt · .jpg
+  logs/
+```
+
+`manifest.clock.mediaStartEpochMs` is media time zero on the machine clock;
+`mediaMs = event.at - mediaStartEpochMs`, within `uncertaintyMs`. The browser
+backend owns its clock outright: a constant-rate pump re-emits the latest
+frame every tick, so frame _k_ is on screen at start + _k_/fps and still pages
+cost almost nothing to store. Media is written as fragmented MP4 while
+recording, so a killed recorder leaves playable footage; `stop` recovers it.
+
+## SDK
 
 ```ts
-const engine = new CameraEngine({
-  sourceSize: { width: 1920, height: 1080 },
-  positionSpring: { omega: 8, zeta: 0.7 },  // Snappy, slightly underdamped
-  zoomSpring: { omega: 6, zeta: 0.85 },      // Smooth, no overshoot
-  minZoom: 1.0,
-  maxZoom: 2.8,
+import { startRecording, renderBundle } from "@deus/screen-studio";
+
+const recording = await startRecording({
+  source: "agent-browser:demo",
+  out: "./captures/login",
+  maxDurationMs: 3 * 60_000,
 });
-```
-
-### Dead zone
-
-The camera only moves when the target exits a dead zone around the current viewport center. This prevents jittery micro-movements during rapid typing.
-
-```ts
-const engine = new CameraEngine({
-  sourceSize: { width: 1920, height: 1080 },
-  deadZone: { fraction: 0.15, hysteresis: 0.05 },
+await recording.chapter("Sign in");
+const started = Date.now();
+await page.click("#sign-in"); // your automation
+await recording.action({
+  type: "click",
+  at: started,
+  endAt: Date.now(),
+  rect: { x: 412, y: 288, width: 120, height: 40 },
 });
+await recording.focus({ x: 900, y: 120, width: 320, height: 200 }, { label: "Welcome banner" });
+const manifest = await recording.stop(); // finalized, verified media
+
+const video = await renderBundle(recording.dir, { preset: "walkthrough" });
+// video.outputPath, video.chapters, video.events, video.plan
 ```
 
-### Intent classification
+Also exported: `listSources`, `importVideo`, `inspectBundle`, `doctor`, the
+bundle schema (zod), and the planning pieces (`planPacing`, `planShots`,
+`EditMap`, …) for editors that want to make their own choices.
 
-Events are classified into intents (typing, clicking, scrolling, navigating) which determine zoom levels. Typing zooms in tight, navigation zooms out wide.
+## Agent tools for any host
 
-```ts
-import { IntentClassifier, ShotPlanner } from "@deus/screen-studio";
-
-const classifier = new IntentClassifier({ sourceSize: { width: 1920, height: 1080 } });
-const intent = classifier.classify(events);
-// → { type: "typing", center: { x: 500, y: 320 }, zoom: 2.0 }
-```
-
-## Compositor
-
-The compositor is canvas-agnostic — it computes **render instructions** (source crop region, destination region, cursor position, device frame info) without touching any canvas API. This makes it testable and portable.
+The tools an agent sees are defined once, in the package: `recording_start`,
+`recording_chapter`, `recording_focus`, `recording_hold`, `recording_status`,
+`recording_stop` (and `recording_action` for sources that can't observe
+themselves). A host registers them with its own MCP layer and supplies only
+what is its own:
 
 ```ts
-const compositor = new Compositor({
-  output: { width: 1920, height: 1080 },
-  source: { width: 1920, height: 1080 },
-  deviceFrame: { type: "browser-chrome", title: "Example" },
-  background: { type: "gradient", colors: ["#0f0f23", "#1a1a3e"], angle: 135 },
-  cursor: { visible: true, size: 24, showClickRipple: true, rippleDuration: 400 },
+import { createAgentTools } from "@deus/screen-studio";
+
+const recording = createAgentTools({
+  // What "record the browser" means in this session.
+  resolveSource: async ({ target }) =>
+    target === "simulator" ? "ios-simulator:booted" : "agent-browser:my-session",
+  bundleDir: () => `/data/recordings/${crypto.randomUUID()}`,
+  resolveRef: (ref) => myBrowser.boxOf(ref), // optional: focus by element ref
+  onStateChange: (state, rec) => emit({ state, id: rec.id }), // optional: tell your UI
 });
-
-const instructions = compositor.computeFrame(camera, cursor);
-// → { source: { x, y, w, h }, content: { x, y, w, h }, cursor: {...}, deviceFrame: {...} }
+for (const t of recording.tools) registerTool(t.name, t.description, t.inputSchema, t.handler);
 ```
 
-### Canvas renderer (browser)
+Deus registers exactly this (`apps/agent-server/agents/deus-tools/recording.ts`).
+`recording_stop` returns the rendered video, chapters and events.
 
-For browser rendering, use `CanvasRenderer`:
+## Agent skill
 
-```ts
-import { CanvasRenderer } from "@deus/screen-studio/compositor";
+`skills/screen-studio/SKILL.md` teaches an agent when to record, the CLI
+workflow, which sources report their own actions, presets, and what to check
+before sharing. `screen-studio skill` prints it, so any agent with a shell can
+load it.
 
-const renderer = new CanvasRenderer(ctx);
-renderer.renderFrame(sourceImage, instructions, backgroundConfig);
-```
+## MCP and CLI
 
-### Device frames
+`screen-studio-mcp` serves the same agent tools over stdio, letting the agent
+name any source, plus `screen_studio_sources`, `recording_render` (re-render or
+`plan`), and `recording_inspect` (returns a contact sheet as an image). The
+`screen-studio` CLI covers the same operations from a shell.
 
-| Type | Description |
-|------|-------------|
-| `browser-chrome` | Browser window with traffic lights, URL bar, title |
-| `macos-window` | macOS window with traffic lights and title bar |
-| `none` | No frame — just the content |
+## Not yet
 
-### Backgrounds
-
-```ts
-// Gradient
-{ type: "gradient", colors: ["#0f0f23", "#1a1a3e"], angle: 135 }
-
-// Solid color
-{ type: "solid", colors: ["#1a1a2e"] }
-
-// Blurred content (frosted glass)
-{ type: "blur", blurRadius: 20 }
-```
-
-## Video encoding
-
-Two ffmpeg filter strategies:
-
-### `generateCropScaleFilter` (recommended)
-
-Crops and scales each frame. Fast, works with any resolution.
-
-```ts
-const filter = generateCropScaleFilter(timeline, sourceSize, outputSize);
-// → "crop=960:540:480:270,scale=1920:1080" (changes per segment)
-```
-
-### `generateFfmpegFilter`
-
-Uses ffmpeg's `zoompan` filter for continuous zoom. Slower but smoother for long recordings.
-
-```ts
-const filter = generateFfmpegFilter(timeline, sourceSize, outputSize);
-// → "zoompan=z='if(between(on,0,3),1.00,...'" (per-frame expressions)
-```
-
-## Frame capture
-
-### SDK frame source interfaces
-
-The SDK defines abstract `FrameSource` interfaces for embedding in your own app. Implementations are platform-specific:
-
-| Source | Platform | How |
-|--------|----------|-----|
-| CDP screencast | Electron | `Page.startScreencast` via BrowserView debugger |
-| VNC canvas | Cloud VMs | noVNC `canvas.captureStream()` |
-| Screenshot polling | Fallback | `webContents.capturePage()` at interval |
-
-### Built-in ffmpeg capture (CLI / MCP)
-
-The CLI and MCP server ship a built-in ffmpeg-based recorder (`src/mcp/ffmpeg-recorder.ts`) that handles screen capture directly:
-
-| Capture method | Platform | How |
-|----------------|----------|-----|
-| `x11grab` | Linux | `ffmpeg -f x11grab` from Xvfb (no permissions needed) |
-| `avfoundation` | macOS | `ffmpeg -f avfoundation` (requires Screen Recording permission) |
-| `none` | Any | Events-only mode — no capture, post-process later |
-
-## Agent event types
-
-| Type | Camera behavior | Example |
-|------|----------------|---------|
-| `click` | Zoom in to element | User clicks a button |
-| `type` | Zoom tight to input | User types in a field |
-| `scroll` | Gentle pan | User scrolls page |
-| `navigate` | Zoom out to full view | User navigates to new URL |
-| `screenshot` | Brief hold | Agent takes a screenshot |
-| `idle` | Slow zoom out | No activity |
-
-## CLI reference
-
-```
-screen-studio <command> [options]
-
-Commands:
-  start     Start a recording session
-  event     Log a browser action event
-  chapter   Add a chapter marker
-  status    Get session status
-  stop      Stop recording and post-process
-  list      List all sessions
-  help      Show help
-
-start options:
-  --output <path>          Output MP4 path (default: /tmp/recording-<id>.mp4)
-  --capture <method>       x11grab | avfoundation | screenshot | none
-  --display <display>      X11 display (default: :99)
-  --fps <n>                Frame rate (default: 30)
-  --source-width <n>       Source width (default: 1920)
-  --source-height <n>      Source height (default: 1080)
-  --output-width <n>       Output width (default: 1920)
-  --output-height <n>      Output height (default: 1080)
-  --device-frame <type>    browser-chrome | macos-window | none
-
-event options:
-  --type <type>            click | type | scroll | navigate | screenshot | idle
-  --x <n>                  X coordinate in source pixels
-  --y <n>                  Y coordinate in source pixels
-  --text <text>            Text content (for type events)
-  --url <url>              URL (for navigate events)
-  --direction <dir>        up | down | left | right (for scroll events)
-  --element-rect <json>    Element bounding rect as JSON
-
-chapter options:
-  --title <title>          Chapter title
-
-stop options:
-  --watermark <text>       Add watermark text to video
-```
-
-All CLI output is JSON, one object per line. Pipe to `jq` for formatting.
-
-## Architecture
-
-```
-packages/screen-studio/
-├── src/
-│   ├── camera/           Spring physics, dead zone, camera engine
-│   ├── intent/           Intent classification, shot planning
-│   ├── compositor/       Render instructions (canvas-agnostic) + canvas renderer
-│   ├── interpolation/    Catmull-Rom splines, smoothstep
-│   ├── recorder/         Timeline recorder, ffmpeg filter generation
-│   ├── adapter/          MCP tool event → camera event mapping
-│   ├── source/           Frame source interfaces (CDP, VNC, polling)
-│   ├── session/          Recording session orchestrator
-│   ├── mcp/              MCP server, session manager, ffmpeg recorder
-│   ├── cli/              CLI entry point
-│   ├── types.ts          Core type definitions
-│   └── index.ts          Public API exports
-├── test/                 243 tests (vitest)
-├── demo/                 Interactive browser demo
-└── dist/                 Built output (ESM + CJS + DTS)
-```
-
-## Testing
-
-```bash
-# Run all tests
-bun run test:screen-studio
-
-# Or from the package directory
-cd packages/screen-studio && bunx vitest run
-
-# Watch mode
-bunx vitest
-```
-
-## Demo
-
-```bash
-cd packages/screen-studio
-bunx serve . -p 3456
-# Open http://localhost:3456/demo/
-```
-
-The demo shows the camera engine and compositor running in real-time. Click on the source canvas to simulate agent events and watch the camera zoom/pan in the output canvas.
-
-## Cross-platform
-
-The core engine is pure math — runs anywhere JavaScript runs (browser, Node.js, Bun, Deno).
-
-| Component | Browser | Node.js | Linux | macOS |
-|-----------|---------|---------|-------|-------|
-| Camera engine | Yes | Yes | Yes | Yes |
-| Compositor | Yes | Yes | Yes | Yes |
-| Canvas renderer | Yes | With `canvas` npm | With `canvas` npm | With `canvas` npm |
-| ffmpeg capture | — | x11grab | x11grab | avfoundation |
-| MCP server | — | Yes | Yes | Yes |
-| CLI | — | Yes | Yes | Yes |
+- Native window capture (a ScreenCaptureKit helper) and Windows/Linux desktops.
+  Desktop agents that work in the background (Cua) act on windows a display
+  recording may not show; record an agent-owned display or VM instead.
+- Places for Cua actions (needs the window's frame on screen at each turn).
+- Audio.
+- Following a browser into a new tab: a closed tab ends the recording.
+- Physical iOS devices and Android.

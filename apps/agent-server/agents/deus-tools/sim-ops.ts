@@ -365,7 +365,7 @@ export async function tap(
     y?: number;
     sessionKey?: string;
   }
-): Promise<void> {
+): Promise<{ x: number; y: number }> {
   // Resolution is explicit — we take exactly one selector and fail loudly if
   // it doesn't match. No silent fallback chain (identifier → label → coord)
   // because that hides precision bugs: the agent says "tap NameField" and
@@ -381,7 +381,7 @@ export async function tap(
       );
     }
     await callSimBridge({ command: "tap", udid, x: entry.center.x, y: entry.center.y });
-    return;
+    return { x: entry.center.x, y: entry.center.y };
   }
 
   if (opts.identifier) {
@@ -394,7 +394,7 @@ export async function tap(
       );
     }
     await callSimBridge({ command: "tap", udid, x: el.center.x, y: el.center.y });
-    return;
+    return { x: el.center.x, y: el.center.y };
   }
 
   if (opts.label) {
@@ -410,7 +410,7 @@ export async function tap(
       );
     }
     await callSimBridge({ command: "tap", udid, x: el.center.x, y: el.center.y });
-    return;
+    return { x: el.center.x, y: el.center.y };
   }
 
   if (typeof opts.x === "number" && typeof opts.y === "number") {
@@ -423,7 +423,7 @@ export async function tap(
       }
     }
     await callSimBridge({ command: "tap", udid, x: opts.x, y: opts.y });
-    return;
+    return { x: opts.x, y: opts.y };
   }
 
   throw new Error("tap requires one of: ref, identifier, label, or (x, y) coordinates");
@@ -472,7 +472,7 @@ export async function swipe(
     distance?: number;
     duration?: number;
   }
-): Promise<void> {
+): Promise<{ from: { x: number; y: number }; to: { x: number; y: number } }> {
   let sx: number, sy: number, ex: number, ey: number;
 
   if (opts.direction) {
@@ -504,6 +504,7 @@ export async function swipe(
     endY: ey,
     ...(opts.duration !== undefined && { duration: opts.duration }),
   });
+  return { from: { x: sx, y: sy }, to: { x: ex, y: ey } };
 }
 
 export async function pressKey(udid: string, key: string): Promise<void> {
