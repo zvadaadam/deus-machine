@@ -391,6 +391,8 @@ export async function renderBundle(
 
   let rendered = 0;
   try {
+    // Cancelled while planning (motion analysis can take a while): start nothing.
+    if (options.signal?.aborted) throw new ScreenStudioError("aborted", "Render cancelled");
     if (canvasAvailable) {
       rendered = await renderWithCanvas({
         mediaPath,

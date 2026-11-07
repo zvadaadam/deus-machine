@@ -149,6 +149,18 @@ describe("render", () => {
     expect(result.warnings.join(" ")).toMatch(/not painted for 5\.0 s/);
   });
 
+  it("starts nothing for a render cancelled before it began", async () => {
+    let progress = 0;
+    await expect(
+      renderBundle(dir, {
+        preset: "demo",
+        signal: AbortSignal.abort(),
+        onProgress: () => progress++,
+      })
+    ).rejects.toMatchObject({ code: "aborted" });
+    expect(progress).toBe(0);
+  });
+
   it("never writes over the original media", async () => {
     await expect(
       renderBundle(dir, { output: join(dir, manifest.media!.path), plain: true })

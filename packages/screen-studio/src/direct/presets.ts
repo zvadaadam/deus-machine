@@ -2,7 +2,7 @@ import type { PacingMode } from "../edit/pacing.js";
 import type { Size } from "../util/units.js";
 import type { SpringConfig } from "./spring.js";
 
-export type CursorStyle = "cua" | "arrow" | "dot" | "touch" | "none";
+export type CursorStyle = "cua" | "arrow" | "touch" | "none";
 /** `auto` picks per source: browser chrome for tabs, a device bezel for phones. */
 export type FrameStyle = "auto" | "browser" | "window" | "device" | "rounded" | "none";
 
