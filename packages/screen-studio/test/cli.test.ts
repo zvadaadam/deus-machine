@@ -1,279 +1,165 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execFileSync } from "node:child_process";
-import { existsSync, rmSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+import { describe, expect, it } from "vitest";
+import { readManifest } from "../src/bundle/bundle.js";
+import { startRecording } from "../src/recorder.js";
+import { groupAlive, isAlive } from "../src/util/process.js";
+import { tempDir } from "./helpers.js";
 
-const CLI = join(__dirname, "../src/cli/index.ts");
-const STATE_DIR = join(tmpdir(), "screen-studio");
-const STATE_FILE = join(STATE_DIR, "sessions.json");
+const exec = promisify(execFile);
+const CLI = resolve(__dirname, "../src/cli/index.ts");
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const HELP_COMMANDS = [
+  "doctor",
+  "sources",
+  "start",
+  "record",
+  "status",
+  "action",
+  "chapter",
+  "hold",
+  "focus",
+  "note",
+  "stop",
+  "render",
+  "inspect",
+  "import",
+  "presets",
+  "skill",
+];
 
-function run(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
+/** Each call is its own process, the way an agent uses the CLI. */
+async function cli(...args: string[]): Promise<{ code: number; json: Record<string, any> }> {
   try {
-    const stdout = execFileSync("bunx", ["tsx", CLI, ...args], {
-      encoding: "utf-8",
-      timeout: 10_000,
-      env: { ...process.env },
-    });
-    return { stdout: stdout.trim(), stderr: "", exitCode: 0 };
-  } catch (err: any) {
+    const { stdout } = await exec("bun", [CLI, ...args], { timeout: 60_000 });
+    return { code: 0, json: JSON.parse(stdout.trim().split("\n").pop()!) };
+  } catch (err) {
+    const e = err as { code?: number; stdout?: string };
     return {
-      stdout: (err.stdout ?? "").trim(),
-      stderr: (err.stderr ?? "").trim(),
-      exitCode: err.status ?? 1,
+      code: e.code ?? 1,
+      json: JSON.parse((e.stdout ?? "{}").trim().split("\n").pop() || "{}"),
     };
   }
 }
 
-function parseOutput(result: { stdout: string; stderr: string }): Record<string, unknown> {
-  // stdout for success, stderr for errors
-  const text = result.stdout || result.stderr;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
-}
+describe("CLI", () => {
+  it("start, annotate and stop from separate processes", async () => {
+    const dir = join(tempDir(), "take");
+    const started = await cli(
+      "start",
+      "--source",
+      "test-pattern:320x240",
+      "--out",
+      dir,
+      "--max-duration",
+      "1m"
+    );
+    expect(started.code).toBe(0);
+    expect(started.json).toMatchObject({ ok: true, status: "recording" });
+    expect(started.json.next).toHaveLength(3);
 
-describe("screen-studio CLI", () => {
-  beforeEach(() => {
-    // Clean state between tests
-    if (existsSync(STATE_FILE)) {
-      rmSync(STATE_FILE);
+    await sleep(500);
+    expect((await cli("chapter", dir, "Sign", "in")).json.event).toMatchObject({
+      kind: "chapter",
+      title: "Sign in",
+    });
+    expect(
+      (await cli("action", dir, "--type", "click", "--rect", "10,10,40,20", "--label", "Go")).json
+        .ok
+    ).toBe(true);
+    expect(
+      (await cli("focus", dir, "--rect", "100,100,80,60", "--for", "2s")).json.event.durationMs
+    ).toBe(2000);
+    expect((await cli("action", dir, "--type", "wave")).json.error.code).toBe("invalid_argument");
+    expect((await cli("status", dir)).json.status).toBe("recording");
+
+    const stopped = await cli("stop", dir);
+    expect(stopped.json).toMatchObject({
+      ok: true,
+      status: "complete",
+      stopReason: "requested",
+      alreadyStopped: false,
+    });
+    expect(stopped.json.media.frames).toBeGreaterThan(10);
+    expect((await cli("stop", dir)).json).toMatchObject({
+      status: "complete",
+      alreadyStopped: true,
+    });
+    expect((await cli("chapter", dir, "Late")).json.error.code).toBe("not_recording");
+
+    const plan = await cli("render", dir, "--plan");
+    expect(plan.json).toMatchObject({ ok: true, planned: true });
+    // --render takes a value here, not a boolean.
+    expect(
+      (await cli("inspect", dir, "--contact-sheet", "--render", "nope")).json.error.message
+    ).toBe('No render named "nope"');
+  }, 120_000);
+
+  it("recovers the media when the recorder is killed", async () => {
+    const dir = join(tempDir(), "take");
+    await cli("start", "--source", "test-pattern:320x240", "--out", dir);
+    await sleep(2500);
+    const owner = (await readManifest(dir)).capture.owner!;
+    process.kill(owner.pid, "SIGKILL");
+    await sleep(300);
+    const stopped = await cli("stop", dir);
+    expect(stopped.json).toMatchObject({
+      status: "complete",
+      recovered: true,
+      stopReason: "owner-lost",
+    });
+    expect(stopped.json.media.durationMs).toBeGreaterThan(1000);
+  }, 60_000);
+
+  it("stops cleanly while the source is still starting", async () => {
+    // A DevTools endpoint that takes 4 s to answer: start is mid-resolve when stop arrives.
+    const server = createServer((_req, res) => setTimeout(() => res.end("[]"), 4000));
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const port = (server.address() as AddressInfo).port;
+    const dir = join(tempDir(), "take");
+    const starting = cli("start", "--source", `browser:http://127.0.0.1:${port}`, "--out", dir);
+    await sleep(1500);
+    const owner = (await readManifest(dir)).capture.owner!;
+    expect(owner.kind).toBe("worker");
+    const stopped = await cli("stop", dir);
+    expect(stopped.json).toMatchObject({ status: "failed", error: { code: "aborted" } });
+    expect((await starting).json.ok).toBe(false);
+    await sleep(500);
+    expect(isAlive(owner.pid)).toBe(false);
+    expect(groupAlive(owner.pid)).toBe(false);
+    server.close();
+  }, 60_000);
+
+  it("refuses to signal an app that records in-process", async () => {
+    const dir = join(tempDir(), "take");
+    const recording = await startRecording({ source: "test-pattern:320x240", out: dir });
+    const stopped = await cli("stop", dir);
+    expect(stopped.json.error).toMatchObject({ code: "invalid_argument" });
+    expect(recording.isRecording).toBe(true);
+    expect((await recording.stop()).status).toBe("complete");
+  }, 60_000);
+
+  it("prints the agent skill", async () => {
+    const { stdout } = await exec("bun", [CLI, "skill"], { timeout: 60_000 });
+    expect(stdout).toMatch(/^---\nname: screen-studio\ndescription: /);
+    // Every command the skill teaches exists.
+    for (const command of stdout.matchAll(/^screen-studio (\w+)/gm)) {
+      expect(HELP_COMMANDS).toContain(command[1]);
     }
   });
 
-  afterEach(() => {
-    if (existsSync(STATE_FILE)) {
-      rmSync(STATE_FILE);
-    }
-  });
-
-  describe("help", () => {
-    it("shows help with --help", () => {
-      const result = run("--help");
-      expect(result.stdout).toContain("screen-studio");
-      expect(result.stdout).toContain("Commands:");
-      expect(result.stdout).toContain("start");
-      expect(result.stdout).toContain("event");
-      expect(result.stdout).toContain("stop");
-      expect(result.exitCode).toBe(0);
+  it("reports bad input as structured errors", async () => {
+    const bad = await cli("start", "--source", "webcam", "--out", join(tempDir(), "x"));
+    expect(bad.code).not.toBe(0);
+    expect(bad.json).toMatchObject({
+      ok: false,
+      error: { code: "invalid_argument", hint: expect.stringContaining("sources") },
     });
-
-    it("shows help with no args", () => {
-      const result = run("help");
-      expect(result.stdout).toContain("Commands:");
-      expect(result.exitCode).toBe(0);
-    });
-  });
-
-  describe("version", () => {
-    it("shows version", () => {
-      const result = run("version");
-      const data = parseOutput(result);
-      expect(data.version).toBe("0.1.0");
-    });
-  });
-
-  describe("start", () => {
-    it("creates a session and returns JSON", () => {
-      const result = run("start");
-      expect(result.exitCode).toBe(0);
-
-      const data = parseOutput(result);
-      expect(data.session_id).toBeDefined();
-      expect(typeof data.session_id).toBe("string");
-      expect((data.session_id as string).startsWith("rec_")).toBe(true);
-      expect(data.status).toBe("recording");
-      expect(data.output_path).toBeDefined();
-    });
-
-    it("accepts --output flag", () => {
-      const outPath = join(tmpdir(), "test-recording.mp4");
-      const result = run("start", "--output", outPath);
-      const data = parseOutput(result);
-      expect(data.output_path).toBe(outPath);
-    });
-  });
-
-  describe("event", () => {
-    it("records a click event", () => {
-      // Start a session first
-      const startResult = run("start");
-      const startData = parseOutput(startResult);
-      const sessionId = startData.session_id as string;
-
-      // Record an event
-      const result = run("event", sessionId, "--type", "click", "--x", "500", "--y", "300");
-      expect(result.exitCode).toBe(0);
-
-      const data = parseOutput(result);
-      expect(data.recorded).toBe(true);
-      expect(data.event_index).toBe(0);
-      expect(data.timestamp_ms).toBeDefined();
-    });
-
-    it("records a type event with --text", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      const result = run("event", sessionId, "--type", "type", "--x", "500", "--y", "320", "--text", "hello world");
-      const data = parseOutput(result);
-      expect(data.recorded).toBe(true);
-    });
-
-    it("records multiple events with incrementing index", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      const r1 = parseOutput(run("event", sessionId, "--type", "click", "--x", "100", "--y", "100"));
-      const r2 = parseOutput(run("event", sessionId, "--type", "click", "--x", "200", "--y", "200"));
-      const r3 = parseOutput(run("event", sessionId, "--type", "click", "--x", "300", "--y", "300"));
-
-      expect(r1.event_index).toBe(0);
-      expect(r2.event_index).toBe(1);
-      expect(r3.event_index).toBe(2);
-    });
-
-    it("fails with missing session ID", () => {
-      const result = run("event");
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("Missing session ID");
-    });
-
-    it("fails with invalid session ID", () => {
-      const result = run("event", "rec_nonexistent", "--type", "click", "--x", "0", "--y", "0");
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("Session not found");
-    });
-
-    it("fails with missing --type flag", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      const result = run("event", sessionId, "--x", "500", "--y", "300");
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("Missing required flag --type");
-    });
-
-    it("fails with invalid event type", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      const result = run("event", sessionId, "--type", "explode", "--x", "0", "--y", "0");
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("Invalid event type");
-      expect(data.hint).toContain("click");
-    });
-  });
-
-  describe("chapter", () => {
-    it("adds a chapter marker", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      const result = run("chapter", sessionId, "--title", "Introduction");
-      expect(result.exitCode).toBe(0);
-
-      const data = parseOutput(result);
-      expect(data.chapter_index).toBe(0);
-      expect(data.title).toBe("Introduction");
-      expect(data.timestamp_ms).toBeDefined();
-    });
-
-    it("fails with missing --title", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      const result = run("chapter", sessionId);
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("Missing required flag --title");
-    });
-  });
-
-  describe("status", () => {
-    it("returns session status", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      // Add some events
-      run("event", sessionId, "--type", "click", "--x", "500", "--y", "300");
-      run("event", sessionId, "--type", "type", "--x", "500", "--y", "320", "--text", "test");
-      run("chapter", sessionId, "--title", "Test");
-
-      const result = run("status", sessionId);
-      expect(result.exitCode).toBe(0);
-
-      const data = parseOutput(result);
-      expect(data.session_id).toBe(sessionId);
-      expect(data.status).toBe("recording");
-      expect(data.event_count).toBe(2);
-      expect(data.chapter_count).toBe(1);
-      expect(typeof data.duration_s).toBe("number");
-    });
-  });
-
-  describe("list", () => {
-    it("lists no sessions when empty", () => {
-      const result = run("list");
-      const data = parseOutput(result);
-      expect(data.count).toBe(0);
-      expect((data.sessions as unknown[]).length).toBe(0);
-    });
-
-    it("lists active sessions", () => {
-      run("start");
-      run("start");
-
-      const result = run("list");
-      const data = parseOutput(result);
-      expect(data.count).toBe(2);
-    });
-  });
-
-  describe("stop", () => {
-    it("stops a session with events-only mode", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      // Add events
-      run("event", sessionId, "--type", "click", "--x", "500", "--y", "300");
-      run("event", sessionId, "--type", "type", "--x", "500", "--y", "320", "--text", "hello");
-
-      const result = run("stop", sessionId);
-      expect(result.exitCode).toBe(0);
-
-      const data = parseOutput(result);
-      expect(data.session_id).toBe(sessionId);
-      expect(data.status).toBe("done");
-      expect(data.event_count).toBe(2);
-    });
-
-    it("fails when session is already stopped", () => {
-      const startData = parseOutput(run("start"));
-      const sessionId = startData.session_id as string;
-
-      run("stop", sessionId);
-
-      const result = run("stop", sessionId);
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("not recording");
-    });
-  });
-
-  describe("unknown command", () => {
-    it("shows error with hint", () => {
-      const result = run("deploy");
-      expect(result.exitCode).toBe(1);
-      const data = parseOutput(result);
-      expect(data.error).toContain("Unknown command");
-      expect(data.hint).toContain("start");
-    });
+    expect((await cli("status", join(tempDir(), "missing"))).json.error.code).toBe(
+      "bundle_not_found"
+    );
   });
 });

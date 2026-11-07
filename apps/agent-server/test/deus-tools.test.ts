@@ -74,7 +74,7 @@ describe("createDeusMCPServer", () => {
   it("registers all workspace + browser + simulator + apps + recording tools", () => {
     const tools = getRegisteredTools(server.instance);
     const toolNames = Object.keys(tools);
-    expect(toolNames).toHaveLength(42);
+    expect(toolNames).toHaveLength(44);
     // Workspace tools (questions are Claude's own AskUserQuestion, through the engine)
     expect(toolNames).not.toContain("AskUserQuestion");
     expect(toolNames).toContain("GetWorkspaceDiff");
@@ -121,6 +121,8 @@ describe("createDeusMCPServer", () => {
     expect(toolNames).toContain("recording_stop");
     expect(toolNames).toContain("recording_chapter");
     expect(toolNames).toContain("recording_status");
+    expect(toolNames).toContain("recording_focus");
+    expect(toolNames).toContain("recording_hold");
   });
 
   // ==========================================================================

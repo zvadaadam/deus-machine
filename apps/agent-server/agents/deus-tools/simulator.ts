@@ -42,11 +42,34 @@ function withSimulator<T>(
   };
 }
 
+/** A completed simulator interaction, in iOS logical points, for screen recording. */
+export interface SimulatorToolAction {
+  toolName: string;
+  udid: string;
+  startedAt: number;
+  point?: { x: number; y: number };
+  path?: Array<{ x: number; y: number }>;
+  label?: string;
+}
+
 /**
  * Creates the simulator tool definitions for a given session.
  * Injected into the Deus MCP server alongside browser/workspace/recording tools.
+ * @param onAction Optional callback fired after each successful interaction.
  */
-export function createSimulatorTools(sessionId: string): SdkMcpToolDefinition<any>[] {
+export function createSimulatorTools(
+  sessionId: string,
+  onAction?: (action: SimulatorToolAction) => void
+): SdkMcpToolDefinition<any>[] {
+  /** Best-effort: a recording failure never breaks the tool result. */
+  const emitAction = (action: SimulatorToolAction): void => {
+    try {
+      onAction?.(action);
+    } catch (err) {
+      console.warn(`[simulator] Failed to emit action: ${getErrorMessage(err)}`);
+    }
+  };
+
   return [
     // -- ListDevices ----------------------------------------------------------
     tool(
@@ -127,13 +150,21 @@ because layouts shift between reads.`,
       },
       withSimulator(async (args) => {
         const udid = await SimOps.resolveDevice(args.destination, sessionId);
-        await SimOps.tap(udid, {
+        const startedAt = Date.now();
+        const point = await SimOps.tap(udid, {
           ref: args.ref,
           identifier: args.identifier,
           label: args.label,
           x: args.x,
           y: args.y,
           sessionKey: sessionId,
+        });
+        emitAction({
+          toolName: "SimulatorTap",
+          udid,
+          startedAt,
+          point,
+          label: args.label ?? args.identifier,
         });
 
         const tapDesc = args.ref
@@ -176,7 +207,14 @@ complete. Use SimulatorWaitFor(stabilize=true) afterward if you need the result.
       },
       withSimulator(async (args) => {
         const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const startedAt = Date.now();
         await SimOps.typeText(udid, args.text, { submit: args.submit });
+        emitAction({
+          toolName: "SimulatorTypeText",
+          udid,
+          startedAt,
+          label: `[${args.text.length} chars]`,
+        });
 
         const preview = args.text.length > 40 ? args.text.slice(0, 40) + "..." : args.text;
 
@@ -214,7 +252,9 @@ Direction semantics: "up" scrolls content down (finger moves up), "down" scrolls
       },
       withSimulator(async (args) => {
         const udid = await SimOps.resolveDevice(args.destination, sessionId);
-        await SimOps.swipe(udid, args);
+        const startedAt = Date.now();
+        const { from, to } = await SimOps.swipe(udid, args);
+        emitAction({ toolName: "SimulatorSwipe", udid, startedAt, point: from, path: [from, to] });
 
         const label = args.direction ?? "custom";
 
@@ -239,7 +279,9 @@ Direction semantics: "up" scrolls content down (finger moves up), "down" scrolls
       },
       withSimulator(async (args) => {
         const udid = await SimOps.resolveDevice(args.destination, sessionId);
+        const startedAt = Date.now();
         await SimOps.pressKey(udid, args.key);
+        emitAction({ toolName: "SimulatorPressKey", udid, startedAt, label: args.key });
         return textResult(`Pressed ${args.key}`);
       })
     ),

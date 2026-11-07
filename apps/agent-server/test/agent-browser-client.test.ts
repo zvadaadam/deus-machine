@@ -56,7 +56,8 @@ describe("agent-browser client", () => {
     expect(args).toEqual(["snapshot"]);
     expect(options.env.AGENT_BROWSER_SESSION).toBe("session-1");
     expect(options.env.AGENT_BROWSER_HEADED).toBe("1");
-    expect(options.env.AGENT_BROWSER_STREAM_PORT).toBe("9223");
+    // Recording attaches to the session's own DevTools endpoint; no shared stream port.
+    expect(options.env.AGENT_BROWSER_STREAM_PORT).toBeUndefined();
     expect(options.env.DEUS_RUNTIME).toBeUndefined();
     expect(options.env.DEUS_RUNTIME_COMMAND).toBeUndefined();
     expect(options.env.DEUS_RUNTIME_EXECUTABLE).toBeUndefined();

@@ -162,27 +162,26 @@
     },
     "packages/screen-studio": {
       "name": "@deus/screen-studio",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "screen-studio": "./dist/cli/index.js",
-        "screen-studio-mcp": "./dist/mcp/index.js",
+        "screen-studio-mcp": "./dist/mcp/bin.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.1",
         "zod": "^3.24.4",
       },
       "devDependencies": {
-        "@napi-rs/canvas": "^0.1.97",
+        "@types/node": "^22.0.0",
+        "@types/ws": "^8.5.0",
         "tsup": "^8.0.0",
         "typescript": "^5.7.0",
         "vitest": "^3.2.1",
+        "ws": "^8.19.0",
       },
-      "peerDependencies": {
-        "canvas": ">=2.0.0",
+      "optionalDependencies": {
+        "@napi-rs/canvas": "^0.1.97",
       },
-      "optionalPeers": [
-        "canvas",
-      ],
     },
   },
   "packages": {

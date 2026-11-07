@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Spring, SPRING_PRESETS } from "../src/camera/spring.js";
+import { Spring, SPRING_PRESETS } from "../src/direct/spring.js";
 
 describe("Spring", () => {
   describe("underdamped (zeta < 1)", () => {
@@ -159,8 +159,10 @@ describe("Spring", () => {
       // Critically damped should settle faster than overdamped
       const overdamped = new Spring({ omega: 8, zeta: 2.0 });
 
-      let critPos = 0, critVel = 0;
-      let overPos = 0, overVel = 0;
+      let critPos = 0,
+        critVel = 0;
+      let overPos = 0,
+        overVel = 0;
       const dt = 1 / 60;
 
       // After 30 frames, critically damped should be closer to target
@@ -228,21 +230,16 @@ describe("Spring", () => {
     it("all presets produce valid springs", () => {
       for (const [name, config] of Object.entries(SPRING_PRESETS)) {
         const spring = new Spring(config);
-        let pos = 0, vel = 0;
+        let pos = 0,
+          vel = 0;
 
         // Run for 10 seconds to ensure all presets settle (cinematic is slow)
         for (let i = 0; i < 600; i++) {
           [pos, vel] = spring.step(pos, vel, 100, 1 / 60);
         }
 
-        expect(
-          Math.abs(pos - 100),
-          `${name} preset should converge`,
-        ).toBeLessThan(1);
-        expect(
-          Math.abs(vel),
-          `${name} preset should settle`,
-        ).toBeLessThan(1);
+        expect(Math.abs(pos - 100), `${name} preset should converge`).toBeLessThan(1);
+        expect(Math.abs(vel), `${name} preset should settle`).toBeLessThan(1);
       }
     });
   });

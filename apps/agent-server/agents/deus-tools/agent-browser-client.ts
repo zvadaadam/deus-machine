@@ -125,12 +125,6 @@ async function buildArgs(args: string[]): Promise<string[]> {
   return args;
 }
 
-/**
- * Fixed stream port for agent-browser's WebSocket frame server.
- * Screen-studio's StreamRecorder connects here to capture frames for recording.
- * Hardcoded so both sides agree without manual env var configuration.
- */
-const STREAM_PORT = "9223";
 const AGENT_BROWSER_CHILD_ENV_DENYLIST = [
   "AUTH_TOKEN",
   "DATABASE_PATH",
@@ -159,7 +153,6 @@ function buildEnv(sessionId: string): NodeJS.ProcessEnv {
     ...env,
     AGENT_BROWSER_SESSION: sessionId,
     AGENT_BROWSER_HEADED: "1",
-    AGENT_BROWSER_STREAM_PORT: STREAM_PORT,
   };
 }
 
@@ -341,6 +334,26 @@ export async function getElementBox(sessionId: string, ref: string): Promise<Ele
   } catch {
     return null;
   }
+}
+
+/**
+ * The DevTools endpoint screen recording captures for this session: the
+ * managed BrowserView when Deus hosts the browser, otherwise the tab
+ * agent-browser is driving (scoped to the session, never a shared port).
+ */
+export async function getRecordingTarget(
+  sessionId: string
+): Promise<{ endpoint: string; url?: string } | null> {
+  const managed = await getCdpWsUrl();
+  if (managed) return { endpoint: managed };
+  const cdp = await execAgentBrowser(sessionId, ["get", "cdp-url", "--json"], 15_000).catch(
+    () => null
+  );
+  const endpoint = cdp?.success && typeof cdp.data?.cdpUrl === "string" ? cdp.data.cdpUrl : null;
+  if (!endpoint) return null;
+  const page = await execAgentBrowser(sessionId, ["get", "url", "--json"], 5_000).catch(() => null);
+  const url = page?.success && typeof page.data?.url === "string" ? page.data.url : undefined;
+  return { endpoint, ...(url ? { url } : {}) };
 }
 
 /**

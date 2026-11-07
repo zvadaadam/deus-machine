@@ -1,535 +1,291 @@
+import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { SessionManager } from "./session-manager.js";
+import { newId } from "../bundle/bundle.js";
+import { createAgentTools } from "../agent-tools.js";
+import type { Manifest } from "../bundle/schema.js";
+import { listSources } from "../capture/sources.js";
+import { PRESETS } from "../direct/presets.js";
+import { toErrorInfo } from "../errors.js";
+import { inspectBundle } from "../render/inspect.js";
+import { renderBundle, type RenderOptions, type RenderResult } from "../render/render.js";
 
-// ---------------------------------------------------------------------------
-// Shared Zod schemas
-// ---------------------------------------------------------------------------
+const RenderFields = {
+  preset: z
+    .enum(Object.keys(PRESETS) as [string, ...string[]])
+    .optional()
+    .describe("walkthrough (default), demo, replay, or review"),
+  pacing: z.enum(["preserve", "compress", "cut"]).optional(),
+  targetDurationSeconds: z
+    .number()
+    .positive()
+    .optional()
+    .describe("Desired length; reported as unmet rather than cutting actions"),
+  name: z
+    .string()
+    .regex(/^[\w.-]+$/)
+    .optional(),
+  cursor: z.enum(["auto", "cua", "arrow", "touch", "none"]).optional(),
+  frame: z.enum(["auto", "browser", "window", "device", "rounded", "none"]).optional(),
+  background: z
+    .string()
+    .optional()
+    .describe("midnight, dusk, paper, black, none, '#hex' or '#from,#to'"),
+  zoom: z.boolean().optional(),
+  title: z.string().max(200).optional(),
+};
 
-const SessionIdSchema = z
-  .string()
-  .min(1, "sessionId is required")
-  .describe("Session ID returned by recording_start (e.g. 'rec_a1b2c3')");
-
-const GradientBackgroundSchema = z
-  .object({
-    type: z.literal("gradient"),
-    colors: z
-      .tuple([z.string(), z.string()])
-      .describe("Two hex colors (e.g. ['#0f0f23', '#1a1a3e'])"),
-    angle: z
-      .number()
-      .min(0)
-      .max(360)
-      .optional()
-      .describe("Gradient angle in degrees. Default: 135"),
-  })
-  .strict();
-
-const SolidBackgroundSchema = z
-  .object({
-    type: z.literal("solid"),
-    colors: z
-      .tuple([z.string(), z.string()])
-      .describe("Single color repeated (e.g. ['#1a1a2e', '#1a1a2e'])"),
-  })
-  .strict();
-
-const BackgroundSchema = z.discriminatedUnion("type", [
-  GradientBackgroundSchema,
-  SolidBackgroundSchema,
-]);
-
-const ElementRectSchema = z
-  .object({
-    x: z.number().describe("Left edge in source pixels"),
-    y: z.number().describe("Top edge in source pixels"),
-    width: z.number().positive().describe("Element width in pixels"),
-    height: z.number().positive().describe("Element height in pixels"),
-  })
-  .strict();
-
-// ---------------------------------------------------------------------------
-// Tool input schemas
-// ---------------------------------------------------------------------------
-
-const RecordingStartInputSchema = z
-  .object({
-    outputPath: z
-      .string()
-      .optional()
-      .describe("Where to write the final MP4. Default: /tmp/recording-{timestamp}.mp4"),
-    sourceWidth: z
-      .number()
-      .int()
-      .positive()
-      .max(7680)
-      .optional()
-      .describe("Source capture width in pixels. Default: 1280 (auto-detected from stream)"),
-    sourceHeight: z
-      .number()
-      .int()
-      .positive()
-      .max(4320)
-      .optional()
-      .describe("Source capture height in pixels. Default: 720 (auto-detected from stream)"),
-    outputWidth: z
-      .number()
-      .int()
-      .positive()
-      .max(7680)
-      .optional()
-      .describe("Output video width in pixels. Default: 1920"),
-    outputHeight: z
-      .number()
-      .int()
-      .positive()
-      .max(4320)
-      .optional()
-      .describe("Output video height in pixels. Default: 1080"),
-    fps: z.number().int().min(1).max(120).optional().describe("Frame rate. Default: 30"),
-    deviceFrame: z
-      .enum(["browser-chrome", "macos-window", "none"])
-      .optional()
-      .describe("Device frame overlay style. Default: 'none'"),
-    background: BackgroundSchema.optional().describe(
-      "Background behind the device frame. Default: gradient #0f0f23 → #1a1a3e"
-    ),
-    captureMethod: z
-      .enum(["avfoundation", "stream", "auto", "x11grab", "none"])
-      .optional()
-      .describe(
-        "Screen capture method. 'auto' = best available (stream → avfoundation → none). " +
-          "'stream' = WebSocket stream from agent-browser, 10fps, no permission needed. " +
-          "'avfoundation' = macOS 30fps (needs Screen Recording permission). " +
-          "'x11grab' = Linux/Xvfb. 'none' = events-only. Default: 'none'"
-      ),
-    display: z
-      .string()
-      .optional()
-      .describe("X11 display for x11grab capture (e.g. ':99'). Default: ':99'"),
-  })
-  .strict();
-
-const RecordingStopInputSchema = z
-  .object({
-    sessionId: SessionIdSchema,
-    addWatermark: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Add text watermark to bottom-right corner"),
-    watermarkText: z
-      .string()
-      .max(200)
-      .optional()
-      .describe("Watermark text content (required when addWatermark is true)"),
-  })
-  .strict();
-
-const RecordingEventInputSchema = z
-  .object({
-    sessionId: SessionIdSchema,
-    type: z
-      .enum(["click", "type", "scroll", "navigate", "screenshot", "idle", "drag"])
-      .describe("Agent action type"),
-    x: z.number().min(0).describe("X coordinate of the action in source pixels"),
-    y: z.number().min(0).describe("Y coordinate of the action in source pixels"),
-    elementRect: ElementRectSchema.optional().describe(
-      "Bounding box of the interacted element. Helps camera frame the element precisely."
-    ),
-    text: z.string().optional().describe("Text content for 'type' events"),
-    url: z.string().optional().describe("URL for 'navigate' events"),
-    direction: z
-      .enum(["up", "down", "left", "right"])
-      .optional()
-      .describe("Scroll direction for 'scroll' events"),
-  })
-  .strict();
-
-const RecordingChapterInputSchema = z
-  .object({
-    sessionId: SessionIdSchema,
-    title: z
-      .string()
-      .min(1, "Chapter title is required")
-      .max(200)
-      .describe("Chapter title for navigation in the final video"),
-  })
-  .strict();
-
-const RecordingStatusInputSchema = z
-  .object({
-    sessionId: SessionIdSchema,
-  })
-  .strict();
-
-// ---------------------------------------------------------------------------
-// Tool output schemas
-// ---------------------------------------------------------------------------
-
-const RecordingStartOutputSchema = z.object({
-  sessionId: z.string().describe("Session ID to use with other recording tools"),
-  status: z.literal("recording"),
-});
-
-const RecordingStopOutputSchema = z.object({
-  outputPath: z.string().describe("Path to the final MP4 file"),
-  thumbnailPath: z.string().describe("Path to JPEG thumbnail (first frame)"),
-  duration: z.number().describe("Recording duration in seconds (after speed ramping)"),
-  chapters: z
-    .array(
-      z.object({
-        title: z.string(),
-        time: z.number().describe("Time in output video seconds"),
-      })
-    )
-    .describe("Chapter markers with output video timestamps"),
-  events: z
-    .array(
-      z.object({
-        type: z.string().describe("Event type: click, type, scroll, navigate, etc."),
-        time: z.number().describe("Time in output video seconds"),
-        text: z.string().optional(),
-        url: z.string().optional(),
-        direction: z.string().optional(),
-      })
-    )
-    .describe("Agent action events with output video timestamps"),
-});
-
-const RecordingEventOutputSchema = z.object({
-  recorded: z.literal(true),
-  eventIndex: z.number().describe("Index of this event in the session timeline"),
-});
-
-const RecordingChapterOutputSchema = z.object({
-  chapterIndex: z.number().describe("Index of this chapter"),
-  timestamp: z.number().describe("Timestamp in milliseconds from session start"),
-});
-
-const RecordingStatusOutputSchema = z.object({
-  status: z.enum(["recording", "processing", "done", "error"]),
-  duration: z.number().describe("Elapsed time in seconds"),
-  eventCount: z.number(),
-  chapterCount: z.number(),
-  outputPath: z.string().optional().describe("Output path (present when status is 'done')"),
-});
-
-// ---------------------------------------------------------------------------
-// Error helper
-// ---------------------------------------------------------------------------
-
-function toolError(err: unknown): { content: [{ type: "text"; text: string }]; isError: true } {
-  const message = err instanceof Error ? err.message : String(err);
+function renderOptions(args: {
+  preset?: string;
+  pacing?: "preserve" | "compress" | "cut";
+  targetDurationSeconds?: number;
+  name?: string;
+  cursor?: RenderOptions["cursor"];
+  frame?: RenderOptions["frame"];
+  background?: string;
+  zoom?: boolean;
+  title?: string;
+}): RenderOptions {
   return {
-    content: [{ type: "text" as const, text: `Error: ${message}` }],
-    isError: true,
+    ...(args.preset ? { preset: args.preset } : {}),
+    ...(args.pacing ? { pacing: args.pacing } : {}),
+    ...(args.targetDurationSeconds ? { targetDurationMs: args.targetDurationSeconds * 1000 } : {}),
+    ...(args.name ? { name: args.name } : {}),
+    ...(args.cursor ? { cursor: args.cursor } : {}),
+    ...(args.frame ? { frame: args.frame } : {}),
+    ...(args.background ? { background: args.background } : {}),
+    ...(args.zoom !== undefined ? { zoom: args.zoom } : {}),
+    ...(args.title ? { title: args.title } : {}),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Server factory
-// ---------------------------------------------------------------------------
+function manifestSummary(dir: string, m: Manifest) {
+  return {
+    recordingId: m.id,
+    bundle: dir,
+    status: m.status,
+    source: m.source.label,
+    ...(m.capture.stopReason ? { stopReason: m.capture.stopReason } : {}),
+    ...(m.media
+      ? {
+          media: {
+            path: join(dir, m.media.path),
+            durationMs: m.media.durationMs,
+            width: m.media.width,
+            height: m.media.height,
+          },
+        }
+      : {}),
+    ...(m.capture.warnings.length ? { warnings: m.capture.warnings } : {}),
+    ...(m.capture.error ? { error: m.capture.error } : {}),
+  };
+}
+
+function renderSummary(r: RenderResult) {
+  return {
+    video: r.outputPath,
+    plan: r.planPath,
+    ...(r.posterPath ? { poster: r.posterPath } : {}),
+    durationSeconds: Math.round(r.durationMs) / 1000,
+    sourceDurationSeconds: Math.round(r.sourceDurationMs) / 1000,
+    chapters: r.chapters.map((c) => ({ title: c.title, time: c.startMs / 1000 })),
+    ...(r.targetMet !== undefined ? { targetMet: r.targetMet } : {}),
+    ...(r.warnings.length ? { warnings: r.warnings } : {}),
+  };
+}
+
+type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+type ToolResult = { content: ToolContent[]; isError?: boolean };
+type Shape = Record<string, z.ZodTypeAny>;
 
 /**
- * Create and configure the Screen Studio MCP server.
- *
- * Uses the modern `registerTool` API with full annotations, output schemas,
- * and structured content per MCP best practices.
+ * registerTool's generic signature (it accepts zod 3 and 4 schemas) makes the
+ * compiler instantiate enormous types per call — minutes of type checking and
+ * an out-of-memory declaration build. Register through an erased signature and
+ * keep handler arguments typed with plain zod inference instead.
  */
-export function createMcpServer(): { server: McpServer; sessionManager: SessionManager } {
-  const server = new McpServer({
-    name: "screen-studio-mcp-server",
-    version: "0.1.0",
-  });
+function register<S extends Shape>(
+  server: McpServer,
+  name: string,
+  config: {
+    title: string;
+    description: string;
+    inputSchema: S;
+    annotations?: Record<string, boolean>;
+  },
+  handler: (args: z.infer<z.ZodObject<S>>) => Promise<ToolResult>
+): void {
+  const registerTool = server.registerTool as unknown as (
+    name: string,
+    config: unknown,
+    callback: (args: unknown) => Promise<ToolResult>
+  ) => void;
+  registerTool.call(server, name, config, (args) => handler(args as z.infer<z.ZodObject<S>>));
+}
 
-  const sessionManager = new SessionManager();
+const ok = (value: unknown): ToolResult => ({
+  content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
+});
+const fail = (err: unknown): ToolResult => ({
+  content: [{ type: "text" as const, text: JSON.stringify({ error: toErrorInfo(err) }, null, 2) }],
+  isError: true,
+});
 
-  // -----------------------------------------------------------------------
-  // recording_start
-  // -----------------------------------------------------------------------
-  server.registerTool(
-    "recording_start",
+/** An MCP server whose process owns the recordings it starts. */
+export function createMcpServer(options: { recordingsDir?: string } = {}): {
+  server: McpServer;
+  shutdown: () => Promise<void>;
+} {
+  const server = new McpServer({ name: "screen-studio", version: "0.2.0" });
+  const recordingsDir = options.recordingsDir ?? join(tmpdir(), "screen-studio");
+
+  // The same recording tools Deus and other hosts expose; this server lets the
+  // agent name any source, and adds tools for re-rendering and inspecting.
+  const agent = createAgentTools(
     {
-      title: "Start Screen Recording",
-      description: `Start a new screen recording session with Screen Studio-style camera engine.
-
-The camera engine uses spring physics to produce smooth auto-zoom and panning
-based on agent actions (clicks, typing, scrolling). Optionally captures screen
-frames via ffmpeg for post-processing into a polished MP4.
-
-Args:
-  - outputPath (string, optional): Final MP4 path. Default: /tmp/recording-{timestamp}.mp4
-  - sourceWidth/sourceHeight (int, optional): Source resolution. Default: 1920x1080
-  - outputWidth/outputHeight (int, optional): Output resolution. Default: 1920x1080
-  - fps (int, optional): Frame rate 1-120. Default: 30
-  - deviceFrame ('browser-chrome' | 'macos-window' | 'none'): Device frame overlay
-  - background (object, optional): Background behind device frame
-  - captureMethod ('x11grab' | 'avfoundation' | 'screenshot' | 'none'): Capture mode
-  - display (string, optional): X11 display for x11grab. Default: ':99'
-
-Returns:
-  { "sessionId": "rec_a1b2c3", "status": "recording" }
-
-Examples:
-  - Events-only mode: { } (all defaults, no screen capture)
-  - Linux VM capture: { "captureMethod": "x11grab", "display": ":99" }
-  - macOS capture: { "captureMethod": "avfoundation" }
-  - Custom output: { "outputPath": "/tmp/demo.mp4", "deviceFrame": "browser-chrome" }
-
-Error Handling:
-  - "ffmpeg is not available" → Install ffmpeg or use captureMethod: 'none'
-  - Session creation errors include actionable suggestions`,
-      inputSchema: RecordingStartInputSchema,
-      outputSchema: RecordingStartOutputSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
+      async resolveSource({ target, source }) {
+        if (source) return source;
+        if (target === "simulator") return "ios-simulator:booted";
+        return process.env.SCREEN_STUDIO_BROWSER ?? "browser:http://127.0.0.1:9222";
       },
+      bundleDir: () => join(recordingsDir, newId("rec")),
     },
-    async (params) => {
-      try {
-        const sessionId = await sessionManager.create(params);
-        const output = { sessionId, status: "recording" as const };
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(output) }],
-          structuredContent: { ...output },
-        };
-      } catch (err) {
-        return toolError(err);
-      }
+    {
+      allowSourceIds: true,
+      actionTool: true,
+      defaultMaxSeconds: 600,
+      startDescription:
+        "Start recording a source into a new bundle; returns once video is flowing. `source` takes an ID from " +
+        "screen_studio_sources (agent-browser:<session>, browser:<devtools endpoint>, ios-simulator:booted, " +
+        "display:0); without it, target browser records the Chrome at 127.0.0.1:9222 and simulator the booted one. " +
+        "Browser actions are captured from the page itself; for other sources report them with recording_action. " +
+        "Mark sections with recording_chapter; stop with recording_stop.",
     }
   );
-
-  // -----------------------------------------------------------------------
-  // recording_stop
-  // -----------------------------------------------------------------------
-  server.registerTool(
-    "recording_stop",
-    {
-      title: "Stop Screen Recording",
-      description: `Stop a recording session and produce the final MP4.
-
-Pipeline:
-1. Stops ffmpeg screen capture (if running)
-2. Computes camera timeline from recorded events (spring physics zoom/pan)
-3. Generates ffmpeg zoompan filter from the timeline
-4. Runs post-processing: raw video + filter → composited MP4
-5. Cleans up temp files and returns the output path
-
-Args:
-  - sessionId (string, required): Session ID from recording_start
-  - addWatermark (boolean, optional): Add text watermark to bottom-right
-  - watermarkText (string, optional): Watermark text (required if addWatermark is true)
-
-Returns:
-  {
-    "outputPath": "/tmp/recording-rec_a1b2c3.mp4",
-    "thumbnailPath": "/tmp/recording-rec_a1b2c3-thumb.jpg",
-    "duration": 12.5,
-    "chapters": [{ "title": "Login flow", "time": 2.3 }],
-    "events": [{ "type": "click", "time": 1.5 }, { "type": "type", "time": 3.0, "text": "hello" }]
+  for (const tool of agent.tools) {
+    register(
+      server,
+      tool.name,
+      {
+        title: tool.name.replace(/_/g, " "),
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: { openWorldHint: false, ...tool.annotations },
+      },
+      tool.handler
+    );
   }
 
-Error Handling:
-  - "Session not found" → Check the sessionId from recording_start
-  - "Session is not recording" → Session was already stopped or errored
-  - "ffmpeg post-processing exited" → Check ffmpeg stderr in the error message`,
-      inputSchema: RecordingStopInputSchema,
-      outputSchema: RecordingStopOutputSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
+  register(
+    server,
+    "screen_studio_sources",
+    {
+      title: "List recordable sources",
+      description:
+        "List browser tabs, booted iOS simulators and displays that can be recorded, with the source IDs recording_start accepts. Pass `cdp` to look at a specific DevTools endpoint.",
+      inputSchema: { cdp: z.array(z.string()).optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async (params) => {
+    async (args) => {
       try {
-        if (params.addWatermark && (!params.watermarkText || params.watermarkText.length === 0)) {
-          return toolError(new Error("watermarkText is required when addWatermark is true"));
-        }
-        const result = await sessionManager.stop(params.sessionId, {
-          addWatermark: params.addWatermark,
-          watermarkText: params.watermarkText,
-        });
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
-          structuredContent: { ...result },
-        };
+        return ok(await listSources({ cdp: args.cdp }));
       } catch (err) {
-        return toolError(err);
+        return fail(err);
       }
     }
   );
 
-  // -----------------------------------------------------------------------
-  // recording_event
-  // -----------------------------------------------------------------------
-  server.registerTool(
-    "recording_event",
+  register(
+    server,
+    "recording_render",
     {
-      title: "Log Recording Event",
-      description: `Log a browser action event that drives the camera's auto-zoom and panning.
-
-Each event tells the camera engine where to look. The engine uses spring physics
-to smoothly animate between targets. Events are timestamped automatically.
-
-Event types and their camera behavior:
-  - 'click': Camera zooms to 1.8x on the clicked element
-  - 'type': Camera zooms to 2.0x on the text input field
-  - 'scroll': Camera zooms out to 1.3x for context
-  - 'navigate': Camera resets to 1.0x (full viewport)
-  - 'screenshot': Camera holds position at 1.0x
-  - 'idle': Camera gently zooms out to 1.0x
-
-Args:
-  - sessionId (string, required): Session ID from recording_start
-  - type (string, required): One of 'click', 'type', 'scroll', 'navigate', 'screenshot', 'idle'
-  - x (number, required): X coordinate of the action in source pixels
-  - y (number, required): Y coordinate of the action in source pixels
-  - elementRect (object, optional): Bounding box of the target element { x, y, width, height }
-  - text (string, optional): Text content for 'type' events
-  - url (string, optional): URL for 'navigate' events
-  - direction (string, optional): 'up' | 'down' | 'left' | 'right' for scroll events
-
-Returns:
-  { "recorded": true, "eventIndex": 5 }
-
-Examples:
-  - Click: { "sessionId": "rec_abc", "type": "click", "x": 500, "y": 300 }
-  - Type: { "sessionId": "rec_abc", "type": "type", "x": 500, "y": 320, "text": "hello" }
-  - Scroll: { "sessionId": "rec_abc", "type": "scroll", "x": 960, "y": 540, "direction": "down" }
-
-Error Handling:
-  - "Session not found" → Check the sessionId from recording_start
-  - "Session is not recording" → Session was already stopped`,
-      inputSchema: RecordingEventInputSchema,
-      outputSchema: RecordingEventOutputSchema,
+      title: "Render a recording",
+      description:
+        "Render a finalized bundle again with different pacing or styling. Set plan to true to get the edit (kept/sped/cut segments, chapters, camera shots and their reasons) without rendering.",
+      inputSchema: { bundle: z.string().min(1), plan: z.boolean().optional(), ...RenderFields },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      try {
-        const eventIndex = sessionManager.event(params.sessionId, params.type, params.x, params.y, {
-          elementRect: params.elementRect,
-          text: params.text,
-          url: params.url,
-          direction: params.direction,
-        });
-        const output = { recorded: true as const, eventIndex };
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(output) }],
-          structuredContent: { ...output },
-        };
-      } catch (err) {
-        return toolError(err);
-      }
-    }
-  );
-
-  // -----------------------------------------------------------------------
-  // recording_chapter
-  // -----------------------------------------------------------------------
-  server.registerTool(
-    "recording_chapter",
-    {
-      title: "Add Recording Chapter",
-      description: `Add a chapter marker at the current point in the recording.
-
-Chapters act as navigation bookmarks in the final video. They are timestamped
-relative to the session start and associated with the current event index.
-
-Args:
-  - sessionId (string, required): Session ID from recording_start
-  - title (string, required): Chapter title (1-200 chars)
-
-Returns:
-  { "chapterIndex": 2, "timestamp": 15000 }
-
-Examples:
-  - { "sessionId": "rec_abc", "title": "Navigate to login page" }
-  - { "sessionId": "rec_abc", "title": "Fill in credentials" }
-
-Error Handling:
-  - "Session not found" → Check the sessionId from recording_start
-  - "Session is not recording" → Session was already stopped`,
-      inputSchema: RecordingChapterInputSchema,
-      outputSchema: RecordingChapterOutputSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    async (params) => {
-      try {
-        const result = sessionManager.chapter(params.sessionId, params.title);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
-          structuredContent: { ...result },
-        };
-      } catch (err) {
-        return toolError(err);
-      }
-    }
-  );
-
-  // -----------------------------------------------------------------------
-  // recording_status
-  // -----------------------------------------------------------------------
-  server.registerTool(
-    "recording_status",
-    {
-      title: "Get Recording Status",
-      description: `Get the current status and metadata of a recording session.
-
-Use this to check whether a session is still recording, processing the final
-video, done, or errored. Also returns event and chapter counts.
-
-Args:
-  - sessionId (string, required): Session ID from recording_start
-
-Returns:
-  {
-    "status": "recording",
-    "duration": 12.5,
-    "eventCount": 15,
-    "chapterCount": 3,
-    "outputPath": "/tmp/recording.mp4"  // only present when status is 'done'
-  }
-
-Error Handling:
-  - "Session not found" → Check the sessionId from recording_start`,
-      inputSchema: RecordingStatusInputSchema,
-      outputSchema: RecordingStatusOutputSchema,
-      annotations: {
-        readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
       },
     },
-    async (params) => {
+    async (args) => {
       try {
-        const result = sessionManager.status(params.sessionId);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result) }],
-          structuredContent: { ...result },
-        };
+        const result = await renderBundle(resolve(args.bundle), {
+          ...renderOptions(args),
+          planOnly: args.plan === true,
+        });
+        return ok(
+          args.plan
+            ? {
+                plan: result.planPath,
+                pacing: result.plan.pacing,
+                chapters: result.chapters,
+                camera: result.plan.camera,
+                warnings: result.warnings,
+              }
+            : renderSummary(result)
+        );
       } catch (err) {
-        return toolError(err);
+        return fail(err);
       }
     }
   );
 
-  return { server, sessionManager };
+  register(
+    server,
+    "recording_inspect",
+    {
+      title: "Inspect a recording",
+      description:
+        "Facts, events and renders of a bundle. With contactSheet, also returns a grid of evenly spaced frames so you can check what was captured (or a render, with render).",
+      inputSchema: {
+        bundle: z.string().min(1),
+        contactSheet: z.boolean().optional(),
+        render: z.string().optional(),
+      },
+      annotations: { readOnlyHint: false, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const result = await inspectBundle(resolve(args.bundle), {
+          contactSheet: args.contactSheet,
+          render: args.render,
+        });
+        const content: ToolContent[] = [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                ...manifestSummary(result.dir, result.manifest),
+                events: result.events,
+                chapters: result.chapters,
+                renders: result.renders,
+                contactSheet: result.contactSheet,
+              },
+              null,
+              2
+            ),
+          },
+        ];
+        if (result.contactSheet) {
+          content.push({
+            type: "image",
+            data: (await readFile(result.contactSheet)).toString("base64"),
+            mimeType: "image/png",
+          });
+        }
+        return { content };
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  return { server, shutdown: () => agent.dispose() };
 }

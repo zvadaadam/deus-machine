@@ -3,18 +3,17 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
-    "compositor/index": "src/compositor/index.ts",
     "cli/index": "src/cli/index.ts",
-    "mcp/index": "src/mcp/index.ts",
+    "mcp/server": "src/mcp/server.ts",
+    "mcp/bin": "src/mcp/bin.ts",
   },
-  format: ["esm", "cjs"],
-  dts: true,
+  format: ["esm"],
+  dts: { entry: { index: "src/index.ts", "mcp/server": "src/mcp/server.ts" } },
   sourcemap: true,
   clean: true,
-  treeshake: true,
   splitting: true,
-  target: "es2022",
-  // Bundle @modelcontextprotocol/sdk and zod into the output
-  // so the MCP server is self-contained (no node_modules needed)
-  noExternal: [/@modelcontextprotocol/, /zod/],
+  target: "node22",
+  // Runtime dependencies stay external: bundling the MCP SDK's types into the
+  // declarations is what exhausted memory in the earlier build.
+  external: ["@napi-rs/canvas"],
 });

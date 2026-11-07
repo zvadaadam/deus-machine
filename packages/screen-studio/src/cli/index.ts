@@ -1,488 +1,655 @@
 #!/usr/bin/env node
-
 /**
- * screen-studio CLI — agent-friendly screen recording tool.
+ * screen-studio — capture what an agent does, then render it.
  *
- * Designed for AI agents: non-interactive, all flags, structured output,
- * actionable errors, idempotent commands.
- *
- * Usage:
- *   screen-studio start [--output path.mp4]
- *   screen-studio event <sessionId> --type click --x 500 --y 300
- *   screen-studio chapter <sessionId> --title "Login flow"
- *   screen-studio status <sessionId>
- *   screen-studio stop <sessionId> [--watermark "text"]
- *   screen-studio list
+ * Built for agents: non-interactive, flags only, one JSON result per command
+ * on stdout (errors too, with a code and a hint), diagnostics on stderr.
+ * `start` hands the live recorder to a detached worker, so start, chapter
+ * and stop can be separate processes.
  */
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { cuaTrajectory } from "../adapters/cua.js";
+import { appendEvents, makeEvent, readManifest } from "../bundle/bundle.js";
+import { ACTION_TYPES, type EventInput, type Manifest, type Rect } from "../bundle/schema.js";
+import { listSources, parseSourceId, type SourceSpec } from "../capture/sources.js";
+import { runWorker, startDetached, stopDetached } from "../daemon.js";
+import { PRESETS } from "../direct/presets.js";
+import { doctor } from "../doctor.js";
+import { ScreenStudioError, toErrorInfo } from "../errors.js";
+import { importVideo } from "../import.js";
+import { ownerIsGone, startRecording } from "../recorder.js";
+import { inspectBundle } from "../render/inspect.js";
+import { renderBundle, type RenderOptions } from "../render/render.js";
+import { parseBytes, parseDuration, parseSize } from "../util/units.js";
 
-import { SessionManager } from "../mcp/session-manager.js";
-
-// ---------------------------------------------------------------------------
-// Globals
-// ---------------------------------------------------------------------------
-
-// Each CLI command is stateless. State is persisted to a JSON file so that
-// `stop` can reconstruct the session created by `start`. The CLI runs in
-// events-only mode — capture is handled by the MCP server.
-
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-const STATE_DIR = join(tmpdir(), "screen-studio");
-const STATE_FILE = join(STATE_DIR, "sessions.json");
-
-interface PersistedSessionConfig {
-  sourceSize: { width: number; height: number };
-  outputSize: { width: number; height: number };
-  fps: number;
-  deviceFrame: string;
-}
-
-interface PersistedState {
-  sessions: Record<
-    string,
-    {
-      config: Record<string, unknown>;
-      /** Resolved config needed for post-processing in cmdStop. */
-      resolvedConfig: PersistedSessionConfig;
-      events: Array<{ type: string; x: number; y: number; t: number; meta?: Record<string, unknown> }>;
-      chapters: Array<{ title: string; timestamp: number; eventIndex: number }>;
-      startTime: number;
-      endTime?: number;
-      status: string;
-      outputPath?: string;
-    }
-  >;
-}
-
-function loadState(): PersistedState {
-  try {
-    if (existsSync(STATE_FILE)) {
-      return JSON.parse(readFileSync(STATE_FILE, "utf-8"));
-    }
-  } catch {
-    // Corrupted state, start fresh
-  }
-  return { sessions: {} };
-}
-
-/**
- * Save state atomically via writeFileSync. For small JSON payloads (<64KB)
- * writeFileSync is effectively atomic on POSIX systems and Windows.
- * A race condition between concurrent CLI invocations is theoretically
- * possible but acceptable for v1 — agents rarely issue parallel commands
- * to the same session. A proper file lock can be added if needed.
- */
-function saveState(state: PersistedState): void {
-  if (!existsSync(STATE_DIR)) {
-    mkdirSync(STATE_DIR, { recursive: true });
-  }
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-}
+const VERSION = "0.2.0";
+const CLI_ENTRY = fileURLToPath(import.meta.url);
+/** dist/cli/index.js and src/cli/index.ts both sit two levels below the package. */
+const SKILL_PATH = fileURLToPath(new URL("../../skills/screen-studio/SKILL.md", import.meta.url));
 
 // ---------------------------------------------------------------------------
-// Arg parsing — minimal, no dependencies
+// Arguments
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { command: string; positional: string[]; flags: Record<string, string | boolean> } {
-  const args = argv.slice(2);
-  const command = args[0] ?? "help";
+interface Args {
+  command: string;
+  positional: string[];
+  flags: Map<string, string[]>;
+  passthrough: string[];
+}
+
+const BOOLEAN_FLAGS = new Set([
+  "help",
+  "version",
+  "stdin",
+  "contact-sheet",
+  "zoom",
+  "no-zoom",
+  "no-motion",
+  "plain",
+  "plan",
+  "system-cursor",
+]);
+
+/** Flags that may stand alone or take a value: `stop --render` or `--render demo`. */
+const OPTIONAL_VALUE_FLAGS = new Set(["render"]);
+
+function parseArgs(argv: string[]): Args {
+  const [command = "help", ...rest] = argv;
+  const flags = new Map<string, string[]>();
   const positional: string[] = [];
-  const flags: Record<string, string | boolean> = {};
-
-  for (let i = 1; i < args.length; i++) {
-    const arg = args[i];
+  let passthrough: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === "--") {
+      passthrough = rest.slice(i + 1);
+      break;
+    }
     if (arg.startsWith("--")) {
-      const raw = arg.slice(2);
-      // Support --flag=value syntax (e.g. --fps=60)
-      const eqIdx = raw.indexOf("=");
-      if (eqIdx !== -1) {
-        const key = raw.slice(0, eqIdx);
-        const value = raw.slice(eqIdx + 1);
-        flags[key] = value;
-      } else {
-        const key = raw;
-        const next = args[i + 1];
-        if (next && !next.startsWith("--")) {
-          flags[key] = next;
-          i++;
-        } else {
-          flags[key] = true;
-        }
-      }
+      const eq = arg.indexOf("=");
+      const key = eq < 0 ? arg.slice(2) : arg.slice(2, eq);
+      let value: string;
+      if (eq >= 0) value = arg.slice(eq + 1);
+      else if (BOOLEAN_FLAGS.has(key)) value = "true";
+      else if (
+        OPTIONAL_VALUE_FLAGS.has(key) &&
+        (i + 1 >= rest.length || rest[i + 1].startsWith("--"))
+      )
+        value = "true";
+      else if (i + 1 < rest.length) value = rest[++i];
+      else throw new ScreenStudioError("invalid_argument", `--${key} needs a value`);
+      flags.set(key, [...(flags.get(key) ?? []), value]);
     } else {
       positional.push(arg);
     }
   }
-
-  return { command, positional, flags };
+  return { command, positional, flags, passthrough };
 }
 
-function requireFlag(flags: Record<string, string | boolean>, name: string, command: string): string {
-  const val = flags[name];
-  if (val === undefined || val === true) {
-    error(`Missing required flag --${name}`, `screen-studio ${command} --${name} <value>`);
+const flag = (args: Args, name: string): string | undefined => args.flags.get(name)?.at(-1);
+const has = (args: Args, name: string): boolean => args.flags.has(name);
+
+function requireDir(args: Args, usage: string): string {
+  const dir = args.positional[0];
+  if (!dir)
+    throw new ScreenStudioError("invalid_argument", "Missing recording directory", { hint: usage });
+  return resolve(dir);
+}
+
+function parseRect(value: string): Rect {
+  const parts = value.split(",").map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+    throw new ScreenStudioError("invalid_argument", `Invalid rect "${value}"`, {
+      hint: "Use x,y,width,height",
+    });
   }
-  return val as string;
+  return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+}
+
+function parseTime(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (value === "now") return Date.now();
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1e11) {
+    throw new ScreenStudioError("invalid_argument", `Invalid time "${value}"`, {
+      hint: "Use epoch milliseconds (Date.now()) or 'now'",
+    });
+  }
+  return n;
+}
+
+function numberFlag(args: Args, name: string): number | undefined {
+  const value = flag(args, name);
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n))
+    throw new ScreenStudioError("invalid_argument", `--${name} must be a number`);
+  return n;
+}
+
+function sourceSpec(args: Args): SourceSpec {
+  const id = flag(args, "source");
+  if (!id) {
+    throw new ScreenStudioError("invalid_argument", "Missing --source", {
+      hint: "Run `screen-studio sources` to list what can be recorded.",
+    });
+  }
+  const spec = parseSourceId(id);
+  const urlContains = flag(args, "url-contains");
+  if (spec.kind === "browser" && urlContains) spec.urlContains = urlContains;
+  if (
+    spec.kind === "ios-simulator" &&
+    (flag(args, "simulator-set") ?? process.env.SCREEN_STUDIO_SIMULATOR_SET)
+  ) {
+    spec.deviceSet = flag(args, "simulator-set") ?? process.env.SCREEN_STUDIO_SIMULATOR_SET;
+  }
+  if (spec.kind === "display" && has(args, "system-cursor")) spec.systemCursor = true;
+  return spec;
 }
 
 // ---------------------------------------------------------------------------
-// Output helpers
+// Output
 // ---------------------------------------------------------------------------
 
-function output(data: Record<string, unknown>): void {
-  console.log(JSON.stringify(data));
+function print(value: unknown): void {
+  process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-function error(message: string, hint?: string): never {
-  const err: Record<string, string> = { error: message };
-  if (hint) err.hint = hint;
-  console.error(JSON.stringify(err));
-  process.exit(1);
+function summary(dir: string, m: Manifest, extra: Record<string, unknown> = {}) {
+  const live = m.status === "recording" || m.status === "starting" || m.status === "finalizing";
+  return {
+    ok: m.status !== "failed",
+    bundle: dir,
+    id: m.id,
+    status: m.status,
+    source: { id: m.source.id, kind: m.source.kind, label: m.source.label },
+    ...(m.capture.startedAt ? { startedAt: new Date(m.capture.startedAt).toISOString() } : {}),
+    ...(live && m.capture.startedAt ? { elapsedMs: Date.now() - m.capture.startedAt } : {}),
+    ...(live && m.capture.startedAt
+      ? {
+          stopsAutomaticallyAt: new Date(
+            m.capture.startedAt + m.capture.maxDurationMs
+          ).toISOString(),
+        }
+      : {}),
+    ...(m.capture.stopReason ? { stopReason: m.capture.stopReason } : {}),
+    ...(live && ownerIsGone(m) ? { ownerAlive: false } : {}),
+    ...(m.media
+      ? {
+          media: {
+            path: join(dir, m.media.path),
+            durationMs: m.media.durationMs,
+            width: m.media.width,
+            height: m.media.height,
+            frames: m.media.frames,
+            bytes: m.media.bytes,
+          },
+        }
+      : {}),
+    ...(m.capture.warnings.length ? { warnings: m.capture.warnings } : {}),
+    ...(m.capture.error ? { error: m.capture.error } : {}),
+    ...extra,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
-async function cmdStart(flags: Record<string, string | boolean>): Promise<void> {
-  const state = loadState();
-
-  // Parse flags once with defaults
-  const sourceWidth = typeof flags["source-width"] === "string" ? parseInt(flags["source-width"]) : 1920;
-  const sourceHeight = typeof flags["source-height"] === "string" ? parseInt(flags["source-height"]) : 1080;
-  const outputWidth = typeof flags["output-width"] === "string" ? parseInt(flags["output-width"]) : 1920;
-  const outputHeight = typeof flags["output-height"] === "string" ? parseInt(flags["output-height"]) : 1080;
-  const fps = typeof flags.fps === "string" ? parseInt(flags.fps) : 30;
-  const deviceFrame = typeof flags["device-frame"] === "string" ? flags["device-frame"] as "browser-chrome" | "macos-window" | "none" : undefined;
-
-  const sessionManager = new SessionManager();
-  const sessionId = await sessionManager.create({
-    outputPath: typeof flags.output === "string" ? flags.output : undefined,
-    sourceWidth,
-    sourceHeight,
-    outputWidth,
-    outputHeight,
-    fps,
-    deviceFrame,
-    captureMethod: "none",
-    display: typeof flags.display === "string" ? flags.display : undefined,
+async function cmdStart(args: Args): Promise<void> {
+  const out = flag(args, "out");
+  if (!out) throw new ScreenStudioError("invalid_argument", "Missing --out <directory>");
+  const dir = resolve(out);
+  const manifest = await startDetached({
+    source: sourceSpec(args),
+    out: dir,
+    fps: numberFlag(args, "fps"),
+    maxDurationMs: flag(args, "max-duration")
+      ? parseDuration(flag(args, "max-duration")!)
+      : undefined,
+    maxBytes: flag(args, "max-size") ? parseBytes(flag(args, "max-size")!) : undefined,
+    workerEntry: CLI_ENTRY,
+    runtime: process.execPath,
   });
-
-  // Persist the session with resolved config for post-processing in cmdStop
-  state.sessions[sessionId] = {
-    config: flags as Record<string, unknown>,
-    resolvedConfig: {
-      sourceSize: { width: sourceWidth, height: sourceHeight },
-      outputSize: { width: outputWidth, height: outputHeight },
-      fps,
-      deviceFrame: deviceFrame ?? "none",
-    },
-    events: [],
-    chapters: [],
-    startTime: Date.now(),
-    status: "recording",
-    outputPath: typeof flags.output === "string" ? flags.output : join(tmpdir(), `recording-${sessionId}.mp4`),
-  };
-  saveState(state);
-
-  output({
-    session_id: sessionId,
-    status: "recording",
-    output_path: state.sessions[sessionId].outputPath,
-  });
+  print(
+    summary(dir, manifest, {
+      next: [
+        `screen-studio chapter ${dir} "Step title"`,
+        `screen-studio action ${dir} --type click --rect x,y,w,h`,
+        `screen-studio stop ${dir}`,
+      ],
+    })
+  );
 }
 
-function cmdEvent(positional: string[], flags: Record<string, string | boolean>): void {
-  const sessionId = positional[0];
-  if (!sessionId) {
-    error("Missing session ID", "screen-studio event <session_id> --type click --x 500 --y 300");
-  }
-
-  const state = loadState();
-  const session = state.sessions[sessionId];
-  if (!session) {
-    error(
-      `Session not found: ${sessionId}`,
-      `Active sessions: ${Object.keys(state.sessions).join(", ") || "none"}. Use 'screen-studio list' to see all.`,
-    );
-  }
-  if (session.status !== "recording") {
-    error(`Session ${sessionId} is not recording (status: ${session.status})`);
-  }
-
-  const type = requireFlag(flags, "type", `event ${sessionId}`);
-  const x = parseFloat(requireFlag(flags, "x", `event ${sessionId}`));
-  const y = parseFloat(requireFlag(flags, "y", `event ${sessionId}`));
-  const t = Date.now() - session.startTime;
-
-  const validTypes = ["click", "type", "scroll", "navigate", "screenshot", "idle", "drag"];
-  if (!validTypes.includes(type)) {
-    error(
-      `Invalid event type: '${type}'`,
-      `Valid types: ${validTypes.join(", ")}`,
-    );
-  }
-
-  const meta: Record<string, unknown> = {};
-  if (flags.text) meta.text = flags.text;
-  if (flags.url) meta.url = flags.url;
-  if (flags.direction) meta.direction = flags.direction;
-  if (flags["element-rect"]) {
-    try {
-      meta.elementRect = JSON.parse(flags["element-rect"] as string);
-    } catch {
-      error("Invalid --element-rect JSON", 'Use: --element-rect \'{"x":100,"y":200,"width":50,"height":30}\'');
+async function cmdRecord(args: Args): Promise<void> {
+  const out = flag(args, "out");
+  if (!out) throw new ScreenStudioError("invalid_argument", "Missing --out <directory>");
+  const dir = resolve(out);
+  const maxDurationMs = parseDuration(
+    flag(args, "max-duration") ?? (args.passthrough.length ? "10m" : "30s")
+  );
+  const recording = await startRecording({
+    source: sourceSpec(args),
+    out: dir,
+    fps: numberFlag(args, "fps"),
+    maxDurationMs,
+    maxBytes: flag(args, "max-size") ? parseBytes(flag(args, "max-size")!) : undefined,
+    reporter: "cli",
+    log: (message) => process.stderr.write(`[screen-studio] ${message}\n`),
+  });
+  print({ type: "recording", ...summary(dir, recording.manifest) });
+  const onSignal = () => void recording.stop("signal");
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  let exitCode: number | null = null;
+  if (args.passthrough.length) {
+    const [command, ...rest] = args.passthrough;
+    const child = spawn(command, rest, {
+      stdio: ["inherit", process.stderr, process.stderr],
+      env: { ...process.env, SCREEN_STUDIO_BUNDLE: dir },
+    });
+    const exited = new Promise<number>((r) => {
+      child.once("close", (code) => r(code ?? 1));
+      child.once("error", () => r(127));
+    });
+    const first = await Promise.race([
+      exited.then((code) => ({ code })),
+      recording.finished.then(() => null),
+    ]);
+    if (first) {
+      exitCode = first.code;
+      await recording.stop("requested");
+    } else {
+      child.kill("SIGTERM");
+      exitCode = await exited;
     }
   }
-
-  session.events.push({ type, x, y, t, meta: Object.keys(meta).length > 0 ? meta : undefined });
-  saveState(state);
-
-  output({
-    recorded: true,
-    event_index: session.events.length - 1,
-    timestamp_ms: t,
+  const final = await recording.finished;
+  print({
+    type: "stopped",
+    ...summary(dir, final),
+    ...(exitCode !== null ? { commandExitCode: exitCode } : {}),
   });
+  if (final.status !== "complete") process.exitCode = 1;
 }
 
-function cmdChapter(positional: string[], flags: Record<string, string | boolean>): void {
-  const sessionId = positional[0];
-  if (!sessionId) {
-    error("Missing session ID", "screen-studio chapter <session_id> --title 'Chapter name'");
-  }
-
-  const state = loadState();
-  const session = state.sessions[sessionId];
-  if (!session) {
-    error(`Session not found: ${sessionId}`, "Use 'screen-studio list' to see active sessions.");
-  }
-  if (session.status !== "recording") {
-    error(`Session ${sessionId} is not recording (status: ${session.status})`);
-  }
-
-  const title = requireFlag(flags, "title", `chapter ${sessionId}`);
-  const timestamp = Date.now() - session.startTime;
-
-  session.chapters.push({
-    title,
-    timestamp,
-    eventIndex: session.events.length,
-  });
-  saveState(state);
-
-  output({
-    chapter_index: session.chapters.length - 1,
-    timestamp_ms: timestamp,
-    title,
-  });
+async function cmdStatus(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio status <dir>");
+  print(summary(dir, await readManifest(dir)));
 }
 
-function cmdStatus(positional: string[]): void {
-  const sessionId = positional[0];
-  if (!sessionId) {
-    error("Missing session ID", "screen-studio status <session_id>");
-  }
-
-  const state = loadState();
-  const session = state.sessions[sessionId];
-  if (!session) {
-    error(`Session not found: ${sessionId}`, "Use 'screen-studio list' to see active sessions.");
-  }
-
-  const endTime = session.endTime ?? Date.now();
-  output({
-    session_id: sessionId,
-    status: session.status,
-    duration_s: (endTime - session.startTime) / 1000,
-    event_count: session.events.length,
-    chapter_count: session.chapters.length,
-    output_path: session.outputPath,
-  });
-}
-
-async function cmdStop(positional: string[], flags: Record<string, string | boolean>): Promise<void> {
-  const sessionId = positional[0];
-  if (!sessionId) {
-    error("Missing session ID", "screen-studio stop <session_id>");
-  }
-
-  const state = loadState();
-  const session = state.sessions[sessionId];
-  if (!session) {
-    error(`Session not found: ${sessionId}`, "Use 'screen-studio list' to see active sessions.");
-  }
-  if (session.status !== "recording") {
-    error(`Session ${sessionId} is not recording (status: ${session.status})`);
-  }
-
-  // Create a temporary manager and replay events through the engine
-  const manager = new SessionManager();
-  const cfg = session.resolvedConfig;
-  const tempId = await manager.create({
-    sourceWidth: cfg.sourceSize.width,
-    sourceHeight: cfg.sourceSize.height,
-    outputWidth: cfg.outputSize.width,
-    outputHeight: cfg.outputSize.height,
-    fps: cfg.fps,
-    deviceFrame: cfg.deviceFrame as "browser-chrome" | "macos-window" | "none",
-    outputPath: session.outputPath,
-    captureMethod: "none",
-  });
-
-  // Replay all stored events
-  for (const evt of session.events) {
-    manager.event(tempId, evt.type as import("../types.js").AgentEventType, evt.x, evt.y, {
-      text: evt.meta?.text as string | undefined,
-      url: evt.meta?.url as string | undefined,
-      direction: evt.meta?.direction as string | undefined,
-      elementRect: evt.meta?.elementRect as { x: number; y: number; width: number; height: number } | undefined,
+async function addEvent(dir: string, input: EventInput): Promise<void> {
+  const manifest = await readManifest(dir);
+  if (manifest.status !== "recording" && input.at === undefined) {
+    throw new ScreenStudioError("not_recording", `Recording is ${manifest.status}`, {
+      hint: "Events without --at are stamped now; pass --at <epoch ms> to annotate a finished recording.",
     });
   }
+  const event = makeEvent(input, "cli");
+  await appendEvents(dir, [event]);
+  const origin = manifest.clock?.mediaStartEpochMs;
+  print({ ok: true, event, ...(origin !== undefined ? { mediaMs: event.at - origin } : {}) });
+}
 
-  // Replay chapters
-  for (const ch of session.chapters) {
-    manager.chapter(tempId, ch.title);
+async function cmdAction(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio action <dir> --type click --rect x,y,w,h");
+  if (has(args, "stdin")) {
+    // Adapters stream events as JSON Lines; each line is validated on its own.
+    const manifest = await readManifest(dir);
+    if (manifest.status !== "recording")
+      throw new ScreenStudioError("not_recording", `Recording is ${manifest.status}`);
+    let accepted = 0;
+    const rejected: Array<{ line: number; error: string }> = [];
+    let line = 0;
+    for await (const text of createInterface({ input: process.stdin })) {
+      line++;
+      if (!text.trim()) continue;
+      try {
+        await appendEvents(dir, [makeEvent(JSON.parse(text) as EventInput, "cli")]);
+        accepted++;
+      } catch (err) {
+        rejected.push({ line, error: (err as Error).message });
+      }
+    }
+    print({ ok: rejected.length === 0, accepted, rejected });
+    return;
   }
-
-  // Stop generates timeline + runs ffmpeg post-processing
-  const result = await manager.stop(tempId, {
-    addWatermark: typeof flags.watermark === "string",
-    watermarkText: typeof flags.watermark === "string" ? flags.watermark : undefined,
-  });
-
-  const endTime = Date.now();
-  session.status = "done";
-  session.endTime = endTime;
-  saveState(state);
-
-  output({
-    session_id: sessionId,
-    status: "done",
-    output_path: result.outputPath,
-    duration_s: result.duration,
-    event_count: session.events.length,
-    chapter_count: session.chapters.length,
-  });
-}
-
-function cmdList(): void {
-  const state = loadState();
-  const sessions = Object.entries(state.sessions).map(([id, s]) => {
-    const endTime = s.endTime ?? Date.now();
-    return {
-      session_id: id,
-      status: s.status,
-      duration_s: Math.round((endTime - s.startTime) / 1000),
-      event_count: s.events.length,
-      chapter_count: s.chapters.length,
-    };
-  });
-
-  output({
-    count: sessions.length,
-    sessions,
+  const json = flag(args, "json");
+  if (json) {
+    await addEvent(dir, { kind: "action", ...(JSON.parse(json) as object) } as EventInput);
+    return;
+  }
+  const type = flag(args, "type");
+  if (!type || !(ACTION_TYPES as readonly string[]).includes(type)) {
+    throw new ScreenStudioError(
+      "invalid_argument",
+      `--type must be one of: ${ACTION_TYPES.join(", ")}`
+    );
+  }
+  const at = parseTime(flag(args, "at"));
+  const duration = flag(args, "duration") ? parseDuration(flag(args, "duration")!) : undefined;
+  const endAt =
+    parseTime(flag(args, "end-at")) ??
+    (duration !== undefined ? (at ?? Date.now()) + duration : undefined);
+  const x = numberFlag(args, "x");
+  const y = numberFlag(args, "y");
+  await addEvent(dir, {
+    kind: "action",
+    type: type as (typeof ACTION_TYPES)[number],
+    ...(at !== undefined ? { at } : {}),
+    ...(endAt !== undefined ? { endAt } : {}),
+    ...(x !== undefined && y !== undefined ? { point: { x, y } } : {}),
+    ...(flag(args, "rect") ? { rect: parseRect(flag(args, "rect")!) } : {}),
+    ...(flag(args, "space") ? { space: parseSize(flag(args, "space")!, "space") } : {}),
+    ...(flag(args, "label") ? { label: flag(args, "label") } : {}),
+    ...(flag(args, "url") ? { url: flag(args, "url") } : {}),
+    ...(flag(args, "text") ? { text: flag(args, "text") } : {}),
   });
 }
 
-function cmdHelp(): void {
-  console.log(`screen-studio — Screen Studio-style recording for AI agents
-
-Commands:
-  start     Start a new recording session
-  event     Log a browser action (click, type, scroll, navigate, drag)
-  chapter   Add a chapter marker
-  status    Get session status
-  stop      Stop recording and produce MP4
-  list      List all sessions
-  version   Show version
-
-Examples:
-  screen-studio start
-  screen-studio start --output demo.mp4
-  screen-studio start --device-frame browser-chrome --fps 60
-
-  screen-studio event rec_abc123 --type click --x 500 --y 300
-  screen-studio event rec_abc123 --type type --x 500 --y 320 --text "hello"
-  screen-studio event rec_abc123 --type scroll --x 960 --y 540 --direction down
-  screen-studio event rec_abc123 --type navigate --x 960 --y 540 --url https://example.com
-
-  screen-studio chapter rec_abc123 --title "Login flow"
-
-  screen-studio status rec_abc123
-  screen-studio stop rec_abc123
-  screen-studio stop rec_abc123 --watermark "Built with Deus"
-
-  screen-studio list
-
-Flags (start):
-  --output <path>         Output MP4 path (default: /tmp/recording-{id}.mp4)
-  --display <display>     X11 display for x11grab (default: :99)
-  --fps <n>               Frame rate 1-120 (default: 30)
-  --source-width <n>      Source width (default: 1920)
-  --source-height <n>     Source height (default: 1080)
-  --output-width <n>      Output width (default: 1920)
-  --output-height <n>     Output height (default: 1080)
-  --device-frame <type>   browser-chrome | macos-window | none (default: none)
-
-Flags (event):
-  --type <type>           click | type | scroll | navigate | screenshot | idle | drag (required)
-  --x <n>                 X coordinate in source pixels (required)
-  --y <n>                 Y coordinate in source pixels (required)
-  --text <text>           Text for type events
-  --url <url>             URL for navigate events
-  --direction <dir>       up | down | left | right for scroll events
-  --element-rect <json>   Element bounding box as JSON
-
-Flags (stop):
-  --watermark <text>      Add watermark text to bottom-right`);
+async function cmdChapter(args: Args): Promise<void> {
+  const dir = requireDir(args, 'screen-studio chapter <dir> "Title"');
+  const title = args.positional.slice(1).join(" ") || flag(args, "title");
+  if (!title) throw new ScreenStudioError("invalid_argument", "Missing chapter title");
+  const at = parseTime(flag(args, "at"));
+  await addEvent(dir, { kind: "chapter", title, ...(at ? { at } : {}) });
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+async function cmdHold(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio hold <dir> --for 2s");
+  const reason = flag(args, "reason");
+  const at = parseTime(flag(args, "at"));
+  await addEvent(dir, {
+    kind: "hold",
+    durationMs: parseDuration(flag(args, "for") ?? "2s"),
+    ...(reason ? { reason } : {}),
+    ...(at ? { at } : {}),
+  });
+}
+
+async function cmdFocus(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio focus <dir> --rect x,y,w,h");
+  const rect = flag(args, "rect");
+  if (!rect) throw new ScreenStudioError("invalid_argument", "Missing --rect x,y,width,height");
+  const label = flag(args, "label");
+  const at = parseTime(flag(args, "at"));
+  await addEvent(dir, {
+    kind: "focus",
+    rect: parseRect(rect),
+    ...(flag(args, "for") ? { durationMs: parseDuration(flag(args, "for")!) } : {}),
+    ...(flag(args, "space") ? { space: parseSize(flag(args, "space")!, "space") } : {}),
+    ...(label ? { label } : {}),
+    ...(at ? { at } : {}),
+  });
+}
+
+async function cmdNote(args: Args): Promise<void> {
+  const dir = requireDir(args, 'screen-studio note <dir> "text"');
+  const text = args.positional.slice(1).join(" ");
+  if (!text) throw new ScreenStudioError("invalid_argument", "Missing note text");
+  const at = parseTime(flag(args, "at"));
+  await addEvent(dir, { kind: "note", text, ...(at ? { at } : {}) });
+}
+
+async function cmdStop(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio stop <dir>");
+  const result = await stopDetached(dir);
+  const extra: Record<string, unknown> = {
+    alreadyStopped: result.alreadyStopped,
+    recovered: result.recovered,
+  };
+  if (has(args, "render") && result.manifest.status === "complete") {
+    const preset = flag(args, "render");
+    const rendered = await renderBundle(dir, {
+      ...renderOptions(args),
+      ...(preset && preset !== "true" && !has(args, "preset") ? { preset } : {}),
+    });
+    extra.render = renderSummary(rendered);
+  } else if (result.manifest.status === "complete") {
+    extra.next = [
+      `screen-studio render ${dir} --preset walkthrough`,
+      `screen-studio inspect ${dir} --contact-sheet`,
+    ];
+  }
+  print(summary(dir, result.manifest, extra));
+  if (result.manifest.status !== "complete") process.exitCode = 1;
+}
+
+function renderOptions(args: Args): RenderOptions {
+  const size = flag(args, "size");
+  const background = flag(args, "background");
+  const cursor = flag(args, "cursor");
+  const frame = flag(args, "frame");
+  const pacing = flag(args, "pacing");
+  if (pacing && !["preserve", "compress", "cut"].includes(pacing)) {
+    throw new ScreenStudioError("invalid_argument", "--pacing must be preserve, compress or cut");
+  }
+  return {
+    ...(flag(args, "preset") ? { preset: flag(args, "preset") } : {}),
+    ...(pacing ? { pacing: pacing as RenderOptions["pacing"] } : {}),
+    ...(flag(args, "target-duration")
+      ? { targetDurationMs: parseDuration(flag(args, "target-duration")!) }
+      : {}),
+    ...(flag(args, "name") ? { name: flag(args, "name") } : {}),
+    ...(flag(args, "output") ? { output: flag(args, "output") } : {}),
+    ...(size ? { size: size === "source" ? "source" : parseSize(size) } : {}),
+    ...(numberFlag(args, "fps") ? { fps: numberFlag(args, "fps") } : {}),
+    ...(cursor ? { cursor: cursor as RenderOptions["cursor"] } : {}),
+    ...(frame ? { frame: frame as RenderOptions["frame"] } : {}),
+    ...(background ? { background } : {}),
+    ...(has(args, "no-zoom") ? { zoom: false } : has(args, "zoom") ? { zoom: true } : {}),
+    ...(numberFlag(args, "max-zoom") ? { maxZoom: numberFlag(args, "max-zoom") } : {}),
+    ...(flag(args, "title") ? { title: flag(args, "title") } : {}),
+    ...(has(args, "no-motion") ? { motion: false } : {}),
+    ...(has(args, "plain") ? { plain: true } : {}),
+    ...(has(args, "plan") ? { planOnly: true } : {}),
+    onProgress: ({ frame: f, frames }) =>
+      process.stderr.write(`[screen-studio] rendered ${f}/${frames} frames\n`),
+  };
+}
+
+function renderSummary(result: Awaited<ReturnType<typeof renderBundle>>) {
+  return {
+    name: result.name,
+    output: result.outputPath,
+    plan: result.planPath,
+    ...(result.vttPath ? { chaptersVtt: result.vttPath } : {}),
+    ...(result.posterPath ? { poster: result.posterPath } : {}),
+    durationMs: Math.round(result.durationMs),
+    sourceDurationMs: Math.round(result.sourceDurationMs),
+    frames: result.frames,
+    chapters: result.chapters.map((c) => ({ title: c.title, startMs: c.startMs })),
+    shots: result.plan.camera.shots.length,
+    ...(result.targetMet !== undefined ? { targetMet: result.targetMet } : {}),
+    ...(result.warnings.length ? { warnings: result.warnings } : {}),
+  };
+}
+
+async function cmdRender(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio render <dir> [--preset walkthrough]");
+  const result = await renderBundle(dir, renderOptions(args));
+  print({
+    ok: true,
+    bundle: dir,
+    planned: has(args, "plan"),
+    ...renderSummary(result),
+    ...(has(args, "plan") ? { pacing: result.plan.pacing, camera: result.plan.camera } : {}),
+  });
+}
+
+async function cmdInspect(args: Args): Promise<void> {
+  const dir = requireDir(args, "screen-studio inspect <dir>");
+  const result = await inspectBundle(dir, {
+    contactSheet: has(args, "contact-sheet"),
+    render: flag(args, "render"),
+  });
+  print({
+    ...summary(dir, result.manifest),
+    clock: result.manifest.clock,
+    geometry: result.manifest.geometry,
+    events: result.events,
+    chapters: result.chapters,
+    renders: result.renders,
+    ...(result.contactSheet ? { contactSheet: result.contactSheet } : {}),
+  });
+}
+
+async function cmdImport(args: Args): Promise<void> {
+  const cua = flag(args, "cua-trajectory");
+  const video = args.positional[0] ?? (cua ? (await cuaTrajectory(cua)).videoPath : undefined);
+  const out = flag(args, "out");
+  if (!video || !out)
+    throw new ScreenStudioError(
+      "invalid_argument",
+      "Usage: screen-studio import <video> --out <dir> (or --cua-trajectory DIR --out <dir>)"
+    );
+  const kind = flag(args, "kind");
+  const manifest = await importVideo(video, out, {
+    ...(flag(args, "events") ? { eventsPath: flag(args, "events") } : {}),
+    ...(flag(args, "agent-device-telemetry")
+      ? { agentDeviceTelemetry: flag(args, "agent-device-telemetry") }
+      : {}),
+    ...(cua ? { cuaTrajectory: cua } : {}),
+    ...(numberFlag(args, "start-epoch-ms") !== undefined
+      ? { startEpochMs: numberFlag(args, "start-epoch-ms") }
+      : {}),
+    ...(flag(args, "viewport") ? { viewport: parseSize(flag(args, "viewport")!, "viewport") } : {}),
+    ...(kind ? { kind: kind as Manifest["source"]["kind"] } : {}),
+  });
+  print(summary(resolve(out), manifest, { next: [`screen-studio render ${resolve(out)}`] }));
+}
+
+async function cmdSources(args: Args): Promise<void> {
+  const { sources, problems } = await listSources({
+    cdp: args.flags.get("cdp"),
+    deviceSet: flag(args, "simulator-set") ?? process.env.SCREEN_STUDIO_SIMULATOR_SET,
+  });
+  print({ ok: true, sources, ...(problems.length ? { problems } : {}) });
+}
+
+const HELP = `screen-studio ${VERSION} — record what an agent does, then render it
+
+Capture produces a bundle: original video + timed events (actions, chapters,
+holds, focus hints). Rendering is separate and repeatable; the original is
+never modified.
+
+  doctor                         Check FFmpeg, canvas, Xcode, agent-browser
+  sources [--cdp URL]            List recordable sources and their IDs
+  start --source ID --out DIR    Start recording in the background
+        [--max-duration 10m] [--max-size 4GiB] [--fps 30]
+        [--url-contains TEXT] [--simulator-set PATH]
+  record --source ID --out DIR [--max-duration 30s] [-- COMMAND ...]
+                                 Record in the foreground until the duration,
+                                 Ctrl-C, or COMMAND exits ($SCREEN_STUDIO_BUNDLE)
+  status DIR
+  action DIR --type click|type|tap|swipe|… [--rect x,y,w,h | --x N --y N]
+        [--label TEXT] [--url URL] [--duration 800ms] [--space WxH] [--at MS]
+  action DIR --stdin             Stream events as JSON Lines
+  chapter DIR "Title"            Mark the start of a section
+  hold DIR [--for 2s]            Keep this moment at normal speed
+  focus DIR --rect x,y,w,h       Ask the camera to show a region
+  note DIR "text"                Annotation for editors
+  stop DIR [--render [PRESET]]   Finalize (idempotent); optionally render
+  render DIR [--preset walkthrough|demo|replay|review] [--pacing preserve|compress|cut]
+        [--target-duration 30s] [--size 1920x1080|source] [--cursor auto|cua|arrow|touch|none]
+        [--frame auto|browser|window|device|rounded|none] [--background midnight|paper|none|#hex]
+        [--zoom | --no-zoom] [--max-zoom 1.6] [--title TEXT] [--name NAME] [--plan] [--plain]
+  inspect DIR [--contact-sheet] [--render NAME]
+  import VIDEO --out DIR [--events FILE.jsonl] [--start-epoch-ms N] [--viewport WxH]
+        [--agent-device-telemetry FILE.json]
+  import --cua-trajectory DIR --out DIR   A Cua driver trajectory (video + turns)
+  presets
+  skill                          Print the agent skill (SKILL.md): when and how to record
+
+Source IDs: browser:http://127.0.0.1:9222 · browser:ws://…/devtools/page/ID ·
+agent-browser:SESSION · ios-simulator:booted · display:0 · test-pattern:1280x720
+
+Example:
+  screen-studio start --source agent-browser:demo --out ./captures/login --max-duration 3m
+  screen-studio chapter ./captures/login "Sign in"
+  screen-studio stop ./captures/login --render --preset walkthrough
+`;
 
 async function main(): Promise<void> {
-  const { command, positional, flags } = parseArgs(process.argv);
-
-  if (flags.help || command === "help" || command === "--help" || command === "-h") {
-    cmdHelp();
+  const args = parseArgs(process.argv.slice(2));
+  if (args.command === "__worker") {
+    // Exit as soon as the bundle is final; nothing left in flight (a slow
+    // source lookup, a stray timer) should keep the worker alive.
+    process.exit(await runWorker(args.positional[0]));
+  }
+  if (args.command === "--version" || args.command === "version") {
+    print({ version: VERSION });
     return;
   }
-
-  if (command === "version" || command === "--version" || command === "-v") {
-    output({ version: "0.1.0" });
+  if (
+    args.command === "help" ||
+    args.command === "--help" ||
+    args.command === "-h" ||
+    has(args, "help")
+  ) {
+    process.stdout.write(HELP);
     return;
   }
-
-  switch (command) {
+  switch (args.command) {
+    case "doctor": {
+      const result = await doctor();
+      print(result);
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    case "sources":
+      return cmdSources(args);
     case "start":
-      await cmdStart(flags);
-      break;
-    case "event":
-      cmdEvent(positional, flags);
-      break;
-    case "chapter":
-      cmdChapter(positional, flags);
-      break;
+      return cmdStart(args);
+    case "record":
+      return cmdRecord(args);
     case "status":
-      cmdStatus(positional);
-      break;
+      return cmdStatus(args);
+    case "action":
+    case "event":
+      return cmdAction(args);
+    case "chapter":
+      return cmdChapter(args);
+    case "hold":
+      return cmdHold(args);
+    case "focus":
+      return cmdFocus(args);
+    case "note":
+      return cmdNote(args);
     case "stop":
-      await cmdStop(positional, flags);
-      break;
-    case "list":
-      cmdList();
-      break;
+      return cmdStop(args);
+    case "render":
+      return cmdRender(args);
+    case "inspect":
+      return cmdInspect(args);
+    case "import":
+      return cmdImport(args);
+    case "skill":
+      process.stdout.write(await readFile(SKILL_PATH, "utf8"));
+      return;
+    case "presets":
+      print({
+        presets: Object.values(PRESETS).map((p) => ({
+          name: p.name,
+          description: p.description,
+          pacing: p.pacing,
+        })),
+      });
+      return;
     default:
-      error(
-        `Unknown command: '${command}'`,
-        "Available commands: start, event, chapter, status, stop, list. Run 'screen-studio --help' for usage.",
-      );
+      throw new ScreenStudioError("invalid_argument", `Unknown command "${args.command}"`, {
+        hint: "Run `screen-studio help`.",
+      });
   }
 }
 
 main().catch((err) => {
-  error(err instanceof Error ? err.message : String(err));
+  print({ ok: false, error: toErrorInfo(err) });
+  if (!(err instanceof ScreenStudioError)) process.stderr.write(`${(err as Error).stack ?? err}\n`);
+  process.exitCode = 1;
 });
