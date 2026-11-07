@@ -206,13 +206,17 @@ export class Recording {
         void this.stop("source-lost");
       },
       onGeometry: (viewport) => {
-        void appendEvents(this.dir, [makeEvent({ kind: "geometry", viewport }, "recorder")]);
+        appendEvents(this.dir, [makeEvent({ kind: "geometry", viewport }, "recorder")]).catch(
+          (err) => this.log(`dropped a geometry event: ${(err as Error).message}`)
+        );
       },
       onEvent: (event) => {
-        try {
-          void appendEvents(this.dir, [makeEvent(event, "page")]);
-        } catch (err) {
+        const dropped = (err: unknown) =>
           this.log(`dropped an observed event: ${(err as Error).message}`);
+        try {
+          appendEvents(this.dir, [makeEvent(event, "page")]).catch(dropped);
+        } catch (err) {
+          dropped(err);
         }
       },
       onFailure: (error) => {

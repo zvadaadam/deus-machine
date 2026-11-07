@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
@@ -106,6 +107,28 @@ describe("recorder", () => {
     expect(final.status).toBe("complete");
     expect(final.clock?.mediaStartEpochMs).toBeGreaterThan(0);
     expect(final.capture.startedAt).toBe(final.clock?.mediaStartEpochMs);
+  });
+
+  it("survives events it cannot write", async () => {
+    const real = await resolveSource("test-pattern:320x240");
+    const dir = join(tempDir(), "bundle");
+    const recording = await startRecording({
+      source: {
+        ...real,
+        start: async (context) => {
+          const capture = await real.start(context);
+          // The events file becomes unwritable (as on a full disk).
+          rmSync(join(dir, "events.jsonl"), { force: true });
+          mkdirSync(join(dir, "events.jsonl"));
+          context.onEvent?.({ kind: "note", text: "lost" });
+          context.onGeometry({ width: 10, height: 10 });
+          return capture;
+        },
+      },
+      out: dir,
+    });
+    await sleep(300);
+    expect((await recording.stop()).status).toBe("complete");
   });
 
   it("stops itself at the deadline", async () => {

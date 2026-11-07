@@ -122,7 +122,8 @@ Record a deliberate walkthrough after the work is done, not the whole investigat
  */
 export function createAgentTools(host: AgentToolHost, options: AgentToolOptions = {}) {
   let current: Recording | null = null;
-  let starting = false;
+  /** A recording_start in progress, so dispose can cancel it. */
+  let starting: { abort: AbortController; done: Promise<void> } | null = null;
   const maxDefault = options.defaultMaxSeconds ?? 300;
 
   const live = (): Recording => {
@@ -162,7 +163,9 @@ export function createAgentTools(host: AgentToolHost, options: AgentToolOptions 
             `Already recording${current?.isRecording ? ` (${current.id})` : ""}. Call recording_stop first.`
           );
         }
-        starting = true;
+        const abort = new AbortController();
+        let done!: () => void;
+        starting = { abort, done: new Promise((resolve) => (done = resolve)) };
         try {
           const source = await host.resolveSource({
             target: (args.target as RecordTarget | undefined) ?? "browser",
@@ -175,6 +178,7 @@ export function createAgentTools(host: AgentToolHost, options: AgentToolOptions 
             out: host.bundleDir(),
             maxDurationMs: seconds * 1000,
             reporter: "agent",
+            signal: abort.signal,
           });
           current = recording;
           host.onStateChange?.("recording", recording);
@@ -188,7 +192,8 @@ export function createAgentTools(host: AgentToolHost, options: AgentToolOptions 
         } catch (err) {
           return failure("Error starting recording", err);
         } finally {
-          starting = false;
+          starting = null;
+          done();
         }
       },
     },
@@ -382,6 +387,10 @@ Returns: { outputPath, thumbnailPath, duration, chapters, events, bundlePath }`,
     },
     /** Stop whatever is recording, e.g. when the agent session ends. */
     async dispose(): Promise<void> {
+      if (starting) {
+        starting.abort.abort();
+        await starting.done;
+      }
       await current?.stop("signal");
     },
   };

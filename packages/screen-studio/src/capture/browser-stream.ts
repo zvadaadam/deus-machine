@@ -62,13 +62,17 @@ async function startStream(
 
   const ws = new WebSocket(spec.url);
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(unavailable(spec.url)), 5_000);
+    const timer = setTimeout(() => {
+      ws.close();
+      reject(unavailable(spec.url));
+    }, 5_000);
     ws.onopen = () => {
       clearTimeout(timer);
       resolve();
     };
     ws.onerror = () => {
       clearTimeout(timer);
+      ws.close();
       reject(unavailable(spec.url));
     };
   });

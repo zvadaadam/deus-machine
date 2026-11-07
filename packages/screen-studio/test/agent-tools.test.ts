@@ -56,4 +56,25 @@ describe("shared agent tools", () => {
     expect(summary.chapters).toEqual([{ title: "Sign in", time: expect.any(Number) }]);
     expect(states).toEqual(["recording", "stopped"]);
   }, 120_000);
+
+  it("cancel a start in progress when disposed", async () => {
+    let release!: () => void;
+    const agent = createAgentTools({
+      resolveSource: async () => {
+        await new Promise<void>((resolve) => (release = resolve));
+        return "test-pattern:320x240";
+      },
+      bundleDir: () => join(tempDir(), "rec"),
+    });
+    const started = agent.tools.find((t) => t.name === "recording_start")!.handler({});
+    await new Promise((r) => setTimeout(r, 50));
+    const disposed = agent.dispose();
+    release();
+    await disposed;
+    const result = parse(await started);
+    const leftover = agent.current();
+    await leftover?.stop();
+    expect(leftover?.isRecording ?? false).toBe(false);
+    expect(result).toMatch(/Error starting recording/);
+  }, 30_000);
 });
