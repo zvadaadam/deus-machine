@@ -245,6 +245,7 @@ describe("CDP screencast", () => {
           for (const [delay, payload] of [
             [400, { t: "down", at: now + 400, x: 25, y: 19, rect, label: "Save" }],
             [480, { t: "click", at: now + 480, x: 25, y: 19, rect, label: "Save" }],
+            [490, { t: "hover", at: now + 490, x: 60, y: 19, rect, label: "Menu" }],
             [500, { t: "idle", at: now + 100, endAt: now + 200 }],
             [505, { t: "idle", at: now + 300, endAt: now + 1000 }],
             [510, { t: "painted", at: now + 1050 }],
@@ -332,6 +333,10 @@ describe("CDP screencast", () => {
       point: { x: 25, y: 19 },
     });
     expect(click?.kind === "action" && click.endAt! - click.at).toBe(80);
+    expect(events.find((e) => e.kind === "action" && e.type === "hover")).toMatchObject({
+      label: "Menu",
+      point: { x: 60, y: 19 },
+    });
     const unseen = events.flatMap((e) => (e.kind === "unseen" ? [e] : []));
     expect(unseen).toHaveLength(2);
     expect(unseen[0].endAt - unseen[0].at).toBe(950);

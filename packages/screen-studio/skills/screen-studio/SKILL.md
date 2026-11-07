@@ -48,8 +48,8 @@ screen-studio stop ./captures/login --render walkthrough
 
 - `start` returns once video is flowing. The recording stops itself at
   `--max-duration`, so a forgotten `stop` costs nothing.
-- **Browser sources see every click, key press, typing burst, scroll and
-  navigation by themselves**, with the element's box. Don't report them.
+- **Browser sources see every click, hover, key press, typing burst, scroll
+  and navigation by themselves**, with the element's box. Don't report them.
 - **Other sources need actions reported**, right after each one: when it
   started (`--at`, epoch ms; default now), how long it took, and where it
   happened in the source's own coordinates (iOS points for simulators):

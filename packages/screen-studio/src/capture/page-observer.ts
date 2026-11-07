@@ -23,7 +23,9 @@ const UNSEEN = "hidden tab, hidden view or minimized window";
 
 /** Runs in the page (top frame only; frame-relative boxes would be wrong). */
 const PAGE_SCRIPT = `(() => {
-  if (window !== window.top || window.__screenStudioObserver) return;
+  if (window !== window.top) return;
+  // Recordings can share a tab: they share one observer, which stays until the last stops.
+  if (window.__screenStudioObserver) { window.__screenStudioObserver.refs++; return; }
   const send = (payload) => { try { window.${BINDING}(JSON.stringify(payload)); } catch {} };
   const at = (e) => Math.round(performance.timeOrigin + e.timeStamp);
   const origin = (e) => (e.composedPath && e.composedPath()[0]) || e.target;
@@ -45,6 +47,21 @@ const PAGE_SCRIPT = `(() => {
     addEventListener(type, handler, { capture: true, passive: true });
     listeners.push([type, handler]);
   };
+  // A mouse that comes to rest on something hoverable (a menu, a tooltip
+  // target) without pressing hovered it: how an agent reveals a dropdown.
+  const HOVERABLE = ACTIONABLE + ",[title],[aria-haspopup],[aria-describedby]";
+  let over = null, hoverTimer = 0;
+  on("pointerover", (e) => {
+    const node = origin(e);
+    const el = e.pointerType === "mouse" && !e.buttons && node instanceof Element ? node.closest(HOVERABLE) : null;
+    if (el === over) return;
+    over = el;
+    clearTimeout(hoverTimer);
+    if (!el) return;
+    const t = at(e), x = e.clientX, y = e.clientY;
+    hoverTimer = setTimeout(() => send({ t: "hover", at: t, x, y, ...describe(el) }), 600);
+  });
+  on("pointerdown", () => clearTimeout(hoverTimer));
   on("pointerdown", (e) => send({ t: "down", at: at(e), x: e.clientX, y: e.clientY, touch: e.pointerType === "touch", ...describe(origin(e)) }));
   on("click", (e) => send({ t: "click", at: at(e), x: e.clientX, y: e.clientY, ...describe(origin(e)) }));
   on("contextmenu", (e) => send({ t: "context", at: at(e), x: e.clientX, y: e.clientY, ...describe(origin(e)) }));
@@ -88,8 +105,9 @@ const PAGE_SCRIPT = `(() => {
   requestAnimationFrame(frame);
   const beat = setInterval(check, 250);
   addEventListener("pagehide", check);
-  window.__screenStudioObserver = { off: () => {
-    live = false; clearInterval(beat); removeEventListener("pagehide", check);
+  window.__screenStudioObserver = { refs: 1, off: () => {
+    if (--window.__screenStudioObserver.refs > 0) return;
+    live = false; clearInterval(beat); clearTimeout(hoverTimer); removeEventListener("pagehide", check);
     for (const [t, h] of listeners) removeEventListener(t, h, { capture: true });
     delete window.__screenStudioObserver;
     check();
@@ -97,7 +115,7 @@ const PAGE_SCRIPT = `(() => {
 })()`;
 
 interface Observed {
-  t: "down" | "click" | "context" | "input" | "key" | "scroll" | "idle" | "painted";
+  t: "down" | "click" | "context" | "hover" | "input" | "key" | "scroll" | "idle" | "painted";
   at: number;
   endAt?: number;
   x?: number;
@@ -216,6 +234,10 @@ export async function observePage(
       case "context":
         flushAll();
         pointerAction(e, "right-click");
+        break;
+      case "hover":
+        flushAll();
+        pointerAction(e, "hover");
         break;
       case "input":
         flushScrolling();

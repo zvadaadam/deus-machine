@@ -82,7 +82,8 @@ inside it are left out, and the render warns. Keep the recorded tab visible.
 **Browser recordings report their own actions.** The browser source installs
 passive listeners in the recorded tab and records every trusted click, tap,
 key press, typing burst, scroll and navigation with the target's exact box —
-whichever tool (or person) drives the page. Typed text is never read, only
+whichever tool (or person) drives the page. A mouse that rests on a menu or
+tooltip target for 600 ms without pressing is recorded as a hover. Typed text is never read, only
 its length. Pass `observe: false` in the source spec when a controller
 reports actions itself. Other sources need actions reported:
 
