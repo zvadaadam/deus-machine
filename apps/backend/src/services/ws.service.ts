@@ -15,6 +15,7 @@ export interface WsConnection {
   id: string;
   ws: WsSendable;
   deviceId: string | null;
+  /** When the client was last heard from: a pong, or any frame it sent. */
   lastPong: number;
   /** True for relay-tunneled connections (skip direct heartbeat pings) */
   isVirtual?: boolean;
@@ -24,9 +25,13 @@ export interface WsConnection {
 
 const connections = new Map<string, WsConnection>();
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+let deviceListener: (() => void) | null = null;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
+/** A relayed viewer probes every 30s (its runtime client's ping). Two missed
+ *  probes and it is gone, whether or not the relay noticed. */
+const VIRTUAL_SILENCE_MS = 2 * HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS;
 
 // ---- Public API ----
 
@@ -42,14 +47,30 @@ export function addConnection(ws: WsSendable, deviceId: string | null, isVirtual
   });
 
   startHeartbeat();
+  if (deviceId) deviceListener?.();
   return id;
 }
 
 /** Remove a connection by ID. */
 export function removeConnection(id: string): void {
-  if (!connections.delete(id)) return;
+  const conn = connections.get(id);
+  if (!conn) return;
+  connections.delete(id);
   if (connections.size === 0) stopHeartbeat();
   extendedHandlers.onDisconnect?.(id);
+  if (conn.deviceId) deviceListener?.();
+}
+
+/** Paired devices with a live connection (relay or local network). The desktop's own window has none. */
+export function connectedDeviceIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const conn of connections.values()) if (conn.deviceId) ids.add(conn.deviceId);
+  return ids;
+}
+
+/** Called whenever a paired device connects or disconnects. */
+export function onDeviceConnectionsChange(listener: (() => void) | null): void {
+  deviceListener = listener;
 }
 
 function closeConnection(conn: WsConnection, code: number, reason: string): void {
@@ -66,6 +87,17 @@ function closeConnection(conn: WsConnection, code: number, reason: string): void
 export function closeDeviceConnections(deviceId: string): void {
   for (const conn of connections.values()) {
     if (conn.deviceId === deviceId) closeConnection(conn, 4001, "Device access revoked");
+  }
+}
+
+/**
+ * Remote access was turned off: disconnect the devices on the local network
+ * (relayed ones go with the tunnel). Not a revocation: each keeps its approval
+ * and reconnects once remote access is back on.
+ */
+export function disconnectDirectDevices(): void {
+  for (const conn of connections.values()) {
+    if (conn.deviceId && !conn.isVirtual) closeConnection(conn, 1001, "Remote access turned off");
   }
 }
 
@@ -116,8 +148,19 @@ function stopHeartbeat(): void {
 function checkHeartbeats(): void {
   const now = Date.now();
   for (const [id, conn] of connections) {
-    // Virtual connections are managed by the relay tunnel — skip direct heartbeat
-    if (conn.isVirtual) continue;
+    // The relay tunnel carries a virtual connection's pings: the viewer probes
+    // and this end answers (handleProtocolMessage). One whose probes stopped
+    // (a half-open phone the relay never saw leave, a suspended tab) is
+    // forgotten here, not closed: the relay's only way to close one viewer is
+    // a denial, which revokes its grant. A viewer that comes back finds its
+    // probes unanswered and reconnects with the same grant.
+    if (conn.isVirtual) {
+      if (now - conn.lastPong > VIRTUAL_SILENCE_MS) {
+        console.log(`[WS] Forgetting silent relay connection: ${id}`);
+        removeConnection(id);
+      }
+      continue;
+    }
 
     if (now - conn.lastPong > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
       // Client hasn't responded to pings — close
@@ -162,6 +205,7 @@ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
 export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
   const connection = connections.get(connectionId);
   if (!connection) return;
+  connection.lastPong = Date.now();
   match(msg.type as string)
     .with("ping", () => {
       // Echo a client probe through the same authenticated path, including relay

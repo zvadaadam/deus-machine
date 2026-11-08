@@ -8,7 +8,7 @@
 
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
-import { closeDeviceConnections } from "./ws.service";
+import { broadcast, closeDeviceConnections, connectedDeviceIds } from "./ws.service";
 
 // ---- Types ----
 
@@ -476,6 +476,7 @@ export function createDeviceToken(
   );
 
   const device = db.prepare("SELECT * FROM paired_devices WHERE id = ?").get(id) as PairedDevice;
+  notifyDevicesChanged();
   return { token, device };
 }
 
@@ -507,15 +508,21 @@ export function updateLastSeen(tokenHash: string): void {
   );
 }
 
+/** Clients showing the device list read it again: a device was added, connected, left or revoked. */
+export function notifyDevicesChanged(): void {
+  broadcast(JSON.stringify({ type: "q:event", event: "devices:changed", data: {} }));
+}
+
 /** List all paired devices (token_hash excluded from the returned objects for safety). */
-export function listDevices(): Omit<PairedDevice, "token_hash">[] {
+export function listDevices(): (Omit<PairedDevice, "token_hash"> & { connected: boolean })[] {
   const db = getDatabase();
   const rows = db
     .prepare(
       "SELECT id, name, account_id, machine_id, ip_address, user_agent, last_seen_at, created_at FROM paired_devices ORDER BY created_at DESC"
     )
     .all() as Omit<PairedDevice, "token_hash">[];
-  return rows;
+  const connected = connectedDeviceIds();
+  return rows.map((row) => ({ ...row, connected: connected.has(row.id) }));
 }
 
 /** Revoke (delete) a paired device by id. Returns true if a row was deleted. */
@@ -523,6 +530,7 @@ export function revokeDevice(id: string): boolean {
   const db = getDatabase();
   const result = db.prepare("DELETE FROM paired_devices WHERE id = ?").run(id);
   closeDeviceConnections(id);
+  if (result.changes > 0) notifyDevicesChanged();
   return result.changes > 0;
 }
 

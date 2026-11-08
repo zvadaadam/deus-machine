@@ -163,6 +163,8 @@ export function getRelayStatus(): {
   accountId: string | null;
   relayUrl: string;
   error: string | null;
+  /** This computer's OS, for a viewer on another device ("Keep this Mac awake"). */
+  platform: NodeJS.Platform;
 } {
   const enabled = getSetting("remote_access_enabled") === true;
   const connected = tunnelWs?.readyState === WebSocket.OPEN;
@@ -192,6 +194,7 @@ export function getRelayStatus(): {
         : state === "removed"
           ? new MachineRemovedError().message
           : null,
+    platform: process.platform,
   };
 }
 
@@ -363,7 +366,12 @@ function handleRelayFrame(frame: RelayFrame): void {
     .with({ type: "data" }, (f) => {
       const connId = clientToConn.get(f.clientId);
       if (!connId) return;
-      if (!getConnection(connId)) return;
+      // Forgotten for going silent (ws.service): its probes go unanswered
+      // until it reconnects.
+      if (!getConnection(connId)) {
+        clientToConn.delete(f.clientId);
+        return;
+      }
 
       try {
         const msg = JSON.parse(f.payload) as Record<string, unknown>;

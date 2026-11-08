@@ -1,6 +1,8 @@
 // TanStack Query hooks for remote access auth endpoints.
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { onConnectionChange, onEvent } from "@/platform/ws";
 import { AuthService } from "./auth.service";
 
 const authKeys = {
@@ -8,14 +10,24 @@ const authKeys = {
   relayStatus: ["auth", "relay-status"] as const,
 };
 
-/** Fetch paired devices. Polls every 10s when enabled. */
+/** Paired devices, read again whenever the backend says one was added, connected, left or
+ *  revoked, and after a reconnect (a change while the socket was down sent nothing). */
 export function usePairedDevices(enabled: boolean) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    const refresh = () => void queryClient.invalidateQueries({ queryKey: authKeys.devices });
+    const stopEvents = onEvent((event) => event === "devices:changed" && refresh());
+    const stopConnection = onConnectionChange((connected) => connected && refresh());
+    return () => {
+      stopEvents();
+      stopConnection();
+    };
+  }, [enabled, queryClient]);
   return useQuery({
     queryKey: authKeys.devices,
     queryFn: () => AuthService.listDevices().then((r) => r.devices),
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
-    staleTime: 5_000,
   });
 }
 

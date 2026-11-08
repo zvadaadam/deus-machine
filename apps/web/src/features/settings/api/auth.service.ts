@@ -13,6 +13,8 @@ export interface PairedDevice {
   user_agent: string | null;
   last_seen_at: string;
   created_at: string;
+  /** Connected right now, through the relay or the local network. */
+  connected?: boolean;
 }
 
 export interface PairCodeResponse {
@@ -50,4 +52,6 @@ export interface RelayStatus {
   relayUrl: string | null;
   /** Why the last dial failed, while still retrying. */
   error: string | null;
+  /** This computer's OS (Node's `process.platform`); absent from older backends. */
+  platform?: string;
 }

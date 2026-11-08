@@ -269,9 +269,11 @@ export async function testBrowser({
           .getState()
           .setActiveSettingsSection("access")
       );
-      await mac.getByText("https://deusmachine.ai/connect").waitFor();
+      await mac.getByText("Devices that can control this computer").waitFor();
+      // Devices reach this computer through the account: no address to copy.
+      assert.equal(await mac.getByText("deusmachine.ai/connect", { exact: false }).count(), 0);
       await mac.screenshot({ path: path.join(output, "mac-remote-access.png") });
-      await mac.getByRole("button", { name: "Connect a Device" }).click();
+      await mac.getByRole("button", { name: "Add device" }).click();
       await mac.getByText("You approve each device once.", { exact: false }).waitFor();
       await mac
         .getByText(`${machineId.slice(0, 4)} ${machineId.slice(4, 8)}`, { exact: false })
@@ -282,7 +284,9 @@ export async function testBrowser({
         .evaluate((svg) => svg.outerHTML.length);
       assert(qr > 1000, "the dialog draws the pairing QR code");
       await mac.screenshot({ path: path.join(output, "mac-connect-device.png") });
-      check("The Mac's Remote access settings show the account link and a pairing QR");
+      check(
+        "The Mac's Remote access settings list approved devices and a pairing QR, with no address"
+      );
 
       // A code approves one device: a phone pairs with the dialog's code, the
       // dialog closes, and opening it again shows a new code.
@@ -296,7 +300,10 @@ export async function testBrowser({
       await online(pairer);
       await mac.getByText("Device Connected").waitFor();
       await mac.getByText("Device Connected").waitFor({ state: "hidden" });
-      await mac.getByRole("button", { name: "Connect a Device" }).click();
+      // The new device is listed as connected, with a way to revoke it.
+      await mac.getByText("Connected", { exact: true }).first().waitFor();
+      await mac.getByRole("button", { name: "Revoke access" }).first().waitFor();
+      await mac.getByRole("button", { name: "Add device" }).click();
       await until(
         async () => {
           const next = (await shownCode.innerText({ timeout: 1_000 }).catch(() => "")).trim();
@@ -306,7 +313,7 @@ export async function testBrowser({
         "a new code after a device paired"
       );
       await mac.close();
-      check("After a device pairs, Connect a Device shows a new code instead of the spent one");
+      check("After a device pairs, it shows as connected and Add device shows a new code");
     } finally {
       await desktopUi.close();
     }

@@ -2,7 +2,12 @@ import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
-import { closeAll as closeAllWsConnections } from "./services/ws.service";
+import {
+  closeAll as closeAllWsConnections,
+  onDeviceConnectionsChange,
+} from "./services/ws.service";
+import { syncKeepAwake } from "./services/keep-awake.service";
+import { notifyDevicesChanged } from "./services/remote-auth.service";
 import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
 import { retireLegacyRelayCredentials } from "./services/remote-machine.service";
 import * as agentService from "./services/agent";
@@ -126,6 +131,11 @@ async function onListening(port: number): Promise<void> {
   // Waits for the desktop's account session when it is not handed over yet.
   retireLegacyRelayCredentials();
   reconcileRelay();
+  // A connected device can keep the Mac awake (the desktop holds the blocker).
+  onDeviceConnectionsChange(() => {
+    syncKeepAwake();
+    notifyDevicesChanged();
+  });
 
   // Discover booted simulators on startup (fire-and-forget).
   // Restores awareness of running simulators after a backend restart.

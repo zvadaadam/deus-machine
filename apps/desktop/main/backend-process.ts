@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
 import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
+import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 
 export const CDP_PORT = "19222";
 
@@ -253,6 +254,8 @@ export async function spawnBackend(
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        // A keep-awake line is protocol, not log output.
+        if (handleKeepAwakeLine(trimmed)) continue;
         hooks.onStdoutLine?.("backend", trimmed);
         relayWorkspaceProgress(trimmed);
         if (!hooks.onStdoutLine && !app.isPackaged) console.log("[backend]", trimmed);
@@ -274,6 +277,8 @@ export async function spawnBackend(
     child.on("exit", (code, signal) => {
       if (backendProcess === child) backendProcess = null;
       clearTimeout(timeout);
+      // Its connections went with it; a restarted backend reports them again.
+      setKeepAwakeWanted(false);
       hooks.onExit?.("backend", code, signal);
       if (!hooks.onExit) console.log(`[backend] Exited with code=${code} signal=${signal}`);
       if (!settled) {

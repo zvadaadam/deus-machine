@@ -301,7 +301,9 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("cloud:identity");
       expect(PROTOCOL_EVENTS).toContain("agent:auth");
       expect(PROTOCOL_EVENTS).toContain("agent:cli");
-      expect(PROTOCOL_EVENTS).toHaveLength(24);
+      // Remote access: the paired devices list changed
+      expect(PROTOCOL_EVENTS).toContain("devices:changed");
+      expect(PROTOCOL_EVENTS).toHaveLength(25);
     });
 
     it("has no deus-dialect part/message event names left", () => {

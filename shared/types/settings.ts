@@ -38,6 +38,8 @@ export interface Settings {
 
   // Remote Access
   remote_access_enabled?: boolean;
+  /** Keep the computer awake while a device is connected and it's plugged in (default on). */
+  remote_keep_awake?: boolean;
 }
 
 // Config item types (MCPServer, Command, Agent) moved to shared/types/agent-config.ts
