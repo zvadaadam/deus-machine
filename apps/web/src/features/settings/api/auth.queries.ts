@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { onEvent } from "@/platform/ws";
+import { onConnectionChange, onEvent } from "@/platform/ws";
 import { AuthService } from "./auth.service";
 
 const authKeys = {
@@ -10,15 +10,19 @@ const authKeys = {
   relayStatus: ["auth", "relay-status"] as const,
 };
 
-/** Paired devices, read again whenever the backend says one was added, connected, left or revoked. */
+/** Paired devices, read again whenever the backend says one was added, connected, left or
+ *  revoked, and after a reconnect (a change while the socket was down sent nothing). */
 export function usePairedDevices(enabled: boolean) {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!enabled) return;
-    return onEvent((event) => {
-      if (event === "devices:changed")
-        void queryClient.invalidateQueries({ queryKey: authKeys.devices });
-    });
+    const refresh = () => void queryClient.invalidateQueries({ queryKey: authKeys.devices });
+    const stopEvents = onEvent((event) => event === "devices:changed" && refresh());
+    const stopConnection = onConnectionChange((connected) => connected && refresh());
+    return () => {
+      stopEvents();
+      stopConnection();
+    };
   }, [enabled, queryClient]);
   return useQuery({
     queryKey: authKeys.devices,

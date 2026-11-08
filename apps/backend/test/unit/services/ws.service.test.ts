@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("relayed viewers", () => {
-  it("stay while they probe, and are closed once their probes stop", () => {
+  it("stay while they probe, and are forgotten (not denied) once their probes stop", () => {
     const close = vi.fn();
     const id = addConnection({ send: vi.fn(), close }, "phone", true);
     // The viewer's runtime client pings every 30s through the tunnel.
@@ -28,8 +28,9 @@ describe("relayed viewers", () => {
 
     // A half-open phone: the relay never reports it gone, and it says nothing.
     vi.advanceTimersByTime(100_000);
-    expect(close).toHaveBeenCalledWith(1001, "Heartbeat timeout");
     expect(connectedDeviceIds().has("phone")).toBe(false);
+    // Closing a relayed viewer is a denial that revokes its grant: never for silence.
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("count any frame the viewer sends as a sign of life", () => {

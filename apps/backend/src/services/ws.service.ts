@@ -150,11 +150,14 @@ function checkHeartbeats(): void {
   for (const [id, conn] of connections) {
     // The relay tunnel carries a virtual connection's pings: the viewer probes
     // and this end answers (handleProtocolMessage). One whose probes stopped
-    // (a half-open phone the relay never saw leave) is closed here.
+    // (a half-open phone the relay never saw leave, a suspended tab) is
+    // forgotten here, not closed: the relay's only way to close one viewer is
+    // a denial, which revokes its grant. A viewer that comes back finds its
+    // probes unanswered and reconnects with the same grant.
     if (conn.isVirtual) {
       if (now - conn.lastPong > VIRTUAL_SILENCE_MS) {
-        console.log(`[WS] Closing silent relay connection: ${id}`);
-        closeConnection(conn, 1001, "Heartbeat timeout");
+        console.log(`[WS] Forgetting silent relay connection: ${id}`);
+        removeConnection(id);
       }
       continue;
     }

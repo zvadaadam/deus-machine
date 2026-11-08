@@ -366,7 +366,12 @@ function handleRelayFrame(frame: RelayFrame): void {
     .with({ type: "data" }, (f) => {
       const connId = clientToConn.get(f.clientId);
       if (!connId) return;
-      if (!getConnection(connId)) return;
+      // Forgotten for going silent (ws.service): its probes go unanswered
+      // until it reconnects.
+      if (!getConnection(connId)) {
+        clientToConn.delete(f.clientId);
+        return;
+      }
 
       try {
         const msg = JSON.parse(f.payload) as Record<string, unknown>;
