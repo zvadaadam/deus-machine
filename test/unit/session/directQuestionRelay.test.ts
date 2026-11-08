@@ -1,71 +1,88 @@
 import { describe, it, expect } from "vitest";
 import {
-  toolRequestFromMcpQuestion,
-  buildMcpAnswerFrame,
+  toolRequestFromElicitation,
+  buildElicitationResponseFrame,
 } from "@/features/session/cloud/directSessionRegistry";
 
-describe("toolRequestFromMcpQuestion (agnt mcp.question → renderer tool:request)", () => {
-  it("maps agnt's question items onto the RPC handler's shape and rewrites the session id", () => {
-    const request = toolRequestFromMcpQuestion(
+const QUESTIONS = [
+  {
+    id: "pref",
+    question: "Prefer A or B?",
+    options: [{ label: "A" }, { label: "B", description: "the other one" }],
+  },
+  { id: "notes", question: "Any notes?", multiSelect: true, options: [{ label: "Yes" }] },
+];
+
+describe("toolRequestFromElicitation (agnt elicitation.requested → renderer tool:request)", () => {
+  it("maps the engine's questions onto the card's shape and rewrites the session id", () => {
+    const asked = toolRequestFromElicitation(
       {
-        type: "mcp.question",
-        data: {
-          questionId: "q-1",
-          sessionId: "provider-session",
-          questions: [
-            { text: "Prefer A or B?", options: ["A", "B"], allowsMultiSelect: false },
-            { text: "Any notes?" },
-          ],
-          timestamp: "2026-09-02T00:00:00Z",
-        },
+        type: "elicitation.requested",
+        sessionId: "provider-session",
+        turnId: "turn-1",
+        requestId: "req-1",
+        mode: "question",
+        questions: QUESTIONS,
       },
       "deus-session"
     );
-    expect(request).toEqual({
-      requestId: "q-1",
+    expect(asked?.request).toEqual({
+      requestId: "req-1",
       sessionId: "deus-session",
       method: "askUserQuestion",
       params: {
         sessionId: "deus-session",
         questions: [
-          { question: "Prefer A or B?", options: ["A", "B"], multiSelect: false },
-          { question: "Any notes?", options: [] },
+          { question: "Prefer A or B?", options: ["A", "B"] },
+          { question: "Any notes?", options: ["Yes"], multiSelect: true },
         ],
       },
       timeoutMs: 24 * 60 * 60 * 1000,
     });
+    expect(asked?.questions).toBe(QUESTIONS);
   });
 
-  it("drops unusable items and returns null without a question id", () => {
-    const request = toolRequestFromMcpQuestion(
-      {
-        type: "mcp.question",
-        data: { questionId: "q-2", questions: [{ text: "   " }, "junk", null] },
-      },
-      "s"
-    );
-    expect(request?.params.questions).toEqual([]);
-    expect(toolRequestFromMcpQuestion({ type: "mcp.question", data: {} }, "s")).toBeNull();
-    expect(toolRequestFromMcpQuestion({ type: "mcp.question" }, "s")).toBeNull();
+  it("returns null without a request id, outside question mode, or with nothing to ask", () => {
+    expect(toolRequestFromElicitation({ mode: "question", questions: QUESTIONS }, "s")).toBeNull();
+    expect(
+      toolRequestFromElicitation({ requestId: "r", mode: "form", message: "Fill in" }, "s")
+    ).toBeNull();
+    expect(
+      toolRequestFromElicitation({ requestId: "r", mode: "question", questions: [] }, "s")
+    ).toBeNull();
   });
 });
 
-describe("buildMcpAnswerFrame (renderer answer → agnt mcp.answer)", () => {
-  it("nests the payload under data (the ClientCommand schema) with the PROVIDER session id", () => {
-    expect(buildMcpAnswerFrame("q-1", "provider-session", { answers: ["A"] })).toEqual({
-      type: "mcp.answer",
-      data: { questionId: "q-1", sessionId: "provider-session", answers: ["A"] },
+describe("buildElicitationResponseFrame (renderer answer → agnt elicitation.respond)", () => {
+  it("nests the outcome under data with the PROVIDER session id, answers keyed by question id", () => {
+    expect(
+      buildElicitationResponseFrame("req-1", "provider-session", QUESTIONS, {
+        answers: ["B", ["Yes"]],
+      })
+    ).toEqual({
+      type: "elicitation.respond",
+      data: {
+        sessionId: "provider-session",
+        requestId: "req-1",
+        outcome: { action: "accept", content: { pref: "B", notes: ["Yes"] } },
+      },
     });
   });
 
-  it("turns an error/empty/odd response into the schema-valid cancellation so the agent unblocks", () => {
+  it("cancels on an error/empty/odd response so the agent unblocks, and declines USER_CANCELLED", () => {
     for (const result of [undefined, null, {}, { answers: [] }, "nope"]) {
-      expect(buildMcpAnswerFrame("q", "p", result).data).toMatchObject({
-        answers: ["USER_CANCELLED"],
+      expect(buildElicitationResponseFrame("r", "p", QUESTIONS, result).data).toMatchObject({
+        outcome: { action: "cancel" },
       });
     }
-    expect(buildMcpAnswerFrame("q", "p", { answers: [1, "two"] }).data).toMatchObject({
-      answers: ["1", "two"],
+    expect(
+      buildElicitationResponseFrame("r", "p", QUESTIONS, { answers: ["USER_CANCELLED"] }).data
+    ).toMatchObject({ outcome: { action: "decline" } });
+  });
+
+  it("declines a request Deus has no card for", () => {
+    expect(buildElicitationResponseFrame("r", "p", [], null).data).toMatchObject({
+      outcome: { action: "decline" },
     });
   });
 });

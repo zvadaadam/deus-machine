@@ -10,7 +10,7 @@
 // workspace.state → workspace row, session.error → engine error event,
 // simulator.* → ./simulator (an in-memory device cache + q:event cloud:simulator),
 // sandboxUrlTemplate → ./preview (an in-memory template cache + q:event cloud:preview),
-// mcp.question → the existing askUserQuestion relay, permission.request →
+// elicitation.requested → the existing askUserQuestion relay (and the fold), permission.request →
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
 
@@ -20,7 +20,12 @@ import {
   SessionErrorEventSchema,
   SessionSnapshotEventSchema,
 } from "@deus-hq/api";
-import type { TurnCancelResult } from "@zvada/agent-server/protocol";
+import type {
+  ElicitationOutcome,
+  ElicitationRequestedEvent,
+  TurnCancelResult,
+} from "@zvada/agent-server/protocol";
+import { cardQuestions, questionAnswer, unansweredElicitations } from "@shared/agent-asks";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { CloudTurnSelection } from "@shared/cloud-models";
 import {
@@ -54,7 +59,7 @@ import { getCloudConfig, runCloudConnectHook, setCloudIdentityChangedHandler } f
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import { mintCloudSessionToken } from "./session-token";
 import type { AgentEventHandler } from "../event-handler";
-import { relay, cancelSessionRelays } from "../tool-relay";
+import { relay, cancelRelay, cancelSessionRelays } from "../tool-relay";
 import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../persistence";
 import { invalidate } from "../../query-engine";
 import { broadcast } from "../../ws.service";
@@ -362,6 +367,13 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
   // it ignores for a request it no longer holds.)
   if (type === "turn.ended") cancelSessionRelays(session.deusSessionId, "turn ended");
 
+  // The agent asks the user (a lifecycle event, folded below like any other):
+  // put it on the question card and answer with `elicitation.respond`.
+  if (type === "elicitation.requested")
+    void relayElicitation(session, frame as Partial<ElicitationRequestedEvent>);
+  // Answered on another device, or closed by the runtime: the card goes.
+  if (type === "elicitation.resolved") withdrawElicitation(session, frame);
+
   // Engine lifecycle events pass through verbatim under the deus session id.
   // agnt's published set omits the engine `error` member (it re-wraps errors
   // in its own envelopes below), but a frame that IS engine-shaped — carrying
@@ -455,6 +467,11 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         updateCloudWorkspace(session.deusWorkspaceId, { status: "running" });
         clearTurnKill(session);
       }
+
+      // What the agent still waits on: the frame that asked fell into a socket
+      // gap or predates this backend. One already on the card stays as it is.
+      for (const request of unansweredElicitations(frame) ?? [])
+        void relayElicitation(session, request);
 
       // Full transcripts use atomic hydration above, including their outcomes.
       // A failed restore must not fall through into live completion effects.
@@ -606,22 +623,11 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       return;
     }
 
-    case "mcp.question": {
-      const data = (frame.data ?? {}) as {
-        questionId?: string;
-        sessionId?: string;
-        questions?: unknown[];
-      };
-      if (!data.questionId) return;
-      void relayQuestion(session, data as { questionId: string; questions?: unknown[] });
-      return;
-    }
-
     case "permission.request": {
       const data = (frame.data ?? {}) as { requestId?: string };
       if (!data.requestId) return;
-      // The agent's questions arrive as `mcp.question`; an approval is
-      // allowed (the sandbox VM is the isolation boundary).
+      // The agent's questions arrive as `elicitation.requested`; an approval
+      // is allowed (the sandbox VM is the isolation boundary).
       void sendPermissionResponse(session, data.requestId, { behavior: "allow" });
       return;
     }
@@ -705,7 +711,7 @@ async function sendPermissionResponse(
   try {
     await sendOnLiveSocket(session.deusSessionId, {
       type: "permission.response",
-      // Nested under `data` like every ClientCommand payload (see mcp.answer).
+      // Nested under `data` like every ClientCommand payload (see elicitation.respond).
       data: { requestId, sessionId: session.providerSessionId, result },
     });
   } catch (err) {
@@ -713,44 +719,101 @@ async function sendPermissionResponse(
   }
 }
 
-async function relayQuestion(
+/** Answer an elicitation over the session's live socket. Never throws. */
+async function sendElicitationOutcome(
   session: CloudSession,
-  data: { questionId: string; questions?: unknown[] }
+  requestId: string,
+  outcome: ElicitationOutcome
 ): Promise<void> {
+  try {
+    // The ClientCommand schema nests the payload under `data` (the DO spreads
+    // `command.data` toward the sidecar); a flat frame fails its parse and the
+    // agent waits out the sidecar's question timeout unanswered.
+    await sendOnLiveSocket(session.deusSessionId, {
+      type: "elicitation.respond",
+      data: { sessionId: session.providerSessionId, requestId, outcome },
+    });
+  } catch (err) {
+    console.warn(`[CloudDriver] elicitation answer not delivered (${requestId}): ${String(err)}`);
+  }
+}
+
+/** Questions on the card: the relay's id, by Deus session and agnt request
+ *  id. A reconnect snapshot lists them again, and the same question is not
+ *  asked twice. */
+const askedElicitations = new Map<string, string>();
+const elicitationKey = (sessionId: string, requestId: string) => `${sessionId}\n${requestId}`;
+
+/**
+ * The agent's question → the question card (`askUserQuestion`, as the local
+ * lane shows it) → `elicitation.respond`. A request Deus has no card for (a
+ * form, a URL) is declined; a card that goes away unanswered cancels, which
+ * unblocks the agent.
+ */
+async function relayElicitation(
+  session: CloudSession,
+  event: Partial<ElicitationRequestedEvent>
+): Promise<void> {
+  if (typeof event.requestId !== "string" || !event.requestId) return;
+  const requestId = event.requestId;
+  if (event.mode !== "question" || !event.questions?.length) {
+    await sendElicitationOutcome(session, requestId, { action: "decline" });
+    return;
+  }
+  const questions = event.questions;
   const sessionId = session.deusSessionId;
+  const key = elicitationKey(sessionId, requestId);
+  if (askedElicitations.has(key)) return;
+  const relayId = crypto.randomUUID();
+  askedElicitations.set(key, relayId);
   const needs = persistSessionNeedsResponse(sessionId);
   if (needs.ok)
     invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
   try {
     const response = await relay({
-      requestId: crypto.randomUUID(),
+      requestId: relayId,
       sessionId,
       method: "askUserQuestion",
-      params: { sessionId, questions: data.questions ?? [] },
+      params: { sessionId, questions: cardQuestions(questions) },
       timeoutMs: 24 * 60 * 60 * 1000,
     });
-    const answers = extractAnswers(response);
-    // The ClientCommand schema nests the payload under `data` (the DO spreads
-    // `command.data` toward the sidecar); a flat frame fails its parse and the
-    // agent waits out the sidecar's question timeout unanswered.
-    await sendOnLiveSocket(session.deusSessionId, {
-      type: "mcp.answer",
-      data: { questionId: data.questionId, sessionId: session.providerSessionId, answers },
-    });
+    await sendElicitationOutcome(
+      session,
+      requestId,
+      questionAnswer(questions, extractAnswers(response))
+    );
   } catch (err) {
-    console.warn(`[CloudDriver] askUserQuestion relay failed: ${String(err)}`);
+    // Withdrawn (answered elsewhere): nothing is left to answer.
+    if (askedElicitations.get(key) === relayId) {
+      console.warn(`[CloudDriver] askUserQuestion relay failed: ${String(err)}`);
+      await sendElicitationOutcome(session, requestId, { action: "cancel" });
+    }
   } finally {
+    if (askedElicitations.get(key) === relayId) askedElicitations.delete(key);
     const back = persistSessionBackToWorking(sessionId);
     if (back.ok)
       invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
   }
 }
 
-function extractAnswers(response: unknown): string[] {
-  if (Array.isArray(response)) return response.map(String);
+/** A question the runtime resolved without this card (another device answered
+ *  it, the turn closed it) leaves the card. */
+function withdrawElicitation(session: CloudSession, frame: Record<string, unknown>): void {
+  if (typeof frame.requestId !== "string") return;
+  const key = elicitationKey(session.deusSessionId, frame.requestId);
+  const relayId = askedElicitations.get(key);
+  if (!relayId) return;
+  askedElicitations.delete(key);
+  cancelRelay(relayId, "resolved elsewhere");
+}
+
+/** One answer per question; a multi-select answer stays a list. */
+function extractAnswers(response: unknown): (string | string[])[] {
+  const answer = (value: unknown) => (Array.isArray(value) ? value.map(String) : String(value));
+  if (Array.isArray(response)) return response.map(answer);
   if (response && typeof response === "object") {
     const maybe = (response as Record<string, unknown>).answers;
-    if (Array.isArray(maybe)) return maybe.map(String);
+    if (Array.isArray(maybe)) return maybe.map(answer);
   }
   return [String(response ?? "")];
 }

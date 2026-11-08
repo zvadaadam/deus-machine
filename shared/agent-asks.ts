@@ -6,6 +6,7 @@
 import type {
   ElicitationOutcome,
   ElicitationQuestion,
+  ElicitationRequestedEvent,
   PermissionOption,
   PermissionOutcome,
 } from "@zvada/agent-server/protocol";
@@ -58,4 +59,31 @@ export function questionAnswer(
     if (answer !== undefined && answer !== "") content[q.id] = answer;
   });
   return { action: "accept", content };
+}
+
+/**
+ * What a session snapshot says the agent still waits on in its live turn: a
+ * request nobody has answered yet. The frame that asked is not replayed, so a
+ * client that connected after it, or whose socket was down, learns of it only
+ * here. `null` when the platform does not list its requests.
+ */
+export function unansweredElicitations(
+  snapshot: Record<string, unknown>
+): ElicitationRequestedEvent[] | null {
+  if (!Array.isArray(snapshot.interactions)) return null;
+  const state = snapshot.state as { currentTurnId?: unknown } | undefined;
+  const live = typeof state?.currentTurnId === "string" ? state.currentTurnId : null;
+  if (!live) return [];
+  return snapshot.interactions.flatMap((entry: unknown) => {
+    const { request, receipt } = (entry ?? {}) as {
+      request?: Partial<ElicitationRequestedEvent>;
+      receipt?: unknown;
+    };
+    return request?.type === "elicitation.requested" &&
+      receipt === undefined &&
+      request.turnId === live &&
+      typeof request.requestId === "string"
+      ? [request as ElicitationRequestedEvent]
+      : [];
+  });
 }

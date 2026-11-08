@@ -48,9 +48,9 @@ import {
   getDirectSession,
   buildMessageSendFrame,
   buildCancelFrame,
-  buildMcpAnswerFrame,
+  buildElicitationResponseFrame,
   buildPermissionResponseFrame,
-  toolRequestFromMcpQuestion,
+  toolRequestFromElicitation,
 } from "../cloud/directSessionRegistry";
 import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
@@ -68,27 +68,31 @@ import {
   selectPrimaryCloudSimulator,
 } from "@shared/cloud-simulator";
 import type { QueryClient } from "@tanstack/react-query";
+import type { ElicitationQuestion } from "@shared/protocol-types";
+import { unansweredElicitations } from "@shared/agent-asks";
 
 // ---- Question round-trip ----------------------------------------------------
 // The agent's questions (Claude's AskUserQuestion, Codex's request_user_input)
-// reach the browser as `mcp.question` frames on the direct socket. The Mac lane
-// relays these to the renderer as a `tool:request` q:event and answers over its
-// own socket; here the renderer IS the client, so each frame is handed to the
-// same handlers locally and the answer goes back on whichever socket serves the
-// session WHEN the user answers — a remount, a reconnect or a brief outage must
-// not lose the correlation. One registry per renderer, keyed by the LOCAL
-// request id the overlay sees; `sendToolResponse` consults it before the
+// reach the browser as `elicitation.requested` events on the direct socket. The
+// Mac lane relays these to the renderer as a `tool:request` q:event and answers
+// over its own socket; here the renderer IS the client, so each frame is handed
+// to the same handlers locally and the answer goes back on whichever socket
+// serves the session WHEN the user answers — a remount, a reconnect or a brief
+// outage must not lose the correlation. One registry per renderer, keyed by the
+// LOCAL request id the overlay sees; `sendToolResponse` consults it before the
 // (dark) q: lane.
 interface PendingDirectQuestion {
-  /** The id agnt correlates on (`questionId`). */
+  /** The id agnt correlates on (the elicitation's `requestId`). */
   wireRequestId: string;
+  /** The engine's questions, which turn the card's answers into the outcome. */
+  questions: ElicitationQuestion[];
   sessionId: string;
   providerSessionId: string;
   queryClient: QueryClient;
-  /** The turn that was live when the question arrived (the wire carries no
-   *  turn id; the fold's active turn is the binding). A reconnect snapshot
-   *  re-presents the question only for THAT turn — undefined (no admitted
-   *  turn in the fold yet) falls back to "any live turn". */
+  /** The turn that asked (the event's `turnId`, else the fold's active turn).
+   *  A reconnect snapshot re-presents the question only for THAT turn —
+   *  undefined (no admitted turn in the fold yet) falls back to "any live
+   *  turn". */
   turnId?: string;
   /** What the overlay was shown — re-emitted verbatim after a remount. */
   request: Omit<ToolRequestEventData, "requestId">;
@@ -177,9 +181,10 @@ setToolResponseInterceptor((requestId, result, error) => {
   if (!pending) return false;
   pendingDirectQuestions.delete(requestId);
   // An error response still UNBLOCKS the agent (schema-valid cancellation).
-  const frame = buildMcpAnswerFrame(
+  const frame = buildElicitationResponseFrame(
     pending.wireRequestId,
     pending.providerSessionId,
+    pending.questions,
     error === undefined ? result : undefined
   );
   // Whichever socket serves the session NOW — the one the question arrived on
@@ -386,26 +391,41 @@ export function useCloudDirectSession(
     const pendingTurnActive = () =>
       pendingTurn !== null && Date.now() - pendingTurn.at < PENDING_TURN_STALE_MS;
 
+    // The agent asked the user something: park it for the overlay (the same
+    // `tool:request` the Mac lane delivers) and mark the row as waiting so
+    // the sidebar shows attention, not a spinner. Answered via the
+    // interceptor above; the sidecar's own timeout is the fallback.
+    const askUser = (event: Record<string, unknown>) => {
+      const asked = toolRequestFromElicitation(event, sessionId);
+      if (asked) {
+        const { requestId: wireRequestId, ...rest } = asked.request;
+        parkDirectQuestion({
+          wireRequestId,
+          questions: asked.questions,
+          sessionId,
+          providerSessionId,
+          queryClient,
+          turnId:
+            typeof event.turnId === "string" ? event.turnId : activeTurnId(sessionId, queryClient),
+          request: rest,
+        });
+      } else if (typeof event.requestId === "string" && event.requestId) {
+        // Deus has no card for this kind of request (a form, a URL): decline it.
+        socket.send(buildElicitationResponseFrame(event.requestId, providerSessionId, [], null));
+      }
+    };
+
     const onFrame = (frame: Record<string, unknown>) => {
       if (closed) return;
-      // The agent asked the user something: park it for the overlay (the same
-      // `tool:request` the Mac lane delivers) and mark the row as waiting so
-      // the sidebar shows attention, not a spinner. Answered via the
-      // interceptor above; the sidecar's own timeout is the fallback.
-      if (frame.type === "mcp.question") {
-        const request = toolRequestFromMcpQuestion(frame, sessionId);
-        if (request) {
-          const { requestId: wireRequestId, ...rest } = request;
-          parkDirectQuestion({
-            wireRequestId,
-            sessionId,
-            providerSessionId,
-            queryClient,
-            turnId: activeTurnId(sessionId, queryClient),
-            request: rest,
-          });
+      // The event also reaches the fold below, as on the local lane.
+      if (frame.type === "elicitation.requested") askUser(frame);
+      // Answered or retracted elsewhere (another client, the turn ending):
+      // drop the card so it can't be answered twice.
+      if (frame.type === "elicitation.resolved" && typeof frame.requestId === "string") {
+        for (const [id, pending] of [...pendingDirectQuestions]) {
+          if (pending.wireRequestId === frame.requestId && pending.queryClient === queryClient)
+            retractDirectQuestion(id, pending, true);
         }
-        return;
       }
       // An approval the sidecar asks for is allowed on the spot (the sandbox
       // is the isolation boundary; parity with the Mac driver), or the agent
@@ -440,15 +460,19 @@ export function useCloudDirectSession(
         else emitSimulatorEvent(queryClient, sessionId, simulatorKind, frame);
         return;
       }
-      // The (re)connect snapshot is the truth about a parked question's turn.
-      // Live turn: put the overlay back — the frame that asked is consumed
-      // (the snapshot won't replay it) and the agent is still waiting on the
-      // sidecar's clock. No live turn: it ended while this socket was down
-      // (stopped from another client, timed out) and the agent no longer
-      // accepts the answer — drop it, or a stale card lives across remounts.
-      // A question bound to a turn other than the live one (turn A ended and
-      // turn B started while disconnected) is stale too: its answer would
-      // carry A's request id to an agent already past it.
+      // The (re)connect snapshot is the truth about a parked question. A
+      // platform with durable replies lists what is still unanswered in the
+      // live turn: those go back on the overlay (the frame that asked is
+      // consumed — the snapshot won't replay it), and ones this page never
+      // saw (asked before it loaded) are parked now. The rest were answered
+      // on another device or ended with their turn, and are dropped.
+      // Otherwise the turn decides. Live turn: put the overlay back. No live
+      // turn: it ended while this socket was down (stopped from another
+      // client, timed out) and the agent no longer accepts the answer — drop
+      // it, or a stale card lives across remounts. A question bound to a turn
+      // other than the live one (turn A ended and turn B started while
+      // disconnected) is stale too: its answer would carry A's request id to
+      // an agent already past it.
       if (frame.type === "session.snapshot") {
         const state = frame.state as
           | {
@@ -482,15 +506,24 @@ export function useCloudDirectSession(
           typeof state?.currentTurnId === "string" && state.currentTurnId
             ? state.currentTurnId
             : null;
+        const unanswered = unansweredElicitations(frame);
+        const parked = new Set<string>();
         for (const [id, pending] of [...pendingDirectQuestions]) {
           if (pending.sessionId !== sessionId || pending.queryClient !== queryClient) continue;
-          if (live && (pending.turnId === undefined || pending.turnId === live)) {
+          const open = unanswered
+            ? unanswered.some((request) => request.requestId === pending.wireRequestId)
+            : live !== null && (pending.turnId === undefined || pending.turnId === live);
+          if (open) {
             pendingDirectQuestions.delete(id);
             presentDirectQuestion(pending);
+            parked.add(pending.wireRequestId);
           } else {
             // The snapshot is the truth about the turn; the fold folds it next.
             retractDirectQuestion(id, pending, live !== null);
           }
+        }
+        for (const request of unanswered ?? []) {
+          if (!parked.has(request.requestId)) askUser(request);
         }
       }
       // A fresh turn proves the lane works — clear any earlier surfaced error

@@ -5,6 +5,7 @@ import {
   isPlanRequest,
   planAnswer,
   questionAnswer,
+  unansweredElicitations,
 } from "@shared/agent-asks";
 
 // The engine's plan question (agent-server's PLAN_OPTIONS) and a tool's approval.
@@ -57,5 +58,33 @@ describe("what Deus answers the engine", () => {
       content: { q1: "blue", q2: ["S", "M"] },
     });
     expect(questionAnswer(questions, ["USER_CANCELLED"])).toEqual({ action: "decline" });
+  });
+
+  it("reads what a snapshot says is still unanswered in its live turn", () => {
+    const ask = (requestId: string, turnId = "live") => ({
+      type: "elicitation.requested",
+      sessionId: "s",
+      turnId,
+      requestId,
+      mode: "question",
+      message: "Which?",
+    });
+    const receipt = { type: "interaction.receipt", status: "accepted", responseId: "r" };
+    const snapshot = (interactions?: unknown[], currentTurnId: string | null = "live") => ({
+      type: "session.snapshot",
+      state: { currentTurnId },
+      ...(interactions && { interactions }),
+    });
+    const interactions = [
+      { request: ask("open") },
+      { request: ask("answered"), receipt },
+      { request: ask("old turn", "earlier") },
+      { request: { type: "permission.request", turnId: "live", data: { requestId: "p" } } },
+    ];
+
+    expect(unansweredElicitations(snapshot(interactions))).toEqual([ask("open")]);
+    // Between turns nothing is waiting; a platform that doesn't list them says nothing.
+    expect(unansweredElicitations(snapshot(interactions, null))).toEqual([]);
+    expect(unansweredElicitations(snapshot())).toBeNull();
   });
 });

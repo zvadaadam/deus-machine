@@ -22,8 +22,9 @@
 //     turn.* / session.* — folded verbatim, as the live stream.
 //
 // Everything else (workspace.state, pty.*, diff.*, fs.*, browser.*, session.error,
-// permission.request, mcp.question) is a backend-driver effect with no surface in
-// a pure render lane, and is ignored.
+// permission.request) is a backend-driver effect with no surface in a pure render
+// lane, and is ignored. Questions (`elicitation.requested`) fold like any lifecycle
+// event; the direct-session hook answers them.
 
 import { LIFECYCLE_EVENT_TYPES } from "@deus-hq/api";
 import type { SessionSnapshotEvent } from "@deus-hq/api";
