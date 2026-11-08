@@ -41,10 +41,12 @@ vi.mock("@/platform/ws", () => ({
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 let onFrame: (frame: Record<string, unknown>) => void;
+let socketSend: ReturnType<typeof vi.fn>;
 vi.mock("@/features/session/cloud/cloudSessionSocket", () => ({
   connectCloudSessionSocket: (options: { onFrame: typeof onFrame }) => {
     onFrame = options.onFrame;
-    return { send: vi.fn(), close: vi.fn() };
+    socketSend = vi.fn();
+    return { send: socketSend, close: vi.fn() };
   },
 }));
 
@@ -131,11 +133,12 @@ describe("direct cloud session published frames", () => {
     try {
       first.frame({ type: "turn.started", turnId: "A-turn", timestamp: 1 });
       first.frame({
-        type: "mcp.question",
-        data: {
-          questionId: "question",
-          questions: [{ text: "Choose A's option" }],
-        },
+        type: "elicitation.requested",
+        sessionId: "same-provider",
+        turnId: "A-turn",
+        requestId: "question",
+        mode: "question",
+        questions: [{ id: "q1", question: "Choose A's option" }],
       });
       expect(hasParkedDirectQuestion("same", a.queryClient)).toBe(true);
       expect(hasParkedDirectQuestion("same", b.queryClient)).toBe(false);
@@ -158,6 +161,82 @@ describe("direct cloud session published frames", () => {
       a.dispose();
       b.dispose();
     }
+  });
+
+  it("puts back what a reconnect snapshot lists as unanswered and drops what it doesn't", () => {
+    const question = {
+      type: "elicitation.requested",
+      sessionId: "agnt-direct-1",
+      turnId: "turn-current",
+      mode: "question",
+      questions: [{ id: "q1", question: "Ship it?", options: [{ label: "Yes" }] }],
+      timestamp: 2,
+    };
+    onFrame({ type: "turn.started", turnId: "turn-current", timestamp: 1 });
+    onFrame({ ...question, requestId: "answered-on-phone" });
+    expect(hasParkedDirectQuestion("deus-direct-1", queryClient)).toBe(true);
+    vi.mocked(emitLocalEvent).mockClear();
+
+    // The phone answered while this socket was down, and the agent asked again.
+    onFrame(
+      SessionSnapshotEventSchema.parse({
+        type: "session.snapshot",
+        state: {
+          sessionId: "agnt-direct-1",
+          organizationId: "org-1",
+          workspaceId: "agnt-ws-1",
+          status: "running",
+          currentTurnId: "turn-current",
+        },
+        interactions: [
+          {
+            request: { ...question, requestId: "answered-on-phone", message: "Ship it?" },
+            receipt: {
+              type: "interaction.receipt",
+              sessionId: "agnt-direct-1",
+              turnId: "turn-current",
+              requestType: "elicitation.requested",
+              requestId: "answered-on-phone",
+              responseId: "phone-1",
+              status: "accepted",
+            },
+          },
+          { request: { ...question, requestId: "asked-while-away", message: "Ship it?" } },
+          {
+            request: {
+              type: "permission.request",
+              turnId: "turn-current",
+              data: {
+                sessionId: "agnt-direct-1",
+                requestId: "approval-while-away",
+                toolName: "Bash",
+                toolUseId: "tool-1",
+                input: {},
+              },
+            },
+          },
+        ],
+      })
+    );
+    expect(socketSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({
+          requestId: "approval-while-away",
+          result: { behavior: "allow" },
+        }),
+      })
+    );
+    const shown = vi
+      .mocked(emitLocalEvent)
+      .mock.calls.filter(([event]) => event === "tool:request")
+      .map(([, data]) => (data as { requestId: string }).requestId);
+    expect(shown).toEqual([expect.stringMatching(/^asked-while-away#/)]);
+    expect(emitLocalEvent).toHaveBeenCalledWith("tool:cancel", {
+      sessionId: "deus-direct-1",
+      requestId: expect.stringMatching(/^answered-on-phone#/),
+    });
+    expect(hasParkedDirectQuestion("deus-direct-1", queryClient)).toBe(true);
   });
 
   it("removes only the rejected optimistic send and leaves unrelated errors alone", () => {

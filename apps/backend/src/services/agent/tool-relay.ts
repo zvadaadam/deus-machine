@@ -113,6 +113,25 @@ export function reject(requestId: string, error: string): boolean {
 }
 
 /**
+ * Reject one pending relay and tell the renderer to drop its overlay: what it
+ * asked was settled elsewhere. Returns whether it was pending.
+ */
+export function cancelRelay(requestId: string, reason: string): boolean {
+  const entry = pending.get(requestId);
+  if (!entry) return false;
+  clearTimeout(entry.timer);
+  pending.delete(requestId);
+  entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
+  const frame: QServerFrame = {
+    type: "q:event",
+    event: TOOL_CANCEL_EVENT,
+    data: { sessionId: entry.sessionId, requestId },
+  };
+  broadcast(JSON.stringify(frame));
+  return true;
+}
+
+/**
  * Reject every pending relay of a session and tell the renderer to drop their
  * overlays: the turn that asked has ended (stopped, killed, timed out), so a
  * later answer would reach a request the agent has already abandoned — and
@@ -121,18 +140,8 @@ export function reject(requestId: string, error: string): boolean {
  */
 export function cancelSessionRelays(sessionId: string, reason: string): string[] {
   const cancelled: string[] = [];
-  for (const [requestId, entry] of pending) {
-    if (entry.sessionId !== sessionId) continue;
-    clearTimeout(entry.timer);
-    pending.delete(requestId);
-    cancelled.push(requestId);
-    entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
-    const frame: QServerFrame = {
-      type: "q:event",
-      event: TOOL_CANCEL_EVENT,
-      data: { sessionId, requestId },
-    };
-    broadcast(JSON.stringify(frame));
+  for (const [requestId, entry] of [...pending]) {
+    if (entry.sessionId === sessionId && cancelRelay(requestId, reason)) cancelled.push(requestId);
   }
   return cancelled;
 }

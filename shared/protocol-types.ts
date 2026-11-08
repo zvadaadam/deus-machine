@@ -76,6 +76,9 @@ export type {
   ImagePartInput,
   // ---- config ----
   AgentCapabilities,
+  // ---- elicitation (a cloud agent's question, answered in the browser) ----
+  ElicitationOutcome,
+  ElicitationQuestion,
   // ---- accounting + errors ----
   TokenUsage,
   ErrorCategory,

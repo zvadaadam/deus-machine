@@ -22,6 +22,7 @@ import {
   reject,
   getPendingCount,
   clearAll,
+  cancelRelay,
   cancelSessionRelays,
 } from "../../../src/services/agent/tool-relay";
 // The live payload type. `shared/agent-events` was the deus dialect and is
@@ -262,5 +263,30 @@ describe("cancelSessionRelays", () => {
     // The other session's relay is untouched and still resolvable.
     expect(resolve("q-2", { ok: true })).toBe(true);
     await expect(other).resolves.toEqual({ ok: true });
+  });
+});
+
+describe("cancelRelay", () => {
+  beforeEach(() => {
+    mockBroadcast.mockClear();
+  });
+  afterEach(() => {
+    clearAll();
+  });
+
+  it("rejects one pending relay and tells the renderer to drop its overlay", async () => {
+    const asked = relay(makeToolRequestEvent({ requestId: "q-1", sessionId: "sess-1" }));
+    asked.catch(() => {});
+    mockBroadcast.mockClear();
+
+    expect(cancelRelay("q-1", "resolved elsewhere")).toBe(true);
+    await expect(asked).rejects.toThrow(/cancelled: resolved elsewhere/);
+    expect(getPendingCount()).toBe(0);
+    expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toEqual({
+      type: "q:event",
+      event: "tool:cancel",
+      data: { sessionId: "sess-1", requestId: "q-1" },
+    });
+    expect(cancelRelay("q-1", "again")).toBe(false);
   });
 });

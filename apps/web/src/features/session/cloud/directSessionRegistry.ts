@@ -28,6 +28,8 @@ import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import { readCloudTurnSelection } from "@shared/cloud-models";
 import { queryClient } from "@/shared/api/queryClient";
 import type { QueryClient } from "@tanstack/react-query";
+import type { ElicitationOutcome, ElicitationQuestion } from "@shared/protocol-types";
+import { askableQuestions, cardOutcome, cardQuestions } from "@shared/agent-asks";
 
 /** What the composer chose for this turn — never a credential (agnt resolves that). */
 export interface DirectTurnOptions {
@@ -124,7 +126,7 @@ export function buildCancelFrame(turnId?: string): Record<string, unknown> {
   return { type: "agent.cancel", ...(turnId ? { turnId } : {}) };
 }
 
-// ---- Question round-trip (pure; the agnt mcp.question ↔ mcp.answer wire) ----
+// ---- Question round-trip (pure; agnt's elicitation.requested ↔ elicitation.respond) ----
 
 /** The `tool:request` payload the renderer's RPC handlers consume — the SAME
  *  contract the Mac lane's q:event carries, so the direct lane can't drift. */
@@ -134,60 +136,54 @@ export type DirectToolRequest = ToolRequestEventData;
 const QUESTION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 /**
- * An agnt `mcp.question` frame (the agent's AskUserQuestion) → the same
- * `tool:request` the Mac lane delivers via q:event, so `useAgentRpcHandler`
- * shows the existing overlay without knowing which lane asked. agnt's items
- * are `{text, options?, allowsMultiSelect?}`; the handler's tolerant reader
- * wants `{question, options, multiSelect}`. The deus session id replaces the
- * wire's provider id, exactly as the fold does. Returns null for a frame with
- * no usable question id.
+ * An agnt `elicitation.requested` event in question mode (Claude's
+ * AskUserQuestion, Codex's request_user_input) → the same `tool:request` the
+ * Mac lane delivers via q:event, so `useAgentRpcHandler` shows the existing
+ * overlay without knowing which lane asked. The card's questions come from
+ * the shared converter (shared/agent-asks.ts), as on the local lane; the deus
+ * session id replaces the wire's provider id, exactly as the fold does. The
+ * engine's questions are kept to turn the card's answers into the outcome.
+ * Returns null for an event with no request id or nothing to ask.
  */
-export function toolRequestFromMcpQuestion(
+export function toolRequestFromElicitation(
   frame: Record<string, unknown>,
   deusSessionId: string
-): DirectToolRequest | null {
-  const data = (frame.data ?? {}) as {
-    questionId?: unknown;
-    questions?: unknown;
-  };
-  if (typeof data.questionId !== "string" || !data.questionId) return null;
-  const items = Array.isArray(data.questions) ? data.questions : [];
-  const questions = items.flatMap((item): Array<Record<string, unknown>> => {
-    if (!item || typeof item !== "object") return [];
-    const q = item as { text?: unknown; options?: unknown; allowsMultiSelect?: unknown };
-    if (typeof q.text !== "string" || !q.text.trim()) return [];
-    return [
-      {
-        question: q.text,
-        options: Array.isArray(q.options) ? q.options.filter((o) => typeof o === "string") : [],
-        ...(typeof q.allowsMultiSelect === "boolean" ? { multiSelect: q.allowsMultiSelect } : {}),
-      },
-    ];
-  });
+): { request: DirectToolRequest; questions: ElicitationQuestion[] } | null {
+  if (typeof frame.requestId !== "string" || !frame.requestId) return null;
+  if (frame.mode !== "question" || !Array.isArray(frame.questions)) return null;
+  const questions = askableQuestions(frame.questions);
+  if (questions.length === 0) return null;
   return {
-    requestId: data.questionId,
-    sessionId: deusSessionId,
-    method: "askUserQuestion",
-    params: { sessionId: deusSessionId, questions },
-    timeoutMs: QUESTION_TIMEOUT_MS,
+    request: {
+      requestId: frame.requestId,
+      sessionId: deusSessionId,
+      method: "askUserQuestion",
+      params: { sessionId: deusSessionId, questions: cardQuestions(questions) },
+      timeoutMs: QUESTION_TIMEOUT_MS,
+    },
+    questions,
   };
 }
 
 /**
- * The `mcp.answer` client command for a handled question. `result` is what the
- * RPC handler responded with (`{answers: string[]}`); anything else — including
- * an error response — becomes the schema-valid cancellation, which UNBLOCKS the
- * agent instead of leaving it on the sidecar's timeout.
+ * The `elicitation.respond` client command. `result` is what the RPC handler
+ * responded with (`{answers}`, one per question); anything else — including an
+ * error response — becomes a cancellation, which UNBLOCKS the agent instead of
+ * leaving it on the sidecar's timeout. A request Deus has no card for (a form,
+ * a URL) is declined, as the local lane does.
  */
-export function buildMcpAnswerFrame(
-  questionId: string,
+export function buildElicitationResponseFrame(
+  requestId: string,
   providerSessionId: string,
+  questions: readonly ElicitationQuestion[],
   result: unknown
 ): Record<string, unknown> {
-  const maybe =
-    result && typeof result === "object" ? (result as { answers?: unknown }).answers : undefined;
-  const answers = Array.isArray(maybe) && maybe.length > 0 ? maybe.map(String) : ["USER_CANCELLED"];
-  return { type: "mcp.answer", data: { questionId, sessionId: providerSessionId, answers } };
+  const outcome: ElicitationOutcome =
+    questions.length === 0 ? { action: "decline" } : cardOutcome(questions, result);
+  return {
+    type: "elicitation.respond",
+    data: { sessionId: providerSessionId, requestId, outcome },
+  };
 }
 
 /**

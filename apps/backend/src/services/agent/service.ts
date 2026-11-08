@@ -27,10 +27,11 @@ import type {
 } from "@zvada/agent-server/protocol";
 import {
   allowOnce,
+  askableQuestions,
+  cardOutcome,
   cardQuestions,
   isPlanRequest,
   planAnswer,
-  questionAnswer,
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
 import type { AgentInfo } from "@shared/agent-info";
@@ -248,14 +249,14 @@ async function answerElicitation(event: ElicitationRequestedEvent): Promise<void
 }
 
 async function askQuestions(event: ElicitationRequestedEvent): Promise<ElicitationOutcome> {
-  if (event.mode !== "question" || !event.questions?.length) return { action: "decline" };
+  const questions = event.mode === "question" ? askableQuestions(event.questions) : [];
+  if (questions.length === 0) return { action: "decline" };
   try {
-    const answer = (await handleToolRequest("askUserQuestion", {
+    const answer = await handleToolRequest("askUserQuestion", {
       sessionId: event.sessionId,
-      questions: cardQuestions(event.questions),
-    })) as { answers?: unknown } | undefined;
-    const answers = Array.isArray(answer?.answers) ? (answer.answers as (string | string[])[]) : [];
-    return questionAnswer(event.questions, answers);
+      questions: cardQuestions(questions),
+    });
+    return cardOutcome(questions, answer);
   } catch {
     // The card went away unanswered (the turn stopped, the relay was cleared).
     return { action: "cancel" };

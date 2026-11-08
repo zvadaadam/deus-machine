@@ -85,8 +85,10 @@ vi.mock("../../../src/services/workspace-status.service", () => ({ autoProgressS
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));
 const mockCancelSessionRelays = vi.fn((..._args: unknown[]) => [] as string[]);
+const mockCancelRelay = vi.fn((..._args: unknown[]) => true);
 vi.mock("../../../src/services/agent/tool-relay", () => ({
   relay: (...args: unknown[]) => mockRelay(...args),
+  cancelRelay: (...args: unknown[]) => mockCancelRelay(...args),
   cancelSessionRelays: (...args: unknown[]) => mockCancelSessionRelays(...args),
 }));
 
@@ -147,6 +149,7 @@ import {
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
 import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
+import { persistSessionBackToWorking } from "../../../src/services/agent/persistence";
 
 function makeHandler() {
   return {
@@ -460,8 +463,11 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "mcp.question",
-      data: { questionId: "req-r", questions: [{ text: "Which?", options: ["A"] }] },
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-r",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -476,8 +482,11 @@ describe("cloud driver frame → fold contract", () => {
     await vi.waitFor(() =>
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: "mcp.answer",
-          data: expect.objectContaining({ questionId: "req-r", answers: ["A"] }),
+          type: "elicitation.respond",
+          data: expect.objectContaining({
+            requestId: "req-r",
+            outcome: { action: "accept", content: { q1: "A" } },
+          }),
         })
       )
     );
@@ -493,8 +502,11 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "mcp.question",
-      data: { questionId: "req-o", questions: [{ text: "Which?", options: ["A"] }] },
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-o",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -503,14 +515,16 @@ describe("cloud driver frame → fold contract", () => {
     socketOpen = false;
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: "mcp.answer" }));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "elicitation.respond" })
+    );
 
     socketOpen = true;
     capturedOnOpen!();
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "mcp.answer",
-        data: expect.objectContaining({ questionId: "req-o" }),
+        type: "elicitation.respond",
+        data: expect.objectContaining({ requestId: "req-o" }),
       })
     );
   });
@@ -524,8 +538,11 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "mcp.question",
-      data: { questionId: "req-x", questions: [{ text: "Which?", options: ["A"] }] },
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-x",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -533,7 +550,9 @@ describe("cloud driver frame → fold contract", () => {
     socketOpen = false;
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: "mcp.answer" }));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "elicitation.respond" })
+    );
 
     // That socket gives up (terminal onDown) — the queue must not die with it.
     capturedOnDown!("session socket down after 8 retries");
@@ -548,8 +567,8 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnOpen!();
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "mcp.answer",
-        data: expect.objectContaining({ questionId: "req-x" }),
+        type: "elicitation.respond",
+        data: expect.objectContaining({ requestId: "req-x" }),
       })
     );
   });
@@ -563,8 +582,11 @@ describe("cloud driver frame → fold contract", () => {
         })
     );
     capturedOnFrame!({
-      type: "mcp.question",
-      data: { questionId: "req-late", questions: [{ text: "Which?", options: ["A"] }] },
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-late",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
     });
     await vi.waitFor(() => expect(mockRelay).toHaveBeenCalled());
 
@@ -575,7 +597,9 @@ describe("cloud driver frame → fold contract", () => {
     mockTokenExchange.mockRejectedValueOnce(new Error("mint failed"));
     settle({ answers: ["A"] });
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: "mcp.answer" }));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "elicitation.respond" })
+    );
 
     // The next connect delivers it.
     socketOpen = true;
@@ -583,9 +607,284 @@ describe("cloud driver frame → fold contract", () => {
     capturedOnOpen!();
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "mcp.answer",
-        data: expect.objectContaining({ questionId: "req-late" }),
+        type: "elicitation.respond",
+        data: expect.objectContaining({ requestId: "req-late" }),
       })
+    );
+  });
+
+  it("declines a request Deus has no card for, without showing anything", async () => {
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-form",
+      mode: "form",
+      message: "Fill this in",
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith({
+        type: "elicitation.respond",
+        data: {
+          sessionId: "agnt-session-1",
+          requestId: "req-form",
+          outcome: { action: "decline" },
+        },
+      })
+    );
+    expect(mockRelay).not.toHaveBeenCalled();
+  });
+
+  it("cancels the request when the card goes away unanswered, so the agent isn't left waiting", async () => {
+    mockRelay.mockRejectedValueOnce(new Error("relay cleared"));
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-gone",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "elicitation.respond",
+          data: expect.objectContaining({ requestId: "req-gone", outcome: { action: "cancel" } }),
+        })
+      )
+    );
+  });
+
+  it("asks what a reconnect snapshot lists as unanswered in the live turn, once", () => {
+    mockRelay.mockImplementationOnce(() => new Promise(() => {}));
+    const question = {
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
+    };
+    const snapshot = {
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [
+        { request: { ...question, requestId: "req-snap" } },
+        // Answered on another device, and one its turn left behind.
+        {
+          request: { ...question, requestId: "req-answered" },
+          receipt: {
+            type: "interaction.receipt",
+            sessionId: "agnt-session-1",
+            turnId: "turn-live",
+            requestType: "elicitation.requested",
+            requestId: "req-answered",
+            responseId: "phone-1",
+            status: "accepted",
+          },
+        },
+        { request: { ...question, turnId: "turn-old", requestId: "req-old" } },
+      ],
+    };
+    capturedOnFrame!(snapshot);
+    // The next reconnect lists it again while it is still on the card.
+    capturedOnFrame!(snapshot);
+    expect(mockRelay).toHaveBeenCalledTimes(1);
+    expect(mockRelay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "askUserQuestion",
+        params: expect.objectContaining({ questions: [{ question: "Which?", options: ["A"] }] }),
+      })
+    );
+  });
+
+  it("takes the card down when another device answers, without cancelling the answer", async () => {
+    let fail: (err: Error) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        })
+    );
+    mockCancelRelay.mockImplementationOnce(() => {
+      fail(new Error("cancelled"));
+      return true;
+    });
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-1",
+      requestId: "req-elsewhere",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?", options: [{ label: "A" }] }],
+    });
+    const relayId = (mockRelay.mock.calls.at(-1)![0] as { requestId: string }).requestId;
+    capturedOnFrame!({
+      type: "elicitation.resolved",
+      sessionId: "agnt-session-1",
+      turnId: "turn-1",
+      requestId: "req-elsewhere",
+      outcome: { action: "accept", content: { q1: "A" } },
+    });
+    expect(mockCancelRelay).toHaveBeenCalledWith(relayId, expect.any(String));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "elicitation.respond" })
+    );
+  });
+
+  it("asks the live turn's question after a snapshot ends the stale one, without cancelling it", () => {
+    mockRelay.mockImplementationOnce(() => new Promise(() => {}));
+    // This backend still thinks turn A runs; A ended in the gap and B asked.
+    handler.liveTurnId.mockReturnValue("turn-a");
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: {
+        currentTurnId: "turn-b",
+        turns: [{ turnId: "turn-a", stopReason: "end_turn" }],
+      },
+      interactions: [
+        {
+          request: {
+            type: "elicitation.requested",
+            sessionId: "agnt-session-1",
+            turnId: "turn-b",
+            requestId: "req-b",
+            mode: "question",
+            questions: [{ id: "q1", question: "Which?" }],
+          },
+        },
+      ],
+    });
+    const order = [
+      mockCancelSessionRelays.mock.invocationCallOrder[0],
+      mockRelay.mock.invocationCallOrder[0],
+    ];
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "elicitation.respond" })
+    );
+  });
+
+  it("takes down a card the snapshot no longer lists, and allows an approval asked in the gap", () => {
+    mockRelay.mockImplementationOnce(() => new Promise(() => {}));
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      requestId: "req-gap",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    });
+    const relayId = (mockRelay.mock.calls.at(-1)![0] as { requestId: string }).requestId;
+    // Answered on the phone while this socket was down.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [
+        {
+          request: {
+            type: "permission.request",
+            turnId: "turn-live",
+            data: { sessionId: "agnt-session-1", requestId: "perm-gap" },
+          },
+        },
+      ],
+    });
+    expect(mockCancelRelay).toHaveBeenCalledWith(relayId, expect.any(String));
+    expect(mockSend).toHaveBeenCalledWith({
+      type: "permission.response",
+      data: { requestId: "perm-gap", sessionId: "agnt-session-1", result: { behavior: "allow" } },
+    });
+  });
+
+  it("keeps the session waiting when a recovered question replaces one answered elsewhere", async () => {
+    let fail: (err: Error) => void = () => {};
+    mockRelay
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            fail = reject;
+          })
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+    mockCancelRelay.mockImplementationOnce(() => {
+      fail(new Error("cancelled"));
+      return true;
+    });
+    const ask = (requestId: string) => ({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      requestId,
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    });
+    capturedOnFrame!(ask("req-a"));
+    // A was answered on the phone in the gap, and the agent asked B.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [{ request: ask("req-b") }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockRelay).toHaveBeenCalledTimes(2);
+    expect(persistSessionBackToWorking).not.toHaveBeenCalled();
+  });
+
+  it("does not ask again what was answered while its answer waits for the socket", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    const question = {
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      requestId: "req-queued",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    };
+    capturedOnFrame!(question);
+    socketOpen = false;
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The reconnect's snapshot predates the queued answer.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [{ request: question }],
+    });
+    expect(mockRelay).toHaveBeenCalledTimes(1);
+    socketOpen = true;
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "elicitation.respond",
+        data: expect.objectContaining({
+          requestId: "req-queued",
+          outcome: { action: "accept", content: { q1: "A" } },
+        }),
+      })
+    );
+  });
+
+  it("cancels rather than invent an answer when the card responds without answers", async () => {
+    mockRelay.mockResolvedValueOnce({} as { answers: string[] });
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-empty",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "elicitation.respond",
+          data: expect.objectContaining({ requestId: "req-empty", outcome: { action: "cancel" } }),
+        })
+      )
     );
   });
 
