@@ -5,7 +5,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockApp, mockBrowserWindow, mockSpawn } = vi.hoisted(() => ({
+const { mockApp, mockBrowserWindow, mockSpawn, mockPushCredentials } = vi.hoisted(() => ({
   mockApp: {
     isPackaged: true,
     getPath: vi.fn((name: string) =>
@@ -16,6 +16,7 @@ const { mockApp, mockBrowserWindow, mockSpawn } = vi.hoisted(() => ({
     getAllWindows: vi.fn(() => []),
   },
   mockSpawn: vi.fn(),
+  mockPushCredentials: vi.fn(async () => true),
 }));
 
 vi.mock("electron", () => ({
@@ -25,6 +26,10 @@ vi.mock("electron", () => ({
 
 vi.mock("child_process", () => ({
   spawn: mockSpawn,
+}));
+
+vi.mock("../../../apps/desktop/main/deus-cloud-provision", () => ({
+  pushCloudCredentialsToBackend: mockPushCredentials,
 }));
 
 import { CDP_PORT, spawnBackend, stopBackend } from "../../../apps/desktop/main/backend-process";
@@ -114,6 +119,42 @@ describe("desktop backend process", () => {
     child.emit("exit", 0, null);
     await stopping;
     expect(stopped).toBe(true);
+  });
+
+  it("hands credentials to a restarted backend with that backend's token", async () => {
+    // A fresh module: stopBackend() in afterEach leaves the shared one quitting.
+    vi.resetModules();
+    const backend = await import("../../../apps/desktop/main/backend-process");
+    vi.useFakeTimers();
+    try {
+      const resourcesPath = createTempResourcesRoot();
+      createRuntimeExecutable(resourcesPath);
+      (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+      const first = createFakeChild();
+      const second = createFakeChild();
+      mockSpawn.mockReturnValueOnce(first).mockReturnValueOnce(second);
+      const starting = backend.spawnBackend();
+      first.stdout.write("[BACKEND_PORT]45678\n");
+      process.env.DEUS_AUTH_TOKEN = (await starting).authToken; // as main/index.ts does
+
+      let tokenAtPush: string | undefined;
+      mockPushCredentials.mockImplementationOnce(async () => {
+        tokenAtPush = process.env.DEUS_AUTH_TOKEN;
+        return true;
+      });
+      first.exitCode = 1;
+      first.emit("exit", 1, null);
+      await vi.advanceTimersByTimeAsync(1_000);
+      second.stdout.write("[BACKEND_PORT]45679\n");
+      await vi.waitFor(() => expect(mockPushCredentials).toHaveBeenCalled());
+
+      // The route refuses any other token, so the push must carry the new one.
+      expect(tokenAtPush).toBe(mockSpawn.mock.calls[1][2].env.AUTH_TOKEN);
+      expect(process.env.DEUS_BACKEND_PORT).toBe("45679");
+    } finally {
+      vi.useRealTimers();
+      await backend.stopBackend();
+    }
   });
 
   it("starts packaged backend through bundled deus-runtime without Electron-as-Node", async () => {

@@ -141,8 +141,10 @@ function scheduleRestart(hooks: BackendSpawnHooks): void {
     void (async () => {
       try {
         await terminateBackend();
-        const { port } = await spawnBackend(hooks);
+        const { port, authToken } = await spawnBackend(hooks);
         process.env.DEUS_BACKEND_PORT = String(port);
+        // The new backend accepts credentials only with its own spawn token.
+        process.env.DEUS_AUTH_TOKEN = authToken;
 
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send("backend:port-changed", { port });
