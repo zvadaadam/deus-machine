@@ -8,6 +8,8 @@ import {
   CloudSessionExpiredError,
 } from "@/features/session/cloud/cloudDataAdapter";
 import { handleWebCloudSessionExpired } from "@/features/session/cloud/webCloudDirectConfig";
+import { queryClient, setActiveQueryClient } from "@/shared/api/queryClient";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
 
 // Partial discovery failures surface through sonner; node-env has no toaster.
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn() } }));
@@ -235,5 +237,66 @@ describe("multi-org discovery", () => {
     expect(groups[0].workspaces).toHaveLength(1);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("has_more"));
     expect(toast.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("discovery account boundaries", () => {
+  it.each([200, 401])("keeps a late %s response on its original account", async (status) => {
+    const previous = queryClient;
+    const open = () => {
+      throw new Error("No q: socket for discovery");
+    };
+    const a = new RuntimeClient({ host: "direct", account: "A", grant: "A" }, { open });
+    const b = new RuntimeClient({ host: "direct", account: "B", grant: "B" }, { open });
+    let bearer = "A";
+    vi.stubGlobal("sessionStorage", { getItem: () => bearer });
+    vi.mocked(handleWebCloudSessionExpired).mockClear();
+    let finishA!: (value: unknown) => void;
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      const authorization = (init.headers as Record<string, string>).authorization;
+      if (new URL(url).pathname === "/dashboard/orgs") {
+        if (authorization === "Bearer A")
+          return new Promise((resolve) => {
+            finishA = resolve;
+          });
+        return ok({ items: [{ id: "B-org" }] });
+      }
+      return ok({
+        items: [agntSession({ id: authorization === "Bearer A" ? "A-session" : "B-session" })],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      setActiveQueryClient(a.queryClient);
+      const pendingA = cloudDataRequestInterceptor("workspaces")!;
+      const resultA = pendingA.then(
+        (data) => ({ data }),
+        (error) => ({ error })
+      );
+      await vi.waitFor(() => expect(finishA).toBeTypeOf("function"));
+      a.dispose();
+      bearer = "B";
+      setActiveQueryClient(b.queryClient);
+      const dataB = (await cloudDataRequestInterceptor("workspaces")) as Groups;
+      expect(dataB[0].workspaces[0].id).toBe("B-session");
+      finishA(status === 401 ? fail(401) : ok({ items: [{ id: "A-org" }] }));
+      const old = await resultA;
+      if (status === 200) {
+        expect((old as { data: Groups }).data[0].workspaces[0].id).toBe("A-session");
+        const requestA = fetchMock.mock.calls.find(([url]) =>
+          new URL(url).pathname.includes("/A-org/")
+        );
+        expect(requestA?.[1].headers).toEqual({ authorization: "Bearer A" });
+      } else expect((old as { error: Error }).error).toBeInstanceOf(CloudSessionExpiredError);
+      expect(handleWebCloudSessionExpired).not.toHaveBeenCalled();
+      const count = fetchMock.mock.calls.length;
+      expect(await cloudDataRequestInterceptor("workspaces")).toEqual(dataB);
+      expect(fetchMock).toHaveBeenCalledTimes(count);
+    } finally {
+      setActiveQueryClient(previous);
+      a.dispose();
+      b.dispose();
+      vi.unstubAllGlobals();
+    }
   });
 });

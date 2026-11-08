@@ -93,5 +93,11 @@ export function mergeWorkspaceDelta(
     }
   }
 
-  return result;
+  // Match the snapshot query's updated_at DESC order after an upsert changes it.
+  return result.map((group) => ({
+    ...group,
+    workspaces: group.workspaces.sort((a, b) =>
+      a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0
+    ),
+  }));
 }

@@ -1,5 +1,5 @@
 {
-  "version": "2.18",
+  "version": "2.22",
   "children": [
     {
       "type": "frame",
@@ -9498,8 +9498,7 @@
                       "x": 0,
                       "y": 8
                     },
-                    "blur": 24,
-                    "spread": -6
+                    "blur": 24
                   },
                   "layout": "vertical",
                   "children": [
@@ -21314,8 +21313,7 @@
                 "x": 0,
                 "y": 1
               },
-              "blur": 2,
-              "spread": -1
+              "blur": 2
             }
           ],
           "layout": "vertical",
@@ -22325,8 +22323,7 @@
                 "x": 0,
                 "y": 4
               },
-              "blur": 6,
-              "spread": -1
+              "blur": 6
             },
             {
               "type": "shadow",
@@ -22336,8 +22333,7 @@
                 "x": 0,
                 "y": 2
               },
-              "blur": 4,
-              "spread": -2
+              "blur": 4
             }
           ],
           "layout": "vertical",
@@ -22914,8 +22910,7 @@
                 "x": 0,
                 "y": 4
               },
-              "blur": 6,
-              "spread": -1
+              "blur": 6
             },
             {
               "type": "shadow",
@@ -22925,8 +22920,7 @@
                 "x": 0,
                 "y": 2
               },
-              "blur": 4,
-              "spread": -2
+              "blur": 4
             }
           ],
           "layout": "vertical",
@@ -30760,7 +30754,7 @@
                                         "type": "image",
                                         "enabled": true,
                                         "url": "assets/github-acme.png",
-                                        "mode": "fill"
+                                        "mode": "cover"
                                       },
                                       "width": 24,
                                       "height": 24
@@ -30860,7 +30854,7 @@
                                         "type": "image",
                                         "enabled": true,
                                         "url": "assets/github-acme.png",
-                                        "mode": "fill"
+                                        "mode": "cover"
                                       },
                                       "width": 24,
                                       "height": 24
@@ -30938,7 +30932,7 @@
                                         "type": "image",
                                         "enabled": true,
                                         "url": "assets/github-acme.png",
-                                        "mode": "fill"
+                                        "mode": "cover"
                                       },
                                       "width": 24,
                                       "height": 24
@@ -31038,7 +31032,7 @@
                                         "type": "image",
                                         "enabled": true,
                                         "url": "assets/github-acme.png",
-                                        "mode": "fill"
+                                        "mode": "cover"
                                       },
                                       "width": 24,
                                       "height": 24
@@ -32829,7 +32823,7 @@
                                   "id": "a5u823",
                                   "name": "Access URL",
                                   "fill": "$text-muted",
-                                  "content": "Access URL",
+                                  "content": "Open on another device, signed in as adam@deusmachine.ai",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-xs",
                                   "fontWeight": "normal"
@@ -32841,7 +32835,7 @@
                                   "fill": "$text-primary",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
-                                  "content": "https://deusmachine.ai/connect/abcdef12",
+                                  "content": "https://deusmachine.ai/connect",
                                   "fontFamily": "$font-mono",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "normal"
@@ -33037,7 +33031,7 @@
                                           "id": "C6Mb75",
                                           "name": "last seen yesterday",
                                           "fill": "$text-muted",
-                                          "content": "last seen yesterday",
+                                          "content": "last seen yesterday · Local network only",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-xs",
                                           "fontWeight": "normal"
@@ -44630,7 +44624,7 @@
               "id": "aOCXx",
               "name": "Pair a device",
               "fill": "$text-primary",
-              "content": "Pair a device",
+              "content": "Connect a Device",
               "fontFamily": "$font-sans",
               "fontSize": "$text-lg",
               "fontWeight": "600",
@@ -44643,7 +44637,7 @@
               "fill": "$text-muted",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Scan the code on your phone, or type the six characters into app.deusmachine.ai.",
+              "content": "Scan the QR code, signed in to the same Deus account, or enter the code on your other device. You approve each device once.",
               "lineHeight": 1.5,
               "fontFamily": "$font-sans",
               "fontSize": "$text-xs",
@@ -45046,13 +45040,26 @@
               "id": "jOQYX",
               "name": "K7M-2QX",
               "fill": "$text-primary",
-              "content": "K7M-2QX",
+              "content": "FATE LAID",
               "fontFamily": "$font-mono",
               "fontSize": "$text-2xl",
               "fontWeight": "700",
               "letterSpacing": 1.2
             }
           ]
+        },
+        {
+          "type": "text",
+          "id": "ltPzD",
+          "name": "For this computer · AccessSection.tsx",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "For Studio Mac · 0123 4567",
+          "textAlign": "center",
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-xs",
+          "fontWeight": "normal"
         },
         {
           "type": "frame",
@@ -45105,7 +45112,7 @@
           "fill": "$text-muted",
           "textGrowth": "fixed-width",
           "width": "fill_container",
-          "content": "Expires in 4:32",
+          "content": "Expires in 15 minutes",
           "textAlign": "center",
           "fontFamily": "$font-sans",
           "fontSize": "$text-xs",
@@ -51012,8 +51019,7 @@
                           "x": 0,
                           "y": 8
                         },
-                        "blur": 24,
-                        "spread": -6
+                        "blur": 24
                       },
                       "layout": "vertical",
                       "children": [
@@ -53748,8 +53754,7 @@
             "type": "shadow",
             "shadowType": "outer",
             "color": "#6D95EE4D",
-            "blur": 30,
-            "spread": -4
+            "blur": 30
           },
           "padding": [
             0,
@@ -59521,7 +59526,7 @@
       "id": "SqQTS",
       "x": 9240,
       "y": 9800,
-      "name": "80 · Connect to Server (/connect)",
+      "name": "80 · Your computers (/connect)",
       "theme": {
         "mode": "dark"
       },
@@ -59553,11 +59558,11 @@
                 {
                   "type": "text",
                   "id": "sF9da",
-                  "name": "Connect to Server",
+                  "name": "Your computers",
                   "fill": "$text-primary",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Connect to Server",
+                  "content": "Your computers",
                   "textAlign": "center",
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-2xl",
@@ -59567,11 +59572,11 @@
                 {
                   "type": "text",
                   "id": "r1pJ4y",
-                  "name": "Enter the server ID from your Deus deskt",
+                  "name": "Subtitle",
                   "fill": "$text-muted",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Enter the server ID from your Deus desktop app to connect.",
+                  "content": "Computers signed in to this Deus account with Remote access on.",
                   "lineHeight": 1.5,
                   "textAlign": "center",
                   "fontFamily": "$font-sans",
@@ -59582,97 +59587,149 @@
             },
             {
               "type": "frame",
-              "id": "FI1tf",
-              "name": "Form",
+              "id": "LEld1",
+              "name": "Computers · app/routes/connect.tsx",
               "width": "fill_container",
               "layout": "vertical",
-              "gap": 24,
+              "gap": 6,
               "children": [
                 {
                   "type": "frame",
-                  "id": "X3yX5",
-                  "name": "Field",
+                  "id": "u8sE6",
+                  "name": "Studio Mac",
                   "width": "fill_container",
-                  "layout": "vertical",
-                  "gap": 8,
+                  "fill": "#2A2A2A4D",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 12,
+                  "padding": [
+                    10,
+                    12,
+                    10,
+                    16
+                  ],
+                  "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "UlqED",
-                      "name": "Server ID",
-                      "fill": "$text-secondary",
-                      "content": "Server ID",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "500"
+                      "type": "icon",
+                      "id": "hd1Fo",
+                      "name": "Monitor",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "monitor",
+                      "library": "lucide",
+                      "fill": "$text-muted"
                     },
                     {
                       "type": "frame",
-                      "id": "HBS5W",
-                      "name": "Input",
+                      "id": "X6a1ci",
+                      "name": "Text",
                       "width": "fill_container",
-                      "height": 44,
-                      "fill": "$bg-elevated",
-                      "cornerRadius": "$radius-lg",
-                      "stroke": "$border-default",
-                      "strokeWidth": 1,
-                      "strokeAlignment": "inner",
-                      "justifyContent": "center",
-                      "alignItems": "center",
+                      "layout": "vertical",
+                      "gap": 2,
                       "children": [
                         {
                           "type": "text",
-                          "id": "ugmvg",
-                          "name": "e.g. abc123",
-                          "fill": "$text-disabled",
-                          "content": "e.g. abc123",
-                          "fontFamily": "$font-mono",
-                          "fontSize": "$text-lg",
-                          "fontWeight": "normal",
-                          "letterSpacing": 1.5
+                          "id": "HdjUF",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Studio Mac",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "kvXO2",
+                          "name": "Last connected",
+                          "fill": "$text-muted",
+                          "content": "Connected just now · 0123 4567",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
                         }
                       ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "ZCLhZ",
+                      "name": "Remove",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "trash-2",
+                      "library": "lucide",
+                      "fill": "$text-muted"
                     }
                   ]
                 },
                 {
                   "type": "frame",
-                  "id": "qvRgX",
-                  "name": "Connect",
+                  "id": "NmApm",
+                  "name": "MacBook Air",
                   "width": "fill_container",
-                  "height": 36,
-                  "fill": "$primary",
+                  "fill": "#2A2A2A4D",
                   "cornerRadius": "$radius-lg",
-                  "justifyContent": "center",
+                  "gap": 12,
+                  "padding": [
+                    10,
+                    12,
+                    10,
+                    16
+                  ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "RVRol",
-                      "name": "Connect",
-                      "fill": "$primary-foreground",
-                      "content": "Connect",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "500"
+                      "type": "icon",
+                      "id": "uwBdY",
+                      "name": "Monitor",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "monitor",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "amUOy",
+                      "name": "Text",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "m19SUq",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "MacBook Air",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-sm",
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Q3fg3",
+                          "name": "Last connected",
+                          "fill": "$text-muted",
+                          "content": "Connected 2 days ago · 89ab cdef",
+                          "fontFamily": "$font-sans",
+                          "fontSize": "$text-xs",
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "sK8OE",
+                      "name": "Remove",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "trash-2",
+                      "library": "lucide",
+                      "fill": "$text-muted"
                     }
                   ]
                 }
               ]
-            },
-            {
-              "type": "text",
-              "id": "mRwV3",
-              "name": "Open Settings > Remote Access in the Deu",
-              "fill": "$text-muted",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Open Settings > Remote Access in the Deus desktop app to find your server ID.",
-              "lineHeight": 1.5,
-              "textAlign": "center",
-              "fontFamily": "$font-sans",
-              "fontSize": "$text-xs",
-              "fontWeight": "normal"
             }
           ]
         }
@@ -70074,7 +70131,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "references/automations/chatgpt-scheduled-list.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   },
                   "cornerRadius": "$radius-md",
                   "stroke": "$border-subtle",
@@ -70104,7 +70161,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "references/automations/chatgpt-manual-create.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   },
                   "cornerRadius": "$radius-md",
                   "stroke": "$border-subtle",
@@ -70154,7 +70211,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "references/automations/cursor-automations-list.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   },
                   "cornerRadius": "$radius-md",
                   "stroke": "$border-subtle",
@@ -70184,7 +70241,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "references/automations/cursor-automation-editor.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   },
                   "cornerRadius": "$radius-md",
                   "stroke": "$border-subtle",
@@ -81401,7 +81458,7 @@
                                 "type": "image",
                                 "enabled": true,
                                 "url": "assets/github-acme.png",
-                                "mode": "fill"
+                                "mode": "cover"
                               },
                               "width": 28,
                               "height": 28
@@ -82698,7 +82755,7 @@
                                 "type": "image",
                                 "enabled": true,
                                 "url": "assets/github-acme.png",
-                                "mode": "fill"
+                                "mode": "cover"
                               },
                               "width": 28,
                               "height": 28
@@ -84716,7 +84773,7 @@
                             "type": "image",
                             "enabled": true,
                             "url": "assets/github-acme.png",
-                            "mode": "fill"
+                            "mode": "cover"
                           },
                           "width": 24,
                           "height": 24
@@ -84804,7 +84861,7 @@
                             "type": "image",
                             "enabled": true,
                             "url": "assets/github-acme.png",
-                            "mode": "fill"
+                            "mode": "cover"
                           },
                           "width": 24,
                           "height": 24
@@ -84870,7 +84927,7 @@
                             "type": "image",
                             "enabled": true,
                             "url": "assets/github-acme.png",
-                            "mode": "fill"
+                            "mode": "cover"
                           },
                           "width": 24,
                           "height": 24
@@ -84958,7 +85015,7 @@
                             "type": "image",
                             "enabled": true,
                             "url": "assets/github-acme.png",
-                            "mode": "fill"
+                            "mode": "cover"
                           },
                           "width": 24,
                           "height": 24
@@ -85705,7 +85762,7 @@
                                 "type": "image",
                                 "enabled": true,
                                 "url": "assets/github-acme.png",
-                                "mode": "fill"
+                                "mode": "cover"
                               },
                               "width": 28,
                               "height": 28
@@ -138407,8 +138464,7 @@
                                   "x": 0,
                                   "y": 18
                                 },
-                                "blur": 48,
-                                "spread": -8
+                                "blur": 48
                               },
                               "layout": "vertical",
                               "children": [
@@ -157891,7 +157947,7 @@
                                                 "type": "image",
                                                 "enabled": true,
                                                 "url": "assets/github-acme.png",
-                                                "mode": "fill"
+                                                "mode": "cover"
                                               },
                                               "width": 22,
                                               "height": 22
@@ -158069,7 +158125,7 @@
                                             "type": "image",
                                             "enabled": true,
                                             "url": "assets/github-acme.png",
-                                            "mode": "fill"
+                                            "mode": "cover"
                                           },
                                           "width": 22,
                                           "height": 22
@@ -158205,7 +158261,7 @@
                                             "type": "image",
                                             "enabled": true,
                                             "url": "assets/github-acme.png",
-                                            "mode": "fill"
+                                            "mode": "cover"
                                           },
                                           "width": 22,
                                           "height": 22
@@ -158329,7 +158385,7 @@
                                             "type": "image",
                                             "enabled": true,
                                             "url": "assets/github-acme.png",
-                                            "mode": "fill"
+                                            "mode": "cover"
                                           },
                                           "width": 22,
                                           "height": 22
@@ -158465,7 +158521,7 @@
                                             "type": "image",
                                             "enabled": true,
                                             "url": "assets/github-acme.png",
-                                            "mode": "fill"
+                                            "mode": "cover"
                                           },
                                           "width": 22,
                                           "height": 22
@@ -165393,7 +165449,7 @@
                                 "type": "image",
                                 "enabled": true,
                                 "url": "assets/github-acme.png",
-                                "mode": "fill"
+                                "mode": "cover"
                               },
                               "width": 28,
                               "height": 28
@@ -169994,8 +170050,7 @@
                         "x": 0,
                         "y": 4
                       },
-                      "blur": 6,
-                      "spread": -1
+                      "blur": 6
                     },
                     {
                       "type": "shadow",
@@ -170005,8 +170060,7 @@
                         "x": 0,
                         "y": 2
                       },
-                      "blur": 4,
-                      "spread": -2
+                      "blur": 4
                     }
                   ],
                   "layout": "vertical",
@@ -181335,6 +181389,2407 @@
                           ]
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "PkKSW",
+      "x": 10800,
+      "y": 9800,
+      "name": "81 · Remote — Sign in (/s/:computer)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$bg-base",
+      "padding": 24,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "GBnBm",
+          "name": "Column · RemoteAccessGate.tsx · RelaySignInPage",
+          "width": 342,
+          "layout": "vertical",
+          "gap": 24,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "f7bly",
+              "name": "ConnectionIllustration (features/connection/ui/ConnectionIllustration.tsx)",
+              "width": 260,
+              "height": 96,
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "HWlxN",
+                  "name": "Note",
+                  "fill": "$text-disabled",
+                  "content": "ConnectionIllustration",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-2xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "eWM3J",
+              "name": "Heading",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Sign in to reach your computer",
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xl",
+              "fontWeight": "600",
+              "letterSpacing": -0.2
+            },
+            {
+              "type": "text",
+              "id": "I2oIr",
+              "name": "Body",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Use the Deus account your computer is signed in to. Devices you approved before connect again without a new code.",
+              "lineHeight": 1.6,
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-sm",
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "Jibmn",
+              "name": "Actions",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "F3VhgN",
+                  "type": "ref",
+                  "ref": "rg2x2",
+                  "name": "Sign in",
+                  "height": 32,
+                  "descendants": {
+                    "z4bI4": {
+                      "content": "Sign in"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Ole0r",
+      "x": 11310,
+      "y": 9800,
+      "name": "82 · Remote — Computer not on this account",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$bg-base",
+      "padding": 24,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "NQItX",
+          "name": "Column · RemoteAccessGate.tsx · MachineUnavailablePage",
+          "width": 342,
+          "layout": "vertical",
+          "gap": 24,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "CcC3V",
+              "name": "ConnectionIllustration (features/connection/ui/ConnectionIllustration.tsx)",
+              "width": 260,
+              "height": 96,
+              "cornerRadius": "$radius-lg",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "xZNa5",
+                  "name": "Note",
+                  "fill": "$text-disabled",
+                  "content": "ConnectionIllustration",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-2xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "mn3s5",
+              "name": "Heading",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "This computer isn't on your account",
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-xl",
+              "fontWeight": "600",
+              "letterSpacing": -0.2
+            },
+            {
+              "type": "text",
+              "id": "jg8Ek",
+              "name": "Body",
+              "fill": "$text-muted",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "It may have been removed, or it is signed in to a different Deus account. Turn on Remote access in Deus on that computer, signed in to this account.",
+              "lineHeight": 1.6,
+              "textAlign": "center",
+              "fontFamily": "$font-sans",
+              "fontSize": "$text-sm",
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "oOy6u",
+              "name": "Actions",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "AAYKE",
+                  "type": "ref",
+                  "ref": "rg2x2",
+                  "name": "Your computers",
+                  "height": 32,
+                  "descendants": {
+                    "z4bI4": {
+                      "content": "Your computers"
+                    }
+                  }
+                },
+                {
+                  "id": "veW7E",
+                  "type": "ref",
+                  "ref": "Rcfnv",
+                  "name": "Try again",
+                  "height": 32,
+                  "descendants": {
+                    "kB8v8": {
+                      "content": "Try again"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "HtAGh",
+      "x": 11820,
+      "y": 9800,
+      "name": "83 · Remote — Approve this device (PairGatePage)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$bg-base",
+      "padding": 24,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Mcuje",
+          "name": "Column · features/auth/ui/PairGatePage.tsx",
+          "width": 342,
+          "layout": "vertical",
+          "gap": 32,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "aFIht",
+              "name": "BrandMark",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "M9v9kM",
+                  "name": "Mark",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$text-primary",
+                  "cornerRadius": "$radius-lg",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eV84e",
+                      "name": "D",
+                      "fill": "$bg-base",
+                      "content": "D",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "CGENg",
+                  "name": "Deus",
+                  "fill": "$text-muted",
+                  "content": "Deus",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "500",
+                  "letterSpacing": 0.3
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LCRhn",
+              "name": "Head",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "v7cjPL",
+                  "name": "Heading",
+                  "fill": "$text-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Approve this device",
+                  "textAlign": "center",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-2xl",
+                  "fontWeight": "700",
+                  "letterSpacing": -0.34
+                },
+                {
+                  "type": "text",
+                  "id": "pnzmG",
+                  "name": "Body",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Enter the code from Deus on your computer, under Settings → Remote access.",
+                  "lineHeight": 1.5,
+                  "textAlign": "center",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "qB8dV",
+                  "name": "Which computer",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "For Studio Mac · 0123 4567, which Remote access shows beside the code.",
+                  "lineHeight": 1.5,
+                  "textAlign": "center",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "sYltZ",
+              "name": "Form",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "id": "H2sfH6",
+                  "type": "ref",
+                  "ref": "YqG8t",
+                  "name": "Code",
+                  "width": "fill_container",
+                  "height": 48,
+                  "justifyContent": "center",
+                  "descendants": {
+                    "E8yhJ5": {
+                      "content": "WORD WORD",
+                      "fontFamily": "$font-mono",
+                      "fontSize": "$text-lg",
+                      "letterSpacing": 1.5
+                    }
+                  }
+                },
+                {
+                  "id": "mw7NX",
+                  "type": "ref",
+                  "ref": "rg2x2",
+                  "name": "Connect",
+                  "width": "fill_container",
+                  "height": 44,
+                  "descendants": {
+                    "z4bI4": {
+                      "content": "Connect"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "QK3mp",
+      "x": 31480,
+      "y": 7600,
+      "name": "58a · Settings — Remote Access (signed out)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-sidebar",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Y5wzo",
+          "name": "SettingsSidebar",
+          "width": 256,
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "TyFCy",
+              "name": "Header",
+              "width": "fill_container",
+              "height": 40,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "qxeJB",
+                  "name": "Back",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "arrow-left",
+                  "library": "lucide",
+                  "fill": "$text-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "ltfjL",
+                  "name": "Label",
+                  "fill": "$text-muted",
+                  "content": "Back",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "zsbl7",
+              "name": "Nav",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 2,
+              "padding": [
+                0,
+                6
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "TsasY",
+                  "name": "Account",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "j9S7R6",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "circle-user",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "is7f2",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Account",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "WhXPf",
+                  "name": "General",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "IrqRB",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "settings-2",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ROI1E",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "General",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Byu9j",
+                  "name": "GitHub",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "cExSd",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "github",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "rDtTa",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "GitHub",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "rgtfo",
+                  "name": "Browser",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "GamzN",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "app-window",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "SCuCg",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Browser",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "o7ZqDN",
+                  "name": "AI Providers",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "yp5K7",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "bot",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "HEhG2",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "AI Providers",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "B1PH9",
+                  "name": "Cloud",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "sqLZJ",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "cloud",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "nwdQs",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Cloud",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "J0msO",
+                  "name": "Environment",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "P6Z9Y",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "box",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "rWxx8",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Environments",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "PHJna",
+                  "name": "Slack",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "Sk5WW",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "slack",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "x2J8W",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Slack",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "rhFys",
+                  "name": "Experimental",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "DeiR7",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "flask-conical",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mLvvw",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Experimental",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZSFdO",
+                  "name": "Remote Access",
+                  "width": "fill_container",
+                  "fill": "$bg-selection",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "f4pSig",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "globe",
+                      "library": "lucide",
+                      "fill": "$text-primary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "uQajM",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Remote Access",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    },
+                    {
+                      "type": "text",
+                      "id": "slLtT",
+                      "name": "Badge",
+                      "fill": "$text-muted",
+                      "content": "Experimental",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "HEhAz",
+          "name": "InsetWrap",
+          "width": "fill_container",
+          "height": "fill_container",
+          "padding": [
+            8,
+            8,
+            8,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "KBNsB",
+              "name": "SettingsPage",
+              "clip": true,
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$bg-surface",
+              "cornerRadius": "$radius-xl",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "U29HcL",
+                  "name": "TopBar",
+                  "width": "fill_container",
+                  "height": 44,
+                  "stroke": "$border-subtle",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "yD8Nf",
+                      "name": "Title",
+                      "fill": "$text-secondary",
+                      "content": "Settings / Remote Access",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MAxzh",
+                  "name": "Scroll",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "padding": [
+                    24,
+                    0
+                  ],
+                  "justifyContent": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "uWJ2K",
+                      "name": "Body",
+                      "width": 896,
+                      "layout": "vertical",
+                      "gap": 20,
+                      "padding": [
+                        0,
+                        32
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "OP5k8",
+                          "name": "SectionHead",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "IQdEk",
+                              "name": "Remote Access",
+                              "fill": "$text-primary",
+                              "content": "Remote Access",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "600",
+                              "letterSpacing": -0.14
+                            },
+                            {
+                              "type": "text",
+                              "id": "G8dYx7",
+                              "name": "Reach this machine's workspaces from a phone",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Reach this machine's workspaces from a phone or another computer. The tunnel is opened on demand and closed with the app.",
+                              "lineHeight": 1.5,
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "A76zte",
+                          "name": "Enable",
+                          "width": "fill_container",
+                          "gap": 24,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "w6taRm",
+                              "name": "Enable remote access",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "haanO",
+                                  "name": "Enable remote access",
+                                  "fill": "$text-secondary",
+                                  "content": "Enable remote access",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "PAOv6",
+                                  "name": "Publishes a temporary https URL for paired d",
+                                  "fill": "$text-muted",
+                                  "content": "Publishes a temporary https URL for paired devices only.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-base",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Tzt83",
+                              "name": "Switch",
+                              "width": 44,
+                              "height": 24,
+                              "fill": "$primary",
+                              "cornerRadius": "$radius-full",
+                              "padding": [
+                                0,
+                                2
+                              ],
+                              "justifyContent": "end",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "ctKfI",
+                                  "name": "Thumb",
+                                  "fill": "$bg-base",
+                                  "width": 20,
+                                  "height": 20
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ev8J3",
+                          "name": "SignInCard · AccessSection.tsx",
+                          "width": "fill_container",
+                          "fill": "#2A2A2A4D",
+                          "cornerRadius": "$radius-xl",
+                          "stroke": "$border-default",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "gap": 16,
+                          "padding": 16,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "S4rfi6",
+                              "name": "Copy",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "siqEe",
+                                  "name": "Title",
+                                  "fill": "$text-primary",
+                                  "content": "Sign in to use remote access",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "O13H6l",
+                                  "name": "Body",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Your other devices reach this computer through your Deus account.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "ANbGO",
+                              "type": "ref",
+                              "ref": "rg2x2",
+                              "name": "Sign in",
+                              "height": 32,
+                              "descendants": {
+                                "z4bI4": {
+                                  "content": "Sign in"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "rectangle",
+                          "id": "c7gyp",
+                          "name": "Separator",
+                          "fill": "$border-subtle",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ir6rz",
+                          "name": "Devices",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "d7c1J",
+                              "name": "Paired devices",
+                              "width": "fill_container",
+                              "gap": 8,
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Cb9fJ",
+                                  "name": "Paired devices",
+                                  "fill": "$text-secondary",
+                                  "content": "Paired devices",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "id": "M0JCHS",
+                                  "type": "ref",
+                                  "ref": "rg2x2",
+                                  "name": "Pair",
+                                  "height": 32,
+                                  "theme": {
+                                    "mode": "dark"
+                                  },
+                                  "cornerRadius": "$radius-lg",
+                                  "opacity": 0.5,
+                                  "descendants": {
+                                    "z4bI4": {
+                                      "content": "Connect a Device",
+                                      "fontSize": 11
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "WDLxh",
+                              "name": "Adam's iPhone",
+                              "width": "fill_container",
+                              "fill": "#2A2A2A4D",
+                              "cornerRadius": "$radius-lg",
+                              "gap": 12,
+                              "padding": [
+                                10,
+                                16
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "l62eu",
+                                  "name": "Adam's iPhone",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "eBIMT",
+                                      "name": "i",
+                                      "width": 16,
+                                      "height": 16,
+                                      "icon": "smartphone",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "qIKAy",
+                                      "name": "Adam's iPhone",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "msoO0",
+                                          "name": "Adam's iPhone",
+                                          "fill": "$text-primary",
+                                          "content": "Adam's iPhone",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-sm",
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "bffY0",
+                                          "name": "last seen 4m ago",
+                                          "fill": "$text-muted",
+                                          "content": "last seen 4m ago",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-xs",
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "AChq4",
+                                  "name": "x",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "XXUzs",
+                              "name": "MacBook Air",
+                              "width": "fill_container",
+                              "fill": "#2A2A2A4D",
+                              "cornerRadius": "$radius-lg",
+                              "gap": 12,
+                              "padding": [
+                                10,
+                                16
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "J6Cte",
+                                  "name": "MacBook Air",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "i3Z84",
+                                      "name": "i",
+                                      "width": 16,
+                                      "height": 16,
+                                      "icon": "laptop",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "HisIS",
+                                      "name": "MacBook Air",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "sIgte",
+                                          "name": "MacBook Air",
+                                          "fill": "$text-primary",
+                                          "content": "MacBook Air",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-sm",
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "rF35S",
+                                          "name": "last seen yesterday",
+                                          "fill": "$text-muted",
+                                          "content": "last seen yesterday · Local network only",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-xs",
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "G3RaOS",
+                                  "name": "x",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "grmX0",
+      "x": 33040,
+      "y": 7600,
+      "name": "58b · Settings — Remote Access (computer removed)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-sidebar",
+      "children": [
+        {
+          "type": "frame",
+          "id": "f5ZeR",
+          "name": "SettingsSidebar",
+          "width": 256,
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "YBU3j",
+              "name": "Header",
+              "width": "fill_container",
+              "height": 40,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "LcJtG",
+                  "name": "Back",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "arrow-left",
+                  "library": "lucide",
+                  "fill": "$text-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "MW1Od",
+                  "name": "Label",
+                  "fill": "$text-muted",
+                  "content": "Back",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "hdgm3",
+              "name": "Nav",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 2,
+              "padding": [
+                0,
+                6
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "p1n6p6",
+                  "name": "Account",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "K6AFH",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "circle-user",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "G4eus6",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Account",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "y7lIhg",
+                  "name": "General",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "l2hP1",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "settings-2",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "X2xii",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "General",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pPjg0",
+                  "name": "GitHub",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "C6LH0v",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "github",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "iNpNG",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "GitHub",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "KlJNc",
+                  "name": "Browser",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "x37bY",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "app-window",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "n6kvK5",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Browser",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "IxB5f",
+                  "name": "AI Providers",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "xKhhS",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "bot",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "lzxvr",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "AI Providers",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "so27E",
+                  "name": "Cloud",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "L8oZWC",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "cloud",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "tnZ5K",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Cloud",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "nwd8p",
+                  "name": "Environment",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "qEp27",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "box",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "sSOZO",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Environments",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "XJotl",
+                  "name": "Slack",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "RSTYU",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "slack",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "I5xu4v",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Slack",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ki2Sd",
+                  "name": "Experimental",
+                  "width": "fill_container",
+                  "fill": "#00000000",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "oSEcE",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "flask-conical",
+                      "library": "lucide",
+                      "fill": "$text-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "vnGvc",
+                      "name": "Label",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Experimental",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OJENO",
+                  "name": "Remote Access",
+                  "width": "fill_container",
+                  "fill": "$bg-selection",
+                  "cornerRadius": "$radius-lg",
+                  "gap": 10,
+                  "padding": [
+                    6,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "hoAMm",
+                      "name": "Icon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "globe",
+                      "library": "lucide",
+                      "fill": "$text-primary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "l6V81",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Remote Access",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-base",
+                      "fontWeight": "500",
+                      "letterSpacing": -0.14
+                    },
+                    {
+                      "type": "text",
+                      "id": "EMtcD",
+                      "name": "Badge",
+                      "fill": "$text-muted",
+                      "content": "Experimental",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "o2Dik",
+          "name": "InsetWrap",
+          "width": "fill_container",
+          "height": "fill_container",
+          "padding": [
+            8,
+            8,
+            8,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "D9qqi",
+              "name": "SettingsPage",
+              "clip": true,
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$bg-surface",
+              "cornerRadius": "$radius-xl",
+              "stroke": "$border-subtle",
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "vTDtk",
+                  "name": "TopBar",
+                  "width": "fill_container",
+                  "height": 44,
+                  "stroke": "$border-subtle",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SazJK",
+                      "name": "Title",
+                      "fill": "$text-secondary",
+                      "content": "Settings / Remote Access",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "vyUp1",
+                  "name": "Scroll",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "padding": [
+                    24,
+                    0
+                  ],
+                  "justifyContent": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "yuChn",
+                      "name": "Body",
+                      "width": 896,
+                      "layout": "vertical",
+                      "gap": 20,
+                      "padding": [
+                        0,
+                        32
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "O1HW0",
+                          "name": "SectionHead",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "pryEF",
+                              "name": "Remote Access",
+                              "fill": "$text-primary",
+                              "content": "Remote Access",
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "600",
+                              "letterSpacing": -0.14
+                            },
+                            {
+                              "type": "text",
+                              "id": "iAOl7",
+                              "name": "Reach this machine's workspaces from a phone",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Reach this machine's workspaces from a phone or another computer. The tunnel is opened on demand and closed with the app.",
+                              "lineHeight": 1.5,
+                              "fontFamily": "$font-sans",
+                              "fontSize": "$text-base",
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Qh7rt",
+                          "name": "Enable",
+                          "width": "fill_container",
+                          "gap": 24,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Y3BZq4",
+                              "name": "Enable remote access",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "wwWEE",
+                                  "name": "Enable remote access",
+                                  "fill": "$text-secondary",
+                                  "content": "Enable remote access",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "a3k7g",
+                                  "name": "Publishes a temporary https URL for paired d",
+                                  "fill": "$text-muted",
+                                  "content": "Publishes a temporary https URL for paired devices only.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-base",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "pzGom",
+                              "name": "Switch",
+                              "width": 44,
+                              "height": 24,
+                              "fill": "$primary",
+                              "cornerRadius": "$radius-full",
+                              "padding": [
+                                0,
+                                2
+                              ],
+                              "justifyContent": "end",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "E6DXa",
+                                  "name": "Thumb",
+                                  "fill": "$bg-base",
+                                  "width": 20,
+                                  "height": 20
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "REj1A",
+                          "name": "Removed · AccessSection.tsx",
+                          "width": "fill_container",
+                          "fill": "#2A2A2A4D",
+                          "cornerRadius": "$radius-xl",
+                          "stroke": "$border-default",
+                          "strokeWidth": 1,
+                          "strokeAlignment": "inner",
+                          "gap": 16,
+                          "padding": 16,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "frq18",
+                              "name": "Copy",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "H0UpH",
+                                  "x": 0,
+                                  "y": 0,
+                                  "name": "Title",
+                                  "enabled": false,
+                                  "fill": "$text-primary",
+                                  "content": "Sign in to use remote access",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "RZd11",
+                                  "name": "Body",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "This computer was removed from your Deus account. Turn remote access on to add it again.",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-xs",
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "QUsJi",
+                              "type": "ref",
+                              "ref": "Rcfnv",
+                              "name": "Add it again",
+                              "height": 32,
+                              "descendants": {
+                                "kB8v8": {
+                                  "content": "Add it again"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "rectangle",
+                          "id": "T2iZ6O",
+                          "name": "Separator",
+                          "fill": "$border-subtle",
+                          "width": "fill_container",
+                          "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "vektc",
+                          "name": "Devices",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Qbxul",
+                              "name": "Paired devices",
+                              "width": "fill_container",
+                              "gap": 8,
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "PXSrh",
+                                  "name": "Paired devices",
+                                  "fill": "$text-secondary",
+                                  "content": "Paired devices",
+                                  "fontFamily": "$font-sans",
+                                  "fontSize": "$text-sm",
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "id": "PJuGA",
+                                  "type": "ref",
+                                  "ref": "rg2x2",
+                                  "name": "Pair",
+                                  "height": 32,
+                                  "theme": {
+                                    "mode": "dark"
+                                  },
+                                  "cornerRadius": "$radius-lg",
+                                  "opacity": 0.5,
+                                  "descendants": {
+                                    "z4bI4": {
+                                      "content": "Connect a Device",
+                                      "fontSize": 11
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "lX7h3",
+                              "name": "Adam's iPhone",
+                              "width": "fill_container",
+                              "fill": "#2A2A2A4D",
+                              "cornerRadius": "$radius-lg",
+                              "gap": 12,
+                              "padding": [
+                                10,
+                                16
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "thZ0S",
+                                  "name": "Adam's iPhone",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "zuILF",
+                                      "name": "i",
+                                      "width": 16,
+                                      "height": 16,
+                                      "icon": "smartphone",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "BrMaD",
+                                      "name": "Adam's iPhone",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "FOvx3",
+                                          "name": "Adam's iPhone",
+                                          "fill": "$text-primary",
+                                          "content": "Adam's iPhone",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-sm",
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "Q1qh33",
+                                          "name": "last seen 4m ago",
+                                          "fill": "$text-muted",
+                                          "content": "last seen 4m ago",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-xs",
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "OQAgL",
+                                  "name": "x",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "fwfCx",
+                              "name": "MacBook Air",
+                              "width": "fill_container",
+                              "fill": "#2A2A2A4D",
+                              "cornerRadius": "$radius-lg",
+                              "gap": 12,
+                              "padding": [
+                                10,
+                                16
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "BN1Dq",
+                                  "name": "MacBook Air",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "FQQU3",
+                                      "name": "i",
+                                      "width": 16,
+                                      "height": 16,
+                                      "icon": "laptop",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "Z9fGU",
+                                      "name": "MacBook Air",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "UDBz0",
+                                          "name": "MacBook Air",
+                                          "fill": "$text-primary",
+                                          "content": "MacBook Air",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-sm",
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "MqTT8",
+                                          "name": "last seen yesterday",
+                                          "fill": "$text-muted",
+                                          "content": "last seen yesterday · Local network only",
+                                          "fontFamily": "$font-sans",
+                                          "fontSize": "$text-xs",
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "SgBlY",
+                                  "name": "x",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "trash-2",
+                                  "library": "lucide",
+                                  "fill": "$text-muted"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "w2wHIg",
+      "x": 12290,
+      "y": 9800,
+      "name": "83a · Remote — Computer offline (PairGatePage AutoConnectErrorView)",
+      "theme": {
+        "mode": "dark"
+      },
+      "clip": true,
+      "width": 390,
+      "height": 844,
+      "fill": "$bg-base",
+      "padding": 24,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "evqC3",
+          "name": "Column · features/auth/ui/PairGatePage.tsx",
+          "width": 342,
+          "layout": "vertical",
+          "gap": 24,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "zRBE8",
+              "name": "BrandMark",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "CUkCc",
+                  "name": "Mark",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$text-primary",
+                  "cornerRadius": "$radius-lg",
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "TtLy5",
+                      "name": "D",
+                      "fill": "$bg-base",
+                      "content": "D",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-xs",
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "JQ73p",
+                  "name": "Deus",
+                  "fill": "$text-muted",
+                  "content": "Deus",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "500",
+                  "letterSpacing": 0.3
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "pxXZs",
+              "name": "Head",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "BO0lu",
+                  "name": "Heading",
+                  "fill": "$text-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Couldn't connect",
+                  "textAlign": "center",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-xl",
+                  "fontWeight": "600",
+                  "letterSpacing": -0.28
+                },
+                {
+                  "type": "text",
+                  "id": "tI7ls",
+                  "name": "Body",
+                  "fill": "$text-muted",
+                  "textGrowth": "fixed-width",
+                  "width": 280,
+                  "content": "This computer is offline. Open Deus on it, then try again.",
+                  "lineHeight": 1.5,
+                  "textAlign": "center",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "zVIxg",
+                  "name": "Retry · mt-2",
+                  "padding": [
+                    8,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "id": "d6Hqj",
+                      "type": "ref",
+                      "ref": "Rcfnv",
+                      "name": "Try again · Button outline sm",
+                      "height": 32,
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "descendants": {
+                        "kB8v8": {
+                          "content": "Try again"
+                        }
+                      }
                     }
                   ]
                 }

@@ -17,7 +17,11 @@ import type { Session } from "@shared/types/session";
 import type { SessionStatus, WorkspaceState } from "@shared/enums";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
+import { getRuntimeClient, onRuntimeChange } from "@/platform/ws/query-protocol-client";
+import type { RuntimeClient } from "@/platform/ws/runtime-client";
+import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { queryClient } from "@/shared/api/queryClient";
+import type { QueryClient } from "@tanstack/react-query";
 import { hasParkedDirectQuestion } from "./directQuestionState";
 import {
   resolveAgntBaseUrl,
@@ -62,9 +66,7 @@ export class CloudSessionExpiredError extends Error {
 
 // ---- agnt REST ----
 
-async function dashboardGet<T>(path: string): Promise<T> {
-  const bearer = await readWebCloudSessionBearer();
-  if (!bearer) throw new CloudSessionExpiredError();
+async function dashboardGet<T>(path: string, bearer: string): Promise<T> {
   const res = await fetch(`${resolveAgntBaseUrl()}${path}`, {
     headers: { authorization: `Bearer ${bearer}` },
   });
@@ -87,7 +89,11 @@ interface DashboardList<T> {
 let orgFailureNoticed = false;
 
 async function fetchAllCloudSessions(): Promise<AgntSession[]> {
-  const orgs = await dashboardGet<DashboardList<{ id: string }>>("/dashboard/orgs");
+  // Bind every request in the fan-out to the credential at admission. A sign-in
+  // during the org lookup must not mix one account's orgs with another's bearer.
+  const bearer = await readWebCloudSessionBearer();
+  if (!bearer) throw new CloudSessionExpiredError();
+  const orgs = await dashboardGet<DashboardList<{ id: string }>>("/dashboard/orgs", bearer);
   if (orgs.has_more) {
     console.warn(
       "[cloudDataAdapter] /dashboard/orgs truncated (has_more) — sessions in the orgs past the cap are not listed"
@@ -96,7 +102,8 @@ async function fetchAllCloudSessions(): Promise<AgntSession[]> {
   const results = await Promise.allSettled(
     (orgs.items ?? []).map(async (org) => {
       const page = await dashboardGet<DashboardList<AgntSession>>(
-        `/dashboard/orgs/${encodeURIComponent(org.id)}/sessions`
+        `/dashboard/orgs/${encodeURIComponent(org.id)}/sessions`,
+        bearer
       );
       if (page.has_more) {
         console.warn(
@@ -137,25 +144,26 @@ async function fetchAllCloudSessions(): Promise<AgntSession[]> {
 // "session" (open panel) reads share one round-trip. TTL is tiny — freshness
 // comes from re-fetch on focus/interval, not from holding this.
 const LIST_TTL_MS = 3000;
-let listCache: { at: number; promise: Promise<AgntSession[]> } | null = null;
+const listCaches = new WeakMap<QueryClient, { at: number; promise: Promise<AgntSession[]> }>();
 
 /**
  * Drop the in-flight list cache so the NEXT read hits agnt. Event-driven
  * refreshes (turn boundaries) call this before invalidating — inside the TTL
  * they'd otherwise refetch the cached list and see the pre-event status.
  */
-export function bustCloudSessionsListCache(): void {
-  listCache = null;
+export function bustCloudSessionsListCache(owner: QueryClient = queryClient): void {
+  listCaches.delete(owner);
 }
 
-function getCloudSessions(): Promise<AgntSession[]> {
+function getCloudSessions(owner: QueryClient): Promise<AgntSession[]> {
   const now = Date.now();
+  const listCache = listCaches.get(owner);
   if (listCache && now - listCache.at < LIST_TTL_MS) return listCache.promise;
   const promise = fetchAllCloudSessions().catch((err) => {
-    listCache = null; // don't cache a failure
+    if (listCaches.get(owner)?.promise === promise) listCaches.delete(owner);
     throw err;
   });
-  listCache = { at: now, promise };
+  listCaches.set(owner, { at: now, promise });
   return promise;
 }
 
@@ -200,7 +208,7 @@ function parkedInitStage(workspaceStatus: string): string | null {
  * connects to). Worktree-only fields (root_path, git worktree, PR) are
  * nulled/empty: a cloud sandbox has no local checkout.
  */
-function toWorkspace(s: AgntSession): Workspace {
+function toWorkspace(s: AgntSession, owner: QueryClient): Workspace {
   return {
     id: s.id,
     repository_id: repoLabel(s.repo),
@@ -221,7 +229,9 @@ function toWorkspace(s: AgntSession): Workspace {
     current_session_id: s.id,
     // A session blocked on a question is "running" to agnt; the renderer
     // holding the question knows better (see directQuestionState).
-    session_status: hasParkedDirectQuestion(s.id) ? "needs_response" : mapSessionStatus(s.status),
+    session_status: hasParkedDirectQuestion(s.id, owner)
+      ? "needs_response"
+      : mapSessionStatus(s.status),
     session_error_category: null,
     session_error_message: null,
     latest_message_sent_at: s.updated_at,
@@ -235,7 +245,10 @@ function toWorkspace(s: AgntSession): Workspace {
   };
 }
 
-export function mapToRepoGroups(agntSessions: AgntSession[]): RepoGroup[] {
+export function mapToRepoGroups(
+  agntSessions: AgntSession[],
+  owner: QueryClient = queryClient
+): RepoGroup[] {
   const byRepo = new Map<string, Workspace[]>();
   for (const s of agntSessions) {
     const repo = repoLabel(s.repo);
@@ -244,7 +257,7 @@ export function mapToRepoGroups(agntSessions: AgntSession[]): RepoGroup[] {
       group = [];
       byRepo.set(repo, group);
     }
-    group.push(toWorkspace(s));
+    group.push(toWorkspace(s, owner));
   }
   return [...byRepo.entries()].map(([repo, workspaces], index) => ({
     repo_id: repo,
@@ -255,7 +268,7 @@ export function mapToRepoGroups(agntSessions: AgntSession[]): RepoGroup[] {
 }
 
 /** The session-detail shape the direct lane + header read (drives useIsDirectSession). */
-export function toSession(s: AgntSession): Session {
+export function toSession(s: AgntSession, owner: QueryClient = queryClient): Session {
   return {
     id: s.id,
     workspace_id: s.workspace_id,
@@ -263,7 +276,7 @@ export function toSession(s: AgntSession): Session {
     provider_session_id: s.id,
     workspace_kind: "cloud",
     title: s.title,
-    status: hasParkedDirectQuestion(s.id) ? "needs_response" : mapSessionStatus(s.status),
+    status: hasParkedDirectQuestion(s.id, owner) ? "needs_response" : mapSessionStatus(s.status),
     // Discovery carries no count, but the chat tabs hydrate ONCE from this row
     // and label `message_count === 0` "New chat" — a title is only ever minted
     // after the first turn, so it's an honest has-started proxy. The real count
@@ -289,18 +302,23 @@ export function cloudDataRequestInterceptor(
   resource: string,
   params?: Record<string, unknown>
 ): Promise<unknown> | null {
+  const owner = queryClient;
   switch (resource) {
     case "workspaces":
-      return withAuthGuard(getCloudSessions().then(mapToRepoGroups));
+      return withAuthGuard(
+        getCloudSessions(owner).then((list) => mapToRepoGroups(list, owner)),
+        owner
+      );
     case "session": {
       const sessionId = params?.sessionId as string | undefined;
       if (!sessionId) return null;
       return withAuthGuard(
-        getCloudSessions().then((list) => {
+        getCloudSessions(owner).then((list) => {
           const found = list.find((s) => s.id === sessionId);
           if (!found) throw new Error("Session not found");
-          return toSession(found);
-        })
+          return toSession(found, owner);
+        }),
+        owner
       );
     }
     case "sessions": {
@@ -308,9 +326,12 @@ export function cloudDataRequestInterceptor(
       // single session whose id === the workspace item id.
       const workspaceId = params?.workspaceId as string | undefined;
       return withAuthGuard(
-        getCloudSessions().then((list) =>
-          list.filter((s) => s.id === workspaceId || s.workspace_id === workspaceId).map(toSession)
-        )
+        getCloudSessions(owner).then((list) =>
+          list
+            .filter((s) => s.id === workspaceId || s.workspace_id === workspaceId)
+            .map((s) => toSession(s, owner))
+        ),
+        owner
       );
     }
     case "settings":
@@ -326,9 +347,17 @@ export function cloudDataRequestInterceptor(
 }
 
 /** On an expired bearer (agnt 401), drop it + re-auth; the error still surfaces. */
-function withAuthGuard<T>(promise: Promise<T>): Promise<T> {
+function withAuthGuard<T>(promise: Promise<T>, owner: QueryClient): Promise<T> {
   return promise.catch((err) => {
-    if (err instanceof CloudSessionExpiredError) handleWebCloudSessionExpired();
+    const state = runtimeForQueryClient(owner)?.getState();
+    if (
+      err instanceof CloudSessionExpiredError &&
+      owner === queryClient &&
+      state !== "disposed" &&
+      state !== "revoked"
+    ) {
+      handleWebCloudSessionExpired();
+    }
     throw err;
   });
 }
@@ -343,27 +372,39 @@ function withAuthGuard<T>(promise: Promise<T>): Promise<T> {
  */
 const DISCOVERY_REFRESH_MS = 60_000;
 
-function refreshDiscovery(): void {
-  void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-  void queryClient.invalidateQueries({ queryKey: ["sessions", "by-workspace"] });
-}
-
-function startDiscoveryRefresh(): void {
+function startDiscoveryRefresh(runtime: RuntimeClient): void {
+  const refreshDiscovery = () => {
+    void runtime.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    void runtime.queryClient.invalidateQueries({ queryKey: ["sessions", "by-workspace"] });
+  };
   // Hidden tabs skip the tick (a backgrounded tab shouldn't poll agnt all
   // day); regaining visibility refreshes immediately, so returning to the tab
   // never waits out the interval. A true push source is the agnt-side
   // follow-up — the dashboard has no event channel to subscribe to yet.
-  setInterval(() => {
+  const timer = setInterval(() => {
     if (!document.hidden) refreshDiscovery();
   }, DISCOVERY_REFRESH_MS);
-  document.addEventListener("visibilitychange", () => {
+  const visible = () => {
     if (!document.hidden) refreshDiscovery();
+  };
+  document.addEventListener("visibilitychange", visible);
+  runtime.onDispose(() => {
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", visible);
   });
 }
 
+let installed = false;
 /** Register the adapter — a no-op unless this is a fully Mac-closed web build. */
 export function installCloudDataAdapter(): void {
-  if (!isCloudDirectWebMode()) return;
+  if (installed || !isCloudDirectWebMode()) return;
+  installed = true;
   setQueryRequestInterceptor(cloudDataRequestInterceptor);
-  startDiscoveryRefresh();
+  const configure = () => {
+    bustCloudSessionsListCache();
+    const runtime = getRuntimeClient();
+    if (runtime.identity.host === "web-direct") startDiscoveryRefresh(runtime);
+  };
+  configure();
+  onRuntimeChange(configure);
 }

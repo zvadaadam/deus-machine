@@ -123,7 +123,7 @@ async function mintViaWebExchange(
     // re-mint runs on a timer, so this path can be the FIRST to notice) — route
     // it through the same drop-bearer + re-login flow the discovery reads use.
     if (err instanceof SessionTokenExchangeError && err.status === 401) {
-      handleWebCloudSessionExpired();
+      handleWebCloudSessionExpired(bearer);
     }
     throw err;
   }

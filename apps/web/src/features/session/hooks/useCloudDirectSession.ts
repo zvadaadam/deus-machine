@@ -5,12 +5,12 @@
  * (`useAgentEvents`); this is its twin for "Mac closed": it opens the agnt
  * session socket in the browser and drives the SAME fold into the SAME cache key
  * (`queryKeys.sessions.messages(sessionId)`), so `SessionPanel`/`useMessages`
- * render it with no UI change. The `q:` singleton is untouched — this is a
- * parallel lane.
+ * render it with no UI change. The direct transport shares its runtime
+ * cache ownership with the q: lane.
  *
  * A cloud session is rendered by EITHER lane, never both: use this hook instead
  * of `useAgentEvents` when the session is served direct. So it keeps its own
- * `folds`/`cursor` module state, isolated from the Mac lane's.
+ * `folds`/`cursor` per cache, isolated from the Mac lane's.
  *
  * The token is provided by the caller (`useCloudDirect`, minted at the backend
  * seam or via the dashboard exchange — `exchangeSessionToken.ts`). Where the
@@ -53,6 +53,7 @@ import {
   toolRequestFromMcpQuestion,
 } from "../cloud/directSessionRegistry";
 import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
+import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import {
   TOOL_CANCEL_EVENT,
   CloudSimulatorStatusSchema,
@@ -100,11 +101,11 @@ let localRequestCounter = 0;
 function presentDirectQuestion(pending: PendingDirectQuestion): void {
   const localId = `${pending.wireRequestId}#${++localRequestCounter}`;
   pendingDirectQuestions.set(localId, pending);
-  emitLocalEvent("tool:request", { ...pending.request, requestId: localId });
+  emitForCache(pending.queryClient, "tool:request", { ...pending.request, requestId: localId });
 }
 
 function parkDirectQuestion(pending: PendingDirectQuestion): void {
-  setDirectQuestionParked(pending.sessionId, true);
+  setDirectQuestionParked(pending.sessionId, true, pending.queryClient);
   patchSessionDetail(pending.queryClient, pending.sessionId, { status: "needs_response" });
   // The sidebar/home rows read the workspace projection, not the session
   // detail — and discovery would keep saying "running" (see directQuestionState).
@@ -120,22 +121,28 @@ function settleDirectQuestionState(
   qc: QueryClient,
   liveOverride?: boolean
 ): void {
-  const stillParked = [...pendingDirectQuestions.values()].some((p) => p.sessionId === sessionId);
-  setDirectQuestionParked(sessionId, stillParked);
+  const stillParked = [...pendingDirectQuestions.values()].some(
+    (p) => p.sessionId === sessionId && p.queryClient === qc
+  );
+  setDirectQuestionParked(sessionId, stillParked, qc);
   if (stillParked) return;
   // Only a still-live turn goes back to "working": a stale overlay answered
   // after the turn ended (or was stopped) must not revive a finished session.
   const live =
     liveOverride ??
-    folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active") ??
+    projectionFor(qc)
+      .folds.get(sessionId)
+      ?.state.turns.some((turn) => turn.status === "active") ??
     false;
   patchWorkspaceSessionStatus(qc, sessionId, live ? "working" : "idle");
   if (live) patchSessionDetail(qc, sessionId, { status: "working" });
 }
 
 /** The fold's active turn — what a freshly arrived question belongs to. */
-function activeTurnId(sessionId: string): string | undefined {
-  return folds.get(sessionId)?.state.turns.find((turn) => turn.status === "active")?.turnId;
+function activeTurnId(sessionId: string, qc: QueryClient): string | undefined {
+  return projectionFor(qc)
+    .folds.get(sessionId)
+    ?.state.turns.find((turn) => turn.status === "active")?.turnId;
 }
 
 /** Retract a presented question: the registry forgets it AND the overlay
@@ -149,15 +156,19 @@ function retractDirectQuestion(
   live: boolean
 ): void {
   pendingDirectQuestions.delete(localId);
-  emitLocalEvent(TOOL_CANCEL_EVENT, { sessionId: pending.sessionId, requestId: localId });
+  emitForCache(pending.queryClient, TOOL_CANCEL_EVENT, {
+    sessionId: pending.sessionId,
+    requestId: localId,
+  });
   settleDirectQuestionState(pending.sessionId, pending.queryClient, live);
 }
 
 /** Drop every parked question of a session (its turn ended — a late answer
  *  must not revive it) without answering. */
-function dropDirectQuestions(sessionId: string): void {
+function dropDirectQuestions(sessionId: string, qc: QueryClient): void {
   for (const [id, pending] of [...pendingDirectQuestions]) {
-    if (pending.sessionId === sessionId) retractDirectQuestion(id, pending, false);
+    if (pending.sessionId === sessionId && pending.queryClient === qc)
+      retractDirectQuestion(id, pending, false);
   }
 }
 
@@ -175,7 +186,7 @@ setToolResponseInterceptor((requestId, result, error) => {
   // may be gone. If none is open, keep the answer's question parked and put
   // the overlay back so the user can answer once the lane is up again.
   try {
-    const channel = getDirectSession(pending.sessionId);
+    const channel = getDirectSession(pending.sessionId, pending.queryClient);
     if (!channel) throw new Error("no direct channel");
     channel.sendRaw(frame);
   } catch {
@@ -202,12 +213,13 @@ const SIMULATOR_FRAME_KINDS = new Map<string, CloudSimulatorEventKind>([
 ]);
 
 function emitSimulatorEvent(
+  qc: QueryClient,
   sessionId: string,
   kind: CloudSimulatorEventKind,
   frame: Record<string, unknown>
 ): void {
   const { type: _type, ...data } = frame;
-  emitLocalEvent("cloud:simulator", { workspaceId: sessionId, sessionId, kind, data });
+  emitForCache(qc, "cloud:simulator", { workspaceId: sessionId, sessionId, kind, data });
 }
 
 /**
@@ -217,8 +229,36 @@ function emitSimulatorEvent(
  * folds straight through (see its header); the throwaway `cursor` below only
  * satisfies the shared `AgentStreamContext` type, which the Mac lane needs.
  */
-const folds = new Map<string, SessionFold>();
-const cursor = createStreamCursor();
+const projections = new WeakMap<
+  QueryClient,
+  {
+    folds: Map<string, SessionFold>;
+    cursor: ReturnType<typeof createStreamCursor>;
+  }
+>();
+function projectionFor(qc: QueryClient) {
+  let projection = projections.get(qc);
+  if (!projection) {
+    projection = { folds: new Map(), cursor: createStreamCursor() };
+    projections.set(qc, projection);
+    const owned = projection;
+    runtimeForQueryClient(qc)?.onDispose(() => {
+      owned.folds.clear();
+      for (const session of owned.cursor.sessions()) owned.cursor.reset(session);
+      for (const [id, pending] of pendingDirectQuestions) {
+        if (pending.queryClient !== qc) continue;
+        pendingDirectQuestions.delete(id);
+        setDirectQuestionParked(pending.sessionId, false, qc);
+      }
+    });
+  }
+  return projection;
+}
+function emitForCache(qc: QueryClient, event: string, data: unknown): void {
+  const runtime = runtimeForQueryClient(qc);
+  if (runtime) runtime.emitLocalEvent(event, data);
+  else emitLocalEvent(event, data);
+}
 
 export interface CloudDirectSessionParams {
   /** deus session id — the fold/cache key everywhere the UI reads. */
@@ -263,6 +303,10 @@ export function useCloudDirectSession(
       return;
     }
 
+    const runtime = runtimeForQueryClient(queryClient);
+    if (runtime?.getState() === "disposed" || runtime?.getState() === "revoked") return;
+    const { folds, cursor } = projectionFor(queryClient);
+    let closed = false;
     pruneFolds(queryClient, folds);
     setStatus("connecting");
     setError(null);
@@ -310,7 +354,7 @@ export function useCloudDirectSession(
     const emitPrimarySimulator = (before: CloudSimulatorStatus | null = null) => {
       const primary = primarySimulatorStatus();
       if (before && primary && sameCloudSimulatorStatus(before, primary)) return;
-      emitSimulatorEvent(sessionId, primary ? "status" : "gone", primary ?? {});
+      emitSimulatorEvent(queryClient, sessionId, primary ? "status" : "gone", primary ?? {});
     };
     const applySimulatorStatus = (frame: Record<string, unknown>, hydrate = false) => {
       const parsed = CloudSimulatorStatusSchema.safeParse(frame);
@@ -320,7 +364,7 @@ export function useCloudDirectSession(
       }
       if (parsed.data.platform === undefined) {
         // A command failure has no device slot; still surface its message.
-        emitSimulatorEvent(sessionId, "status", parsed.data);
+        emitSimulatorEvent(queryClient, sessionId, "status", parsed.data);
         return;
       }
       // Snapshots rehydrate the store even when unchanged. A live update on
@@ -343,6 +387,7 @@ export function useCloudDirectSession(
       pendingTurn !== null && Date.now() - pendingTurn.at < PENDING_TURN_STALE_MS;
 
     const onFrame = (frame: Record<string, unknown>) => {
+      if (closed) return;
       // The agent asked the user something: park it for the overlay (the same
       // `tool:request` the Mac lane delivers) and mark the row as waiting so
       // the sidebar shows attention, not a spinner. Answered via the
@@ -356,7 +401,7 @@ export function useCloudDirectSession(
             sessionId,
             providerSessionId,
             queryClient,
-            turnId: activeTurnId(sessionId),
+            turnId: activeTurnId(sessionId, queryClient),
             request: rest,
           });
         }
@@ -379,7 +424,7 @@ export function useCloudDirectSession(
       if (frame.type === "workspace.state") {
         const data = (frame.data ?? {}) as { sandboxUrlTemplate?: string | null };
         if (data.sandboxUrlTemplate !== undefined) {
-          emitLocalEvent("cloud:preview", {
+          emitForCache(queryClient, "cloud:preview", {
             workspaceId: sessionId,
             sessionId,
             template: data.sandboxUrlTemplate || null,
@@ -392,7 +437,7 @@ export function useCloudDirectSession(
         typeof frame.type === "string" ? SIMULATOR_FRAME_KINDS.get(frame.type) : undefined;
       if (simulatorKind) {
         if (simulatorKind === "status") applySimulatorStatus(frame);
-        else emitSimulatorEvent(sessionId, simulatorKind, frame);
+        else emitSimulatorEvent(queryClient, sessionId, simulatorKind, frame);
         return;
       }
       // The (re)connect snapshot is the truth about a parked question's turn.
@@ -412,7 +457,7 @@ export function useCloudDirectSession(
             }
           | undefined;
         if (typeof state?.sandboxUrlTemplate === "string" || state?.sandboxUrlTemplate === null) {
-          emitLocalEvent("cloud:preview", {
+          emitForCache(queryClient, "cloud:preview", {
             workspaceId: sessionId,
             sessionId,
             template: state.sandboxUrlTemplate || null,
@@ -438,7 +483,7 @@ export function useCloudDirectSession(
             ? state.currentTurnId
             : null;
         for (const [id, pending] of [...pendingDirectQuestions]) {
-          if (pending.sessionId !== sessionId) continue;
+          if (pending.sessionId !== sessionId || pending.queryClient !== queryClient) continue;
           if (live && (pending.turnId === undefined || pending.turnId === live)) {
             pendingDirectQuestions.delete(id);
             presentDirectQuestion(pending);
@@ -458,7 +503,7 @@ export function useCloudDirectSession(
       // The turn is over (finished or stopped): any question still parked for
       // it can no longer be answered meaningfully — drop it so a stale overlay
       // can't flip the finished session back to "working".
-      if (frame.type === "turn.ended") dropDirectQuestions(sessionId);
+      if (frame.type === "turn.ended") dropDirectQuestions(sessionId, queryClient);
       // A rejected send carries our turnId as its messageId. Only retire that
       // pending attempt; delayed rejections cannot affect an admitted turn.
       // CATEGORY-bearing error frames are the ENGINE's error events, not command
@@ -474,7 +519,7 @@ export function useCloudDirectSession(
             return;
           dropOptimisticMessage(queryClient, sessionId, pendingTurn.turnId);
           pendingTurn = null;
-          if (activeTurnId(sessionId)) {
+          if (activeTurnId(sessionId, queryClient)) {
             // This command failed while another client's turn is still live.
             // Keep that execution visible and report only the rejected send.
             toast.error(
@@ -499,7 +544,8 @@ export function useCloudDirectSession(
         // The failed turn may already be ended. Protect a different admitted
         // or pending turn, without dropping the post-terminal error message.
         const live =
-          activeTurnId(sessionId) ?? (pendingTurnActive() ? pendingTurn?.turnId : undefined);
+          activeTurnId(sessionId, queryClient) ??
+          (pendingTurnActive() ? pendingTurn?.turnId : undefined);
         if (recoverable || (turnId !== undefined && live !== undefined && turnId !== live)) return;
         setStatus("error");
         setError(error.message);
@@ -515,7 +561,7 @@ export function useCloudDirectSession(
       // The snapshot's projection (`backfillSnapshot`) writes "working" for a
       // session with a current turn — but a turn parked on a question is
       // waiting on the user, not generating. Re-assert it after the fold.
-      if (frame.type === "session.snapshot" && hasParkedDirectQuestion(sessionId)) {
+      if (frame.type === "session.snapshot" && hasParkedDirectQuestion(sessionId, queryClient)) {
         patchSessionDetail(queryClient, sessionId, { status: "needs_response" });
         patchWorkspaceSessionStatus(queryClient, sessionId, "needs_response");
       }
@@ -531,6 +577,7 @@ export function useCloudDirectSession(
       setReconnectNonce((n) => n + 1);
     };
     const assertDeliverable = () => {
+      if (closed) throw new Error("Runtime access has ended");
       if (!terminallyDown) return;
       requestReconnect();
       throw new Error("The session lost its connection — reconnecting, try again in a moment.");
@@ -541,6 +588,7 @@ export function useCloudDirectSession(
       token,
       onFrame,
       onOpen: () => {
+        if (closed) return;
         // A (re)connect re-syncs turn truth from the snapshot — a pre-drop
         // pending marker must not block the first post-reconnect send.
         // Parked questions wait for that snapshot too (see onFrame).
@@ -548,6 +596,7 @@ export function useCloudDirectSession(
         setStatus("open");
       },
       onDown: (reason) => {
+        if (closed) return;
         terminallyDown = true;
         pendingTurn = null;
         setStatus("down");
@@ -559,35 +608,41 @@ export function useCloudDirectSession(
     // this session go straight to agnt (the Mac `q:` relay is closed). The frame
     // builders are the agnt ClientCommand wire; `socket.send` throws if the socket
     // is not open yet, which surfaces as the send mutation's normal rollback.
-    const disposeChannel = registerDirectSession(sessionId, {
-      sendMessage: (prompt, turnId, options) => {
-        // Enforce deus's one-live-turn contract here, where the fold state is in
-        // reach — agnt itself QUEUES overlapping sends, so without this a
-        // double-send starts a second turn (parity with the Mac driver's
-        // `liveTurnId` guard). The fold covers ADMITTED turns; `pendingTurn`
-        // covers the echo round-trip a double-Enter fits inside. The throw
-        // rolls the optimistic bubble back.
-        if (
-          pendingTurnActive() ||
-          folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")
-        ) {
-          throw new Error("The agent is still working — wait for the current turn to finish.");
-        }
-        assertDeliverable();
-        socket.send(buildMessageSendFrame(prompt, turnId, options));
-        pendingTurn = { turnId, at: Date.now() };
+    const disposeChannel = registerDirectSession(
+      sessionId,
+      {
+        sendMessage: (prompt, turnId, options) => {
+          // Enforce deus's one-live-turn contract here, where the fold state is in
+          // reach — agnt itself QUEUES overlapping sends, so without this a
+          // double-send starts a second turn (parity with the Mac driver's
+          // `liveTurnId` guard). The fold covers ADMITTED turns; `pendingTurn`
+          // covers the echo round-trip a double-Enter fits inside. The throw
+          // rolls the optimistic bubble back.
+          if (
+            pendingTurnActive() ||
+            folds.get(sessionId)?.state.turns.some((turn) => turn.status === "active")
+          ) {
+            throw new Error("The agent is still working — wait for the current turn to finish.");
+          }
+          assertDeliverable();
+          socket.send(buildMessageSendFrame(prompt, turnId, options));
+          pendingTurn = { turnId, at: Date.now() };
+        },
+        cancel: (turnId) => {
+          assertDeliverable();
+          socket.send(buildCancelFrame(turnId));
+        },
+        sendRaw: (raw) => {
+          assertDeliverable();
+          socket.send(raw);
+        },
       },
-      cancel: (turnId) => {
-        assertDeliverable();
-        socket.send(buildCancelFrame(turnId));
-      },
-      sendRaw: (raw) => {
-        assertDeliverable();
-        socket.send(raw);
-      },
-    });
+      queryClient
+    );
 
-    return () => {
+    const dispose = () => {
+      if (closed) return;
+      closed = true;
       disposeChannel();
       socket.close();
       // Parked questions deliberately SURVIVE this teardown: the next socket
@@ -597,6 +652,11 @@ export function useCloudDirectSession(
       if (frame !== null) cancelAnimationFrame(frame);
       refetchTimers.forEach((timer) => clearTimeout(timer));
       refetchTimers.clear();
+    };
+    const stopDisposal = runtime?.onDispose(dispose);
+    return () => {
+      stopDisposal?.();
+      dispose();
     };
   }, [sessionId, providerSessionId, baseUrl, token, tokenUpdatedAt, queryClient, reconnectNonce]);
 

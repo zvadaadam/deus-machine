@@ -5,11 +5,11 @@
  * and multi-phase orchestration (git init → register → create workspace).
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { getErrorMessage } from "@shared/lib/errors";
-import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { getRuntimeClient } from "@/platform/ws";
 
 export interface StartNewProjectTemplate {
   type: "empty" | "github";
@@ -32,6 +32,12 @@ export function useStartNewProject({
 
   // Generation counter: prevents stale invocations from mutating state.
   const startNewGenerationRef = useRef(0);
+  useEffect(
+    () => () => {
+      startNewGenerationRef.current++;
+    },
+    []
+  );
 
   /** Reset all modal state to idle. */
   function resetStartNewState() {
@@ -51,7 +57,11 @@ export function useStartNewProject({
     template?: StartNewProjectTemplate
   ) {
     const generation = ++startNewGenerationRef.current;
-    const isStale = () => generation !== startNewGenerationRef.current;
+    const runtime = getRuntimeClient();
+    const isStale = () =>
+      generation !== startNewGenerationRef.current ||
+      runtime.getState() === "disposed" ||
+      runtime.getState() === "revoked";
 
     setStartingNew(true);
     setStartNewError(null);
@@ -64,14 +74,14 @@ export function useStartNewProject({
       }
 
       // Ensure WS is connected before starting
-      if (!isConnected()) {
-        await connect();
+      if (!runtime.isConnected()) {
+        await runtime.connect();
         if (isStale()) return;
       }
 
       // Phase 1: Create project via git:init command
       if (isStale()) return;
-      const initAck = (await sendCommand(
+      const initAck = (await runtime.sendCommand(
         "git:init",
         {
           projectName: projectName.trim(),

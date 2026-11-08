@@ -2,23 +2,42 @@ import { vi } from "vitest";
 
 // ---- Mock WebSocket ----
 
+/** The account every helper's sockets are admitted for unless a test says otherwise. */
+export const TEST_ACCOUNT = "user_owner";
+
 export interface MockWebSocket {
+  accept: ReturnType<typeof vi.fn>;
   send: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
+  serializeAttachment: (value: unknown) => void;
+  deserializeAttachment: () => unknown;
   readyState: number;
   _tags: string[];
   _sentMessages: unknown[];
+  _attachment: unknown;
 }
 
-export function createMockWebSocket(tags: string[] = []): MockWebSocket {
+/** Sockets the relay accepted carry their ticket's account, as the DO's admission records it. */
+export function createMockWebSocket(
+  tags: string[] = [],
+  accountId: string | null = TEST_ACCOUNT
+): MockWebSocket {
   const ws: MockWebSocket = {
     readyState: 1, // OPEN
     _tags: tags,
     _sentMessages: [],
+    _attachment: accountId
+      ? { accountId, role: tags.includes("tunnel") ? "host" : "client" }
+      : null,
+    accept: vi.fn(),
     send: vi.fn((data: string) => {
       ws._sentMessages.push(JSON.parse(data));
     }),
     close: vi.fn(),
+    serializeAttachment: (value: unknown) => {
+      ws._attachment = structuredClone(value);
+    },
+    deserializeAttachment: () => ws._attachment,
   };
   return ws;
 }
@@ -37,10 +56,11 @@ export function getLastSent(ws: MockWebSocket): unknown {
 
 export interface MockDOStorage {
   get: <T = unknown>(key: string) => Promise<T | undefined>;
-  put: (key: string, value: unknown) => Promise<void>;
+  put: (key: string | Record<string, unknown>, value?: unknown) => Promise<void>;
   delete: (key: string | string[]) => Promise<boolean>;
   list: <T = unknown>(opts?: { prefix?: string }) => Promise<Map<string, T>>;
   setAlarm: ReturnType<typeof vi.fn>;
+  getAlarm: () => Promise<number | null>;
   _data: Map<string, unknown>;
   _alarmTime: number | null;
 }
@@ -56,8 +76,10 @@ export function createMockStorage(): MockDOStorage {
       return data.get(key) as T | undefined;
     }),
 
-    put: vi.fn(async (key: string, value: unknown): Promise<void> => {
-      data.set(key, value);
+    // Both forms of the real API: put(key, value) and put({ key: value, ... }).
+    put: vi.fn(async (key: string | Record<string, unknown>, value?: unknown): Promise<void> => {
+      if (typeof key === "string") data.set(key, value);
+      else for (const [entry, entryValue] of Object.entries(key)) data.set(entry, entryValue);
     }),
 
     delete: vi.fn(async (key: string | string[]): Promise<boolean> => {
@@ -81,6 +103,7 @@ export function createMockStorage(): MockDOStorage {
     setAlarm: vi.fn(async (time: number) => {
       storage._alarmTime = time;
     }),
+    getAlarm: async () => storage._alarmTime,
   };
 
   return storage;
@@ -158,19 +181,18 @@ export async function createTestDO() {
 export async function registerServer(
   relay: any,
   state: MockDOState,
-  opts: { serverId?: string; relayToken?: string; serverName?: string } = {}
+  opts: { serverName?: string; accountId?: string } = {}
 ) {
-  const { serverId = "test1234", relayToken = "tok_test", serverName = "Test Server" } = opts;
+  const { serverName = "Test Server", accountId = TEST_ACCOUNT } = opts;
+  // The host's admission pinned its account before any frame arrives.
+  if (!state.storage._data.has("owner")) state.storage._data.set("owner", accountId);
 
   // Simulate tunnel WebSocket upgrade
-  const tunnelWs = createMockWebSocket(["tunnel"]);
+  const tunnelWs = createMockWebSocket(["tunnel"], accountId);
   state._websockets.set(tunnelWs, ["tunnel"]);
 
   // Process register message
-  await relay.webSocketMessage(
-    tunnelWs,
-    JSON.stringify({ type: "register", serverId, relayToken, serverName })
-  );
+  await relay.webSocketMessage(tunnelWs, JSON.stringify({ type: "register", serverName }));
 
   return tunnelWs;
 }
@@ -180,12 +202,16 @@ export async function registerServer(
 export async function connectAndAuthClient(
   relay: any,
   state: MockDOState,
-  opts: { clientId?: string; deviceToken?: string } = {}
+  opts: { clientId?: string; deviceToken?: string; accountId?: string } = {}
 ) {
-  const { clientId = crypto.randomUUID(), deviceToken = "dev_tok_test" } = opts;
+  const {
+    clientId = crypto.randomUUID(),
+    deviceToken = "dev_tok_test",
+    accountId = TEST_ACCOUNT,
+  } = opts;
 
   // Simulate client WebSocket
-  const clientWs = createMockWebSocket(["client", clientId]);
+  const clientWs = createMockWebSocket(["client", clientId], accountId);
   state._websockets.set(clientWs, ["client", clientId]);
   await state.storage.put(`pending:${clientId}`, Date.now() + 5000);
 

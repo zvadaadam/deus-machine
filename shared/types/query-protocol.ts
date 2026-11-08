@@ -5,6 +5,7 @@
 // live in shared/events.ts — the single source of truth for all app events
 // and resources. This file only defines the wire format that carries them.
 
+import type { MutateResult } from "@deus/runtime-client";
 import type {
   QueryResource,
   RequestResource,
@@ -116,15 +117,9 @@ export interface QDeltaFrame {
 }
 
 /** Server returns mutation result. Uses `success`, not `ok`. */
-export interface QMutateResultFrame<T = unknown> {
+export interface QMutateResultFrame<T = unknown> extends MutateResult<T> {
   type: "q:mutate_result";
   id: string;
-  success: boolean;
-  data?: T;
-  error?: string;
-  /** Route error metadata, preserved for conflict recovery. */
-  status?: number;
-  details?: unknown;
 }
 
 /** Server tells clients to refetch stale resources. */

@@ -16,9 +16,9 @@
  *   sits on "idle" for a session the backend has flagged `error` until the app
  *   is reloaded. Refetch instead.
  *
- *   The TRANSPORT died. Nothing was pushed, because there was no socket to push
- *   down; the snapshot IS the freshest thing anyone has, and a refetch would
- *   only be a request with nowhere to go. Restore it.
+ *   The command was SENT but its acknowledgment was lost. It may have started
+ *   a turn, so reconcile with the backend instead of restoring an older status.
+ *   A failure BEFORE dispatch can safely restore the pre-send snapshot.
  *
  * Both rejection flavors take the refetch branch, including `turnActive` — the
  * one where the backend deliberately leaves the status alone. "Alone" there
@@ -30,6 +30,7 @@
  */
 
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { RuntimeError } from "@/platform/ws/runtime-client";
 
 /** A rejection the server understood — resending it would only reject again. */
 export class SendRejectedError extends Error {}
@@ -56,8 +57,12 @@ export function rollbackSendStatus(
     void queryClient.invalidateQueries({ queryKey: WORKSPACES_BY_REPO });
   };
 
-  // The server spoke; its status is already in the cache and outranks ours.
-  if (error instanceof SendRejectedError) return refetch();
+  // A server rejection or an uncertain delivery needs authoritative state.
+  if (
+    error instanceof SendRejectedError ||
+    (error instanceof RuntimeError && error.kind === "unknown-outcome")
+  )
+    return refetch();
 
   if (snapshot?.length) {
     snapshot.forEach(([key, data]) => queryClient.setQueryData(key, data));

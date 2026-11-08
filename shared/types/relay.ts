@@ -1,11 +1,19 @@
-// Relay envelope protocol types.
+// Relay envelope protocol types (relay protocol v2).
 // Defines the framing between Deus server <-> CF Durable Object relay <-> web clients.
+// Every socket is admitted with a Deus Cloud ticket before any frame below is
+// exchanged; `accountId` on host-bound frames is the account that ticket proved.
+
+/**
+ * Every peer offers `[RELAY_PROTOCOL, <Deus Cloud ticket>]` as its WebSocket
+ * subprotocols; the relay echoes RELAY_PROTOCOL back once the ticket verifies.
+ */
+export const RELAY_PROTOCOL = "deus.relay.v2";
 
 // ---- Server <-> Relay (tunnel) ----
 
 /** Frames sent from Deus server to relay via tunnel WebSocket */
 export type ServerFrame =
-  | { type: "register"; serverId: string; relayToken: string; serverName?: string }
+  | { type: "register"; serverName?: string }
   | { type: "data"; clientId: string; payload: string }
   | { type: "auth_response"; clientId: string; allowed: boolean; reason?: string }
   | { type: "pong" }
@@ -16,13 +24,13 @@ export type ServerFrame =
 /** Frames sent from relay to Deus server via tunnel WebSocket */
 export type RelayFrame =
   | { type: "registered" }
-  | { type: "client_connected"; clientId: string; deviceToken: string }
+  | { type: "client_connected"; clientId: string; deviceToken: string; accountId: string }
   | { type: "client_disconnected"; clientId: string }
   | { type: "data"; clientId: string; payload: string }
   | { type: "ping" }
   | { type: "error"; message: string }
   // Pairing: web client wants to exchange a code for a device token
-  | { type: "pair_request"; pairId: string; code: string; deviceName: string };
+  | { type: "pair_request"; pairId: string; code: string; deviceName: string; accountId: string };
 
 // ---- Client <-> Relay ----
 
@@ -31,11 +39,10 @@ export type ClientAuthFrame = { type: "authenticate"; token: string };
 
 /** Control frames sent from relay to client (auth + lifecycle) */
 export type RelayClientFrame =
+  | { type: "pong"; id: string }
   | { type: "authenticated" }
   | { type: "auth_failed"; message: string }
-  | { type: "server_offline"; serverName: string | null; serverDisconnectedAt: number }
   | { type: "server_reconnecting"; serverName: string | null; serverDisconnectedAt: number }
-  | { type: "server_connected" }
   | { type: "error"; message: string };
 
 // ---- Pairer <-> Relay (one-shot /pair WebSocket) ----

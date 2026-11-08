@@ -38,8 +38,27 @@ function writePreferences(settings: Record<string, any>): void {
   fs.renameSync(tmpPath, PREFS_PATH);
 }
 
+/**
+ * Kept in preferences.json but never served or written through the settings
+ * API: remote devices read settings through the relay. `relay_machines` holds
+ * this computer's Deus Cloud machine secrets.
+ */
+export const PRIVATE_SETTINGS: ReadonlySet<string> = new Set(["relay_machines"]);
+
+/** Delete settings outright (not set them to null). Returns whether any existed. */
+export function removeSettings(keys: readonly string[]): boolean {
+  const prefs = readPreferences();
+  const present = keys.filter((key) => key in prefs);
+  if (present.length === 0) return false;
+  for (const key of present) delete prefs[key];
+  writePreferences(prefs);
+  return true;
+}
+
 export function getAllSettings(): Record<string, any> {
-  return readPreferences();
+  const prefs = readPreferences();
+  for (const key of PRIVATE_SETTINGS) delete prefs[key];
+  return prefs;
 }
 
 /** Get a single setting value by key. Returns the parsed value or null. */

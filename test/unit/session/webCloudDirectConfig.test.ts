@@ -71,6 +71,13 @@ describe.each([
 });
 
 describe("login loop guard", () => {
+  it("ignores a late 401 from the previous bearer", async () => {
+    sessionStorage.setItem("deus_cloud_session", "account-B");
+    handleWebCloudSessionExpired("account-A");
+    expect(await readWebCloudSessionBearer()).toBe("account-B");
+    expect(win().location.href).toBe(APP_URL);
+  });
+
   it("a bearer that came back from login and is rejected by agnt does not bounce to login again", async () => {
     // Boot without a bearer: off to sign in.
     expect(redirectToWebCloudLogin()).toBe(true);

@@ -103,6 +103,66 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 
 Resources, mutations, commands, and events are all defined in `shared/events.ts`. Frontend subscribes via `useQuerySubscription()`.
 
+The private workspace package `@deus/runtime-client` (`packages/runtime-client/`)
+owns transport, pending operations and subscriptions. Its root entry has no React,
+TanStack or app dependencies; `/query` adds a dedicated TanStack Query cache.
+`apps/web/src/platform/ws/runtime-client.ts` binds the package to Deus resource
+names, cache defaults and the cache-to-runtime lookup. Keep host selection,
+credentials, routing, React hooks and domain projections in the app. The package
+uses the existing `q:` wire; `@zvada/agent-server/client` serves the separate agent
+execution protocol. See `packages/runtime-client/README.md` for the boundary.
+
+The shell selects a host, account and authorization grant; changing any of them
+disposes the old runtime and remounts the cache provider. Async flows must retain
+their originating client across awaits. Equal resource/parameter subscriptions
+share one wire subscription, and equal resource/parameter/query-key bindings
+share one cache projection. Agent folds and cloud-direct channels belong to that
+same cache and survive reconnects (only disposal drops them). Reconnect restores
+reads; it never resends writes. A lost acknowledgment is an `unknown-outcome`, not
+permission to retry a command. Correlated ping/pong probes detect silent
+connections (30s interval, 10s timeout). When a relay host is replaced,
+already-authorized viewers reconnect and authorize again before their
+subscriptions resume; a connected tunnel alone is not readiness.
+
+### Remote access (relay)
+
+Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
+
+- **Deus Cloud** (AGNT `apps/deus-cloud`, `/me/machines`) lists the account's
+  computers and signs one-use, 60-second relay tickets (ES256). The desktop
+  backend registers its computer per signed-in account
+  (`services/remote-machine.service.ts`, records in the private `relay_machines`
+  setting) and needs that computer's own secret to host it.
+- **The relay** (`apps/cloud-relay`) admits a socket only with a ticket for that
+  machine and role (`deus.relay.v2` subprotocol + ticket), verifies it with
+  public keys (`RELAY_TICKET_JWKS`), consumes it once, pins the machine to its
+  first host's account, and names the verified account on `client_connected` and
+  `pair_request`. It has no public status route and holds no minting key.
+- **The Mac** approves each device once (pairing code, or the QR link
+  `/s/<machine>#pair=CODE`, whose fragment never reaches a server) and binds the
+  grant to the relay-verified account and this machine id
+  (`paired_devices.account_id`, `machine_id`). Relay grants work only through the
+  relay; local-network (direct) grants only directly. The tunnel follows the
+  desktop's account: sign-out closes it, switching accounts replaces it. A
+  computer removed from the account stays off (and its relay grants are retired)
+  until remote access is turned on again. Only the desktop process that spawned
+  the backend (its `AUTH_TOKEN`) may hand it account credentials.
+- **The browser** signs in with its own `deus-web` session, lists computers at
+  `/connect`, and stores grants per account and computer, so signing out keeps
+  them and signing back in reconnects without a code. Every dial fetches a fresh
+  ticket; an expired session (401), a refusal (400/403) or a computer the account
+  lacks (404) stops redialing. A relay refusal looks like a network failure to a
+  browser, so it redials with backoff. Pairing pages and the Mac's dialog show the
+  computer's name and id fingerprint, so a code is typed into the right computer.
+
+Admission is checked when a socket opens (no leases), and the relay can still read
+`q:` frames: end-to-end encryption is separate work. `DEUS_RELAY_URL` points the
+backend at a local Worker; `bun run test:e2e:remote-access` runs the whole stack.
+The production ticket key pair is backed up in the gitignored `.env.relay-tickets`
+at the repository root (copied into new worktrees); its private key is Deus Cloud's
+secret and must never be printed or committed. `apps/cloud-relay/.dev.vars` holds the
+local relay's development JWKS.
+
 ### Adding a New WS Resource
 
 1. Add resource to `QUERY_RESOURCES` in `shared/events.ts`
@@ -128,6 +188,7 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 ```bash
 bun run test:backend          # apps/backend/test/unit/
 bun run test:agent-server     # apps/agent-server/test/
+bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or React)
 ```
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.

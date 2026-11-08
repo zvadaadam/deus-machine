@@ -64,6 +64,7 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
   ],
   parts: ["parent_tool_call_id"],
   compactions: ["compaction_id"],
+  paired_devices: ["account_id", "machine_id"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -116,6 +117,12 @@ export const ADDITIVE_COLUMNS = {
   automations: {
     // The spec's thinking level; AGNT runs no automation that names none.
     thinking_level: "TEXT",
+  },
+  paired_devices: {
+    // A relay pairing's Deus account and this computer's machine id in it.
+    // Null for a direct (local network) pairing, which works only there.
+    account_id: "TEXT",
+    machine_id: "TEXT",
   },
 } as const satisfies Record<string, Record<string, string>>;
 
@@ -251,6 +258,8 @@ export const SCHEMA_SQL = `
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL DEFAULT 'Unknown Device',
     token_hash TEXT NOT NULL UNIQUE,
+    account_id TEXT,
+    machine_id TEXT,
     ip_address TEXT,
     user_agent TEXT,
     last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),

@@ -98,7 +98,7 @@ export function makeCloudFrameHandler(
         // adapter's in-flight list cache first: a boundary inside its 3s TTL
         // would otherwise refetch the CACHED list and the dot wouldn't move
         // until the next slow tick.
-        bustCloudSessionsListCache();
+        bustCloudSessionsListCache(ctx.queryClient);
         void ctx.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       } else if (type === "session.usage") {
         // The composer's context gauge — mirror the Mac backend's projection

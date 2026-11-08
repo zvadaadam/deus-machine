@@ -10,13 +10,28 @@
 // Kept in its own module so the adapter can read it without importing the
 // hook (which imports the adapter's neighbours).
 
-const sessionsWithParkedQuestion = new Set<string>();
+import { queryClient } from "@/shared/api/queryClient";
+import type { QueryClient } from "@tanstack/react-query";
 
-export function setDirectQuestionParked(sessionId: string, parked: boolean): void {
+const parkedByCache = new WeakMap<QueryClient, Set<string>>();
+
+export function setDirectQuestionParked(
+  sessionId: string,
+  parked: boolean,
+  owner: QueryClient = queryClient
+): void {
+  let sessionsWithParkedQuestion = parkedByCache.get(owner);
+  if (!sessionsWithParkedQuestion) {
+    sessionsWithParkedQuestion = new Set();
+    parkedByCache.set(owner, sessionsWithParkedQuestion);
+  }
   if (parked) sessionsWithParkedQuestion.add(sessionId);
   else sessionsWithParkedQuestion.delete(sessionId);
 }
 
-export function hasParkedDirectQuestion(sessionId: string): boolean {
-  return sessionsWithParkedQuestion.has(sessionId);
+export function hasParkedDirectQuestion(
+  sessionId: string,
+  owner: QueryClient = queryClient
+): boolean {
+  return parkedByCache.get(owner)?.has(sessionId) ?? false;
 }

@@ -8,8 +8,8 @@
  *   |   +-- /w/$workspaceId -> WorkspaceRoute
  *   |   +-- /settings       -> SettingsRoute
  *   +-- relay (Mac remote control), under its own URLs:
- *       +-- /connect            -> ConnectPage (enter server ID)
- *       +-- /connect/$serverId  -> ConnectPage (pre-filled server)
+ *       +-- /connect            -> ConnectPage (the account's computers)
+ *       +-- /connect/$serverId  -> redirect to /s/$serverId (older shared links)
  *       +-- /s/$serverId        -> ServerLayout (wraps nested routes)
  *           +-- /               -> redirects to last workspace
  *           +-- /w/$workspaceId -> WorkspaceRoute
@@ -36,7 +36,7 @@ const rootRoute = createRootRoute({
   component: RootLayout,
 });
 
-// --- /connect (no server ID) ---
+// --- /connect (the signed-in account's computers) ---
 const connectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/connect",

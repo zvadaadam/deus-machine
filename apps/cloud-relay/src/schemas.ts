@@ -37,9 +37,7 @@ const pairResponseSchema = z
 const baseFrameSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("register"),
-    serverId: z.string(),
-    relayToken: z.string(),
-    serverName: z.string().optional(),
+    serverName: z.string().max(200).optional(),
   }),
   z.object({
     type: z.literal("data"),

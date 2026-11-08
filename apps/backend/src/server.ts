@@ -3,8 +3,8 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
 import { closeAll as closeAllWsConnections } from "./services/ws.service";
-import { ensureRelayConnected, disconnectFromRelay } from "./services/relay.service";
-import { getSetting } from "./services/settings.service";
+import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
+import { retireLegacyRelayCredentials } from "./services/remote-machine.service";
 import * as agentService from "./services/agent";
 import { destroyAllPtySessions } from "./services/pty.service";
 import { destroyAllWatchers } from "./services/fs-watcher.service";
@@ -123,10 +123,9 @@ async function onListening(port: number): Promise<void> {
   console.log(`Database: ${DB_PATH}`);
   console.log("Server ready!\n");
 
-  const remoteEnabled = getSetting("remote_access_enabled");
-  if (remoteEnabled === true) {
-    ensureRelayConnected();
-  }
+  // Waits for the desktop's account session when it is not handed over yet.
+  retireLegacyRelayCredentials();
+  reconcileRelay();
 
   // Discover booted simulators on startup (fire-and-forget).
   // Restores awareness of running simulators after a backend restart.

@@ -102,11 +102,15 @@ describe("Stop delivery", () => {
     expectUnstopped();
 
     const cancel = vi.fn();
-    disposeChannel = registerDirectSession(SESSION, {
-      sendMessage: vi.fn(),
-      sendRaw: vi.fn(),
-      cancel,
-    });
+    disposeChannel = registerDirectSession(
+      SESSION,
+      {
+        sendMessage: vi.fn(),
+        sendRaw: vi.fn(),
+        cancel,
+      },
+      state.queryClient!
+    );
     state.error.mockClear();
     await actions.stopSession();
     expect(cancel).toHaveBeenCalledExactlyOnceWith();
@@ -118,13 +122,17 @@ describe("Stop delivery", () => {
     "Cloud session socket is not connected",
     "The session lost its connection — reconnecting, try again in a moment.",
   ])("shows failed direct delivery: %s", async (message) => {
-    disposeChannel = registerDirectSession(SESSION, {
-      sendMessage: vi.fn(),
-      sendRaw: vi.fn(),
-      cancel: () => {
-        throw new Error(message);
+    disposeChannel = registerDirectSession(
+      SESSION,
+      {
+        sendMessage: vi.fn(),
+        sendRaw: vi.fn(),
+        cancel: () => {
+          throw new Error(message);
+        },
       },
-    });
+      state.queryClient!
+    );
     await useSessionActions({ sessionId: SESSION }).stopSession();
     expect(state.error).toHaveBeenCalledExactlyOnceWith(message);
     expect(state.sendCommand).not.toHaveBeenCalled();
@@ -152,5 +160,79 @@ describe("Stop delivery", () => {
     await useSessionActions({ sessionId: SESSION }).stopSession();
     expect(state.error).toHaveBeenCalledExactlyOnceWith("Stop could not be delivered");
     expectUnstopped();
+  });
+});
+
+describe("backend prompt delivery", () => {
+  beforeEach(() => {
+    storageForLocalSession();
+  });
+
+  function storageForLocalSession() {
+    state.queryClient!.setQueryData<Session>(queryKeys.sessions.detail(SESSION), (old) => ({
+      ...old!,
+      workspace_kind: "local",
+      provider_session_id: null,
+    }));
+  }
+
+  it("does not resubmit a prompt after losing the command acknowledgment", async () => {
+    const { useSendMessage } = await import("@/features/session/api/session.queries");
+    const { RuntimeError } = await import("@/platform/ws/runtime-client");
+    const failure = new RuntimeError("unknown-outcome", "Acknowledgment lost");
+    state.sendCommand.mockRejectedValue(failure);
+    await expect(
+      useSendMessage().mutateAsync({
+        sessionId: SESSION,
+        content: "Run this once",
+        turnId: "turn-once",
+      })
+    ).rejects.toBe(failure);
+    expect(state.sendCommand).toHaveBeenCalledTimes(1);
+    expect(state.sendCommand.mock.calls[0][0]).toBe("sendMessage");
+  });
+
+  it("does not resubmit an authoritative rejection", async () => {
+    const { useSendMessage } = await import("@/features/session/api/session.queries");
+    state.sendCommand.mockResolvedValue({ accepted: false, error: "Already running" });
+    await expect(
+      useSendMessage().mutateAsync({
+        sessionId: SESSION,
+        content: "Run this once",
+        turnId: "turn-rejected",
+      })
+    ).rejects.toThrow("Already running");
+    expect(state.sendCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a send waiting for connection on its original runtime when that runtime is disposed", async () => {
+    const { useSendMessage } = await import("@/features/session/api/session.queries");
+    const { RuntimeClient } = await import("@/platform/ws/runtime-client");
+    const original = new RuntimeClient(
+      { host: "A", account: "account", grant: "A" },
+      {
+        queryClient: state.queryClient!,
+        open: () => new Promise(() => {}),
+      }
+    );
+    const next = new RuntimeClient(
+      { host: "B", account: "account", grant: "B" },
+      {
+        open: () => new Promise(() => {}),
+      }
+    );
+    const otherSend = vi.spyOn(next, "sendCommand");
+    const result = useSendMessage().mutateAsync({
+      sessionId: SESSION,
+      content: "Only for A",
+      turnId: "turn-A",
+    });
+    const rejected = expect(result).rejects.toMatchObject({ kind: "disposed" });
+    await vi.waitFor(() => expect(original.getState()).toBe("connecting"));
+    original.dispose();
+    await rejected;
+    expect(state.sendCommand).not.toHaveBeenCalled();
+    expect(otherSend).not.toHaveBeenCalled();
+    next.dispose();
   });
 });

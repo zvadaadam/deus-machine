@@ -176,6 +176,9 @@ jobs:
       - name: Rebuild SQLite for recovery integration tests
         run: bun run native:node
 
+      - name: Test standalone runtime client
+        run: bun run test:runtime-client
+
       - name: Run app and desktop unit tests
         run: bun run test:simulator
 

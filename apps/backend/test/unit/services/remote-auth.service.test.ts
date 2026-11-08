@@ -18,9 +18,11 @@ vi.mock("../../../src/lib/database", () => ({
 import {
   generatePairCode,
   validatePairCode,
+  authorizePairing,
   getActiveCodeCount,
   createDeviceToken,
   validateDeviceToken,
+  validateDirectDeviceToken,
   listDevices,
   revokeDevice,
   updateLastSeen,
@@ -77,10 +79,10 @@ describe("generatePairCode", () => {
 });
 
 describe("validatePairCode", () => {
-  it("accepts a valid code and allows reuse within TTL", () => {
+  it("checks validity without consuming the code", () => {
     const { code } = generatePairCode();
     expect(validatePairCode(code)).toBe(true);
-    // Reuse within TTL succeeds (multi-device pairing)
+    // Validation is non-consuming; admission below is single-use.
     expect(validatePairCode(code)).toBe(true);
   });
 
@@ -105,6 +107,32 @@ describe("validatePairCode", () => {
   ] as const)("%s", (_label, transform) => {
     const { code } = generatePairCode();
     expect(validatePairCode(transform(code))).toBe(true);
+  });
+});
+
+describe("single-use pairing admission", () => {
+  it("consumes a successful HTTP admission before a relay can reuse the code", () => {
+    const { code } = generatePairCode();
+    expect(authorizePairing(code.toLowerCase().replace(" ", "-"), "http-device")).toBeNull();
+    expect(authorizePairing(code, "relay")).toBe("invalid_code");
+    expect(getActiveCodeCount()).toBe(0);
+  });
+
+  it("does not consume a valid code on a rate-limited attempt", () => {
+    const { code } = generatePairCode();
+    for (let i = 0; i < 10; i++) recordFailure("blocked");
+    expect(authorizePairing(code, "blocked")).toBe("rate_limited");
+    expect(authorizePairing(code, "allowed")).toBeNull();
+  });
+
+  it("rejects an expired offer", () => {
+    const { code, expiresAt } = generatePairCode();
+    const now = vi.spyOn(Date, "now").mockReturnValue(expiresAt);
+    try {
+      expect(authorizePairing(code, "device")).toBe("invalid_code");
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 
@@ -227,5 +255,17 @@ describe("rate limiting", () => {
     }
     resetRateLimit("1.2.3.4");
     expect(checkRateLimit("1.2.3.4")).toBe(0);
+  });
+});
+
+describe("validateDirectDeviceToken", () => {
+  it("accepts a local-network grant and refuses a relay grant", () => {
+    mockStmt.get.mockReturnValueOnce({ id: "lan", account_id: null, machine_id: null });
+    expect(validateDirectDeviceToken("lan-token")).toMatchObject({ id: "lan" });
+    // A relay grant copied from a shared browser must not skip the relay's account check.
+    mockStmt.get.mockReturnValueOnce({ id: "relay", account_id: "user_a", machine_id: "m" });
+    expect(validateDirectDeviceToken("relay-token")).toBeNull();
+    mockStmt.get.mockReturnValueOnce(undefined);
+    expect(validateDirectDeviceToken("unknown")).toBeNull();
   });
 });

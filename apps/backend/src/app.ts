@@ -4,7 +4,7 @@ import { createNodeWebSocket } from "@hono/node-ws";
 import { errorHandler } from "./middleware/error-handler";
 import { remoteGateMiddleware } from "./middleware/remote-gate";
 import { authMiddleware } from "./middleware/remote-auth";
-import { validateDeviceToken } from "./services/remote-auth.service";
+import { validateDirectDeviceToken } from "./services/remote-auth.service";
 import { addConnection, removeConnection, handleProtocolMessage } from "./services/ws.service";
 import { getRelayStatus } from "./services/relay.service";
 // Simulator context is accessed via q:command handlers in commands.ts
@@ -99,7 +99,7 @@ export function createApp() {
           // Unauthenticated remote client — must initialize first
           if (!connectionId) {
             if (msg.type === "initialize" && typeof msg.token === "string") {
-              const device = validateDeviceToken(msg.token);
+              const device = validateDirectDeviceToken(msg.token);
               if (device) {
                 connectionId = addConnection(ws, device.id);
                 ws.send(JSON.stringify({ type: "connected", connectionId }));

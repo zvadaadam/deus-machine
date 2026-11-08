@@ -5,7 +5,6 @@
 
 export {
   connect,
-  subscribe,
   isConnected,
   sendCommand,
   sendRequest,
@@ -17,5 +16,7 @@ export {
   forceReconnect,
   onEvent,
   onConnectionChange,
+  getRuntimeClient,
+  runtimeForQueryClient,
 } from "./query-protocol-client";
 export type { QueryRequestInterceptor, ToolResponseInterceptor } from "./query-protocol-client";

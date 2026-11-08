@@ -12,6 +12,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { SendRejectedError, rollbackSendStatus } from "@/features/session/lib/sendRollback";
+import { RuntimeError } from "@/platform/ws/runtime-client";
 
 const BY_REPO = ["workspaces", "by-repo", "active"] as const;
 
@@ -69,6 +70,14 @@ describe("rollbackSendStatus", () => {
   });
 
   describe("a transport failure", () => {
+    it("reconciles an unknown outcome without restoring stale pre-send status", () => {
+      queryClient.setQueryData(BY_REPO, group("working"));
+      rollbackSendStatus(queryClient, new RuntimeError("unknown-outcome", "Reply lost"), [
+        [BY_REPO, group("idle")],
+      ]);
+      expect(queryClient.getQueryData(BY_REPO)).toEqual(group("working"));
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["workspaces", "by-repo"] });
+    });
     it("restores the snapshot — nothing was pushed, and a refetch has nowhere to go", () => {
       const snapshot: Array<[readonly unknown[], unknown]> = [[BY_REPO, group("idle")]];
       queryClient.setQueryData(BY_REPO, group("working")); // the optimistic paint

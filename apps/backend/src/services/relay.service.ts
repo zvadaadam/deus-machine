@@ -2,21 +2,32 @@
 // Manages the outbound WebSocket tunnel to the cloud relay.
 // Creates virtual WsConnections in ws.service for relay-forwarded clients.
 // Registers the query-engine protocol handler for q:* frames.
+//
+// Remote access belongs to the Deus account the desktop is signed in to. The
+// tunnel opens with a Deus Cloud host ticket for this computer's machine in
+// that account; the relay admits only the same account's devices and names
+// each one's account, and a pairing made here is bound to it.
 
 import { execSync } from "child_process";
 import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
-import type { ServerFrame, RelayFrame } from "@shared/types/relay";
+import { RELAY_PROTOCOL, type ServerFrame, type RelayFrame } from "@shared/types/relay";
 import { getSetting } from "./settings.service";
 import {
-  getRelayCredentials,
-  generateRelayCredentials,
   validateDeviceToken,
   authorizePairing,
   createDeviceToken,
   updateLastSeen,
 } from "./remote-auth.service";
+import {
+  currentAccountSession,
+  forgetRemovedMachine,
+  getMachineId,
+  isMachineRemoved,
+  MachineRemovedError,
+  obtainHostTicket,
+} from "./remote-machine.service";
 import { DEFAULT_RELAY_URL } from "../lib/network";
 import {
   addConnection,
@@ -28,14 +39,20 @@ import {
 } from "./ws.service";
 import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "./query-engine";
 
+/** What Settings shows: off, waiting for sign-in, dialing, serving viewers, or removed. */
+export type RelayState = "off" | "signed_out" | "connecting" | "connected" | "removed";
+
 // ---- Tunnel State ----
 
 let tunnelWs: WebSocket | null = null;
-let relayUrl: string | null = null;
-let serverId: string | null = null;
-let relayToken: string | null = null;
+/** The account the current tunnel serves; a different signed-in account replaces it. */
+let hostAccount: string | null = null;
+let machineId: string | null = null;
+let dial: AbortController | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let stableTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
+let lastError: string | null = null;
 
 // ---- Relay clients ----
 
@@ -49,6 +66,11 @@ function unlinkClient(clientId: string): string | undefined {
 
 const MAX_RECONNECT_DELAY = 30_000;
 const BASE_RECONNECT_DELAY = 1_000;
+/** A tunnel must stay registered this long before backoff starts over. */
+const STABLE_TUNNEL_MS = 60_000;
+const HANDSHAKE_TIMEOUT_MS = 15_000;
+/** The relay's close reason when another tunnel for this machine replaced ours. */
+const DISPLACED = "New tunnel connection";
 
 // ---- Server Name Detection ----
 
@@ -88,98 +110,154 @@ setProtocolHandlers({
 
 // ---- Public API ----
 
-export function ensureRelayConnected(): void {
-  const url = DEFAULT_RELAY_URL;
-  let creds = getRelayCredentials();
-  if (!creds) {
-    creds = generateRelayCredentials();
-  }
-  // Already connected or connecting with same credentials — skip
-  if (
-    relayUrl === url &&
-    serverId === creds.serverId &&
-    relayToken === creds.relayToken &&
-    tunnelWs &&
-    (tunnelWs.readyState === WebSocket.OPEN || tunnelWs.readyState === WebSocket.CONNECTING)
-  ) {
+/**
+ * Bring the tunnel in line with Settings and the desktop's account: open it
+ * when remote access is on and an account is signed in, replace it when the
+ * account changes, and close it otherwise. Idempotent; call it on any change.
+ * `restart` is the user turning remote access on, which re-adds a computer the
+ * account removed.
+ */
+export function reconcileRelay({ restart = false }: { restart?: boolean } = {}): void {
+  const enabled = getSetting("remote_access_enabled") === true;
+  const session = enabled ? currentAccountSession() : null;
+  if (session && restart) forgetRemovedMachine(session.accountId);
+  if (!session || isMachineRemoved(session.accountId)) {
+    if (hostAccount !== null || tunnelWs || dial || reconnectTimer) disconnectFromRelay();
     return;
   }
+  if (hostAccount === session.accountId && (tunnelWs || dial || reconnectTimer)) return;
 
-  connectToRelay(url, creds.serverId, creds.relayToken);
-}
-
-function connectToRelay(url: string, id: string, token: string): void {
-  relayUrl = url;
-  serverId = id;
-  relayToken = token;
+  disconnectFromRelay();
+  hostAccount = session.accountId;
+  machineId = getMachineId(session.accountId);
   reconnectAttempt = 0;
-  openTunnel();
+  void openTunnel();
 }
 
 export function disconnectFromRelay(): void {
-  relayUrl = null;
-  serverId = null;
-  relayToken = null;
+  hostAccount = null;
+  machineId = null;
+  lastError = null;
+  dial?.abort();
+  dial = null;
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  if (tunnelWs) {
-    tunnelWs.close(1000, "Disconnecting");
-    tunnelWs = null;
+  if (stableTimer) {
+    clearTimeout(stableTimer);
+    stableTimer = null;
   }
-  for (const [, connId] of clientToConn) {
-    removeConnection(connId);
-  }
-  clientToConn.clear();
+  const socket = tunnelWs;
+  tunnelWs = null;
+  socket?.close(1000, "Disconnecting");
+  dropClients();
 }
 
 export function getRelayStatus(): {
+  state: RelayState;
   connected: boolean;
   clients: number;
   serverId: string | null;
-  relayUrl: string | null;
+  serverName: string;
+  accountId: string | null;
+  relayUrl: string;
+  error: string | null;
 } {
-  const effectiveUrl = relayUrl ?? DEFAULT_RELAY_URL;
-  const creds = serverId ? null : getRelayCredentials();
-  const effectiveServerId = serverId ?? creds?.serverId ?? null;
-
+  const enabled = getSetting("remote_access_enabled") === true;
+  const connected = tunnelWs?.readyState === WebSocket.OPEN;
+  const session = enabled && !hostAccount ? currentAccountSession() : null;
+  const removed = session !== null && isMachineRemoved(session.accountId);
+  const state: RelayState = !enabled
+    ? "off"
+    : removed
+      ? "removed"
+      : !hostAccount
+        ? "signed_out"
+        : connected
+          ? "connected"
+          : "connecting";
   return {
-    connected: tunnelWs?.readyState === WebSocket.OPEN,
+    state,
+    connected,
     clients: clientToConn.size,
-    serverId: effectiveServerId,
-    relayUrl: effectiveUrl,
+    serverId: machineId,
+    // Shown beside the pairing code so a code is typed into this computer only.
+    serverName: getServerName(),
+    accountId: hostAccount,
+    relayUrl: DEFAULT_RELAY_URL,
+    error:
+      state === "connecting"
+        ? lastError
+        : state === "removed"
+          ? new MachineRemovedError().message
+          : null,
   };
 }
 
 // ---- Tunnel Lifecycle ----
 
-function openTunnel(): void {
-  if (!relayUrl || !serverId || !relayToken) return;
+async function openTunnel(): Promise<void> {
+  const account = hostAccount;
+  const session = currentAccountSession();
+  if (!account || session?.accountId !== account) return;
 
-  const wsUrl = `${relayUrl}/api/servers/${serverId}/tunnel?token=${encodeURIComponent(relayToken)}`;
-  console.log(`[Relay] Connecting to ${relayUrl}/api/servers/${serverId}/tunnel...`);
-
+  const controller = new AbortController();
+  dial = controller;
+  let hostTicket: { machineId: string; ticket: string };
   try {
-    tunnelWs = new WebSocket(wsUrl);
+    hostTicket = await obtainHostTicket(session, getServerName(), controller.signal);
+  } catch (err) {
+    if (controller.signal.aborted) return;
+    dial = null;
+    if (err instanceof MachineRemovedError) {
+      // Removing a computer is a decision, not an outage: stay off, don't re-register.
+      console.log("[Relay] This computer was removed from the account; remote access is off");
+      disconnectFromRelay();
+      return;
+    }
+    lastError = err instanceof Error ? err.message : String(err);
+    console.error(`[Relay] Could not obtain a host ticket: ${lastError}`);
+    scheduleReconnect();
+    return;
+  }
+  if (controller.signal.aborted || hostAccount !== account) return;
+  dial = null;
+  machineId = hostTicket.machineId;
+
+  const url = `${DEFAULT_RELAY_URL}/api/servers/${machineId}/tunnel`;
+  console.log(`[Relay] Connecting to ${url}...`);
+  let socket: WebSocket;
+  try {
+    // Browsers can only send a credential as a subprotocol; the host does the same.
+    socket = new WebSocket(url, [RELAY_PROTOCOL, hostTicket.ticket], {
+      handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
+    });
   } catch (err) {
     console.error("[Relay] Failed to create WebSocket:", err);
     scheduleReconnect();
     return;
   }
+  tunnelWs = socket;
+  // A replaced or abandoned socket's late events must not touch its successor.
+  const current = () => tunnelWs === socket;
 
-  tunnelWs.on("open", () => {
+  socket.on("open", () => {
+    if (!current()) return;
     console.log("[Relay] Tunnel connected, registering...");
-    reconnectAttempt = 0;
-    sendToRelay({
-      type: "register",
-      serverId: serverId!,
-      relayToken: relayToken!,
-      serverName: getServerName(),
-    });
+    lastError = null;
+    sendToRelay({ type: "register", serverName: getServerName() });
+    // Start backoff over only once the tunnel has held: a tunnel that keeps
+    // being replaced (two Deus apps hosting one machine) must not redial hot.
+    if (stableTimer) clearTimeout(stableTimer);
+    stableTimer = setTimeout(() => {
+      stableTimer = null;
+      if (current()) reconnectAttempt = 0;
+    }, STABLE_TUNNEL_MS);
   });
 
-  tunnelWs.on("message", (raw: Buffer | string) => {
+  socket.on("message", (raw: Buffer | string) => {
+    if (!current()) return;
     try {
       const frame = JSON.parse(typeof raw === "string" ? raw : raw.toString()) as RelayFrame;
       handleRelayFrame(frame);
@@ -188,19 +266,37 @@ function openTunnel(): void {
     }
   });
 
-  tunnelWs.on("close", (code, reason) => {
-    console.log(`[Relay] Tunnel closed: ${code} ${reason}`);
-    tunnelWs = null;
-    for (const [, connId] of clientToConn) {
-      removeConnection(connId);
-    }
-    clientToConn.clear();
-    if (relayUrl) scheduleReconnect();
+  socket.on("unexpected-response", (_request, response) => {
+    if (!current()) return;
+    lastError = `The relay refused this computer (${response.statusCode})`;
+    // With this listener ws leaves the handshake open; end it so `close` redials.
+    response.resume();
+    socket.terminate();
   });
 
-  tunnelWs.on("error", (err) => {
+  socket.on("close", (code, reason) => {
+    if (!current()) return;
+    console.log(`[Relay] Tunnel closed: ${code} ${reason}`);
+    tunnelWs = null;
+    dropClients();
+    if (String(reason) === DISPLACED) {
+      lastError = "Another Deus app on this computer is hosting remote access";
+      reconnectAttempt = Math.max(reconnectAttempt, 5);
+    }
+    scheduleReconnect();
+  });
+
+  socket.on("error", (err) => {
+    if (!current()) return;
     console.error("[Relay] Tunnel error:", err.message);
   });
+}
+
+function dropClients(): void {
+  for (const [, connId] of clientToConn) {
+    removeConnection(connId);
+  }
+  clientToConn.clear();
 }
 
 function handleRelayFrame(frame: RelayFrame): void {
@@ -210,7 +306,15 @@ function handleRelayFrame(frame: RelayFrame): void {
     })
     .with({ type: "client_connected" }, (f) => {
       const device = validateDeviceToken(f.deviceToken);
-      if (device) {
+      // A pairing works only for the account and machine it was made for, on this
+      // account's tunnel: removing the computer from the account retires its grants.
+      if (
+        device &&
+        machineId &&
+        device.account_id === f.accountId &&
+        device.machine_id === machineId &&
+        f.accountId === hostAccount
+      ) {
         // Clean up existing connection (idempotent on tunnel reconnect)
         const existingConnId = clientToConn.get(f.clientId);
         if (existingConnId) {
@@ -270,7 +374,7 @@ function handleRelayFrame(frame: RelayFrame): void {
       }
     })
     .with({ type: "pair_request" }, (f) => {
-      handlePairRequest(f.pairId, f.code, f.deviceName);
+      handlePairRequest(f.pairId, f.code, f.deviceName, f.accountId);
     })
     .with({ type: "ping" }, () => {
       sendToRelay({ type: "pong" });
@@ -283,7 +387,21 @@ function handleRelayFrame(frame: RelayFrame): void {
 
 // ---- Pairing ----
 
-function handlePairRequest(pairId: string, code: string, deviceName: string): void {
+function handlePairRequest(
+  pairId: string,
+  code: string,
+  deviceName: string,
+  accountId: string
+): void {
+  if (accountId !== hostAccount || !machineId) {
+    sendToRelay({
+      type: "pair_response",
+      pairId,
+      success: false,
+      reason: "This computer is signed in to another Deus account",
+    });
+    return;
+  }
   // The relay supplies no trustworthy client IP; redialing must not reset this budget.
   const error = authorizePairing(code, "relay");
   if (error) {
@@ -300,7 +418,10 @@ function handlePairRequest(pairId: string, code: string, deviceName: string): vo
     return;
   }
 
-  const { token } = createDeviceToken(deviceName || "Web Portal", null, "relay-paired");
+  const { token } = createDeviceToken(deviceName || "Web Portal", null, "relay-paired", {
+    accountId,
+    machineId,
+  });
   sendToRelay({ type: "pair_response", pairId, success: true, deviceToken: token });
   console.log(`[Relay] Pair request ${pairId} succeeded, device "${deviceName}" paired`);
 }
@@ -318,12 +439,12 @@ function sendToRelay(frame: ServerFrame): void {
 }
 
 function scheduleReconnect(): void {
-  if (reconnectTimer) return;
+  if (reconnectTimer || !hostAccount) return;
   const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** reconnectAttempt, MAX_RECONNECT_DELAY);
   reconnectAttempt++;
   console.log(`[Relay] Reconnecting in ${delay}ms (attempt ${reconnectAttempt})...`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    openTunnel();
+    void openTunnel();
   }, delay);
 }

@@ -6,6 +6,7 @@ import {
   connectAndAuthClient,
   getSentMessages,
   getLastSent,
+  TEST_ACCOUNT,
   type MockDOState,
   type MockWebSocket,
   type MockDOStorage,
@@ -28,9 +29,10 @@ beforeEach(async () => {
 // ============================================================================
 
 describe("server tunnel registration", () => {
-  it("first registration stores relayToken and responds with registered", async () => {
+  it("registration responds with registered; the ticket, not the frame, proved the host", async () => {
     const tunnelWs = await registerServer(relay, state);
-    expect(storage._data.get("relayToken")).toBe("tok_test");
+    expect(storage._data.get("owner")).toBe(TEST_ACCOUNT);
+    expect(storage._data.has("relayToken")).toBe(false);
     expect(getLastSent(tunnelWs)).toEqual({ type: "registered" });
   });
 
@@ -44,33 +46,13 @@ describe("server tunnel registration", () => {
     expect(storage._data.get("tunnelRegistered")).toBe(true);
   });
 
-  it("rejects registration with mismatched token", async () => {
-    // First registration sets the token
-    await registerServer(relay, state, { relayToken: "correct_token" });
-
-    // Second registration with wrong token
-    const badTunnelWs = createMockWebSocket(["tunnel"]);
-    state._websockets.set(badTunnelWs, ["tunnel"]);
-
-    await relay.webSocketMessage(
-      badTunnelWs,
-      JSON.stringify({ type: "register", serverId: "test1234", relayToken: "wrong_token" })
-    );
-
-    expect(getLastSent(badTunnelWs)).toEqual({ type: "error", message: "Invalid relay token" });
-    expect(badTunnelWs.close).toHaveBeenCalledWith(4003, "Invalid relay token");
-  });
-
-  it("accepts registration with matching token", async () => {
-    await registerServer(relay, state, { relayToken: "tok_abc" });
+  it("a replacement tunnel of the same machine registers again", async () => {
+    await registerServer(relay, state);
 
     const tunnelWs2 = createMockWebSocket(["tunnel"]);
     state._websockets.set(tunnelWs2, ["tunnel"]);
 
-    await relay.webSocketMessage(
-      tunnelWs2,
-      JSON.stringify({ type: "register", serverId: "test1234", relayToken: "tok_abc" })
-    );
+    await relay.webSocketMessage(tunnelWs2, JSON.stringify({ type: "register" }));
 
     expect(getLastSent(tunnelWs2)).toEqual({ type: "registered" });
   });
@@ -107,6 +89,7 @@ describe("client auth flow", () => {
       type: "client_connected",
       clientId,
       deviceToken: "dev_tok_1",
+      accountId: TEST_ACCOUNT,
     });
   });
 
@@ -347,6 +330,7 @@ describe("pairing flow", () => {
       pairId,
       code: "EAGLE",
       deviceName: "iPad",
+      accountId: TEST_ACCOUNT,
     });
   });
 
@@ -425,9 +409,9 @@ describe("pairing flow", () => {
 
     expect(getLastSent(pairerWs)).toEqual({
       type: "pair_failed",
-      message: "Server is offline",
+      message: "This computer is offline. Open Deus on it, then try again.",
     });
-    expect(pairerWs.close).toHaveBeenCalledWith(1000, "Server offline");
+    expect(pairerWs.close).toHaveBeenCalledWith(1000, "Computer offline");
   });
 
   it("pair_response is ignored when tunnel is not registered", async () => {
@@ -457,7 +441,7 @@ describe("pairing flow", () => {
 // ============================================================================
 
 describe("alarm", () => {
-  it("rejects clients whose auth deadline has expired", async () => {
+  it("retries expired authentication without declaring the token invalid", async () => {
     const clientId = "expired-client";
     const clientWs = createMockWebSocket(["client", clientId]);
     state._websockets.set(clientWs, ["client", clientId]);
@@ -466,10 +450,10 @@ describe("alarm", () => {
     await relay.alarm();
 
     expect(getLastSent(clientWs)).toEqual({
-      type: "auth_failed",
+      type: "error",
       message: "Authentication timeout",
     });
-    expect(clientWs.close).toHaveBeenCalledWith(4003, "Authentication timeout");
+    expect(clientWs.close).toHaveBeenCalledWith(1013, "Authentication timeout");
     expect(storage._data.has(`pending:${clientId}`)).toBe(false);
   });
 
@@ -576,7 +560,7 @@ describe("server disconnect and reconnection", () => {
     expect(storage._data.get("tunnelRegistered")).toBe(true);
   });
 
-  it("reconnected server notifies authenticated clients with server_connected", async () => {
+  it("reconnected server closes authenticated clients for fresh authorization", async () => {
     const tunnelWs1 = await registerServer(relay, state);
 
     // Add authenticated client
@@ -592,7 +576,8 @@ describe("server disconnect and reconnection", () => {
     const tunnelWs2 = await registerServer(relay, state);
 
     const messages = getSentMessages(clientWs);
-    expect(messages).toContainEqual({ type: "server_connected" });
+    expect(messages).not.toContainEqual({ type: "server_connected" });
+    expect(clientWs.close).toHaveBeenCalledWith(1012, "Host reconnected; authenticate again");
   });
 
   it("reconnection re-forwards pending clients stored auth tokens", async () => {
@@ -620,6 +605,7 @@ describe("server disconnect and reconnection", () => {
       type: "client_connected",
       clientId,
       deviceToken: "saved_token",
+      accountId: TEST_ACCOUNT,
     });
   });
 
@@ -775,7 +761,7 @@ describe("edge cases", () => {
     await relay.alarm();
 
     expect(getLastSent(clientWs)).toEqual({
-      type: "auth_failed",
+      type: "error",
       message: "Authentication timeout",
     });
     // pair entry should still have been handled separately
@@ -802,5 +788,111 @@ describe("edge cases", () => {
     for (const id of ids) {
       expect(storage._data.has(`pending:${id}`)).toBe(false);
     }
+  });
+});
+
+// Client-originated liveness checks must cover the host when it is available,
+// but preserve the authenticated/offline distinction while waiting for it.
+describe("client heartbeat probes", () => {
+  it("forwards an authorized probe through the host and returns its correlated pong", async () => {
+    const tunnel = await registerServer(relay, state);
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+    await relay.webSocketMessage(
+      tunnel,
+      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+    );
+    const probe = { type: "ping", id: "probe-1" };
+    await relay.webSocketMessage(clientWs, JSON.stringify(probe));
+    expect(getLastSent(tunnel)).toEqual({ type: "data", clientId, payload: JSON.stringify(probe) });
+    await relay.webSocketMessage(
+      tunnel,
+      JSON.stringify({
+        type: "data",
+        clientId,
+        payload: JSON.stringify({ type: "pong", id: "probe-1" }),
+      })
+    );
+    expect(getLastSent(clientWs)).toEqual({ type: "pong", id: "probe-1" });
+  });
+
+  it("answers probes for pending clients without granting access or forwarding data", async () => {
+    const tunnel = await registerServer(relay, state);
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+    const before = tunnel.send.mock.calls.length;
+    await relay.webSocketMessage(clientWs, JSON.stringify({ type: "ping", id: "waiting" }));
+    await relay.webSocketMessage(
+      clientWs,
+      JSON.stringify({ type: "q:mutate", action: "createSession", id: "forbidden", params: {} })
+    );
+    expect(getLastSent(clientWs)).toEqual({ type: "pong", id: "waiting" });
+    expect(await storage.get(`pending:${clientId}`)).toBeDefined();
+    expect(tunnel.send).toHaveBeenCalledTimes(before);
+  });
+
+  it("keeps an authorized client alive when its host disconnects", async () => {
+    const tunnel = await registerServer(relay, state);
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+    await relay.webSocketMessage(
+      tunnel,
+      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+    );
+    state._websockets.delete(tunnel);
+    await relay.webSocketClose(tunnel, 1006, "network gone", false);
+    expect(getLastSent(clientWs)).toMatchObject({ type: "server_reconnecting" });
+    await relay.webSocketMessage(clientWs, JSON.stringify({ type: "ping", id: "offline" }));
+    expect(getLastSent(clientWs)).toEqual({ type: "pong", id: "offline" });
+  });
+});
+
+describe("host replacement authorization", () => {
+  it("requires authenticated clients to reconnect and reauthorize with the new host", async () => {
+    const tunnel = await registerServer(relay, state);
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+    await relay.webSocketMessage(
+      tunnel,
+      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+    );
+    state._websockets.delete(tunnel);
+    await relay.webSocketClose(tunnel, 1006, "outage", false);
+    await registerServer(relay, state);
+    expect(clientWs.close).toHaveBeenCalledWith(1012, "Host reconnected; authenticate again");
+    expect(getSentMessages(clientWs)).not.toContainEqual({ type: "server_connected" });
+    // A fresh client must remain pending until the replacement host allows it.
+    const replacement = await connectAndAuthClient(relay, state, { clientId: "replacement" });
+    await relay.webSocketMessage(
+      replacement.clientWs,
+      JSON.stringify({ type: "q:mutate", id: "blocked", action: "createSession", params: {} })
+    );
+    expect(await storage.get("pending:replacement")).toBeDefined();
+  });
+
+  it("requires reauthorization on a hot tunnel replacement too", async () => {
+    const tunnel = await registerServer(relay, state);
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+    await relay.webSocketMessage(
+      tunnel,
+      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+    );
+    state._websockets.delete(tunnel);
+    // Replacement occurs before the old close callback observes a disconnect.
+    await registerServer(relay, state);
+    expect(clientWs.close).toHaveBeenCalledWith(1012, "Host reconnected; authenticate again");
+  });
+});
+
+describe("closing tunnel lifecycle", () => {
+  it("announces an outage even while the terminated socket remains in the Durable Object inventory", async () => {
+    const tunnel = await registerServer(relay, state);
+    const { clientId, clientWs } = await connectAndAuthClient(relay, state);
+    await relay.webSocketMessage(
+      tunnel,
+      JSON.stringify({ type: "auth_response", clientId, allowed: true })
+    );
+    tunnel.readyState = 2;
+    // Worker's close callback can still see this socket in getWebSockets().
+    await relay.webSocketClose(tunnel, 1000, "Host shutdown", true);
+    expect(tunnel.close).toHaveBeenCalledWith(1000, "Host shutdown");
+    expect(getLastSent(clientWs)).toMatchObject({ type: "server_reconnecting" });
+    expect(await storage.get("tunnelRegistered")).toBe(false);
   });
 });
