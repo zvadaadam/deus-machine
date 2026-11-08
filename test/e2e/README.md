@@ -81,7 +81,8 @@ Docker must be running. It checks, in order:
   pairing once; a QR scanned while the Mac is offline says so, and Try again
   pairs once it is back; sign-in without a redirect loop; the approval page and
   the Mac's dialog both name the computer with the same id fingerprint; the
-  Mac's Remote access settings with the QR.
+  Mac's Remote access settings with the QR, which shows a new code once a
+  device has paired with the old one.
 
 `REMOTE_ACCESS_E2E_BROWSER_ONLY=1` skips to the browser checks. Logs, Worker
 state, the run's databases and `results.json` go to `.context/remote-access/`,

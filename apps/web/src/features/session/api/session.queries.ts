@@ -96,7 +96,8 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
   const queries = useQueries({
     queries: sessionIds.map((id) => ({
       ...sessionDetailQueryOptions(id),
-      select: (data: Session): SessionStatus => data.status,
+      // A session that disappears arrives as null.
+      select: (data: Session | null): SessionStatus | undefined => data?.status,
     })),
   });
 

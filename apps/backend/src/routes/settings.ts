@@ -74,11 +74,12 @@ app.post("/settings/cloud/github-token", async (c) => {
 /**
  * Only the process that spawned this backend may hand it an account. It passes
  * AUTH_TOKEN at spawn; without the check, any page that found the local port
- * could sign this computer in to another account and host it there.
+ * could sign this computer in to another account and host it there. A backend
+ * started without one (web dev, the CLI) has no such process and takes no account.
  */
 function fromDesktopMain(authorization: string | undefined): boolean {
   const expected = process.env.AUTH_TOKEN;
-  if (!expected) return true; // web-dev and tests run without a desktop main process
+  if (!expected) return false;
   const given = Buffer.from(authorization?.replace(/^Bearer /, "") ?? "");
   const wanted = Buffer.from(expected);
   return given.length === wanted.length && timingSafeEqual(given, wanted);
