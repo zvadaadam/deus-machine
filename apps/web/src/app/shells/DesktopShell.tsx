@@ -27,6 +27,10 @@ import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAutoUpdate, useUpdateToast, UpdateProvider } from "@/features/updates";
 import { useAnalyticsConsent } from "@/platform/analytics";
 export function DesktopShell({ reset }: { reset: () => void }) {
+  // First, so the socket is already opening when the queries below fire their
+  // first requests (they wait for it rather than fail into a retry).
+  useQueryProtocol();
+
   const auth = useAuth();
   const settingsQuery = useSettings();
   const windowShownRef = useRef(false);
@@ -42,9 +46,6 @@ export function DesktopShell({ reset }: { reset: () => void }) {
 
   // Global listener: workspace init progress -> invalidate queries on completion
   useWorkspaceInitEvents();
-
-  // Global listener: WS query protocol -> direct cache updates + invalidation dispatch
-  useQueryProtocol();
 
   // Global listener: backend restart -> update cached port + force WS reconnect
   useBackendRestart();

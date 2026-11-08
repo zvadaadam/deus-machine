@@ -273,15 +273,44 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     } catch (error) {
       return Promise.reject(error);
     }
-    return this.call(
-      "request",
-      resource,
-      { type: "q:request", resource, ...(params ? { params } : {}) },
-      options?.timeoutMs,
-      intercepted,
-      options?.effect ?? false
-    ) as Promise<T>;
+    const timeoutMs = options?.timeoutMs ?? 30_000;
+    const send = (remainingMs: number) =>
+      this.call(
+        "request",
+        resource,
+        { type: "q:request", resource, ...(params ? { params } : {}) },
+        remainingMs,
+        intercepted,
+        options?.effect ?? false
+      ) as Promise<T>;
+    // Asked while the connection is being made (startup, a reconnect attempt):
+    // wait for it within the request's deadline instead of failing into the
+    // caller's retry backoff. The request was never sent, so this sends it once.
+    if (!intercepted && this.state === "connecting") {
+      const deadline = Date.now() + timeoutMs;
+      return this.within(this.connect(), timeoutMs, `${resource} timed out`).then(() =>
+        send(Math.max(deadline - Date.now(), 0))
+      );
+    }
+    return send(timeoutMs);
   };
+
+  /** `promise`, or an unavailable error once `timeoutMs` passes. */
+  private within(promise: Promise<void>, timeoutMs: number, message: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new RuntimeError("unavailable", message)), timeoutMs);
+      promise.then(
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        (error: Error) => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
+    });
+  }
 
   sendMutate = <T = unknown>(
     action: string,
