@@ -13,6 +13,8 @@ export interface PairedDevice {
   user_agent: string | null;
   last_seen_at: string;
   created_at: string;
+  /** Connected right now, through the relay or the local network. */
+  connected?: boolean;
 }
 
 export interface PairCodeResponse {

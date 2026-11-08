@@ -8,7 +8,7 @@
 
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
-import { closeDeviceConnections } from "./ws.service";
+import { closeDeviceConnections, connectedDeviceIds } from "./ws.service";
 
 // ---- Types ----
 
@@ -508,14 +508,15 @@ export function updateLastSeen(tokenHash: string): void {
 }
 
 /** List all paired devices (token_hash excluded from the returned objects for safety). */
-export function listDevices(): Omit<PairedDevice, "token_hash">[] {
+export function listDevices(): (Omit<PairedDevice, "token_hash"> & { connected: boolean })[] {
   const db = getDatabase();
   const rows = db
     .prepare(
       "SELECT id, name, account_id, machine_id, ip_address, user_agent, last_seen_at, created_at FROM paired_devices ORDER BY created_at DESC"
     )
     .all() as Omit<PairedDevice, "token_hash">[];
-  return rows;
+  const connected = connectedDeviceIds();
+  return rows.map((row) => ({ ...row, connected: connected.has(row.id) }));
 }
 
 /** Revoke (delete) a paired device by id. Returns true if a row was deleted. */

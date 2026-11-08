@@ -2,25 +2,25 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { QRCodeSVG } from "qrcode.react";
-import { native } from "@/platform";
+import { capabilities, native } from "@/platform";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { pairingLink } from "@/features/auth/lib/pairing-link";
+import { deviceDisplayName } from "@/features/auth/lib/device-name";
 import { machineFingerprint } from "@/platform/ws/relay-access";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy, Trash2, Smartphone, Monitor, Plus, Check, Link2, LogIn } from "lucide-react";
+import { Copy, Smartphone, Monitor, Plus, Check, Link2, LogIn } from "lucide-react";
 import {
   usePairedDevices,
   useGeneratePairCode,
@@ -34,13 +34,9 @@ import type { SettingsSectionProps } from "./types";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getDeviceIcon(ua: string | null) {
-  if (!ua) return Monitor;
-  const lower = ua.toLowerCase();
-  if (lower.includes("mobile") || lower.includes("iphone") || lower.includes("android")) {
-    return Smartphone;
-  }
-  return Monitor;
+function getDeviceIcon(device: { name: string; user_agent: string | null }) {
+  const text = `${device.user_agent ?? ""} ${device.name}`.toLowerCase();
+  return /mobile|iphone|android phone|\bphone\b/.test(text) ? Smartphone : Monitor;
 }
 
 /**
@@ -60,51 +56,6 @@ function appOriginFor(relayUrl: string): string | null {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-/**
- * Portal URL card with connection status.
- */
-function PortalCard({
-  url,
-  connected,
-  clients,
-  account,
-}: {
-  url: string;
-  connected: boolean;
-  clients: number;
-  account: string | null;
-}) {
-  return (
-    <div className="border-border/60 bg-muted/30 space-y-3 rounded-xl border px-4 py-4">
-      {/* Status line */}
-      <div className="flex items-center gap-2.5">
-        <span
-          className={`size-[7px] shrink-0 rounded-full ${
-            connected
-              ? "bg-success shadow-[0_0_6px_oklch(0.53_0.16_155/0.35)]"
-              : "bg-destructive/60"
-          }`}
-        />
-        <span className="text-muted-foreground text-xs font-medium">
-          {connected ? "Connected" : "Connecting..."}
-        </span>
-        {connected && clients > 0 && (
-          <span className="text-muted-foreground/70 text-[11px]">
-            &middot; {clients} {clients === 1 ? "device" : "devices"} online
-          </span>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        <p className="text-muted-foreground text-xs">
-          Open on another device{account ? `, signed in as ${account}` : ""}
-        </p>
-        <p className="truncate font-mono text-sm leading-relaxed">{url}</p>
-      </div>
-    </div>
-  );
-}
 
 /** Remote access belongs to a Deus account: the relay serves this computer to it only. */
 function SignInCard() {
@@ -256,7 +207,7 @@ function ConnectDeviceDialog({
         ) : (
           <>
             <DialogHeader className="text-center">
-              <DialogTitle>Connect a Device</DialogTitle>
+              <DialogTitle>Add a device</DialogTitle>
               <DialogDescription>
                 Scan the QR code, signed in to the same Deus account, or enter the code on your
                 other device. You approve each device once.
@@ -330,50 +281,60 @@ function ConnectDeviceDialog({
 }
 
 /**
- * Connected devices list with remove action per device.
+ * The devices this computer approved, each with its live state and a way to
+ * revoke it.
  */
 function DevicesList({
   devices,
-  onRemove,
-  isRemoving,
+  onRevoke,
 }: {
   devices: PairedDevice[];
-  onRemove: (device: PairedDevice) => void;
-  isRemoving: boolean;
+  onRevoke: (device: PairedDevice) => void;
 }) {
   if (devices.length === 0) {
-    return <p className="text-muted-foreground py-0.5 text-sm">No devices connected yet.</p>;
+    return (
+      <p className="text-muted-foreground py-0.5 text-sm">
+        No devices yet. Add one to control this computer from your phone.
+      </p>
+    );
   }
 
   return (
     <div className="space-y-1.5">
       {devices.map((device) => {
-        const DeviceIcon = getDeviceIcon(device.user_agent);
+        const DeviceIcon = getDeviceIcon(device);
+        const name = deviceDisplayName(device);
         return (
           <div
             key={device.id}
-            className="bg-muted/30 flex items-center justify-between rounded-lg px-4 py-2.5"
+            className="bg-muted/30 flex items-center justify-between gap-3 rounded-lg px-4 py-2.5"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <DeviceIcon className="text-muted-foreground size-4 shrink-0" />
-              <div>
-                <p className="text-sm font-medium">{device.name}</p>
-                <p className="text-muted-foreground text-xs">
-                  {formatTimeAgo(device.last_seen_at)}
-                  {device.ip_address ? ` \u00b7 ${device.ip_address}` : ""}
-                  {device.account_id ? "" : " \u00b7 Local network only"}
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{name}</p>
+                <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
+                  {device.connected ? (
+                    <>
+                      <span className="bg-success size-1.5 shrink-0 rounded-full" />
+                      Connected
+                    </>
+                  ) : (
+                    `Last connected ${formatTimeAgo(device.last_seen_at)}`
+                  )}
+                  {device.account_id
+                    ? ""
+                    : ` \u00b7 ${device.ip_address ? `${device.ip_address} \u00b7 ` : ""}Local network only`}
                 </p>
               </div>
             </div>
             <Button
-              variant="ghost"
-              size="icon-xs"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => onRemove(device)}
-              disabled={isRemoving}
-              title={`Remove ${device.name}`}
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive shrink-0"
+              onClick={() => onRevoke(device)}
             >
-              <Trash2 className="size-3.5" />
+              Revoke access
             </Button>
           </div>
         );
@@ -382,17 +343,50 @@ function DevicesList({
   );
 }
 
+/** Revoking disconnects the device; it needs approving again to come back. */
+function RevokeDeviceDialog({
+  device,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  device: PairedDevice | null;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={device !== null} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Revoke access?</DialogTitle>
+          <DialogDescription>
+            {device ? deviceDisplayName(device) : "This device"} is disconnected and needs your
+            approval again to reconnect.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm} disabled={pending}>
+            Revoke access
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main Section
 // ---------------------------------------------------------------------------
 
 /**
- * Unified Access settings section.
- *
- * Hierarchy:
- *   1. Toggle + hero portal card (URL, status, copy)
- *   2. "+ Connect a Device" button that opens a dialog with QR + code
- *   3. Connected devices list
+ * Remote access settings: the switch, keeping the computer awake for a
+ * connected device, and the devices it approved (Add opens the QR + code
+ * dialog). Status shows only when something is wrong; devices reach this
+ * computer through the account, so no address is shown.
  */
 export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const enabled = settings.remote_access_enabled === true;
@@ -456,12 +450,17 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     [saveSetting]
   );
 
-  async function handleRemoveDevice(device: PairedDevice) {
+  const [revoking, setRevoking] = useState<PairedDevice | null>(null);
+
+  async function handleRevokeDevice() {
+    if (!revoking) return;
+    const name = deviceDisplayName(revoking);
     try {
-      await revokeDeviceMutation.mutateAsync(device.id);
-      toast.success(`Removed "${device.name}"`);
+      await revokeDeviceMutation.mutateAsync(revoking.id);
+      toast.success(`Revoked access for ${name}`);
+      setRevoking(null);
     } catch {
-      toast.error("Couldn't remove device. Try again.");
+      toast.error("Couldn't revoke access. Try again.");
     }
   }
 
@@ -473,9 +472,10 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   // session query only names the account.
   const session = useDeusCloudSession().data;
   const signedOut = relayStatus?.state === "signed_out";
+  const removed = relayStatus?.state === "removed";
   const appOrigin = relayStatus?.relayUrl ? appOriginFor(relayStatus.relayUrl) : null;
-  // Any device signed in to the account lists this computer at /connect.
-  const accessUrl = appOrigin && relayStatus?.serverId ? `${appOrigin}/connect` : null;
+  const keepAwake = settings.remote_keep_awake !== false;
+  const thisComputer = /Mac/.test(navigator.userAgent) ? "this Mac" : "this computer";
 
   // -- Render --
 
@@ -485,18 +485,18 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
       <div>
         <h3 className="text-base font-semibold">Remote Access</h3>
         <p className="text-muted-foreground mt-1 text-sm">
-          Access your workspaces from your phone or another computer.
+          Control this computer from your phone or another computer.
         </p>
       </div>
 
       {/* Master toggle */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <Label htmlFor="remote-access-toggle" className="text-sm">
-            Enable remote access
+            Allow remote access
           </Label>
           <p className="text-muted-foreground text-xs">
-            Allow other devices to connect to this machine.
+            Devices signed in to your Deus account connect after you approve them once.
           </p>
         </div>
         <Switch id="remote-access-toggle" checked={enabled} onCheckedChange={handleToggle} />
@@ -508,9 +508,9 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
         <>
           {signedOut && <SignInCard />}
 
-          {relayStatus?.state === "removed" && (
+          {removed && (
             <div className="border-border/60 bg-muted/30 flex items-center justify-between gap-4 rounded-xl border px-4 py-4">
-              <p className="text-muted-foreground text-xs">{relayStatus.error}</p>
+              <p className="text-muted-foreground text-xs">{relayStatus?.error}</p>
               {/* Turning it on again re-adds a computer the account removed. */}
               <Button size="sm" variant="outline" onClick={() => void handleToggle(true)}>
                 Add it again
@@ -518,42 +518,61 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             </div>
           )}
 
-          {/* Portal card -- hero element: URL + status */}
-          {!signedOut && relayStatus?.state !== "removed" && accessUrl && relayStatus && (
-            <PortalCard
-              url={accessUrl}
-              connected={relayStatus.connected}
-              clients={relayStatus.clients}
-              account={session?.accountEmail ?? null}
-            />
-          )}
-
-          {/* Disconnected state without URL */}
-          {!signedOut && relayStatus && relayStatus.state !== "removed" && !accessUrl && (
+          {/* Status only when devices can't reach this computer right now. */}
+          {!signedOut && !removed && relayStatus && !relayStatus.connected && (
             <div className="bg-muted/30 flex items-center gap-2.5 rounded-lg px-4 py-3">
               <span className="bg-warning size-[7px] shrink-0 rounded-full" />
               <span className="text-muted-foreground text-sm">
-                {relayStatus.error ?? (relayStatus.connected ? "Setting up..." : "Connecting...")}
+                {relayStatus.error ?? "Connecting..."}
               </span>
             </div>
           )}
 
-          <Separator />
+          {/* A browser can't hold a computer awake; only the desktop app shows this. */}
+          {capabilities.isDesktop && (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="remote-keep-awake" className="text-sm">
+                  Keep {thisComputer} awake
+                </Label>
+                <p className="text-muted-foreground text-xs">
+                  Prevent sleep while a device is connected and {thisComputer} is plugged in.
+                </p>
+              </div>
+              <Switch
+                id="remote-keep-awake"
+                checked={keepAwake}
+                onCheckedChange={(on) => void saveSetting("remote_keep_awake", on)}
+              />
+            </div>
+          )}
 
-          {/* Connect a Device button */}
+          {/* Approved devices */}
           <div className="space-y-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDialogOpen(true)}
-              disabled={signedOut}
-            >
-              <Plus className="mr-1.5 size-3.5" />
-              Connect a Device
-            </Button>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h4 className="text-sm font-medium">Devices that can control this computer</h4>
+                {session?.accountEmail && (
+                  <p className="text-muted-foreground truncate text-xs">
+                    Signed in to {session.accountEmail}
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setDialogOpen(true)}
+                disabled={signedOut}
+              >
+                <Plus className="size-3.5" />
+                Add device
+              </Button>
+            </div>
+            <DevicesList devices={devices} onRevoke={setRevoking} />
           </div>
 
-          {/* Connect Device Dialog */}
+          {/* Add-a-device dialog */}
           <ConnectDeviceDialog
             open={dialogOpen}
             onOpenChange={setDialogOpen}
@@ -569,24 +588,12 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             isDevicesLoaded={devicesQuery.isFetched}
           />
 
-          <Separator />
-
-          {/* Connected devices */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm font-medium">Connected Devices</h4>
-              {devices.length > 0 && (
-                <Badge variant="secondary" className="text-[11px]">
-                  {devices.length}
-                </Badge>
-              )}
-            </div>
-            <DevicesList
-              devices={devices}
-              onRemove={handleRemoveDevice}
-              isRemoving={revokeDeviceMutation.isPending}
-            />
-          </div>
+          <RevokeDeviceDialog
+            device={revoking}
+            pending={revokeDeviceMutation.isPending}
+            onCancel={() => setRevoking(null)}
+            onConfirm={() => void handleRevokeDevice()}
+          />
         </>
       )}
     </div>

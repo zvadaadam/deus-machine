@@ -32679,11 +32679,11 @@
                             {
                               "type": "text",
                               "id": "sV1wH",
-                              "name": "Reach this machine's workspaces from a phone",
+                              "name": "Control this computer from your phone",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Reach this machine's workspaces from a phone or another computer. The tunnel is opened on demand and closed with the app.",
+                              "content": "Control this computer from your phone or another computer.",
                               "lineHeight": 1.5,
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
@@ -32703,7 +32703,7 @@
                             {
                               "type": "frame",
                               "id": "Ts53M",
-                              "name": "Enable remote access",
+                              "name": "Allow remote access",
                               "width": "fill_container",
                               "layout": "vertical",
                               "gap": 2,
@@ -32711,9 +32711,9 @@
                                 {
                                   "type": "text",
                                   "id": "yrB0j",
-                                  "name": "Enable remote access",
+                                  "name": "Allow remote access",
                                   "fill": "$text-secondary",
-                                  "content": "Enable remote access",
+                                  "content": "Allow remote access",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
@@ -32721,9 +32721,9 @@
                                 {
                                   "type": "text",
                                   "id": "HIl4L",
-                                  "name": "Publishes a temporary https URL for paired d",
+                                  "name": "Devices signed in to your Deus account",
                                   "fill": "$text-muted",
-                                  "content": "Publishes a temporary https URL for paired devices only.",
+                                  "content": "Devices signed in to your Deus account connect after you approve them once.",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-base",
                                   "fontWeight": "normal"
@@ -32759,98 +32759,69 @@
                         },
                         {
                           "type": "frame",
-                          "id": "RaNG2",
-                          "name": "URL card",
+                          "id": "FIG2N",
+                          "name": "Keep awake",
                           "width": "fill_container",
-                          "fill": "#2A2A2A4D",
-                          "cornerRadius": "$radius-xl",
-                          "stroke": "$border-default",
-                          "strokeWidth": 1,
-                          "strokeAlignment": "inner",
-                          "layout": "vertical",
-                          "gap": 12,
-                          "padding": 16,
+                          "gap": 24,
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "frame",
-                              "id": "C7M51R",
-                              "name": "status",
+                              "id": "GLGof",
+                              "name": "Keep this Mac awake",
                               "width": "fill_container",
-                              "gap": 10,
-                              "alignItems": "center",
+                              "layout": "vertical",
+                              "gap": 2,
                               "children": [
                                 {
-                                  "type": "ellipse",
-                                  "id": "Qh184",
-                                  "name": "dot",
-                                  "fill": "$accent-green",
-                                  "width": 7,
-                                  "height": 7
-                                },
-                                {
                                   "type": "text",
-                                  "id": "iTyvf",
-                                  "name": "ONLINE",
-                                  "fill": "$text-muted",
-                                  "content": "Connected",
+                                  "id": "J5EVei",
+                                  "name": "Keep this Mac awake",
+                                  "fill": "$text-secondary",
+                                  "content": "Keep this Mac awake",
                                   "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
+                                  "fontSize": "$text-sm",
                                   "fontWeight": "500"
                                 },
                                 {
                                   "type": "text",
-                                  "id": "YEkJK",
-                                  "name": "expires in 3h 42m",
-                                  "fill": "$text-disabled",
-                                  "content": "· 2 devices online",
+                                  "id": "UwaZb",
+                                  "name": "Prevent sleep while a device is connected",
+                                  "fill": "$text-muted",
+                                  "content": "Prevent sleep while a device is connected and this Mac is plugged in.",
                                   "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
+                                  "fontSize": "$text-base",
                                   "fontWeight": "normal"
                                 }
                               ]
                             },
                             {
                               "type": "frame",
-                              "id": "fcBSa",
-                              "name": "url",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 4,
-                              "justifyContent": "space_between",
+                              "id": "g4zmw",
+                              "name": "Switch",
+                              "width": 44,
+                              "height": 24,
+                              "fill": "$primary",
+                              "cornerRadius": "$radius-full",
+                              "padding": [
+                                0,
+                                2
+                              ],
+                              "justifyContent": "end",
+                              "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "a5u823",
-                                  "name": "Access URL",
-                                  "fill": "$text-muted",
-                                  "content": "Open on another device, signed in as adam@deusmachine.ai",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-xs",
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "ODEb3",
-                                  "name": "Access URL value",
-                                  "fill": "$text-primary",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "https://deusmachine.ai/connect",
-                                  "fontFamily": "$font-mono",
-                                  "fontSize": "$text-sm",
-                                  "fontWeight": "normal"
+                                  "type": "ellipse",
+                                  "id": "C4gqYP",
+                                  "name": "Thumb",
+                                  "fill": "$bg-base",
+                                  "width": 20,
+                                  "height": 20
                                 }
                               ]
                             }
                           ]
-                        },
-                        {
-                          "type": "rectangle",
-                          "id": "Hsqt8",
-                          "name": "Separator",
-                          "fill": "$border-subtle",
-                          "width": "fill_container",
-                          "height": 1
                         },
                         {
                           "type": "frame",
@@ -32863,36 +32834,56 @@
                             {
                               "type": "frame",
                               "id": "x5wmK",
-                              "name": "Paired devices",
+                              "name": "Devices header",
                               "width": "fill_container",
                               "gap": 8,
                               "justifyContent": "space_between",
                               "alignItems": "center",
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "j0iAT",
-                                  "name": "Paired devices",
-                                  "fill": "$text-secondary",
-                                  "content": "Paired devices",
-                                  "fontFamily": "$font-sans",
-                                  "fontSize": "$text-sm",
-                                  "fontWeight": "500"
+                                  "type": "frame",
+                                  "id": "PfeKA",
+                                  "name": "Devices that can control this computer",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "XUdDP",
+                                      "name": "Devices that can control this computer",
+                                      "fill": "$text-secondary",
+                                      "content": "Devices that can control this computer",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-sm",
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "z3NBjw",
+                                      "name": "Signed in to account",
+                                      "fill": "$text-muted",
+                                      "content": "Signed in to adam@deusmachine.ai",
+                                      "fontFamily": "$font-sans",
+                                      "fontSize": "$text-xs",
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
                                 },
                                 {
-                                  "id": "xXH1K",
+                                  "id": "R0FwC",
                                   "type": "ref",
-                                  "ref": "rg2x2",
-                                  "name": "Pair",
+                                  "ref": "Rcfnv",
+                                  "name": "Add device",
                                   "height": 32,
-                                  "theme": {
-                                    "mode": "dark"
-                                  },
-                                  "cornerRadius": "$radius-lg",
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "gap": 6,
                                   "descendants": {
-                                    "z4bI4": {
-                                      "content": "Connect a Device",
-                                      "fontSize": 11
+                                    "kB8v8": {
+                                      "content": "Add device"
                                     }
                                   }
                                 }
@@ -32901,7 +32892,7 @@
                             {
                               "type": "frame",
                               "id": "ZcCBR",
-                              "name": "Adam's iPhone",
+                              "name": "iPhone · Safari",
                               "width": "fill_container",
                               "fill": "#2A2A2A4D",
                               "cornerRadius": "$radius-lg",
@@ -32942,43 +32933,67 @@
                                         {
                                           "type": "text",
                                           "id": "nfTP3",
-                                          "name": "Adam's iPhone",
+                                          "name": "iPhone · Safari",
                                           "fill": "$text-primary",
-                                          "content": "Adam's iPhone",
+                                          "content": "iPhone · Safari",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
                                         },
                                         {
-                                          "type": "text",
-                                          "id": "zpKb6",
-                                          "name": "last seen 4m ago",
-                                          "fill": "$text-muted",
-                                          "content": "last seen 4m ago",
-                                          "fontFamily": "$font-sans",
-                                          "fontSize": "$text-xs",
-                                          "fontWeight": "normal"
+                                          "type": "frame",
+                                          "id": "kOK1j",
+                                          "name": "Connected",
+                                          "gap": 6,
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "ellipse",
+                                              "id": "ESXte",
+                                              "name": "Live dot",
+                                              "fill": "$success",
+                                              "width": 6,
+                                              "height": 6
+                                            },
+                                            {
+                                              "type": "text",
+                                              "id": "mNOBF",
+                                              "name": "Connected",
+                                              "fill": "$text-muted",
+                                              "content": "Connected",
+                                              "fontFamily": "$font-sans",
+                                              "fontSize": "$text-xs",
+                                              "fontWeight": "normal"
+                                            }
+                                          ]
                                         }
                                       ]
                                     }
                                   ]
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "SAhG0",
-                                  "name": "x",
-                                  "width": 14,
-                                  "height": 14,
-                                  "icon": "trash-2",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "id": "wClcB",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Revoke access",
+                                  "height": 32,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Revoke access",
+                                      "fill": "$destructive"
+                                    }
+                                  }
                                 }
                               ]
                             },
                             {
                               "type": "frame",
                               "id": "d4Oa6E",
-                              "name": "MacBook Air",
+                              "name": "Mac · Chrome",
                               "width": "fill_container",
                               "fill": "#2A2A2A4D",
                               "cornerRadius": "$radius-lg",
@@ -33004,7 +33019,7 @@
                                       "name": "i",
                                       "width": 16,
                                       "height": 16,
-                                      "icon": "laptop",
+                                      "icon": "monitor",
                                       "library": "lucide",
                                       "fill": "$text-muted"
                                     },
@@ -33019,9 +33034,9 @@
                                         {
                                           "type": "text",
                                           "id": "dCtUn",
-                                          "name": "MacBook Air",
+                                          "name": "Mac · Chrome",
                                           "fill": "$text-primary",
-                                          "content": "MacBook Air",
+                                          "content": "Mac · Chrome",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
@@ -33029,9 +33044,9 @@
                                         {
                                           "type": "text",
                                           "id": "C6Mb75",
-                                          "name": "last seen yesterday",
+                                          "name": "Last connected yesterday",
                                           "fill": "$text-muted",
-                                          "content": "last seen yesterday · Local network only",
+                                          "content": "Last connected yesterday · 192.168.1.20 · Local network only",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-xs",
                                           "fontWeight": "normal"
@@ -33041,14 +33056,21 @@
                                   ]
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "HqCjm",
-                                  "name": "x",
-                                  "width": 14,
-                                  "height": 14,
-                                  "icon": "trash-2",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "id": "TCL67",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Revoke access",
+                                  "height": 32,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Revoke access",
+                                      "fill": "$destructive"
+                                    }
+                                  }
                                 }
                               ]
                             }
@@ -44622,9 +44644,9 @@
             {
               "type": "text",
               "id": "aOCXx",
-              "name": "Pair a device",
+              "name": "Add a device",
               "fill": "$text-primary",
-              "content": "Connect a Device",
+              "content": "Add a device",
               "fontFamily": "$font-sans",
               "fontSize": "$text-lg",
               "fontWeight": "600",
@@ -182359,11 +182381,11 @@
                             {
                               "type": "text",
                               "id": "G8dYx7",
-                              "name": "Reach this machine's workspaces from a phone",
+                              "name": "Control this computer from your phone",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Reach this machine's workspaces from a phone or another computer. The tunnel is opened on demand and closed with the app.",
+                              "content": "Control this computer from your phone or another computer.",
                               "lineHeight": 1.5,
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
@@ -182391,9 +182413,9 @@
                                 {
                                   "type": "text",
                                   "id": "haanO",
-                                  "name": "Enable remote access",
+                                  "name": "Allow remote access",
                                   "fill": "$text-secondary",
-                                  "content": "Enable remote access",
+                                  "content": "Allow remote access",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
@@ -182401,9 +182423,9 @@
                                 {
                                   "type": "text",
                                   "id": "PAOv6",
-                                  "name": "Publishes a temporary https URL for paired d",
+                                  "name": "Devices signed in to your Deus account",
                                   "fill": "$text-muted",
-                                  "content": "Publishes a temporary https URL for paired devices only.",
+                                  "content": "Devices signed in to your Deus account connect after you approve them once.",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-base",
                                   "fontWeight": "normal"
@@ -182499,14 +182521,6 @@
                           ]
                         },
                         {
-                          "type": "rectangle",
-                          "id": "c7gyp",
-                          "name": "Separator",
-                          "fill": "$border-subtle",
-                          "width": "fill_container",
-                          "height": 1
-                        },
-                        {
                           "type": "frame",
                           "id": "ir6rz",
                           "name": "Devices",
@@ -182526,28 +182540,26 @@
                                 {
                                   "type": "text",
                                   "id": "Cb9fJ",
-                                  "name": "Paired devices",
+                                  "name": "Devices that can control this computer",
                                   "fill": "$text-secondary",
-                                  "content": "Paired devices",
+                                  "content": "Devices that can control this computer",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
                                 },
                                 {
-                                  "id": "M0JCHS",
+                                  "id": "uPL5L",
                                   "type": "ref",
-                                  "ref": "rg2x2",
-                                  "name": "Pair",
+                                  "ref": "Rcfnv",
+                                  "name": "Add device",
                                   "height": 32,
-                                  "theme": {
-                                    "mode": "dark"
-                                  },
-                                  "cornerRadius": "$radius-lg",
-                                  "opacity": 0.5,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
                                   "descendants": {
-                                    "z4bI4": {
-                                      "content": "Connect a Device",
-                                      "fontSize": 11
+                                    "kB8v8": {
+                                      "content": "Add device"
                                     }
                                   }
                                 }
@@ -182597,9 +182609,9 @@
                                         {
                                           "type": "text",
                                           "id": "msoO0",
-                                          "name": "Adam's iPhone",
+                                          "name": "iPhone · Safari",
                                           "fill": "$text-primary",
-                                          "content": "Adam's iPhone",
+                                          "content": "iPhone · Safari",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
@@ -182607,9 +182619,9 @@
                                         {
                                           "type": "text",
                                           "id": "bffY0",
-                                          "name": "last seen 4m ago",
+                                          "name": "Last connected 4m ago",
                                           "fill": "$text-muted",
-                                          "content": "last seen 4m ago",
+                                          "content": "Last connected 4m ago",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-xs",
                                           "fontWeight": "normal"
@@ -182619,14 +182631,21 @@
                                   ]
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "AChq4",
-                                  "name": "x",
-                                  "width": 14,
-                                  "height": 14,
-                                  "icon": "trash-2",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "id": "SrVgt",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Revoke access",
+                                  "height": 32,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Revoke access",
+                                      "fill": "$destructive"
+                                    }
+                                  }
                                 }
                               ]
                             },
@@ -182659,7 +182678,7 @@
                                       "name": "i",
                                       "width": 16,
                                       "height": 16,
-                                      "icon": "laptop",
+                                      "icon": "monitor",
                                       "library": "lucide",
                                       "fill": "$text-muted"
                                     },
@@ -182674,9 +182693,9 @@
                                         {
                                           "type": "text",
                                           "id": "sIgte",
-                                          "name": "MacBook Air",
+                                          "name": "Mac · Chrome",
                                           "fill": "$text-primary",
-                                          "content": "MacBook Air",
+                                          "content": "Mac · Chrome",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
@@ -182684,9 +182703,9 @@
                                         {
                                           "type": "text",
                                           "id": "rF35S",
-                                          "name": "last seen yesterday",
+                                          "name": "Last connected yesterday",
                                           "fill": "$text-muted",
-                                          "content": "last seen yesterday · Local network only",
+                                          "content": "Last connected yesterday · 192.168.1.20 · Local network only",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-xs",
                                           "fontWeight": "normal"
@@ -182696,14 +182715,21 @@
                                   ]
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "G3RaOS",
-                                  "name": "x",
-                                  "width": 14,
-                                  "height": 14,
-                                  "icon": "trash-2",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "id": "TDM1V",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Revoke access",
+                                  "height": 32,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Revoke access",
+                                      "fill": "$destructive"
+                                    }
+                                  }
                                 }
                               ]
                             }
@@ -183295,11 +183321,11 @@
                             {
                               "type": "text",
                               "id": "iAOl7",
-                              "name": "Reach this machine's workspaces from a phone",
+                              "name": "Control this computer from your phone",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Reach this machine's workspaces from a phone or another computer. The tunnel is opened on demand and closed with the app.",
+                              "content": "Control this computer from your phone or another computer.",
                               "lineHeight": 1.5,
                               "fontFamily": "$font-sans",
                               "fontSize": "$text-base",
@@ -183327,9 +183353,9 @@
                                 {
                                   "type": "text",
                                   "id": "wwWEE",
-                                  "name": "Enable remote access",
+                                  "name": "Allow remote access",
                                   "fill": "$text-secondary",
-                                  "content": "Enable remote access",
+                                  "content": "Allow remote access",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
@@ -183337,9 +183363,9 @@
                                 {
                                   "type": "text",
                                   "id": "a3k7g",
-                                  "name": "Publishes a temporary https URL for paired d",
+                                  "name": "Devices signed in to your Deus account",
                                   "fill": "$text-muted",
-                                  "content": "Publishes a temporary https URL for paired devices only.",
+                                  "content": "Devices signed in to your Deus account connect after you approve them once.",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-base",
                                   "fontWeight": "normal"
@@ -183438,14 +183464,6 @@
                           ]
                         },
                         {
-                          "type": "rectangle",
-                          "id": "T2iZ6O",
-                          "name": "Separator",
-                          "fill": "$border-subtle",
-                          "width": "fill_container",
-                          "height": 1
-                        },
-                        {
                           "type": "frame",
                           "id": "vektc",
                           "name": "Devices",
@@ -183465,28 +183483,26 @@
                                 {
                                   "type": "text",
                                   "id": "PXSrh",
-                                  "name": "Paired devices",
+                                  "name": "Devices that can control this computer",
                                   "fill": "$text-secondary",
-                                  "content": "Paired devices",
+                                  "content": "Devices that can control this computer",
                                   "fontFamily": "$font-sans",
                                   "fontSize": "$text-sm",
                                   "fontWeight": "500"
                                 },
                                 {
-                                  "id": "PJuGA",
+                                  "id": "CJAyv",
                                   "type": "ref",
-                                  "ref": "rg2x2",
-                                  "name": "Pair",
+                                  "ref": "Rcfnv",
+                                  "name": "Add device",
                                   "height": 32,
-                                  "theme": {
-                                    "mode": "dark"
-                                  },
-                                  "cornerRadius": "$radius-lg",
-                                  "opacity": 0.5,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
                                   "descendants": {
-                                    "z4bI4": {
-                                      "content": "Connect a Device",
-                                      "fontSize": 11
+                                    "kB8v8": {
+                                      "content": "Add device"
                                     }
                                   }
                                 }
@@ -183536,9 +183552,9 @@
                                         {
                                           "type": "text",
                                           "id": "FOvx3",
-                                          "name": "Adam's iPhone",
+                                          "name": "iPhone · Safari",
                                           "fill": "$text-primary",
-                                          "content": "Adam's iPhone",
+                                          "content": "iPhone · Safari",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
@@ -183546,9 +183562,9 @@
                                         {
                                           "type": "text",
                                           "id": "Q1qh33",
-                                          "name": "last seen 4m ago",
+                                          "name": "Last connected 4m ago",
                                           "fill": "$text-muted",
-                                          "content": "last seen 4m ago",
+                                          "content": "Last connected 4m ago",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-xs",
                                           "fontWeight": "normal"
@@ -183558,14 +183574,21 @@
                                   ]
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "OQAgL",
-                                  "name": "x",
-                                  "width": 14,
-                                  "height": 14,
-                                  "icon": "trash-2",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "id": "B4ZCn",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Revoke access",
+                                  "height": 32,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Revoke access",
+                                      "fill": "$destructive"
+                                    }
+                                  }
                                 }
                               ]
                             },
@@ -183598,7 +183621,7 @@
                                       "name": "i",
                                       "width": 16,
                                       "height": 16,
-                                      "icon": "laptop",
+                                      "icon": "monitor",
                                       "library": "lucide",
                                       "fill": "$text-muted"
                                     },
@@ -183613,9 +183636,9 @@
                                         {
                                           "type": "text",
                                           "id": "UDBz0",
-                                          "name": "MacBook Air",
+                                          "name": "Mac · Chrome",
                                           "fill": "$text-primary",
-                                          "content": "MacBook Air",
+                                          "content": "Mac · Chrome",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-sm",
                                           "fontWeight": "500"
@@ -183623,9 +183646,9 @@
                                         {
                                           "type": "text",
                                           "id": "MqTT8",
-                                          "name": "last seen yesterday",
+                                          "name": "Last connected yesterday",
                                           "fill": "$text-muted",
-                                          "content": "last seen yesterday · Local network only",
+                                          "content": "Last connected yesterday · 192.168.1.20 · Local network only",
                                           "fontFamily": "$font-sans",
                                           "fontSize": "$text-xs",
                                           "fontWeight": "normal"
@@ -183635,14 +183658,21 @@
                                   ]
                                 },
                                 {
-                                  "type": "icon",
-                                  "id": "SgBlY",
-                                  "name": "x",
-                                  "width": 14,
-                                  "height": 14,
-                                  "icon": "trash-2",
-                                  "library": "lucide",
-                                  "fill": "$text-muted"
+                                  "id": "Wxwwe",
+                                  "type": "ref",
+                                  "ref": "Rcfnv",
+                                  "name": "Revoke access",
+                                  "height": 32,
+                                  "padding": [
+                                    0,
+                                    12
+                                  ],
+                                  "descendants": {
+                                    "kB8v8": {
+                                      "content": "Revoke access",
+                                      "fill": "$destructive"
+                                    }
+                                  }
                                 }
                               ]
                             }

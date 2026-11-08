@@ -24,6 +24,7 @@ export interface WsConnection {
 
 const connections = new Map<string, WsConnection>();
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+let deviceListener: (() => void) | null = null;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
@@ -42,14 +43,30 @@ export function addConnection(ws: WsSendable, deviceId: string | null, isVirtual
   });
 
   startHeartbeat();
+  if (deviceId) deviceListener?.();
   return id;
 }
 
 /** Remove a connection by ID. */
 export function removeConnection(id: string): void {
-  if (!connections.delete(id)) return;
+  const conn = connections.get(id);
+  if (!conn) return;
+  connections.delete(id);
   if (connections.size === 0) stopHeartbeat();
   extendedHandlers.onDisconnect?.(id);
+  if (conn.deviceId) deviceListener?.();
+}
+
+/** Paired devices with a live connection (relay or local network). The desktop's own window has none. */
+export function connectedDeviceIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const conn of connections.values()) if (conn.deviceId) ids.add(conn.deviceId);
+  return ids;
+}
+
+/** Called whenever a paired device connects or disconnects. */
+export function onDeviceConnectionsChange(listener: (() => void) | null): void {
+  deviceListener = listener;
 }
 
 function closeConnection(conn: WsConnection, code: number, reason: string): void {

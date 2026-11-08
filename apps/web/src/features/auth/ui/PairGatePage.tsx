@@ -30,6 +30,7 @@ import {
   peekPairCode,
 } from "../lib/pairing-link";
 import { EASE_OUT_QUART } from "@/shared/lib/animation";
+import { describeDevice } from "../lib/device-name";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -363,7 +364,9 @@ export function PairGatePage({ onPaired, serverId, account, machine }: PairGateP
       setError(null);
       setPageState("connecting");
 
-      const deviceName = navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Web Browser";
+      const deviceName = describeDevice(navigator.userAgent, {
+        touch: navigator.maxTouchPoints > 1,
+      });
 
       try {
         const relay = isRelayMode();

@@ -6,6 +6,7 @@ import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas
 import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { getCloudModelLists } from "../services/agent/cloud/models";
 import { reconcileRelay } from "../services/relay.service";
+import { syncKeepAwake } from "../services/keep-awake.service";
 import { getLocalAgents } from "../services/agent";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
 import {
@@ -28,6 +29,7 @@ app.post("/settings", async (c) => {
 
   // Turning it on is also how a computer removed from the account is added again.
   if (key === "remote_access_enabled") reconcileRelay({ restart: value === true });
+  if (key === "remote_keep_awake") syncKeepAwake();
 
   return c.json({ success: true, key, value });
 });
