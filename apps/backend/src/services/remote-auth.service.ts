@@ -1,11 +1,14 @@
 // backend/src/services/remote-auth.service.ts
 // Core auth logic for remote access: pairing codes, device tokens, rate limiting.
 // Pairing codes are ephemeral (in-memory), device tokens are persistent (DB).
+// A device paired through the relay is bound to the Deus account the relay
+// verified and to this computer's machine id in it: the relay admits it again
+// only for both. A direct (local network) pairing has neither and works only
+// directly; a relay grant is never accepted on the direct path.
 
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
 import { closeDeviceConnections } from "./ws.service";
-import { getSetting, saveSetting } from "./settings.service";
 
 // ---- Types ----
 
@@ -13,6 +16,10 @@ export interface PairedDevice {
   id: string;
   name: string;
   token_hash: string;
+  /** Deus account that paired through the relay; null for a direct (LAN) pairing. */
+  account_id: string | null;
+  /** This computer's machine id in that account when it paired; null for direct. */
+  machine_id: string | null;
   ip_address: string | null;
   user_agent: string | null;
   last_seen_at: string;
@@ -37,7 +44,7 @@ const CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_FAILURES = 10;
 const RATE_LIMIT_LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-// ~250 short, memorable, unambiguous English words for two-word pairing codes.
+// 313 short, memorable, unambiguous English words for two-word pairing codes.
 // Avoids homophones, offensive words, and easily confused pairs.
 const WORD_LIST = [
   "ABLE",
@@ -408,7 +415,7 @@ function normalizePairCode(raw: string): string {
     .toUpperCase();
 }
 
-/** Validate a pairing code. Reusable within its TTL — multiple devices can pair with the same code. */
+/** Check a code without consuming it. Pairing admission consumes it atomically below. */
 export function validatePairCode(code: string): boolean {
   const normalized = normalizePairCode(code);
   const entry = activeCodes.get(normalized);
@@ -445,7 +452,8 @@ function generateId(): string {
 export function createDeviceToken(
   name: string,
   ip: string | null,
-  userAgent: string | null
+  userAgent: string | null,
+  relay: { accountId: string; machineId: string } | null = null
 ): { token: string; device: PairedDevice } {
   const token = randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
@@ -454,10 +462,18 @@ export function createDeviceToken(
   const db = getDatabase();
   db.prepare(
     `
-    INSERT INTO paired_devices (id, name, token_hash, ip_address, user_agent)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO paired_devices (id, name, token_hash, ip_address, user_agent, account_id, machine_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `
-  ).run(id, name || "Unknown Device", tokenHash, ip, userAgent);
+  ).run(
+    id,
+    name || "Unknown Device",
+    tokenHash,
+    ip,
+    userAgent,
+    relay?.accountId ?? null,
+    relay?.machineId ?? null
+  );
 
   const device = db.prepare("SELECT * FROM paired_devices WHERE id = ?").get(id) as PairedDevice;
   return { token, device };
@@ -474,6 +490,15 @@ export function validateDeviceToken(token: string): PairedDevice | null {
   );
 }
 
+/**
+ * The direct (local network) path. A relay grant is refused here: it belongs to
+ * an account, and a copy taken from a shared browser must not skip that check.
+ */
+export function validateDirectDeviceToken(token: string): PairedDevice | null {
+  const device = validateDeviceToken(token);
+  return device && device.account_id === null ? device : null;
+}
+
 /** Update last_seen_at for a device by token hash. */
 export function updateLastSeen(tokenHash: string): void {
   const db = getDatabase();
@@ -487,7 +512,7 @@ export function listDevices(): Omit<PairedDevice, "token_hash">[] {
   const db = getDatabase();
   const rows = db
     .prepare(
-      "SELECT id, name, ip_address, user_agent, last_seen_at, created_at FROM paired_devices ORDER BY created_at DESC"
+      "SELECT id, name, account_id, machine_id, ip_address, user_agent, last_seen_at, created_at FROM paired_devices ORDER BY created_at DESC"
     )
     .all() as Omit<PairedDevice, "token_hash">[];
   return rows;
@@ -513,6 +538,9 @@ export function authorizePairing(
     recordFailure(source);
     return "invalid_code";
   }
+  // Both HTTP and relay admission run synchronously in this process. Consume
+  // before issuing the credential so simultaneous attempts cannot pair twice.
+  activeCodes.delete(normalizePairCode(code));
   resetRateLimit(source);
   return null;
 }
@@ -540,25 +568,6 @@ export function recordFailure(ip: string): void {
 /** Reset rate limit for an IP (called on successful pairing). */
 export function resetRateLimit(ip: string): void {
   rateLimits.delete(ip);
-}
-
-// ---- Relay Credentials ----
-
-/** Generate relay credentials (server_id + relay_token). Stores in preferences.json. */
-export function generateRelayCredentials(): { serverId: string; relayToken: string } {
-  const serverId = randomBytes(4).toString("hex"); // 8-char hex
-  const relayToken = randomBytes(32).toString("hex");
-  saveSetting("relay_server_id", serverId);
-  saveSetting("relay_token", relayToken);
-  return { serverId, relayToken };
-}
-
-/** Get stored relay credentials, or null if not yet generated. */
-export function getRelayCredentials(): { serverId: string; relayToken: string } | null {
-  const serverId = getSetting("relay_server_id");
-  const relayToken = getSetting("relay_token");
-  if (!serverId || !relayToken) return null;
-  return { serverId, relayToken };
 }
 
 // ---- Test Helpers (exported for testing only) ----

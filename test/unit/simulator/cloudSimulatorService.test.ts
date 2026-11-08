@@ -60,7 +60,7 @@ describe("cloudSimulatorService — exec (request/response)", () => {
         args: ["42", "100"],
         platform: "ios",
       },
-      { timeoutMs: 100_000 }
+      { timeoutMs: 100_000, effect: true }
     );
 
     await cloudSimulatorService.exec("ws-1", "home");
@@ -70,7 +70,7 @@ describe("cloudSimulatorService — exec (request/response)", () => {
         workspaceId: "ws-1",
         verb: "home",
       },
-      { timeoutMs: 100_000 }
+      { timeoutMs: 100_000, effect: true }
     );
   });
 
@@ -88,7 +88,7 @@ describe("cloudSimulatorService — exec (request/response)", () => {
         workspaceId: "ws-1",
         verb: "screenshot",
       },
-      { timeoutMs: 100_000 }
+      { timeoutMs: 100_000, effect: true }
     );
   });
 
@@ -97,7 +97,7 @@ describe("cloudSimulatorService — exec (request/response)", () => {
     expect(sendRequest).toHaveBeenLastCalledWith(
       "cloudSimExec",
       { workspaceId: "ws-1", verb: "screenshot", platform: "ios" },
-      { timeoutMs: 100_000 }
+      { timeoutMs: 100_000, effect: true }
     );
   });
 
@@ -110,7 +110,7 @@ describe("cloudSimulatorService — exec (request/response)", () => {
         verb: "appstate",
         platform: "android",
       },
-      { timeoutMs: 100_000 }
+      { timeoutMs: 100_000, effect: true }
     );
   });
 });

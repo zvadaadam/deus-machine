@@ -1,96 +1,91 @@
-// Remote access auth state management.
-// Checks if the current browser context requires token auth (non-Electron, non-localhost).
-// Stores and validates device tokens in localStorage.
-//
-// The signOut() function is the canonical way to log out from any module.
-// It clears localStorage AND dispatches a CustomEvent so any useAuth() listener
-// updates React state immediately (e.g., after an auth_failed WS frame).
-
-import { useState, useEffect, useCallback } from "react";
-import { capabilities } from "@/platform/capabilities";
-
-const TOKEN_KEY = "deus_device_token";
-const DEVICE_NAME_KEY = "deus_device_name";
-const SIGNOUT_EVENT = "deus:signout";
-
-/** Whether this browser session needs remote auth (non-Electron + non-localhost). */
-export function needsRemoteAuth(): boolean {
-  if (capabilities.ipcInvoke) return false;
-  const host = window.location.hostname;
-  return host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
-}
-
-/** Get the stored device token (or null). */
-export function getStoredToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-/** Store a device token after successful pairing. */
-export function storeToken(token: string, deviceName?: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-  if (deviceName) localStorage.setItem(DEVICE_NAME_KEY, deviceName);
-}
-
-/** Clear stored token (logout). */
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(DEVICE_NAME_KEY);
-}
-
-/**
- * Sign out: clears stored token AND dispatches a CustomEvent so any
- * useAuth() listener re-renders immediately. Safe to call from anywhere
- * (WS handlers, event listeners, non-React code). Supports multiple
- * listeners without mutable module state.
- */
-export function signOut(): void {
-  clearToken();
-  window.dispatchEvent(new CustomEvent(SIGNOUT_EVENT));
-}
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import {
+  getStoredToken,
+  storeToken,
+  onDeviceAuthChange,
+  needsRemoteAuth,
+} from "@/platform/ws/device-auth";
+import {
+  clearMachineUnavailable,
+  isMachineUnavailable,
+  onMachineAvailability,
+  readRelayAccount,
+  type RelayAccount,
+} from "@/platform/ws/relay-access";
+import { isRelayMode } from "@/shared/config/backend.config";
+export {
+  getStoredToken,
+  storeToken,
+  clearToken,
+  signOut,
+  needsRemoteAuth,
+} from "@/platform/ws/device-auth";
 
 export interface AuthState {
-  /** Whether auth check is still in progress. */
-  isLoading: boolean;
-  /** Whether the user is authenticated (or auth not required). */
-  isAuthenticated: boolean;
-  /** Set after successful pairing — triggers re-render. */
+  /** Relay only: the Deus account this browser is signed in to. */
+  account: RelayAccount | null;
+  /** Relay only: sign in first — the relay serves a computer to its own account. */
+  needsAccount: boolean;
+  /** Relay only: Deus Cloud has no such computer for this account. */
+  machineUnavailable: boolean;
+  /** Local credential presence only. The runtime still authenticates with the host. */
+  hasDeviceGrant: boolean;
   onPaired: (token: string, deviceName?: string) => void;
+  /** Relay only: ask Deus Cloud about this computer again. */
+  retryMachine: () => void;
 }
 
-/**
- * Hook that manages remote auth state.
- * - Electron or localhost: always authenticated (no token needed).
- * - Remote browser: checks localStorage for a valid token.
- */
-export function useAuth(): AuthState {
+function subscribe(callback: () => void): () => void {
+  const stopAuth = onDeviceAuthChange(callback);
+  const stopAvailability = onMachineAvailability(callback);
+  return () => {
+    stopAuth();
+    stopAvailability();
+  };
+}
+
+export function useAuth(serverId?: string): AuthState {
   const requiresAuth = needsRemoteAuth();
+  const relay = isRelayMode();
+  // One primitive snapshot, so React re-renders exactly when any of the three changes.
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    () => {
+      const account = relay ? readRelayAccount() : null;
+      const grant =
+        !requiresAuth || !!getStoredToken(serverId, relay ? account?.accountId : undefined);
+      const unavailable =
+        !!account && !!serverId && isMachineUnavailable(account.accountId, serverId);
+      return JSON.stringify([account?.bearer ?? null, grant, unavailable]);
+    },
+    () => JSON.stringify([null, !requiresAuth, false])
+  );
+  const [bearer, hasDeviceGrant, machineUnavailable] = JSON.parse(snapshot) as [
+    string | null,
+    boolean,
+    boolean,
+  ];
+  const account = useMemo(
+    () => (bearer ? readRelayAccount() : null),
+    // The bearer identifies the session; re-read its claims only when it changes.
 
-  // Initialize state synchronously — no effect needed for initial check
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (!requiresAuth) return true;
-    return !!getStoredToken();
-  });
-  const [isLoading] = useState(false);
-
-  // Listen for signOut events dispatched from any context (WS handlers, etc.)
-  useEffect(() => {
-    if (!requiresAuth) return;
-
-    const handler = () => setIsAuthenticated(false);
-    window.addEventListener(SIGNOUT_EVENT, handler);
-    return () => {
-      window.removeEventListener(SIGNOUT_EVENT, handler);
-    };
-  }, [requiresAuth]);
-
-  const onPaired = useCallback((token: string, deviceName?: string) => {
-    storeToken(token, deviceName);
-    setIsAuthenticated(true);
-  }, []);
-
-  return { isLoading, isAuthenticated, onPaired };
+    [bearer]
+  );
+  const onPaired = useCallback(
+    (token: string, deviceName?: string) => {
+      storeToken(token, deviceName, serverId, relay ? (account?.accountId ?? null) : undefined);
+    },
+    [serverId, relay, account]
+  );
+  const retryMachine = useCallback(() => {
+    if (account && serverId) clearMachineUnavailable(account.accountId, serverId);
+  }, [account, serverId]);
+  return {
+    account,
+    needsAccount: relay && !account,
+    machineUnavailable,
+    hasDeviceGrant,
+    onPaired,
+    retryMachine,
+  };
 }

@@ -156,12 +156,25 @@ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
  * Handle an incoming WS protocol message for an authenticated connection.
  * Shared by local WS (app.ts) and virtual relay connections (relay.service.ts).
  *
- * Core: pong
+ * Core: ping / pong
  * Query protocol: q:* frames routed to query engine
  */
 export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
-  if (!connections.has(connectionId)) return;
+  const connection = connections.get(connectionId);
+  if (!connection) return;
   match(msg.type as string)
+    .with("ping", () => {
+      // Echo a client probe through the same authenticated path, including relay
+      // virtual connections, so the client can detect a silent one-way failure.
+      recordPong(connectionId);
+      try {
+        connection.ws.send(
+          JSON.stringify({ type: "pong", ...(typeof msg.id === "string" ? { id: msg.id } : {}) })
+        );
+      } catch {
+        closeConnection(connection, 1001, "Connection lost");
+      }
+    })
     .with("pong", () => {
       recordPong(connectionId);
     })

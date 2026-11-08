@@ -3,6 +3,7 @@ import { SessionSnapshotEventSchema, TurnEndedEventSchema } from "@deus-hq/api";
 import { emptyConversation, reduceConversation } from "@zvada/agent-server/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { subscribeToAgentEvents } from "@/features/session/hooks/useAgentEvents";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
 import { messagesKey } from "@/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -196,6 +197,153 @@ function delta(seq: number, text: string): void {
 }
 
 describe("shell agent stream subscription", () => {
+  it("keeps streaming an open part after the runtime reconnects", async () => {
+    const sockets: Array<
+      EventTarget & { readyState: number; send: () => void; close: () => void }
+    > = [];
+    const runtime = new RuntimeClient(
+      { host: "host", account: "account", grant: "grant" },
+      {
+        heartbeatIntervalMs: 0,
+        open: () => {
+          const socket = Object.assign(new EventTarget(), {
+            readyState: 1,
+            send: () => {},
+            close: () => {},
+          });
+          sockets.push(socket);
+          return socket as never;
+        },
+      }
+    );
+    const cache = runtime.queryClient;
+    const online = async () => {
+      const connected = runtime.connect();
+      await vi.advanceTimersByTimeAsync(0);
+      sockets
+        .at(-1)!
+        .dispatchEvent(
+          new MessageEvent("message", { data: JSON.stringify({ type: "connected" }) })
+        );
+      await connected;
+    };
+    cache.setQueryData(messagesKey(sessionId), page([message("answer", "initial")]));
+    const observer = new QueryObserver(cache, {
+      queryKey: messagesKey(sessionId),
+      queryFn: async () => page([message("answer", "Stored")]),
+      staleTime: Infinity,
+    });
+    const stopObserver = observer.subscribe(() => {});
+    const stop = subscribeToAgentEvents(cache);
+    const live = (seq: number, chunk: string) =>
+      runtime.emitLocalEvent("agent:event", {
+        sessionId,
+        seq,
+        event: {
+          type: "message.part.delta",
+          sessionId,
+          turnId: TURN,
+          messageId: "answer",
+          partId: "part-answer",
+          outputIndex: 1,
+          partIndex: 0,
+          delta: { type: "text", text: chunk },
+          timestamp: T,
+        },
+      });
+    const shown = () => {
+      const part = cache.getQueryData<PaginatedMessages>(messagesKey(sessionId))?.messages[0]
+        .parts?.[0];
+      return part && !isUnknownPart(part) && part.type === "text" ? part.text : undefined;
+    };
+    try {
+      await online();
+      runtime.emitLocalEvent("agent:snapshot", snapshot("Streaming", 40));
+      live(41, " so far");
+      flushFrame();
+      expect(shown()).toBe("Streaming so far");
+
+      // A relay blip: the socket drops and comes back without a gap in the stream.
+      sockets.at(-1)!.dispatchEvent(Object.assign(new Event("close"), { code: 1006 }));
+      expect(runtime.isConnected()).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+      sockets
+        .at(-1)!
+        .dispatchEvent(
+          new MessageEvent("message", { data: JSON.stringify({ type: "connected" }) })
+        );
+      live(42, " and more");
+      flushFrame();
+      expect(shown()).toBe("Streaming so far and more");
+    } finally {
+      stop();
+      stopObserver();
+      runtime.dispose();
+    }
+  });
+
+  it("keeps folds and stream cursors separate for hosts with identical session and message IDs", () => {
+    const hosts = ["A", "B"].map(
+      (host) =>
+        new RuntimeClient(
+          { host, account: "account", grant: host },
+          {
+            open: () => {
+              throw new Error("No transport needed for projection");
+            },
+          }
+        )
+    );
+    const stops = hosts.map((runtime) => {
+      const cache = runtime.queryClient;
+      cache.setQueryData(messagesKey(sessionId), page([message("answer", "initial")]));
+      const observer = new QueryObserver(cache, {
+        queryKey: messagesKey(sessionId),
+        queryFn: async () => page(),
+        staleTime: Infinity,
+      });
+      const stopObserver = observer.subscribe(() => {});
+      const stopEvents = subscribeToAgentEvents(cache);
+      return () => {
+        stopEvents();
+        stopObserver();
+        runtime.dispose();
+      };
+    });
+    try {
+      for (const runtime of hosts) {
+        runtime.emitLocalEvent("agent:snapshot", snapshot(runtime.identity.host, 40));
+        runtime.emitLocalEvent("agent:event", {
+          sessionId,
+          seq: 41,
+          event: {
+            type: "message.part.delta",
+            sessionId,
+            turnId: TURN,
+            messageId: "answer",
+            partId: "part-answer",
+            outputIndex: 1,
+            partIndex: 0,
+            delta: { type: "text", text: ` from ${runtime.identity.host}` },
+            timestamp: T,
+          },
+        });
+      }
+      flushFrame();
+      const content = (runtime: RuntimeClient) =>
+        runtime.queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages[0]
+          .parts?.[0];
+      expect(content(hosts[0])).toMatchObject({ text: "A from A" });
+      expect(content(hosts[1])).toMatchObject({ text: "B from B" });
+      hosts[0].dispose();
+      hosts[0].emitLocalEvent("agent:snapshot", snapshot("late A", 100));
+      expect(hosts[0].queryClient.getQueryData(messagesKey(sessionId))).toBeUndefined();
+      expect(content(hosts[1])).toMatchObject({ text: "B from B" });
+    } finally {
+      stops.forEach((stop) => stop());
+    }
+  });
+
   it("warns once for a live cloud save failure even when its chat is not open", () => {
     const event = TurnEndedEventSchema.parse({
       type: "turn.ended",

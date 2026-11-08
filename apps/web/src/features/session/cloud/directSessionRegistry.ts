@@ -26,6 +26,8 @@
 
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import { readCloudTurnSelection } from "@shared/cloud-models";
+import { queryClient } from "@/shared/api/queryClient";
+import type { QueryClient } from "@tanstack/react-query";
 
 /** What the composer chose for this turn — never a credential (agnt resolves that). */
 export interface DirectTurnOptions {
@@ -48,7 +50,7 @@ export interface DirectSessionChannel {
   sendRaw(frame: Record<string, unknown>): void;
 }
 
-const channels = new Map<string, DirectSessionChannel>();
+const channelsByCache = new WeakMap<QueryClient, Map<string, DirectSessionChannel>>();
 
 /**
  * Register a session's direct channel; returns a disposer. The disposer only
@@ -58,8 +60,14 @@ const channels = new Map<string, DirectSessionChannel>();
  */
 export function registerDirectSession(
   sessionId: string,
-  channel: DirectSessionChannel
+  channel: DirectSessionChannel,
+  owner: QueryClient = queryClient
 ): () => void {
+  let channels = channelsByCache.get(owner);
+  if (!channels) {
+    channels = new Map();
+    channelsByCache.set(owner, channels);
+  }
   channels.set(sessionId, channel);
   return () => {
     if (channels.get(sessionId) === channel) channels.delete(sessionId);
@@ -67,8 +75,11 @@ export function registerDirectSession(
 }
 
 /** The live direct channel for a session, or undefined when the Mac lane owns it. */
-export function getDirectSession(sessionId: string): DirectSessionChannel | undefined {
-  return channels.get(sessionId);
+export function getDirectSession(
+  sessionId: string,
+  owner: QueryClient = queryClient
+): DirectSessionChannel | undefined {
+  return channelsByCache.get(owner)?.get(sessionId);
 }
 
 // ---- Wire frames (pure; the agnt ClientCommand shapes) ----

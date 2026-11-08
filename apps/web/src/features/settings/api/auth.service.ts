@@ -7,6 +7,8 @@ import { sendRequest, sendMutate } from "@/platform/ws";
 export interface PairedDevice {
   id: string;
   name: string;
+  /** The Deus account a relay pairing belongs to; null for a local-network pairing. */
+  account_id: string | null;
   ip_address: string | null;
   user_agent: string | null;
   last_seen_at: string;
@@ -36,8 +38,16 @@ export const AuthService = {
 };
 
 export interface RelayStatus {
+  /** off, waiting for the desktop's Deus sign-in, dialing, serving devices, or removed. */
+  state: "off" | "signed_out" | "connecting" | "connected" | "removed";
   connected: boolean;
   clients: number;
+  /** This computer's id in the signed-in account (its relay routing id). */
   serverId: string | null;
+  /** The name other devices see for this computer. */
+  serverName: string;
+  accountId: string | null;
   relayUrl: string | null;
+  /** Why the last dial failed, while still retrying. */
+  error: string | null;
 }

@@ -4,6 +4,8 @@ import { SessionErrorEventSchema, SessionSnapshotEventSchema } from "@deus-hq/ap
 import { useCloudDirectSession } from "@/features/session/hooks/useCloudDirectSession";
 import { emitLocalEvent } from "@/platform/ws";
 import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
+import { hasParkedDirectQuestion } from "@/features/session/cloud/directQuestionState";
+import { RuntimeClient } from "@/platform/ws/runtime-client";
 import { messagesKey } from "@/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
 import { toast } from "sonner";
@@ -102,6 +104,62 @@ function snapshot(status: "ready" | "stopped") {
 }
 
 describe("direct cloud session published frames", () => {
+  it("isolates colliding sessions and disposes a runtime's channel, questions and late frames", () => {
+    cleanup?.();
+    const open = () => {
+      throw new Error("The q: transport is unused");
+    };
+    const a = new RuntimeClient({ host: "A", account: "A", grant: "A" }, { open });
+    const b = new RuntimeClient({ host: "B", account: "B", grant: "B" }, { open });
+    const eventsA = vi.fn(),
+      eventsB = vi.fn();
+    a.onEvent(eventsA);
+    b.onEvent(eventsB);
+    const mount = (runtime: RuntimeClient) => {
+      queryClient = runtime.queryClient;
+      useCloudDirectSession({
+        sessionId: "same",
+        providerSessionId: "same-provider",
+        baseUrl: "https://agnt.test",
+        token: runtime.identity.grant,
+      });
+      const stop = effects.at(-1)!();
+      return { frame: onFrame, stop };
+    };
+    const first = mount(a),
+      second = mount(b);
+    try {
+      first.frame({ type: "turn.started", turnId: "A-turn", timestamp: 1 });
+      first.frame({
+        type: "mcp.question",
+        data: {
+          questionId: "question",
+          questions: [{ text: "Choose A's option" }],
+        },
+      });
+      expect(hasParkedDirectQuestion("same", a.queryClient)).toBe(true);
+      expect(hasParkedDirectQuestion("same", b.queryClient)).toBe(false);
+      expect(eventsA).toHaveBeenCalledWith("tool:request", expect.anything());
+      expect(eventsB).not.toHaveBeenCalled();
+      // A's active turn must not block B's independent session.
+      expect(() =>
+        getDirectSession("same", b.queryClient)!.sendMessage("For B", "B-turn", TURN)
+      ).not.toThrow();
+      a.dispose();
+      expect(getDirectSession("same", a.queryClient)).toBeUndefined();
+      expect(hasParkedDirectQuestion("same", a.queryClient)).toBe(false);
+      first.frame({ type: "workspace.state", data: { sandboxUrlTemplate: "https://late-A" } });
+      expect(eventsB).not.toHaveBeenCalled();
+      expect(a.queryClient.getQueryCache().getAll()).toHaveLength(0);
+      expect(getDirectSession("same", b.queryClient)).toBeDefined();
+    } finally {
+      first.stop?.();
+      second.stop?.();
+      a.dispose();
+      b.dispose();
+    }
+  });
+
   it("removes only the rejected optimistic send and leaves unrelated errors alone", () => {
     const sessionId = "deus-direct-1";
     queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
@@ -111,7 +169,7 @@ describe("direct cloud session published frames", () => {
       has_older: false,
       has_newer: false,
     });
-    getDirectSession(sessionId)!.sendMessage("Hello", "pending", TURN);
+    getDirectSession(sessionId, queryClient)!.sendMessage("Hello", "pending", TURN);
     setState.mockClear();
     onFrame({
       type: "error",
@@ -133,7 +191,7 @@ describe("direct cloud session published frames", () => {
       []
     );
     expect(setState).toHaveBeenCalledWith("MESSAGE_SEND_FAILED: Account unavailable");
-    getDirectSession(sessionId)!.sendMessage("Retry", "retry", TURN);
+    getDirectSession(sessionId, queryClient)!.sendMessage("Retry", "retry", TURN);
     setState.mockClear();
     onFrame({
       type: "error",
@@ -145,7 +203,7 @@ describe("direct cloud session published frames", () => {
   });
 
   it("ignores a delayed send refusal after native admission", () => {
-    getDirectSession("deus-direct-1")!.sendMessage("Hello", "accepted", TURN);
+    getDirectSession("deus-direct-1", queryClient)!.sendMessage("Hello", "accepted", TURN);
     onFrame({ type: "turn.started", turnId: "accepted", timestamp: 1 });
     setState.mockClear();
     onFrame({
@@ -170,7 +228,7 @@ describe("direct cloud session published frames", () => {
       has_older: false,
       has_newer: false,
     });
-    getDirectSession(sessionId)!.sendMessage("Hello", "ours", TURN);
+    getDirectSession(sessionId, queryClient)!.sendMessage("Hello", "ours", TURN);
     onFrame({ type: "turn.started", turnId: "other-client", timestamp: 1 });
     setState.mockClear();
     onFrame({
@@ -187,9 +245,9 @@ describe("direct cloud session published frames", () => {
     expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toMatchObject({
       status: "working",
     });
-    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", TURN)).toThrow(
-      "The agent is still working"
-    );
+    expect(() =>
+      getDirectSession(sessionId, queryClient)!.sendMessage("Retry", "retry", TURN)
+    ).toThrow("The agent is still working");
     onFrame({
       type: "message.started",
       turnId: "other-client",
@@ -221,12 +279,14 @@ describe("direct cloud session published frames", () => {
     expect(queryClient.getQueryData(queryKeys.sessions.detail(sessionId))).toMatchObject({
       status: "idle",
     });
-    expect(() => getDirectSession(sessionId)!.sendMessage("Retry", "retry", TURN)).not.toThrow();
+    expect(() =>
+      getDirectSession(sessionId, queryClient)!.sendMessage("Retry", "retry", TURN)
+    ).not.toThrow();
   });
 
   it("accepts our send from a snapshot and releases its pending marker when it ends", () => {
     const sessionId = "deus-direct-1";
-    getDirectSession(sessionId)!.sendMessage("Hello", "accepted", TURN);
+    getDirectSession(sessionId, queryClient)!.sendMessage("Hello", "accepted", TURN);
     onFrame({
       type: "session.snapshot",
       state: { sessionId: "agnt-direct-1", status: "running", currentTurnId: "accepted" },
@@ -241,7 +301,9 @@ describe("direct cloud session published frames", () => {
     });
     expect(setState).not.toHaveBeenCalled();
     onFrame({ type: "turn.ended", turnId: "accepted", stopReason: "end_turn", timestamp: 2 });
-    expect(() => getDirectSession(sessionId)!.sendMessage("Next", "next", TURN)).not.toThrow();
+    expect(() =>
+      getDirectSession(sessionId, queryClient)!.sendMessage("Next", "next", TURN)
+    ).not.toThrow();
   });
 
   it("restores the device and refreshes it when reconnect reports it stopped", () => {
@@ -457,7 +519,7 @@ describe("direct cloud session published frames", () => {
   it("does not let a previous turn's error interrupt a new send awaiting admission", () => {
     onFrame({ type: "turn.started", turnId: "turn-previous", timestamp: 1 });
     onFrame({ type: "turn.ended", turnId: "turn-previous", stopReason: "end_turn", timestamp: 2 });
-    getDirectSession("deus-direct-1")!.sendMessage("Next request", "turn-next", TURN);
+    getDirectSession("deus-direct-1", queryClient)!.sendMessage("Next request", "turn-next", TURN);
     setState.mockClear();
     onFrame({
       type: "session.error",

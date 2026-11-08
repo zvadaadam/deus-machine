@@ -3,19 +3,13 @@ import { serverFrameSchema, clientAuthFrameSchema, pairerFrameSchema } from "../
 
 describe("serverFrameSchema", () => {
   it("parses valid register frame", () => {
-    const result = serverFrameSchema.safeParse({
-      type: "register",
-      serverId: "abc123",
-      relayToken: "tok_abc",
-    });
+    const result = serverFrameSchema.safeParse({ type: "register" });
     expect(result.success).toBe(true);
   });
 
   it("parses register frame with optional serverName", () => {
     const result = serverFrameSchema.safeParse({
       type: "register",
-      serverId: "abc123",
-      relayToken: "tok_abc",
       serverName: "My Server",
     });
     expect(result.success).toBe(true);
@@ -98,11 +92,8 @@ describe("serverFrameSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects register frame missing relayToken", () => {
-    const result = serverFrameSchema.safeParse({
-      type: "register",
-      serverId: "abc123",
-    });
+  it("rejects an oversized server name", () => {
+    const result = serverFrameSchema.safeParse({ type: "register", serverName: "x".repeat(201) });
     expect(result.success).toBe(false);
   });
 });

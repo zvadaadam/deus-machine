@@ -5,7 +5,8 @@
     "apps/desktop/main/**/*",
     "apps/desktop/preload/**/*",
     "scripts/runtime/**/*",
-    "shared/**/*"
+    "shared/**/*",
+    "packages/runtime-client/src/**/*"
   ],
   "compilerOptions": {
     "composite": true,

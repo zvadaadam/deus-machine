@@ -83,8 +83,9 @@ export const cloudSimulatorService = {
       withPlatform({ workspaceId, verb, ...(args ? { args } : {}) }, platform),
       // The backend waits 60 s for the device (a verb can wait on a UI
       // target); the client must outlast that or a slow verb rejects here
-      // first and its late answer is dropped.
-      { timeoutMs: EXEC_TIMEOUT_MS }
+      // first and its late answer is dropped. A verb acts on the device, so a
+      // lost answer is an unknown outcome, never a safe retry.
+      { timeoutMs: EXEC_TIMEOUT_MS, effect: true }
     ),
 
   /** The PNG does not come back here — it arrives as a `cloud:simulator`

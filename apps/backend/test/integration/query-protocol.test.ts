@@ -52,9 +52,14 @@ import { execFileSync } from "node:child_process";
 import { setApp } from "../../src/services/route-delegate";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
-import { closeAll as closeAllWs } from "../../src/services/ws.service";
+import {
+  addConnection,
+  removeConnection,
+  closeAll as closeAllWs,
+} from "../../src/services/ws.service";
 import { resetStatsCache } from "../../src/db";
-import { invalidate } from "../../src/services/query-engine";
+import * as queries from "../../src/db";
+import { handleFrame, invalidate } from "../../src/services/query-engine";
 import { restoreCloudSnapshot } from "../../src/services/agent/cloud/snapshot";
 
 // ---- Constants ----
@@ -1051,5 +1056,183 @@ describe("Error handling", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     expect(() => invalidate(["workspaces"])).not.toThrow();
+  });
+});
+
+describe("invalidation sharing and filtered deltas", () => {
+  function viewer(deviceId: string | null = "same-device", virtual = true) {
+    const frames: Array<{
+      type: string;
+      id: string;
+      data?: Array<{ workspaces: Array<{ id: string; title: string }> }>;
+      upserted?: Array<{ id: string }>;
+      cursor?: number;
+    }> = [];
+    const id = addConnection(
+      { send: (raw) => frames.push(JSON.parse(String(raw))), close: () => {} },
+      deviceId,
+      virtual
+    );
+    return {
+      frames,
+      subscribe: (sub: string, resource: string, params = {}) =>
+        handleFrame(id, { type: "q:subscribe", id: sub, resource, params }),
+      close: () => removeConnection(id),
+    };
+  }
+
+  it("runs an identical query once per invalidation for the same authorized scope", () => {
+    const a = viewer(),
+      b = viewer();
+    const read = vi.spyOn(queries, "getWorkspacesByRepo");
+    try {
+      a.subscribe("one", "workspaces", { state: "ready", unused: 1 });
+      a.subscribe("two", "workspaces", { unused: 1, state: "ready" });
+      b.subscribe("three", "workspaces", { state: "ready", unused: 1 });
+      read.mockClear();
+      a.frames.length = 0;
+      b.frames.length = 0;
+      invalidate(["workspaces"]);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(a.frames.map((frame) => frame.id)).toEqual(["one", "two"]);
+      expect(b.frames.map((frame) => frame.id)).toEqual(["three"]);
+      testDb.prepare("UPDATE workspaces SET title = 'Second invalidation' WHERE id = ?").run(WS_ID);
+      invalidate(["workspaces"]);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(
+        b.frames
+          .at(-1)
+          ?.data?.flatMap((group) => group.workspaces)
+          .find((ws) => ws.id === WS_ID)?.title
+      ).toBe("Second invalidation");
+    } finally {
+      a.close();
+      b.close();
+      read.mockRestore();
+    }
+  });
+
+  it("never shares query work between device or transport authorization scopes", () => {
+    const viewers = [viewer("device-a"), viewer("device-b"), viewer(null), viewer(null, false)];
+    const read = vi.spyOn(queries, "getWorkspacesByRepo");
+    try {
+      viewers.forEach((v) => v.subscribe("same-id", "workspaces"));
+      read.mockClear();
+      invalidate(["workspaces"]);
+      expect(read).toHaveBeenCalledTimes(4);
+    } finally {
+      viewers.forEach((v) => v.close());
+      read.mockRestore();
+    }
+  });
+
+  it("only reads affected message subscriptions and shares equal cursors", () => {
+    const a = viewer(),
+      b = viewer();
+    const read = vi.spyOn(queries, "getMessagesDelta");
+    try {
+      a.subscribe("affected-a", "messages", { sessionId: SESS_ID });
+      b.subscribe("affected-b", "messages", { sessionId: SESS_ID });
+      a.subscribe("unaffected", "messages", { sessionId: "another-session" });
+      testDb
+        .prepare(
+          "INSERT INTO messages (id, session_id, role) VALUES ('shared-delta', ?, 'assistant')"
+        )
+        .run(SESS_ID);
+      read.mockClear();
+      a.frames.length = 0;
+      b.frames.length = 0;
+      invalidate(["messages"], { sessionIds: [SESS_ID] });
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(a.frames).toHaveLength(1);
+      expect(b.frames).toHaveLength(1);
+      expect(a.frames[0].upserted?.[0].id).toBe("shared-delta");
+      expect(b.frames[0].cursor).toBe(a.frames[0].cursor);
+    } finally {
+      a.close();
+      b.close();
+      read.mockRestore();
+    }
+  });
+
+  it("removes filtered-out workspaces even when the same delta contains matching rows", () => {
+    const v = viewer();
+    testDb
+      .prepare(
+        "INSERT INTO workspaces (id, repository_id, slug, state, current_session_id) VALUES ('ws-filter', ?, 'filter', 'ready', 'sess-filter')"
+      )
+      .run(REPO_ID);
+    testDb
+      .prepare(
+        "INSERT INTO sessions (id, workspace_id, agent_harness, status) VALUES ('sess-filter', 'ws-filter', 'claude-code', 'idle')"
+      )
+      .run();
+    try {
+      v.subscribe("filtered", "workspaces", { state: "ready" });
+      v.frames.length = 0;
+      testDb.prepare("UPDATE workspaces SET state = 'archived' WHERE id = 'ws-filter'").run();
+      invalidate(["workspaces"], { sessionIds: [SESS_ID, "sess-filter"] });
+      expect(v.frames).toHaveLength(1);
+      expect(v.frames[0]).toMatchObject({
+        type: "q:delta",
+        id: "filtered",
+        removed: ["ws-filter"],
+      });
+      expect(v.frames[0].upserted?.map((ws) => ws.id)).toEqual([WS_ID]);
+    } finally {
+      v.close();
+      testDb.prepare("DELETE FROM workspaces WHERE id = 'ws-filter'").run();
+    }
+  });
+
+  it("falls back to a full snapshot when a removed session cannot locate its workspace", () => {
+    const v = viewer();
+    try {
+      v.subscribe("snapshot", "workspaces");
+      v.frames.length = 0;
+      invalidate(["workspaces"], { sessionIds: [SESS_ID, "removed-session"] });
+      expect(v.frames).toHaveLength(1);
+      expect(v.frames[0].type).toBe("q:snapshot");
+    } finally {
+      v.close();
+    }
+  });
+});
+
+describe("client liveness probes", () => {
+  it("echoes the probe through an authenticated real WebSocket without creating a subscription", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      expect(await sendAndReceive(ws, { type: "ping", id: "probe-1" }, "pong")).toEqual({
+        type: "pong",
+        id: "probe-1",
+      });
+      const response = await sendAndReceive(
+        ws,
+        { type: "q:request", id: "after-probe", resource: "stats" },
+        "q:response"
+      );
+      expect(response.id).toBe("after-probe");
+    } finally {
+      ws.close();
+    }
+  });
+});
+
+describe("missing resource snapshots", () => {
+  it("serializes absent sessions as explicit null for both reads and subscriptions", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      for (const type of ["q:request", "q:subscribe"]) {
+        const response = await sendAndReceive(
+          ws,
+          { type, id: "missing", resource: "session", params: { sessionId: "missing" } },
+          type === "q:request" ? "q:response" : "q:snapshot"
+        );
+        expect(response).toHaveProperty("data", null);
+      }
+    } finally {
+      ws.close();
+    }
   });
 });

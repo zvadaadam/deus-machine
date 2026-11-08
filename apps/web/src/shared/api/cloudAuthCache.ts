@@ -18,7 +18,7 @@ export function applyDeusCloudAuthChange(
   // The web-direct adapter coalesces list reads through a short in-flight
   // cache; without dropping it, the reset below refetches the OLD account's
   // list. A no-op on backed builds (the cache is only ever filled in web-direct).
-  bustCloudSessionsListCache();
+  bustCloudSessionsListCache(queryClient);
   // EVERY account-scoped cache, and RESET rather than invalidate — invalidate
   // keeps the old account's data rendering while the refetch runs, and with
   // `retry: false` a failed refetch strands it indefinitely. The curated-subset

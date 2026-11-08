@@ -1,77 +1,167 @@
 /**
- * ConnectPage -- server connection / pairing entry point for web mode.
+ * ConnectPage -- the computers this Deus account can reach through the relay.
  *
- * Phase 1: Simple page that lets the user enter a server ID to navigate to /s/{id}.
- * Phase 2: Will integrate relay connectivity, pairing flow, server status checks.
- *
- * Supports both /connect and /connect/$serverId (pre-filled from a shared link).
+ * A computer appears here once Deus on it is signed in to the same account
+ * with Remote access on. Opening one goes to /s/{id}; the first visit from a
+ * browser asks the computer to approve it, later visits connect directly.
+ * /connect/$serverId (an old shared link) redirects straight to the computer.
  */
 
-import { useState } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Monitor, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { formatTimeAgo } from "@/shared/lib/formatters";
+import { onDeviceAuthChange } from "@/platform/ws/device-auth";
+import {
+  listMachines,
+  readRelayAccount,
+  machineFingerprint,
+  removeMachine,
+  RelayTicketError,
+  expireRelayAccount,
+  type RemoteMachine,
+} from "@/platform/ws/relay-access";
+import { beginWebCloudLogin } from "@/features/session/cloud/webCloudDirectConfig";
+
+type Listing =
+  | { status: "loading" }
+  | { status: "ready"; machines: RemoteMachine[] }
+  | { status: "error"; message: string };
+
+function useAccountBearer(): string | null {
+  return useSyncExternalStore(
+    onDeviceAuthChange,
+    () => readRelayAccount()?.bearer ?? null,
+    () => null
+  );
+}
 
 export function ConnectPage() {
-  // $serverId may be present if navigated to /connect/$serverId
-  const params = useParams({ strict: false }) as { serverId?: string };
   const navigate = useNavigate();
-  const [serverId, setServerId] = useState(params.serverId ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const bearer = useAccountBearer();
+  const [listing, setListing] = useState<Listing>({ status: "loading" });
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = serverId.trim();
-    if (!trimmed) {
-      setError("Please enter a server ID");
-      return;
+  useEffect(() => {
+    const account = readRelayAccount();
+    if (!account) return;
+    let current = true;
+    setListing({ status: "loading" });
+    listMachines(account).then(
+      (machines) => current && setListing({ status: "ready", machines }),
+      (error: unknown) => {
+        if (!current) return;
+        if (error instanceof RelayTicketError && error.kind === "expired") {
+          expireRelayAccount(account);
+          return;
+        }
+        setListing({
+          status: "error",
+          message: error instanceof Error ? error.message : "Couldn't load your computers.",
+        });
+      }
+    );
+    return () => {
+      current = false;
+    };
+  }, [bearer, revision]);
+
+  const remove = useCallback(async (machine: RemoteMachine) => {
+    const account = readRelayAccount();
+    if (!account) return;
+    setRemoving(machine.id);
+    try {
+      await removeMachine(account, machine.id);
+      setListing((previous) =>
+        previous.status === "ready"
+          ? { status: "ready", machines: previous.machines.filter((m) => m.id !== machine.id) }
+          : previous
+      );
+      toast.success(`Removed "${machine.name}"`);
+    } catch {
+      toast.error("Couldn't remove the computer. Try again.");
+    } finally {
+      setRemoving(null);
     }
-    setError(null);
-    navigate({ to: "/s/$serverId", params: { serverId: trimmed } });
-  }
+  }, []);
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
-        {/* Header */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Connect to Server</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Your computers</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Enter the server ID from your Deus desktop app to connect.
+            {bearer
+              ? "Computers signed in to this Deus account with Remote access on."
+              : "Sign in with the Deus account your computer uses."}
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Server ID</Label>
-            <Input
-              type="text"
-              placeholder="e.g. abc123"
-              value={serverId}
-              onChange={(e) => {
-                setServerId(e.target.value);
-                setError(null);
-              }}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              className="text-center font-mono text-lg tracking-wider"
-            />
-          </div>
-
-          {error && <p className="text-destructive text-center text-sm">{error}</p>}
-
-          <Button type="submit" className="w-full" disabled={!serverId.trim()}>
-            Connect
+        {!bearer ? (
+          <Button className="w-full" onClick={() => beginWebCloudLogin("/connect")}>
+            Sign in
           </Button>
-        </form>
-
-        {/* Help text */}
-        <p className="text-muted-foreground text-center text-xs">
-          Open Settings &gt; Remote Access in the Deus desktop app to find your server ID.
-        </p>
+        ) : listing.status === "loading" ? (
+          <div className="space-y-2" aria-busy="true">
+            {[0, 1].map((row) => (
+              <div key={row} className="bg-muted/40 h-14 animate-pulse rounded-lg" />
+            ))}
+          </div>
+        ) : listing.status === "error" ? (
+          <div className="space-y-3 text-center">
+            <p className="text-destructive text-sm" role="alert">
+              {listing.message}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => setRevision((n) => n + 1)}>
+              Try again
+            </Button>
+          </div>
+        ) : listing.machines.length === 0 ? (
+          <p className="text-muted-foreground bg-muted/30 rounded-lg px-4 py-3 text-center text-sm">
+            No computers yet. In Deus on your computer, open Settings → Remote access and turn it
+            on.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {listing.machines.map((machine) => (
+              <li
+                key={machine.id}
+                className="bg-muted/30 hover:bg-muted/50 flex items-center gap-1 rounded-lg pr-2"
+              >
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2.5 text-left"
+                  onClick={() => navigate({ to: "/s/$serverId", params: { serverId: machine.id } })}
+                >
+                  <Monitor className="text-muted-foreground size-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{machine.name}</span>
+                    <span className="text-muted-foreground block text-xs">
+                      {machine.last_seen_at
+                        ? `Connected ${formatTimeAgo(machine.last_seen_at)}`
+                        : "Not connected yet"}
+                      <span className="font-mono"> · {machineFingerprint(machine.id)}</span>
+                    </span>
+                  </span>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => void remove(machine)}
+                  disabled={removing === machine.id}
+                  title={`Remove ${machine.name}`}
+                  aria-label={`Remove ${machine.name}`}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

@@ -7,7 +7,8 @@ const mockUpdateLastSeen = vi.fn<(...args: any[]) => any>();
 const mockCheckRateLimit = vi.fn<(...args: any[]) => any>(() => 0);
 
 vi.mock("../../../src/services/remote-auth.service", () => ({
-  validateDeviceToken: (...args: unknown[]) => mockValidateDeviceToken(...args),
+  // The direct path: relay grants are refused before this middleware sees them.
+  validateDirectDeviceToken: (...args: unknown[]) => mockValidateDeviceToken(...args),
   updateLastSeen: (...args: unknown[]) => mockUpdateLastSeen(...args),
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));

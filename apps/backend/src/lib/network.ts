@@ -1,4 +1,5 @@
-export const DEFAULT_RELAY_URL = "wss://relay.deusmachine.ai";
+// Allows a local Worker during remote-access integration tests and development.
+export const DEFAULT_RELAY_URL = process.env.DEUS_RELAY_URL || "wss://relay.deusmachine.ai";
 
 export function isLocalhost(ip: string | undefined): boolean {
   if (!ip) return false;

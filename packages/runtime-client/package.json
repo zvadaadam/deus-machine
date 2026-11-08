@@ -1,0 +1,32 @@
+{
+  "name": "@deus/runtime-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-independent q: runtime client with optional TanStack Query integration",
+  "exports": {
+    ".": "./src/index.ts",
+    "./query": "./src/query.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "ts-pattern": "^5.9.0"
+  },
+  "peerDependencies": {
+    "@tanstack/query-core": "^5.90.5"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/query-core": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@tanstack/query-core": "^5.90.5",
+    "typescript": "^5.5.3",
+    "vitest": "^4.0.16"
+  }
+}

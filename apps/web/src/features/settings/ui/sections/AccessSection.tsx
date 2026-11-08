@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { QRCodeSVG } from "qrcode.react";
+import { native } from "@/platform";
+import { queryKeys } from "@/shared/api/queryKeys";
+import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { pairingLink } from "@/features/auth/lib/pairing-link";
+import { machineFingerprint } from "@/platform/ws/relay-access";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +20,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Copy, Trash2, Smartphone, Monitor, Plus, Check, Link2 } from "lucide-react";
+import { Copy, Trash2, Smartphone, Monitor, Plus, Check, Link2, LogIn } from "lucide-react";
 import {
   usePairedDevices,
   useGeneratePairCode,
@@ -37,12 +43,18 @@ function getDeviceIcon(ua: string | null) {
   return Monitor;
 }
 
-/** Build the full pairing URL for QR code. */
-function buildPairUrl(accessUrl: string, code: string): string {
-  // accessUrl is like https://deusmachine.ai/connect/{serverId}
-  // Append ?pair=SOFT+TIGER (URL-encode the space as +)
-  const encodedCode = code.replace(/ /g, "+");
-  return `${accessUrl}?pair=${encodedCode}`;
+/**
+ * The web app's origin for this relay: wss://relay.deusmachine.ai serves
+ * https://deusmachine.ai (app.deusmachine.ai remains a path-preserving alias).
+ */
+function appOriginFor(relayUrl: string): string | null {
+  const configured = import.meta.env.VITE_DEUS_APP_URL as string | undefined;
+  if (configured) return configured.replace(/\/$/, "");
+  try {
+    return `https://${new URL(relayUrl).hostname.replace(/^relay\./, "")}`;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -56,10 +68,12 @@ function PortalCard({
   url,
   connected,
   clients,
+  account,
 }: {
   url: string;
   connected: boolean;
   clients: number;
+  account: string | null;
 }) {
   return (
     <div className="border-border/60 bg-muted/30 space-y-3 rounded-xl border px-4 py-4">
@@ -83,9 +97,38 @@ function PortalCard({
       </div>
 
       <div className="space-y-1">
-        <p className="text-muted-foreground text-xs">Access URL</p>
+        <p className="text-muted-foreground text-xs">
+          Open on another device{account ? `, signed in as ${account}` : ""}
+        </p>
         <p className="truncate font-mono text-sm leading-relaxed">{url}</p>
       </div>
+    </div>
+  );
+}
+
+/** Remote access belongs to a Deus account: the relay serves this computer to it only. */
+function SignInCard() {
+  const queryClient = useQueryClient();
+  const signIn = useMutation({
+    mutationFn: () => native.deusCloud.startLogin(),
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
+      if (!result.success) toast.error(result.error ?? "Sign-in did not complete");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Sign-in failed"),
+  });
+  return (
+    <div className="border-border/60 bg-muted/30 flex items-center justify-between gap-4 rounded-xl border px-4 py-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Sign in to use remote access</p>
+        <p className="text-muted-foreground text-xs">
+          Your other devices reach this computer through your Deus account.
+        </p>
+      </div>
+      <Button size="sm" onClick={() => signIn.mutate()} disabled={signIn.isPending}>
+        <LogIn className="mr-1.5 size-3.5" />
+        Sign in
+      </Button>
     </div>
   );
 }
@@ -97,7 +140,9 @@ function PortalCard({
 function ConnectDeviceDialog({
   open,
   onOpenChange,
-  accessUrl,
+  appOrigin,
+  serverId,
+  serverName,
   pairCode,
   countdown,
   isGenerating,
@@ -107,7 +152,9 @@ function ConnectDeviceDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  accessUrl: string | null;
+  appOrigin: string | null;
+  serverId: string | null;
+  serverName: string | null;
   pairCode: string | null;
   countdown: number;
   isGenerating: boolean;
@@ -162,7 +209,8 @@ function ConnectDeviceDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices, open, isDevicesLoaded]);
 
-  const pairUrl = accessUrl && pairCode ? buildPairUrl(accessUrl, pairCode) : null;
+  const pairUrl =
+    appOrigin && serverId && pairCode ? pairingLink(appOrigin, serverId, pairCode) : null;
   const minutes = Math.floor(countdown / 60);
   const isExpiringSoon = countdown > 0 && countdown < 120;
 
@@ -206,7 +254,8 @@ function ConnectDeviceDialog({
             <DialogHeader className="text-center">
               <DialogTitle>Connect a Device</DialogTitle>
               <DialogDescription>
-                Scan the QR code or enter the code on your other device.
+                Scan the QR code, signed in to the same Deus account, or enter the code on your
+                other device. You approve each device once.
               </DialogDescription>
             </DialogHeader>
 
@@ -216,7 +265,7 @@ function ConnectDeviceDialog({
                 <div className="rounded-xl bg-white p-3">
                   <QRCodeSVG value={pairUrl} size={180} level="M" />
                 </div>
-              ) : accessUrl ? (
+              ) : serverId ? (
                 <div className="bg-muted/40 flex size-[204px] items-center justify-center rounded-xl">
                   <span className="text-muted-foreground text-sm">Generating...</span>
                 </div>
@@ -233,6 +282,13 @@ function ConnectDeviceDialog({
                 <p className="font-mono text-2xl font-bold tracking-wide">{pairCode}</p>
               ) : (
                 <div className="bg-muted/40 h-8 w-40 animate-pulse rounded" />
+              )}
+              {/* The other device names the computer it pairs with; they must match. */}
+              {serverId && (
+                <p className="text-muted-foreground -mt-3 text-xs">
+                  For {serverName ?? "this computer"}
+                  <span className="font-mono"> · {machineFingerprint(serverId)}</span>
+                </p>
               )}
 
               {/* Action buttons — Copy Link is primary (higher conversion for web sharing) */}
@@ -301,6 +357,7 @@ function DevicesList({
                 <p className="text-muted-foreground text-xs">
                   {formatTimeAgo(device.last_seen_at)}
                   {device.ip_address ? ` \u00b7 ${device.ip_address}` : ""}
+                  {device.account_id ? "" : " \u00b7 Local network only"}
                 </p>
               </div>
             </div>
@@ -401,21 +458,13 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
 
   const relayStatus = relayQuery.data;
   const devices = devicesQuery.data ?? [];
-
-  // Derive web app URL from relay WebSocket URL
-  // wss://relay.deusmachine.ai -> https://deusmachine.ai/connect/{serverId}
-  // (The web product lives at the ROOT domain; app.deusmachine.ai remains a
-  // path-preserving 301 alias, so links minted before the move keep working.)
-  const accessUrl = (() => {
-    if (!relayStatus?.relayUrl || !relayStatus.serverId) return null;
-    try {
-      const url = new URL(relayStatus.relayUrl);
-      const domain = url.hostname.replace(/^relay\./, "");
-      return `https://${domain}/connect/${relayStatus.serverId}`;
-    } catch {
-      return null;
-    }
-  })();
+  // The backend reports whether it holds an account session; the desktop's
+  // session query only names the account.
+  const session = useDeusCloudSession().data;
+  const signedOut = relayStatus?.state === "signed_out";
+  const appOrigin = relayStatus?.relayUrl ? appOriginFor(relayStatus.relayUrl) : null;
+  // Any device signed in to the account lists this computer at /connect.
+  const accessUrl = appOrigin && relayStatus?.serverId ? `${appOrigin}/connect` : null;
 
   // -- Render --
 
@@ -446,21 +495,34 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
 
       {enabled && (
         <>
+          {signedOut && <SignInCard />}
+
+          {relayStatus?.state === "removed" && (
+            <div className="border-border/60 bg-muted/30 flex items-center justify-between gap-4 rounded-xl border px-4 py-4">
+              <p className="text-muted-foreground text-xs">{relayStatus.error}</p>
+              {/* Turning it on again re-adds a computer the account removed. */}
+              <Button size="sm" variant="outline" onClick={() => void handleToggle(true)}>
+                Add it again
+              </Button>
+            </div>
+          )}
+
           {/* Portal card -- hero element: URL + status */}
-          {accessUrl && relayStatus && (
+          {!signedOut && relayStatus?.state !== "removed" && accessUrl && relayStatus && (
             <PortalCard
               url={accessUrl}
               connected={relayStatus.connected}
               clients={relayStatus.clients}
+              account={session?.accountEmail ?? null}
             />
           )}
 
           {/* Disconnected state without URL */}
-          {relayStatus && !accessUrl && (
+          {!signedOut && relayStatus && relayStatus.state !== "removed" && !accessUrl && (
             <div className="bg-muted/30 flex items-center gap-2.5 rounded-lg px-4 py-3">
               <span className="bg-warning size-[7px] shrink-0 rounded-full" />
               <span className="text-muted-foreground text-sm">
-                {relayStatus.connected ? "Setting up..." : "Connecting..."}
+                {relayStatus.error ?? (relayStatus.connected ? "Setting up..." : "Connecting...")}
               </span>
             </div>
           )}
@@ -469,7 +531,12 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
 
           {/* Connect a Device button */}
           <div className="space-y-3">
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDialogOpen(true)}
+              disabled={signedOut}
+            >
               <Plus className="mr-1.5 size-3.5" />
               Connect a Device
             </Button>
@@ -479,7 +546,9 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
           <ConnectDeviceDialog
             open={dialogOpen}
             onOpenChange={setDialogOpen}
-            accessUrl={accessUrl}
+            appOrigin={appOrigin}
+            serverId={relayStatus?.serverId ?? null}
+            serverName={relayStatus?.serverName ?? null}
             pairCode={pairCode}
             countdown={countdown}
             isGenerating={generateCodeMutation.isPending}

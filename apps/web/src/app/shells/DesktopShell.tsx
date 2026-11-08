@@ -62,8 +62,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   useEffect(() => {
     if (import.meta.env.DEV) {
       console.log("[DesktopShell] mount -- auth:", {
-        isLoading: auth.isLoading,
-        isAuthenticated: auth.isAuthenticated,
+        hasDeviceGrant: auth.hasDeviceGrant,
       });
       console.log("[DesktopShell] mount -- settings:", {
         isLoading: settingsQuery.isLoading,
@@ -74,8 +73,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
       });
     }
   }, [
-    auth.isLoading,
-    auth.isAuthenticated,
+    auth.hasDeviceGrant,
     settingsQuery.isLoading,
     settingsQuery.isError,
     settingsQuery.data,
@@ -95,8 +93,7 @@ export function DesktopShell({ reset }: { reset: () => void }) {
   }, [settingsQuery.isLoading, showOnboarding]);
 
   // Remote browser auth gate: show pairing page if not authenticated
-  if (auth.isLoading) return null;
-  if (!auth.isAuthenticated) return <PairGatePage onPaired={auth.onPaired} />;
+  if (!auth.hasDeviceGrant) return <PairGatePage onPaired={auth.onPaired} />;
 
   // While settings load, render nothing -- window is hidden anyway
   if (settingsQuery.isLoading) return null;

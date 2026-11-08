@@ -7,8 +7,8 @@
  * - Web-standalone: same-origin proxy (CLI server / self-hosted)
  * - Web-production (relay): WS through relay.deusmachine.ai, HTTP tunneled over WS
  *
- * Relay and same-origin endpoints are cached. Local endpoints use the current
- * cached backend port so a restart can move the connection to a new port.
+ * Local endpoints use the current cached backend port so a restart can move
+ * the connection to a new port. A runtime can bind its deployment mode and host.
  */
 
 import { capabilities } from "@/platform/capabilities";
@@ -53,10 +53,6 @@ export interface BackendEndpoints {
 export const RELAY_BASE_URL =
   (import.meta.env.VITE_RELAY_URL as string | undefined) || "wss://relay.deusmachine.ai";
 
-let cachedEndpoints: BackendEndpoints | null = null;
-/** The serverId that the cached endpoints were built for (relay mode only). */
-let cachedRelayServerId: string | null = null;
-
 /**
  * Resolve the backend's WebSocket and HTTP base URLs.
  *
@@ -65,9 +61,10 @@ let cachedRelayServerId: string | null = null;
  * - Web-production: wss://relay.deusmachine.ai/api/servers/{serverId}/connect
  *   (HTTP goes through WS bridge, so apiBase is unused in relay mode)
  */
-export async function resolveBackendEndpoints(serverId?: string): Promise<BackendEndpoints> {
-  const mode = getDeploymentMode();
-
+export async function resolveBackendEndpoints(
+  serverId?: string,
+  mode: DeploymentMode = getDeploymentMode()
+): Promise<BackendEndpoints> {
   if (mode === "web-production") {
     // In relay mode, serverId comes from the URL (/s/{serverId}/...)
     // or can be passed explicitly.
@@ -75,19 +72,13 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
     if (!id) {
       throw new Error("No server ID available for relay connection");
     }
-    // Cache is per-serverId — invalidate if serverId changes (strict equality)
-    if (cachedEndpoints && cachedRelayServerId === id) {
-      return cachedEndpoints;
-    }
     const encodedId = encodeURIComponent(id);
-    cachedRelayServerId = id;
-    cachedEndpoints = {
+    return {
       wsUrl: `${RELAY_BASE_URL}/api/servers/${encodedId}/connect`,
       // In relay mode, HTTP is tunneled over WS — apiBase is a placeholder
       // that should never be used directly (client.ts intercepts requests).
       apiBase: `${RELAY_BASE_URL}/api/servers/${encodedId}`,
     };
-    return cachedEndpoints;
   }
 
   if (mode === "web-standalone" || mode === "web-direct") {
@@ -95,13 +86,11 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
     // Connect using the same origin the page was loaded from.
     // (web-direct never actually connects — the request interceptor answers
     // before the transport is touched — this is just a harmless default.)
-    if (cachedEndpoints) return cachedEndpoints;
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    cachedEndpoints = {
+    return {
       wsUrl: `${wsProtocol}//${window.location.host}/ws`,
       apiBase: `${window.location.origin}/api`,
     };
-    return cachedEndpoints;
   }
 
   // The port already has a cache, updated when the backend restarts.
@@ -113,7 +102,13 @@ export async function resolveBackendEndpoints(serverId?: string): Promise<Backen
 }
 
 /** Extract serverId from the current URL pathname (/s/{serverId}/...). */
-function getServerIdFromUrl(): string | null {
+export function getServerIdFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
   const match = window.location.pathname.match(/^\/s\/([^/]+)/);
-  return match ? match[1] : null;
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }

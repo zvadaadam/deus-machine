@@ -209,14 +209,19 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
     expect(res.status).toBe(200);
   });
 
-  it("allows reuse of a pairing code within its TTL", async () => {
+  it("consumes a pairing code without revoking the device it authorized", async () => {
     const code = await generateCode();
-    await pairDevice(code, "Phone"); // First use succeeds
-
-    // Second use also succeeds (codes are reusable for multi-device sharing)
-    const { token, device } = await pairDevice(code, "Tablet");
-    expect(token).toHaveLength(64);
-    expect(device.name).toBe("Tablet");
+    const { token } = await pairDevice(code, "Phone");
+    const replay = await app.request("/api/remote-auth/pair", {
+      method: "POST",
+      headers: { ...REMOTE_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ code, deviceName: "Tablet" }),
+    });
+    expect(replay.status).toBe(401);
+    const authorized = await app.request("/api/settings", {
+      headers: { ...REMOTE_HEADERS, authorization: `Bearer ${token}` },
+    });
+    expect(authorized.status).toBe(200);
   });
 
   it("rejects an invalid token on protected endpoints", async () => {

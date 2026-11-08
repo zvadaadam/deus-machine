@@ -5,10 +5,9 @@
 
 import { createMiddleware } from "hono/factory";
 import {
-  validateDeviceToken,
+  validateDirectDeviceToken,
   updateLastSeen,
   checkRateLimit,
-  type PairedDevice,
 } from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
@@ -61,7 +60,8 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   }
 
   const token = authHeader.slice(7);
-  const device = validateDeviceToken(token);
+  // A relay grant only works through the relay, under its account.
+  const device = validateDirectDeviceToken(token);
   if (!device) {
     return c.json({ error: "Invalid or revoked token" }, 401);
   }

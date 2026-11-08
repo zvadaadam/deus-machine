@@ -1,10 +1,16 @@
 // Cloudflare Durable Object for relay WebSocket multiplexing.
-// One DO per Deus server. Holds the server tunnel + all client connections.
+// One DO per registered computer. Holds its tunnel + all client connections.
 // Uses the WebSocket Hibernation API for efficient connection handling.
 // All mutable state lives in ctx.storage to survive hibernation.
 //
+// The Worker (index.ts) verifies each socket's Deus Cloud ticket and passes
+// its claims in ADMISSION_HEADER. This object pins the machine to the account
+// of the first host ticket, admits only that account's clients, consumes each
+// ticket once, and tells the host which account every client belongs to.
+//
 // Storage keys:
-//   relayToken                   — server's relay token (set on first registration)
+//   owner                        — account the machine belongs to (pinned by its first host)
+//   ticket:<jti>                 — when to forget a consumed ticket (replay protection)
 //   tunnelRegistered             — boolean, true after successful register handshake
 //   serverDisconnectedAt         — timestamp when server disconnected (persists until reconnect)
 //   serverName                   — server name for display to clients
@@ -13,56 +19,95 @@
 //   pending:pair:<pairId>       — deadline timestamp for one-shot pairing requests
 
 import { DurableObject } from "cloudflare:workers";
-import type {
-  PairerFrame,
-  RelayClientFrame,
-  RelayFrame,
-  RelayPairerFrame,
-  ServerFrame,
+import {
+  RELAY_PROTOCOL,
+  type PairerFrame,
+  type RelayClientFrame,
+  type RelayFrame,
+  type RelayPairerFrame,
+  type ServerFrame,
 } from "../../../shared/types/relay";
 import { clientAuthFrameSchema, pairerFrameSchema, serverFrameSchema } from "./schemas";
+import { admissionSchema, type Admission, type RelayRole } from "./tickets";
+
+/** Set by the Worker after ticket verification; never trusted from a peer. */
+export const ADMISSION_HEADER = "x-deus-relay-admission";
+const RELAY_PROTOCOL_RESPONSE = { "Sec-WebSocket-Protocol": RELAY_PROTOCOL };
+
+/** Survives hibernation with the socket: whose account and role it was admitted for. */
+interface SocketIdentity {
+  accountId: string;
+  role: RelayRole;
+}
 
 const AUTH_TIMEOUT_MS = 5_000;
+/** A consumed ticket is remembered past its expiry, so clock skew cannot reopen it. */
+const TICKET_RETENTION_MS = 60_000;
 const OFFLINE_WAIT_MS = 300_000; // 5 min — max time a client waits for server to reconnect
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PAIR_TIMEOUT_MS = 30_000;
+/** Shown by the pairing page: only the computer itself can approve a device. */
+const COMPUTER_OFFLINE = "This computer is offline. Open Deus on it, then try again.";
 
 export class RelayDO extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const handler = (
+      {
+        "/tunnel": this.handleTunnel,
+        "/connect": this.handleClient,
+        "/pair": this.handlePairer,
+      } as const
+    )[url.pathname as "/tunnel"];
+    if (!handler) return new Response("Not found", { status: 404 });
 
-    if (url.pathname === "/tunnel") {
-      return this.handleTunnel(request);
+    const admission = this.readAdmission(request);
+    const expectedRole: RelayRole = url.pathname === "/tunnel" ? "host" : "client";
+    if (!admission || admission.role !== expectedRole) {
+      return Response.json({ error: "Account ticket required" }, { status: 401 });
     }
-    if (url.pathname === "/connect") {
-      return this.handleClient(request);
-    }
-    if (url.pathname === "/pair") {
-      return this.handlePairer(request);
-    }
-    if (url.pathname === "/status") {
-      return this.handleStatus();
-    }
+    const rejected = await this.admit(admission);
+    if (rejected) return rejected;
+    return handler.call(this, admission);
+  }
 
-    return new Response("Not found", { status: 404 });
+  // ---- Admission ----
+
+  private readAdmission(request: Request): Admission | null {
+    try {
+      const parsed = admissionSchema.safeParse(JSON.parse(request.headers.get(ADMISSION_HEADER)!));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Pins the owner on the first host and consumes the ticket. Storage-only: no other I/O interleaves. */
+  private async admit(admission: Admission): Promise<Response | null> {
+    const owner = await this.ctx.storage.get<string>("owner");
+    if (!owner && admission.role === "client") {
+      return Response.json({ error: "server_not_found" }, { status: 503 });
+    }
+    if (owner && owner !== admission.accountId) {
+      return Response.json({ error: "This computer belongs to another account" }, { status: 403 });
+    }
+    const ticketKey = `ticket:${admission.ticketId}`;
+    if ((await this.ctx.storage.get<number>(ticketKey)) !== undefined) {
+      return Response.json({ error: "Ticket already used" }, { status: 401 });
+    }
+    const forgetAt = admission.expiresAt + TICKET_RETENTION_MS;
+    await this.ctx.storage.put({
+      [ticketKey]: forgetAt,
+      ...(owner ? {} : { owner: admission.accountId }),
+    });
+    // The alarm chain sweeps consumed tickets; start one if nothing else will.
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(forgetAt);
+    return null;
   }
 
   // ---- Server Tunnel ----
 
-  private async handleTunnel(request: Request): Promise<Response> {
-    // Authenticate BEFORE closing existing tunnels to prevent unauthenticated
-    // connections from disrupting a legitimate server's tunnel (DoS).
-    const storedToken = await this.ctx.storage.get<string>("relayToken");
-    if (storedToken) {
-      const url = new URL(request.url);
-      const token =
-        request.headers.get("Authorization")?.replace("Bearer ", "") ||
-        url.searchParams.get("token");
-      if (token !== storedToken) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-    }
-
+  private async handleTunnel(admission: Admission): Promise<Response> {
     // Close any existing tunnel before accepting a new one to prevent
     // stale connections from receiving messages meant for the new tunnel.
     const existingTunnels = this.ctx.getWebSockets("tunnel");
@@ -80,78 +125,60 @@ export class RelayDO extends DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
 
-    this.ctx.acceptWebSocket(server, ["tunnel"]);
+    this.acceptSocket(server, ["tunnel"], admission);
 
-    return new Response(null, { status: 101, webSocket: client });
+    return this.upgraded(client);
   }
 
   // ---- Client Connection ----
 
-  private async handleClient(_request: Request): Promise<Response> {
-    const tunnels = this.ctx.getWebSockets("tunnel");
-    if (tunnels.length === 0) {
-      // Accept connections if server was ever registered — it may come back.
-      // Only reject for completely unknown servers (never registered).
-      const hasEverRegistered = await this.ctx.storage.get<string>("relayToken");
-      if (!hasEverRegistered) {
-        return Response.json({ error: "server_not_found" }, { status: 503 });
-      }
-    }
-
+  private async handleClient(admission: Admission): Promise<Response> {
+    // An owned machine accepts viewers while its host is away: it may come back.
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
 
     const clientId = crypto.randomUUID();
     // Tags are immutable after acceptWebSocket — don't encode mutable state in them.
     // Auth state is tracked via storage keys instead.
-    this.ctx.acceptWebSocket(server, ["client", clientId]);
+    this.acceptSocket(server, ["client", clientId], admission);
 
     // Store auth deadline in durable storage (survives hibernation)
     await this.ctx.storage.put(`pending:${clientId}`, Date.now() + AUTH_TIMEOUT_MS);
     await this.scheduleNextAlarm();
 
-    return new Response(null, { status: 101, webSocket: client });
-  }
-
-  // ---- Status ----
-
-  private async handleStatus(): Promise<Response> {
-    const tunnels = this.ctx.getWebSockets("tunnel");
-    const allClients = this.ctx.getWebSockets("client");
-    const pendingClientCount = (await this.getPendingClients()).size;
-    const serverDisconnectedAt = await this.ctx.storage.get<number>("serverDisconnectedAt");
-    const serverName = await this.ctx.storage.get<string>("serverName");
-
-    return Response.json({
-      online: tunnels.length > 0,
-      clients: Math.max(0, allClients.length - pendingClientCount),
-      reconnecting: serverDisconnectedAt !== undefined,
-      serverDisconnectedAt: serverDisconnectedAt ?? null,
-      serverName: serverName || null,
-    });
+    return this.upgraded(client);
   }
 
   // ---- Pairing (one-shot code exchange) ----
 
-  private async handlePairer(_request: Request): Promise<Response> {
-    // Pairing requires an active, registered server tunnel
-    const tunnel = this.getTunnel();
-    const isRegistered = await this.ctx.storage.get<boolean>("tunnelRegistered");
-    if (!tunnel || !isRegistered) {
-      return Response.json({ error: "server_offline" }, { status: 503 });
-    }
-
+  private async handlePairer(admission: Admission): Promise<Response> {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
 
+    // Pairing requires an active, registered server tunnel. A browser cannot
+    // read a refused upgrade's status, so the refusal is said on the socket.
+    const tunnel = this.getTunnel();
+    const isRegistered = await this.ctx.storage.get<boolean>("tunnelRegistered");
+    if (!tunnel || !isRegistered) {
+      server.accept();
+      this.safeSend(server, { type: "pair_failed", message: COMPUTER_OFFLINE });
+      server.close(1000, "Computer offline");
+      return this.upgraded(client);
+    }
+
     const pairId = crypto.randomUUID();
-    this.ctx.acceptWebSocket(server, ["pairer", pairId]);
+    this.acceptSocket(server, ["pairer", pairId], admission);
 
     // Store deadline for cleanup via alarm
     await this.ctx.storage.put(`pending:pair:${pairId}`, Date.now() + PAIR_TIMEOUT_MS);
     await this.scheduleNextAlarm();
 
-    return new Response(null, { status: 101, webSocket: client });
+    return this.upgraded(client);
+  }
+
+  /** A browser fails the handshake unless the offered subprotocol is echoed back. */
+  private upgraded(client: WebSocket): Response {
+    return new Response(null, { status: 101, webSocket: client, headers: RELAY_PROTOCOL_RESPONSE });
   }
 
   // ---- WebSocket Handlers (Hibernation API) ----
@@ -169,6 +196,7 @@ export class RelayDO extends DurableObject {
     }
 
     if (tags.includes("tunnel")) {
+      if (!this.ctx.getWebSockets("tunnel").includes(ws)) return;
       const result = serverFrameSchema.safeParse(json);
       if (!result.success) {
         console.error("relay: invalid server frame", result.error.issues);
@@ -195,10 +223,18 @@ export class RelayDO extends DurableObject {
 
   async webSocketClose(
     ws: WebSocket,
-    _code: number,
-    _reason: string,
+    code: number,
+    reason: string,
     _wasClean: boolean
   ): Promise<void> {
+    // Our 2025 compatibility date requires a reciprocal Close frame. Otherwise
+    // a CLOSING socket can remain in getWebSockets() after its peer has gone.
+    // https://developers.cloudflare.com/durable-objects/api/base/#websocketclose
+    try {
+      ws.close([1005, 1006, 1015].includes(code) ? 1000 : code, reason);
+    } catch {
+      // The transport may already have failed; still remove its logical state.
+    }
     await this.handleWebSocketTermination(ws);
   }
 
@@ -210,7 +246,7 @@ export class RelayDO extends DurableObject {
     const tags = this.ctx.getTags(ws);
 
     if (tags.includes("tunnel")) {
-      await this.handleServerDisconnect();
+      await this.handleServerDisconnect(ws);
     } else if (tags.includes("pairer")) {
       const pairId = tags.find((t) => t !== "pairer");
       if (pairId) {
@@ -241,7 +277,17 @@ export class RelayDO extends DurableObject {
       const keysToDelete = expiredClientIds.flatMap((id) => [`pending:${id}`, `auth_token:${id}`]);
       await this.ctx.storage.delete(keysToDelete);
       for (const clientId of expiredClientIds) {
-        this.rejectClient(clientId, "Authentication timeout");
+        // A slow handshake says nothing about credential validity. Retry the
+        // connection without sending auth_failed (which removes the pairing).
+        const clientWs = this.findClientWs(clientId);
+        if (clientWs) {
+          this.safeSend(clientWs, { type: "error", message: "Authentication timeout" });
+          try {
+            clientWs.close(1013, "Authentication timeout");
+          } catch {
+            // Already closed; pending state was removed above.
+          }
+        }
       }
     }
 
@@ -263,14 +309,25 @@ export class RelayDO extends DurableObject {
       }
     }
 
+    // 1c. Forget consumed tickets once they could no longer be presented
+    const consumed = await this.ctx.storage.list<number>({ prefix: "ticket:" });
+    const expiredTickets = [...consumed].filter(([, expiry]) => expiry <= now).map(([key]) => key);
+    for (let i = 0; i < expiredTickets.length; i += 128) {
+      await this.ctx.storage.delete(expiredTickets.slice(i, i + 128));
+    }
+    const remaining = [...consumed.values()].filter((expiry) => expiry > now);
+
     // 2. Send heartbeat ping to server
     const tunnel = this.getTunnel();
     if (tunnel) {
       this.safeSend(tunnel, { type: "ping" });
     }
 
-    // 3. Reschedule for next event
+    // 3. Reschedule for next event, including the sweep of tickets still remembered
     await this.scheduleNextAlarm();
+    if (remaining.length > 0 && (await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Math.min(...remaining));
+    }
   }
 
   // ---- Server Message Handling ----
@@ -323,21 +380,7 @@ export class RelayDO extends DurableObject {
     ws: WebSocket,
     frame: Extract<ServerFrame, { type: "register" }>
   ): Promise<void> {
-    const storedToken = await this.ctx.storage.get<string>("relayToken");
-    if (storedToken && storedToken !== frame.relayToken) {
-      this.safeSend(ws, { type: "error", message: "Invalid relay token" });
-      try {
-        ws.close(4003, "Invalid relay token");
-      } catch (err) {
-        console.error("relay: failed to close tunnel with bad token", err);
-      }
-      return;
-    }
-
-    if (!storedToken) {
-      await this.ctx.storage.put("relayToken", frame.relayToken);
-    }
-
+    // The tunnel's ticket already proved the host; registering only names it.
     // Always update server name (user might have changed it)
     if (frame.serverName) {
       await this.ctx.storage.put("serverName", frame.serverName);
@@ -346,38 +389,43 @@ export class RelayDO extends DurableObject {
     // Mark tunnel as registered — gates auth_response/data processing
     await this.ctx.storage.put("tunnelRegistered", true);
 
-    // Clear reconnection state and notify clients server is back
-    const wasReconnecting = await this.ctx.storage.get<number>("serverDisconnectedAt");
+    // Clear the previous outage before admitting viewers on this host.
     await this.ctx.storage.delete("serverDisconnectedAt");
 
     // Confirm registration to the WebSocket that sent it
     this.safeSend(ws, { type: "registered" });
 
-    // Notify already-authenticated clients that the server is back.
-    // Pending clients are notified via the normal auth flow (they'll get "authenticated").
-    if (wasReconnecting !== undefined) {
-      const clients = this.ctx.getWebSockets("client");
-      for (const clientWs of clients) {
-        const clientId = this.ctx.getTags(clientWs).find((t) => t !== "client");
-        if (!clientId) continue;
-        const isPending = await this.ctx.storage.get<number>(`pending:${clientId}`);
-        if (isPending !== undefined) continue;
-        this.safeSend(clientWs, { type: "server_connected" });
+    // A replacement host has no virtual connection for an already-authorized
+    // viewer. Its token was deliberately discarded after the original auth.
+    // Redial and reauthorize instead of claiming the host is ready prematurely.
+    // This also handles a hot replacement without a preceding disconnect event.
+    for (const clientWs of this.ctx.getWebSockets("client")) {
+      const clientId = this.ctx.getTags(clientWs).find((tag) => tag !== "client");
+      if (!clientId || (await this.ctx.storage.get<number>(`pending:${clientId}`)) !== undefined)
+        continue;
+      // Block data immediately, before the socket's close callback arrives.
+      await this.ctx.storage.put(`pending:${clientId}`, Date.now() + AUTH_TIMEOUT_MS);
+      try {
+        clientWs.close(1012, "Host reconnected; authenticate again");
+      } catch (error) {
+        console.error("relay: failed to close client for reauthorization", error);
       }
     }
 
     // Always re-forward pending clients' stored auth tokens to the new tunnel.
-    // This handles both reconnection (wasReconnecting) and tunnel replacement
+    // This handles both reconnection and tunnel replacement
     // (where serverDisconnectedAt was never set because the old tunnel's close
     // handler saw the new tunnel already existed).
     const pendingClients = await this.getPendingClients();
     for (const [pendingClientId] of pendingClients) {
       const storedAuthToken = await this.ctx.storage.get<string>(`auth_token:${pendingClientId}`);
-      if (storedAuthToken) {
+      const accountId = this.accountOf(this.findClientWs(pendingClientId));
+      if (storedAuthToken && accountId) {
         this.safeSend(ws, {
           type: "client_connected",
           clientId: pendingClientId,
           deviceToken: storedAuthToken,
+          accountId,
         });
       }
     }
@@ -427,6 +475,28 @@ export class RelayDO extends DurableObject {
   private async handleClientMessage(clientId: string, json: unknown): Promise<void> {
     const isPending = await this.ctx.storage.get<number>(`pending:${clientId}`);
 
+    // An offline host cannot answer the end-to-end probe. Keep the waiting
+    // client's relay connection alive without authenticating it or forwarding
+    // application data. Once authorized, probes travel all the way to the host.
+    if (
+      typeof json === "object" &&
+      json !== null &&
+      "type" in json &&
+      json.type === "ping" &&
+      "id" in json &&
+      typeof json.id === "string"
+    ) {
+      if (
+        isPending !== undefined ||
+        !this.getTunnel() ||
+        !(await this.ctx.storage.get<boolean>("tunnelRegistered"))
+      ) {
+        const clientWs = this.findClientWs(clientId);
+        if (clientWs) this.safeSend(clientWs, { type: "pong", id: json.id });
+        return;
+      }
+    }
+
     if (isPending !== undefined) {
       // Client is still pending — only accept authenticate messages
       const authResult = clientAuthFrameSchema.safeParse(json);
@@ -438,11 +508,13 @@ export class RelayDO extends DurableObject {
 
       const tunnel = this.getTunnel();
       const isRegistered = await this.ctx.storage.get<boolean>("tunnelRegistered");
-      if (tunnel && isRegistered) {
+      const accountId = this.accountOf(this.findClientWs(clientId));
+      if (tunnel && isRegistered && accountId) {
         this.safeSend(tunnel, {
           type: "client_connected",
           clientId,
           deviceToken: token,
+          accountId,
         });
       } else if (tunnel) {
         // Tunnel exists but not yet registered — replacement in progress.
@@ -487,19 +559,21 @@ export class RelayDO extends DurableObject {
 
     const tunnel = this.getTunnel();
     const isRegistered = await this.ctx.storage.get<boolean>("tunnelRegistered");
-    if (tunnel && isRegistered) {
+    const accountId = this.accountOf(this.findPairerWs(pairId));
+    if (tunnel && isRegistered && accountId) {
       this.safeSend(tunnel, {
         type: "pair_request",
         pairId,
         code: frame.code,
         deviceName: frame.deviceName,
+        accountId,
       });
     } else {
       const pairerWs = this.findPairerWs(pairId);
       if (pairerWs) {
-        this.safeSend(pairerWs, { type: "pair_failed", message: "Server is offline" });
+        this.safeSend(pairerWs, { type: "pair_failed", message: COMPUTER_OFFLINE });
         try {
-          pairerWs.close(1000, "Server offline");
+          pairerWs.close(1000, "Computer offline");
         } catch (err) {
           console.error("relay: failed to close pairer (server offline)", err);
         }
@@ -523,10 +597,12 @@ export class RelayDO extends DurableObject {
     }
   }
 
-  private async handleServerDisconnect(): Promise<void> {
+  private async handleServerDisconnect(terminated: WebSocket): Promise<void> {
     // If another tunnel is already active (e.g. old tunnel's close callback firing
     // after handleTunnel replaced it), skip the disconnect flow.
-    const tunnels = this.ctx.getWebSockets("tunnel");
+    const tunnels = this.ctx
+      .getWebSockets("tunnel")
+      .filter((socket) => socket !== terminated && socket.readyState === 1);
     if (tunnels.length > 0) return;
 
     const existing = await this.ctx.storage.get<number>("serverDisconnectedAt");
@@ -620,7 +696,20 @@ export class RelayDO extends DurableObject {
 
   private getTunnel(): WebSocket | null {
     const tunnels = this.ctx.getWebSockets("tunnel");
-    return tunnels[0] ?? null;
+    return tunnels.find((socket) => socket.readyState === 1) ?? null;
+  }
+
+  private acceptSocket(ws: WebSocket, tags: string[], admission: Admission): void {
+    this.ctx.acceptWebSocket(ws, tags);
+    ws.serializeAttachment({
+      accountId: admission.accountId,
+      role: admission.role,
+    } satisfies SocketIdentity);
+  }
+
+  private accountOf(ws: WebSocket | null): string | null {
+    const identity = ws?.deserializeAttachment() as SocketIdentity | null | undefined;
+    return identity?.accountId ?? null;
   }
 
   private safeSend(ws: WebSocket, data: RelayFrame | RelayClientFrame | RelayPairerFrame): void {

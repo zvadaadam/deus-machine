@@ -10,6 +10,12 @@ routes = [
 
 [vars]
 ENVIRONMENT = "production"
+# Deus Cloud's PUBLIC relay ticket keys: the relay verifies tickets with these and
+# holds nothing that can mint one. The private half is the deus-cloud secret
+# RELAY_TICKET_SIGNING_KEY (backup: .env.relay-tickets at the AGNT root).
+# To rotate, add the new key to this list and deploy, switch Deus Cloud's secret,
+# then remove the old key. Local wrangler dev overrides this from .dev.vars.
+RELAY_TICKET_JWKS = '{"keys":[{"kty":"EC","crv":"P-256","x":"TLIZWDkCcqzuU4WZBPGcAgLjTaBg6RtR36OM9yKKNz0","y":"fnDnuVVVVCX4g_nfrez2BchZ6eSNhh50pMAOPzNvY5w","kid":"relay-prod-2026-11-07-20ba8f83","alg":"ES256","use":"sig"}]}'
 
 [durable_objects]
 bindings = [

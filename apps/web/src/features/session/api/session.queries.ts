@@ -8,7 +8,6 @@ import { produce } from "immer";
 import { SessionService } from "./session.service";
 import type { PaginatedMessages } from "./session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { reconnectListener } from "@/shared/lib/reconnect";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
@@ -25,7 +24,8 @@ import type { RepoGroup } from "@shared/types/workspace";
 import { useEffect, useMemo } from "react";
 import { track } from "@/platform/analytics";
 
-import { sendCommand, connect, isConnected, subscribe, onConnectionChange } from "@/platform/ws";
+import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { RuntimeError, runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { emitSendAttemptFailed } from "@/features/connection";
 import type { AgentHarness } from "@/shared/agents";
 
@@ -82,17 +82,16 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
   const queryClient = useQueryClient();
 
   // WS-subscribe all tab sessions so status pushes keep the cache fresh.
+  const runtime = runtimeForQueryClient(queryClient);
   const stableKey = useMemo(() => sessionIds.join(","), [sessionIds]);
   useEffect(() => {
-    if (!sessionIds.length) return;
+    if (!sessionIds.length || !runtime) return;
     const unsubs = sessionIds.map((id) =>
-      subscribe("session", { sessionId: id }, (data) => {
-        queryClient.setQueryData(queryKeys.sessions.detail(id), data);
-      })
+      runtime.retainQuery("session", { sessionId: id }, queryKeys.sessions.detail(id))
     );
     return () => unsubs.forEach((u) => u());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stableKey, queryClient]);
+  }, [stableKey, runtime]);
 
   const queries = useQueries({
     queries: sessionIds.map((id) => ({
@@ -120,8 +119,6 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
  * The virtualizer limits how many loaded messages render at once.
  */
 export function useMessages(sessionId: string | null) {
-  const queryClient = useQueryClient();
-
   // Cloud-direct (Path B): the browser folds the agnt socket into this same
   // cache key itself (`useCloudDirect`), so the Mac-backend lanes — the WS
   // `messages` subscription, the reconnect-invalidate, and the HTTP fetch — must
@@ -141,25 +138,7 @@ export function useMessages(sessionId: string | null) {
     mergeDelta: mergeMessageDelta,
   });
 
-  // On WS reconnect, refetch messages to catch up on anything missed while
-  // disconnected. The delta-only subscription resets its cursor to MAX(seq) on
-  // re-subscribe and only ever carries INSERTs, so two durable changes written
-  // during downtime are otherwise skipped for good: a turn.ended's accounting
-  // and compaction rows (separate tables, delivered
-  // only by the full page).
-  //
-  // `reconnectListener` is seeded with the socket's state AT SUBSCRIBE, which
-  // is the load-bearing part: this hook usually mounts onto an already-open
-  // socket, and a listener that starts from "never connected" reads the first
-  // real re-connect as its first connect and skips this refetch entirely.
-  useEffect(() => {
-    if (!macLaneEnabled || !sessionId) return;
-    return onConnectionChange(
-      reconnectListener(isConnected(), () => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.messages(sessionId) });
-      })
-    );
-  }, [sessionId, queryClient, macLaneEnabled]);
+  // The runtime-owned agent subscription recovers cached transcripts on reconnect.
 
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
@@ -296,7 +275,7 @@ export function useSendMessage() {
       // does on the Mac path; `sendMessage` throws if the socket is mid-reconnect,
       // which falls through to onError's rollback. No credential rides the wire —
       // agnt resolves the org key at dispatch.
-      const direct = getDirectSession(sessionId);
+      const direct = getDirectSession(sessionId, queryClient);
       if (direct) {
         direct.sendMessage(content, turnId, { model, agentHarness, thinkingLevel });
         return;
@@ -310,39 +289,21 @@ export function useSendMessage() {
         throw new SendRejectedError("The cloud connection isn't ready yet — try again in a moment");
       }
 
-      // Send message via WS command: backend flips the session to working,
-      // forwards to agent-server, and pushes q:delta to subscribers.
-      try {
-        if (!isConnected()) await connect();
-        const ack = await sendCommand("sendMessage", {
-          sessionId,
-          content,
-          model,
-          agentHarness,
-          turnId,
-          permissionMode,
-          thinkingLevel,
-        });
-        if (!ack.accepted) {
-          // A business rejection ("the agent is still working"). The HTTP
-          // fallback below would send the SAME command down the SAME socket
-          // and be rejected identically — or, if the status raced, actually
-          // start a second turn. Fail here so onError rolls the bubble back
-          // deterministically instead of leaving it for an unrelated delta.
-          throw new SendRejectedError(ack.error || "Agent rejected the query");
-        }
-        // No return value needed — WS q:delta handles message reconciliation.
-        return;
-      } catch (error) {
-        if (error instanceof SendRejectedError) throw error;
-        // Transport failure only: fall back through the legacy service wrapper,
-        // keeping the same runtime routing fields so backend validation
-        // behaves identically.
-        return SessionService.sendMessage(sessionId, content, model, agentHarness, turnId, {
-          permissionMode,
-          thinkingLevel,
-        });
-      }
+      // Capture the cache's owner before waiting for connection. A host change
+      // disposes this client; it cannot redirect the pending send to the new host.
+      const backend = runtimeForQueryClient(queryClient) ?? { isConnected, connect, sendCommand };
+      if (!backend.isConnected()) await backend.connect();
+      const ack = await backend.sendCommand("sendMessage", {
+        sessionId,
+        content,
+        model,
+        agentHarness,
+        turnId,
+        permissionMode,
+        thinkingLevel,
+      });
+      if (!ack.accepted) throw new SendRejectedError(ack.error || "Agent rejected the query");
+      // No fallback resubmission: a lost ACK can follow a successfully started turn.
     },
 
     // Optimistic update: show user message immediately.
@@ -402,17 +363,21 @@ export function useSendMessage() {
     },
 
     onError: (_err, variables, context) => {
-      // If the error is a Mac q: connectivity issue, escalate the connection
-      // state immediately. The WS client produces three distinct error messages:
-      //   "WebSocket not connected"     — socket already down before send
-      //   "WebSocket disconnected"      — connection dropped mid-flight
-      //   "WebSocket connection failed" — connect() rejected (initial open failed)
-      // Gate on NOT-direct: a direct-socket failure ("Cloud session socket is not
-      // connected") matches the same substrings but must not flag the Mac
-      // connection UI — that's a different transport.
-      if (_err instanceof Error && !isDirectSessionCached(queryClient, variables.sessionId)) {
+      // A failed or uncertain backend delivery should surface its connection
+      // state. The cloud-direct channel owns its own connectivity UI, and a
+      // runtime that was replaced (another host or account) says nothing about
+      // the connection now in use.
+      const owner = runtimeForQueryClient(queryClient);
+      const replaced = owner && ["disposed", "revoked"].includes(owner.getState());
+      if (
+        _err instanceof Error &&
+        !replaced &&
+        !isDirectSessionCached(queryClient, variables.sessionId)
+      ) {
         const msg = _err.message.toLowerCase();
         if (
+          (_err instanceof RuntimeError &&
+            (_err.kind === "unavailable" || _err.kind === "unknown-outcome")) ||
           msg.includes("not connected") ||
           msg.includes("disconnected") ||
           msg.includes("connection failed")
@@ -424,9 +389,8 @@ export function useSendMessage() {
       // notice, and the row must not linger pretending the prompt was sent.
       dropOptimisticMessage(queryClient, variables.sessionId, variables.turnId);
       // Put the sidebar's status back — by REFETCH after a server rejection,
-      // whose authoritative status the backend already pushed ahead of the
-      // rejecting ack, and by snapshot only when the transport died and no such
-      // push could have happened. See sendRollback.ts.
+      // or uncertain delivery, and by snapshot only for failures before dispatch.
+      // See sendRollback.ts.
       rollbackSendStatus(queryClient, _err, context?.previousWorkspaceByRepo);
     },
 
@@ -471,7 +435,7 @@ export function useStopSession() {
       // Mac-CLOSED direct lane: cancel straight to agnt. The `turn.ended`
       // (cancelled) flows back over the render socket and the fold projects the
       // "Response stopped" divider — the same outcome the Mac stop produces.
-      const direct = getDirectSession(sessionId);
+      const direct = getDirectSession(sessionId, queryClient);
       if (direct) {
         direct.cancel();
         return Promise.resolve();

@@ -1,10 +1,11 @@
+import { timingSafeEqual } from "crypto";
 import { Hono } from "hono";
 import type { CloudModelCatalog } from "@shared/cloud-models";
-import { getAllSettings, saveSetting } from "../services/settings.service";
+import { getAllSettings, PRIVATE_SETTINGS, saveSetting } from "../services/settings.service";
 import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas";
 import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { getCloudModelLists } from "../services/agent/cloud/models";
-import { ensureRelayConnected, disconnectFromRelay } from "../services/relay.service";
+import { reconcileRelay } from "../services/relay.service";
 import { getLocalAgents } from "../services/agent";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
 import {
@@ -22,15 +23,11 @@ app.get("/settings", (c) => {
 
 app.post("/settings", async (c) => {
   const { key, value } = parseBody(SaveSettingBody, await c.req.json());
+  if (PRIVATE_SETTINGS.has(key)) throw new ValidationError(`${key} is not a setting`);
   saveSetting(key, value);
 
-  if (key === "remote_access_enabled") {
-    if (value === true) {
-      ensureRelayConnected();
-    } else {
-      disconnectFromRelay();
-    }
-  }
+  // Turning it on is also how a computer removed from the account is added again.
+  if (key === "remote_access_enabled") reconcileRelay({ restart: value === true });
 
   return c.json({ success: true, key, value });
 });
@@ -74,13 +71,31 @@ app.post("/settings/cloud/github-token", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Only the process that spawned this backend may hand it an account. It passes
+ * AUTH_TOKEN at spawn; without the check, any page that found the local port
+ * could sign this computer in to another account and host it there.
+ */
+function fromDesktopMain(authorization: string | undefined): boolean {
+  const expected = process.env.AUTH_TOKEN;
+  if (!expected) return true; // web-dev and tests run without a desktop main process
+  const given = Buffer.from(authorization?.replace(/^Bearer /, "") ?? "");
+  const wanted = Buffer.from(expected);
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
+}
+
 // Runtime credential handoff from the desktop main process (D1 handshake):
 // the per-device agnt key minted after sign-in, and agent credentials saved
 // in Settings. Values live in memory only — durable storage is main's
 // safeStorage, never this process or the DB.
 app.post("/settings/cloud/credentials", async (c) => {
+  if (!fromDesktopMain(c.req.header("authorization"))) {
+    throw new AppError(401, "Only the Deus desktop app can set cloud credentials");
+  }
   const body = parseBody(CloudCredentialsBody, await c.req.json());
   setCloudRuntimeCredentials(body);
+  // Remote access belongs to the signed-in account: follow sign-in, sign-out and switches.
+  reconcileRelay();
   // Credentials arriving is the moment the automations cache can first (or
   // freshly) mirror the platform — kick a background sync.
   initAutomations();

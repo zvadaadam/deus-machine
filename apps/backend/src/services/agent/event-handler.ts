@@ -129,10 +129,10 @@ const NOT_PUSHED = new Set([
  * page resolves, and `mergeMessageDelta` dedupes by id, so the redundant case
  * costs a query and a frame while the missing case would cost a lost row.
  * Whoever exercises those two paths can drop `"messages"` here and make the
- * fold the single writer of message rows — note that `invalidate` fans a
- * `messages` push out to EVERY subscribed session, not just the changed one
- * (query-engine.ts: the `ctx.sessionIds` filter covers `session`/`workspaces`,
- * not `messages`), so the saving is per subscription, not per client.
+ * fold the single writer of message rows. `invalidate` already narrows a
+ * `messages` push to the changed sessions (query-engine.ts filters
+ * `messages` subscriptions by `ctx.sessionIds`), so the saving would be one
+ * query per subscriber of that session.
  */
 const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]>> = {
   message_upserted: MESSAGE_RESOURCES,

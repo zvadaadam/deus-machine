@@ -14,17 +14,17 @@ tools only, never with plain file reads.
 Top-level frames are numbered so the layer list reads in order, and laid out in bands on
 the canvas — read left to right, top to bottom.
 
-| Band                    | Frames           | What's there                                                                                                                                                                                                                |
-| ----------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **00 — Overview**       | `00`             | The design ↔ code contract, on canvas                                                                                                                                                                                       |
-| **01–05 — Foundations** | `01`…`05`        | Colour / type / radius · motion & easing · elevation & materials · iconography · interaction states                                                                                                                         |
-| **10–25 — Components**  | `10`…`25`        | The `DS/*` library, grouped: buttons, inputs, overlays, display, sidebar, chat, composer, tools, changes, tool anatomy, shell, content-panel states, remaining surfaces, markdown, transient flows, provider & access parts |
-| **30 — States**         | `30`             | Every workspace-row state side by side                                                                                                                                                                                      |
-| **40–49 — Screens**     | `40`…`49`        | Workspace × each content tab, Home, Onboarding, light theme                                                                                                                                                                 |
-| **50–59 — Settings**    | `50`…`59a`       | Its own lane at x 19,000. Four bands: shipped sections · sub-pages · overlays · explorations                                                                                                                                |
-| **60–67 — Overlays**    | `60`…`67`        | ⌘K palette, every dialog, and Grant repository access                                                                                                                                                                       |
-| **70–75 — Mobile**      | `70`…`75`        | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
-| **80 · 85 · 90**        | `80`, `85`, `90` | The `/connect` web route, the web-direct surfaces, and the landing site (its own token set)                                                                                                                                 |
+| Band                    | Frames                | What's there                                                                                                                                                                                                                |
+| ----------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **00 — Overview**       | `00`                  | The design ↔ code contract, on canvas                                                                                                                                                                                       |
+| **01–05 — Foundations** | `01`…`05`             | Colour / type / radius · motion & easing · elevation & materials · iconography · interaction states                                                                                                                         |
+| **10–25 — Components**  | `10`…`25`             | The `DS/*` library, grouped: buttons, inputs, overlays, display, sidebar, chat, composer, tools, changes, tool anatomy, shell, content-panel states, remaining surfaces, markdown, transient flows, provider & access parts |
+| **30 — States**         | `30`                  | Every workspace-row state side by side                                                                                                                                                                                      |
+| **40–49 — Screens**     | `40`…`49`             | Workspace × each content tab, Home, Onboarding, light theme                                                                                                                                                                 |
+| **50–59 — Settings**    | `50`…`59a`            | Its own lane at x 19,000. Four bands: shipped sections · sub-pages · overlays · explorations                                                                                                                                |
+| **60–67 — Overlays**    | `60`…`67`             | ⌘K palette, every dialog, and Grant repository access                                                                                                                                                                       |
+| **70–75 — Mobile**      | `70`…`75`             | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
+| **80 · 85 · 90**        | `80`–`83`, `85`, `90` | The `/connect` web route and relay gates, the web-direct surfaces, and the landing site (its own token set)                                                                                                                 |
 
 ### Workspace usability
 
@@ -158,13 +158,13 @@ Settings is the largest district in the file, so it has its own lane rather than
 the x 0 column with dialogs, mobile and onboarding. Origin **x 19,000**, pitch **1,560**
 (1,440 board + 120 gutter), four baselines:
 
-| Band | y     | Frames                                                     |
-| ---- | ----- | ---------------------------------------------------------- |
-| 1    | 6400  | `50`…`58` — shipped sections                               |
-| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i`            |
-| 3    | 8800  | `66a` `66b` — overlays; `54b` states; `54e` local accounts |
-| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule                   |
-| 4    | 10300 | `54a` `54c` `54d` `59` `59a`                               |
+| Band | y     | Frames                                                      |
+| ---- | ----- | ----------------------------------------------------------- |
+| 1    | 6400  | `50`…`58` — shipped sections                                |
+| 2    | 7600  | `56a` `56b` `56c` `56e` `56f` `56g` `56h` `56i` `58a` `58b` |
+| 3    | 8800  | `66a` `66b` — overlays; `54b` states; `54e` local accounts  |
+| —    | 10000 | The `EXPLORATIONS — NOT BUILT` lane rule                    |
+| 4    | 10300 | `54a` `54c` `54d` `59` `59a`                                |
 
 Explorations sit below the rule and each carries a `PROPOSAL — NOT BUILT YET` mark on the
 board, so nothing unshipped reads as a tenth section. A board that is not built says so on
@@ -173,10 +173,16 @@ repository-environments board is `74` and not `56d`. A number means one board: `
 `62` and `72` were each used twice, so the web-direct district moved to `85`/`85a`–`85e`,
 Grant repository access to `67`, and the web-direct mobile chat to `75`.
 
-- `58` labels the portal address **Access URL** without a copy button. **Connect a Device**
-  opens the existing pairing dialog (`66`); its Copy Link and QR code include the pairing
-  code. The link keeps that code through the browser redirect and targets the signed-in
-  iOS pairing flow when the native app is installed and associated with the domain.
+- `58` is remote access bound to the Deus account: the card reads **Open on another
+  device, signed in as …** over `https://deusmachine.ai/connect`, where any device signed
+  in to that account lists this computer. **Connect a Device** opens the pairing dialog
+  (`66`); its QR code and Copy Link carry the code in the URL fragment
+  (`/s/<computer>#pair=CODE`), which survives the sign-in redirect and never reaches a
+  server. A device paired before account binding reads **Local network only**. `58a` is
+  the same section while the desktop app is signed out of its Deus account
+  (`AccessSection.tsx` `SignInCard`); `58b` after the account removed this computer
+  (it stays off until **Add it again**). The dialog names the computer with an id
+  fingerprint (**For Studio Mac · 0123 4567**), and the approval page `83` repeats it.
 - `54a`, `54c` and `59`/`59a` are a **proposal, not built** — the settings revamp, parked in
   band 4. `54b` has been updated to the implemented local account states and moved to band 3.
   `54d` is the implemented cloud flow: it previously housed
@@ -210,7 +216,13 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
   `64` Start new project · `65` System prompt · `66` Pair a device
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
-- `80` Connect to Server — the `/connect` web route
+- `80` Your computers — the `/connect` web route (the account's computers, from Deus Cloud).
+  The relay gates in front of a computer's workspace, mobile size: `81` sign in
+  (`RelaySignInPage`), `82` computer not on this account (`MachineUnavailablePage`), `83`
+  approve this device (`PairGatePage`), `83a` a QR link's code that could not be used
+  because the computer is offline (`PairGatePage`'s auto-connect error; the relay sends that
+  message). `81` and `82` reuse `ConnectionIllustration`, which the boards mark rather than
+  redraw.
 - `90` Landing — `deusmachine.ai` (`apps/landing`)
 
 ### The landing site is a different product

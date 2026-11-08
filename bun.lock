@@ -10,6 +10,7 @@
         "@anthropic-ai/sdk": "^0.93.0",
         "@deus-hq/api": "3.4.0",
         "@deus-hq/sdk": "3.4.0",
+        "@deus/runtime-client": "workspace:*",
         "@hono/node-server": "^1.19.9",
         "@hono/node-ws": "^1.3.0",
         "@napi-rs/canvas": "^0.1.97",
@@ -84,6 +85,7 @@
         "globals": "^16.5.0",
         "husky": "^9.1.7",
         "immer": "^11.0.1",
+        "jose": "6.2.2",
         "knip": "^6.0.6",
         "lint-staged": "^16.2.7",
         "lucide-react": "^0.546.0",
@@ -159,6 +161,24 @@
         "vite": "^7.0.0",
         "zustand": "^5.0.12",
       },
+    },
+    "packages/runtime-client": {
+      "name": "@deus/runtime-client",
+      "version": "0.1.0",
+      "dependencies": {
+        "ts-pattern": "^5.9.0",
+      },
+      "devDependencies": {
+        "@tanstack/query-core": "^5.90.5",
+        "typescript": "^5.5.3",
+        "vitest": "^4.0.16",
+      },
+      "peerDependencies": {
+        "@tanstack/query-core": "^5.90.5",
+      },
+      "optionalPeers": [
+        "@tanstack/query-core",
+      ],
     },
     "packages/screen-studio": {
       "name": "@deus/screen-studio",
@@ -270,6 +290,8 @@
     "@deus-hq/api": ["@deus-hq/api@3.4.0", "", { "dependencies": { "zod": "^4.6.7" } }, "sha512-v/kc2F925eNM1A/NOrOnHcnQaptXkcajL9Bt7hgBpwyvteq5vzQn6d+uQKSQS2njKcG5aVFKrfKrzuvpJJuFUw=="],
 
     "@deus-hq/sdk": ["@deus-hq/sdk@3.4.0", "", { "dependencies": { "@deus-hq/api": "3.4.0", "ws": "^8", "zod": "^4.6.7" }, "peerDependencies": { "@chat-adapter/slack": "^4.41.0", "@chat-adapter/state-memory": "^4.41.0", "chat": "^4.41.0" }, "optionalPeers": ["@chat-adapter/slack", "@chat-adapter/state-memory", "chat"] }, "sha512-Meb8U33nADX1Ui/kxNoPWuqVRWXZSnXcOBrecI+6qodvm0S6oTrU008ueeGPiwDiVreaXJg8rA67Xa7ln8gpHg=="],
+
+    "@deus/runtime-client": ["@deus/runtime-client@workspace:packages/runtime-client"],
 
     "@deus/screen-studio": ["@deus/screen-studio@workspace:packages/screen-studio"],
 

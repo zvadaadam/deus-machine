@@ -3,11 +3,12 @@
 //
 // Three visual states:
 //   1. Auto-connecting — QR/link path, no form, just a clean "Connecting..." with animation
-//   2. Success — checkmark with spring animation, brief pause before navigating
-//   3. Manual entry — single code input, shown when there's no code in the URL
+//   2. Success — grant saved immediately, ready for the parent to navigate
+//   3. Manual entry — single code input, shown when there's no code in the link
 //
-// In relay mode (web-production), pairing happens through a one-shot WebSocket
-// to the relay's /pair endpoint. In direct mode (web-dev with remote host),
+// In relay mode (web-production), the signed-in account opens a one-shot
+// WebSocket to the relay's /pair endpoint and the computer approves this
+// device for that account. In direct mode (web-dev with remote host),
 // pairing POSTs to the backend's /api/remote-auth/pair endpoint.
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -15,7 +16,19 @@ import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check } from "lucide-react";
-import { isRelayMode, RELAY_BASE_URL } from "@/shared/config/backend.config";
+import { isRelayMode, RELAY_BASE_URL, getServerIdFromUrl } from "@/shared/config/backend.config";
+import {
+  machineFingerprint,
+  type RelayAccount,
+  type RemoteMachine,
+} from "@/platform/ws/relay-access";
+import { pairDevice } from "../api/pairing-client";
+import {
+  discardPairCode,
+  normalizePairCode as normalizeCode,
+  pairCodeFromLink,
+  peekPairCode,
+} from "../lib/pairing-link";
 import { EASE_OUT_QUART } from "@/shared/lib/animation";
 
 // ---------------------------------------------------------------------------
@@ -23,7 +36,6 @@ import { EASE_OUT_QUART } from "@/shared/lib/animation";
 // ---------------------------------------------------------------------------
 
 const SPRING_OVERSHOOT = { type: "spring", stiffness: 300, damping: 20 } as const;
-const SUCCESS_HOLD_MS = 1500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,120 +45,13 @@ interface PairGatePageProps {
   onPaired: (token: string, deviceName?: string) => void;
   /** Server ID for relay mode pairing. Extracted from route params by ServerLayout. */
   serverId?: string;
+  /** Relay mode: the signed-in account the computer approves this device for. */
+  account?: RelayAccount | null;
+  /** Relay mode: the computer, named so the code is compared against the right one. */
+  machine?: RemoteMachine | null;
 }
 
 type PageState = "idle" | "connecting" | "success" | "error";
-
-// ---------------------------------------------------------------------------
-// Code normalization
-// ---------------------------------------------------------------------------
-
-/**
- * Normalize a raw code string to canonical form: "WORD WORD".
- * Treats dashes, underscores, and plus signs as word separators.
- * Returns null if the result isn't a valid two-word code.
- */
-function normalizeCode(raw: string): string | null {
-  const normalized = raw.replace(/[-_+]/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
-  const parts = normalized.split(" ");
-  if (parts.length === 2 && parts.every((p) => /^[A-Z]{2,}$/.test(p))) {
-    return normalized;
-  }
-  return null;
-}
-
-/** Extract code from the current URL's ?pair= query parameter. */
-function getPairFromUrl(): string | null {
-  const pair = new URLSearchParams(window.location.search).get("pair");
-  return pair ? normalizeCode(pair) : null;
-}
-
-/** Extract code from a pasted URL (e.g. "https://...?pair=SOFT+TIGER"). */
-function extractCodeFromPastedUrl(text: string): string | null {
-  try {
-    const pair = new URL(text.trim()).searchParams.get("pair");
-    return pair ? normalizeCode(pair) : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Extract serverId from the current URL pathname (/s/{serverId}/...). */
-function getServerIdFromUrl(): string | null {
-  const match = window.location.pathname.match(/^\/s\/([^/]+)/);
-  return match ? match[1] : null;
-}
-
-// ---------------------------------------------------------------------------
-// Pairing transports
-// ---------------------------------------------------------------------------
-
-function pairViaRelay(
-  serverId: string,
-  code: string,
-  deviceName: string
-): Promise<{ token: string }> {
-  return new Promise((resolve, reject) => {
-    const url = `${RELAY_BASE_URL}/api/servers/${encodeURIComponent(serverId)}/pair`;
-    const ws = new WebSocket(url);
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error("Connection timed out. Try again."));
-    }, 30_000);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "pair_request", code, deviceName }));
-    };
-
-    ws.onmessage = (evt) => {
-      clearTimeout(timeout);
-      try {
-        const msg = JSON.parse(evt.data as string);
-        if (msg.type === "pair_success" && msg.token) {
-          resolve({ token: msg.token });
-        } else if (msg.type === "pair_failed") {
-          reject(new Error(msg.message || "Connection failed. Check your code and try again."));
-        } else {
-          reject(new Error("Something went wrong. Try again."));
-        }
-      } catch {
-        reject(new Error("Something went wrong. Try again."));
-      }
-      ws.close();
-    };
-
-    ws.onerror = () => {
-      clearTimeout(timeout);
-      reject(new Error("Unable to connect. Check your internet and try again."));
-    };
-
-    ws.onclose = (evt) => {
-      clearTimeout(timeout);
-      if (evt.code !== 1000) {
-        reject(new Error("Connection lost. Try again."));
-      }
-    };
-  });
-}
-
-async function pairViaDirect(
-  code: string,
-  deviceName: string
-): Promise<{ token: string; device?: { name: string } }> {
-  const baseUrl = `${window.location.protocol}//${window.location.host}`;
-  const response = await fetch(`${baseUrl}/api/remote-auth/pair`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, deviceName }),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.error ?? "Invalid connection code");
-  }
-
-  return response.json();
-}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -311,6 +216,7 @@ function ManualEntryView({
   isPending,
   codeIsValid,
   reduced,
+  machine,
   onChange,
   onPaste,
   onSubmit,
@@ -320,6 +226,7 @@ function ManualEntryView({
   isPending: boolean;
   codeIsValid: boolean;
   reduced: boolean | null;
+  machine?: RemoteMachine | null;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -342,10 +249,17 @@ function ManualEntryView({
       >
         <BrandMark />
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Connect to Deus</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Approve this device</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Enter the code from your desktop app.
+            Enter the code from Deus on your computer, under Settings → Remote access.
           </p>
+          {machine && (
+            <p className="text-muted-foreground mt-3 text-xs">
+              For <span className="text-foreground font-medium">{machine.name}</span>
+              <span className="font-mono"> · {machineFingerprint(machine.id)}</span>, which Remote
+              access shows beside the code.
+            </p>
+          )}
         </div>
       </m.div>
 
@@ -417,8 +331,9 @@ function ManualEntryView({
 // Main component
 // ---------------------------------------------------------------------------
 
-export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
-  const prefill = getPairFromUrl();
+export function PairGatePage({ onPaired, serverId, account, machine }: PairGatePageProps) {
+  const linkScope = serverId ?? getServerIdFromUrl() ?? "standalone";
+  const [prefill] = useState(() => peekPairCode(linkScope));
   const isAutoConnect = prefill !== null;
 
   const [code, setCode] = useState(prefill ?? "");
@@ -426,21 +341,24 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
   const [pageState, setPageState] = useState<PageState>(isAutoConnect ? "connecting" : "idle");
 
   const autoSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAttempt = useRef<AbortController | null>(null);
   const reduced = useReducedMotion();
 
-  // Clean up all timers on unmount
+  // Pairing belongs to this page/host. Late replies must not store a grant after leaving.
   useEffect(() => {
     return () => {
       if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
-      if (successTimer.current) clearTimeout(successTimer.current);
+      pendingAttempt.current?.abort();
+      pendingAttempt.current = null;
     };
   }, []);
 
   const submitCode = useCallback(
     async (rawCode: string) => {
       const normalized = normalizeCode(rawCode);
-      if (!normalized) return;
+      if (!normalized || pendingAttempt.current) return;
+      const attempt = new AbortController();
+      pendingAttempt.current = attempt;
 
       setError(null);
       setPageState("connecting");
@@ -448,43 +366,52 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
       const deviceName = navigator.userAgent.includes("Mobile") ? "Mobile Browser" : "Web Browser";
 
       try {
-        let token: string;
-        let resolvedName: string | undefined = deviceName;
-
-        if (isRelayMode()) {
-          const resolvedServerId = serverId || getServerIdFromUrl();
-          if (!resolvedServerId) {
-            setError("Unable to connect. Try opening the link from your desktop app again.");
-            setPageState("error");
-            return;
-          }
-          const result = await pairViaRelay(resolvedServerId, normalized, deviceName);
-          token = result.token;
-        } else {
-          const data = await pairViaDirect(normalized, deviceName);
-          token = data.token;
-          resolvedName = data.device?.name;
+        const relay = isRelayMode();
+        const resolvedServerId = serverId ?? getServerIdFromUrl();
+        if (relay && !resolvedServerId) {
+          throw new Error("Unable to connect. Try opening the link from your desktop app again.");
         }
+        if (relay && !account) throw new Error("Sign in to approve this device.");
+        const result = await pairDevice(
+          relay
+            ? {
+                kind: "relay",
+                baseUrl: RELAY_BASE_URL,
+                serverId: resolvedServerId!,
+                account: account!,
+              }
+            : { kind: "direct", baseUrl: window.location.origin },
+          normalized,
+          deviceName,
+          attempt.signal
+        );
+        if (attempt.signal.aborted) return;
 
-        // Show success state, then navigate
+        // Save the one-use grant immediately. An animation delay must not lose
+        // access if the user reloads or closes the tab after the code is consumed.
+        onPaired(result.token, result.deviceName);
         setPageState("success");
-        if (successTimer.current) clearTimeout(successTimer.current);
-        successTimer.current = setTimeout(() => onPaired(token, resolvedName), SUCCESS_HOLD_MS);
       } catch (err) {
+        if (attempt.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Unable to connect. Try again.");
         setPageState("error");
+      } finally {
+        if (pendingAttempt.current === attempt) pendingAttempt.current = null;
       }
     },
-    [onPaired, serverId]
+    [onPaired, serverId, account]
   );
 
-  // Auto-submit on mount if code came from URL
   useEffect(() => {
-    if (prefill) {
-      submitCode(prefill);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // The link's one-use code never reached a server (it is a fragment); drop it
+    // from history and storage before it is submitted.
+    discardPairCode(linkScope);
+    if (!prefill) return;
+    // Defer admission until after effect setup: React StrictMode's probe cleanup
+    // can then cancel it before a one-use code reaches the server twice.
+    const timer = setTimeout(() => void submitCode(prefill), 0);
+    return () => clearTimeout(timer);
+  }, [prefill, submitCode, linkScope]);
 
   function clearAutoSubmitTimer() {
     if (autoSubmitTimer.current) {
@@ -507,7 +434,7 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
     const pasted = e.clipboardData.getData("text");
-    const resolved = extractCodeFromPastedUrl(pasted) ?? normalizeCode(pasted);
+    const resolved = pairCodeFromLink(pasted) ?? normalizeCode(pasted);
     if (!resolved) return;
 
     e.preventDefault();
@@ -554,6 +481,7 @@ export function PairGatePage({ onPaired, serverId }: PairGatePageProps) {
         isPending={pageState === "connecting"}
         codeIsValid={codeIsValid}
         reduced={reduced}
+        machine={machine}
         onChange={handleChange}
         onPaste={handlePaste}
         onSubmit={handleSubmit}

@@ -1,6 +1,7 @@
 import { capabilities } from "../capabilities";
 import type { DeusCloudAuthResult, DeusCloudSessionStatus } from "@shared/types";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { isRelayMode } from "@/shared/config/backend.config";
 import { queryClient } from "@/shared/api/queryClient";
 import { applyDeusCloudAuthChange } from "@/shared/api/cloudAuthCache";
 import {
@@ -18,6 +19,12 @@ const WEB_SESSION: DeusCloudSessionStatus = {
   cloudUrl: "https://cloud.deusmachine.ai",
   hasPlatformKey: false,
 };
+
+/**
+ * A browser holds its own Deus Cloud session in web-direct mode and to reach a
+ * computer through the relay; only the desktop app signs in through its main process.
+ */
+const browserSession = (): boolean => isCloudDirectWebMode() || isRelayMode();
 
 /**
  * In web-direct mode the browser's own bearer IS the Deus Cloud session — the
@@ -59,7 +66,7 @@ function webDirectSession(): DeusCloudSessionStatus | null {
 
 export async function getSession(): Promise<DeusCloudSessionStatus> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.getDeusCloudSession) {
-    if (isCloudDirectWebMode()) {
+    if (browserSession()) {
       return webDirectSession() ?? { ...WEB_SESSION, cloudUrl: resolveDeusCloudUrl() };
     }
     return WEB_SESSION;
@@ -70,7 +77,7 @@ export async function getSession(): Promise<DeusCloudSessionStatus> {
 
 export async function startLogin(): Promise<DeusCloudAuthResult> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.startDeusCloudLogin) {
-    if (isCloudDirectWebMode()) {
+    if (browserSession()) {
       // Full-page redirect through the deus-web WorkOS flow; the promise result
       // is moot once navigation starts.
       beginWebCloudLogin(`${window.location.pathname}${window.location.search}`);
@@ -88,7 +95,7 @@ export async function startLogin(): Promise<DeusCloudAuthResult> {
 
 export async function signOut(): Promise<DeusCloudAuthResult> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.signOutDeusCloud) {
-    if (isCloudDirectWebMode()) {
+    if (browserSession()) {
       // The browser also holds deus-cloud's own session cookie (set by the
       // login callback) and POST /auth/logout is what clears it. Best-effort:
       // local sign-out must not hang on an unreachable auth origin, and

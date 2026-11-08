@@ -11,7 +11,6 @@ import { match } from "ts-pattern";
 import { AppError } from "../lib/errors";
 import { getDatabase } from "../lib/database";
 import {
-  getDashboardWorkspaces,
   getStats,
   getSessionsByWorkspaceId,
   getSessionById,
@@ -59,7 +58,6 @@ import {
   type MutationName,
   type CommandName,
   type QueryResource,
-  type RequestResource,
   type QServerFrame,
 } from "@shared/types/query-protocol";
 import {
@@ -69,6 +67,7 @@ import {
   requireParam,
 } from "../lib/query-params";
 import { groupWorkspacesByRepo } from "../lib/workspace-grouping";
+import { subscriptionKey } from "@deus/runtime-client";
 
 // ---- Subscription State ----
 
@@ -187,6 +186,9 @@ interface InvalidateContext {
  * q:delta (only the changed workspaces) instead of a full q:snapshot.
  */
 export function invalidate(resources: QueryResource[], ctx?: InvalidateContext): void {
+  // Share only within this synchronous invalidation and authorization scope.
+  // No TTL cache can outlive a write or serve another device's future permissions.
+  const reads = new Map<string, unknown>();
   if (resources.includes("stats")) {
     resetStatsCache();
   }
@@ -201,8 +203,10 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
       if (!resources.includes(sub.resource)) continue;
 
       if (sub.resource === "messages") {
+        const sessionId = readStringParam(sub.params, "sessionId");
+        if (ctx?.sessionIds?.length && (!sessionId || !ctx.sessionIds.includes(sessionId)))
+          continue;
         if (ctx?.resetMessageCursors) {
-          const sessionId = readStringParam(sub.params, "sessionId");
           if (sessionId && ctx.sessionIds?.includes(sessionId)) {
             messageCursors.set(
               `${connectionId}:${subId}`,
@@ -211,7 +215,7 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
           }
           continue;
         }
-        pushMessageDelta(connectionId, subId, sub.params);
+        pushMessageDelta(connectionId, subId, sub.params, reads);
         continue;
       }
 
@@ -223,10 +227,10 @@ export function invalidate(resources: QueryResource[], ctx?: InvalidateContext):
 
       // Workspaces with session context: try targeted delta first
       if (sub.resource === "workspaces" && ctx?.sessionIds?.length) {
-        if (pushWorkspaceDelta(connectionId, subId, sub, ctx.sessionIds)) continue;
+        if (pushWorkspaceDelta(connectionId, subId, sub, ctx.sessionIds, reads)) continue;
       }
 
-      pushSnapshot(connectionId, subId, sub);
+      pushSnapshot(connectionId, subId, sub, reads);
     }
   }
 }
@@ -236,21 +240,27 @@ function pushWorkspaceDelta(
   connectionId: string,
   subId: string,
   sub: Sub,
-  sessionIds: string[]
+  sessionIds: string[],
+  reads: Map<string, unknown>
 ): boolean {
   try {
     const db = getDatabase();
     const stateFilter = readStringParam(sub.params, "state") ?? "ready,initializing,error";
     const allowedStates = new Set(stateFilter.split(",").map((s) => s.trim()));
-    const changed = getWorkspacesBySessionIds(db, sessionIds).filter((ws) =>
-      allowedStates.has(ws.state)
+    const changed = sharedRead(reads, connectionId, ["workspace-delta", sessionIds], () =>
+      getWorkspacesBySessionIds(db, sessionIds)
     );
-    if (changed.length === 0) return false;
+    // A deleted or no-longer-current session cannot identify its old workspace.
+    // A snapshot can remove that row reliably; an upsert-only delta cannot.
+    if (changed.length < new Set(sessionIds).size) return false;
+    const included = changed.filter((ws) => allowedStates.has(ws.state));
+    const removed = changed.filter((ws) => !allowedStates.has(ws.state)).map((ws) => ws.id);
 
     sendFrame(connectionId, {
       type: "q:delta",
       id: subId,
-      upserted: changed.map((ws) => ({ ...ws, workspace_path: computeWorkspacePath(ws) })),
+      upserted: included.map((ws) => ({ ...ws, workspace_path: computeWorkspacePath(ws) })),
+      ...(removed.length ? { removed } : {}),
     });
     return true;
   } catch (err) {
@@ -260,13 +270,38 @@ function pushWorkspaceDelta(
 }
 
 /** Push a full snapshot for a subscription; log and swallow errors. */
-function pushSnapshot(connectionId: string, subId: string, sub: Sub): void {
+function pushSnapshot(
+  connectionId: string,
+  subId: string,
+  sub: Sub,
+  reads: Map<string, unknown>
+): void {
   try {
-    const data = runQuery(sub.resource, sub.params);
+    const data = sharedRead(reads, connectionId, [sub.resource, sub.params], () =>
+      runQuery(sub.resource, sub.params)
+    );
     sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
   } catch (err) {
     console.error(`[QueryEngine] Snapshot push failed for ${sub.resource}:`, err);
   }
+}
+
+function sharedRead<T>(
+  reads: Map<string, unknown>,
+  connectionId: string,
+  query: unknown,
+  read: () => T
+): T {
+  const connection = getConnection(connectionId);
+  const key = subscriptionKey([
+    connection?.deviceId ?? null,
+    connection?.isVirtual ?? false,
+    query,
+  ]);
+  if (reads.has(key)) return reads.get(key) as T;
+  const value = read();
+  reads.set(key, value);
+  return value;
 }
 
 // ---- Frame Handlers ----
@@ -449,7 +484,10 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
       .with("sessions", () =>
         getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
       )
-      .with("session", () => getSessionById(db, requireParam(params, "sessionId", "session")))
+      .with(
+        "session",
+        () => getSessionById(db, requireParam(params, "sessionId", "session")) ?? null
+      )
       .with("messages", () => {
         const sessionId = requireParam(params, "sessionId", "messages");
         const before = readNumberParam(params, "before");
@@ -638,7 +676,12 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
 
 // ---- Message Delta Push ----
 
-function pushMessageDelta(connectionId: string, subId: string, params: QueryParams): void {
+function pushMessageDelta(
+  connectionId: string,
+  subId: string,
+  params: QueryParams,
+  reads: Map<string, unknown>
+): void {
   const sessionId = readStringParam(params, "sessionId");
   if (!sessionId) return;
 
@@ -647,7 +690,9 @@ function pushMessageDelta(connectionId: string, subId: string, params: QueryPara
 
   try {
     const db = getDatabase();
-    const newMessages = getMessagesDelta(db, sessionId, lastSeq);
+    const newMessages = sharedRead(reads, connectionId, ["message-delta", sessionId, lastSeq], () =>
+      attachParts(db, getMessagesDelta(db, sessionId, lastSeq))
+    );
 
     if (newMessages.length === 0) return;
 
@@ -657,7 +702,7 @@ function pushMessageDelta(connectionId: string, subId: string, params: QueryPara
     sendFrame(connectionId, {
       type: "q:delta",
       id: subId,
-      upserted: attachParts(db, newMessages),
+      upserted: newMessages,
       cursor: maxSeq,
     });
   } catch (err) {

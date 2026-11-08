@@ -46,7 +46,7 @@ export async function requestCloudSettings<T>(
     redirect: "error",
   });
   if (!response.ok) {
-    if (direct && response.status === 401) handleWebCloudSessionExpired();
+    if (direct && response.status === 401) handleWebCloudSessionExpired(bearer);
     const body = (await response.json().catch(() => null)) as {
       message?: unknown;
       error?: unknown;

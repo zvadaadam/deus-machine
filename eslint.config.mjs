@@ -95,6 +95,33 @@ export default tseslint.config(
     },
   },
   {
+    files: ["packages/runtime-client/src/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/*", "@shared/*", "**/apps/**", "**/shared/**"],
+              message: "The runtime client cannot depend on the consuming app.",
+            },
+            {
+              group: [
+                "react",
+                "react/*",
+                "react-dom",
+                "react-dom/*",
+                "@tanstack/react-query",
+                "@tanstack/react-query/*",
+              ],
+              message: "Keep this package framework-independent; /query uses @tanstack/query-core.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["apps/cloud-relay/**/*.{ts,tsx}"],
     languageOptions: {
       globals: {

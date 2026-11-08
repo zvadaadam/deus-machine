@@ -5,7 +5,8 @@
     "apps/web/src/**/*",
     "apps/web/src/**/*.tsx",
     "apps/desktop/preload/*.d.ts",
-    "shared/**/*"
+    "shared/**/*",
+    "packages/runtime-client/src/**/*"
   ],
   "compilerOptions": {
     "composite": true,

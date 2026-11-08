@@ -40,6 +40,10 @@ apps/cli/bundles/
 .env.development.local
 .env.test.local
 .env.production.local
+# Relay ticket key backup (production signing key) and Wrangler local vars
+.env.relay-tickets
+.dev.vars*
+!.dev.vars.example
 
 # IDE
 .vscode/

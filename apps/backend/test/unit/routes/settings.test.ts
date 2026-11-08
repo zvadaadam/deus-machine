@@ -5,10 +5,14 @@ import { errorHandler } from "../../../src/middleware/error-handler";
 vi.mock("../../../src/services/settings.service", () => ({
   getAllSettings: vi.fn(() => ({ theme: "dark", lang: "en" })),
   saveSetting: vi.fn(),
+  getSetting: vi.fn(() => null),
+  PRIVATE_SETTINGS: new Set(["relay_machines"]),
 }));
 vi.mock("../../../src/services/agent/cloud/models", () => ({
   getCloudModelLists: vi.fn(),
 }));
+vi.mock("../../../src/services/automations", () => ({ initAutomations: vi.fn() }));
+vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: vi.fn() }));
 
 import settingsRoutes from "../../../src/routes/settings";
 import { getAllSettings, saveSetting } from "../../../src/services/settings.service";
@@ -47,6 +51,16 @@ describe("POST /settings", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ success: true, key: "theme", value: "light" });
+  });
+
+  it("refuses to write this computer's machine secrets", async () => {
+    const res = await app.request("/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "relay_machines", value: {} }),
+    });
+    expect(res.status).toBe(400);
+    expect(saveSetting).not.toHaveBeenCalled();
   });
 
   it("calls saveSetting with correct arguments", async () => {
@@ -113,5 +127,28 @@ describe("GET /settings/cloud/models", () => {
     const res = await app.request("/settings/cloud/models");
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "Request timed out" });
+  });
+});
+
+describe("POST /settings/cloud/credentials", () => {
+  const push = (authorization?: string) =>
+    app.request("/settings/cloud/credentials", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authorization ? { authorization } : {}),
+      },
+      body: JSON.stringify({ deusCloudSessionToken: null }),
+    });
+
+  it("accepts only the desktop process that spawned the backend", async () => {
+    vi.stubEnv("AUTH_TOKEN", "spawn-secret");
+    try {
+      expect((await push()).status).toBe(401);
+      expect((await push("Bearer wrong-secret")).status).toBe(401);
+      expect((await push("Bearer spawn-secret")).status).toBe(200);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

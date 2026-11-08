@@ -9,13 +9,13 @@
  * - Multi-phase clone orchestration (git clone → register → create workspace)
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { native } from "@/platform";
 import { extractRepoNameFromUrl } from "@/shared/lib/utils";
 import { getErrorMessage } from "@shared/lib/errors";
-import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { getRuntimeClient } from "@/platform/ws";
 
 interface UseCloneRepoOptions {
   addRepoOrUseExisting: (path: string) => Promise<Repository>;
@@ -35,6 +35,12 @@ export function useCloneRepo({
   // Each call to handleCloneRepository captures its generation; if the counter
   // advances (via close or a new clone), earlier invocations bail out.
   const cloneGenerationRef = useRef(0);
+  useEffect(
+    () => () => {
+      cloneGenerationRef.current++;
+    },
+    []
+  );
 
   /** Reset all clone modal state to idle. */
   function resetCloneState() {
@@ -52,7 +58,11 @@ export function useCloneRepo({
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
     // Advance generation so any in-flight clone from a previous invocation bails out.
     const generation = ++cloneGenerationRef.current;
-    const isStale = () => generation !== cloneGenerationRef.current;
+    const runtime = getRuntimeClient();
+    const isStale = () =>
+      generation !== cloneGenerationRef.current ||
+      runtime.getState() === "disposed" ||
+      runtime.getState() === "revoked";
 
     setCloning(true);
     setCloneError(null);
@@ -75,14 +85,14 @@ export function useCloneRepo({
       }
 
       // Ensure WS is connected before starting
-      if (!isConnected()) {
-        await connect();
+      if (!runtime.isConnected()) {
+        await runtime.connect();
         if (isStale()) return;
       }
 
       // Phase 1: Git clone via WS command (5min timeout — large repos take a while)
       if (isStale()) return;
-      const cloneAck = await sendCommand(
+      const cloneAck = await runtime.sendCommand(
         "git:clone",
         { url: githubUrl, targetPath: cloneTarget },
         300_000

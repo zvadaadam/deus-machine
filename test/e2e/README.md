@@ -4,6 +4,90 @@ This directory contains all test files for the Deus application.
 
 ## Test Files
 
+### Runtime client network and relay tests
+
+`runtime-client-network.runtime.mjs` starts the real backend and Vite app with an
+isolated SQLite database. A desktop browser exercises 700ms latency in each
+direction, a 24 KiB/s bandwidth limit, 20 rapid writes, repeated disconnects,
+lost and late acknowledgments, missing resources, page reload, and silent
+traffic loss with the production 30s + 10s heartbeat deadline; a mobile browser
+watches the same data and goes offline (cached reads, refused writes, catching
+up). It also checks for duplicate sends, leftover subscriptions, pending
+operations and browser errors. Delayed WebSocket frames retain TCP ordering.
+
+```sh
+bun run native:node
+bunx playwright install chromium
+bun run test:e2e:runtime-client
+```
+
+The package's faster fault tests run with `bun run test:runtime-client`.
+
+### Account-bound remote access (`remote-access/`)
+
+`remote-access/run.mjs` runs the whole remote-access stack on loopback: a
+disposable Postgres container migrated with AGNT's migrations, Deus Cloud from
+the linked AGNT worktree, the relay Worker, a Deus backend with an isolated
+SQLite database, `@deus/runtime-client`, and the real web app in Chromium. Deus
+Cloud sessions are signed with the run's own secret in the shape Deus Cloud
+issues after WorkOS sign-in; only the WorkOS page is stood in for (its redirect
+returns the same `#token=` fragment). No production service or real account is
+used.
+
+```sh
+bun run native:node
+bunx playwright install chromium
+AGNT_WORKSPACE=/path/to/agnt bun run test:e2e:remote-access
+```
+
+Docker must be running. It checks, in order:
+
+- Turning on remote access registers the Mac under its signed-in account only, and
+  only the process holding the backend's spawn token may hand it an account.
+- Deus Cloud gives another account nothing; hosting needs the desktop app plus
+  the Mac's own secret.
+- The relay refuses sockets without a valid, unused ticket for that machine and
+  role, and refuses even a correctly signed ticket for another account once a
+  machine is pinned. In the real Durable Object runtime, two accounts racing to
+  host one unclaimed machine, and one ticket presented twice at once, each admit
+  exactly one socket; a ticket that expires in transit is refused.
+- One-use pairing approves a device for the relay-verified account.
+- Two devices read, subscribe, write and answer heartbeat probes through the relay.
+- A slow Deus Cloud (700ms each way) only slows dialing.
+- A six-second authentication delay redials with a fresh ticket without revoking.
+- An offline Mac keeps viewers connected but blocks writes; new viewers wait;
+  pairing is refused with "This computer is offline" on the socket; a restarted
+  Mac keeps its machine id and viewers reconnect with the same grants.
+- A Deus Cloud outage leaves live connections working; new dials resume after.
+- A relay restart keeps the machine's owner; the Mac, its viewers and a viewer
+  that dialed during the outage reconnect.
+- Signing the Mac into another account cuts the first account off; signing back
+  reuses its approvals without a new code.
+- Revoking one device ends its access and old grant; the other keeps working.
+- Two computers in one account approve their own devices; a grant opens only its
+  own computer.
+- Direct LAN access still needs pairing, and settings never serve machine secrets.
+- Removing a computer from the account keeps it off through a restart and retires
+  its relay grants, leaving the account's other computer; turning remote access on
+  registers it anew.
+- In the browser: scanning the QR while signed out (sign in, approve with the
+  link's code, connect, secrets scrubbed from the URL); reload and a new tab
+  reconnect without a code; reopening a QR link on an approved browser leaves its
+  code unspent; `/connect` signs in from its own page, lists the account's
+  computers, and says when Deus Cloud is unreachable until Try again succeeds;
+  another account, even holding the
+  Mac's code, sees "This computer isn't on your account"; manual approval
+  survives a pairing socket that closes with no answer and a double submit,
+  pairing once; a QR scanned while the Mac is offline says so, and Try again
+  pairs once it is back; sign-in without a redirect loop; the approval page and
+  the Mac's dialog both name the computer with the same id fingerprint; the
+  Mac's Remote access settings with the QR.
+
+`REMOTE_ACCESS_E2E_BROWSER_ONLY=1` skips to the browser checks. Logs, Worker
+state, the run's databases and `results.json` go to `.context/remote-access/`,
+with mobile and desktop screenshots beside them. The relay can still read `q:`
+frames: this verifies account admission, not end-to-end encryption.
+
 ### `controls.browser.mjs`
 
 Runs the shared buttons, joined controls, menus, selects and tabs in an isolated

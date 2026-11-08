@@ -38,10 +38,6 @@ export interface Settings {
 
   // Remote Access
   remote_access_enabled?: boolean;
-
-  // Relay
-  relay_server_id?: string;
-  relay_token?: string;
 }
 
 // Config item types (MCPServer, Command, Agent) moved to shared/types/agent-config.ts

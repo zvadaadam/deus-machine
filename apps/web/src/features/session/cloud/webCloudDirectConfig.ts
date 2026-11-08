@@ -16,6 +16,7 @@
  */
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { queryClient } from "@/shared/api/queryClient";
+import { notifyAuthChange } from "@/platform/ws/device-auth";
 import { assertSecureCloudUrl } from "@shared/cloud-url";
 export { isCloudDirectWebMode };
 
@@ -86,6 +87,7 @@ export function captureCloudSessionFromFragment(): boolean {
     if (!echoed || !expected || echoed !== expected) return false;
 
     sessionStorage.setItem(BEARER_KEY, decodeURIComponent(match[1]));
+    notifyAuthChange();
     // Anchor the 401 cooldown to the CALLBACK, not the outbound redirect: a
     // hosted login that takes longer than the cooldown would otherwise return
     // with an already-stale marker, and a rejected fresh bearer would loop.
@@ -121,6 +123,7 @@ export function clearWebCloudSession(): void {
   } catch {
     /* sessionStorage unavailable — nothing to clear */
   }
+  notifyAuthChange();
 }
 
 // The last login redirect's timestamp — a loop guard. If login returns without a
@@ -176,6 +179,11 @@ export function markWebCloudSignOut(): void {
   signedOutDeliberately = true;
 }
 
+/** After a deliberate sign-out, sign-in waits for the user to ask (see above). */
+export function wasSignedOutDeliberately(): boolean {
+  return signedOutDeliberately;
+}
+
 /**
  * The bearer lapsed (agnt answered 401) — drop it and re-authenticate, under
  * the same cooldown as the boot gate. A 401 within seconds of a login means
@@ -183,8 +191,16 @@ export function markWebCloudSignOut(): void {
  * login→token→401→login. Inside the cooldown the app stays signed out instead,
  * and Settings → Account still offers a manual sign-in.
  */
-export function handleWebCloudSessionExpired(): void {
+export function handleWebCloudSessionExpired(expectedBearer?: string | null): void {
   if (signedOutDeliberately) return;
+  // A request admitted by an older account cannot sign out a replacement.
+  if (expectedBearer !== undefined) {
+    try {
+      if (sessionStorage.getItem(BEARER_KEY) !== expectedBearer) return;
+    } catch {
+      return;
+    }
+  }
   clearWebCloudSession();
   if (redirectToWebCloudLogin()) return;
   // Staying put is still an account boundary: run the SAME teardown as
@@ -192,8 +208,9 @@ export function handleWebCloudSessionExpired(): void {
   // its socket), not just the account query — otherwise the dead bearer's
   // data keeps rendering and its direct socket keeps streaming. Loaded
   // lazily: the cache module imports the adapter, which imports this file.
+  const signedOutCache = queryClient;
   void import("@/shared/api/cloudAuthCache").then(({ applyDeusCloudAuthChange }) =>
-    applyDeusCloudAuthChange(queryClient, {
+    applyDeusCloudAuthChange(signedOutCache, {
       signedIn: false,
       accountId: null,
       expiresAt: null,

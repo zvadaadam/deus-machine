@@ -19,8 +19,9 @@ async function request(path: string, init: RequestInit = {}, streaming = false):
   const direct = isCloudDirectWebMode();
   const headers = new Headers(init.headers);
   let base: string;
+  let bearer: string | null = null;
   if (direct) {
-    const bearer = await readWebCloudSessionBearer();
+    bearer = await readWebCloudSessionBearer();
     if (!bearer) throw new Error("Sign in to Deus Cloud to manage your provider accounts.");
     headers.set("authorization", `Bearer ${bearer}`);
     base = `${resolveDeusCloudUrl()}/me/provider-accounts`;
@@ -36,7 +37,7 @@ async function request(path: string, init: RequestInit = {}, streaming = false):
     : AbortSignal.any([AbortSignal.timeout(15_000), ...(init.signal ? [init.signal] : [])]);
   const response = await fetch(`${base}${path}`, { ...init, headers, signal });
   if (!response.ok) {
-    if (direct && response.status === 401) handleWebCloudSessionExpired();
+    if (direct && response.status === 401) handleWebCloudSessionExpired(bearer);
     const error = (await response.json().catch(() => null)) as {
       message?: string;
       error?: string;
