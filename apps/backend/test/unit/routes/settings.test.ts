@@ -151,4 +151,14 @@ describe("POST /settings/cloud/credentials", () => {
       vi.unstubAllEnvs();
     }
   });
+
+  it("takes no account when no desktop process spawned the backend", async () => {
+    vi.stubEnv("AUTH_TOKEN", "");
+    try {
+      expect((await push()).status).toBe(401);
+      expect((await push("Bearer anything")).status).toBe(401);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

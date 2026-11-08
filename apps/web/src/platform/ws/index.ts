@@ -17,6 +17,8 @@ export {
   onEvent,
   onConnectionChange,
   getRuntimeClient,
+  onRuntimeChange,
   runtimeForQueryClient,
+  selectRuntime,
 } from "./query-protocol-client";
 export type { QueryRequestInterceptor, ToolResponseInterceptor } from "./query-protocol-client";

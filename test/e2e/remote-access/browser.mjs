@@ -282,8 +282,31 @@ export async function testBrowser({
         .evaluate((svg) => svg.outerHTML.length);
       assert(qr > 1000, "the dialog draws the pairing QR code");
       await mac.screenshot({ path: path.join(output, "mac-connect-device.png") });
-      await mac.close();
       check("The Mac's Remote access settings show the account link and a pairing QR");
+
+      // A code approves one device: a phone pairs with the dialog's code, the
+      // dialog closes, and opening it again shows a new code.
+      const shownCode = mac.locator("p.font-mono.text-2xl");
+      const spent = (await shownCode.innerText()).trim();
+      const pairer = await (await phone(sessions.aliceWeb)).open();
+      await pairer.goto(`${base}s/${machineId}`);
+      const field = pairer.getByPlaceholder("WORD WORD");
+      await field.fill(spent);
+      await field.press("Enter");
+      await online(pairer);
+      await mac.getByText("Device Connected").waitFor();
+      await mac.getByText("Device Connected").waitFor({ state: "hidden" });
+      await mac.getByRole("button", { name: "Connect a Device" }).click();
+      await until(
+        async () => {
+          const next = (await shownCode.innerText({ timeout: 1_000 }).catch(() => "")).trim();
+          return next !== "" && next !== spent;
+        },
+        15_000,
+        "a new code after a device paired"
+      );
+      await mac.close();
+      check("After a device pairs, Connect a Device shows a new code instead of the spent one");
     } finally {
       await desktopUi.close();
     }

@@ -147,6 +147,7 @@ function ConnectDeviceDialog({
   countdown,
   isGenerating,
   onGenerate,
+  onCodeUsed,
   devices,
   isDevicesLoaded,
 }: {
@@ -159,6 +160,8 @@ function ConnectDeviceDialog({
   countdown: number;
   isGenerating: boolean;
   onGenerate: () => void;
+  /** A code approves one device: once a device pairs, the shown code is spent. */
+  onCodeUsed: () => void;
   devices: PairedDevice[];
   isDevicesLoaded: boolean;
 }) {
@@ -200,6 +203,7 @@ function ConnectDeviceDialog({
 
     if (open && hasNewDevice) {
       setShowSuccess(true);
+      onCodeUsed();
       const timer = setTimeout(() => onOpenChangeRef.current(false), 2000);
       setPrevDeviceIds(currentIds);
       return () => clearTimeout(timer);
@@ -423,6 +427,13 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     return () => clearInterval(interval);
   }, [pairCode, codeExpiresAt]);
 
+  // A paired device consumed the code; reopening the dialog generates a new one.
+  const handleCodeUsed = useCallback(() => {
+    setPairCode(null);
+    setCodeExpiresAt(0);
+    setCountdown(0);
+  }, []);
+
   async function handleGenerateCode() {
     try {
       const result = await generateCodeMutation.mutateAsync();
@@ -553,6 +564,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             countdown={countdown}
             isGenerating={generateCodeMutation.isPending}
             onGenerate={handleGenerateCode}
+            onCodeUsed={handleCodeUsed}
             devices={devices}
             isDevicesLoaded={devicesQuery.isFetched}
           />
