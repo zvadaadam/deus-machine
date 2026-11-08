@@ -149,6 +149,7 @@ import {
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
 import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
+import { persistSessionBackToWorking } from "../../../src/services/agent/persistence";
 
 function makeHandler() {
   return {
@@ -792,6 +793,40 @@ describe("cloud driver frame → fold contract", () => {
       type: "permission.response",
       data: { requestId: "perm-gap", sessionId: "agnt-session-1", result: { behavior: "allow" } },
     });
+  });
+
+  it("keeps the session waiting when a recovered question replaces one answered elsewhere", async () => {
+    let fail: (err: Error) => void = () => {};
+    mockRelay
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            fail = reject;
+          })
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+    mockCancelRelay.mockImplementationOnce(() => {
+      fail(new Error("cancelled"));
+      return true;
+    });
+    const ask = (requestId: string) => ({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      requestId,
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    });
+    capturedOnFrame!(ask("req-a"));
+    // A was answered on the phone in the gap, and the agent asked B.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [{ request: ask("req-b") }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockRelay).toHaveBeenCalledTimes(2);
+    expect(persistSessionBackToWorking).not.toHaveBeenCalled();
   });
 
   it("does not ask again what was answered while its answer waits for the socket", async () => {

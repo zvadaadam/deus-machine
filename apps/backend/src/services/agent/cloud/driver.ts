@@ -809,8 +809,13 @@ async function relayElicitation(
       console.warn(`[CloudDriver] askUserQuestion relay failed: ${String(err)}`);
     outcome = { action: "cancel" };
   } finally {
-    const back = persistSessionBackToWorking(sessionId);
-    if (back.ok)
+    // Back to working, unless another question still waits on the user (one
+    // a snapshot recovered while this card was coming down).
+    const waiting = [...(askedElicitations.get(sessionId)?.entries() ?? [])].some(
+      ([id, relayed]) => id !== requestId && relayed !== null
+    );
+    const back = waiting ? null : persistSessionBackToWorking(sessionId);
+    if (back?.ok)
       invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
   }
   // Withdrawn (settled elsewhere, its turn over): nothing is left to answer.
