@@ -3,9 +3,11 @@ import {
   allowOnce,
   cardQuestions,
   isPlanRequest,
+  askableQuestions,
+  cardOutcome,
   planAnswer,
   questionAnswer,
-  unansweredElicitations,
+  unansweredRequests,
 } from "@shared/agent-asks";
 
 // The engine's plan question (agent-server's PLAN_OPTIONS) and a tool's approval.
@@ -60,6 +62,29 @@ describe("what Deus answers the engine", () => {
     expect(questionAnswer(questions, ["USER_CANCELLED"])).toEqual({ action: "decline" });
   });
 
+  it("asks only what the card can show, so its answers line up with the question ids", () => {
+    const questions = askableQuestions([
+      { id: "blank", question: "  " },
+      null,
+      { question: "No id" },
+      { id: "pick", question: "Pick one", options: [{ label: "A" }, null] },
+    ]);
+    expect(questions.map((q) => q.id)).toEqual(["pick"]);
+    expect(cardQuestions(questions)).toEqual([{ question: "Pick one", options: ["A"] }]);
+    expect(cardOutcome(questions, { answers: ["A"] })).toEqual({
+      action: "accept",
+      content: { pick: "A" },
+    });
+  });
+
+  it("cancels when the card's response carries no answers", () => {
+    const questions = askableQuestions([{ id: "q", question: "Which?" }]);
+    for (const response of [undefined, null, {}, { answers: [] }, { error: "x" }, "nope"]) {
+      expect(cardOutcome(questions, response)).toEqual({ action: "cancel" });
+    }
+    expect(cardOutcome(questions, { answers: ["USER_CANCELLED"] })).toEqual({ action: "decline" });
+  });
+
   it("reads what a snapshot says is still unanswered in its live turn", () => {
     const ask = (requestId: string, turnId = "live") => ({
       type: "elicitation.requested",
@@ -68,6 +93,11 @@ describe("what Deus answers the engine", () => {
       requestId,
       mode: "question",
       message: "Which?",
+    });
+    const approval = (requestId: string) => ({
+      type: "permission.request",
+      turnId: "live",
+      data: { sessionId: "s", requestId },
     });
     const receipt = { type: "interaction.receipt", status: "accepted", responseId: "r" };
     const snapshot = (interactions?: unknown[], currentTurnId: string | null = "live") => ({
@@ -79,12 +109,19 @@ describe("what Deus answers the engine", () => {
       { request: ask("open") },
       { request: ask("answered"), receipt },
       { request: ask("old turn", "earlier") },
-      { request: { type: "permission.request", turnId: "live", data: { requestId: "p" } } },
+      { request: approval("approve") },
+      { request: approval("approved"), receipt },
     ];
 
-    expect(unansweredElicitations(snapshot(interactions))).toEqual([ask("open")]);
+    expect(unansweredRequests(snapshot(interactions))).toEqual({
+      elicitations: [ask("open")],
+      permissions: ["approve"],
+    });
     // Between turns nothing is waiting; a platform that doesn't list them says nothing.
-    expect(unansweredElicitations(snapshot(interactions, null))).toEqual([]);
-    expect(unansweredElicitations(snapshot())).toBeNull();
+    expect(unansweredRequests(snapshot(interactions, null))).toEqual({
+      elicitations: [],
+      permissions: [],
+    });
+    expect(unansweredRequests(snapshot())).toBeNull();
   });
 });

@@ -69,7 +69,7 @@ import {
 } from "@shared/cloud-simulator";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ElicitationQuestion } from "@shared/protocol-types";
-import { unansweredElicitations } from "@shared/agent-asks";
+import { unansweredRequests } from "@shared/agent-asks";
 
 // ---- Question round-trip ----------------------------------------------------
 // The agent's questions (Claude's AskUserQuestion, Codex's request_user_input)
@@ -506,7 +506,8 @@ export function useCloudDirectSession(
           typeof state?.currentTurnId === "string" && state.currentTurnId
             ? state.currentTurnId
             : null;
-        const unanswered = unansweredElicitations(frame);
+        const waiting = unansweredRequests(frame);
+        const unanswered = waiting?.elicitations ?? null;
         const parked = new Set<string>();
         for (const [id, pending] of [...pendingDirectQuestions]) {
           if (pending.sessionId !== sessionId || pending.queryClient !== queryClient) continue;
@@ -524,6 +525,12 @@ export function useCloudDirectSession(
         }
         for (const request of unanswered ?? []) {
           if (!parked.has(request.requestId)) askUser(request);
+        }
+        // An approval asked while this socket was down: allowed, as it is live.
+        for (const requestId of waiting?.permissions ?? []) {
+          socket.send(
+            buildPermissionResponseFrame(requestId, providerSessionId, { behavior: "allow" })
+          );
         }
       }
       // A fresh turn proves the lane works — clear any earlier surfaced error

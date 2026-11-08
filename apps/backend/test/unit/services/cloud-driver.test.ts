@@ -729,6 +729,130 @@ describe("cloud driver frame → fold contract", () => {
     );
   });
 
+  it("asks the live turn's question after a snapshot ends the stale one, without cancelling it", () => {
+    mockRelay.mockImplementationOnce(() => new Promise(() => {}));
+    // This backend still thinks turn A runs; A ended in the gap and B asked.
+    handler.liveTurnId.mockReturnValue("turn-a");
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: {
+        currentTurnId: "turn-b",
+        turns: [{ turnId: "turn-a", stopReason: "end_turn" }],
+      },
+      interactions: [
+        {
+          request: {
+            type: "elicitation.requested",
+            sessionId: "agnt-session-1",
+            turnId: "turn-b",
+            requestId: "req-b",
+            mode: "question",
+            questions: [{ id: "q1", question: "Which?" }],
+          },
+        },
+      ],
+    });
+    const order = [
+      mockCancelSessionRelays.mock.invocationCallOrder[0],
+      mockRelay.mock.invocationCallOrder[0],
+    ];
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(mockSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "elicitation.respond" })
+    );
+  });
+
+  it("takes down a card the snapshot no longer lists, and allows an approval asked in the gap", () => {
+    mockRelay.mockImplementationOnce(() => new Promise(() => {}));
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      requestId: "req-gap",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    });
+    const relayId = (mockRelay.mock.calls.at(-1)![0] as { requestId: string }).requestId;
+    // Answered on the phone while this socket was down.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [
+        {
+          request: {
+            type: "permission.request",
+            turnId: "turn-live",
+            data: { sessionId: "agnt-session-1", requestId: "perm-gap" },
+          },
+        },
+      ],
+    });
+    expect(mockCancelRelay).toHaveBeenCalledWith(relayId, expect.any(String));
+    expect(mockSend).toHaveBeenCalledWith({
+      type: "permission.response",
+      data: { requestId: "perm-gap", sessionId: "agnt-session-1", result: { behavior: "allow" } },
+    });
+  });
+
+  it("does not ask again what was answered while its answer waits for the socket", async () => {
+    let settle: (value: { answers: string[] }) => void = () => {};
+    mockRelay.mockImplementationOnce(
+      () =>
+        new Promise<{ answers: string[] }>((resolve) => {
+          settle = resolve;
+        })
+    );
+    const question = {
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      turnId: "turn-live",
+      requestId: "req-queued",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    };
+    capturedOnFrame!(question);
+    socketOpen = false;
+    settle({ answers: ["A"] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The reconnect's snapshot predates the queued answer.
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { currentTurnId: "turn-live", turns: [] },
+      interactions: [{ request: question }],
+    });
+    expect(mockRelay).toHaveBeenCalledTimes(1);
+    socketOpen = true;
+    capturedOnOpen!();
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "elicitation.respond",
+        data: expect.objectContaining({
+          requestId: "req-queued",
+          outcome: { action: "accept", content: { q1: "A" } },
+        }),
+      })
+    );
+  });
+
+  it("cancels rather than invent an answer when the card responds without answers", async () => {
+    mockRelay.mockResolvedValueOnce({} as { answers: string[] });
+    capturedOnFrame!({
+      type: "elicitation.requested",
+      sessionId: "agnt-session-1",
+      requestId: "req-empty",
+      mode: "question",
+      questions: [{ id: "q1", question: "Which?" }],
+    });
+    await vi.waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "elicitation.respond",
+          data: expect.objectContaining({ requestId: "req-empty", outcome: { action: "cancel" } }),
+        })
+      )
+    );
+  });
+
   it("serializes metadata pushes per provider session — a slow default stamp cannot land after the first-send restamp", async () => {
     // Only OUR two pushes are held back; the scaffolding's connect-time stamps
     // (queued on the same chain by beforeEach) settle at once.

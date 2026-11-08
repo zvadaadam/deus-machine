@@ -39,7 +39,23 @@ describe("toolRequestFromElicitation (agnt elicitation.requested → renderer to
       },
       timeoutMs: 24 * 60 * 60 * 1000,
     });
-    expect(asked?.questions).toBe(QUESTIONS);
+    expect(asked?.questions).toEqual(QUESTIONS);
+  });
+
+  it("asks only what the card shows, so the answers stay keyed to the right questions", () => {
+    const asked = toolRequestFromElicitation(
+      {
+        requestId: "req-2",
+        mode: "question",
+        questions: [{ id: "blank", question: "" }, ...QUESTIONS],
+      },
+      "deus-session"
+    );
+    expect(asked?.questions.map((q) => q.id)).toEqual(["pref", "notes"]);
+    expect(
+      buildElicitationResponseFrame("req-2", "p", asked!.questions, { answers: ["A", ["Yes"]] })
+        .data
+    ).toMatchObject({ outcome: { action: "accept", content: { pref: "A", notes: ["Yes"] } } });
   });
 
   it("returns null without a request id, outside question mode, or with nothing to ask", () => {
@@ -49,6 +65,12 @@ describe("toolRequestFromElicitation (agnt elicitation.requested → renderer to
     ).toBeNull();
     expect(
       toolRequestFromElicitation({ requestId: "r", mode: "question", questions: [] }, "s")
+    ).toBeNull();
+    expect(
+      toolRequestFromElicitation(
+        { requestId: "r", mode: "question", questions: [null, { id: "x", question: " " }] },
+        "s"
+      )
     ).toBeNull();
   });
 });

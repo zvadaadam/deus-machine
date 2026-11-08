@@ -41,10 +41,12 @@ vi.mock("@/platform/ws", () => ({
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 let onFrame: (frame: Record<string, unknown>) => void;
+let socketSend: ReturnType<typeof vi.fn>;
 vi.mock("@/features/session/cloud/cloudSessionSocket", () => ({
   connectCloudSessionSocket: (options: { onFrame: typeof onFrame }) => {
     onFrame = options.onFrame;
-    return { send: vi.fn(), close: vi.fn() };
+    socketSend = vi.fn();
+    return { send: socketSend, close: vi.fn() };
   },
 }));
 
@@ -200,7 +202,29 @@ describe("direct cloud session published frames", () => {
             },
           },
           { request: { ...question, requestId: "asked-while-away", message: "Ship it?" } },
+          {
+            request: {
+              type: "permission.request",
+              turnId: "turn-current",
+              data: {
+                sessionId: "agnt-direct-1",
+                requestId: "approval-while-away",
+                toolName: "Bash",
+                toolUseId: "tool-1",
+                input: {},
+              },
+            },
+          },
         ],
+      })
+    );
+    expect(socketSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "permission.response",
+        data: expect.objectContaining({
+          requestId: "approval-while-away",
+          result: { behavior: "allow" },
+        }),
       })
     );
     const shown = vi

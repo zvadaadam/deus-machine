@@ -29,7 +29,7 @@ import { readCloudTurnSelection } from "@shared/cloud-models";
 import { queryClient } from "@/shared/api/queryClient";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ElicitationOutcome, ElicitationQuestion } from "@shared/protocol-types";
-import { cardQuestions, questionAnswer } from "@shared/agent-asks";
+import { askableQuestions, cardOutcome, cardQuestions } from "@shared/agent-asks";
 
 /** What the composer chose for this turn — never a credential (agnt resolves that). */
 export interface DirectTurnOptions {
@@ -151,7 +151,7 @@ export function toolRequestFromElicitation(
 ): { request: DirectToolRequest; questions: ElicitationQuestion[] } | null {
   if (typeof frame.requestId !== "string" || !frame.requestId) return null;
   if (frame.mode !== "question" || !Array.isArray(frame.questions)) return null;
-  const questions = frame.questions as ElicitationQuestion[];
+  const questions = askableQuestions(frame.questions);
   if (questions.length === 0) return null;
   return {
     request: {
@@ -178,14 +178,8 @@ export function buildElicitationResponseFrame(
   questions: readonly ElicitationQuestion[],
   result: unknown
 ): Record<string, unknown> {
-  const maybe =
-    result && typeof result === "object" ? (result as { answers?: unknown }).answers : undefined;
   const outcome: ElicitationOutcome =
-    questions.length === 0
-      ? { action: "decline" }
-      : Array.isArray(maybe) && maybe.length > 0
-        ? questionAnswer(questions, maybe as (string | string[])[])
-        : { action: "cancel" };
+    questions.length === 0 ? { action: "decline" } : cardOutcome(questions, result);
   return {
     type: "elicitation.respond",
     data: { sessionId: providerSessionId, requestId, outcome },
