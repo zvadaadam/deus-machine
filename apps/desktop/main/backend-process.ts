@@ -254,9 +254,10 @@ export async function spawnBackend(
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        // A keep-awake line is protocol, not log output.
+        if (handleKeepAwakeLine(trimmed)) continue;
         hooks.onStdoutLine?.("backend", trimmed);
         relayWorkspaceProgress(trimmed);
-        handleKeepAwakeLine(trimmed);
         if (!hooks.onStdoutLine && !app.isPackaged) console.log("[backend]", trimmed);
 
         const match = trimmed.match(/^\[BACKEND_PORT\](\d+)$/);

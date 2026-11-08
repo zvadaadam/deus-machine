@@ -7,6 +7,8 @@ import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cl
 import { getCloudModelLists } from "../services/agent/cloud/models";
 import { reconcileRelay } from "../services/relay.service";
 import { syncKeepAwake } from "../services/keep-awake.service";
+import { disconnectDirectDevices } from "../services/ws.service";
+import { invalidateRemoteGateCache } from "../middleware/remote-gate";
 import { getLocalAgents } from "../services/agent";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
 import {
@@ -27,9 +29,14 @@ app.post("/settings", async (c) => {
   if (PRIVATE_SETTINGS.has(key)) throw new ValidationError(`${key} is not a setting`);
   saveSetting(key, value);
 
-  // Turning it on is also how a computer removed from the account is added again.
-  if (key === "remote_access_enabled") reconcileRelay({ restart: value === true });
-  if (key === "remote_keep_awake") syncKeepAwake();
+  if (key === "remote_access_enabled") {
+    // The gate refuses the local network from now on, not in five seconds.
+    invalidateRemoteGateCache();
+    // Turning it on is also how a computer removed from the account is added again.
+    reconcileRelay({ restart: value === true });
+    if (value !== true) disconnectDirectDevices();
+  }
+  if (key === "remote_access_enabled" || key === "remote_keep_awake") syncKeepAwake();
 
   return c.json({ success: true, key, value });
 });

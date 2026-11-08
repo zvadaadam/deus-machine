@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { capabilities, native } from "@/platform";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { pairingLink } from "@/features/auth/lib/pairing-link";
 import { deviceDisplayName } from "@/features/auth/lib/device-name";
 import { machineFingerprint } from "@/platform/ws/relay-access";
@@ -155,14 +156,18 @@ function ConnectDeviceDialog({
     if (open && hasNewDevice) {
       setShowSuccess(true);
       onCodeUsed();
-      const timer = setTimeout(() => onOpenChangeRef.current(false), 2000);
-      setPrevDeviceIds(currentIds);
-      return () => clearTimeout(timer);
     }
     setPrevDeviceIds(currentIds);
-    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices, open, isDevicesLoaded]);
+
+  // Close a moment after the success shows. Its own effect: the list updates
+  // again as the new device connects, which must not cancel the close.
+  useEffect(() => {
+    if (!open || !showSuccess) return;
+    const timer = setTimeout(() => onOpenChangeRef.current(false), 2000);
+    return () => clearTimeout(timer);
+  }, [open, showSuccess]);
 
   const pairUrl =
     appOrigin && serverId && pairCode ? pairingLink(appOrigin, serverId, pairCode) : null;
@@ -313,18 +318,18 @@ function DevicesList({
               <DeviceIcon className="text-muted-foreground size-4 shrink-0" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{name}</p>
-                <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
-                  {device.connected ? (
-                    <>
-                      <span className="bg-success size-1.5 shrink-0 rounded-full" />
-                      Connected
-                    </>
-                  ) : (
-                    `Last connected ${formatTimeAgo(device.last_seen_at)}`
+                <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                  {device.connected && (
+                    <span className="bg-success size-1.5 shrink-0 rounded-full" />
                   )}
-                  {device.account_id
-                    ? ""
-                    : ` \u00b7 ${device.ip_address ? `${device.ip_address} \u00b7 ` : ""}Local network only`}
+                  <span className="min-w-0 truncate">
+                    {device.connected
+                      ? "Connected"
+                      : `Last connected ${formatTimeAgo(device.last_seen_at)}`}
+                    {device.account_id
+                      ? ""
+                      : ` \u00b7 ${device.ip_address ? `${device.ip_address} \u00b7 ` : ""}Local network only`}
+                  </span>
                 </p>
               </div>
             </div>
@@ -346,17 +351,20 @@ function DevicesList({
 /** Revoking disconnects the device; it needs approving again to come back. */
 function RevokeDeviceDialog({
   device,
+  open,
   pending,
   onCancel,
   onConfirm,
 }: {
+  /** Kept after `open` turns false, so the closing dialog still names it. */
   device: PairedDevice | null;
+  open: boolean;
   pending: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   return (
-    <Dialog open={device !== null} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Revoke access?</DialogTitle>
@@ -451,6 +459,11 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   );
 
   const [revoking, setRevoking] = useState<PairedDevice | null>(null);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const askRevoke = useCallback((device: PairedDevice) => {
+    setRevoking(device);
+    setRevokeOpen(true);
+  }, []);
 
   async function handleRevokeDevice() {
     if (!revoking) return;
@@ -458,7 +471,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     try {
       await revokeDeviceMutation.mutateAsync(revoking.id);
       toast.success(`Revoked access for ${name}`);
-      setRevoking(null);
+      setRevokeOpen(false);
     } catch {
       toast.error("Couldn't revoke access. Try again.");
     }
@@ -475,7 +488,11 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
   const removed = relayStatus?.state === "removed";
   const appOrigin = relayStatus?.relayUrl ? appOriginFor(relayStatus.relayUrl) : null;
   const keepAwake = settings.remote_keep_awake !== false;
-  const thisComputer = /Mac/.test(navigator.userAgent) ? "this Mac" : "this computer";
+  // The settings are the host's, whichever device shows them.
+  const hostPlatform =
+    relayStatus?.platform ??
+    (capabilities.isDesktop && /Mac/.test(navigator.userAgent) ? "darwin" : undefined);
+  const thisComputer = hostPlatform === "darwin" ? "this Mac" : "this computer";
 
   // -- Render --
 
@@ -528,8 +545,8 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
             </div>
           )}
 
-          {/* A browser can't hold a computer awake; only the desktop app shows this. */}
-          {capabilities.isDesktop && (
+          {/* The host keeps itself awake; a phone showing its settings can change this too. */}
+          {!isCloudDirectWebMode() && (
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label htmlFor="remote-keep-awake" className="text-sm">
@@ -569,7 +586,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
                 Add device
               </Button>
             </div>
-            <DevicesList devices={devices} onRevoke={setRevoking} />
+            <DevicesList devices={devices} onRevoke={askRevoke} />
           </div>
 
           {/* Add-a-device dialog */}
@@ -590,8 +607,9 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
 
           <RevokeDeviceDialog
             device={revoking}
+            open={revokeOpen}
             pending={revokeDeviceMutation.isPending}
-            onCancel={() => setRevoking(null)}
+            onCancel={() => setRevokeOpen(false)}
             onConfirm={() => void handleRevokeDevice()}
           />
         </>

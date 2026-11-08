@@ -39,4 +39,9 @@ it("improves the generic names older builds stored, when a user agent is known",
   expect(deviceDisplayName({ name: "Adam's iPhone", user_agent: IPHONE_SAFARI })).toBe(
     "Adam's iPhone"
   );
+  expect(deviceDisplayName({ name: "Web Portal", user_agent: MAC_CHROME })).toBe("Mac · Chrome");
+  // A relay pairing stores a marker, not the browser's user agent: keep the name it has.
+  expect(deviceDisplayName({ name: "Mobile Browser", user_agent: "relay-paired" })).toBe(
+    "Mobile Browser"
+  );
 });

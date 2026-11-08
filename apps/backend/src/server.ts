@@ -7,6 +7,7 @@ import {
   onDeviceConnectionsChange,
 } from "./services/ws.service";
 import { syncKeepAwake } from "./services/keep-awake.service";
+import { notifyDevicesChanged } from "./services/remote-auth.service";
 import { reconcileRelay, disconnectFromRelay } from "./services/relay.service";
 import { retireLegacyRelayCredentials } from "./services/remote-machine.service";
 import * as agentService from "./services/agent";
@@ -131,7 +132,10 @@ async function onListening(port: number): Promise<void> {
   retireLegacyRelayCredentials();
   reconcileRelay();
   // A connected device can keep the Mac awake (the desktop holds the blocker).
-  onDeviceConnectionsChange(syncKeepAwake);
+  onDeviceConnectionsChange(() => {
+    syncKeepAwake();
+    notifyDevicesChanged();
+  });
 
   // Discover booted simulators on startup (fire-and-forget).
   // Restores awareness of running simulators after a backend restart.

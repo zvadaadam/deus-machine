@@ -8,7 +8,7 @@
 
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
-import { closeDeviceConnections, connectedDeviceIds } from "./ws.service";
+import { broadcast, closeDeviceConnections, connectedDeviceIds } from "./ws.service";
 
 // ---- Types ----
 
@@ -476,6 +476,7 @@ export function createDeviceToken(
   );
 
   const device = db.prepare("SELECT * FROM paired_devices WHERE id = ?").get(id) as PairedDevice;
+  notifyDevicesChanged();
   return { token, device };
 }
 
@@ -507,6 +508,11 @@ export function updateLastSeen(tokenHash: string): void {
   );
 }
 
+/** Clients showing the device list read it again: a device was added, connected, left or revoked. */
+export function notifyDevicesChanged(): void {
+  broadcast(JSON.stringify({ type: "q:event", event: "devices:changed", data: {} }));
+}
+
 /** List all paired devices (token_hash excluded from the returned objects for safety). */
 export function listDevices(): (Omit<PairedDevice, "token_hash"> & { connected: boolean })[] {
   const db = getDatabase();
@@ -524,6 +530,7 @@ export function revokeDevice(id: string): boolean {
   const db = getDatabase();
   const result = db.prepare("DELETE FROM paired_devices WHERE id = ?").run(id);
   closeDeviceConnections(id);
+  if (result.changes > 0) notifyDevicesChanged();
   return result.changes > 0;
 }
 

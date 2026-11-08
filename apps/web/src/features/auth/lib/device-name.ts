@@ -39,9 +39,11 @@ export function describeDevice(userAgent: string, options: { touch?: boolean } =
 }
 
 /** Names earlier builds gave every device; a stored user agent can say more. */
-const GENERIC_NAMES = new Set(["Web Browser", "Mobile Browser", "Unknown Device"]);
+const GENERIC_NAMES = new Set(["Web Browser", "Mobile Browser", "Web Portal", "Unknown Device"]);
 
 export function deviceDisplayName(device: { name: string; user_agent: string | null }): string {
-  if (GENERIC_NAMES.has(device.name) && device.user_agent) return describeDevice(device.user_agent);
+  // Only a browser's own user agent says more (relay pairings store a marker).
+  if (GENERIC_NAMES.has(device.name) && device.user_agent?.startsWith("Mozilla/"))
+    return describeDevice(device.user_agent);
   return device.name;
 }

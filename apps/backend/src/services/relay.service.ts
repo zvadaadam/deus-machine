@@ -163,6 +163,8 @@ export function getRelayStatus(): {
   accountId: string | null;
   relayUrl: string;
   error: string | null;
+  /** This computer's OS, for a viewer on another device ("Keep this Mac awake"). */
+  platform: NodeJS.Platform;
 } {
   const enabled = getSetting("remote_access_enabled") === true;
   const connected = tunnelWs?.readyState === WebSocket.OPEN;
@@ -192,6 +194,7 @@ export function getRelayStatus(): {
         : state === "removed"
           ? new MachineRemovedError().message
           : null,
+    platform: process.platform,
   };
 }
 

@@ -52,4 +52,6 @@ export interface RelayStatus {
   relayUrl: string | null;
   /** Why the last dial failed, while still retrying. */
   error: string | null;
+  /** This computer's OS (Node's `process.platform`); absent from older backends. */
+  platform?: string;
 }

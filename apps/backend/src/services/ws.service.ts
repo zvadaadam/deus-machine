@@ -15,6 +15,7 @@ export interface WsConnection {
   id: string;
   ws: WsSendable;
   deviceId: string | null;
+  /** When the client was last heard from: a pong, or any frame it sent. */
   lastPong: number;
   /** True for relay-tunneled connections (skip direct heartbeat pings) */
   isVirtual?: boolean;
@@ -28,6 +29,9 @@ let deviceListener: (() => void) | null = null;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
+/** A relayed viewer probes every 30s (its runtime client's ping). Two missed
+ *  probes and it is gone, whether or not the relay noticed. */
+const VIRTUAL_SILENCE_MS = 2 * HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS;
 
 // ---- Public API ----
 
@@ -86,6 +90,17 @@ export function closeDeviceConnections(deviceId: string): void {
   }
 }
 
+/**
+ * Remote access was turned off: disconnect the devices on the local network
+ * (relayed ones go with the tunnel). Not a revocation: each keeps its approval
+ * and reconnects once remote access is back on.
+ */
+export function disconnectDirectDevices(): void {
+  for (const conn of connections.values()) {
+    if (conn.deviceId && !conn.isVirtual) closeConnection(conn, 1001, "Remote access turned off");
+  }
+}
+
 /** Get a connection by ID. */
 export function getConnection(id: string): WsConnection | undefined {
   return connections.get(id);
@@ -133,8 +148,16 @@ function stopHeartbeat(): void {
 function checkHeartbeats(): void {
   const now = Date.now();
   for (const [id, conn] of connections) {
-    // Virtual connections are managed by the relay tunnel — skip direct heartbeat
-    if (conn.isVirtual) continue;
+    // The relay tunnel carries a virtual connection's pings: the viewer probes
+    // and this end answers (handleProtocolMessage). One whose probes stopped
+    // (a half-open phone the relay never saw leave) is closed here.
+    if (conn.isVirtual) {
+      if (now - conn.lastPong > VIRTUAL_SILENCE_MS) {
+        console.log(`[WS] Closing silent relay connection: ${id}`);
+        closeConnection(conn, 1001, "Heartbeat timeout");
+      }
+      continue;
+    }
 
     if (now - conn.lastPong > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
       // Client hasn't responded to pings — close
@@ -179,6 +202,7 @@ export function setProtocolHandlers(handlers: WsProtocolHandlers): void {
 export function handleProtocolMessage(connectionId: string, msg: Record<string, unknown>): void {
   const connection = connections.get(connectionId);
   if (!connection) return;
+  connection.lastPong = Date.now();
   match(msg.type as string)
     .with("ping", () => {
       // Echo a client probe through the same authenticated path, including relay

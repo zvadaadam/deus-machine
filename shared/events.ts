@@ -281,6 +281,9 @@ export const PROTOCOL_EVENTS = [
   "agent:auth",
   // A local agent's CLI installing. Payload: HarnessCliProgress.
   "agent:cli",
+  // A paired device was added, connected, disconnected or revoked: read the
+  // `pairedDevices` list again. No payload.
+  "devices:changed",
 ] as const;
 export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
