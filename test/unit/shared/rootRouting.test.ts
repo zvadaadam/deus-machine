@@ -48,6 +48,13 @@ describe("decideRootRequest (the deusmachine.ai edge split)", () => {
     );
     expect(association.applinks.details).toEqual([
       {
+        appIDs: ["V3MA6M9H6Q.ai.deusmachine.ios"],
+        components: [
+          { "/": "/s/????????????????", "#": "pair=?*" },
+          { "/": "/connect/????????????????", "?": { pair: "?*" } },
+        ],
+      },
+      {
         appIDs: ["98Y9HY82MU.ai.deus.machine"],
         components: [{ "/": "/connect/*", "?": { pair: "?*" } }],
       },
