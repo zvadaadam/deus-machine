@@ -252,6 +252,8 @@ interface SignInStart {
 
 /** Sign-ins being begun, by connection. */
 const beginning = new Map<string, Promise<string>>();
+/** The sign-in each connection began last: only that one may save what it brings back. */
+const newest = new Map<string, Attempt>();
 
 /**
  * Begin a sign-in and return the page to open in the browser. A second
@@ -289,6 +291,7 @@ async function startSignIn(input: SignInStart): Promise<string> {
   }
   // The newest attempt wins: an older tab's callback finds nothing.
   attempts.set(input.connectionId, attempt);
+  newest.set(input.connectionId, attempt);
   return provider.authorizationUrl.toString();
 }
 
@@ -311,6 +314,12 @@ export async function completeOAuth(input: { state: string; code: string }): Pro
   if (result !== "AUTHORIZED" || !provider.landed) {
     throw new Error("The server did not accept the sign-in");
   }
+  // Another sign-in was begun while this one's code was being exchanged:
+  // that one is the account the person chose last, and this must not replace it.
+  if (newest.get(attempt.connectionId) !== attempt) {
+    throw new Error("A newer sign-in replaced this one");
+  }
+  newest.delete(attempt.connectionId);
   const credential = provider.result();
   if (!writeCredential(attempt.connectionId, credential)) {
     throw new Error("The connection was removed before its sign-in finished");
@@ -333,6 +342,7 @@ export function abandonOAuth(state: string): string | null {
 /** Forget whatever sign-in a connection has in progress (it was removed). */
 export function forgetOAuth(connectionId: string): void {
   attempts.delete(connectionId);
+  newest.delete(connectionId);
   refreshFlights.delete(connectionId);
   refreshFailures.delete(connectionId);
 }

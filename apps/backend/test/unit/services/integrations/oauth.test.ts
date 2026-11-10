@@ -172,6 +172,23 @@ describe("signing in", () => {
     expect(acme().readiness).toBe("ready");
   });
 
+  it("a sign-in begun while an older one's code is being exchanged is the one that stays", async () => {
+    const older = await approve();
+    provider.exchangeDelayMs = 80;
+    const exchanging = completeOAuthCallback(older.searchParams);
+    exchanging.catch(() => {});
+    await new Promise((next) => setTimeout(next, 10));
+    // The person starts over and finishes first.
+    const newer = await approve();
+    await completeOAuthCallback(newer.searchParams);
+    const chosen = await bearer();
+
+    await expect(exchanging).rejects.toThrow(/newer sign-in/);
+    expect(await bearer()).toBe(chosen);
+    expect(acme()).toMatchObject({ readiness: "ready" });
+    expect(acme().connection?.lastError ?? null).toBeNull();
+  });
+
   it("a denied sign-in leaves the app waiting for its account", async () => {
     const result = await connectApp({ appId: "acme" });
     const oauthState = new URL((result as { url: string }).url).searchParams.get("state")!;

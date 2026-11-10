@@ -13,7 +13,7 @@ import {
   type CatalogPlugin,
   type CatalogSkill,
 } from "@shared/integrations/types";
-import { listInstallations } from "./store";
+import { getInstallation } from "./store";
 
 function catalogApps(): CatalogApp[] {
   return CATALOG.apps;
@@ -27,34 +27,29 @@ export function catalogPlugins(): CatalogPlugin[] {
   return CATALOG.plugins;
 }
 
-/** Custom apps the user added, from their installation rows. */
-function customApps(): CatalogApp[] {
-  return listInstallations("app").flatMap((row) => {
-    if (row.source !== "custom") return [];
-    const parsed = CatalogAppSchema.safeParse(row.definition);
-    return parsed.success ? [parsed.data] : [];
-  });
-}
-
-function customSkills(): CatalogSkill[] {
-  return listInstallations("skill").flatMap((row) => {
-    if (row.source !== "custom") return [];
-    const parsed = CatalogSkillSchema.safeParse(row.definition);
-    return parsed.success ? [parsed.data] : [];
-  });
+/**
+ * The user's own app or skill: its definition lives on its installation row.
+ * One row is read and parsed, not every custom item: this is asked once per
+ * installed app at each turn's start.
+ */
+function customItem<T>(
+  kind: "app" | "skill",
+  id: string,
+  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }
+): T | null {
+  const row = getInstallation(kind, id);
+  if (row?.source !== "custom") return null;
+  const parsed = schema.safeParse(row.definition);
+  return parsed.success ? parsed.data : null;
 }
 
 export function findApp(id: string): CatalogApp | null {
-  return (
-    catalogApps().find((app) => app.id === id) ?? customApps().find((app) => app.id === id) ?? null
-  );
+  return catalogApps().find((app) => app.id === id) ?? customItem("app", id, CatalogAppSchema);
 }
 
 export function findSkill(id: string): CatalogSkill | null {
   return (
-    catalogSkills().find((skill) => skill.id === id) ??
-    customSkills().find((skill) => skill.id === id) ??
-    null
+    catalogSkills().find((skill) => skill.id === id) ?? customItem("skill", id, CatalogSkillSchema)
   );
 }
 

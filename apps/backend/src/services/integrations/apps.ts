@@ -199,8 +199,12 @@ export async function completeOAuthCallback(params: URLSearchParams): Promise<st
   try {
     await completeOAuth({ state, code });
   } catch (err) {
-    updateConnection(connection.id, { lastError: getErrorMessage(err) });
-    integrationsChanged();
+    // An account that works keeps its state: the one a sign-in was to
+    // replace, or the one a newer sign-in made while this one was finishing.
+    if (getConnection(connection.id)?.status !== "active") {
+      updateConnection(connection.id, { lastError: getErrorMessage(err) });
+      integrationsChanged();
+    }
     throw err;
   }
   attachConnection(app.id, connection.id);

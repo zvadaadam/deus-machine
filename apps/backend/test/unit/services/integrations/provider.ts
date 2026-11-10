@@ -17,6 +17,8 @@ export interface Provider {
   refreshCalls: number;
   /** Lifetime of the next tokens issued, in seconds. */
   nextExpiresIn: number;
+  /** How long the next exchange of a code takes (once). */
+  exchangeDelayMs: number;
   /** How the token endpoint answers a refresh, when not properly. */
   refreshAnswer: "ok" | "invalid_request" | "error_in_200" | "unavailable";
   /** The `Authorization` header of each request the MCP endpoint received. */
@@ -50,6 +52,7 @@ export async function startProvider(): Promise<Provider> {
     refreshTokens: new Set(),
     refreshCalls: 0,
     nextExpiresIn: 3600,
+    exchangeDelayMs: 0,
     refreshAnswer: "ok",
     seenAuthorization: [],
     calls: [],
@@ -60,6 +63,7 @@ export async function startProvider(): Promise<Provider> {
       provider.refreshTokens.clear();
       provider.refreshCalls = 0;
       provider.nextExpiresIn = 3600;
+      provider.exchangeDelayMs = 0;
       provider.refreshAnswer = "ok";
       provider.seenAuthorization = [];
       provider.calls = [];
@@ -133,6 +137,9 @@ export async function startProvider(): Promise<Provider> {
     if (url.pathname === "/token" && req.method === "POST") {
       const form = new URLSearchParams(await readBody(req));
       if (form.get("grant_type") === "authorization_code") {
+        const delay = provider.exchangeDelayMs;
+        provider.exchangeDelayMs = 0;
+        if (delay) await new Promise((next) => setTimeout(next, delay));
         const grant = codes.get(form.get("code") ?? "");
         codes.delete(form.get("code") ?? "");
         const verifier = form.get("code_verifier") ?? "";

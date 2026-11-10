@@ -52,6 +52,10 @@ export async function connectThroughCloud(
       .filter((c) => c.status === "removing" && c.deusAccountId === accountId)
       .map(finishRemoval)
   );
+  // Another Deus account signed in meanwhile: the request is the first one's.
+  if (cloudAccountId() !== accountId) {
+    throw new Error(`The Deus account changed; connect ${app.name} again`);
+  }
   const existing = cloudRow(app.id, accountId);
   const row =
     existing ?? createConnection({ appId: app.id, kind: "managed", deusAccountId: accountId });

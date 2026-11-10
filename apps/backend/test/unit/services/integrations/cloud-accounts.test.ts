@@ -344,6 +344,24 @@ describe("an app that connects through the Deus account", () => {
     expect(listConnections("instagram").map((c) => c.status)).toEqual(["active"]);
   });
 
+  it("a sign-in that waited does not go on as another Deus account", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    cloud.deleteDelayMs = 80;
+    disconnectApp("instagram");
+    const connecting = connectApp({ appId: "instagram" });
+    connecting.catch(() => {});
+    // Bob signs in to Deus while Alice's disconnect is still on its way.
+    setCloudRuntimeCredentials({
+      deusCloudUrl: cloud.base,
+      deusCloudSessionToken: cloud.session("bob"),
+    });
+    await expect(connecting).rejects.toThrow(/Deus account changed/);
+    await settle();
+    expect(cloud.accounts.get("bob")?.has("instagram") ?? false).toBe(false);
+    expect(listConnections("instagram").some((c) => c.status === "active")).toBe(false);
+  });
+
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
     await deusAccount("alice");
     await signIn("instagram");
