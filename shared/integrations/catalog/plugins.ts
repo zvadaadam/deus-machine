@@ -1,0 +1,246 @@
+// Recommended Plugins: bundles of apps and skills for one job. Every id
+// refers to an app or skill in this catalog.
+
+import type { CatalogPlugin } from "../types";
+
+export const CATALOG_PLUGINS: CatalogPlugin[] = [
+  {
+    id: "ship-web-app",
+    title: "Ship a Web App",
+    tagline: "Build, test and deploy a production web app end to end",
+    description:
+      "Design the UI, wire up Supabase, test in a real browser, fix CI and deploy to Vercel, with Sentry watching production.",
+    categories: ["developer"],
+    publisher: "Deus",
+    apps: ["github", "vercel", "supabase", "sentry", "playwright"],
+    skills: [
+      "anthropics-skills/frontend-design",
+      "shadcn-ui/shadcn",
+      "vercel-labs-agent-skills/vercel-react-best-practices",
+      "supabase-agent-skills/supabase",
+      "anthropics-skills/webapp-testing",
+      "openai-skills/gh-fix-ci",
+      "vercel-labs-agent-skills/deploy-to-vercel",
+    ],
+  },
+  {
+    id: "design-to-code",
+    title: "Design to Code",
+    tagline: "Turn Figma designs into polished, production-ready UI",
+    description:
+      "Pull frames and tokens from Figma, implement them with shadcn/ui, then critique and polish layout, type and motion until it feels finished.",
+    categories: ["design", "developer"],
+    publisher: "Deus",
+    apps: ["figma", "figma-desktop", "chrome-devtools"],
+    skills: [
+      "figma-mcp-server-guide/figma-design-to-code",
+      "figma-mcp-server-guide/figma-use",
+      "anthropics-skills/frontend-design",
+      "pbakaus-impeccable/impeccable",
+      "shadcn-ui/shadcn",
+      "vercel-labs-agent-skills/web-design-guidelines",
+      "emilkowalski-skills/emil-design-eng",
+      "emilkowalski-skills/animate",
+    ],
+  },
+  {
+    id: "marketing-launch",
+    title: "Marketing Launch",
+    tagline: "Plan and run a product launch from positioning to announcement",
+    description:
+      "Nail positioning, plan the launch, write the landing page and emails, schedule social posts and track the campaign in Notion and HubSpot.",
+    categories: ["marketing"],
+    publisher: "Deus",
+    apps: ["notion", "hubspot", "klaviyo", "canva", "slack"],
+    skills: [
+      "coreyhaines31-marketingskills/product-marketing",
+      "coreyhaines31-marketingskills/launch",
+      "coreyhaines31-marketingskills/copywriting",
+      "coreyhaines31-marketingskills/cro",
+      "coreyhaines31-marketingskills/emails",
+      "coreyhaines31-marketingskills/social",
+      "makenotion-claude-code-notion-plugin/notion-plan-marketing-campaigns",
+    ],
+  },
+  {
+    id: "seo-content",
+    title: "SEO & Content",
+    tagline: "Rank in Google and get cited by AI search",
+    description:
+      "Audit technical SEO, plan topic clusters, write briefs and copy, and optimize for AI Overviews, ChatGPT and Perplexity using live web and search data.",
+    categories: ["marketing", "writing"],
+    publisher: "Deus",
+    apps: ["ahrefs", "google-analytics", "firecrawl", "exa"],
+    skills: [
+      "coreyhaines31-marketingskills/seo-audit",
+      "coreyhaines31-marketingskills/ai-seo",
+      "coreyhaines31-marketingskills/content-strategy",
+      "agricidaniel-claude-seo/seo-content-brief",
+      "coreyhaines31-marketingskills/copywriting",
+      "addyosmani-web-quality-skills/core-web-vitals",
+    ],
+  },
+  {
+    id: "social-media-studio",
+    title: "Social Media Studio",
+    tagline: "Create on-brand posts, images and short videos for every channel",
+    description:
+      "Write posts, generate images and voiceovers, cut short videos and resize one design for TikTok, Instagram, LinkedIn and X.",
+    categories: ["marketing", "creative"],
+    publisher: "Deus",
+    apps: ["canva", "elevenlabs", "cloudinary"],
+    skills: [
+      "coreyhaines31-marketingskills/social",
+      "canva-sdks-canva-skills/canva-resize-for-social-media",
+      "coreyhaines31-marketingskills/ad-creative",
+      "coreyhaines31-marketingskills/ads",
+      "openai-skills/imagegen",
+      "heygen-com-hyperframes/hyperframes",
+      "elevenlabs-skills/text-to-speech",
+    ],
+  },
+  {
+    id: "data-analytics",
+    title: "Data & Analytics",
+    tagline: "Instrument your product and answer questions with data",
+    description:
+      "Set up event tracking, analyze experiments, query product analytics, research companies and markets, and deliver the answer as a clean spreadsheet.",
+    categories: ["data"],
+    publisher: "Deus",
+    apps: ["posthog", "amplitude", "mixpanel", "google-analytics", "airtable"],
+    skills: [
+      "coreyhaines31-marketingskills/analytics",
+      "coreyhaines31-marketingskills/ab-testing",
+      "anthropics-skills/xlsx",
+      "exa-labs-agent-skills/company-research",
+      "firecrawl-cli/firecrawl",
+    ],
+  },
+  {
+    id: "documents-office",
+    title: "Documents & Office",
+    tagline: "Create and edit Word, PDF, PowerPoint and Excel files",
+    description:
+      "Draft reports and contracts, build decks and spreadsheets, fill and merge PDFs, and design one-off visuals, straight from your files in Box or Notion.",
+    categories: ["documents", "productivity"],
+    publisher: "Deus",
+    apps: ["box", "notion"],
+    skills: [
+      "anthropics-skills/docx",
+      "anthropics-skills/pdf",
+      "anthropics-skills/pptx",
+      "anthropics-skills/xlsx",
+      "anthropics-skills/canvas-design",
+    ],
+  },
+  {
+    id: "product-management",
+    title: "Product Management",
+    tagline: "From rough idea to spec to tickets, without losing context",
+    description:
+      "Stress-test ideas, shape them into designs, turn specs into Linear or Jira tickets and keep decisions captured in Notion.",
+    categories: ["productivity"],
+    publisher: "Deus",
+    apps: ["linear", "notion", "atlassian", "slack", "asana"],
+    skills: [
+      "obra-superpowers/brainstorming",
+      "mattpocock-skills/grilling",
+      "makenotion-claude-code-notion-plugin/notion-spec-to-implementation",
+      "atlassian-atlassian-mcp-server/spec-to-backlog",
+      "openai-skills/linear",
+      "makenotion-claude-code-notion-plugin/notion-knowledge-capture",
+    ],
+  },
+  {
+    id: "bug-triage",
+    title: "Bug Triage",
+    tagline: "Find, reproduce and fix production bugs fast",
+    description:
+      "Pull errors from Sentry, reproduce them in Chrome, find the root cause, review the fix for new bugs and keep tickets in Linear or Jira up to date.",
+    categories: ["developer"],
+    publisher: "Deus",
+    apps: ["sentry", "github", "linear", "atlassian", "chrome-devtools"],
+    skills: [
+      "getsentry-sentry-for-ai/sentry-debug-issue",
+      "obra-superpowers/systematic-debugging",
+      "chromedevtools-chrome-devtools-mcp/chrome-devtools",
+      "getsentry-skills/find-bugs",
+      "atlassian-atlassian-mcp-server/triage-issue",
+      "openai-skills/gh-fix-ci",
+    ],
+  },
+  {
+    id: "mobile-app-expo",
+    title: "Mobile App (Expo)",
+    tagline: "Build a native iOS and Android app and ship it to the stores",
+    description:
+      "Build native-feeling Expo screens, keep React Native fast, and build, sign and submit to TestFlight, the App Store and Google Play.",
+    categories: ["developer", "design"],
+    publisher: "Deus",
+    apps: ["github", "sentry", "figma"],
+    skills: [
+      "expo-skills/expo-native-ui",
+      "vercel-labs-agent-skills/vercel-react-native-skills",
+      "expo-skills/eas-app-stores",
+    ],
+  },
+  {
+    id: "payments-commerce",
+    title: "Payments & Commerce",
+    tagline: "Take payments and run a store with Stripe and Shopify",
+    description:
+      "Add Checkout, subscriptions and Connect the right way with Stripe, or build Shopify apps, themes and storefronts.",
+    categories: ["developer"],
+    publisher: "Deus",
+    apps: ["stripe", "shopify-dev", "supabase"],
+    skills: ["stripe-ai/stripe-best-practices", "shopify-shopify-ai-toolkit/shopify"],
+  },
+  {
+    id: "video-studio",
+    title: "Video Studio",
+    tagline: "Make launch films, explainers and music-backed videos in code",
+    description:
+      "Write videos as React or HTML, add AI voiceover and music, caption them and render finished MP4s for launches, socials and docs.",
+    categories: ["creative", "marketing"],
+    publisher: "Deus",
+    apps: ["elevenlabs", "cloudinary"],
+    skills: [
+      "remotion-dev-skills/remotion-best-practices",
+      "heygen-com-hyperframes/hyperframes",
+      "elevenlabs-skills/text-to-speech",
+      "elevenlabs-skills/music",
+    ],
+  },
+  {
+    id: "creative-3d",
+    title: "Creative 3D & Generative Art",
+    tagline: "Model, light and render in Blender, or make art with code",
+    description:
+      "Drive Blender for modeling, materials and renders, generate textures and concept images, and create generative art and posters.",
+    categories: ["creative", "design"],
+    publisher: "Deus",
+    apps: ["blender"],
+    skills: [
+      "el4cteo-blender-skills/blender-core",
+      "openai-skills/imagegen",
+      "anthropics-skills/algorithmic-art",
+      "anthropics-skills/canvas-design",
+    ],
+  },
+  {
+    id: "ai-builder",
+    title: "AI & Agent Builder",
+    tagline: "Build MCP servers, skills and ML features with current docs",
+    description:
+      "Build MCP servers and agent skills, look up current library docs instead of guessing, and pull models and datasets from Hugging Face.",
+    categories: ["developer"],
+    publisher: "Deus",
+    apps: ["github", "context7", "huggingface"],
+    skills: [
+      "anthropics-skills/mcp-builder",
+      "anthropics-skills/skill-creator",
+      "upstash-context7/find-docs",
+      "huggingface-skills/hf-cli",
+    ],
+  },
+];

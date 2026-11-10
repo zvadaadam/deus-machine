@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ClockFading, Cloud, FolderOpen } from "lucide-react";
+import { Blocks, ClockFading, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -41,6 +41,8 @@ export function AppSidebar({
   onNewSession,
   onOpenAutomations,
   automationsActive,
+  onOpenCustomize,
+  customizeActive,
   diffStatsMap,
   profile,
 }: AppSidebarProps) {
@@ -121,37 +123,27 @@ export function AppSidebar({
 
       {/* App-level nav — sits under the header, above the repo list */}
       {!webDirect && (
-        <div className="px-1.5 pb-1">
-          <SidebarRow variant="action" isActive={automationsActive} asChild>
-            <button
-              type="button"
-              onClick={() => {
-                onOpenAutomations?.();
-                // Same mobile behavior as workspace selection: the off-canvas
-                // sheet must not stay open over the page it just navigated to.
-                if (isMobile) setOpenMobile(false);
-              }}
-            >
-              <SidebarRowMain>
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  <ClockFading
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      automationsActive ? "text-text-primary" : "text-text-muted"
-                    )}
-                  />
-                </span>
-                <span
-                  className={cn(
-                    "truncate text-sm",
-                    automationsActive ? "text-text-primary font-medium" : "text-text-secondary"
-                  )}
-                >
-                  Automations
-                </span>
-              </SidebarRowMain>
-            </button>
-          </SidebarRow>
+        <div className="flex flex-col gap-px px-1.5 pb-1">
+          <AppNavRow
+            icon={ClockFading}
+            label="Automations"
+            active={automationsActive}
+            onClick={() => {
+              onOpenAutomations?.();
+              // Same mobile behavior as workspace selection: the off-canvas
+              // sheet must not stay open over the page it just navigated to.
+              if (isMobile) setOpenMobile(false);
+            }}
+          />
+          <AppNavRow
+            icon={Blocks}
+            label="Customize"
+            active={customizeActive}
+            onClick={() => {
+              onOpenCustomize?.();
+              if (isMobile) setOpenMobile(false);
+            }}
+          />
         </div>
       )}
 
@@ -217,5 +209,38 @@ export function AppSidebar({
         onStartNewProject={onStartNewProject}
       />
     </Sidebar>
+  );
+}
+
+/** One app-level page in the sidebar (Automations, Customize). */
+function AppNavRow({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <SidebarRow variant="action" isActive={active} asChild>
+      <button type="button" onClick={onClick}>
+        <SidebarRowMain>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+            <Icon className={cn("h-3.5 w-3.5", active ? "text-text-primary" : "text-text-muted")} />
+          </span>
+          <span
+            className={cn(
+              "truncate text-sm",
+              active ? "text-text-primary font-medium" : "text-text-secondary"
+            )}
+          >
+            {label}
+          </span>
+        </SidebarRowMain>
+      </button>
+    </SidebarRow>
   );
 }

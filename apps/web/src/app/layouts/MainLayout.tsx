@@ -43,6 +43,7 @@ import { getLastOpenInAppId } from "@/shared/hooks/useLastOpenInApp";
 import { track } from "@/platform/analytics";
 import { CommandPalette } from "@/features/command-palette";
 import { AutomationsPage, useAutomations } from "@/features/automations";
+import { CustomizePage } from "@/features/customize";
 import { setupEnvironmentPrompt } from "@/features/session/lib/sessionPrompts";
 import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
@@ -104,6 +105,8 @@ export function MainLayout() {
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
   const openAutomations = useUIStore((s) => s.openAutomations);
+  const customizeOpen = useUIStore((s) => s.customizeOpen);
+  const openCustomize = useUIStore((s) => s.openCustomize);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
   const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
@@ -449,7 +452,9 @@ export function MainLayout() {
     (workspace: Workspace) => {
       // The Automations view overlays MainContent — a workspace click while
       // it is open must land ON the workspace, not silently under the view.
+      // Same for the Customize view.
       uiActions.closeAutomations();
+      uiActions.closeCustomize();
       selectWorkspace(workspace.id);
       expandRepo(workspace.repository_id);
       // Only mark the active tab's session as read — other tabs keep their
@@ -494,10 +499,13 @@ export function MainLayout() {
           onStatusChange={webDirect ? undefined : handleStatusChange}
           onNewSession={() => {
             uiActions.closeAutomations();
+            uiActions.closeCustomize();
             selectWorkspace(null);
           }}
           onOpenAutomations={openAutomations}
           automationsActive={automationsOpen}
+          onOpenCustomize={openCustomize}
+          customizeActive={customizeOpen}
           profile={sidebarProfile}
         />
       )}
@@ -505,11 +513,13 @@ export function MainLayout() {
       {/* Sidebar resize handle */}
       <SidebarResizeHandle onSizeChange={setSidebarWidth} onDraggingChange={setSidebarDragging} />
 
-      {/* Main Content — swap between app content, settings and automations */}
+      {/* Main Content — swap between app content, settings, automations and Customize */}
       {settingsOpen ? (
         <SettingsPage />
       ) : automationsOpen ? (
         <AutomationsPage />
+      ) : customizeOpen ? (
+        <CustomizePage />
       ) : (
         <MainContent
           selectedWorkspace={selectedWorkspace}

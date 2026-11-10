@@ -5,8 +5,9 @@
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, turns, parts, compactions,
- *         paired_devices, automations, automation_runs
- * Indexes: 17
+ *         paired_devices, automations, automation_runs, extension_installations,
+ *         integration_connections
+ * Indexes: 18
  * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
@@ -320,7 +321,62 @@ export const SCHEMA_SQL = `
     summary TEXT
   );
 
-  -- Indexes (17)
+  -- Apps, Plugins and Skills (shared/integrations/types.ts). One row per
+  -- installed item, account-wide on this computer: every project and
+  -- workspace inherits them, so there are no per-workspace rows.
+  -- definition: the user's own app/skill (JSON), which is what makes an item
+  -- "custom"; catalog items read theirs from the catalog and store none.
+  -- explicit = the user installed it directly; an item a
+  -- plugin brought in has explicit = 0 and goes when no installed plugin
+  -- lists it (which plugins do is derived from the catalog, never stored).
+  -- connection_id: the account an app's tools use.
+  -- Skills: installed_ref (the commit on disk), status, and error (why the
+  -- install or update failed).
+  -- Apps: tools (JSON, what its server listed at the last check), checked_at,
+  -- and error (what that check could not do).
+  CREATE TABLE IF NOT EXISTS extension_installations (
+    kind TEXT NOT NULL CHECK (kind IN ('app', 'skill', 'plugin')),
+    item_id TEXT NOT NULL,
+    definition TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    explicit INTEGER NOT NULL DEFAULT 1,
+    connection_id TEXT REFERENCES integration_connections(id) ON DELETE SET NULL,
+    installed_ref TEXT,
+    status TEXT CHECK (status IS NULL OR status IN ('installing', 'ready', 'error')),
+    error TEXT,
+    tools TEXT,
+    checked_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (kind, item_id)
+  );
+
+  -- An app's account. kind says how it is held: 'oauth' (tokens from the MCP
+  -- sign-in) and 'secret' (a pasted key, a local server's variables) keep a
+  -- vault-sealed credential here (services/integrations/vault.ts) that never
+  -- leaves the backend; 'cli' stores nothing (a CLI signed in on this
+  -- computer supplies the token at each use); 'managed' is held by Deus Cloud
+  -- for deus_account_id, has no credential, and counts only while that Deus
+  -- account is the one signed in. last_error is the account's own problem (a
+  -- refused refresh, a rejected key). An app uses one account today; the
+  -- table keeps one row per account so a second (a second brand, work and
+  -- personal) is a row, not a migration. 'removing' is a managed row the
+  -- person removed: it belongs to no app any more, and stays until Deus Cloud
+  -- has disconnected the account (at once, or when it can next be asked).
+  CREATE TABLE IF NOT EXISTS integration_connections (
+    id TEXT PRIMARY KEY NOT NULL,
+    app_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('oauth', 'secret', 'cli', 'managed')),
+    deus_account_id TEXT,
+    label TEXT,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'active', 'needs_reauth', 'removing')),
+    credential TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK ((kind = 'managed') = (deus_account_id IS NOT NULL))
+  );
+
+  -- Indexes (18)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -340,6 +396,7 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_automations_repository_id ON automations(repository_id);
   -- Run history newest-first (agnt run ids are UUID7 — the PK carries time).
   CREATE INDEX IF NOT EXISTS idx_automation_runs_automation ON automation_runs(automation_id, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_integration_connections_app ON integration_connections(app_id);
 
   -- Triggers: auto-update updated_at (4)
   CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at

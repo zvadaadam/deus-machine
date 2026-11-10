@@ -26,6 +26,7 @@ import onboardingRoutes from "./routes/onboarding";
 import authRoutes from "./routes/remote-auth";
 import filesRoutes from "./routes/files";
 import browserImportRoutes from "./routes/browser-import";
+import integrationRoutes from "./routes/integrations";
 export function createApp() {
   const app = new Hono();
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
@@ -55,6 +56,7 @@ export function createApp() {
   app.route("/api", statsRoutes);
   app.route("/api", filesRoutes);
   app.route("/api", browserImportRoutes);
+  app.route("/api", integrationRoutes);
   app.route("/api", onboardingRoutes);
 
   // Relay status endpoint

@@ -36,6 +36,9 @@ interface UIState {
   /** Deep-link: open straight onto this automation's detail (consumed once). */
   automationsFocusId: string | null;
 
+  // Customize view: Apps, Recommended Plugins and Skills (full-page, keeps the app sidebar)
+  customizeOpen: boolean;
+
   /** MainLayout creates a workspace and sends the setup instructions as turn one. */
   pendingEnvSetup: EnvironmentSetupRequest | null;
 
@@ -65,6 +68,10 @@ interface UIState {
   closeAutomations: () => void;
   clearAutomationsFocus: () => void;
 
+  // Actions - Customize view
+  openCustomize: () => void;
+  closeCustomize: () => void;
+
   closeAllModals: () => void;
 }
 
@@ -82,6 +89,7 @@ export const useUIStore = create<UIState>()(
       environmentSettingsTarget: null,
       automationsOpen: false,
       automationsFocusId: null,
+      customizeOpen: false,
       pendingEnvSetup: null,
 
       // Modal actions
@@ -99,6 +107,7 @@ export const useUIStore = create<UIState>()(
             newWorkspaceMode: "default" as NewWorkspaceMode,
             newWorkspaceDraft: draft,
             automationsOpen: false,
+            customizeOpen: false,
           },
           false,
           "ui/openNewWorkspaceModalWithDraft"
@@ -130,16 +139,21 @@ export const useUIStore = create<UIState>()(
           "ui/toggleCommandPalette"
         ),
 
-      // Settings view actions — settings and automations are both full-page
-      // takeovers, so opening one closes the other.
+      // Settings view actions — settings, automations and Customize are all
+      // full-page takeovers, so opening one closes the others.
       openSettings: () =>
-        set({ settingsOpen: true, automationsOpen: false }, false, "ui/openSettings"),
+        set(
+          { settingsOpen: true, automationsOpen: false, customizeOpen: false },
+          false,
+          "ui/openSettings"
+        ),
 
       openEnvironmentSettings: (repoId, location) =>
         set(
           {
             settingsOpen: true,
             automationsOpen: false,
+            customizeOpen: false,
             activeSettingsSection: "environment",
             environmentSettingsTarget: { repoId, location },
           },
@@ -156,6 +170,7 @@ export const useUIStore = create<UIState>()(
           {
             automationsOpen: true,
             settingsOpen: false,
+            customizeOpen: false,
             automationsFocusId: automationId ?? null,
           },
           false,
@@ -166,6 +181,16 @@ export const useUIStore = create<UIState>()(
 
       clearAutomationsFocus: () =>
         set({ automationsFocusId: null }, false, "ui/clearAutomationsFocus"),
+
+      // Customize view actions
+      openCustomize: () =>
+        set(
+          { customizeOpen: true, settingsOpen: false, automationsOpen: false },
+          false,
+          "ui/openCustomize"
+        ),
+
+      closeCustomize: () => set({ customizeOpen: false }, false, "ui/closeCustomize"),
 
       setActiveSettingsSection: (section) =>
         set({ activeSettingsSection: section }, false, "ui/setActiveSettingsSection"),
@@ -189,6 +214,7 @@ export const useUIStore = create<UIState>()(
             settingsOpen: false,
             environmentSettingsTarget: null,
             automationsOpen: false,
+            customizeOpen: false,
           },
           false,
           "ui/closeAllModals"
@@ -224,6 +250,8 @@ export const uiActions = {
   closeSettings: () => useUIStore.getState().closeSettings(),
   openAutomations: (automationId?: string) => useUIStore.getState().openAutomations(automationId),
   closeAutomations: () => useUIStore.getState().closeAutomations(),
+  openCustomize: () => useUIStore.getState().openCustomize(),
+  closeCustomize: () => useUIStore.getState().closeCustomize(),
   openCommandPalette: () => useUIStore.getState().openCommandPalette(),
   closeCommandPalette: () => useUIStore.getState().closeCommandPalette(),
   toggleCommandPalette: () => useUIStore.getState().toggleCommandPalette(),

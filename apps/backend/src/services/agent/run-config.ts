@@ -8,6 +8,7 @@ import { parseAgentInput } from "@zvada/agent-server/protocol";
 import type {
   AgentHarness as EngineHarness,
   AgentInput,
+  McpServerConfig,
   TurnStartParams,
 } from "@zvada/agent-server/protocol";
 import type { AgentHarness } from "@shared/enums";
@@ -81,6 +82,10 @@ export interface DeusTurnOptions {
   resumeSessionAt?: string;
   /** From the initialize handshake — whether this harness accepts image parts. */
   supportsImages?: boolean;
+  /** The installed apps' MCP servers (services/integrations/runtime.ts). */
+  mcpServers?: Record<string, McpServerConfig>;
+  /** Extra env for the agent process (a Codex session's own CODEX_HOME). */
+  env?: Record<string, string>;
 }
 
 /**
@@ -121,6 +126,10 @@ export function buildTurnStartParams(
       additionalDirectories: options.additionalDirectories,
       resumeSessionId: options.resume,
       resumeSessionAt: options.resumeSessionAt,
+      ...(options.mcpServers && Object.keys(options.mcpServers).length
+        ? { mcpServers: options.mcpServers }
+        : {}),
+      ...(options.env && Object.keys(options.env).length ? { env: options.env } : {}),
     },
   };
 }

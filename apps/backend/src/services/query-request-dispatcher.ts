@@ -8,6 +8,7 @@ import {
 } from "../lib/query-params";
 import { delegateToRoute } from "./route-delegate";
 import { getSimulatorCapabilities } from "./simulator-context";
+import { runIntegrationRequest } from "./integrations";
 import {
   execCloudSimulator,
   getCloudSimulatorStatus,
@@ -103,6 +104,9 @@ export async function runRequest(
       .with("repoPrs", () => repoGet("/prs"))
       .with("repoBranches", () => repoGet("/branches"))
       .with("agentAuth", () => delegateToRoute("GET", "/api/settings/agent-auth"))
+      .with("integrationsCatalog", "appTools", "skillContent", "localSkills", (name) =>
+        runIntegrationRequest(name, params)
+      )
       .with("cloudDirectToken", () => {
         const sessionId = requireParam(params, "sessionId", "cloudDirectToken");
         return delegateToRoute(

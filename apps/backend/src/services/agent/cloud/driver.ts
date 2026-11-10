@@ -72,6 +72,7 @@ import { getDatabase } from "../../../lib/database";
 import { emitPtyData, emitPtyExit } from "../../pty.service";
 import { getSessionRaw } from "../../../db";
 import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
+import { resolveCloudTurnExtensions } from "../../integrations";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 const TRANSCRIPT_SNAPSHOT_SCHEMA = SessionSnapshotEventSchema.pick({
@@ -1137,6 +1138,14 @@ export async function startCloudTurn(
   }
 
   const session = await ensureCloudSession(deusSessionId);
+  // The installed skills and the apps that reach the cloud ride along, each
+  // as the complete set (once the platform takes them). An app Deus Cloud
+  // holds an account for is named by a capability, never a token of the
+  // account's; an account held on this computer stays here
+  // (services/integrations/runtime.ts). Resolved before the turn is
+  // registered, like the wake above: from there to the send nothing waits,
+  // so a Stop can never be sent ahead of the turn it stops.
+  const extensions = await resolveCloudTurnExtensions();
   if (!handler.beginTurn(deusSessionId, turnId)) {
     throw new Error("The agent is still working — wait for the current turn to finish.");
   }
@@ -1153,6 +1162,7 @@ export async function startCloudTurn(
         harness: selection.harness,
         model: selection.model,
         thinkingLevel: selection.thinkingLevel,
+        ...extensions,
       },
     });
   } catch (err) {

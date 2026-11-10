@@ -42,6 +42,7 @@ import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, engineHarness, type DeusTurnOptions } from "./run-config";
 import { relay } from "./tool-relay";
+import { codexTurnHome, resolveTurnApps } from "../integrations";
 import {
   persistSessionNeedsPlanResponse,
   persistSessionNeedsResponse,
@@ -138,8 +139,10 @@ export async function startTurn(
   options: DeusTurnOptions
 ): Promise<void> {
   if (!link) throw new Error("Agent service not initialized");
+  const apps = await turnApps(sessionId, agentHarness, options.resume);
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
+    ...apps,
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
       link.getAgents().find((a) => a.type === engineHarness(agentHarness))?.capabilities.images ??
@@ -161,6 +164,54 @@ export async function startTurn(
   // view was stale (e.g. backend restart); register for real now.
   if (!registered) events?.beginTurn(sessionId, turnId, { force: true });
   events?.confirmTurn(sessionId, turnId);
+}
+
+/**
+ * The installed apps' MCP servers for a local turn: every project inherits
+ * them. A Codex turn carries them only in a CODEX_HOME of its session's own
+ * (`codexTurnHome` says which chats get one).
+ */
+async function turnApps(
+  sessionId: string,
+  agentHarness: AgentHarness,
+  resume: string | undefined
+): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
+  const codex = engineHarness(agentHarness) === "codex-app-server";
+  const { servers, skipped, installed } = await resolveTurnApps();
+  if (skipped.length) {
+    console.log(
+      `[AgentService] Apps not in this turn: ${skipped.map((s) => `${s.appId} (${s.reason})`).join(", ")}`
+    );
+  }
+  if (!codex) return { mcpServers: servers, env: loopbackPastProxy() };
+  try {
+    const home = codexTurnHome(sessionId, {
+      resumes: resume !== undefined,
+      appsInstalled: installed,
+    });
+    if (!home) return {};
+    return { mcpServers: servers, env: { ...loopbackPastProxy(), CODEX_HOME: home } };
+  } catch (error) {
+    console.warn("[AgentService] Codex session home unavailable; turn runs without apps:", error);
+    return {};
+  }
+}
+
+/**
+ * Apps with an account are reached at this backend's loopback gateway. Where
+ * the user's environment sends HTTP through a proxy, the agent's MCP client
+ * must not send loopback there: add it to NO_PROXY, keeping what they have.
+ */
+function loopbackPastProxy(): Record<string, string> {
+  const proxied = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"].some(
+    (name) => process.env[name] || process.env[name.toLowerCase()]
+  );
+  if (!proxied) return {};
+  const current = process.env.NO_PROXY ?? process.env.no_proxy ?? "";
+  const value = [
+    ...new Set([...current.split(",").filter(Boolean), "127.0.0.1", "localhost"]),
+  ].join(",");
+  return { NO_PROXY: value, no_proxy: value };
 }
 
 /**

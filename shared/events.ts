@@ -72,6 +72,10 @@ export const QUERY_RESOURCES = [
   // Automations (prompts on a schedule) + their run ledger (param: automationId)
   "automations",
   "automation_runs",
+  // Customize (Apps, Plugins and Skills): what is installed and connected on
+  // this computer (IntegrationsState, shared/integrations/types.ts). State
+  // only: the catalog it refers to is the `integrationsCatalog` request.
+  "integrations",
 ] as const;
 export type QueryResource = (typeof QUERY_RESOURCES)[number];
 
@@ -122,6 +126,14 @@ export const REQUEST_RESOURCES = [
   // (listModels(), cached a few minutes by the backend). No params →
   // CloudModelCatalog (shared/cloud-models.ts).
   "cloudModels",
+  // Customize, read on demand (services/integrations). The catalog is static
+  // for a build: no params → Catalog. An app's tools as last listed:
+  // { appId } → AppTool[]. A skill's SKILL.md and files: { skillId } →
+  // SkillContent. Skills on this computer Deus did not add: → LocalSkill[].
+  "integrationsCatalog",
+  "appTools",
+  "skillContent",
+  "localSkills",
 ] as const;
 export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
 
@@ -146,6 +158,18 @@ export const MUTATION_NAMES = [
   "saveAutomation",
   "deleteAutomation",
   "toggleAutomation",
+  // Apps, Plugins and Skills (services/integrations). Install/uninstall/enable
+  // take { kind: "app" | "skill" | "plugin", id }; connectApp takes
+  // ConnectAppInput and answers ConnectAppResult (a URL to open for OAuth).
+  "installIntegration",
+  "uninstallIntegration",
+  "setIntegrationEnabled",
+  "connectApp",
+  "disconnectApp",
+  "checkApp",
+  "addCustomApp",
+  "addCustomSkill",
+  "updateSkill",
 ] as const;
 export type MutationName = (typeof MUTATION_NAMES)[number];
 

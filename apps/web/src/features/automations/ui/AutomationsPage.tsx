@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Cloud } from "lucide-react";
-import { SidebarInset } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarMobileBar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui";
 import { apiClient } from "@/shared/api/client";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -89,49 +89,52 @@ export function AutomationsPage() {
 
   return (
     <SidebarInset className="min-w-0">
-      <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 overflow-hidden rounded-xl border">
-        {cloudStatus.isSuccess && !cloudReady ? (
-          <CloudNudge />
-        ) : view.mode === "list" ? (
-          <AutomationsListView
-            automations={automations ?? []}
-            isLoading={isLoading}
-            onNew={openNew}
-            onCreateWithAi={createWithAi}
-            onOpenTemplates={openTemplates}
-            onOpen={openDetail}
-          />
-        ) : view.mode === "templates" ? (
-          <TemplatesView onBack={openList} onUse={(prefill) => openNew(prefill)} />
-        ) : (
-          <>
-            <AutomationRail
+      <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
+        <SidebarMobileBar title="Automations" />
+        <div className="flex min-h-0 min-w-0 flex-1">
+          {cloudStatus.isSuccess && !cloudReady ? (
+            <CloudNudge />
+          ) : view.mode === "list" ? (
+            <AutomationsListView
               automations={automations ?? []}
-              selectedId={selectedId}
-              onSelect={(a) => openDetail(a)}
-              onNew={() => openNew()}
-              onBack={openList}
+              isLoading={isLoading}
+              onNew={openNew}
+              onCreateWithAi={createWithAi}
+              onOpenTemplates={openTemplates}
+              onOpen={openDetail}
             />
-            {view.mode === "editor" ? (
-              <AutomationEditor
-                key={view.automationId ?? "new"}
-                automation={selected}
-                prefill={view.prefill}
+          ) : view.mode === "templates" ? (
+            <TemplatesView onBack={openList} onUse={(prefill) => openNew(prefill)} />
+          ) : (
+            <>
+              <AutomationRail
+                automations={automations ?? []}
+                selectedId={selectedId}
+                onSelect={(a) => openDetail(a)}
+                onNew={() => openNew()}
                 onBack={openList}
-                onSaved={(a) => setView({ mode: "detail", automationId: a.id })}
               />
-            ) : selected ? (
-              <AutomationDetail
-                automation={selected}
-                onBack={openList}
-                onEdit={() => openEdit(selected.id)}
-              />
-            ) : (
-              // One frame while the render-time adjustment above lands.
-              <div className="flex-1" />
-            )}
-          </>
-        )}
+              {view.mode === "editor" ? (
+                <AutomationEditor
+                  key={view.automationId ?? "new"}
+                  automation={selected}
+                  prefill={view.prefill}
+                  onBack={openList}
+                  onSaved={(a) => setView({ mode: "detail", automationId: a.id })}
+                />
+              ) : selected ? (
+                <AutomationDetail
+                  automation={selected}
+                  onBack={openList}
+                  onEdit={() => openEdit(selected.id)}
+                />
+              ) : (
+                // One frame while the render-time adjustment above lands.
+                <div className="flex-1" />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </SidebarInset>
   );

@@ -34,6 +34,9 @@ export interface AppSidebarProps {
   onNewSession?: () => void;
   onOpenAutomations?: () => void;
   automationsActive?: boolean;
+  /** Customize: Apps, Recommended Plugins and Skills. */
+  onOpenCustomize?: () => void;
+  customizeActive?: boolean;
   profile?: SidebarProfile;
 }
 

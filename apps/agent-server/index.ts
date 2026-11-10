@@ -15,7 +15,12 @@ import { createCheckpoint } from "./agents/core/checkpoint";
 import { currentAapServers, getRuntime } from "./agents/core/engine";
 import { applyShellEnvironment } from "./agents/environment";
 import { setHost, type DeusHost } from "./host-link";
-import { observeLifecycleEvent, observeTurnStart, trackedSessions } from "./session-tracker";
+import {
+  observeLifecycleEvent,
+  observeTurnStart,
+  sessionServers,
+  trackedSessions,
+} from "./session-tracker";
 import { maybeFetchTitle } from "./title-watch";
 
 export type { DeusHost, SessionTitle } from "./host-link";
@@ -98,7 +103,10 @@ export function beginTurnStart(params: TurnStartParams): {
     params.config.harness === "claude-code" && Object.keys(aapServers).length
       ? {
           ...params,
-          config: { ...params.config, mcpServers: { ...aapServers, ...params.config.mcpServers } },
+          config: {
+            ...params.config,
+            mcpServers: sessionServers(aapServers, params.config.mcpServers),
+          },
         }
       : params;
   const sessionId = params.sessionId;
