@@ -13,6 +13,7 @@
     "shared/enums.ts",
     "shared/lib/*.ts",
     "apps/cli/src/cli.ts",
+    "scripts/generate-integration-icons.ts",
     "apps/**/test/**/*.ts",
     "test/**/*.ts"
   ],
@@ -39,7 +40,8 @@
     "esbuild",
     "@electron/rebuild",
     "@napi-rs/canvas",
-    "sharp"
+    "sharp",
+    "@iconify-json/logos"
   ],
   "ignoreBinaries": ["wrangler"],
   "ignoreExportsUsedInFile": true,

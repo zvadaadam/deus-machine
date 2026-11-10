@@ -170,7 +170,9 @@ describe("shared/events", () => {
       // Automations
       expect(QUERY_RESOURCES).toContain("automations");
       expect(QUERY_RESOURCES).toContain("automation_runs");
-      expect(QUERY_RESOURCES).toHaveLength(10);
+      // Apps, Plugins and Skills
+      expect(QUERY_RESOURCES).toContain("integrations");
+      expect(QUERY_RESOURCES).toHaveLength(11);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
@@ -192,7 +194,21 @@ describe("shared/events", () => {
       expect(MUTATION_NAMES).toContain("saveAutomation");
       expect(MUTATION_NAMES).toContain("deleteAutomation");
       expect(MUTATION_NAMES).toContain("toggleAutomation");
-      expect(MUTATION_NAMES).toHaveLength(16);
+      // Apps, Plugins and Skills
+      for (const name of [
+        "installIntegration",
+        "uninstallIntegration",
+        "setIntegrationEnabled",
+        "connectApp",
+        "disconnectApp",
+        "checkApp",
+        "addCustomApp",
+        "addCustomSkill",
+        "updateSkill",
+      ]) {
+        expect(MUTATION_NAMES).toContain(name);
+      }
+      expect(MUTATION_NAMES).toHaveLength(25);
     });
 
     it("COMMAND_NAMES contains the expected commands", () => {
@@ -268,7 +284,11 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("cloudSimulator");
       expect(REQUEST_RESOURCES).toContain("cloudPreview");
       expect(REQUEST_RESOURCES).toContain("cloudModels");
-      expect(REQUEST_RESOURCES).toHaveLength(30);
+      // Customize, read on demand
+      for (const name of ["integrationsCatalog", "appTools", "skillContent", "localSkills"]) {
+        expect(REQUEST_RESOURCES).toContain(name);
+      }
+      expect(REQUEST_RESOURCES).toHaveLength(34);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

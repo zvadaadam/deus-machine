@@ -5,9 +5,10 @@
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, turns, parts, compactions,
- *         paired_devices, automations, automation_runs
- * Indexes: 17
- * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
+ *         paired_devices, automations, automation_runs, extension_installations,
+ *         integration_connections
+ * Indexes: 18
+ * Triggers: 8 (6 auto-update updated_at, 2 denormalized message_count + auto-seq)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
@@ -65,6 +66,9 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
   parts: ["parent_tool_call_id"],
   compactions: ["compaction_id"],
   paired_devices: ["account_id", "machine_id"],
+  // How an app's account is held became its own vocabulary (`kind`), and an
+  // account Deus Cloud holds names its Deus account.
+  integration_connections: ["kind", "deus_account_id"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -86,6 +90,8 @@ export const PRELAUNCH_RETIRED_COLUMNS = {
   // database that still carries the column also carries a stale capability
   // URL on disk, so it takes the reset rather than a silent leftover.
   workspaces: ["cloud_preview_template"],
+  // "Custom" is having a definition; the column that repeated it is gone.
+  extension_installations: ["source"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -320,7 +326,64 @@ export const SCHEMA_SQL = `
     summary TEXT
   );
 
-  -- Indexes (17)
+  -- Apps, Plugins and Skills (shared/integrations/types.ts). One row per
+  -- installed item, account-wide on this computer: every project and
+  -- workspace inherits them, so there are no per-workspace rows.
+  -- definition: the user's own app/skill (JSON), which is what makes an item
+  -- "custom"; catalog items read theirs from the catalog and store none.
+  -- explicit = the user installed it directly; an item a
+  -- plugin brought in has explicit = 0 and goes when no installed plugin
+  -- lists it (which plugins do is derived from the catalog, never stored).
+  -- connection_id: the account an app's tools use.
+  -- Skills: installed_ref (the commit on disk), status, and error (why the
+  -- install or update failed).
+  -- Apps: tools (JSON, what its server listed at the last check), checked_at,
+  -- and error (what that check could not do).
+  CREATE TABLE IF NOT EXISTS extension_installations (
+    kind TEXT NOT NULL CHECK (kind IN ('app', 'skill', 'plugin')),
+    item_id TEXT NOT NULL,
+    definition TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    explicit INTEGER NOT NULL DEFAULT 1,
+    connection_id TEXT REFERENCES integration_connections(id) ON DELETE SET NULL,
+    installed_ref TEXT,
+    status TEXT CHECK (status IS NULL OR status IN ('installing', 'ready', 'error')),
+    error TEXT,
+    tools TEXT,
+    checked_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (kind, item_id)
+  );
+
+  -- An app's account. kind says how it is held: 'oauth' (tokens from the MCP
+  -- sign-in) and 'secret' (a pasted key, a local server's variables) keep a
+  -- vault-sealed credential here (services/integrations/vault.ts) that never
+  -- leaves the backend; 'cli' stores nothing (a CLI signed in on this
+  -- computer supplies the token at each use); 'managed' is held by Deus Cloud
+  -- for deus_account_id, has no credential, and counts only while that Deus
+  -- account is the one signed in. last_error is the account's own problem (a
+  -- refused refresh, a rejected key). An app uses one account today; the
+  -- table keeps one row per account so a second (a second brand, work and
+  -- personal) is a row, not a migration. 'removing' is a managed row the
+  -- person removed while signed out of Deus: it belongs to no app any more,
+  -- and waits to be disconnected in Deus Cloud.
+  CREATE TABLE IF NOT EXISTS integration_connections (
+    id TEXT PRIMARY KEY NOT NULL,
+    app_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('oauth', 'secret', 'cli', 'managed')),
+    deus_account_id TEXT,
+    label TEXT,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'active', 'needs_reauth', 'removing')),
+    credential TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK ((kind = 'managed') = (deus_account_id IS NOT NULL))
+  );
+
+  -- Indexes (18)
   CREATE INDEX IF NOT EXISTS idx_workspaces_repository_id ON workspaces(repository_id);
   CREATE INDEX IF NOT EXISTS idx_workspaces_state ON workspaces(state);
   CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
@@ -340,8 +403,9 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_automations_repository_id ON automations(repository_id);
   -- Run history newest-first (agnt run ids are UUID7 — the PK carries time).
   CREATE INDEX IF NOT EXISTS idx_automation_runs_automation ON automation_runs(automation_id, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_integration_connections_app ON integration_connections(app_id);
 
-  -- Triggers: auto-update updated_at (4)
+  -- Triggers: auto-update updated_at (6)
   CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
     AFTER UPDATE ON repositories
     BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
@@ -357,6 +421,17 @@ export const SCHEMA_SQL = `
   CREATE TRIGGER IF NOT EXISTS update_automations_updated_at
     AFTER UPDATE ON automations
     BEGIN UPDATE automations SET updated_at = datetime('now') WHERE id = NEW.id; END;
+
+  CREATE TRIGGER IF NOT EXISTS update_extension_installations_updated_at
+    AFTER UPDATE ON extension_installations
+    BEGIN
+      UPDATE extension_installations SET updated_at = datetime('now')
+        WHERE kind = NEW.kind AND item_id = NEW.item_id;
+    END;
+
+  CREATE TRIGGER IF NOT EXISTS update_integration_connections_updated_at
+    AFTER UPDATE ON integration_connections
+    BEGIN UPDATE integration_connections SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
   -- Triggers: denormalized message_count + auto-seq on messages (2)
   CREATE TRIGGER IF NOT EXISTS assign_message_seq

@@ -1,0 +1,69 @@
+// backend/src/services/integrations/accounts.ts
+// An app's account rows: which one the app uses, and what forgetting one
+// means. The rules:
+//
+//  - An app uses one account. A new sign-in replaces it only once it lands,
+//    so the old one keeps working until then.
+//  - An account never outlives its app: removing an app forgets its account,
+//    so no credential stays where no view shows it. Signing out forgets the
+//    account and keeps the app.
+
+import { cloudAccountId, forgetCloudAccount, forgetCloudAttempts } from "./auth/cloud-accounts";
+import { forgetOAuth } from "./auth/mcp-oauth";
+import { integrationsChanged } from "./events";
+import {
+  deleteConnection,
+  getConnection,
+  getInstallation,
+  listConnections,
+  updateConnection,
+  upsertInstallation,
+  type ConnectionRow,
+} from "./store";
+
+/**
+ * Make `connectionId` the account an app uses, and forget the ones it
+ * replaces. Installs the app if it is not (a sign-in that lands after its
+ * app was removed puts it back).
+ */
+export function attachConnection(appId: string, connectionId: string): void {
+  // Connecting an account is the user's own act: the app is theirs from here.
+  upsertInstallation({ kind: "app", itemId: appId, connectionId, explicit: true });
+  const attached = getConnection(connectionId) ?? undefined;
+  for (const old of listConnections(appId)) {
+    if (old.id !== connectionId) forgetConnection(old, attached);
+  }
+  integrationsChanged();
+}
+
+/**
+ * Forget one account: here, and in Deus Cloud when it holds it. Deus Cloud
+ * keeps one connection per Deus account and app, so a row that `replacedBy`
+ * stands for the same one is dropped here only.
+ */
+export function forgetConnection(connection: ConnectionRow, replacedBy?: ConnectionRow): void {
+  forgetOAuth(connection.id);
+  if (connection.kind === "managed") {
+    forgetCloudAttempts(connection.id);
+    const sameCloudAccount =
+      replacedBy?.kind === "managed" && replacedBy.deusAccountId === connection.deusAccountId;
+    if (!sameCloudAccount && cloudAccountId() === null) {
+      // Signed out of Deus, Deus Cloud cannot be told. The row leaves its app
+      // and waits: the account is disconnected when its Deus account signs
+      // in again (cloud-apps.ts), so it does not outlive the app.
+      const install = getInstallation("app", connection.appId);
+      if (install?.connectionId === connection.id) {
+        upsertInstallation({ kind: "app", itemId: connection.appId, connectionId: null });
+      }
+      updateConnection(connection.id, { status: "removing" });
+      return;
+    }
+    if (!sameCloudAccount) forgetCloudAccount(connection);
+  }
+  deleteConnection(connection.id);
+}
+
+/** Forget every account of an app. */
+export function forgetAccounts(appId: string): void {
+  for (const connection of listConnections(appId)) forgetConnection(connection);
+}

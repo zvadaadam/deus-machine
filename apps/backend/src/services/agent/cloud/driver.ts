@@ -72,6 +72,7 @@ import { getDatabase } from "../../../lib/database";
 import { emitPtyData, emitPtyExit } from "../../pty.service";
 import { getSessionRaw } from "../../../db";
 import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
+import { resolveCloudTurnExtensions } from "../../integrations";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
 const TRANSCRIPT_SNAPSHOT_SCHEMA = SessionSnapshotEventSchema.pick({
@@ -1142,7 +1143,12 @@ export async function startCloudTurn(
   }
   try {
     // The turn names its selection and no credential: the platform selects the
-    // signed-in user's provider account at admission.
+    // signed-in user's provider account at admission. The installed skills
+    // and the apps that reach the cloud ride along, each as the complete set
+    // (once the platform takes them). An app Deus Cloud holds an account for
+    // is named by a capability, never a token of the account's; an account
+    // held on this computer stays here (services/integrations/runtime.ts).
+    const extensions = await resolveCloudTurnExtensions();
     session.socket.send({
       type: "message.send",
       text: prompt,
@@ -1153,6 +1159,7 @@ export async function startCloudTurn(
         harness: selection.harness,
         model: selection.model,
         thinkingLevel: selection.thinkingLevel,
+        ...extensions,
       },
     });
   } catch (err) {

@@ -9,15 +9,11 @@
 // the settings API) and sent only to Deus Cloud.
 
 import { randomBytes } from "crypto";
-import { getDeusCloudSessionConfig } from "./agent/cloud/config";
+import { currentAccountSession, type AccountSession } from "./account-session";
 import { getSetting, removeSettings, saveSetting } from "./settings.service";
 
-export interface AccountSession {
-  cloudUrl: string;
-  sessionToken: string;
-  /** The session's `sub`, read unverified: it scopes local records; Deus Cloud verifies it. */
-  accountId: string;
-}
+// The tunnel follows this session; its callers read it from here.
+export { currentAccountSession };
 
 interface MachineRecord {
   machineId: string;
@@ -58,30 +54,6 @@ export function retireLegacyRelayCredentials(): void {
   }
 }
 const CLOUD_TIMEOUT_MS = 15_000;
-
-function accountOf(sessionToken: string): string | null {
-  try {
-    const payload = JSON.parse(
-      Buffer.from(sessionToken.split(".")[1] ?? "", "base64url").toString("utf8")
-    ) as { sub?: unknown };
-    return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
-/** The desktop's current Deus account session, or null while signed out. */
-export function currentAccountSession(): AccountSession | null {
-  const { deusCloudUrl, deusCloudSessionToken } = getDeusCloudSessionConfig();
-  if (!deusCloudUrl || !deusCloudSessionToken) return null;
-  const accountId = accountOf(deusCloudSessionToken);
-  if (!accountId) return null;
-  return {
-    cloudUrl: deusCloudUrl.replace(/\/+$/, ""),
-    sessionToken: deusCloudSessionToken,
-    accountId,
-  };
-}
 
 function records(): Record<string, MachineRecord> {
   const stored = getSetting(RECORDS_SETTING) as unknown;

@@ -163,6 +163,105 @@ at the repository root (copied into new worktrees); its private key is Deus Clou
 secret and must never be printed or committed. `apps/cloud-relay/.dev.vars` holds the
 local relay's development JWKS.
 
+### Customize: Apps, Plugins and Skills (`services/integrations/`)
+
+The Customize page (`features/customize`) has three views over one install system:
+**Apps** are MCP servers (Connect → OAuth or a pasted key), **Recommended
+Plugins** bundle apps and skills for a job (Install), **Skills** are Agent Skills
+folders (Add); opening one replaces the catalog with its page, never a dialog.
+The curated catalog is data in `shared/integrations/catalog/` (each app's
+endpoint verified, each skill pinned to a commit; brand marks via
+`bun scripts/generate-integration-icons.ts`). Deus implements no app: an entry
+points at a vendor's remote server, a package to run locally, or a broker's
+toolkit. `shared/integrations` imports nothing but zod (a test holds it), so
+the catalog can move to a package the day Deus Cloud reads it too.
+
+- **Install once, every project inherits.** `extension_installations` rows are
+  account-wide on this computer — no per-workspace bindings. Installing and
+  authorizing are separate states ("Installed · needs sign-in" is valid). A
+  plugin's parts are `explicit = 0` and go when no installed plugin lists them
+  (membership is read from the catalog, never stored); anything the user added
+  or connected themselves stays.
+- **Two reads, not one.** The catalog is static for a build: clients read it
+  once (`integrationsCatalog`). The `integrations` resource pushes state only
+  (a few kilobytes) and `shared/integrations/compose.ts` joins them. Lists one
+  page needs (`appTools`, `skillContent`, `localSkills`) are requests. Nothing
+  a client reads ever carries a credential.
+- **Credentials.** An account's row says how it is held
+  (`integration_connections.kind`): `oauth` and `secret` (a pasted key, a
+  local server's variables) keep a credential sealed by `vault.ts` (key in the
+  macOS Keychain, else a 0600 file; found once at startup); `cli` stores
+  nothing (the signed-in CLI supplies the token at each use); `managed` is
+  held by Deus Cloud. A credential sealed under a lost key opens as null and
+  its app asks to connect again.
+- **The gateway is the only door.** A turn's config names an app with an account
+  as `http://127.0.0.1:<port>/api/integrations/mcp/<app>` plus this process's
+  key (`gateway.ts`). Each request gets the account's current credential
+  (`credentials.ts`) and is streamed to the real server; a 401 is retried once
+  with a fresh one. So a turn start does no network work for apps, a token
+  that expires mid-turn is refreshed on the call that needs it, and no agent
+  process or config file (Codex writes its MCP servers to disk) holds a
+  provider's token. Never put an account's token in a turn's `mcpServers`.
+  Local (stdio) servers and servers with no account are named directly.
+- **OAuth** (`auth/mcp-oauth.ts`): signing in runs the MCP SDK's `auth()`
+  (discovery, dynamic client registration, PKCE; the callback at
+  `/api/integrations/oauth/callback`; one in-memory attempt per connection,
+  newest wins). Refreshing calls `refreshAuthorization` directly, single-flight
+  per connection, and tells "sign in again" (grant refused) from "try later".
+  Tokens are bound to the server URL they were issued for. Servers that accept
+  only vendor-approved clients are `registration: "preregistered"` and use a
+  client from `auth/clients.ts`.
+- **Apps that connect through the Deus account** (`sign-in-route.ts`,
+  `cloud-apps.ts`, `auth/cloud-accounts.ts`). A catalog app may name a broker that can hold
+  its account and serve its tools: `broker.provider` (`composio`) and
+  `broker.toolkit`. `signInRoute(app)` picks: a vendor-gated app signs in
+  directly once Deus has its own client, and goes through its broker until
+  then; an app with no server of its own always does (its transport is
+  `broker`, its auth `managed`). Only Deus Cloud talks to a broker (AGNT `apps/deus-cloud`,
+  `/me/connections`, LLP 0004 "App connections"): the Composio key can act on
+  every connected account, so this app has no code path that holds one (a
+  test scans for it). The route therefore needs the person signed in to Deus
+  (`unavailable: "account"`, and the blocked state is the sign-in button);
+  an app Deus Cloud does not serve yet is `"soon"`. This computer keeps one
+  row per app and Deus account (`auth_kind = managed`, `deus_account_id`, no
+  credential), as Deus Cloud keeps one connection per account and app. Its
+  requests go through the gateway to the connection's MCP endpoint in Deus
+  Cloud with the Deus session, read per request. A sign-in returns to
+  `/api/integrations/oauth/callback/<attempt>`; whether it worked is asked
+  of Deus Cloud, never read from the page. `reconcileCloudAccounts()` follows
+  the account (startup, sign-in, renewal, switch, sign-out): signed out, the
+  apps pause and their rows wait; another account's rows are dropped here
+  only; an installed app the account connected elsewhere is ready with no
+  sign-in. Disconnecting or removing the app disconnects the account in Deus
+  Cloud, for every computer.
+- **Cloud turns** (`cloud-turns.ts`, behind `DEUS_CLOUD_EXTENSIONS=1` until
+  the platform this build talks to accepts the options). A cloud turn's
+  options carry two complete sets: the skills to place in the sandbox, and
+  the MCP servers of the installed apps that reach the cloud
+  (`appReachesCloud`, one rule for the backend and the page): an app Deus
+  Cloud holds an account for, or a public remote server that needs none. The
+  sandbox's agent gets a capability for the first kind (`cloudTurnServers`):
+  it can call those apps' tools for eight hours and nothing else, and one is
+  reused across turns until the apps change or it nears its end. Neither the
+  Deus session nor an account held on this computer ever goes to a sandbox.
+- **Where accounts are headed.** Accounts that sign in directly (the MCP
+  OAuth flow, a pasted key) are this computer's, so cloud agents do not get
+  them. The plan is for Deus Cloud's `Connections` to hold those too, and
+  for the platform to resolve an account's connections at dispatch, the way
+  it resolves provider accounts, so a turn started without this computer
+  gets them as well. Do not ship account tokens to a sandbox through turn
+  options.
+- **Codex** takes per-turn servers only in a session-owned `CODEX_HOME`
+  (`codex-homes.ts`, `codexSessionHome`: the user's login, instructions and skills linked in, not
+  their history; pruned when its session is deleted). Codex itself accepts
+  them in a thread's `config` with no home; when the engine delivers them that
+  way, the session homes go.
+- **Skills on disk** (`skill-files.ts`) use the Skills CLI layout: files in
+  `~/.agents/skills/<name>` (Codex), a symlink in `~/.claude/skills/<name>`
+  (Claude), a `.deus-skill.json` marker. Nothing without the marker is replaced
+  or removed; a folder is swapped in whole. `DEUS_SKILLS_HOME` points it
+  elsewhere (tests, dev).
+
 ### Adding a New WS Resource
 
 1. Add resource to `QUERY_RESOURCES` in `shared/events.ts`
@@ -173,7 +272,7 @@ local relay's development JWKS.
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 10 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 12 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only. `db/migrate-turns.ts` moves existing message accounting once at startup without deleting history.
 - Only the backend writes to DB
@@ -192,6 +291,10 @@ bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or
 ```
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.
+
+`bun run typecheck` covers the web app and `shared/` only. A backend change is
+checked by `bun run typecheck:backend` (its tests included), and
+`bun run typecheck:all` runs every program.
 
 ## Code Style
 

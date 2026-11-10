@@ -8,6 +8,7 @@ import {
   Settings,
   ArrowUpRight,
   ClockFading,
+  Blocks,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
 import { capabilities } from "@/platform/capabilities";
@@ -129,6 +130,15 @@ export const staticCommands: CommandDefinition[] = [
     keywords: ["automations", "scheduled", "cron", "recurring", "tasks"],
     when: macBackendAvailable,
     action: () => uiActions.openAutomations(),
+  },
+  {
+    id: "open-customize",
+    label: "Go to Customize",
+    icon: Blocks,
+    group: "navigation",
+    keywords: ["apps", "plugins", "skills", "mcp", "integrations", "connectors", "tools"],
+    when: macBackendAvailable,
+    action: () => uiActions.openCustomize(),
   },
 
   ...settingsNavigation.map(

@@ -26,6 +26,7 @@ import {
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
+import { startIntegrations } from "./services/integrations";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -112,6 +113,8 @@ const allowAgentless =
 
 async function onListening(port: number): Promise<void> {
   actualServerPort = port;
+  // Customize: app sign-ins return here, and agents reach apps through its gateway.
+  void startIntegrations(port);
 
   if (!allowAgentless) {
     await agentService.init();

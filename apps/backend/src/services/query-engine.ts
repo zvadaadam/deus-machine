@@ -35,6 +35,7 @@ import { setWorkspaceStatus } from "./workspace-status.service";
 import { archiveWorkspace } from "./workspace-archive.service";
 import { getRunningApps, listApps } from "./aap";
 import { getDiscoveredServers } from "./local-servers.service";
+import { getState as getIntegrationsState, runIntegrationMutation } from "./integrations";
 import {
   createAutomation,
   updateAutomation,
@@ -521,6 +522,7 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
       .with("automation_runs", () =>
         listAutomationRuns(requireParam(params, "automationId", "automation_runs"))
       )
+      .with("integrations", () => getIntegrationsState())
       .exhaustive()
   );
 }
@@ -670,6 +672,19 @@ async function runMutation(action: string, params: QueryParams): Promise<unknown
         }
         return toggleAutomationService(automationId, status);
       })
+      // ---- Apps, Plugins and Skills (the service invalidates itself) ----
+      .with(
+        "installIntegration",
+        "uninstallIntegration",
+        "setIntegrationEnabled",
+        "connectApp",
+        "disconnectApp",
+        "checkApp",
+        "addCustomApp",
+        "addCustomSkill",
+        "updateSkill",
+        (action) => runIntegrationMutation(action, params)
+      )
       .exhaustive()
   );
 }

@@ -16,6 +16,7 @@ import {
   saveCloudGithubToken,
 } from "../services/cloud-workspace-init.service";
 import { initAutomations } from "../services/automations";
+import { reconcileCloudAccounts } from "../services/integrations";
 import { AppError, ValidationError } from "../lib/errors";
 
 const app = new Hono();
@@ -106,6 +107,8 @@ app.post("/settings/cloud/credentials", async (c) => {
   setCloudRuntimeCredentials(body);
   // Remote access belongs to the signed-in account: follow sign-in, sign-out and switches.
   reconcileRelay();
+  // So do the apps the account connected through Deus Cloud.
+  void reconcileCloudAccounts();
   // Credentials arriving is the moment the automations cache can first (or
   // freshly) mirror the platform — kick a background sync.
   initAutomations();
