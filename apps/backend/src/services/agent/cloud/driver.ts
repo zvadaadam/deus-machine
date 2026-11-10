@@ -1138,17 +1138,20 @@ export async function startCloudTurn(
   }
 
   const session = await ensureCloudSession(deusSessionId);
+  // The installed skills and the apps that reach the cloud ride along, each
+  // as the complete set (once the platform takes them). An app Deus Cloud
+  // holds an account for is named by a capability, never a token of the
+  // account's; an account held on this computer stays here
+  // (services/integrations/runtime.ts). Resolved before the turn is
+  // registered, like the wake above: from there to the send nothing waits,
+  // so a Stop can never be sent ahead of the turn it stops.
+  const extensions = await resolveCloudTurnExtensions();
   if (!handler.beginTurn(deusSessionId, turnId)) {
     throw new Error("The agent is still working — wait for the current turn to finish.");
   }
   try {
     // The turn names its selection and no credential: the platform selects the
-    // signed-in user's provider account at admission. The installed skills
-    // and the apps that reach the cloud ride along, each as the complete set
-    // (once the platform takes them). An app Deus Cloud holds an account for
-    // is named by a capability, never a token of the account's; an account
-    // held on this computer stays here (services/integrations/runtime.ts).
-    const extensions = await resolveCloudTurnExtensions();
+    // signed-in user's provider account at admission.
     session.socket.send({
       type: "message.send",
       text: prompt,

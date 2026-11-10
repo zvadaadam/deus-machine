@@ -52,6 +52,7 @@ import {
   uninstallApp,
 } from "../../../../src/services/integrations/apps";
 import { checkApp, settleChecks } from "../../../../src/services/integrations/checks";
+import { markNeedsReauth } from "../../../../src/services/integrations/events";
 import {
   completeCloudCallback,
   __setCallbackSettleForTests,
@@ -469,6 +470,18 @@ describe("an app that connects through the Deus account", () => {
     await settle();
     expect(cloud.accounts.get("alice")!.has("instagram")).toBe(false);
     expect(listConnections("instagram")).toHaveLength(0);
+  });
+
+  it("a late answer about its sign-in does not undo a disconnect that is still owed", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    const row = listConnections("instagram")[0]!;
+    cloud.failing.add("DELETE");
+    disconnectApp("instagram");
+    await settle();
+    // A check begun before the disconnect now reports the account gone.
+    markNeedsReauth(row.id, "Instagram is no longer signed in");
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
   });
 
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {

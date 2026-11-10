@@ -3,7 +3,7 @@
 // one tick (a plugin installing ten parts) become one push to the clients.
 
 import { invalidate } from "../query-engine";
-import { updateConnection } from "./store";
+import { getConnection, updateConnection } from "./store";
 
 let scheduled = false;
 
@@ -22,6 +22,9 @@ export function integrationsChanged(): void {
  * for every kind of account, so none changes state without a push.
  */
 export function markNeedsReauth(connectionId: string, reason: string): void {
+  // Disconnected or removed meanwhile: its row waits for Deus Cloud to
+  // confirm, and a late answer about its sign-in must not undo that.
+  if (getConnection(connectionId)?.status === "removing") return;
   if (updateConnection(connectionId, { status: "needs_reauth", lastError: reason })) {
     integrationsChanged();
   }

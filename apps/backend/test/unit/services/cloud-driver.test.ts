@@ -129,11 +129,20 @@ vi.mock("../../../src/db", () => ({
   })),
 }));
 
+// A turn's apps and skills: nothing by default, held open by the test that needs it.
+const { mockExtensions } = vi.hoisted(() => ({
+  mockExtensions: vi.fn(async (): Promise<Record<string, unknown>> => ({})),
+}));
+vi.mock("../../../src/services/integrations", () => ({
+  resolveCloudTurnExtensions: () => mockExtensions(),
+}));
+
 import {
   initCloudDriver,
   shutdownCloudDriver,
   ensureCloudSession,
   startCloudTurn,
+  cancelCloudTurn,
   requestCloudDiff,
   pushCloudSessionFacts,
   startCloudSimulator,
@@ -1319,6 +1328,31 @@ describe("cloud driver turn API", () => {
       });
     }
   );
+
+  it("registers the turn once its apps and skills are resolved, so a Stop is never sent ahead of it", async () => {
+    let release = () => {};
+    mockExtensions.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ skills: [] });
+        })
+    );
+    const starting = startCloudTurn("deus-session-1", "turn-slow", "hello", SELECTION);
+    await new Promise((next) => setTimeout(next, 10));
+    // Still resolving: no turn is live, so a Stop has nothing to cancel and sends nothing.
+    expect(handler.beginTurn).not.toHaveBeenCalled();
+    expect(await cancelCloudTurn("deus-session-1")).toEqual({ outcome: "no_active_turn" });
+    expect(mockSend).not.toHaveBeenCalled();
+
+    release();
+    await starting;
+    expect(handler.beginTurn).toHaveBeenCalledWith("deus-session-1", "turn-slow");
+    expect(mockSend.mock.calls.at(-1)![0]).toMatchObject({
+      type: "message.send",
+      turnId: "turn-slow",
+      options: { skills: [] },
+    });
+  });
 
   it("rejects a send while a turn is live (agnt would queue, deus's contract is one turn)", async () => {
     handler.liveTurnId.mockReturnValue("busy-turn");
