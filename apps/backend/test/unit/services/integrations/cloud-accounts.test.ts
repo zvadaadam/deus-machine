@@ -378,6 +378,26 @@ describe("an app that connects through the Deus account", () => {
     expect(cloud.accounts.get("alice")?.has("instagram") ?? false).toBe(false);
   });
 
+  it("connecting again cancels a disconnect that is still owed", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    cloud.failing.add("DELETE");
+    disconnectApp("instagram");
+    await settle();
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
+
+    // The account is still in Deus Cloud, so connecting again finds it there.
+    expect(await connectApp({ appId: "instagram" })).toEqual({ status: "connected" });
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["active"]);
+
+    // No later pass disconnects what the person connected again.
+    cloud.failing.clear();
+    await deusAccount("alice");
+    await settle();
+    expect(cloud.accounts.get("alice")!.get("instagram")?.status).toBe("active");
+    expect(view("instagram").readiness).toBe("ready");
+  });
+
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
     await deusAccount("alice");
     await signIn("instagram");
