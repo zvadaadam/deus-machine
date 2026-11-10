@@ -443,6 +443,34 @@ describe("an app that connects through the Deus account", () => {
     expect(listConnections("instagram").map((c) => c.status)).toEqual(["active"]);
   });
 
+  it("a disconnect one Deus account still owes survives another account using the app", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    await deusAccount(null);
+    uninstallApp("instagram");
+    await settle();
+
+    // Bob signs in to Deus on this computer and connects the same app as himself.
+    await deusAccount("bob");
+    await signIn("instagram");
+    expect(
+      listConnections("instagram")
+        .map((c) => c.status)
+        .sort()
+    ).toEqual(["active", "removing"]);
+    // He removes it again: his account is disconnected, hers still waits for her.
+    uninstallApp("instagram");
+    await settle();
+    expect(cloud.accounts.get("bob")?.has("instagram") ?? false).toBe(false);
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
+    expect(cloud.accounts.get("alice")!.has("instagram")).toBe(true);
+
+    await deusAccount("alice");
+    await settle();
+    expect(cloud.accounts.get("alice")!.has("instagram")).toBe(false);
+    expect(listConnections("instagram")).toHaveLength(0);
+  });
+
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
     await deusAccount("alice");
     await signIn("instagram");

@@ -42,7 +42,8 @@ export function attachConnection(appId: string, connectionId: string): void {
  * Forget one account: here, and in Deus Cloud when it holds it. Deus Cloud
  * keeps one connection per Deus account and app, so a row that `replacedBy`
  * stands for the same one is dropped here only, and so is a row another Deus
- * account left (it stays that account's).
+ * account left (it stays that account's). A disconnect another Deus account
+ * still owes is not this one's to drop: its row waits for that account.
  */
 export function forgetConnection(connection: ConnectionRow, replacedBy?: ConnectionRow): void {
   forgetOAuth(connection.id);
@@ -51,7 +52,8 @@ export function forgetConnection(connection: ConnectionRow, replacedBy?: Connect
     const sameCloudAccount =
       replacedBy?.kind === "managed" && replacedBy.deusAccountId === connection.deusAccountId;
     const signedIn = cloudAccountId();
-    if (!sameCloudAccount && (signedIn === null || signedIn === connection.deusAccountId)) {
+    const owner = signedIn === connection.deusAccountId;
+    if (!sameCloudAccount && (signedIn === null || owner || connection.status === "removing")) {
       // The row leaves its app and waits as `removing` until Deus Cloud has
       // disconnected the account: now when its Deus account is signed in,
       // else when it next is (cloud-apps.ts). A request that fails is asked
@@ -61,7 +63,7 @@ export function forgetConnection(connection: ConnectionRow, replacedBy?: Connect
         upsertInstallation({ kind: "app", itemId: connection.appId, connectionId: null });
       }
       updateConnection(connection.id, { status: "removing" });
-      if (signedIn) void finishRemoval(connection);
+      if (owner) void finishRemoval(connection);
       return;
     }
   }
