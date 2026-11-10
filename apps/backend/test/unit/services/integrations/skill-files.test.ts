@@ -207,8 +207,8 @@ describe("placing a skill", () => {
     writeForeignSkill(agentsSkillsDir(), "codex-only");
     const installed = (id: string) => id === "acme/plan";
     expect(listLocalSkills(installed)).toEqual([
-      { name: "codex-only", description: "Mine", locations: ["agents"] },
-      { name: "mine", description: "Mine", locations: ["claude", "agents"] },
+      { name: "codex-only", description: "Mine" },
+      { name: "mine", description: "Mine" },
     ]);
     // A folder Deus placed whose install is gone is listed too: nothing agents load is invisible.
     expect(listLocalSkills(() => false).map((skill) => skill.name)).toContain("plan");

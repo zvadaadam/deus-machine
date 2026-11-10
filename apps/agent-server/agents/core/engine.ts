@@ -13,7 +13,7 @@ import {
 import type { SdkMcpServers } from "@zvada/agent-server/core";
 import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { createDeusMCPServer } from "../deus-tools";
-import { trackedSessions } from "../../session-tracker";
+import { sessionServers, trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
 import { decideToolUse } from "./tool-policy";
 
@@ -103,7 +103,12 @@ export async function setAapMcpServers(
   const failures: string[] = [];
   for (const sessionId of liveSessionIds) {
     try {
-      await claude.setMcpServers(sessionId, servers);
+      // The swap replaces the session's whole wire set: the servers its turn
+      // brought (the installed apps') go back in with the new AAP set.
+      await claude.setMcpServers(
+        sessionId,
+        sessionServers(servers, trackedSessions.get(sessionId)?.mcpServers)
+      );
     } catch (error) {
       console.error(`[core] mcp hot-swap failed for ${sessionId}:`, error);
       failures.push(sessionId);

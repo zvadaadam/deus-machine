@@ -42,7 +42,7 @@ import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, engineHarness, type DeusTurnOptions } from "./run-config";
 import { relay } from "./tool-relay";
-import { codexSessionHome, hasCodexSessionHome, resolveTurnApps } from "../integrations";
+import { codexTurnHome, resolveTurnApps } from "../integrations";
 import {
   persistSessionNeedsPlanResponse,
   persistSessionNeedsResponse,
@@ -168,8 +168,8 @@ export async function startTurn(
 
 /**
  * The installed apps' MCP servers for a local turn: every project inherits
- * them. A Codex turn carries them only in a CODEX_HOME of its session's own,
- * so a new session gets one at its first turn with apps, and keeps it.
+ * them. A Codex turn carries them only in a CODEX_HOME of its session's own
+ * (`codexTurnHome` says which chats get one).
  */
 async function turnApps(
   sessionId: string,
@@ -184,15 +184,13 @@ async function turnApps(
     );
   }
   if (!codex) return { mcpServers: servers, env: loopbackPastProxy() };
-  if (!hasCodexSessionHome(sessionId)) {
-    // A thread that began in the user's own home resumes there, without apps.
-    if (!Object.keys(servers).length || resume) return {};
-  }
   try {
-    return {
-      mcpServers: servers,
-      env: { ...loopbackPastProxy(), CODEX_HOME: codexSessionHome(sessionId) },
-    };
+    const home = codexTurnHome(sessionId, {
+      resumes: resume !== undefined,
+      appsInstalled: Object.keys(servers).length + skipped.length > 0,
+    });
+    if (!home) return {};
+    return { mcpServers: servers, env: { ...loopbackPastProxy(), CODEX_HOME: home } };
   } catch (error) {
     console.warn("[AgentService] Codex session home unavailable; turn runs without apps:", error);
     return {};

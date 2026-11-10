@@ -439,7 +439,7 @@ export function isSkillPlaced(name: string, id: string): boolean {
  */
 export function listLocalSkills(installed: (id: string) => boolean): LocalSkill[] {
   const found = new Map<string, LocalSkill>();
-  const scan = (dir: string, location: "claude" | "agents") => {
+  const scan = (dir: string) => {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -458,13 +458,12 @@ export function listLocalSkills(installed: (id: string) => boolean): LocalSkill[
       } catch {
         // unreadable: list it without a description
       }
-      const existing = found.get(entry.name);
-      if (existing) existing.locations.push(location);
-      else found.set(entry.name, { name: entry.name, description, locations: [location] });
+      // In both folders it is one skill: the first found says what it is.
+      if (!found.has(entry.name)) found.set(entry.name, { name: entry.name, description });
     }
   };
-  scan(claudeSkillsDir(), "claude");
-  scan(agentsSkillsDir(), "agents");
+  scan(claudeSkillsDir());
+  scan(agentsSkillsDir());
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -493,7 +492,6 @@ export async function readSkillContent(
     return {
       markdown: fs.readFileSync(path.join(dir, "SKILL.md"), "utf8"),
       files: listFiles(dir).sort(),
-      from: "installed",
     };
   }
   const file = [source.path, "SKILL.md"].filter(Boolean).join("/");
@@ -503,5 +501,5 @@ export async function readSkillContent(
   );
   if (!response.ok)
     throw new Error(`GitHub answered ${response.status} for ${source.repo}/${file}`);
-  return { markdown: await response.text(), files: null, from: "github" };
+  return { markdown: await response.text(), files: null };
 }

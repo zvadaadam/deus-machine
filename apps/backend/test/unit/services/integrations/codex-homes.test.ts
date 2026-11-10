@@ -15,7 +15,7 @@ vi.mock("../../../../src/services/query-engine", () => ({ invalidate: () => {} }
 
 import {
   codexSessionHome,
-  hasCodexSessionHome,
+  codexTurnHome,
   pruneCodexSessionHomes,
 } from "../../../../src/services/integrations/codex-homes";
 
@@ -47,7 +47,6 @@ afterEach(() => {
 describe("Codex session homes", () => {
   it("share the user's login and skills by link, start from a copy of their config, and stay private", () => {
     const home = codexSessionHome("live");
-    expect(hasCodexSessionHome("live")).toBe(true);
     expect(fs.lstatSync(path.join(home, "auth.json")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(home, "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(home, "config.toml")).isSymbolicLink()).toBe(false);
@@ -56,6 +55,17 @@ describe("Codex session homes", () => {
     // The user's history is not linked: a fresh home would index all of it before answering.
     expect(fs.existsSync(path.join(home, "sessions"))).toBe(false);
     expect(codexSessionHome("live")).toBe(home);
+  });
+
+  it("a chat gets a home at its first turn once an app is installed, and keeps it", () => {
+    // No app installed: the user's own home, where their Codex finds the thread.
+    expect(codexTurnHome("plain", { resumes: false, appsInstalled: false })).toBeNull();
+    // A thread that began there resumes there, whatever is installed since.
+    expect(codexTurnHome("plain", { resumes: true, appsInstalled: true })).toBeNull();
+    // An app installed, signed in or not: a home of its own, kept from then on.
+    const home = codexTurnHome("with-apps", { resumes: false, appsInstalled: true });
+    expect(home).toBe(codexSessionHome("with-apps"));
+    expect(codexTurnHome("with-apps", { resumes: true, appsInstalled: false })).toBe(home);
   });
 
   it("refuses an id that is not a plain name", () => {

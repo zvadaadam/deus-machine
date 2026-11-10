@@ -234,8 +234,7 @@ function toConnection(row: RawConnection): ConnectionRow {
 }
 
 export function toConnectionView(row: ConnectionRow): ConnectionView {
-  const { deusAccountId: _account, ...view } = row;
-  return view;
+  return { kind: row.kind, label: row.label, status: row.status, lastError: row.lastError };
 }
 
 export function listConnections(appId?: string): ConnectionRow[] {

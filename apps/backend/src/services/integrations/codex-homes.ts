@@ -65,7 +65,7 @@ export function codexSessionHome(sessionId: string): string {
 }
 
 /** Whether a session already runs Codex in a home of its own (keep using it). */
-export function hasCodexSessionHome(sessionId: string): boolean {
+function hasCodexSessionHome(sessionId: string): boolean {
   return fs.existsSync(path.join(codexHomesRoot(), sessionId, HOME_MARKER));
 }
 
@@ -73,6 +73,21 @@ export function hasCodexSessionHome(sessionId: string): boolean {
 const REGENERABLE = ["cache", "plugins", "tmp", "shell_snapshots"];
 /** A home unused this long gives its regenerable caches back. */
 const IDLE_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * The CODEX_HOME a Codex turn runs in, or null for the user's own. A chat
+ * gets a home of its own at its first turn once an app is installed, ready
+ * or not (one signed in to later reaches the same chat), and keeps it. With
+ * no app installed it stays in the user's home, where their own Codex finds
+ * it; a thread that began there resumes there, without apps.
+ */
+export function codexTurnHome(
+  sessionId: string,
+  turn: { resumes: boolean; appsInstalled: boolean }
+): string | null {
+  if (!hasCodexSessionHome(sessionId) && (turn.resumes || !turn.appsInstalled)) return null;
+  return codexSessionHome(sessionId);
+}
 
 /**
  * Keep the session homes small. A home is the only copy of its session's

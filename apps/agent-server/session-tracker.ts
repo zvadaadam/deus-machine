@@ -8,12 +8,14 @@
 // Deus's backend always mints sessionId/turnId client-side (uuidv7) and sends
 // both on turn/start — a request without a sessionId is simply not tracked.
 
-import type { AgentHarness } from "@zvada/agent-server/protocol";
+import type { AgentHarness, McpServerConfig } from "@zvada/agent-server/protocol";
 
 export interface TrackedSession {
   harness: AgentHarness;
   cwd: string;
   additionalDirectories?: string[];
+  /** The MCP servers its turn brought (the installed apps'), kept through a swap of the AAP set. */
+  mcpServers?: Record<string, McpServerConfig>;
   /** Set while a turn is running; cleared on turn.ended. */
   turnId?: string;
   nativeSessionId?: string;
@@ -27,7 +29,12 @@ export const trackedSessions = new Map<string, TrackedSession>();
 export function observeTurnStart(params: {
   sessionId?: string;
   turnId?: string;
-  config?: { harness?: string; cwd?: string; additionalDirectories?: string[] };
+  config?: {
+    harness?: string;
+    cwd?: string;
+    additionalDirectories?: string[];
+    mcpServers?: Record<string, McpServerConfig>;
+  };
 }): void {
   const { sessionId, config } = params;
   if (!sessionId || !config?.harness || !config.cwd) return;
@@ -37,8 +44,21 @@ export function observeTurnStart(params: {
     harness: config.harness as AgentHarness,
     cwd: config.cwd,
     additionalDirectories: config.additionalDirectories,
+    mcpServers: config.mcpServers,
     turnId: params.turnId ?? existing?.turnId,
   });
+}
+
+/**
+ * The wire servers a session carries: the AAP set, and over it the ones its
+ * turn brought. What a turn starts with and what a swap of the AAP set leaves
+ * it with are the same map.
+ */
+export function sessionServers(
+  aapServers: Record<string, McpServerConfig>,
+  turnServers: Record<string, McpServerConfig> | undefined
+): Record<string, McpServerConfig> {
+  return { ...aapServers, ...turnServers };
 }
 
 /** Record turn boundaries + native ids from the broadcast event stream. */

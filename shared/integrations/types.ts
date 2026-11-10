@@ -250,8 +250,6 @@ export type ConnectionKind = "oauth" | "secret" | "cli" | "managed";
 
 /** An authorized account (or a configured key) for one app. Never carries secrets. */
 export interface ConnectionView {
-  id: string;
-  appId: string;
   kind: ConnectionKind;
   label: string | null;
   status: ConnectionStatus;
@@ -379,15 +377,12 @@ export interface SkillContent {
   markdown: string;
   /** Paths inside the skill folder, when its files are on this computer. */
   files: string[] | null;
-  from: "installed" | "github";
 }
 
 /** A skill already on this computer that Deus did not install (the `localSkills` request). */
 export interface LocalSkill {
   name: string;
   description: string;
-  /** Where the agents load it from. */
-  locations: Array<"claude" | "agents">;
 }
 
 // ---------------------------------------------------------------------------

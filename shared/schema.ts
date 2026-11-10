@@ -8,7 +8,7 @@
  *         paired_devices, automations, automation_runs, extension_installations,
  *         integration_connections
  * Indexes: 18
- * Triggers: 8 (6 auto-update updated_at, 2 denormalized message_count + auto-seq)
+ * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
  *
  * The agent-facing tables (messages, turns, parts, compactions) store the
  * @zvada/agent-server protocol verbatim: `parts.data` is the engine `Part`
@@ -347,7 +347,6 @@ export const SCHEMA_SQL = `
     tools TEXT,
     checked_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (kind, item_id)
   );
 
@@ -374,7 +373,6 @@ export const SCHEMA_SQL = `
     credential TEXT,
     last_error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     CHECK ((kind = 'managed') = (deus_account_id IS NOT NULL))
   );
 
@@ -400,7 +398,7 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_automation_runs_automation ON automation_runs(automation_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_integration_connections_app ON integration_connections(app_id);
 
-  -- Triggers: auto-update updated_at (6)
+  -- Triggers: auto-update updated_at (4)
   CREATE TRIGGER IF NOT EXISTS update_repositories_updated_at
     AFTER UPDATE ON repositories
     BEGIN UPDATE repositories SET updated_at = datetime('now') WHERE id = NEW.id; END;
@@ -416,17 +414,6 @@ export const SCHEMA_SQL = `
   CREATE TRIGGER IF NOT EXISTS update_automations_updated_at
     AFTER UPDATE ON automations
     BEGIN UPDATE automations SET updated_at = datetime('now') WHERE id = NEW.id; END;
-
-  CREATE TRIGGER IF NOT EXISTS update_extension_installations_updated_at
-    AFTER UPDATE ON extension_installations
-    BEGIN
-      UPDATE extension_installations SET updated_at = datetime('now')
-        WHERE kind = NEW.kind AND item_id = NEW.item_id;
-    END;
-
-  CREATE TRIGGER IF NOT EXISTS update_integration_connections_updated_at
-    AFTER UPDATE ON integration_connections
-    BEGIN UPDATE integration_connections SET updated_at = datetime('now') WHERE id = NEW.id; END;
 
   -- Triggers: denormalized message_count + auto-seq on messages (2)
   CREATE TRIGGER IF NOT EXISTS assign_message_seq

@@ -255,8 +255,11 @@ the catalog can move to a package the day Deus Cloud reads it too.
   gets them as well. Do not ship account tokens to a sandbox through turn
   options.
 - **Codex** takes per-turn servers only in a session-owned `CODEX_HOME`
-  (`codex-homes.ts`, `codexSessionHome`: the user's login, instructions and skills linked in, not
-  their history; pruned when its session is deleted). Codex itself accepts
+  (`codex-homes.ts`: the user's login, instructions and skills linked in, not
+  their history; pruned when its session is deleted). `codexTurnHome` says
+  which chats get one: a chat that begins once an app is installed, ready or
+  not, and keeps it; with no app installed a chat stays in the user's own
+  home and gets no apps later. Codex itself accepts
   them in a thread's `config` with no home; when the engine delivers them that
   way, the session homes go.
 - **Skills on disk** (`skill-files.ts`) use the Skills CLI layout: files in

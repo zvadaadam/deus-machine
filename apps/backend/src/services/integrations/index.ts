@@ -62,7 +62,7 @@ export { completeOAuthCallback } from "./apps";
 export { SIGN_IN_CALLBACK_PATH } from "./auth/callback";
 export { completeCloudCallback, reconcileCloudAccounts } from "./cloud-apps";
 export { resolveCloudTurnExtensions } from "./cloud-turns";
-export { codexSessionHome, hasCodexSessionHome } from "./codex-homes";
+export { codexTurnHome } from "./codex-homes";
 export { GATEWAY_PATH, isGatewayKey, proxyMcp } from "./gateway";
 export { resolveTurnApps } from "./runtime";
 export { getState } from "./state";
