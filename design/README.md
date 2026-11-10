@@ -14,17 +14,17 @@ tools only, never with plain file reads.
 Top-level frames are numbered so the layer list reads in order, and laid out in bands on
 the canvas — read left to right, top to bottom.
 
-| Band                    | Frames                | What's there                                                                                                                                                                                                                |
-| ----------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **00 — Overview**       | `00`                  | The design ↔ code contract, on canvas                                                                                                                                                                                       |
-| **01–05 — Foundations** | `01`…`05`             | Colour / type / radius · motion & easing · elevation & materials · iconography · interaction states                                                                                                                         |
-| **10–25 — Components**  | `10`…`25`             | The `DS/*` library, grouped: buttons, inputs, overlays, display, sidebar, chat, composer, tools, changes, tool anatomy, shell, content-panel states, remaining surfaces, markdown, transient flows, provider & access parts |
-| **30 — States**         | `30`                  | Every workspace-row state side by side                                                                                                                                                                                      |
-| **40–49 — Screens**     | `40`…`49`             | Workspace × each content tab, Home, Onboarding, light theme                                                                                                                                                                 |
-| **50–59 — Settings**    | `50`…`59a`            | Its own lane at x 19,000. Four bands: shipped sections · sub-pages · overlays · explorations                                                                                                                                |
-| **60–67 — Overlays**    | `60`…`67`             | ⌘K palette, every dialog, and Grant repository access                                                                                                                                                                       |
-| **70–75 — Mobile**      | `70`…`75`             | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                         |
-| **80 · 85 · 90**        | `80`–`83`, `85`, `90` | The `/connect` web route and relay gates, the web-direct surfaces, and the landing site (its own token set)                                                                                                                 |
+| Band                    | Frames                | What's there                                                                                                                                                                                                                                 |
+| ----------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **00 — Overview**       | `00`                  | The design ↔ code contract, on canvas                                                                                                                                                                                                        |
+| **01–05 — Foundations** | `01`…`05`             | Colour / type / radius · motion & easing · elevation & materials · iconography · interaction states                                                                                                                                          |
+| **10–26 — Components**  | `10`…`26`             | The `DS/*` library, grouped: buttons, inputs, overlays, display, sidebar, chat, composer, tools, changes, tool anatomy, shell, content-panel states, remaining surfaces, markdown, transient flows, provider & access parts, Customize parts |
+| **30 — States**         | `30`                  | Every workspace-row state side by side                                                                                                                                                                                                       |
+| **40–49 — Screens**     | `40`…`49`             | Workspace × each content tab, Home, Automations, Customize, Onboarding, light theme                                                                                                                                                          |
+| **50–59 — Settings**    | `50`…`59a`            | Its own lane at x 19,000. Four bands: shipped sections · sub-pages · overlays · explorations                                                                                                                                                 |
+| **60–67 — Overlays**    | `60`…`67`             | ⌘K palette, every dialog, and Grant repository access                                                                                                                                                                                        |
+| **70–75 — Mobile**      | `70`…`75`             | Chat, Code, sidebar drawer, PR-bar states, repository environments, web-direct chat                                                                                                                                                          |
+| **80 · 85 · 90**        | `80`–`83`, `85`, `90` | The `/connect` web route and relay gates, the web-direct surfaces, and the landing site (its own token set)                                                                                                                                  |
 
 ### Workspace usability
 
@@ -149,6 +149,21 @@ revisions are historical metadata; credential values never appear in the panel.
   `w-1.5 bg-onboarding-foreground/50`, and the ones still ahead
   `w-1.5 bg-onboarding-foreground/20` — three states, not two.
 - `48` Light theme (the same surfaces with the `mode` axis flipped) · `49` Workspace in light
+- `48a`…`48f` — Customize (`features/customize/`), on their own row at y 6,400 because the
+  band's numbers are all taken; `48` itself stays the light sheet. Each board has the
+  sidebar's **Customize** row selected and the page in the main inset (`mt-2`, a bordered
+  `rounded-xl` card, an 832px column). `48a` the Apps tab (`CustomizePage.tsx`): search,
+  the three tabs, Featured and then one section per category, rows in two columns. `48b`–`48d`
+  one app's page (`AppDetail.tsx` inside `DetailPage.tsx`) in three account states: not
+  connected, with **Connect Gmail** in the header and the note that it signs in through
+  Composio; connected, with **Ready · 3 tools**, the account card with **Disconnect**, and
+  its tools split into read-only and can-make-changes; and waiting for the Deus account,
+  where the Account section holds **Sign in to Deus** and the header has no action. `48e` a
+  skill's page (`SkillDetail.tsx`) with its SKILL.md rendered through `.markdown-content`.
+  `48f` the Recommended Plugins tab, whose tiles are `PluginIcon` clusters. A long link in
+  the details column (a skill's source path) is cut with an ellipsis at the column's 220px.
+  `PluginDetail.tsx`, `AddCustomDialog.tsx`, the Skills tab, the Installed section and the
+  access-token form are not drawn yet.
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environments · `57` Experimental · `58` Remote Access
 
@@ -325,11 +340,28 @@ line heights and tracking are the real values; only the outlines differ.
 | `DS/DiffFileHeader`                                                  | `features/workspace/ui/ChangesDiffSection.tsx`                                             |
 | `DS/DiffLine-Add` / `-Del` / `-Ctx`                                  | the `diffs-theme` block in `global.css`                                                    |
 | `DS/FileTreeRow`                                                     | `features/workspace/ui/ChangesFilesPanel.tsx`                                              |
+| `DS/Customize-ItemIcon`                                              | `features/customize/ui/ItemIcon.tsx` — board `26`                                          |
+| `DS/Customize-ItemRow`                                               | `Row` in `features/customize/ui/CustomizePage.tsx` — board `26`                            |
+| `DS/Customize-DetailHeader`                                          | `features/customize/ui/DetailPage.tsx` (breadcrumb, header, fact strip) — board `26`       |
 
 Specimens that are drawn from primitives rather than instanced (because they appear once)
 live on the `12`–`19` boards and are captioned with the file they come from — dropdown /
 popover / tooltip / dialog / sheet, the sidebar hover card and status menu, the composer's
 staged-content cards and mention popovers, every tool renderer, and the changes filter.
+
+Board `26` holds the three Customize components and their states. `DS/Customize-ItemIcon`
+is the tile: a brand mark, or the two fallbacks as hidden children an instance turns on
+(`Letter` for the item's initial, `Glyph` for a lucide icon), at `sm` 28 / `md` 36 / `lg`
+48 with `rounded-md` / `lg` / `xl`. A plugin's tile replaces the mark with a cluster of up
+to four. `DS/Customize-ItemRow` instances the tile and carries the status text and the
+check as hidden children; its tone colours come from `lib/status.ts` (`ready`
+`accent-green`, `attention` `warning`, `muted` `text-muted`). `DS/Customize-DetailHeader`
+is the breadcrumb, header and four-fact strip of `DetailPage.tsx`; the primary button, the
+switch and the More button are all in it, and an instance shows the ones its state has.
+The brand marks are the paths in `shared/integrations/icons.ts`, rounded to the pixel and
+laid out on the board's last row. They are content: their colours are literals and no
+variable is made for them. `currentColor` marks (GitHub, Sentry, Vercel) are bound to the
+tile's text colour, as they are in dark mode. Hugging Face and Postman are simplified.
 
 Board `13` includes the cloud autosave warning from
 `features/session/cloud/notifyCloudAutosaveFailure.ts`, rendered by the existing
@@ -522,6 +554,13 @@ in step with it:
   with `px-4 py-8 sm:px-8`; the nav rail reuses the 256px sidebar
 - Mobile is 390×844; the sidebar sheet is `100vw − 3.5rem` = 334px
 - Sidebar header is 48px (`px-1.5 py-1.5` around a 36px account button); footer is 46px (`p-3.5`)
+- The sidebar's app pages (Automations, Customize) are 32px rows directly under the header
+  (`px-1.5 pb-1`, `gap-px`), a 14px icon in a 20px slot. Boards `48a`–`48f` draw them there;
+  `DS/Sidebar` and the older boards do not have them yet
+- Customize pages are `max-w-4xl` with `px-8`, an 832px column. The catalog is `pt-12` and
+  `gap-5`; its rows are 52px (`py-2` around a 36px tile) in two 408px columns, `gap-x-4` and
+  `gap-y-1`. An item's page is `pt-6` and `gap-6`, with a 572px main column beside a 220px
+  aside (`gap-10`)
 - Chat gutters are `px-6 pt-6` on desktop, `px-3 pt-4` on mobile. Turn rhythm is not a
   uniform gap: a user turn gets `pt-8` / `pb-8`, an assistant turn `pt-0` and `pb-1` only
   when another assistant turn follows. `TurnFooter` belongs **inside** the assistant turn.
@@ -578,6 +617,9 @@ components — if you change an easing or a duration in code, change it there to
    built from primitives rather than `DS/*` instances.
 6. Keep the numbering and the bands. New screens get the next number in their band; new
    components go on the board they belong to, not loose at the document root.
+7. Replacing the only child of an instance turns it into a `ref` with `children`, and every
+   `Get` visitor that reaches it throws (boards `22b` and `40d`–`40f` have such nodes). Build
+   that one control from primitives instead, as the Add your own button on `48a` is.
 
 ### Cloud wake recovery
 

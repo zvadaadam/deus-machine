@@ -323,10 +323,10 @@ integration's removal; preserve those documents rather than restoring the featur
   layouts are drawn — not just the happy path.
 
 Top-level frames are numbered by band: `00` overview, `01–05` foundations (colour/type/
-radius, motion, elevation, iconography, interaction states), `10–24` the component library,
-`30` states, `40–49` screens, `47a–e` the onboarding flow, `50–58` settings, `60–66`
-overlays, `70–73` mobile, `80` the `/connect` route, `90` the landing site. Keep the
-numbering when you add to it.
+radius, motion, elevation, iconography, interaction states), `10–26` the component library,
+`30` states, `40–49` screens, `47a–e` the onboarding flow, `48a–f` Customize, `50–58`
+settings, `60–66` overlays, `70–73` mobile, `80` the `/connect` route, `90` the landing
+site. Keep the numbering when you add to it.
 
 The landing site (`apps/landing`) does not share these tokens — it has its own shadcn/Geist
 palette, namespaced `lp-*` in the design file, and ships dark-only. Never bind an app

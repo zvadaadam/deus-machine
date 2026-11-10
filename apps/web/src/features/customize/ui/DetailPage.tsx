@@ -1,6 +1,6 @@
 /**
- * DetailPage — the in-page view of one app, plugin or skill (design board
- * 48b). It replaces the catalog inside Customize instead of floating over
+ * DetailPage — the in-page view of one app, plugin or skill (design boards
+ * 48b–48e). It replaces the catalog inside Customize instead of floating over
  * it: a breadcrumb back, the item's header and primary action, a strip of
  * facts (status, where it runs, what it brings), then the content beside a
  * details column — the shape of Sentry's and Vercel's integration pages.
@@ -145,7 +145,7 @@ export function AsideLink({ href, children }: { href: string; children: ReactNod
     <button
       type="button"
       onClick={() => void openExternal(href)}
-      className="text-text-secondary hover:text-text-primary inline-flex w-fit min-w-0 items-center gap-1 text-left"
+      className="text-text-secondary hover:text-text-primary inline-flex w-fit max-w-full min-w-0 items-center gap-1 text-left"
     >
       <span className="truncate">{children}</span>
       <ExternalLink className="h-3 w-3 shrink-0" />

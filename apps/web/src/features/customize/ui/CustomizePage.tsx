@@ -1,5 +1,6 @@
 /**
- * CustomizePage — Apps, Recommended Plugins and Skills (design board 48).
+ * CustomizePage — Apps, Recommended Plugins and Skills (design boards 48a
+ * and 48f).
  *
  * Three views over one install system. Apps connect a service or local tool
  * (Connect → sign in or paste a key); plugins install a curated bundle of
@@ -7,7 +8,7 @@
  * add a workflow the agent can follow (Add). Everything installed here
  * reaches every agent, Claude and Codex, in every project.
  *
- * Opening an item replaces the catalog with its page (48b) instead of a
+ * Opening an item replaces the catalog with its page (48b–48e) instead of a
  * dialog; the catalog stays mounted underneath, so going back keeps the
  * search, tab and scroll position. The app sidebar stays; the page fills
  * the main inset like Automations does.
