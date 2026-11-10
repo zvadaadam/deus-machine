@@ -66,9 +66,6 @@ export const PRELAUNCH_REQUIRED_COLUMNS = {
   parts: ["parent_tool_call_id"],
   compactions: ["compaction_id"],
   paired_devices: ["account_id", "machine_id"],
-  // How an app's account is held became its own vocabulary (`kind`), and an
-  // account Deus Cloud holds names its Deus account.
-  integration_connections: ["kind", "deus_account_id"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -90,8 +87,6 @@ export const PRELAUNCH_RETIRED_COLUMNS = {
   // database that still carries the column also carries a stale capability
   // URL on disk, so it takes the reset rather than a silent leftover.
   workspaces: ["cloud_preview_template"],
-  // "Custom" is having a definition; the column that repeated it is gone.
-  extension_installations: ["source"],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
