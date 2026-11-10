@@ -398,6 +398,23 @@ describe("an app that connects through the Deus account", () => {
     expect(view("instagram").readiness).toBe("ready");
   });
 
+  it("an app removed while its sign-in was starting does not come back connected", async () => {
+    await deusAccount("alice");
+    // Connected on another computer, so starting a sign-in answers "connected".
+    cloud.connected("alice", "instagram", "instagram");
+    cloud.startDelayMs = 60;
+    cloud.failing.add("DELETE");
+    const connecting = connectApp({ appId: "instagram" });
+    connecting.catch(() => {});
+    await new Promise((next) => setTimeout(next, 20));
+    uninstallApp("instagram");
+    await expect(connecting).rejects.toThrow(/cancelled/);
+    await settle();
+    expect(view("instagram").installed).toBe(false);
+    // The disconnect that did not go through is still owed.
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
+  });
+
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
     await deusAccount("alice");
     await signIn("instagram");

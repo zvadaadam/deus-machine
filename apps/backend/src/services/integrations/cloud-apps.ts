@@ -59,12 +59,16 @@ export async function connectThroughCloud(
   const existing = cloudRow(app.id, accountId);
   const row =
     existing ?? createConnection({ appId: app.id, kind: "managed", deusAccountId: accountId });
+  const attempt = newCloudAttempt(row.id);
   try {
     const started = await startCloudSignIn({
       appId: app.id,
       route: route.broker,
-      callbackUrl: `${signInReturnUrl()}/${newCloudAttempt(row.id)}`,
+      callbackUrl: `${signInReturnUrl()}/${attempt}`,
     });
+    // Disconnected or removed while Deus Cloud was being asked: the attempt
+    // is gone with its row, and nothing lands.
+    if (cloudAttempt(attempt) !== row.id) throw new Error("it was cancelled");
     if (started.status === "connected") {
       cloudAccountLanded(row);
       return { status: "connected" };
@@ -73,8 +77,9 @@ export async function connectThroughCloud(
     return { status: "redirect", url: started.url };
   } catch (error) {
     forgetCloudAttempts(row.id);
-    // A row that was already there (asking to sign in again) stays as it was.
-    if (!existing) deleteConnection(row.id);
+    // A row that was already there (asking to sign in again) stays as it was,
+    // and so does one a removal has since marked: its disconnect is still owed.
+    if (!existing && getConnection(row.id)?.status === "pending") deleteConnection(row.id);
     throw new Error(`${app.name} did not start a sign-in: ${getErrorMessage(error)}`);
   }
 }
