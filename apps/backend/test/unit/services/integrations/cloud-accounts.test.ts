@@ -415,6 +415,34 @@ describe("an app that connects through the Deus account", () => {
     expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
   });
 
+  it("two clients starting one sign-in at once share it", async () => {
+    await deusAccount("alice");
+    const [first, second] = await Promise.all([
+      connectApp({ appId: "instagram" }),
+      connectApp({ appId: "instagram" }),
+    ]);
+    expect(first.status).toBe("redirect");
+    expect(second).toEqual(first);
+    expect(listConnections("instagram")).toHaveLength(1);
+    expect((await approve((first as { url: string }).url)).status).toBe(200);
+    await settle();
+    expect(view("instagram").readiness).toBe("ready");
+  });
+
+  it("a sign-in that a pass lands first still answers connected", async () => {
+    await deusAccount("alice");
+    cloud.connected("alice", "instagram", "instagram");
+    cloud.startDelayMs = 60;
+    const connecting = connectApp({ appId: "instagram" });
+    await new Promise((next) => setTimeout(next, 20));
+    // The pass finds the account connected on another computer and lands it.
+    await reconcileCloudAccounts();
+    expect(await connecting).toEqual({ status: "connected" });
+    await settle();
+    expect(view("instagram").readiness).toBe("ready");
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["active"]);
+  });
+
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
     await deusAccount("alice");
     await signIn("instagram");

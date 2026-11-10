@@ -39,7 +39,23 @@ import {
  * already has (connected on another computer, or in a tab that never came
  * back) connects at once.
  */
-export async function connectThroughCloud(
+export function connectThroughCloud(
+  app: CatalogApp,
+  route: Extract<SignInRoute, { via: "cloud" }>
+): Promise<ConnectAppResult> {
+  // A second request while the first is still being answered (two clients,
+  // two clicks) shares its answer: each on its own would cancel the other.
+  const under = starting.get(app.id);
+  if (under) return under;
+  const started = startThroughCloud(app, route).finally(() => starting.delete(app.id));
+  starting.set(app.id, started);
+  return started;
+}
+
+/** Sign-ins being started, by app. */
+const starting = new Map<string, Promise<ConnectAppResult>>();
+
+async function startThroughCloud(
   app: CatalogApp,
   route: Extract<SignInRoute, { via: "cloud" }>
 ): Promise<ConnectAppResult> {
@@ -66,9 +82,14 @@ export async function connectThroughCloud(
       route: route.broker,
       callbackUrl: `${signInReturnUrl()}/${attempt}`,
     });
-    // Disconnected or removed while Deus Cloud was being asked: the attempt
-    // is gone with its row, and nothing lands.
-    if (cloudAttempt(attempt) !== row.id) throw new Error("it was cancelled");
+    if (cloudAttempt(attempt) !== row.id) {
+      // The attempt is gone. A pass that found the account connected
+      // elsewhere landed it first: the same answer. Otherwise the app was
+      // disconnected or removed while Deus Cloud was being asked, and
+      // nothing lands.
+      if (getConnection(row.id)?.status === "active") return { status: "connected" };
+      throw new Error("it was cancelled");
+    }
     if (started.status === "connected") {
       cloudAccountLanded(row);
       return { status: "connected" };
