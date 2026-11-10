@@ -30,6 +30,8 @@ export interface FakeDeusCloud {
   revokedSessions: Set<string>;
   /** HTTP methods that answer 502 for now (an outage, a proxy between). */
   failing: Set<string>;
+  /** How long a disconnect takes to be heard. */
+  deleteDelayMs: number;
   /** account id → app id → connection. */
   accounts: Map<string, Map<string, Connection>>;
   /** Every request to `/me/connections*`: method, path, headers. */
@@ -75,6 +77,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
     deployed: true,
     revokedSessions: new Set(),
     failing: new Set(),
+    deleteDelayMs: 0,
     accounts: new Map(),
     requests: [],
     calls: [],
@@ -92,6 +95,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
       cloud.deployed = true;
       cloud.revokedSessions.clear();
       cloud.failing.clear();
+      cloud.deleteDelayMs = 0;
       cloud.accounts.clear();
       cloud.requests = [];
       cloud.calls = [];
@@ -204,6 +208,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
         : json(res, 404, { error: "NOT_FOUND", message: "This app is not connected." });
     }
     if (req.method === "DELETE") {
+      if (cloud.deleteDelayMs) await new Promise((next) => setTimeout(next, cloud.deleteDelayMs));
       return mine.delete(appId)
         ? json(res, 200, { ok: true })
         : json(res, 404, { error: "NOT_FOUND", message: "This app is not connected." });

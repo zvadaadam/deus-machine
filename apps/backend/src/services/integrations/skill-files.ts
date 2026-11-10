@@ -421,6 +421,11 @@ export function discardFetched(fetched: FetchedSkill): void {
   fs.rmSync(fetched.workDir, { recursive: true, force: true });
 }
 
+/** Whether Deus's copy of skill `name` is on disk: where the agents load it, or set aside while it is switched off. */
+export function skillFilesKept(name: string, id: string): boolean {
+  return isSkillPlaced(name, id) || isOurs(path.join(disabledDir(), name), id);
+}
+
 /** Whether Deus's copy of skill `name` is where the agents load it. */
 export function isSkillPlaced(name: string, id: string): boolean {
   return isOurs(path.join(agentsSkillsDir(), name), id);

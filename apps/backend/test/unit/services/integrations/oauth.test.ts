@@ -159,6 +159,19 @@ describe("signing in", () => {
     });
   });
 
+  it("two clients starting one sign-in at once share its page", async () => {
+    const [first, second] = await Promise.all([
+      connectApp({ appId: "acme" }),
+      connectApp({ appId: "acme" }),
+    ]);
+    expect(first.status).toBe("redirect");
+    // One attempt, not two racing to be the newest: the page works for both.
+    expect(second).toEqual(first);
+    const response = await fetch((first as { url: string }).url, { redirect: "manual" });
+    await completeOAuthCallback(new URL(response.headers.get("location")!).searchParams);
+    expect(acme().readiness).toBe("ready");
+  });
+
   it("a denied sign-in leaves the app waiting for its account", async () => {
     const result = await connectApp({ appId: "acme" });
     const oauthState = new URL((result as { url: string }).url).searchParams.get("state")!;

@@ -45,6 +45,13 @@ export async function connectThroughCloud(
 ): Promise<ConnectAppResult> {
   const accountId = cloudAccountId();
   if (!accountId) throw new Error(`Sign in to your Deus account to connect ${app.name}`);
+  // A disconnect of this same account still on its way lands first: started
+  // after this sign-in, it would take the account the sign-in had just made.
+  await Promise.all(
+    listConnections(app.id)
+      .filter((c) => c.status === "removing" && c.deusAccountId === accountId)
+      .map(finishRemoval)
+  );
   const existing = cloudRow(app.id, accountId);
   const row =
     existing ?? createConnection({ appId: app.id, kind: "managed", deusAccountId: accountId });

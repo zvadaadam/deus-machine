@@ -243,13 +243,31 @@ function withTokens(
   };
 }
 
-/** Begin a sign-in and return the page to open in the browser. */
-export async function beginOAuth(input: {
+interface SignInStart {
   connectionId: string;
   serverUrl: string;
   redirectUrl: string;
   client?: RegisteredClient | null;
-}): Promise<string> {
+}
+
+/** Sign-ins being begun, by connection. */
+const beginning = new Map<string, Promise<string>>();
+
+/**
+ * Begin a sign-in and return the page to open in the browser. A second
+ * request for a connection while the first is still being set up (two
+ * clients, two clicks) shares its page: begun separately, whichever finished
+ * its discovery last would have replaced the other's attempt.
+ */
+export function beginOAuth(input: SignInStart): Promise<string> {
+  const under = beginning.get(input.connectionId);
+  if (under) return under;
+  const begun = startSignIn(input).finally(() => beginning.delete(input.connectionId));
+  beginning.set(input.connectionId, begun);
+  return begun;
+}
+
+async function startSignIn(input: SignInStart): Promise<string> {
   const attempt: Attempt = {
     connectionId: input.connectionId,
     state: crypto.randomBytes(32).toString("base64url"),

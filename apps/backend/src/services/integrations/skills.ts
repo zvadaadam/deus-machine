@@ -16,6 +16,7 @@ import {
   readSkillContent,
   removeSkill,
   setSkillPlaced,
+  skillFilesKept,
 } from "./skill-files";
 import {
   deleteInstallation,
@@ -56,9 +57,11 @@ export function installSkill(skillId: string, options: { explicit?: boolean } = 
 function fetchInBackground(skill: CatalogSkill): void {
   if (jobs.has(skill.id)) return;
   // What is on disk before this download: a failed update leaves it working.
-  // The reference says so, not the status: an update Deus quit in the middle
-  // of is `installing` when it is resumed, over files that still work.
-  const working = Boolean(getInstallation("skill", skill.id)?.installedRef);
+  // The files say so, not the status: an update Deus quit in the middle of
+  // is `installing` when it is resumed, over files that still work (or, quit
+  // between the swap's two renames, over none).
+  const before = getInstallation("skill", skill.id);
+  const working = Boolean(before?.installedRef) && skillFilesKept(skill.name, skill.id);
   upsertInstallation({ kind: "skill", itemId: skill.id, status: "installing", error: null });
   const job = (async () => {
     let fetched;

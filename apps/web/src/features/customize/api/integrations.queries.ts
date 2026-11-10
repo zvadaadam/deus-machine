@@ -98,8 +98,16 @@ export function useLocalSkills(enabled: boolean) {
   });
 }
 
-async function mutate<T>(action: string, params: object): Promise<T> {
-  const result = await sendMutate<T>(action, params as Record<string, unknown>);
+/**
+ * How long the two writes that wait on the outside world may take: a check
+ * starts a local server (its first run downloads it; the backend allows 90
+ * seconds), and adding a skill downloads its repository (120 seconds). The
+ * default would give up on them while they are still under way.
+ */
+const SLOW_WRITE_MS = 150_000;
+
+async function mutate<T>(action: string, params: object, timeoutMs?: number): Promise<T> {
+  const result = await sendMutate<T>(action, params as Record<string, unknown>, timeoutMs);
   if (!result.success) throw new Error(result.error || `${action} failed`);
   return result.data as T;
 }
@@ -152,7 +160,7 @@ export function useDisconnectApp() {
 export function useCheckApp() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (appId: string) => mutate("checkApp", { appId }),
+    mutationFn: (appId: string) => mutate("checkApp", { appId }, SLOW_WRITE_MS),
   });
 }
 
@@ -184,7 +192,8 @@ export function useAddCustomApp() {
 export function useAddCustomSkill() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (source: string) => mutate<{ skillId: string }>("addCustomSkill", { source }),
+    mutationFn: (source: string) =>
+      mutate<{ skillId: string }>("addCustomSkill", { source }, SLOW_WRITE_MS),
   });
 }
 

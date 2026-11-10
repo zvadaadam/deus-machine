@@ -314,9 +314,12 @@ export class RuntimeClient<Resource extends string = string, Command extends str
 
   sendMutate = <T = unknown>(
     action: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
+    timeoutMs = 30_000
   ): Promise<MutateResult<T>> =>
-    this.call("mutation", action, { type: "q:mutate", action, params }) as Promise<MutateResult<T>>;
+    this.call("mutation", action, { type: "q:mutate", action, params }, timeoutMs) as Promise<
+      MutateResult<T>
+    >;
 
   sendCommand = (
     command: Command,

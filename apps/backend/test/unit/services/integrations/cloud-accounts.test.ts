@@ -330,6 +330,20 @@ describe("an app that connects through the Deus account", () => {
     expect(view("instagram").readiness).toBe("needs_connection");
   });
 
+  it("a sign-in begun while a disconnect is still on its way waits for it", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    cloud.deleteDelayMs = 80;
+    disconnectApp("instagram");
+    // Connected again at once, before Deus Cloud has heard the disconnect:
+    // the new account must not be the one that disconnect then takes.
+    await signIn("instagram");
+    await settle();
+    expect(cloud.accounts.get("alice")!.get("instagram")?.status).toBe("active");
+    expect(view("instagram").readiness).toBe("ready");
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["active"]);
+  });
+
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
     await deusAccount("alice");
     await signIn("instagram");

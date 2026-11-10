@@ -429,6 +429,19 @@ describe("skills", () => {
     expect(skill("acme/plan").error).toMatch(/Update failed: offline/);
   });
 
+  it("an update that fails over files that are gone says so, not that the skill is ready", async () => {
+    const fs = await import("fs");
+    installSkill("acme/plan");
+    await settleSkillJobs();
+    // Its folder is gone (a swap cut short, or removed by hand).
+    fs.rmSync(`${state.dir}/.agents/skills/plan`, { recursive: true, force: true });
+    state.failFetch = "offline";
+    reinstallSkill("acme/plan");
+    await settleSkillJobs();
+    expect(skill("acme/plan").readiness).toBe("error");
+    expect(skill("acme/plan").error).toBe("offline");
+  });
+
   it("removing a skill while it downloads leaves nothing behind", async () => {
     const fs = await import("fs");
     installSkill("acme/plan");

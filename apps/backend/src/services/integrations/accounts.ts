@@ -68,9 +68,24 @@ export function forgetConnection(connection: ConnectionRow, replacedBy?: Connect
   deleteConnection(connection.id);
 }
 
-/** Disconnect a `removing` row's account in Deus Cloud; the row goes once that is confirmed. */
-export async function finishRemoval(row: ConnectionRow): Promise<void> {
-  if (await disconnectCloudAccount(row)) deleteConnection(row.id);
+/** Removals under way, by row: a second request for one shares it. */
+const removals = new Map<string, Promise<void>>();
+
+/**
+ * Disconnect a `removing` row's account in Deus Cloud; the row goes once
+ * that is confirmed. One request per row at a time, so whoever needs the
+ * account gone first (a new sign-in for the same app) can wait for this one.
+ */
+export function finishRemoval(row: ConnectionRow): Promise<void> {
+  const under = removals.get(row.id);
+  if (under) return under;
+  const removal = disconnectCloudAccount(row)
+    .then((gone) => {
+      if (gone) deleteConnection(row.id);
+    })
+    .finally(() => removals.delete(row.id));
+  removals.set(row.id, removal);
+  return removal;
 }
 
 /** Forget every account of an app. */
