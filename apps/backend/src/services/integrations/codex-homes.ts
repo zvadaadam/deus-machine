@@ -33,6 +33,21 @@ const HOME_MARKER = ".deus-codex-home";
 const SHARED_ENTRIES = ["auth.json", "AGENTS.md", "prompts", "skills"];
 
 /**
+ * Link what the user's home has and this one lacks. At each use, not only
+ * when the home is made: a login the person makes after a chat's first turn
+ * reaches that chat.
+ */
+function linkShared(home: string): void {
+  const shared = userCodexHome();
+  for (const entry of SHARED_ENTRIES) {
+    const target = path.join(shared, entry);
+    const link = path.join(home, entry);
+    if (!fs.existsSync(target) || fs.lstatSync(link, { throwIfNoEntry: false })) continue;
+    fs.symlinkSync(target, link);
+  }
+}
+
+/**
  * The CODEX_HOME for a Deus session's Codex turns that carry apps. Created
  * once per session; later turns reuse it (and the engine keeps its MCP
  * servers current there). A session whose thread began in the user's own
@@ -46,19 +61,14 @@ export function codexSessionHome(sessionId: string): string {
     // Its last use: an idle home's caches are trimmed (`pruneCodexSessionHomes`).
     const now = new Date();
     fs.utimesSync(marker, now, now);
+    linkShared(home);
     return home;
   }
   // The engine writes the turn's MCP servers into this folder's config: the user's only.
   fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-  const shared = userCodexHome();
-  for (const entry of SHARED_ENTRIES) {
-    const target = path.join(shared, entry);
-    const link = path.join(home, entry);
-    if (!fs.existsSync(target) || fs.existsSync(link)) continue;
-    fs.symlinkSync(target, link);
-  }
+  linkShared(home);
   // A copy, not a link: the engine rewrites `mcp_servers` in this file.
-  const config = path.join(shared, "config.toml");
+  const config = path.join(userCodexHome(), "config.toml");
   if (fs.existsSync(config)) fs.copyFileSync(config, path.join(home, "config.toml"));
   fs.writeFileSync(path.join(home, HOME_MARKER), `${sessionId}\n`);
   return home;

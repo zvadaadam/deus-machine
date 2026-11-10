@@ -68,6 +68,17 @@ describe("Codex session homes", () => {
     expect(codexTurnHome("with-apps", { resumes: true, appsInstalled: false })).toBe(home);
   });
 
+  it("links a login made after the home was, at its next use", () => {
+    const user = process.env.CODEX_HOME!;
+    fs.rmSync(path.join(user, "auth.json"));
+    const home = codexSessionHome("live");
+    expect(fs.existsSync(path.join(home, "auth.json"))).toBe(false);
+    // The person signs in to Codex, then sends again in the same chat.
+    fs.writeFileSync(path.join(user, "auth.json"), '{"signed":"in"}');
+    expect(codexSessionHome("live")).toBe(home);
+    expect(fs.readFileSync(path.join(home, "auth.json"), "utf8")).toBe('{"signed":"in"}');
+  });
+
   it("refuses an id that is not a plain name", () => {
     expect(() => codexSessionHome("../escape")).toThrow(/Invalid session id/);
   });
