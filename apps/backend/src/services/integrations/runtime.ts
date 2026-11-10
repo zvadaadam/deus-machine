@@ -22,6 +22,8 @@ export interface TurnApps {
   servers: Record<string, McpServerConfig>;
   /** Installed apps left out of this turn, and why (logged, not fatal). */
   skipped: Array<{ appId: string; reason: string }>;
+  /** Whether any app is installed at all, switched on or not. */
+  installed: boolean;
 }
 
 /** Names the engine and harnesses reserve for their own servers. */
@@ -101,10 +103,12 @@ export function directServer(
 
 /** The MCP servers a local turn carries. Never throws. */
 export async function resolveTurnApps(): Promise<TurnApps> {
-  const result: TurnApps = { servers: {}, skipped: [] };
+  const result: TurnApps = { servers: {}, skipped: [], installed: false };
   let rows: InstallationRow[];
   try {
-    rows = listInstallations("app").filter((row) => row.enabled);
+    const installed = listInstallations("app");
+    result.installed = installed.length > 0;
+    rows = installed.filter((row) => row.enabled);
   } catch (error) {
     console.warn("[Integrations] Could not read installed apps:", getErrorMessage(error));
     return result;

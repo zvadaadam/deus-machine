@@ -221,6 +221,13 @@ describe("apps", () => {
     expect((await resolveTurnApps()).servers.context7).toBeUndefined();
   });
 
+  it("says an app is installed while it is switched off: a Codex chat begun then still gets it later", async () => {
+    expect((await resolveTurnApps()).installed).toBe(false);
+    installApp("linear");
+    setAppEnabled("linear", false);
+    expect(await resolveTurnApps()).toMatchObject({ servers: {}, skipped: [], installed: true });
+  });
+
   it("signing out keeps the app; removing the app forgets its account", async () => {
     await connectApp({ appId: "sentry", values: { token: "t1" } });
     await disconnectApp("sentry");

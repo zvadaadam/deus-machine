@@ -77,7 +77,8 @@ const IDLE_MS = 3 * 24 * 60 * 60 * 1000;
 /**
  * The CODEX_HOME a Codex turn runs in, or null for the user's own. A chat
  * gets a home of its own at its first turn once an app is installed, ready
- * or not (one signed in to later reaches the same chat), and keeps it. With
+ * or not, switched on or not (one signed in to or switched on later reaches
+ * the same chat), and keeps it. With
  * no app installed it stays in the user's home, where their own Codex finds
  * it; a thread that began there resumes there, without apps.
  */

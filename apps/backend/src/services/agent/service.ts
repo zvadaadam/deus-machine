@@ -177,7 +177,7 @@ async function turnApps(
   resume: string | undefined
 ): Promise<Pick<DeusTurnOptions, "mcpServers" | "env">> {
   const codex = engineHarness(agentHarness) === "codex-app-server";
-  const { servers, skipped } = await resolveTurnApps();
+  const { servers, skipped, installed } = await resolveTurnApps();
   if (skipped.length) {
     console.log(
       `[AgentService] Apps not in this turn: ${skipped.map((s) => `${s.appId} (${s.reason})`).join(", ")}`
@@ -187,7 +187,7 @@ async function turnApps(
   try {
     const home = codexTurnHome(sessionId, {
       resumes: resume !== undefined,
-      appsInstalled: Object.keys(servers).length + skipped.length > 0,
+      appsInstalled: installed,
     });
     if (!home) return {};
     return { mcpServers: servers, env: { ...loopbackPastProxy(), CODEX_HOME: home } };
