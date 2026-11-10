@@ -883,6 +883,7 @@ export const CATALOG_APPS: CatalogApp[] = [
           name: "REDIS_PWD",
           label: "Password",
           helpUrl: "https://github.com/redis/mcp-redis#configuration",
+          optional: true,
         },
       ],
     },

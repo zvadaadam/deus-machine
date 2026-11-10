@@ -102,12 +102,17 @@ function keychainCreate(hex: string): Promise<boolean> {
   });
 }
 
-/** The Keychain holds the key but is not answering (locked, slow): nothing can be sealed or opened. */
-let unavailable = false;
+/**
+ * Why nothing can be sealed or opened right now: the Keychain is still being
+ * asked for the key at startup, or it holds the key and is not answering.
+ */
+let blocked: "starting" | "locked" | null = null;
 
-/** Whether the vault can seal and open right now. */
-export function vaultAvailable(): boolean {
-  return !unavailable;
+/** The reason the vault cannot seal or open right now, in words for the person; null when it can. */
+export function vaultProblem(): string | null {
+  if (blocked === "starting") return "App sign-ins are still loading; try again in a moment";
+  if (blocked === "locked") return "The Keychain is locked; unlock it and restart Deus";
+  return null;
 }
 
 /**
@@ -119,7 +124,7 @@ export function vaultAvailable(): boolean {
  */
 export async function initVault(): Promise<void> {
   if (cachedKey) return;
-  unavailable = false;
+  blocked = null;
   const fromEnv = fromHex(process.env.DEUS_VAULT_KEY);
   if (fromEnv) {
     cachedKey = fromEnv;
@@ -135,6 +140,10 @@ export async function initVault(): Promise<void> {
     cachedKey ??= createKeyFile();
     return;
   }
+  // Until the Keychain answers, a request that needs the key is refused: a
+  // key made up meanwhile would be kept in its place, and open nothing that
+  // was sealed under the Keychain's.
+  blocked = "starting";
   let answer = await keychainRead();
   if (answer.status === "missing") {
     // Created without overwrite, then read back: another Deus process may have won.
@@ -142,16 +151,18 @@ export async function initVault(): Promise<void> {
     answer = await keychainRead();
   }
   if (answer.status === "found") {
-    cachedKey ??= answer.key;
+    cachedKey = answer.key;
+    blocked = null;
     return;
   }
-  unavailable = true;
+  blocked = "locked";
   console.warn("[Integrations] The Keychain did not answer; app sign-ins are unavailable for now");
 }
 
 function vaultKey(): Buffer {
   if (cachedKey) return cachedKey;
-  if (unavailable) throw new Error("The Keychain is locked; unlock it and restart Deus");
+  const problem = vaultProblem();
+  if (problem) throw new Error(problem);
   // Before `initVault` has run (a test, a script): the environment, else the file.
   cachedKey = fromHex(process.env.DEUS_VAULT_KEY) ?? readKeyFile() ?? createKeyFile();
   return cachedKey;
@@ -194,5 +205,5 @@ function encodePart(part: string | Buffer): string {
 /** @internal Tests swap keys between cases. */
 export function __resetVaultKeyForTests(): void {
   cachedKey = null;
-  unavailable = false;
+  blocked = null;
 }

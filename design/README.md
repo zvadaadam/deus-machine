@@ -163,7 +163,9 @@ revisions are historical metadata; credential values never appear in the panel.
   `48f` the Recommended Plugins tab, whose tiles are `PluginIcon` clusters. A long link in
   the details column (a skill's source path) is cut with an ellipsis at the column's 220px.
   `PluginDetail.tsx`, `AddCustomDialog.tsx`, the Skills tab, the Installed section and the
-  access-token form are not drawn yet.
+  access-token form are not drawn yet. On a phone the page (and Automations) wears a 44px
+  bar with the sidebar toggle and its title, and its gutters narrow to `px-4`; the mobile
+  band has no Customize board yet.
 - `50` Account · `51` General · `52` GitHub · `53` Browser · `54` AI Providers · `55` Cloud ·
   `56` Environments · `57` Experimental · `58` Remote Access
 

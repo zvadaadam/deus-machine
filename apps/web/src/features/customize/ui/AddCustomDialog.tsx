@@ -16,6 +16,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { cn } from "@/shared/lib/utils";
+import { splitCommandLine } from "@shared/integrations/command-line";
 import type { AppAuth, CustomAppInput } from "@shared/integrations/types";
 import { useAddCustomApp, useAddCustomSkill } from "../api/integrations.queries";
 import { Field } from "./DetailPage";
@@ -97,6 +98,9 @@ function McpForm({ onAdded }: { onAdded: (id: string) => void }) {
     });
   const envValid = env.every((entry) => entry !== null && /^[A-Z_][A-Z0-9_]*$/.test(entry.name));
 
+  /** The program and its arguments; null while a quote is still open. */
+  const words = splitCommandLine(command);
+
   const submit = () => {
     let input: CustomAppInput;
     let values: Record<string, string> | undefined;
@@ -109,7 +113,7 @@ function McpForm({ onAdded }: { onAdded: (id: string) => void }) {
             : { kind: "none" };
       input = { name, transport: { type: "http", url: url.trim() }, auth };
     } else {
-      const [cmd, ...args] = command.trim().split(/\s+/);
+      const [cmd, ...args] = words ?? [];
       const vars = env.flatMap((entry) => (entry ? [entry] : []));
       input = {
         name,
@@ -132,7 +136,7 @@ function McpForm({ onAdded }: { onAdded: (id: string) => void }) {
     name.trim().length > 0 &&
     (kind === "remote"
       ? /^https?:\/\/\S+$/.test(url.trim())
-      : command.trim().length > 0 && envValid);
+      : words !== null && words.length > 0 && envValid);
 
   return (
     <form
@@ -196,6 +200,9 @@ function McpForm({ onAdded }: { onAdded: (id: string) => void }) {
               spellCheck={false}
               className="font-mono text-xs"
             />
+            {words === null && (
+              <span className="text-text-muted text-xs">A quote is still open.</span>
+            )}
           </Field>
           <Field label="Keys and settings (optional)">
             <Textarea

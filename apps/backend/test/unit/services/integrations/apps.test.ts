@@ -89,6 +89,7 @@ import { installPlugin, uninstallPlugin } from "../../../../src/services/integra
 import {
   installSkill,
   reinstallSkill,
+  resumeSkillInstalls,
   setSkillEnabled,
   settleSkillJobs,
   uninstallSkill,
@@ -100,6 +101,7 @@ import {
   getConnection,
   getInstallation,
   readAppTools,
+  upsertInstallation,
 } from "../../../../src/services/integrations/store";
 import { __resetVaultKeyForTests } from "../../../../src/services/integrations/vault";
 import { __resetCredentialCacheForTests } from "../../../../src/services/integrations/credentials";
@@ -305,11 +307,13 @@ describe("apps", () => {
     expect((await resolveTurnApps()).servers.github).toBeUndefined();
 
     state.ghToken = "gho_back"; // gh auth login, outside Deus
+    // The next turn has the app again, with no visit to Customize.
+    expect((await resolveTurnApps()).servers.github).toBeDefined();
+    expect(app("github").readiness).toBe("ready");
     expect(await credentialsFor(app("github").app, connection())).toMatchObject({
       ok: true,
       headers: { Authorization: "Bearer gho_back" },
     });
-    expect(app("github").readiness).toBe("ready");
   });
 
   it("only GitHub can borrow a CLI login", async () => {
@@ -411,6 +415,18 @@ describe("skills", () => {
     expect(skill("acme/plan").readiness).toBe("disabled");
     expect(fs.existsSync(`${state.dir}/.agents/skills/plan`)).toBe(false);
     expect(fs.existsSync(`${state.dir}/.claude/skills/plan`)).toBe(false);
+  });
+
+  it("an update Deus quit in the middle of, resumed and failing, keeps the working version", async () => {
+    installSkill("acme/plan");
+    await settleSkillJobs();
+    // What a quit mid-update leaves: the row says installing, the old files are in place.
+    upsertInstallation({ kind: "skill", itemId: "acme/plan", status: "installing" });
+    state.failFetch = "offline";
+    resumeSkillInstalls();
+    await settleSkillJobs();
+    expect(skill("acme/plan")).toMatchObject({ readiness: "ready", installedRef: "b".repeat(40) });
+    expect(skill("acme/plan").error).toMatch(/Update failed: offline/);
   });
 
   it("removing a skill while it downloads leaves nothing behind", async () => {

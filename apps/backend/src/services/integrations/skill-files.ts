@@ -268,13 +268,17 @@ function sameTarget(link: string, target: string): boolean {
 
 /**
  * Put the folder `from` at `to`, replacing what is there. The new folder is
- * brought beside the target first and swapped in by rename, so an agent
- * reading the skill meanwhile finds the old folder or the new one, whole.
+ * brought beside the target first (under a hidden name, so a half-copied
+ * folder is not listed as a skill) and swapped in by two renames: an agent
+ * reading the skill meanwhile never finds it half written. Between the two
+ * renames the path is empty, for about a tenth of a millisecond. A swap that
+ * fails puts the old folder back.
  */
 function moveDir(from: string, to: string): void {
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  const incoming = `${to}.incoming-${process.pid}`;
-  const outgoing = `${to}.outgoing-${process.pid}`;
+  const parent = path.dirname(to);
+  fs.mkdirSync(parent, { recursive: true });
+  const incoming = path.join(parent, `.${path.basename(to)}.incoming-${process.pid}`);
+  const outgoing = path.join(parent, `.${path.basename(to)}.outgoing-${process.pid}`);
   fs.rmSync(incoming, { recursive: true, force: true });
   fs.rmSync(outgoing, { recursive: true, force: true });
   try {
@@ -285,8 +289,15 @@ function moveDir(from: string, to: string): void {
     fs.cpSync(from, incoming, { recursive: true });
     fs.rmSync(from, { recursive: true, force: true });
   }
-  if (fs.existsSync(to)) fs.renameSync(to, outgoing);
-  fs.renameSync(incoming, to);
+  const replaced = fs.existsSync(to);
+  if (replaced) fs.renameSync(to, outgoing);
+  try {
+    fs.renameSync(incoming, to);
+  } catch (error) {
+    if (replaced) fs.renameSync(outgoing, to);
+    fs.rmSync(incoming, { recursive: true, force: true });
+    throw error;
+  }
   fs.rmSync(outgoing, { recursive: true, force: true });
 }
 

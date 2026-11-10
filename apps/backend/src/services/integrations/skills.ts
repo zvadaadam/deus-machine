@@ -56,8 +56,9 @@ export function installSkill(skillId: string, options: { explicit?: boolean } = 
 function fetchInBackground(skill: CatalogSkill): void {
   if (jobs.has(skill.id)) return;
   // What is on disk before this download: a failed update leaves it working.
-  const before = getInstallation("skill", skill.id);
-  const working = before?.status === "ready" && before.installedRef !== null;
+  // The reference says so, not the status: an update Deus quit in the middle
+  // of is `installing` when it is resumed, over files that still work.
+  const working = Boolean(getInstallation("skill", skill.id)?.installedRef);
   upsertInstallation({ kind: "skill", itemId: skill.id, status: "installing", error: null });
   const job = (async () => {
     let fetched;

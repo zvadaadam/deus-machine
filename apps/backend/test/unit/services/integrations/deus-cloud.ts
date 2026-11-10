@@ -28,6 +28,8 @@ export interface FakeDeusCloud {
   deployed: boolean;
   /** Sessions Deus Cloud no longer accepts (expired, signed out elsewhere). */
   revokedSessions: Set<string>;
+  /** HTTP methods that answer 502 for now (an outage, a proxy between). */
+  failing: Set<string>;
   /** account id → app id → connection. */
   accounts: Map<string, Map<string, Connection>>;
   /** Every request to `/me/connections*`: method, path, headers. */
@@ -72,6 +74,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
     configured: true,
     deployed: true,
     revokedSessions: new Set(),
+    failing: new Set(),
     accounts: new Map(),
     requests: [],
     calls: [],
@@ -88,6 +91,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
       cloud.configured = true;
       cloud.deployed = true;
       cloud.revokedSessions.clear();
+      cloud.failing.clear();
       cloud.accounts.clear();
       cloud.requests = [];
       cloud.calls = [];
@@ -111,6 +115,7 @@ export async function startFakeDeusCloud(): Promise<FakeDeusCloud> {
   async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     const url = new URL(req.url ?? "/", cloud.base);
     const path = url.pathname;
+    if (cloud.failing.has(req.method ?? "")) return json(res, 502, { error: "BAD_GATEWAY" });
 
     // The broker's hosted sign-in page: the person approves and is sent back.
     const link = path.match(/^\/link\/(.+)$/);

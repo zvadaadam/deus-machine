@@ -44,7 +44,7 @@ export function DetailPage({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-8 pt-6 pb-16">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 pt-6 pb-16 sm:px-8">
       <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs">
         <button
           type="button"

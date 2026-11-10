@@ -18,6 +18,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import {
   INTEGRATION_CATEGORY_LABELS,
+  type AppAuth,
   type AppTool,
   type AppView,
   type IntegrationsSnapshot,
@@ -332,7 +333,6 @@ function AccountSection({ view }: { view: AppView }) {
   const flow = useConnectFlow();
   const disconnect = useDisconnectApp();
   const signIn = useDeusCloudSignIn();
-  const [values, setValues] = useState<Record<string, string>>({});
   const connected = connection !== null && connection.status === "active";
 
   if (view.unavailable === "account") {
@@ -411,7 +411,24 @@ function AccountSection({ view }: { view: AppView }) {
   }
 
   if (auth.kind === "none") return null;
+  return <KeyForm view={view} auth={auth} />;
+}
 
+/**
+ * The form for a key, a token or a local server's settings. Its own
+ * component so what was typed goes with it: once the account is connected
+ * the form unmounts, and a later "Forget key" starts from an empty one.
+ */
+function KeyForm({
+  view,
+  auth,
+}: {
+  view: AppView;
+  auth: Extract<AppAuth, { kind: "bearer" | "header" | "env" }>;
+}) {
+  const { app, readiness } = view;
+  const flow = useConnectFlow();
+  const [values, setValues] = useState<Record<string, string>>({});
   const fields =
     auth.kind === "env"
       ? auth.vars.map((v) => ({

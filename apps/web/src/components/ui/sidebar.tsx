@@ -366,6 +366,22 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
   );
 }
 
+/**
+ * The bar a full page (Automations, Customize) wears on a phone: the page
+ * replaces the workspace view, whose header held the only way back to the
+ * sidebar. Renders nothing on a wider screen, where the sidebar is beside it.
+ */
+function SidebarMobileBar({ title }: { title: string }) {
+  const { isMobile } = useSidebar();
+  if (!isMobile) return null;
+  return (
+    <div className="border-border-subtle flex h-11 shrink-0 items-center gap-2 border-b px-3">
+      <SidebarTrigger className="text-text-muted" />
+      <span className="text-text-secondary text-sm font-medium">{title}</span>
+    </div>
+  );
+}
+
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar();
 
@@ -769,6 +785,7 @@ export {
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,
+  SidebarMobileBar,
   SidebarTrigger,
   useSidebar,
 };

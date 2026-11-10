@@ -18,7 +18,7 @@ import { cloudServer } from "./auth/cloud-accounts";
 import { oauthAccessToken } from "./auth/mcp-oauth";
 import { integrationsChanged } from "./events";
 import { readCredential, updateConnection, type ConnectionRow } from "./store";
-import { vaultAvailable } from "./vault";
+import { vaultProblem } from "./vault";
 
 /** What the vault holds for a `secret` connection: a pasted key, or a local server's variables. */
 export interface SecretCredential {
@@ -130,9 +130,10 @@ export async function credentialsFor(
       .with("secret", (): Credentials => {
         const credential = readCredential<SecretCredential>(connection.id);
         if (!credential) {
-          return vaultAvailable()
-            ? { ok: false, reason: "The saved key cannot be read; connect again", reauth: true }
-            : { ok: false, reason: "The Keychain is locked", reauth: false };
+          const problem = vaultProblem();
+          return problem
+            ? { ok: false, reason: problem, reauth: false }
+            : { ok: false, reason: "The saved key cannot be read; connect again", reauth: true };
         }
         if (auth.kind === "bearer" || auth.kind === "header") {
           const token = credential.values.token;
@@ -162,7 +163,7 @@ export async function credentialsFor(
 }
 
 /** Whether a CLI-backed account that needed the user has its login back; marks it active. */
-async function cliRecovered(connection: ConnectionRow): Promise<boolean> {
+export async function cliRecovered(connection: ConnectionRow): Promise<boolean> {
   if (!(await cliToken("gh", true))) return false;
   updateConnection(connection.id, { status: "active", lastError: null });
   integrationsChanged();

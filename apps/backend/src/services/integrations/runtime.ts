@@ -14,7 +14,7 @@ import type { CatalogApp } from "@shared/integrations/types";
 import { getErrorMessage } from "@shared/lib/errors";
 import { cloudHolds } from "./auth/cloud-accounts";
 import { findApp } from "./catalog";
-import { credentialsFor } from "./credentials";
+import { cliRecovered, credentialsFor } from "./credentials";
 import { gatewayServer, usesGateway } from "./gateway";
 import { getConnection, listInstallations, type InstallationRow } from "./store";
 
@@ -40,7 +40,15 @@ async function serverFor(
   const connection = row.connectionId ? getConnection(row.connectionId) : null;
 
   if (usesGateway(app)) {
-    if (!connection || connection.status !== "active") {
+    // A CLI's login is fixed outside Deus (`gh auth login`), so it is looked
+    // at again here (the CLI answers locally): the app is back in the first
+    // turn after, not after a visit to Customize.
+    const active =
+      connection?.status === "active" ||
+      (connection?.kind === "cli" &&
+        connection.status === "needs_reauth" &&
+        (await cliRecovered(connection)));
+    if (!connection || !active) {
       return { reason: connection?.status === "needs_reauth" ? "Sign in again" : "Not connected" };
     }
     // An account Deus Cloud holds works only while its Deus account is signed in.

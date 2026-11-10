@@ -7,14 +7,13 @@
 
 import { getErrorMessage } from "@shared/lib/errors";
 import type { CatalogApp, ConnectAppResult } from "@shared/integrations/types";
-import { attachConnection } from "./accounts";
+import { attachConnection, finishRemoval } from "./accounts";
 import { signInReturnUrl } from "./auth/callback";
 import {
   cloudAccountConnected,
   cloudAccountId,
   cloudAttempt,
   cloudDirectoryVersion,
-  forgetCloudAccount,
   forgetCloudAttempts,
   newCloudAttempt,
   readCloudAccounts,
@@ -159,12 +158,11 @@ async function runReconcile(): Promise<void> {
   }
   // Signed out, the rows wait: signing back in to the same account brings them back.
   if (changed) integrationsChanged();
-  // What the person removed while signed out is disconnected now.
-  for (const row of held()) {
-    if (row.status !== "removing" || row.deusAccountId !== accountId) continue;
-    forgetCloudAccount(row);
-    deleteConnection(row.id);
-  }
+  // What the person removed while signed out, or while Deus Cloud could not
+  // be reached, is disconnected now: before the list is read, so an account
+  // on its way out is not taken for one connected elsewhere.
+  const owed = () => held().filter((c) => c.status === "removing" && c.deusAccountId === accountId);
+  await Promise.all(owed().map(finishRemoval));
   const served = cloudDirectoryVersion();
   const cloud = await readCloudAccounts();
   if (cloudDirectoryVersion() !== served) integrationsChanged();
@@ -194,6 +192,8 @@ async function runReconcile(): Promise<void> {
       return mine?.status !== "active";
     };
     if (!app || app.broker?.toolkit !== theirs.toolkit || !waiting()) continue;
+    // Still owed a disconnect that did not go through: not adopted back.
+    if (owed().some((c) => c.appId === appId)) continue;
     if (signInRoute(app).via !== "cloud") continue;
     if ((await stillConnected(appId)) !== true || !waiting()) continue;
     if (cloudAccountId() !== cloud.accountId) return;

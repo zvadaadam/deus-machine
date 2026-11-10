@@ -16,7 +16,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { BookOpen, Check, Loader2, Package, Plus, Search, Server } from "lucide-react";
-import { SidebarInset } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarMobileBar } from "@/components/ui/sidebar";
 import {
   Button,
   DropdownMenu,
@@ -151,9 +151,10 @@ export function CustomizePage() {
 
   return (
     <SidebarInset className="min-w-0">
-      <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 overflow-hidden rounded-xl border">
+      <div className="bg-bg-surface border-border-subtle flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border">
+        <SidebarMobileBar title="Customize" />
         <ScrollArea className={cn("min-h-0 flex-1", hasDetail && "hidden")}>
-          <div className="mx-auto flex max-w-4xl flex-col gap-5 px-8 pt-12 pb-16">
+          <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 pt-6 pb-16 sm:px-8 sm:pt-12">
             <header className="flex items-start justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <h1 className="text-text-primary text-xl font-semibold">Customize</h1>

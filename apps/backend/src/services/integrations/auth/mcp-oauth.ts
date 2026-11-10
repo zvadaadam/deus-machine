@@ -46,7 +46,7 @@ import { ZodError } from "zod";
 import { getErrorMessage } from "@shared/lib/errors";
 import { markNeedsReauth } from "../events";
 import { readCredential, updateConnection, writeCredential } from "../store";
-import { vaultAvailable } from "../vault";
+import { vaultProblem } from "../vault";
 import type { RegisteredClient } from "./clients";
 
 export interface OAuthCredential {
@@ -369,7 +369,8 @@ export async function oauthAccessToken(
   options: { force?: boolean } = {}
 ): Promise<string | null> {
   const credential = readCredential<OAuthCredential>(connectionId);
-  if (!credential && !vaultAvailable()) throw new Error("The Keychain is locked");
+  const problem = credential ? null : vaultProblem();
+  if (problem) throw new Error(problem);
   const token = credential?.tokens?.access_token;
   if (!credential || credential.kind !== "oauth" || !token) return null;
   if (credential.serverUrl !== serverUrl) {

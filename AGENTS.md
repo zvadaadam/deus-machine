@@ -190,7 +190,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 - **Credentials.** An account's row says how it is held
   (`integration_connections.kind`): `oauth` and `secret` (a pasted key, a
   local server's variables) keep a credential sealed by `vault.ts` (key in the
-  macOS Keychain, else a 0600 file; found once at startup); `cli` stores
+  macOS Keychain, else a 0600 file; found once at startup, and until the
+  Keychain answers nothing is sealed or opened, never a second key made); `cli` stores
   nothing (the signed-in CLI supplies the token at each use); `managed` is
   held by Deus Cloud. A credential sealed under a lost key opens as null and
   its app asks to connect again.
@@ -233,7 +234,9 @@ the catalog can move to a package the day Deus Cloud reads it too.
   apps pause and their rows wait; another account's rows are dropped here
   only; an installed app the account connected elsewhere is ready with no
   sign-in. Disconnecting or removing the app disconnects the account in Deus
-  Cloud, for every computer.
+  Cloud, for every computer: the row leaves its app and stays as `removing`
+  until Deus Cloud confirms, so a request that fails is made again at the
+  next pass and the account is not adopted back meanwhile.
 - **Cloud turns** (`cloud-turns.ts`, behind `DEUS_CLOUD_EXTENSIONS=1` until
   the platform this build talks to accepts the options). A cloud turn's
   options carry two complete sets: the skills to place in the sandbox, and
@@ -259,8 +262,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 - **Skills on disk** (`skill-files.ts`) use the Skills CLI layout: files in
   `~/.agents/skills/<name>` (Codex), a symlink in `~/.claude/skills/<name>`
   (Claude), a `.deus-skill.json` marker. Nothing without the marker is replaced
-  or removed; a folder is swapped in whole. `DEUS_SKILLS_HOME` points it
-  elsewhere (tests, dev).
+  or removed; a folder is swapped in by two renames, never half written.
+  `DEUS_SKILLS_HOME` points it elsewhere (tests, dev).
 
 ### Adding a New WS Resource
 

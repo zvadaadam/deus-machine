@@ -366,8 +366,8 @@ export const SCHEMA_SQL = `
   -- refused refresh, a rejected key). An app uses one account today; the
   -- table keeps one row per account so a second (a second brand, work and
   -- personal) is a row, not a migration. 'removing' is a managed row the
-  -- person removed while signed out of Deus: it belongs to no app any more,
-  -- and waits to be disconnected in Deus Cloud.
+  -- person removed: it belongs to no app any more, and stays until Deus Cloud
+  -- has disconnected the account (at once, or when it can next be asked).
   CREATE TABLE IF NOT EXISTS integration_connections (
     id TEXT PRIMARY KEY NOT NULL,
     app_id TEXT NOT NULL,

@@ -158,7 +158,9 @@ export function useCheckApp() {
 
 /**
  * Add the user's own server. A local server's keys are connected right after
- * (sealed in the vault), so they never sit in its command.
+ * (sealed in the vault), so they never sit in its command. Keys that are
+ * refused are reported and the server stays added: its page asks for them
+ * again, and trying again from the form would add it a second time.
  */
 export function useAddCustomApp() {
   return useMutation({
@@ -171,7 +173,9 @@ export function useAddCustomApp() {
       values?: Record<string, string>;
     }) => {
       const added = await mutate<{ appId: string }>("addCustomApp", input);
-      if (values) await connectApp({ appId: added.appId, values });
+      if (values) {
+        await connectApp({ appId: added.appId, values }).catch(reportFailure.onError);
+      }
       return added;
     },
   });

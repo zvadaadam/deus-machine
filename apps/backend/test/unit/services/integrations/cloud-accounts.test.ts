@@ -306,6 +306,45 @@ describe("an app that connects through the Deus account", () => {
     expect(listConnections("instagram")).toHaveLength(0);
   });
 
+  it("a disconnect Deus Cloud did not hear stays owed, and is asked again", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    cloud.failing.add("DELETE");
+    disconnectApp("instagram");
+    await settle();
+    // The app is signed out here; the account is still in Deus Cloud, so the row waits.
+    expect(view("instagram")).toMatchObject({ installed: true, readiness: "needs_connection" });
+    expect(cloud.accounts.get("alice")!.has("instagram")).toBe(true);
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
+
+    // A pass that still cannot disconnect it does not take the account back
+    // as one connected on another computer.
+    await deusAccount("alice");
+    expect(view("instagram").readiness).toBe("needs_connection");
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
+
+    cloud.failing.clear();
+    await deusAccount("alice");
+    expect(cloud.accounts.get("alice")!.has("instagram")).toBe(false);
+    expect(listConnections("instagram")).toHaveLength(0);
+    expect(view("instagram").readiness).toBe("needs_connection");
+  });
+
+  it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
+    await deusAccount("alice");
+    await signIn("instagram");
+    for (const method of ["GET", "POST", "DELETE"]) cloud.failing.add(method);
+    uninstallApp("instagram");
+    await settle();
+    expect(view("instagram").installed).toBe(false);
+    expect(listConnections("instagram").map((c) => c.status)).toEqual(["removing"]);
+
+    cloud.failing.clear();
+    await deusAccount("alice");
+    expect(cloud.accounts.get("alice")!.has("instagram")).toBe(false);
+    expect(listConnections("instagram")).toHaveLength(0);
+  });
+
   it("a check notices an account that is gone, and a new sign-in replaces it", async () => {
     await deusAccount("alice");
     await signIn("instagram");

@@ -251,20 +251,22 @@ export function cloudServer(connection: ConnectionRow): McpServerConfig & { type
 }
 
 /**
- * Disconnect the account in Deus Cloud, in the background. Only the Deus
- * account that made the connection can; a row left by another account is
- * this computer's to drop and no more.
+ * Disconnect the account in Deus Cloud. True once Deus Cloud says it is gone
+ * (or never had it); false when it could not be asked: signed out, another
+ * Deus account signed in (only the account that made the connection can
+ * disconnect it), or the request failed.
  */
-export function forgetCloudAccount(connection: ConnectionRow): void {
-  forgetCloudAttempts(connection.id);
+export async function disconnectCloudAccount(connection: ConnectionRow): Promise<boolean> {
   forgetCloudTurnCapability();
-  if (!cloudHolds(connection)) return;
-  void cloud(sessionFor(connection), "DELETE", `/${encodeURIComponent(connection.appId)}`).catch(
-    (error) => {
-      if (error instanceof CloudAccountsError && error.status === 404) return;
-      console.warn(`[Integrations] Deus Cloud did not disconnect ${connection.appId}:`, error);
-    }
-  );
+  if (!cloudHolds(connection)) return false;
+  try {
+    await cloud(sessionFor(connection), "DELETE", `/${encodeURIComponent(connection.appId)}`);
+    return true;
+  } catch (error) {
+    if (error instanceof CloudAccountsError && error.status === 404) return true;
+    console.warn(`[Integrations] Deus Cloud did not disconnect ${connection.appId}:`, error);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

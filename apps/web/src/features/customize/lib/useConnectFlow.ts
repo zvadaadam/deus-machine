@@ -16,16 +16,17 @@ import { toast } from "sonner";
 import type { AppView, ConnectAppResult } from "@shared/integrations/types";
 import { getErrorMessage } from "@shared/lib/errors";
 import { openExternalPending, type PendingExternalWindow } from "@/platform/native/window";
-import { isRelayMode } from "@/shared/config/backend.config";
+import { needsRemoteAuth } from "@/platform/ws/device-auth";
 import { connectApp } from "../api/integrations.queries";
 
 /**
  * A browser sign-in returns to the computer Deus runs on, so it can only be
- * started there: on a phone or another computer (remote access) the page
- * would come back to the wrong machine.
+ * started there: on a phone or another computer (through the relay, or
+ * straight over the local network) the page would come back to the wrong
+ * machine.
  */
 export function signInNeedsThisComputer(view: AppView): boolean {
-  return (view.app.auth.kind === "oauth" || view.app.auth.kind === "managed") && isRelayMode();
+  return (view.app.auth.kind === "oauth" || view.app.auth.kind === "managed") && needsRemoteAuth();
 }
 
 interface ConnectRequest {

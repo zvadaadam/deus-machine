@@ -228,7 +228,7 @@ export type InstallKind = "app" | "skill" | "plugin";
 /** Where an item came from: the curated catalog, or the user's own. */
 export type ItemSource = "catalog" | "custom";
 
-/** `removing`: removed while signed out of Deus, waiting to be disconnected in Deus Cloud. */
+/** `removing`: removed here, waiting for Deus Cloud to disconnect the account. */
 export type ConnectionStatus = "pending" | "active" | "needs_reauth" | "removing";
 
 /** One tool a server listed, as the app's page shows it (the `appTools` request). */
