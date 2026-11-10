@@ -126,6 +126,11 @@ export async function completeCloudCallback(attempt: string): Promise<string> {
     integrationsChanged();
     throw error;
   }
+  // Disconnected or removed while Deus Cloud was being asked: the attempt is
+  // gone with its row, and landing it now would bring the account back.
+  if (cloudAttempt(attempt) !== connection.id) {
+    throw new Error("This sign-in was cancelled. Start again from Deus.");
+  }
   if (!connected) {
     updateConnection(connection.id, { lastError: "The sign-in was not finished" });
     integrationsChanged();

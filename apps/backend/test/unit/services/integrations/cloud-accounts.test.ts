@@ -53,6 +53,7 @@ import {
 } from "../../../../src/services/integrations/apps";
 import { checkApp, settleChecks } from "../../../../src/services/integrations/checks";
 import {
+  completeCloudCallback,
   __setCallbackSettleForTests,
   settleCloudAccounts,
 } from "../../../../src/services/integrations/cloud-apps";
@@ -360,6 +361,21 @@ describe("an app that connects through the Deus account", () => {
     await settle();
     expect(cloud.accounts.get("bob")?.has("instagram") ?? false).toBe(false);
     expect(listConnections("instagram").some((c) => c.status === "active")).toBe(false);
+  });
+
+  it("a sign-in whose app was disconnected while it was landing does not come back", async () => {
+    await deusAccount("alice");
+    const page = await fetch(await startSignIn("instagram"), { redirect: "manual" });
+    const attempt = new URL(page.headers.get("location")!).pathname.split("/").pop()!;
+    // The browser is back and Deus Cloud is being asked; the person disconnects meanwhile.
+    const landing = completeCloudCallback(attempt);
+    landing.catch(() => {});
+    disconnectApp("instagram");
+    await expect(landing).rejects.toThrow(/cancelled/);
+    await settle();
+    expect(view("instagram").readiness).toBe("needs_connection");
+    expect(listConnections("instagram")).toHaveLength(0);
+    expect(cloud.accounts.get("alice")?.has("instagram") ?? false).toBe(false);
   });
 
   it("removing an app while Deus Cloud is down still disconnects its account later", async () => {
