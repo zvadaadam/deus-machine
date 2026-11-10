@@ -213,11 +213,12 @@ async function runReconcile(): Promise<void> {
       return mine?.status !== "active";
     };
     if (!app || app.broker?.toolkit !== theirs.toolkit || !waiting()) continue;
-    // Still owed a disconnect that did not go through: not adopted back.
-    if (owed().some((c) => c.appId === appId)) continue;
     if (signInRoute(app).via !== "cloud") continue;
     if ((await stillConnected(appId)) !== true || !waiting()) continue;
     if (cloudAccountId() !== cloud.accountId) return;
+    // Still owed a disconnect that did not go through: not adopted back.
+    // Asked last, with nothing left to wait for before the account lands.
+    if (owed().some((c) => c.appId === appId)) continue;
     cloudAccountLanded(
       cloudRow(appId, cloud.accountId) ??
         createConnection({ appId, kind: "managed", deusAccountId: cloud.accountId })
