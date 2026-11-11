@@ -13,6 +13,8 @@ import { SettingsService } from "./settings.service";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
 import type { Settings } from "../types";
+import { DEFAULT_THINKING_LEVEL } from "@shared/models";
+import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 
 /**
  * Fetch all settings
@@ -57,6 +59,16 @@ function withProgress(answer: AgentAuthAnswer, progress: HarnessCliProgress): Ag
         : cli
     ),
   };
+}
+
+/**
+ * The thinking level a new chat starts on: the user's (Settings → AI), else
+ * Deus's. Settings written by older builds hold retired UPPERCASE spellings,
+ * which are read as what they became.
+ */
+export function useDefaultThinkingLevel(): ThinkingLevel {
+  const { data: settings } = useSettings();
+  return readThinkingLevel(settings?.default_thinking_level) ?? DEFAULT_THINKING_LEVEL;
 }
 
 /**

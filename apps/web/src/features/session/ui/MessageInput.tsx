@@ -61,7 +61,6 @@ import {
   type ThinkingLevel,
 } from "@/shared/agents";
 import { useModelLists } from "@/shared/hooks/useModelLists";
-import { ThinkingPicker } from "./ThinkingPicker";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
 import { ContextTokenIndicator } from "./ContextTokenIndicator";
@@ -492,19 +491,14 @@ export function MessageInput({
             <ModelPicker
               model={model}
               lists={modelLists}
+              // A level the model lacks runs as the nearest one below: show that one.
+              thinkingLevel={fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking)}
+              thinkingLevels={modelThinkingLevels}
               hasMessages={hasMessages}
               onModelChange={(value) => composer.setModel(value, levelsFor(value))}
+              onThinkingLevelChange={composer.setThinkingLevel}
               onOpenNewTab={onOpenNewTab}
             />
-
-            {modelThinkingLevels.length > 0 && (
-              <ThinkingPicker
-                // A level the model lacks runs as the nearest one below: show that one.
-                level={fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking)}
-                levels={modelThinkingLevels}
-                onLevelChange={composer.setThinkingLevel}
-              />
-            )}
             {showPlanMode && (
               <PlanModeToggle enabled={planModeEnabled} onClick={composer.togglePlanMode} />
             )}

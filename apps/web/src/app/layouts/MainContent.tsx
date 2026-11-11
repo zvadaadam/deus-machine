@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { wakeCloudWorkspace } from "@/features/workspace/api/wakeCloudWorkspace";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { SessionPanelRef } from "@/features/session";
+import type { ThinkingLevel } from "@/shared/agents";
 import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
 import type { ContentTab } from "@/features/workspace/store";
@@ -61,7 +62,8 @@ interface MainContentProps {
     message: string,
     model: string,
     branch?: string,
-    location?: "local" | "cloud"
+    location?: "local" | "cloud",
+    thinkingLevel?: ThinkingLevel
   ) => void;
   onWorkspaceClick: (workspace: Workspace) => void;
 }

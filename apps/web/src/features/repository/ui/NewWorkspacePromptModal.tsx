@@ -10,8 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/shared/lib/utils";
-import { ModelPicker, CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
-import { getStoredModel, setStoredModel } from "@/features/session/lib/modelPreference";
+import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
+import { useNewChatSelection } from "./composer/useNewChatSelection";
+import { ModelPicker } from "@/features/session/ui/ModelPicker";
+import type { ThinkingLevel } from "@/shared/agents";
 
 interface NewWorkspacePromptModalProps {
   show: boolean;
@@ -29,6 +31,8 @@ interface NewWorkspacePromptModalProps {
     branch?: string;
     location: "local" | "cloud";
     model: string;
+    /** The thinking level picked here; absent for a model with no thinking control. */
+    thinkingLevel?: ThinkingLevel;
   }) => void;
 }
 
@@ -51,7 +55,7 @@ export function NewWorkspacePromptModal({
 }: NewWorkspacePromptModalProps) {
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [location, setLocation] = useState<"local" | "cloud">("local");
-  const [model, setModel] = useState(getStoredModel);
+  const selection = useNewChatSelection(location);
   const [branchSelection, setBranchSelection] = useState<{
     repoId: string;
     branch: string;
@@ -69,7 +73,8 @@ export function NewWorkspacePromptModal({
       prompt: prompt.trim(),
       branch: selectedBranch ?? undefined,
       location,
-      model,
+      model: selection.model,
+      thinkingLevel: selection.sentThinkingLevel,
     });
     setPrompt("");
     setLocation("local");
@@ -151,12 +156,14 @@ export function NewWorkspacePromptModal({
 
           <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
             <ModelPicker
-              model={model}
-              location={location}
-              onModelChange={(value) => {
-                setModel(value);
-                setStoredModel(value);
-              }}
+              model={selection.model}
+              lists={selection.lists}
+              thinkingLevel={selection.thinkingLevel}
+              thinkingLevels={selection.thinkingLevels}
+              hasMessages={false}
+              onModelChange={selection.setModel}
+              onThinkingLevelChange={selection.setThinkingLevel}
+              side="bottom"
             />
 
             {/* Send / create button */}

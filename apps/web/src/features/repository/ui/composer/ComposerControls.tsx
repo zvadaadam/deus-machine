@@ -1,11 +1,11 @@
 /**
- * Shared composer controls — the ONE definition of the model picker, cloud
- * toggle, and branch button used by both prompt-first surfaces (HomeView's
- * welcome composer and NewWorkspacePromptModal). Extracted so the two can't
- * drift; visual language is the welcome composer's.
+ * Shared composer controls — the ONE definition of the cloud toggle and branch
+ * button used by both prompt-first surfaces (HomeView's welcome composer and
+ * NewWorkspacePromptModal). Extracted so the two can't drift; visual language
+ * is the welcome composer's. Their model picker is the chat composer's own
+ * (features/session ModelPicker), fed by useNewChatSelection.
  */
 
-import { createElement, useState } from "react";
 import { toast } from "sonner";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
@@ -13,164 +13,11 @@ import { capabilities } from "@/platform/capabilities";
 import { useCloudAccessGate } from "./useCloudAccessGate";
 import { GrantRepositoryAccessModal } from "./GrantRepositoryAccessModal";
 
-import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
+import { ChevronDown, Cloud, GitBranch } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import { getAgentLogo } from "@/assets/agents";
-import type { AgentHarness } from "@/shared/agents";
-import { modelPickerView, type ModelPickerView } from "@/shared/agents/picker";
-import { useModelLists } from "@/shared/hooks/useModelLists";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { BranchSelector } from "@/features/workspace/ui/BranchSelector";
-
-export function AgentLogo({ type, className }: { type: AgentHarness; className?: string }) {
-  const Logo = getAgentLogo(type);
-  if (!Logo) {
-    return <span className={cn("bg-muted-foreground/80 inline-flex rounded-full", className)} />;
-  }
-  return createElement(Logo, { className: cn("flex-shrink-0", className) });
-}
-
-interface ModelPickerProps {
-  model: string;
-  /** Where the new workspace runs: a cloud one offers the platform's models. */
-  location: "local" | "cloud";
-  onModelChange: (value: string) => void;
-}
-
-/** Grouped model list — one markup, sized for the containing surface. */
-function ModelOptionList({
-  view: { groups, selected },
-  onSelect,
-  size,
-}: {
-  view: ModelPickerView;
-  onSelect: (value: string) => void;
-  size: "sm" | "lg";
-}) {
-  const lg = size === "lg";
-  return (
-    <>
-      {groups.map((group, groupIdx) => (
-        <div key={group.agentHarness}>
-          {groupIdx > 0 && (
-            <div className={cn("bg-border/70 h-px", lg ? "mx-2 my-2" : "mx-1 my-1.5")} />
-          )}
-          <div
-            className={cn(
-              "text-text-muted/90 font-normal tracking-wide",
-              lg ? "px-2 py-1.5 text-xs" : "text-2xs px-2 py-1"
-            )}
-          >
-            {group.label}
-          </div>
-          {group.options.map((option) => {
-            const isSelected = selected?.value === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                title={option.description}
-                onClick={() => onSelect(option.value)}
-                className={cn(
-                  "control-interaction flex w-full items-center rounded-lg",
-                  "hover:bg-bg-raised/45",
-                  "px-2 text-sm",
-                  lg ? "gap-2.5 py-2.5" : "gap-2 py-1.5",
-                  isSelected ? "text-text-primary" : "text-text-secondary"
-                )}
-              >
-                <AgentLogo type={option.agentHarness} className={lg ? "h-4 w-4" : "h-3.5 w-3.5"} />
-                <span className="font-normal">{option.label}</span>
-                <span className="ml-auto">
-                  {isSelected && (
-                    <Check className={cn("text-text-primary", lg ? "size-3.5" : "size-3")} />
-                  )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ))}
-    </>
-  );
-}
-
-/** Model picker trigger + surface: bottom sheet on mobile, popover on desktop. */
-export function ModelPicker({ model, location, onModelChange }: ModelPickerProps) {
-  const [open, setOpen] = useState(false);
-  const isMobile = useIsMobile();
-  const view = modelPickerView(useModelLists({ cloud: location === "cloud" }), model);
-  const selectedOption = view.selected;
-
-  const trigger = (
-    <button
-      type="button"
-      onClick={isMobile ? () => setOpen(true) : undefined}
-      className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm"
-    >
-      <AgentLogo type={selectedOption?.agentHarness ?? "claude-code"} className="h-3 w-3" />
-      <span className="font-normal">{selectedOption?.label ?? model}</span>
-      <ChevronDown
-        className={cn(
-          "text-text-disabled size-3 transition-transform duration-200",
-          open && "rotate-180"
-        )}
-      />
-    </button>
-  );
-
-  const select = (value: string) => {
-    onModelChange(value);
-    setOpen(false);
-  };
-
-  if (isMobile) {
-    return (
-      <>
-        {trigger}
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent side="bottom" className="rounded-t-xl px-0">
-            <SheetHeader className="px-4 pb-0">
-              <SheetTitle className="text-sm">Select model</SheetTitle>
-              <SheetDescription className="sr-only">
-                Choose an AI model for your workspace
-              </SheetDescription>
-            </SheetHeader>
-            <div className="max-h-[50vh] overflow-y-auto p-2">
-              <ModelOptionList view={view} onSelect={select} size="lg" />
-            </div>
-          </SheetContent>
-        </Sheet>
-      </>
-    );
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className={cn(
-          "max-h-(--radix-popover-content-available-height) w-56 overflow-y-auto rounded-xl p-1.5",
-          "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-          "shadow-[var(--shadow-elevated)]"
-        )}
-      >
-        <ModelOptionList view={view} onSelect={select} size="sm" />
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 interface CloudToggleProps {
   location: "local" | "cloud";

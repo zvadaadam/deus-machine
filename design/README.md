@@ -99,10 +99,13 @@ deferred. The subsequent composer polish updates both the design and the app.
 - `15a` turn details: recorded accounts retain their existing metadata. Missing account
   information displays an em dash, and the explanatory history note is removed.
 - Composer spacing uses a 48px minimum textarea height, 12px vertical textarea padding,
-  16px horizontal padding, and a footer with 8px side/bottom padding. Model and thinking-effort
-  selectors share 32px controls, 8px horizontal padding, and the same text and menu styles.
-  `ThinkingPicker.tsx` replaces the animated cycling label with explicit choices from
-  the existing model catalog. `16` and `16b` show its selected radio item and menu.
+  16px horizontal padding, and a footer with 8px side/bottom padding. One 32px control
+  (`ModelPicker.tsx`) chooses the agent, the model and the thinking effort: its trigger reads
+  "Opus 5.5 High" (the level muted, absent for a model with no thinking control), and its menu
+  has the agents across the top, the shown agent's models on the left and the chat's model's
+  levels on the right, each marked on the right. `16` and `16b` show the trigger and the menu.
+  The home composer and the new-workspace dialog use the same control (`45`), opening downward;
+  the level picked there rides with the first turn.
   The canvas's `tw-shadow-color` variable records the 10% black default used by
   Tailwind's small/medium shadow tokens.
 
@@ -587,10 +590,10 @@ in step with it:
 - The Changes review CTA reads **"Review Changes"** with the file count after it.
 - **A model picker draws no list of its own.** Its rows are the engine's for the chat (this
   computer's CLIs for a local one, the platform's for a cloud one), so board `16` draws the
-  first four of each harness and no "New" badge.
+  first few of one agent and no "New" badge.
 - **A harness is drawn with its own logo, never a generic sparkle.** `apps/web/src/assets/agents/`
   ships the two harness marks and `getAgentLogo(harness)` resolves them in six places: `ModelPicker`
-  (trigger + every row), `ComposerControls`, `SessionTab`, `ClosedSessionsPopover`,
+  (trigger + agent tabs), `ComposerControls`, `SessionTab`, `ClosedSessionsPopover`,
   `PlanApprovalOverlay` and `AgentQuestionOverlay`. The marks in this file are those exact
   paths, transcribed with their `viewBox="29 29 42 42"` and bound to a text colour the way
   `currentColor` behaves in code — so a `sparkles` icon in any of those slots is a bug.

@@ -22,7 +22,7 @@ import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import { AgentQuestionOverlay } from "./AgentQuestionOverlay";
 import { Button } from "@/components/ui/button";
 import { X, Upload } from "lucide-react";
-import type { AgentHarness } from "@/shared/agents";
+import type { AgentHarness, ThinkingLevel } from "@/shared/agents";
 import type { WorkspaceKind } from "@shared/enums";
 import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "../store/sessionComposerStore";
@@ -62,7 +62,7 @@ export interface SessionPanelRef {
    *  directly through `sessionComposerActions`. */
   /** Resolves true only when the send reached the backend (see
    *  useSessionActions) — false keeps the caller's queued prompt alive. */
-  sendMessage: (content: string, model?: string) => Promise<boolean>;
+  sendMessage: (content: string, model?: string, thinkingLevel?: ThinkingLevel) => Promise<boolean>;
 }
 
 export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
@@ -286,8 +286,9 @@ export const SessionPanel = forwardRef<SessionPanelRef, SessionPanelProps>(
     useImperativeHandle(
       ref,
       () => ({
-        sendMessage: (content: string, modelOverride?: string) =>
-          composerRef.current?.sendMessage(content, modelOverride) ?? Promise.resolve(false),
+        sendMessage: (content: string, modelOverride?: string, thinkingOverride?: ThinkingLevel) =>
+          composerRef.current?.sendMessage(content, modelOverride, thinkingOverride) ??
+          Promise.resolve(false),
       }),
       []
     );

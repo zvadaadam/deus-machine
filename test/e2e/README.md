@@ -115,6 +115,19 @@ login or provider call is needed.
 bun test/e2e/provider-accounts.browser.mjs
 ```
 
+### `model-picker.browser.mjs`
+
+Runs the composer's one picker for agent, model and thinking effort in an
+isolated browser, with the engine's own catalog: the trigger's phrase, the
+menu's agents, models and levels (marks on the right), the level fitted when
+the model changes, a model with no thinking control, the keyboard, another
+agent's model in a started chat (a new chat), and a phone's width. No backend
+or provider call is needed.
+
+```bash
+bun test/e2e/model-picker.browser.mjs
+```
+
 ### `environment-secrets.browser.mjs`
 
 Runs the real Environment settings components through both the desktop backend
