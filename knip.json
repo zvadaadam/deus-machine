@@ -64,8 +64,6 @@
   "ignore": ["apps/cloud-relay/**", "apps/landing/**"],
   "ignoreDependencies": [
     "yallist",
-    "@sentry/vite-plugin",
-    "eslint-plugin-react",
     "tailwindcss",
     "esbuild",
     "@electron/rebuild",
