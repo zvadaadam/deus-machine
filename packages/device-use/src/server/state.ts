@@ -83,7 +83,7 @@ export class StateStore {
 }
 
 export function resolveStorageDir(env: NodeJS.ProcessEnv = process.env): string {
-  // Preferred: explicit AAP-style env var.
+  // Preferred: the directory a host names.
   if (env.DEUS_STORAGE) return env.DEUS_STORAGE;
   // Fallback: .device-use inside the current working directory.
   return path.join(process.cwd(), ".device-use");

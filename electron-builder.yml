@@ -62,14 +62,6 @@ mac:
       to: "simulator/simbridge"
     - from: "packages/device-use/bin/siminspector.dylib"
       to: "simulator/siminspector.dylib"
-    - from: "packages/device-use"
-      to: "agentic-apps/device-use"
-      filter:
-        - "agentic-app.json"
-        - "package.json"
-        - "dist/**/*"
-        - "skills/**/*"
-        - "bin/**/*"
   target:
     - target: dmg
       arch: [arm64, x64]

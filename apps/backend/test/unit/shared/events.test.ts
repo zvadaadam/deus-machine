@@ -118,8 +118,6 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("session");
       expect(QUERY_RESOURCES).toContain("messages");
       // AAP resources
-      expect(QUERY_RESOURCES).toContain("apps");
-      expect(QUERY_RESOURCES).toContain("running_apps");
       // Local server discovery
       expect(QUERY_RESOURCES).toContain("local_servers");
       // Automations
@@ -127,7 +125,7 @@ describe("shared/events", () => {
       expect(QUERY_RESOURCES).toContain("automation_runs");
       // Apps, Plugins and Skills
       expect(QUERY_RESOURCES).toContain("integrations");
-      expect(QUERY_RESOURCES).toHaveLength(11);
+      expect(QUERY_RESOURCES).toHaveLength(9);
     });
 
     it("MUTATION_NAMES contains the expected mutations", () => {
@@ -190,8 +188,6 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("sim:inspectSnapshot");
       expect(COMMAND_NAMES).toContain("sim:buildAndRun");
       // AAP commands
-      expect(COMMAND_NAMES).toContain("launchApp");
-      expect(COMMAND_NAMES).toContain("stopApp");
       // Automations
       expect(COMMAND_NAMES).toContain("runAutomationNow");
       expect(COMMAND_NAMES).toContain("refreshAutomations");
@@ -205,7 +201,7 @@ describe("shared/events", () => {
       expect(COMMAND_NAMES).toContain("agentLoginCancel");
       expect(COMMAND_NAMES).toContain("agentLogout");
       expect(COMMAND_NAMES).toContain("agentPrepareClis");
-      expect(COMMAND_NAMES).toHaveLength(39);
+      expect(COMMAND_NAMES).toHaveLength(37);
     });
 
     it("REQUEST_RESOURCES contains the expected request-only resources", () => {
@@ -265,8 +261,6 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("sim:buildFailed");
       expect(PROTOCOL_EVENTS).toContain("sim:streamFailed");
       // AAP events
-      expect(PROTOCOL_EVENTS).toContain("apps:launched");
-      expect(PROTOCOL_EVENTS).toContain("apps:stopped");
       // Cloud sandbox environment progress (ephemeral chat stack)
       expect(PROTOCOL_EVENTS).toContain("cloud:env");
       // Hosted simulator passthrough (status also lands on the workspace row)
@@ -277,7 +271,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("agent:cli");
       // Remote access: the paired devices list changed
       expect(PROTOCOL_EVENTS).toContain("devices:changed");
-      expect(PROTOCOL_EVENTS).toHaveLength(24);
+      expect(PROTOCOL_EVENTS).toHaveLength(22);
     });
 
     it("has no deus-dialect part/message event names left", () => {

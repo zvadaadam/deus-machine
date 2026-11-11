@@ -42,13 +42,11 @@ agent CLI discovery. It is based on the source paths below, not on generated
   own Electron main-process packaged runtime env and backend launch. Packaged
   desktop launches `deus-runtime backend`; development launches the built backend
   CJS bundle with host-staged CLIs.
-- `apps/backend/src/services/aap/lifecycle.ts` owns AAP child process spawning.
-  It routes packaged `device-use` launches through `deus-runtime device-use` so
-  app manifests do not depend on Bun or global PATH.
 - `scripts/prepare-device-use.mjs`, `electron-builder.yml`,
   `scripts/runtime/electron-builder-before-pack.cjs`, and
-  `scripts/runtime/lib/device-use-payloads.cjs` own device-use package payload
-  readiness and macOS helper assertions.
+  `scripts/runtime/lib/device-use-payloads.cjs` own what a packaged app takes
+  from `packages/device-use`: the engine, compiled into `deus-runtime`, and the
+  macOS simulator helpers.
 
 ## Verification Ownership
 

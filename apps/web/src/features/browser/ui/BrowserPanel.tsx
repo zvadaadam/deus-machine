@@ -178,7 +178,6 @@ function serializeTabs(tabs: BrowserTabState[]): PersistedBrowserTab[] {
       url: t.currentUrl,
       title: t.title,
       ...(t.isMobileView ? { isMobileView: true } : {}),
-      ...(t.openedAt ? { openedAt: t.openedAt } : {}),
     }));
 }
 
@@ -384,9 +383,6 @@ export function BrowserPanel({
     const newTab = createBrowserTab(workspaceId);
     newTab.url = pendingNewTab.url;
     newTab.currentUrl = pendingNewTab.url;
-    // Stamp the opening URL so apps:stopped can match this tab even after
-    // Electron overwrites url/currentUrl on load failure (chrome-error).
-    newTab.openedAt = pendingNewTab.url;
     // Reacting to a consumer-side effect (new-tab request dispatched via
     // the global browserWindowStore) — the setState IS the sync from that
     // external store into this component's state.
@@ -448,32 +444,6 @@ export function BrowserPanel({
     },
     [workspaceId, persistTabs, requestFocusUrlBar]
   );
-
-  // Close-tab request consumer — triggered by AAP's `apps:stopped` event
-  // via useAppsStopped. Matches any tab whose `currentUrl` shares the
-  // dead app's origin+port prefix (covers in-app client-side navigation)
-  // and closes it through the existing `closeTab` path so webview cleanup
-  // + next-active-tab selection are unified with the manual close flow.
-  const pendingCloseTab = useBrowserWindowStore((s) => s.pendingCloseTab);
-  useEffect(() => {
-    if (!pendingCloseTab) return;
-    if (pendingCloseTab.workspaceId !== workspaceId) return;
-
-    // Match on `openedAt` (the URL the tab was created for) rather than
-    // `currentUrl`. When an app stops, the <webview> hits
-    // ERR_CONNECTION_REFUSED on reload and transitions currentUrl to
-    // `chrome-error://chromewebdata/` — prefix matching on that would
-    // silently miss the tab we intended to close. `openedAt` is immutable.
-    //
-    // Snapshot ids before closing — closeTab mutates `tabs` and re-renders
-    // asynchronously, so iterating the live array mid-loop would skip or
-    // double-close entries.
-    const doomed = tabs.filter(
-      (t) => t.openedAt && t.openedAt.startsWith(pendingCloseTab.urlPrefix)
-    );
-    for (const t of doomed) closeTab(t.id);
-    browserWindowActions.consumePendingCloseTab();
-  }, [pendingCloseTab, workspaceId, tabs, closeTab]);
 
   /**
    * Stable callback for BrowserTab children to update their tab state.

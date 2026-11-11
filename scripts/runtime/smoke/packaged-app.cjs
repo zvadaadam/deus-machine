@@ -19,9 +19,7 @@ const {
 } = require("./lib/smoke-helpers.cjs");
 const {
   DEVICE_USE_HELPER_NAMES,
-  DEVICE_USE_PACKAGE_FILES,
   assertNoBuildLocalInstallName,
-  packagedDeviceUseRoot,
   packagedSimulatorDir,
 } = require("../lib/device-use-payloads.cjs");
 
@@ -299,9 +297,8 @@ function verifyMacUniversalBinary(filePath, label, options) {
   console.log(`[runtime-smoke] ${label}: ${output}`);
 }
 
-function verifyPackagedDeviceUse(resourcesDir, options) {
+function verifyPackagedSimulatorHelpers(resourcesDir, options) {
   const simulatorDir = packagedSimulatorDir(resourcesDir);
-  const appRoot = packagedDeviceUseRoot(resourcesDir);
 
   assertDirectory(simulatorDir, "packaged simulator helper directory");
   verifyMacUniversalBinary(
@@ -316,45 +313,7 @@ function verifyPackagedDeviceUse(resourcesDir, options) {
     PROJECT_ROOT,
     "packaged simulator siminspector"
   );
-
-  assertDirectory(appRoot, "packaged device-use app");
-  for (const [, relativePath] of DEVICE_USE_PACKAGE_FILES) {
-    assertRegularFile(path.join(appRoot, relativePath), `packaged device-use ${relativePath}`);
-  }
-  verifyMacUniversalBinary(
-    path.join(appRoot, "bin", DEVICE_USE_HELPER_NAMES.simbridge),
-    "packaged device-use app simbridge",
-    options
-  );
-  const appInspector = path.join(appRoot, "bin", DEVICE_USE_HELPER_NAMES.siminspector);
-  verifyMacUniversalBinary(appInspector, "packaged device-use app siminspector", options);
-  assertNoBuildLocalInstallName(appInspector, PROJECT_ROOT, "packaged device-use app siminspector");
-
-  for (const forbidden of [
-    path.join(appRoot, "native", ".build"),
-    path.join(appRoot, "native", ".swiftpm"),
-  ]) {
-    assert(
-      !fs.existsSync(forbidden),
-      `Packaged device-use contains generated native build output: ${forbidden}`
-    );
-  }
-
-  const manifest = readJsonFile(
-    path.join(appRoot, "agentic-app.json"),
-    "packaged device-use manifest"
-  );
-  assert(
-    manifest.launch?.command === "device-use",
-    `Packaged device-use manifest has unexpected launch command: ${manifest.launch?.command}`
-  );
-  assert(
-    Array.isArray(manifest.launch?.args) &&
-      manifest.launch.args.includes("--host") &&
-      manifest.launch.args.includes("127.0.0.1"),
-    "Packaged device-use manifest must bind AAP-launched Mobile Use to loopback"
-  );
-  console.log("[runtime-smoke] packaged device-use runtime payload verified");
+  console.log("[runtime-smoke] packaged simulator helpers verified");
 }
 
 async function verifyPackagedApp(options) {
@@ -409,7 +368,7 @@ async function verifyPackagedApp(options) {
   );
   verifyAsarRuntimeContract(path.join(resourcesDir, "app.asar"));
   verifyNoDuplicateRuntimeCliPackages(resourcesDir);
-  verifyPackagedDeviceUse(resourcesDir, options);
+  verifyPackagedSimulatorHelpers(resourcesDir, options);
 
   console.log(`[runtime-smoke] packaged app verified: ${appPath}`);
 }

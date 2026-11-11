@@ -61,9 +61,6 @@ export const QUERY_RESOURCES = [
   "sessions",
   "session",
   "messages",
-  // AAP (agentic apps protocol)
-  "apps",
-  "running_apps",
   // Localhost dev-server discovery (curated port probe + page metadata)
   "local_servers",
   // Automations (prompts on a schedule) + their run ledger (param: automationId)
@@ -204,11 +201,6 @@ export const COMMAND_NAMES = [
   "sim:launchApp",
   "sim:terminateApp",
   "sim:uninstallApp",
-  // AAP (agentic apps protocol) — user-initiated launch/stop from the Apps tab.
-  // Agent-initiated launches flow through the agent-server RPC path in Phase 3
-  // (not these commands), but both paths converge on apps.service.launchApp.
-  "launchApp",
-  "stopApp",
   // Automations (cloud-only; agnt is the scheduler + source of truth).
   // runAutomationNow triggers a platform fire; refreshAutomations re-mirrors
   // the platform into the local cache (optionally one automation + its runs);
@@ -267,13 +259,6 @@ export const PROTOCOL_EVENTS = [
   "sim:buildComplete",
   "sim:buildFailed",
   "sim:streamFailed",
-  // AAP (agentic apps protocol) lifecycle — one-shot side effects around the
-  // Browser tab that mirrors an app's UI.
-  // Payload for both: { appId, workspaceId, runningAppId, url }.
-  //   apps:launched — new tab opens to the url
-  //   apps:stopped  — tabs pointing at the url are closed (the port is dead)
-  "apps:launched",
-  "apps:stopped",
   // Cloud sandbox environment progress (workspace.state passthrough from the
   // agnt session socket). Ephemeral by design: the chat renders these as a
   // live provisioning/wake progress stack and nothing is persisted — a

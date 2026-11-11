@@ -2,7 +2,7 @@
 // The engine, in the backend's process: the standard @zvada/agent-server wire
 // on an in-process channel, with deus's seams around it — the in-process deus
 // MCP tools (answered by the backend through `host-link`), the tool policy,
-// the checkpoint hooks, session titles and the AAP MCP servers.
+// the checkpoint hooks and session titles.
 
 import { AgentServer } from "@zvada/agent-server/server";
 import {
@@ -12,19 +12,13 @@ import {
 } from "@zvada/agent-server/protocol";
 import { adoptBundledClis } from "./agents/core/bundled-clis";
 import { createCheckpoint } from "./agents/core/checkpoint";
-import { currentAapServers, getRuntime } from "./agents/core/engine";
+import { getRuntime } from "./agents/core/engine";
 import { applyShellEnvironment } from "./agents/environment";
 import { setHost, type DeusHost } from "./host-link";
-import {
-  observeLifecycleEvent,
-  observeTurnStart,
-  sessionServers,
-  trackedSessions,
-} from "./session-tracker";
+import { observeLifecycleEvent, observeTurnStart, trackedSessions } from "./session-tracker";
 import { maybeFetchTitle } from "./title-watch";
 
 export type { DeusHost, SessionTitle } from "./host-link";
-export { registerAppMcp, unregisterAppMcp } from "./app-registrar";
 
 let server: AgentServer | null = null;
 
@@ -87,39 +81,19 @@ export async function stopEngine(): Promise<void> {
 }
 
 /**
- * A turn about to be sent. A Claude turn carries the registered AAP servers
- * in its config (the engine swaps a session's servers between turns). The
- * session tracker records the turn's cwd, harness and directories now, since
- * the hooks can consult it before the ack returns; a session with a turn
- * under way keeps its turn's. `refused` undoes the record for a turn the
- * server refused.
+ * A turn about to be sent. The session tracker records its cwd, harness and
+ * directories now, since the hooks can consult it before the ack returns; a
+ * session with a turn under way keeps its turn's. Returns what undoes the
+ * record for a turn the server refused.
  */
-export function beginTurnStart(params: TurnStartParams): {
-  params: TurnStartParams;
-  refused: () => void;
-} {
-  const aapServers = currentAapServers();
-  const sent =
-    params.config.harness === "claude-code" && Object.keys(aapServers).length
-      ? {
-          ...params,
-          config: {
-            ...params.config,
-            mcpServers: sessionServers(aapServers, params.config.mcpServers),
-          },
-        }
-      : params;
+export function beginTurnStart(params: TurnStartParams): () => void {
   const sessionId = params.sessionId;
   const previous = sessionId ? trackedSessions.get(sessionId) : undefined;
-  const recorded = sessionId !== undefined && previous?.turnId === undefined;
-  if (recorded) observeTurnStart(params);
-  return {
-    params: sent,
-    refused: () => {
-      if (!recorded) return;
-      if (previous) trackedSessions.set(sessionId, previous);
-      else trackedSessions.delete(sessionId);
-    },
+  if (sessionId === undefined || previous?.turnId !== undefined) return () => {};
+  observeTurnStart(params);
+  return () => {
+    if (previous) trackedSessions.set(sessionId, previous);
+    else trackedSessions.delete(sessionId);
   };
 }
 

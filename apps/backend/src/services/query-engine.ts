@@ -33,7 +33,6 @@ import { resolveToolRelay, rejectToolRelay, runCommand } from "./agent";
 import { delegateToRoute } from "./route-delegate";
 import { setWorkspaceStatus } from "./workspace-status.service";
 import { archiveWorkspace } from "./workspace-archive.service";
-import { getRunningApps, listApps } from "./aap";
 import { getDiscoveredServers } from "./local-servers.service";
 import { getState as getIntegrationsState, runIntegrationMutation } from "./integrations";
 import {
@@ -473,58 +472,46 @@ function handleToolResponse(msg: QueryParams): void {
 function runQuery(resource: QueryResource, params: QueryParams): unknown {
   const db = getDatabase();
 
-  return (
-    match(resource)
-      .with("workspaces", () => {
-        // 'error' is in the default: a failed provision must stay VISIBLE
-        // (red state + error message), not silently vanish from the sidebar.
-        const state = readStringParam(params, "state") ?? "ready,initializing,error";
-        return groupWorkspacesByRepo(getWorkspacesByRepo(db, state), getAllRepositorySummaries(db));
-      })
-      .with("stats", () => getStats(db))
-      .with("sessions", () =>
-        getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
-      )
-      .with(
-        "session",
-        () => getSessionById(db, requireParam(params, "sessionId", "session")) ?? null
-      )
-      .with("messages", () => {
-        const sessionId = requireParam(params, "sessionId", "messages");
-        const before = readNumberParam(params, "before");
+  return match(resource)
+    .with("workspaces", () => {
+      // 'error' is in the default: a failed provision must stay VISIBLE
+      // (red state + error message), not silently vanish from the sidebar.
+      const state = readStringParam(params, "state") ?? "ready,initializing,error";
+      return groupWorkspacesByRepo(getWorkspacesByRepo(db, state), getAllRepositorySummaries(db));
+    })
+    .with("stats", () => getStats(db))
+    .with("sessions", () =>
+      getSessionsByWorkspaceId(db, requireParam(params, "workspaceId", "sessions"))
+    )
+    .with("session", () => getSessionById(db, requireParam(params, "sessionId", "session")) ?? null)
+    .with("messages", () => {
+      const sessionId = requireParam(params, "sessionId", "messages");
+      const before = readNumberParam(params, "before");
 
-        const rows = getMessages(db, sessionId, {
-          limit: readNumberParam(params, "limit") ?? 2000,
-          before,
-        });
+      const rows = getMessages(db, sessionId, {
+        limit: readNumberParam(params, "limit") ?? 2000,
+        before,
+      });
 
-        const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
+      const hasOlder = rows.length > 0 ? hasOlderMessages(db, sessionId, rows[0].seq) : false;
 
-        return {
-          messages: attachParts(db, rows),
-          // Compactions are positional siblings of messages, not parts — the
-          // transcript needs the divider IN the order after a reload.
-          compactions: getCompactions(db, sessionId),
-          turns: getTurnsForMessages(db, sessionId, rows),
-          has_older: hasOlder,
-          has_newer: false,
-        };
-      })
-      // AAP (agentic apps protocol) — real handlers. `apps` is the registry;
-      // `running_apps` is workspace-scoped live instances.
-      .with("apps", () => listApps())
-      .with("running_apps", () => {
-        const workspaceId = readStringParam(params, "workspaceId");
-        return getRunningApps(workspaceId ?? null);
-      })
-      .with("local_servers", () => getDiscoveredServers())
-      .with("automations", () => listAutomations())
-      .with("automation_runs", () =>
-        listAutomationRuns(requireParam(params, "automationId", "automation_runs"))
-      )
-      .with("integrations", () => getIntegrationsState())
-      .exhaustive()
-  );
+      return {
+        messages: attachParts(db, rows),
+        // Compactions are positional siblings of messages, not parts — the
+        // transcript needs the divider IN the order after a reload.
+        compactions: getCompactions(db, sessionId),
+        turns: getTurnsForMessages(db, sessionId, rows),
+        has_older: hasOlder,
+        has_newer: false,
+      };
+    })
+    .with("local_servers", () => getDiscoveredServers())
+    .with("automations", () => listAutomations())
+    .with("automation_runs", () =>
+      listAutomationRuns(requireParam(params, "automationId", "automation_runs"))
+    )
+    .with("integrations", () => getIntegrationsState())
+    .exhaustive();
 }
 
 // ---- Request Dispatch (one-shot reads via route delegation) ----

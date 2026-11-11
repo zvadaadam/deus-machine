@@ -89,10 +89,6 @@ Full command list: `device-use help`.
 
 CLI and server share the engine but are independent peers — neither needs the other to work.
 
-## Agentic Apps Protocol
-
-device-use is the reference implementation of an AAP app. The `agentic-app.json` at the package root declares how a host IDE (Deus, any MCP-speaking IDE) should launch and embed it.
-
 ## Develop
 
 ```bash

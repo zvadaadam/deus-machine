@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),
   pause: vi.fn(),
   wake: vi.fn(),
-  stopApps: vi.fn(),
   run: vi.fn(),
   status: vi.fn(),
 }));
@@ -16,7 +15,6 @@ vi.mock("../../../src/db", () => ({ getWorkspaceRaw: mocks.workspace }));
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: () => ({ prepare: () => ({ run: mocks.run }) }),
 }));
-vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: mocks.stopApps }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   pauseCloudWorkspace: mocks.pause,
   wakeCloudWorkspaceWithFeedback: mocks.wake,
@@ -35,7 +33,6 @@ beforeEach(() => {
   });
   mocks.pause.mockResolvedValue(undefined);
   mocks.wake.mockResolvedValue({ ok: true, status: "resuming" });
-  mocks.stopApps.mockResolvedValue(undefined);
 });
 
 describe("workspace archive", () => {
@@ -51,7 +48,6 @@ describe("workspace archive", () => {
     expect(mocks.run).not.toHaveBeenCalled();
     resume();
     await archiving;
-    expect(mocks.stopApps).toHaveBeenCalledWith("workspace");
     expect(mocks.run).toHaveBeenCalledWith("workspace");
     expect(mocks.status).toHaveBeenCalledWith("workspace", "done", { force: true });
   });

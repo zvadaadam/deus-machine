@@ -25,7 +25,6 @@ packages/device-use/
 │   └── frontend/        Vite + React SPA served at /
 ├── scripts/             Build + compile + smoke tests
 ├── test/                Unit + integration tests (outside src/)
-├── agentic-app.json     AAP manifest — consumed by host IDEs
 └── skills/              Claude skill gets copied via `device-use install`
 ```
 

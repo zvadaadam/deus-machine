@@ -76,7 +76,7 @@ Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire 
 
 **Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Routes under `/api`. Runs the agent engine in its own process.
 
-**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks, titles and AAP MCP servers. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop.
+**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop.
 
 **Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend (or the engine's seams, for what a turn runs).
 

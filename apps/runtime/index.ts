@@ -5,7 +5,6 @@ import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { Module as NodeModule } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import packageJson from "../../package.json";
 import { PACKAGED_SYSTEM_PATHS } from "../../shared/runtime";
 
@@ -35,12 +34,11 @@ const REQUIRED_RUNTIME_IMPORTS = [
   },
 ] as const;
 
-type RuntimeCommand = "backend" | "device-use" | "self-test";
+type RuntimeCommand = "backend" | "self-test";
 
 interface ParsedArgs {
   command: RuntimeCommand | "version" | "help";
   dataDir?: string;
-  passthroughArgs?: string[];
 }
 
 function usage(): string {
@@ -51,7 +49,6 @@ function usage(): string {
     `  ${RUNTIME_NAME} --version`,
     `  ${RUNTIME_NAME} self-test`,
     `  ${RUNTIME_NAME} backend [--data-dir <path>]`,
-    `  ${RUNTIME_NAME} device-use [...args]`,
   ].join("\n");
 }
 
@@ -64,7 +61,6 @@ function parseArgs(argv: string[]): ParsedArgs {
     return { command: "version" };
   }
   if (first === "self-test") return { command: "self-test" };
-  if (first === "device-use") return { command: "device-use", passthroughArgs: rest };
   if (first !== "backend") {
     throw new Error(`Unknown command: ${first}`);
   }
@@ -334,41 +330,18 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
       process.env.DATABASE_PATH = join(resolve(dataDir), "deus.db");
     }
   }
-
-  if (command === "device-use") {
-    const simbridge = join(layout.resourcesPath, "simulator", "simbridge");
-    const siminspector = join(layout.resourcesPath, "simulator", "siminspector.dylib");
-    if (isNativeRuntimeExecutable) {
-      process.env.DEVICE_USE_SIMBRIDGE = simbridge;
-      process.env.DEVICE_USE_SIMINSPECTOR = siminspector;
-    } else {
-      process.env.DEVICE_USE_SIMBRIDGE ??= simbridge;
-      process.env.DEVICE_USE_SIMINSPECTOR ??= siminspector;
-    }
-  }
 }
 
-function resolveDeviceUseRuntimeEntry(layout: ReturnType<typeof resolveRuntimeLayout>): string {
-  const candidates = [
-    join(layout.resourcesPath, "agentic-apps", "device-use", "dist", "cli-runtime.js"),
-    layout.projectRoot
-      ? join(layout.projectRoot, "packages", "device-use", "dist", "cli-runtime.js")
-      : null,
-  ];
-  for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) return candidate;
-  }
-
-  throw new Error(
-    `Unable to find packaged device-use runtime CLI. Checked: ${candidates.filter(Boolean).join(", ")}`
+/** A macOS app bundle ships the simulator helpers; staged and source runtimes have none. */
+function isMacAppBundle(resourcesPath: string): boolean {
+  return (
+    process.platform === "darwin" &&
+    basename(resourcesPath) === "Resources" &&
+    basename(dirname(resourcesPath)) === "Contents"
   );
 }
 
-async function run(
-  command: RuntimeCommand,
-  dataDir?: string,
-  passthroughArgs: string[] = []
-): Promise<void> {
+async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
   configureRuntimeEnv(command, dataDir);
 
   if (command === "self-test") {
@@ -382,9 +355,7 @@ async function run(
         inspectSimulatorHelper(layout.resourcesPath, name),
       ])
     );
-    const requireSimulatorHelpers = existsSync(
-      join(layout.resourcesPath, "agentic-apps", "device-use", "agentic-app.json")
-    );
+    const requireSimulatorHelpers = isMacAppBundle(layout.resourcesPath);
     const imports = await inspectRuntimeImports();
     const sqlite = await inspectSqliteContract();
     const missing = Object.entries(binaries)
@@ -436,14 +407,6 @@ async function run(
     return;
   }
 
-  if (command === "device-use") {
-    const layout = resolveRuntimeLayout();
-    const cliPath = resolveDeviceUseRuntimeEntry(layout);
-    process.argv = [layout.executablePath, "device-use", ...passthroughArgs];
-    await import(pathToFileURL(cliPath).href);
-    return;
-  }
-
   await import("../backend/src/server");
 }
 
@@ -467,7 +430,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await run(args.command, args.dataDir, args.passthroughArgs);
+  await run(args.command, args.dataDir);
 }
 
 main().catch((error) => {

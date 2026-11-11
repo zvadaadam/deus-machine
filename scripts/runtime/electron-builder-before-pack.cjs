@@ -14,8 +14,8 @@ const SUPPORTED_PACKAGED_RUNTIME_KEYS = new Map([
   ["linux", new Set(["x64"])],
 ]);
 const {
+  DEVICE_USE_ENGINE_BUNDLE,
   DEVICE_USE_HELPER_NAMES,
-  DEVICE_USE_PACKAGE_FILES,
   assertNoBuildLocalInstallName,
   deviceUsePackageRoot,
 } = require("./lib/device-use-payloads.cjs");
@@ -264,11 +264,11 @@ function assertUniversalMacHelper(filePath, label) {
 function assertDeviceUsePayloads(projectRoot) {
   const packageRoot = deviceUsePackageRoot(projectRoot);
 
-  for (const [label, relativePath] of DEVICE_USE_PACKAGE_FILES) {
-    const filePath = path.join(packageRoot, relativePath);
-    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-      throw new Error(`Missing ${label}: ${filePath}. Run \`bun run prepare:device-use\`.`);
-    }
+  const engine = path.join(packageRoot, DEVICE_USE_ENGINE_BUNDLE);
+  if (!existsSync(engine) || !statSync(engine).isFile()) {
+    throw new Error(
+      `Missing device-use engine bundle: ${engine}. Run \`bun run prepare:device-use\`.`
+    );
   }
 
   const simbridge = path.join(packageRoot, "bin", DEVICE_USE_HELPER_NAMES.simbridge);
@@ -277,17 +277,10 @@ function assertDeviceUsePayloads(projectRoot) {
   assertUniversalMacHelper(siminspector, "device-use siminspector");
   assertNoBuildLocalInstallName(siminspector, projectRoot, "device-use siminspector");
 
-  const tsSources = [
-    "packages/device-use/src/cli",
+  const engineSources = [
     "packages/device-use/src/engine",
-    "packages/device-use/src/server",
     "packages/device-use/package.json",
     "packages/device-use/scripts/build-ts.ts",
-  ];
-  const frontendSources = [
-    "packages/device-use/src/frontend",
-    "packages/device-use/vite.config.ts",
-    "packages/device-use/package.json",
   ];
   const nativeSources = [
     "packages/device-use/native/Sources",
@@ -300,17 +293,13 @@ function assertDeviceUsePayloads(projectRoot) {
     rebuildCommand: "bun run prepare:device-use --force",
   };
 
-  for (const [, relativePath] of DEVICE_USE_PACKAGE_FILES) {
-    if (!relativePath.startsWith("dist/")) continue;
-    const sources = relativePath.startsWith("dist/frontend/") ? frontendSources : tsSources;
-    assertBuildOutputFresh(
-      projectRoot,
-      relativePath,
-      path.join("packages/device-use", relativePath),
-      sources,
-      freshnessOptions
-    );
-  }
+  assertBuildOutputFresh(
+    projectRoot,
+    DEVICE_USE_ENGINE_BUNDLE,
+    path.join("packages/device-use", DEVICE_USE_ENGINE_BUNDLE),
+    engineSources,
+    freshnessOptions
+  );
   assertBuildOutputFresh(
     projectRoot,
     "bin/simbridge",

@@ -10,14 +10,6 @@ import type {
   DiffCommentResponse,
   GetTerminalOutputRequest,
   GetTerminalOutputResponse,
-  ListAppsRequest,
-  ListAppsResponse,
-  LaunchAppRequest,
-  LaunchAppResponse,
-  StopAppRequest,
-  StopAppResponse,
-  ReadAppSkillRequest,
-  ReadAppSkillResponse,
   AutomationUpdateRequest,
   AutomationUpdateResponse,
 } from "./rpc-schemas";
@@ -31,7 +23,7 @@ export interface SessionTitle {
 
 /** What the backend answers for the engine. */
 export interface DeusHost {
-  /** A deus MCP tool's request (getDiff, aap/list-apps, …). */
+  /** A deus MCP tool's request (getDiff, automation/update, …). */
   request(method: string, params: Record<string, unknown>): Promise<unknown>;
   /** A session's title, to name the session and an untitled workspace. */
   title(payload: SessionTitle): void;
@@ -39,11 +31,6 @@ export interface DeusHost {
 
 /** Timeout for data-fetching requests that should resolve quickly. */
 const DATA_QUERY_TIMEOUT_MS = 10_000;
-
-/** Timeout for AAP `launch_app`. The manifest's ready-probe caps at 30s and
- *  the backend adds probe-setup + storage-dir work on top. 60s keeps first-
- *  time launches (binary not yet downloaded) from tripping the timeout. */
-const AAP_LAUNCH_TIMEOUT_MS = 60_000;
 
 /** Timeout for automation writes — Deus Cloud round-trips, possibly including
  *  a lazy environment create before the automation itself. */
@@ -99,18 +86,6 @@ export const HostRpc = {
     sessionId: string;
   }): Promise<{ udid: string; port?: number; streaming: boolean } | null> {
     return requestHost("getSimulatorContext", r, DATA_QUERY_TIMEOUT_MS);
-  },
-  requestListApps(r: ListAppsRequest): Promise<ListAppsResponse> {
-    return requestHost("aap/list-apps", r, DATA_QUERY_TIMEOUT_MS);
-  },
-  requestLaunchApp(r: LaunchAppRequest): Promise<LaunchAppResponse> {
-    return requestHost("aap/launch-app", r, AAP_LAUNCH_TIMEOUT_MS);
-  },
-  requestStopApp(r: StopAppRequest): Promise<StopAppResponse> {
-    return requestHost("aap/stop-app", r, DATA_QUERY_TIMEOUT_MS);
-  },
-  requestReadAppSkill(r: ReadAppSkillRequest): Promise<ReadAppSkillResponse> {
-    return requestHost("aap/read-app-skill", r, DATA_QUERY_TIMEOUT_MS);
   },
   requestAutomationUpdate(r: AutomationUpdateRequest): Promise<AutomationUpdateResponse> {
     // Cloud round-trips: a create may lazily provision the repo's platform

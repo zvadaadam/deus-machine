@@ -5,14 +5,7 @@ import { devtools, persist } from "zustand/middleware";
 import type { PersistedBrowserTab } from "@/features/browser/types";
 import { normalizeWorkspaceRelativePath } from "@/features/workspace/lib/normalizeWorkspaceRelativePath";
 
-export type ContentTab =
-  | "changes"
-  | "files"
-  | "config"
-  | "terminal"
-  | "browser"
-  | "simulator"
-  | "apps";
+export type ContentTab = "changes" | "files" | "config" | "terminal" | "browser" | "simulator";
 
 export type WorkspacePanelMode = "split" | "chat" | "content";
 

@@ -52,7 +52,6 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     ...process.env,
     PORT: "0",
     DATABASE_PATH: path.join(directory, "deus.db"),
-    DEUS_AAP_PID_JOURNAL: path.join(directory, "aap-pids.txt"),
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_API_KEY: "",
     DEUS_CLOUD_AGNT_API_KEY: "",

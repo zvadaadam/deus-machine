@@ -1,5 +1,10 @@
 # device-use v2 — design decisions
 
+> **Status, November 2026.** The Agentic Apps host this plan hands off to was
+> built and then removed from Deus. Deus keeps its own Simulator tab and the
+> agent's Simulator tools, both on the device-use engine. The sections on the
+> AAP manifest and the Deus handoff below are history, not a plan.
+
 Living record of the interview-driven design for the device-use refactor. Captures decisions made, reasoning, and open items. **PR 1 of the AAP effort — device-use becomes a standalone product first, AAP comes after.**
 
 ---
