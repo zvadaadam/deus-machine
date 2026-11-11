@@ -16,13 +16,9 @@ import { GrantRepositoryAccessModal } from "./GrantRepositoryAccessModal";
 import { Check, ChevronDown, Cloud, GitBranch } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
-import {
-  getModelLabel,
-  getModelOption,
-  MODEL_OPTIONS,
-  MODEL_PICKER_GROUPS,
-  type AgentHarness,
-} from "@/shared/agents";
+import type { AgentHarness } from "@/shared/agents";
+import { modelPickerView, type ModelPickerView } from "@/shared/agents/picker";
+import { useModelLists } from "@/shared/hooks/useModelLists";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sheet,
@@ -46,25 +42,26 @@ export function AgentLogo({ type, className }: { type: AgentHarness; className?:
 
 interface ModelPickerProps {
   model: string;
+  /** Where the new workspace runs: a cloud one offers the platform's models. */
+  location: "local" | "cloud";
   onModelChange: (value: string) => void;
 }
 
 /** Grouped model list — one markup, sized for the containing surface. */
 function ModelOptionList({
-  model,
+  view: { groups, selected },
   onSelect,
   size,
 }: {
-  model: string;
+  view: ModelPickerView;
   onSelect: (value: string) => void;
   size: "sm" | "lg";
 }) {
-  const selected = getModelOption(model);
   const lg = size === "lg";
   return (
     <>
-      {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => (
-        <div key={agentConfig.id}>
+      {groups.map((group, groupIdx) => (
+        <div key={group.agentHarness}>
           {groupIdx > 0 && (
             <div className={cn("bg-border/70 h-px", lg ? "mx-2 my-2" : "mx-1 my-1.5")} />
           )}
@@ -74,14 +71,15 @@ function ModelOptionList({
               lg ? "px-2 py-1.5 text-xs" : "text-2xs px-2 py-1"
             )}
           >
-            {agentConfig.label}
+            {group.label}
           </div>
-          {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map((option) => {
+          {group.options.map((option) => {
             const isSelected = selected?.value === option.value;
             return (
               <button
                 key={option.value}
                 type="button"
+                title={option.description}
                 onClick={() => onSelect(option.value)}
                 className={cn(
                   "control-interaction flex w-full items-center rounded-lg",
@@ -93,11 +91,6 @@ function ModelOptionList({
               >
                 <AgentLogo type={option.agentHarness} className={lg ? "h-4 w-4" : "h-3.5 w-3.5"} />
                 <span className="font-normal">{option.label}</span>
-                {option.isNew && (
-                  <span className="border-accent-red-muted/60 bg-accent-red-muted/20 text-accent-red-muted text-2xs rounded-xs border px-1 py-px tracking-wide uppercase">
-                    New
-                  </span>
-                )}
                 <span className="ml-auto">
                   {isSelected && (
                     <Check className={cn("text-text-primary", lg ? "size-3.5" : "size-3")} />
@@ -113,10 +106,11 @@ function ModelOptionList({
 }
 
 /** Model picker trigger + surface: bottom sheet on mobile, popover on desktop. */
-export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
+export function ModelPicker({ model, location, onModelChange }: ModelPickerProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
-  const selectedOption = getModelOption(model);
+  const view = modelPickerView(useModelLists({ cloud: location === "cloud" }), model);
+  const selectedOption = view.selected;
 
   const trigger = (
     <button
@@ -125,7 +119,7 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
       className="control-interaction text-text-muted hover:text-text-secondary flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm"
     >
       <AgentLogo type={selectedOption?.agentHarness ?? "claude-code"} className="h-3 w-3" />
-      <span className="font-normal">{getModelLabel(model)}</span>
+      <span className="font-normal">{selectedOption?.label ?? model}</span>
       <ChevronDown
         className={cn(
           "text-text-disabled size-3 transition-transform duration-200",
@@ -153,7 +147,7 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
               </SheetDescription>
             </SheetHeader>
             <div className="max-h-[50vh] overflow-y-auto p-2">
-              <ModelOptionList model={model} onSelect={select} size="lg" />
+              <ModelOptionList view={view} onSelect={select} size="lg" />
             </div>
           </SheetContent>
         </Sheet>
@@ -167,12 +161,12 @@ export function ModelPicker({ model, onModelChange }: ModelPickerProps) {
       <PopoverContent
         align="start"
         className={cn(
-          "w-56 overflow-hidden rounded-xl p-1.5",
+          "max-h-(--radix-popover-content-available-height) w-56 overflow-y-auto rounded-xl p-1.5",
           "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
           "shadow-[var(--shadow-elevated)]"
         )}
       >
-        <ModelOptionList model={model} onSelect={select} size="sm" />
+        <ModelOptionList view={view} onSelect={select} size="sm" />
       </PopoverContent>
     </Popover>
   );

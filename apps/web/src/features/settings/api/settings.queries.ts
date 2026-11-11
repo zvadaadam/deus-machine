@@ -81,6 +81,8 @@ export function useAgentAuthEvents(): void {
         }
         if (event !== "agent:auth") return;
         void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
+        // Another login lists other models.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
         const login = (data as AgentAuthEvent | undefined)?.login;
         if (login && (login.outcome === "failed" || login.outcome === "expired")) {
           toast.error(login.error ?? "The sign-in didn’t finish");

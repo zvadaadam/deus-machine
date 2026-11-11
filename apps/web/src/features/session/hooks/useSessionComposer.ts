@@ -31,7 +31,8 @@ interface UseSessionComposerOptions {
 export interface SessionComposerActions {
   setDraft: (draft: string) => void;
   appendDraft: (text: string) => void;
-  setModel: (model: string) => void;
+  /** `levels`: the thinking levels the model offers (useModelLists). */
+  setModel: (model: string, levels: readonly ThinkingLevel[]) => void;
   setThinkingLevel: (level: string) => void;
   togglePlanMode: () => void;
   addPastedText: (content: string) => void;
@@ -71,7 +72,8 @@ export function useSessionComposer(
     () => ({
       setDraft: (v) => sessionComposerActions.setDraft(sessionId, v),
       appendDraft: (v) => sessionComposerActions.appendDraft(sessionId, v),
-      setModel: (v) => sessionComposerActions.setModel(sessionId, v, defaultThinking),
+      setModel: (v, levels) =>
+        sessionComposerActions.setModel(sessionId, v, levels, defaultThinking),
       setThinkingLevel: (v) =>
         sessionComposerActions.setThinkingLevel(sessionId, v as ThinkingLevel),
       togglePlanMode: () => sessionComposerActions.togglePlanMode(sessionId),

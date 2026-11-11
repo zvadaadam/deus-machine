@@ -104,6 +104,13 @@ export async function runRequest(
       .with("repoPrs", () => repoGet("/prs"))
       .with("repoBranches", () => repoGet("/branches"))
       .with("agentAuth", () => delegateToRoute("GET", "/api/settings/agent-auth"))
+      .with("agentModels", () => {
+        const workspaceId = readStringParam(params, "workspaceId");
+        return delegateToRoute(
+          "GET",
+          `/api/settings/agent-models${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`
+        );
+      })
       .with("integrationsCatalog", "appTools", "skillContent", "localSkills", (name) =>
         runIntegrationRequest(name, params)
       )

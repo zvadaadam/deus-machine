@@ -728,7 +728,7 @@ export function HomeView({
 
             {/* Bottom toolbar — model picker (left) + send button (right) */}
             <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
-              <ModelPicker model={model} onModelChange={handleSelectModel} />
+              <ModelPicker model={model} location={location} onModelChange={handleSelectModel} />
 
               {/* Send button */}
               <button

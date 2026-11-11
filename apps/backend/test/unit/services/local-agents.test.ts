@@ -52,6 +52,12 @@ function engine(auth: HarnessAuth) {
     login: vi.fn(async () => handle),
     logout: vi.fn(async () => signedOut),
     listClis: vi.fn(async () => [cli]),
+    listModels: vi.fn(async ({ harness }: { harness: string }) => ({
+      harness,
+      models: [],
+      source: "live",
+      fetchedAt: 1,
+    })),
     prepareClis: vi.fn(async () => [cli]),
     onAuthUpdated: (handler: (update: AuthUpdated) => void) => {
       updated = handler;
@@ -78,6 +84,20 @@ const told = () =>
 beforeEach(() => broadcast.mockClear());
 
 describe("LocalAgents", () => {
+  it("asks each harness's CLI for its models, for the folder a turn would run in", async () => {
+    const { logins, client } = engine(signedIn);
+    await expect(logins.models("/repo/.deus/berlin")).resolves.toEqual([
+      expect.objectContaining({ harness: "claude-code", source: "live" }),
+      expect.objectContaining({ harness: "codex-app-server", source: "live" }),
+    ]);
+    expect(client.listModels.mock.calls).toEqual([
+      [{ harness: "claude-code", cwd: "/repo/.deus/berlin" }],
+      [{ harness: "codex-app-server", cwd: "/repo/.deus/berlin" }],
+    ]);
+    await logins.models();
+    expect(client.listModels).toHaveBeenLastCalledWith({ harness: "codex-app-server" });
+  });
+
   it("picks up a login this computer already has, and opens nothing", async () => {
     const { logins, client } = engine(signedIn);
     await expect(logins.signIn("claude-code", "claudeai")).resolves.toEqual({ already: signedIn });

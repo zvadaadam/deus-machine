@@ -229,6 +229,7 @@ describe("shared/events", () => {
       expect(REQUEST_RESOURCES).toContain("repoPrs");
       expect(REQUEST_RESOURCES).toContain("repoBranches");
       expect(REQUEST_RESOURCES).toContain("agentAuth");
+      expect(REQUEST_RESOURCES).toContain("agentModels");
       expect(REQUEST_RESOURCES).toContain("cloudDirectToken");
       expect(REQUEST_RESOURCES).toContain("cloudRepoAccess");
       expect(REQUEST_RESOURCES).toContain("cloudSimExec");
@@ -239,7 +240,7 @@ describe("shared/events", () => {
       for (const name of ["integrationsCatalog", "appTools", "skillContent", "localSkills"]) {
         expect(REQUEST_RESOURCES).toContain(name);
       }
-      expect(REQUEST_RESOURCES).toHaveLength(34);
+      expect(REQUEST_RESOURCES).toHaveLength(35);
     });
 
     it("PROTOCOL_EVENTS contains the expected events", () => {

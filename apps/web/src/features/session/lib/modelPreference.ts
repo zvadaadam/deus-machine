@@ -3,9 +3,9 @@ import { DEFAULT_MODEL, resolveModelSelection } from "@/shared/agents";
 const LAST_MODEL_KEY = "deus:welcome-last-model";
 
 export function getStoredModel(): string {
-  // Validate against the catalog — stale localStorage (old aliases like
-  // "claude:sonnet", removed models, renamed formats) falls back to the
-  // current default instead of silently sending an unknown model.
+  // A stored value from an older build may spell its harness the retired way
+  // ("claude:sonnet") or name none; one that names no harness falls back to
+  // the default.
   try {
     const stored = localStorage.getItem(LAST_MODEL_KEY);
     const resolved = stored ? resolveModelSelection(stored) : undefined;

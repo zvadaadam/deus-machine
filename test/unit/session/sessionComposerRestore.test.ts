@@ -25,6 +25,10 @@ vi.mock("@/features/workspace/api/workspace.queries", () => ({
   useProjectEnvironment: () => ({ isSuccess: false }),
 }));
 vi.mock("@/features/settings/api", () => ({ useSettings: () => ({ data: {} }) }));
+vi.mock("@/shared/hooks/useModelLists", async () => {
+  const { CATALOG_MODEL_LISTS } = await import("@shared/models");
+  return { useModelLists: () => CATALOG_MODEL_LISTS };
+});
 vi.mock("@/features/session/hooks", () => ({ useSessionActions: () => ({}) }));
 vi.mock("@/features/session/ui/MessageInput", () => ({
   MessageInput: (props: { initialModel: string }) => {

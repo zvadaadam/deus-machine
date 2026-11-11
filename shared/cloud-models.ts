@@ -5,10 +5,10 @@
 // chooses none of the three things a turn names: its harness, model and
 // thinking level. Which ones it runs is AGNT's to say: `listModels()`
 // (GET /models) serves one list per harness, generated from the CLIs a new
-// sandbox runs, and its thinking levels are AGNT's engine's, `max` and `ultra`
-// included. The engine deus embeds for LOCAL turns (@zvada/agent-server 0.3.8,
-// shared/protocol.ts) knows neither, so the two lanes keep their own
-// vocabularies: a cloud value is read here, a local one there.
+// sandbox runs. The lists are the engine's own shape and vocabulary, the same
+// as a local chat's (shared/models.ts); what differs is who is asked. The
+// rules here are the platform's: a turn must name all three, and a listed
+// model must be given one of its own levels.
 //
 // Nothing in a list is a default (the platform drops the catalog's own), so a
 // picker built from one starts from the user's choice or deus's visible one.

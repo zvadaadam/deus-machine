@@ -11,6 +11,11 @@ import { disconnectDirectDevices } from "../services/ws.service";
 import { invalidateRemoteGateCache } from "../middleware/remote-gate";
 import { getLocalAgents } from "../services/agent";
 import type { AgentAuthAnswer } from "@shared/agent-auth";
+import type { AgentModelsAnswer } from "@shared/models";
+import { existsSync } from "node:fs";
+import { getDatabase } from "../lib/database";
+import { getWorkspaceForMiddleware } from "../db";
+import { computeWorkspacePath } from "../middleware/workspace-loader";
 import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
@@ -52,6 +57,19 @@ app.get("/settings/agent-auth", async (c) => {
       logins: [],
       error: err instanceof Error ? err.message : String(err),
     }));
+  return c.json(answer);
+});
+
+// The models each local agent offers, as its CLI lists them for this
+// computer's login. A workspace asks for its own folder, whose settings can
+// narrow Claude's list.
+app.get("/settings/agent-models", async (c) => {
+  const workspaceId = c.req.query("workspace_id");
+  const workspace = workspaceId ? getWorkspaceForMiddleware(getDatabase(), workspaceId) : undefined;
+  const folder = workspace ? computeWorkspacePath(workspace) : "";
+  const answer: AgentModelsAnswer = {
+    lists: await getLocalAgents().models(folder && existsSync(folder) ? folder : undefined),
+  };
   return c.json(answer);
 });
 

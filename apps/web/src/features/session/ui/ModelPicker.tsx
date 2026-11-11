@@ -10,16 +10,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
 import { getAgentLogo } from "@/assets/agents";
-import {
-  getModelLabel,
-  getModelOption,
-  MODEL_OPTIONS,
-  MODEL_PICKER_GROUPS,
-  type AgentHarness,
-} from "@/shared/agents";
+import type { AgentHarness, HarnessModels } from "@/shared/agents";
+import { modelPickerView } from "@/shared/agents/picker";
 
 interface ModelPickerProps {
   model: string;
+  /** The models to offer (useModelLists). */
+  lists: readonly HarnessModels[];
   hasMessages: boolean;
   onModelChange?: (model: string) => void;
   /** Opens a new tab when switching to a locked agent group */
@@ -34,9 +31,15 @@ function renderAgentLogo(type: AgentHarness, sizeClass: string) {
   return <Logo className={cn("flex-shrink-0", sizeClass)} />;
 }
 
-export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }: ModelPickerProps) {
-  const modelLabel = getModelLabel(model);
-  const selectedOption = getModelOption(model);
+export function ModelPicker({
+  model,
+  lists,
+  hasMessages,
+  onModelChange,
+  onOpenNewTab,
+}: ModelPickerProps) {
+  const { groups, selected: selectedOption } = modelPickerView(lists, model);
+  const modelLabel = selectedOption?.label ?? model;
   const selectedOptionValue = selectedOption?.value;
   const currentGroup = selectedOption?.agentHarness ?? "claude-code";
 
@@ -56,25 +59,26 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-60">
-        {MODEL_PICKER_GROUPS.map((agentConfig, groupIdx) => {
+        {groups.map((group, groupIdx) => {
           /**
            * Agent type lock: once a session has messages, its agent harness
            * (claude/codex-server) is fixed. The user can switch models within the
            * same harness, but switching harnesses requires a new chat tab.
            */
-          const isLockedGroup = hasMessages && agentConfig.id !== currentGroup;
+          const isLockedGroup = hasMessages && group.agentHarness !== currentGroup;
 
           return (
-            <div key={agentConfig.id}>
+            <div key={group.agentHarness}>
               {groupIdx > 0 && <DropdownMenuSeparator />}
               <DropdownMenuLabel className="text-text-muted text-xs font-normal">
-                {agentConfig.label}
+                {group.label}
               </DropdownMenuLabel>
-              {MODEL_OPTIONS.filter((o) => o.agentHarness === agentConfig.id).map((option) => {
+              {group.options.map((option) => {
                 const isSelected = selectedOptionValue === option.value;
                 return (
                   <DropdownMenuItem
                     key={option.value}
+                    title={option.description}
                     onClick={() =>
                       isLockedGroup ? onOpenNewTab?.(option.value) : onModelChange?.(option.value)
                     }
@@ -82,11 +86,6 @@ export function ModelPicker({ model, hasMessages, onModelChange, onOpenNewTab }:
                   >
                     {renderAgentLogo(option.agentHarness, "h-4 w-4")}
                     <span className="font-normal">{option.label}</span>
-                    {option.isNew && (
-                      <span className="border-border-subtle bg-bg-muted text-text-muted text-2xs rounded-xs border px-1 py-px">
-                        New
-                      </span>
-                    )}
                     <span className="ml-auto flex items-center">
                       {isSelected ? (
                         <Check className="text-text-primary h-3 w-3" />

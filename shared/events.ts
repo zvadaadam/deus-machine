@@ -100,6 +100,10 @@ export const REQUEST_RESOURCES = [
   "repoPrs",
   "repoBranches",
   "agentAuth",
+  // The models each local agent offers, as its CLI lists them for this
+  // computer's login. Params { workspaceId? } (its folder's settings can
+  // narrow Claude's list) → AgentModelsAnswer (shared/models.ts).
+  "agentModels",
   "cloudDirectToken",
   "cloudRepoAccess",
   // Cloud simulator: one device verb against the workspace's hosted device,
