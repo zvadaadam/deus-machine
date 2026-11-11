@@ -16,7 +16,6 @@
 //
 // Initialized once at startup in server.ts via agentService.init().
 
-import path from "path";
 import type { AgentHarness } from "@shared/enums";
 import type {
   ElicitationOutcome,
@@ -34,7 +33,6 @@ import {
   planAnswer,
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
-import { registerAppMcp, unregisterAppMcp } from "../../../../agent-server";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
@@ -49,12 +47,8 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import { getContextForSession } from "../simulator-context";
-import { getRunningApps, launchApp, listApps, readAppSkill, stopApp } from "../aap";
 import { handleAutomationToolRequest } from "../automations";
-import { DB_PATH, getDatabase } from "../../lib/database";
-import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { requireParam } from "../../lib/query-params";
-import { computeWorkspacePath } from "../../middleware/workspace-loader";
 
 // ---- Singleton ----
 
@@ -319,18 +313,6 @@ export function getLocalAgents(): LocalAgents {
   return localAgents;
 }
 
-/** Register an AAP app's MCP server with the engine (mid-turn hot-swap). */
-export async function registerAapMcp(serverName: string, url: string): Promise<void> {
-  if (!link) throw new Error("Agent service not initialized");
-  await registerAppMcp(serverName, url);
-}
-
-/** Unregister an AAP app's MCP server. */
-export async function unregisterAapMcp(serverName: string): Promise<void> {
-  if (!link) throw new Error("Agent service not initialized");
-  await unregisterAppMcp(serverName);
-}
-
 // ----------------------------------------------------------------------------
 // Tool dispatch (the engine's deus MCP tools → backend)
 // ----------------------------------------------------------------------------
@@ -340,10 +322,6 @@ async function handleToolRequest(
   method: string,
   params: Record<string, unknown>
 ): Promise<unknown> {
-  if (method.startsWith("aap/")) {
-    return handleAapRpc(method, params);
-  }
-
   // Automations: answered entirely in the backend (no frontend relay) by the
   // SAME service the q:mutate arms use — one service, two callers.
   if (method === "automation/update") {
@@ -386,94 +364,4 @@ async function handleToolRequest(
       if (result.ok) invalidate([...sessionResources], { sessionIds: [sessionId] });
     }
   }
-}
-
-// ----------------------------------------------------------------------------
-// AAP RPC dispatch
-// ----------------------------------------------------------------------------
-
-interface AapResolvedPaths {
-  workspaceId: string;
-  workspacePath: string;
-  userDataDir: string;
-}
-
-/** Look up the workspaceId of the session the agent is running inside.
- *  The agent tool always has its `sessionId` in scope — we resolve to the
- *  workspace here so Claude never has to guess a workspaceId it doesn't
- *  know. Throws if the session isn't in the DB. */
-function workspaceIdFromSessionId(sessionId: string): string {
-  const db = getDatabase();
-  const session = getSessionRaw(db, sessionId);
-  if (!session) {
-    throw new Error(`aap: session not found: ${sessionId}`);
-  }
-  return session.workspace_id;
-}
-
-/** Resolve a session (or explicit workspaceId) to the filesystem paths
- *  `apps.service.launchApp` needs. One helper for both the agent RPC
- *  path (uses sessionId) and the frontend q:command path (uses
- *  workspaceId) so they converge on identical inputs.
- *
- *  Exported for the user q:command path in `./commands`. */
-export function resolveAapPaths(
-  source: { workspaceId: string } | { sessionId: string }
-): AapResolvedPaths {
-  const userDataDir = path.dirname(DB_PATH);
-  const workspaceId =
-    "workspaceId" in source ? source.workspaceId : workspaceIdFromSessionId(source.sessionId);
-
-  const db = getDatabase();
-  const workspace = getWorkspaceForMiddleware(db, workspaceId);
-  if (!workspace) {
-    throw new Error(`aap: workspace not found: ${workspaceId}`);
-  }
-  const workspacePath = computeWorkspacePath(workspace);
-  if (!workspacePath) {
-    throw new Error(
-      `aap: workspace ${workspaceId} has no resolvable path (missing root_path or slug)`
-    );
-  }
-  return { workspaceId, workspacePath, userDataDir };
-}
-
-/** Handle an AAP RPC dispatched by the agent-server's deus-tools. Throws on
- *  bad args or service errors — the side channel translates throws into
- *  error responses, which surface as `AAP error: …` in the tool result. */
-async function handleAapRpc(method: string, params: Record<string, unknown>): Promise<unknown> {
-  if (method === "aap/list-apps") {
-    // The agent's workspace is resolved from its sessionId — Claude can't
-    // know a workspaceId without being told, so the tool always carries
-    // sessionId and we derive from it.
-    const sessionId = requireParam(params, "sessionId", "aap/list-apps");
-    const { workspaceId } = resolveAapPaths({ sessionId });
-    return {
-      apps: listApps(),
-      runningAppIds: getRunningApps(workspaceId).map((r) => r.id),
-    };
-  }
-
-  if (method === "aap/launch-app") {
-    const appId = requireParam(params, "appId", "aap/launch-app");
-    const sessionId = requireParam(params, "sessionId", "aap/launch-app");
-    const { workspaceId, workspacePath, userDataDir } = resolveAapPaths({ sessionId });
-    return launchApp({ appId, workspaceId, workspacePath, userDataDir });
-  }
-
-  if (method === "aap/stop-app") {
-    const runningAppId = requireParam(params, "runningAppId", "aap/stop-app");
-    await stopApp(runningAppId);
-    return { success: true };
-  }
-
-  if (method === "aap/read-app-skill") {
-    // Pure manifest-driven read — no running state required. Works against
-    // any installed app whether or not it's currently launched, so Claude
-    // can preview a skill before deciding to launch.
-    const appId = requireParam(params, "appId", "aap/read-app-skill");
-    return { content: readAppSkill(appId) };
-  }
-
-  throw new Error(`aap: unknown method "${method}"`);
 }

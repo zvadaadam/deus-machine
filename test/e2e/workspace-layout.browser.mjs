@@ -28,7 +28,7 @@ import { ConnectionIllustration } from "@/features/connection/ui/ConnectionIllus
 import { Check } from "lucide-react";
 import "@/global.css";
 const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
-const settings = {experimental_browser: true, experimental_simulator: true, experimental_apps: true};
+const settings = {experimental_browser: true, experimental_simulator: true};
 client.setQueryData(queryKeys.settings.all, settings);
 const workspace = {id:"first",repository_id:"repo",repo_name:"deus/app",title:"Workspace layout",kind:"local",state:"ready",workspace_path:"/fixture",root_path:"/fixture",current_session_id:"session",session_status:"idle",setup_status:"completed",status:"in-progress",git_branch:"layout",git_default_branch:"main",latest_message_sent_at:1};
 window.layoutActions = workspaceLayoutActions;
@@ -113,7 +113,6 @@ const server = await createServer({
             return json({
               experimental_browser: true,
               experimental_simulator: true,
-              experimental_apps: true,
             });
           if (resource === "session")
             return json({
@@ -191,7 +190,7 @@ try {
   await tabs.getByRole("tab", { name: "Simulator", exact: true }).waitFor();
   assert.deepEqual(
     await tabs.getByRole("tab").evaluateAll((es) => es.map((e) => e.getAttribute("aria-label"))),
-    ["Changes", "Files", "Terminal", "Browser", "Simulator", "Apps", "Agent"]
+    ["Changes", "Files", "Terminal", "Browser", "Simulator", "Agent"]
   );
   assert.equal(await page.getByRole("button", { name: "More content tabs" }).count(), 0);
   const iconWeights = await page
@@ -267,7 +266,7 @@ try {
     )
   );
   // Every tool hosts the same action, including its empty/loading/error body.
-  for (const name of ["Files", "Terminal", "Browser", "Simulator", "Apps", "Agent"]) {
+  for (const name of ["Files", "Terminal", "Browser", "Simulator", "Agent"]) {
     await tab(name);
     await click("Expand workspace");
     await view("content");
@@ -360,7 +359,7 @@ try {
   assert.equal(await page.getByRole("button", { name: "Show workspace", exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: real workspace views, seven tools, icon weights, split restoration, composer DOM/draft preservation, per-workspace state, cloud gates, Files retry, environment target, keyboard and responsive layouts"
+    "PASS: real workspace views, six tools, icon weights, split restoration, composer DOM/draft preservation, per-workspace state, cloud gates, Files retry, environment target, keyboard and responsive layouts"
   );
 } catch (error) {
   console.error("UI", await page?.locator("body").innerText());

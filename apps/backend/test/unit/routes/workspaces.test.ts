@@ -52,7 +52,6 @@ vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   pauseCloudWorkspace: cloud.pause,
   wakeCloudWorkspaceWithFeedback: cloud.wake,
 }));
-vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: vi.fn(async () => {}) }));
 
 vi.mock("../../../src/services/git.service", () => ({
   detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),

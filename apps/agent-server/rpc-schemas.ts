@@ -1,11 +1,10 @@
 // agent-server/rpc-schemas.ts
 // Zod schemas and inferred types for the deus MCP tools' requests to the
-// backend (diff, terminal, apps, automations).
+// backend (diff, terminal, automations).
 //
 // Extracted from protocol.ts for cleaner separation of constants vs schemas.
 
 import { z } from "zod";
-import type { InstalledApp } from "@shared/aap/types";
 
 // ============================================================================
 // MCP-Facing RPC Schemas (agent-server → frontend requests/responses)
@@ -48,70 +47,6 @@ export const GetTerminalOutputResponseSchema = z.object({
   source: z.enum(["spotlight", "run_script", "terminal", "none"]),
   isRunning: z.boolean().optional(),
   error: z.string().optional(),
-});
-
-// ============================================================================
-// AAP (Agentic Apps) Schemas
-//
-// The deus-tools call into apps.service through the backend: `aap/list-apps`,
-// `aap/launch-app`, `aap/stop-app`, `aap/read-app-skill`. (An app's MCP server
-// reaches the engine directly: the mcp-bridge calls `registerAppMcp`.)
-// ============================================================================
-
-/** Wire-schema for one installed-app row. The `satisfies` clause binds it to
- *  the canonical `InstalledApp` interface in `shared/aap/types.ts` — if the
- *  interface grows a field, this schema must grow too or TypeScript fails
- *  right here. Single source of truth is the TS interface; this is its
- *  runtime-validated mirror for the agent-server RPC boundary. */
-export const InstalledAppSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  version: z.string(),
-  icon: z.string().optional(),
-  bootstrap: z.string().optional(),
-}) satisfies z.ZodType<InstalledApp>;
-
-// AAP RPCs carry `sessionId` — the agent always has it from the tool's
-// closure. The backend resolves it to the session's workspace, so Claude
-// never has to guess a workspaceId it doesn't have. Applies to list_apps
-// and launch_app.
-export const ListAppsRequestSchema = z.object({
-  sessionId: z.string(),
-});
-
-export const ListAppsResponseSchema = z.object({
-  apps: z.array(InstalledAppSchema),
-  runningAppIds: z.array(z.string()),
-});
-
-export const LaunchAppRequestSchema = z.object({
-  appId: z.string(),
-  sessionId: z.string(),
-});
-
-export const LaunchAppResponseSchema = z.object({
-  runningAppId: z.string(),
-  url: z.string(),
-  bootstrap: z.string().optional(),
-});
-
-export const StopAppRequestSchema = z.object({
-  runningAppId: z.string(),
-});
-
-export const StopAppResponseSchema = z.object({
-  success: z.boolean(),
-});
-
-export const ReadAppSkillRequestSchema = z.object({
-  appId: z.string(),
-});
-
-export const ReadAppSkillResponseSchema = z.object({
-  /** Concatenated markdown of every skill file the manifest declares, with
-   *  `# <path>` dividers. Empty string when the manifest has no skills. */
-  content: z.string(),
 });
 
 // ============================================================================
@@ -160,18 +95,5 @@ export type DiffCommentRequest = z.infer<typeof DiffCommentRequestSchema>;
 export type DiffCommentResponse = z.infer<typeof DiffCommentResponseSchema>;
 export type GetTerminalOutputRequest = z.infer<typeof GetTerminalOutputRequestSchema>;
 export type GetTerminalOutputResponse = z.infer<typeof GetTerminalOutputResponseSchema>;
-
-// `InstalledApp` is canonical in shared/aap/types.ts — re-exported here so
-// existing `import { InstalledApp } from "./rpc-schemas"` call sites keep
-// working without a second source of truth.
-export type { InstalledApp } from "@shared/aap/types";
-export type ListAppsRequest = z.infer<typeof ListAppsRequestSchema>;
-export type ListAppsResponse = z.infer<typeof ListAppsResponseSchema>;
-export type LaunchAppRequest = z.infer<typeof LaunchAppRequestSchema>;
-export type LaunchAppResponse = z.infer<typeof LaunchAppResponseSchema>;
-export type StopAppRequest = z.infer<typeof StopAppRequestSchema>;
-export type StopAppResponse = z.infer<typeof StopAppResponseSchema>;
-export type ReadAppSkillRequest = z.infer<typeof ReadAppSkillRequestSchema>;
-export type ReadAppSkillResponse = z.infer<typeof ReadAppSkillResponseSchema>;
 export type AutomationUpdateRequest = z.infer<typeof AutomationUpdateRequestSchema>;
 export type AutomationUpdateResponse = z.infer<typeof AutomationUpdateResponseSchema>;

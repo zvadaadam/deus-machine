@@ -271,7 +271,7 @@ below). If a third surface appears, revisit that.
 Boards `21` and `22` hold the surfaces that only ever appear as one state and so can't be
 components: every content tab's idle state (Files select/scanning/empty, Terminal with no
 tabs, Browser scanning / local-server list / nothing found, the Simulator device well, the
-Apps launcher cards, the Agent config rail), plus the FileViewer, `WorkspaceStatusDashboard`,
+Agent config rail), plus the FileViewer, `WorkspaceStatusDashboard`,
 the palette's workspace page, the AI-provider popover and the four update states.
 Board `22` also holds the Run app / environment settings controls and the cloud
 Computer ready row. The retired `TaskRow` editor has been removed.
@@ -574,8 +574,8 @@ in step with it:
   240px panel in from the right; pinning switches to a resizable 75 / 25 split with the
   diff still on the **left**. Both states are drawn on board `18`.
 - **The content tab bar overflows.** `ALWAYS_PRIMARY_TAB_IDS` is
-  `changes · files · terminal · browser`, plus whatever tab is active. Design, Simulator,
-  Apps and Agent live behind the `⋯` menu unless selected. Primary order follows
+  `changes · files · terminal · browser`, plus whatever tab is active. Design, Simulator
+  and Agent live behind the `⋯` menu unless selected. Primary order follows
   `CONTENT_TABS`, so an active Design tab sits between Terminal and Browser.
 - **`PRActions` is `#N` first, then state.** The PR number link comes before the status
   pill / action button, and both take their colour from the PR state — `ready_to_merge`

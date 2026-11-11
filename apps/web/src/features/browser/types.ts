@@ -39,9 +39,6 @@ export interface PersistedBrowserTab {
   title: string; // display title
   /** Tab is in mobile preview mode (narrow centered frame + mobile CDP). */
   isMobileView?: boolean;
-  /** Persisted so AAP `apps:stopped` can still match an app-owned tab after a
-   *  workspace reload; see BrowserTabState.openedAt for the full rationale. */
-  openedAt?: string;
 }
 
 export interface BrowserTabState {
@@ -75,14 +72,6 @@ export interface BrowserTabState {
    *  touch, DPR). When false, the webview fills the panel and no emulation
    *  is applied — the page sees the panel's actual pixel dimensions. */
   isMobileView: boolean;
-  /** The URL the tab was originally opened for, or undefined for tabs opened
-   *  without a target (e.g. the "New Tab" button). Immutable once set —
-   *  navigation and load failures never overwrite it. Used to match tabs
-   *  against AAP lifecycle events: when an app stops, Electron may have
-   *  already transitioned the view to `chrome-error://chromewebdata/`, so
-   *  `url` / `currentUrl` are unreliable for origin matching. `openedAt`
-   *  is the invariant source of truth for "this tab was spawned by app X". */
-  openedAt?: string;
 }
 
 /** Data emitted when user selects an element in inspect mode */
@@ -226,6 +215,5 @@ export function hydratePersistedTab(persisted: PersistedBrowserTab): BrowserTabS
     devtoolsOpen: false,
     consoleLogs: [],
     isMobileView: persisted.isMobileView ?? false,
-    openedAt: persisted.openedAt,
   };
 }

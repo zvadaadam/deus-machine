@@ -161,7 +161,6 @@ export const PreferencesFile = z
     default_thinking_level: z.string().optional(),
     experimental_simulator: z.boolean().optional(),
     experimental_browser: z.boolean().optional(),
-    experimental_apps: z.boolean().optional(),
   })
   .passthrough();
 

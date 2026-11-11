@@ -1,7 +1,6 @@
 import { getWorkspaceRaw } from "../db";
 import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
-import { stopAppsForWorkspace } from "./aap";
 import {
   pauseCloudWorkspace,
   wakeCloudWorkspaceWithFeedback,
@@ -19,19 +18,6 @@ async function performArchive(workspaceId: string): Promise<void> {
     await pauseCloudWorkspace(workspace.provider_workspace_id);
   }
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      stopAppsForWorkspace(workspaceId).catch((err) => {
-        console.warn(`[Workspace] app cleanup failed during archive ${workspaceId}`, err);
-      }),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, 2_000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
   autoProgressStatus(workspaceId, "done", { force: true });
 }

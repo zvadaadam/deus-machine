@@ -154,7 +154,6 @@ Start the app from this worktree with Node 22 and isolated state:
 ```bash
 mkdir -p .context/project-environment-app
 DATABASE_PATH="$PWD/.context/project-environment-app/deus.db" \
-DEUS_AAP_PID_JOURNAL="$PWD/.context/project-environment-app/aap-pids.txt" \
 AGNT_API_KEY= DEUS_CLOUD_AGNT_API_KEY= bun run dev:web
 ```
 

@@ -1,27 +1,17 @@
 // agent-server/agents/core/engine.ts
 // The one construction site for the embedded @zvada/agent-server/core engine:
-// lazy registry + runtime singletons, deus's claude embed-tier options
-// (in-process deus MCP suite, tool policy, checkpoint hooks), and the
-// AAP-registered MCP server set with its live hot-swap.
+// lazy registry + runtime singletons, and deus's claude embed-tier options
+// (in-process deus MCP suite, tool policy, checkpoint hooks).
 
-import {
-  AgentRuntime,
-  createAgentRegistry,
-  type AgentRegistry,
-  type ClaudeCodeAgent,
-} from "@zvada/agent-server/core";
+import { AgentRuntime, createAgentRegistry, type AgentRegistry } from "@zvada/agent-server/core";
 import type { SdkMcpServers } from "@zvada/agent-server/core";
-import type { McpServerConfig } from "@zvada/agent-server/protocol";
 import { createDeusMCPServer } from "../deus-tools";
-import { sessionServers, trackedSessions } from "../../session-tracker";
+import { trackedSessions } from "../../session-tracker";
 import { createCheckpoint } from "./checkpoint";
 import { decideToolUse } from "./tool-policy";
 
 let registry: AgentRegistry | undefined;
 let runtime: AgentRuntime | undefined;
-
-/** AAP-registered MCP servers, applied to every claude turn + live-swapped. */
-let aapServers: Record<string, McpServerConfig> = {};
 
 async function checkpointHook(
   kind: "start" | "end",
@@ -70,7 +60,6 @@ export function getRegistry(): AgentRegistry {
           },
         ],
       }),
-      // AAP MCP servers ride each Claude turn's config (`beginTurnStart`).
     },
   });
   return registry;
@@ -79,44 +68,4 @@ export function getRegistry(): AgentRegistry {
 export function getRuntime(): AgentRuntime {
   runtime ??= new AgentRuntime(getRegistry());
   return runtime;
-}
-
-/** The AAP server set claude sessions should carry (hot-swapped when it changes). */
-export function currentAapServers(): Record<string, McpServerConfig> {
-  return aapServers;
-}
-
-/**
- * AAP app registration: remember the server set for every future claude turn
- * AND live-swap it onto the given running claude sessions (mid-conversation
- * apps). Defaults to every live claude session — other harnesses have no MCP
- * hot-swap.
- */
-export async function setAapMcpServers(
-  servers: Record<string, McpServerConfig>,
-  liveSessionIds: string[] = [...trackedSessions.entries()]
-    .filter(([, s]) => s.harness === "claude-code")
-    .map(([id]) => id)
-): Promise<void> {
-  aapServers = servers;
-  const claude = getRegistry().getAgent("claude-code") as ClaudeCodeAgent;
-  const failures: string[] = [];
-  for (const sessionId of liveSessionIds) {
-    try {
-      // The swap replaces the session's whole wire set: the servers its turn
-      // brought (the installed apps') go back in with the new AAP set.
-      await claude.setMcpServers(
-        sessionId,
-        sessionServers(servers, trackedSessions.get(sessionId)?.mcpServers)
-      );
-    } catch (error) {
-      console.error(`[core] mcp hot-swap failed for ${sessionId}:`, error);
-      failures.push(sessionId);
-    }
-  }
-  // Every session was attempted; a failed swap must surface to the caller
-  // (the registrar contract: never report a failed set as attached).
-  if (failures.length) {
-    throw new Error(`mcp hot-swap failed for session(s): ${failures.join(", ")}`);
-  }
 }

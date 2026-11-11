@@ -80,7 +80,6 @@ vi.mock("@deus-hq/sdk", () => ({
   getWorkspace: (...args: unknown[]) => mockGetWorkspace(...args),
   resumeWorkspace: (...args: unknown[]) => mockResumeWorkspace(...args),
 }));
-vi.mock("../../../src/services/aap", () => ({ stopAppsForWorkspace: vi.fn() }));
 vi.mock("../../../src/services/workspace-status.service", () => ({ autoProgressStatus: vi.fn() }));
 
 const mockRelay = vi.fn(async (..._args: unknown[]) => ({ answers: ["yes"] }));

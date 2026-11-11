@@ -17,7 +17,6 @@ import {
   reconcile as reconcileSimulators,
   destroyAll as destroyAllSimulators,
 } from "./services/simulator-context";
-import { stopAllApps, sweepOrphanApps } from "./services/aap";
 import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
 import {
@@ -46,12 +45,6 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
-
-// AAP orphan sweep: on restart after an ungraceful shutdown (SIGKILL, OOM,
-// crash), child app processes can outlive the backend. The PID journal
-// remembers their pids across restarts; we kill any still alive before
-// accepting new commands so a re-launch allocates a fresh instance cleanly.
-sweepOrphanApps();
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
 // Runs once at startup (fire-and-forget) so WS subscribers get the data
@@ -179,7 +172,6 @@ process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
   Sentry.close(2000).finally(() => {
-    stopAllApps();
     destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();
@@ -204,7 +196,6 @@ function shutdown() {
   shuttingDown = true;
   console.log("\nShutting down...");
   void agentService.shutdown().finally(() => {
-    stopAllApps();
     destroyAllSimulators();
     destroyAllPtySessions();
     destroyAllWatchers();

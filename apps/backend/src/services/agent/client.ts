@@ -35,7 +35,7 @@ export interface AgentLinkOptions {
   onEnvelope: (envelope: DecodedWireEventEnvelope) => void;
   onEventGap?: (gap: SessionEventGap) => void;
   /** Tool round-trips from the agent's in-process deus MCP suite (getDiff,
-   *  aap/list-apps, …). */
+   *  getTerminalOutput, …). */
   onToolRequest: (method: string, params: Record<string, unknown>) => Promise<unknown>;
   /** Session title from Claude's own summary. */
   onTitle: (payload: SessionTitle) => void;
@@ -79,11 +79,11 @@ export class AgentLink {
 
   /** Quick-ack turn start; completion arrives as the turn.ended event. */
   async startTurn(params: TurnStartParams): Promise<{ sessionId: string; turnId: string }> {
-    const turn = beginTurnStart(params);
+    const refused = beginTurnStart(params);
     try {
-      return await this.client.startTurn(turn.params);
+      return await this.client.startTurn(params);
     } catch (err) {
-      turn.refused();
+      refused();
       throw err;
     }
   }

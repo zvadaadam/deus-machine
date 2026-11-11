@@ -267,7 +267,6 @@ export function createStack({ root, agnt, directory }) {
         PORT: "0",
         DATABASE_PATH: database,
         DEUS_RELAY_URL: relayUrl,
-        DEUS_AAP_PID_JOURNAL: path.join(dir, "aap-pids.txt"),
         TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
         AGNT_API_KEY: "",
         DEUS_CLOUD_AGNT_API_KEY: "",

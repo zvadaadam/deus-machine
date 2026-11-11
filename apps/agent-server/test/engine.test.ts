@@ -7,21 +7,17 @@ import { AgentServerClient } from "@zvada/agent-server/client";
 import type { LifecycleEvent, TurnStartParams } from "@zvada/agent-server/protocol";
 import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
 
-const { mockCheckpoint, mockAapServers } = vi.hoisted(() => ({
-  mockCheckpoint: vi.fn(async () => {}),
-  mockAapServers: vi.fn(() => ({})),
-}));
+const { mockCheckpoint } = vi.hoisted(() => ({ mockCheckpoint: vi.fn(async () => {}) }));
 vi.mock("../agents/core/checkpoint", () => ({ createCheckpoint: mockCheckpoint }));
 vi.mock("../agents/core/engine", () => ({
   getRuntime: () => {
     throw new Error("tests pass a runtime");
   },
-  currentAapServers: mockAapServers,
 }));
 
 import { beforeCancel, beginTurnStart, startEngine, stopEngine } from "../index";
 import { HostRpc, notifyTitle } from "../host-link";
-import { sessionServers, trackedSessions } from "../session-tracker";
+import { trackedSessions } from "../session-tracker";
 
 const T = 1_700_000_000_000;
 
@@ -97,11 +93,11 @@ describe("the engine in the backend's process", () => {
 
   /** What AgentLink.startTurn does. */
   async function startTurn(params: TurnStartParams) {
-    const turn = beginTurnStart(params);
+    const refused = beginTurnStart(params);
     try {
-      return await client.startTurn(turn.params);
+      return await client.startTurn(params);
     } catch (err) {
-      turn.refused();
+      refused();
       throw err;
     }
   }
@@ -109,7 +105,6 @@ describe("the engine in the backend's process", () => {
   beforeEach(() => {
     trackedSessions.clear();
     vi.clearAllMocks();
-    mockAapServers.mockReturnValue({});
   });
 
   afterEach(async () => {
@@ -147,14 +142,14 @@ describe("the engine in the backend's process", () => {
     expect(trackedSessions.get("sess-1")?.turnId).toBeUndefined();
   });
 
-  it("gives a Claude turn the registered AAP servers, and a Codex turn none", async () => {
+  it("sends a turn the servers it brought, unchanged", async () => {
     const fake = await open();
-    mockAapServers.mockReturnValue({ app: { type: "http", url: "http://127.0.0.1:9/mcp" } });
+    const gmail = { type: "http" as const, url: "http://127.0.0.1:1/api/integrations/mcp/gmail" };
     await startTurn({
       sessionId: "claude",
       turnId: "t1",
       input: "x",
-      config: { harness: "claude-code", cwd: "/tmp" },
+      config: { harness: "claude-code", cwd: "/tmp", mcpServers: { gmail } },
     });
     await startTurn({
       sessionId: "codex",
@@ -163,30 +158,8 @@ describe("the engine in the backend's process", () => {
       config: { harness: "codex-app-server", cwd: "/tmp" },
     });
     await vi.waitFor(() => expect(fake.started).toHaveLength(2));
-    expect(fake.started[0]?.config.mcpServers).toEqual({
-      app: { type: "http", url: "http://127.0.0.1:9/mcp" },
-    });
+    expect(fake.started[0]?.config.mcpServers).toEqual({ gmail });
     expect(fake.started[1]?.config.mcpServers).toBeUndefined();
-  });
-
-  it("keeps the servers a turn brought through a swap of the AAP set", async () => {
-    const fake = await open();
-    const gmail = { type: "http" as const, url: "http://127.0.0.1:1/api/integrations/mcp/gmail" };
-    const app = { type: "http" as const, url: "http://127.0.0.1:9/mcp" };
-    mockAapServers.mockReturnValue({ app });
-    await startTurn({
-      sessionId: "claude",
-      turnId: "t1",
-      input: "x",
-      config: { harness: "claude-code", cwd: "/tmp", mcpServers: { gmail } },
-    });
-    await vi.waitFor(() => expect(fake.started).toHaveLength(1));
-    expect(fake.started[0]?.config.mcpServers).toEqual({ app, gmail });
-    // An app launched or stopped mid-turn replaces the session's whole set:
-    // what the turn brought is still what the tracker hands the swap.
-    const brought = trackedSessions.get("claude")?.mcpServers;
-    expect(sessionServers({}, brought)).toEqual({ gmail });
-    expect(sessionServers({ other: app }, brought)).toEqual({ other: app, gmail });
   });
 
   it("forgets a refused turn's config; the corrected retry records its own", async () => {

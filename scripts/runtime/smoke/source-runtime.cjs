@@ -155,12 +155,6 @@ async function main() {
   }
   console.log(`[runtime-source-smoke] self-test binDir: ${selfTest.binDir}`);
 
-  const deviceUseVersion = runRuntime(["device-use", "--version"]);
-  if (!/^device-use \d+\.\d+\.\d+/.test(deviceUseVersion)) {
-    throw new Error(`Unexpected source runtime device-use output: ${deviceUseVersion}`);
-  }
-  console.log(`[runtime-source-smoke] device-use command: ${deviceUseVersion}`);
-
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deus-runtime-source-"));
   try {
     const backendPort = await waitForRuntimeLine(

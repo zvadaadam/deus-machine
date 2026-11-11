@@ -287,8 +287,8 @@ app.whenReady().then(async () => {
     // there put a copy in a place the desktop cannot retract: sign-out clears
     // the vault and pushes an explicit null, but the backend's documented
     // null-falls-back-to-env rule then resurrected the revoked key until a
-    // restart — and every backend descendant (setup scripts, agent CLIs,
-    // AAP processes) inherited it. provisionAtStartup pushes credentials over
+    // restart — and every backend descendant (setup scripts, agent CLIs)
+    // inherited it. provisionAtStartup pushes credentials over
     // the runtime route immediately below, which is retractable by design.
     const { port: backendPort, authToken } = await spawnBackend({
       onStdoutLine: (source, line) => {

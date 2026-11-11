@@ -7,7 +7,7 @@
  * is one entry here + the component in its feature folder.
  */
 
-import { GitBranch, FolderOpen, Bot, Terminal, Globe, Smartphone, LayoutGrid } from "lucide-react";
+import { GitBranch, FolderOpen, Bot, Terminal, Globe, Smartphone } from "lucide-react";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Settings } from "@shared/types/settings";
 import { capabilities, type CapabilityName } from "@/platform/capabilities";
@@ -51,7 +51,6 @@ export const CONTENT_TABS: ContentTabItem[] = [
     requiresSimulator: true,
     visibilityKey: "experimental_simulator",
   },
-  { id: "apps", label: "Apps", icon: LayoutGrid, visibilityKey: "experimental_apps" },
   { id: "config", label: "Agent", icon: Bot },
 ];
 

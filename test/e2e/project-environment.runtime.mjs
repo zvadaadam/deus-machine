@@ -1,5 +1,5 @@
 // Full local app: settings UI → backend file write → Git worktree → Setup → Run terminal.
-// Start dev:web with a disposable DATABASE_PATH and DEUS_AAP_PID_JOURNAL; set these URLs.
+// Start dev:web with a disposable DATABASE_PATH; set these URLs.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile, unlink } from "node:fs/promises";

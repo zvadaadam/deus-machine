@@ -2,7 +2,7 @@
  * Content View — thin router for the active content tab.
  *
  * Each tab is either:
- *   - Lazy: mounted/unmounted on tab switch (Changes, Files, Config, Apps)
+ *   - Lazy: mounted/unmounted on tab switch (Changes, Files, Config)
  *   - Persistent: always mounted, hidden when inactive (Terminal, Browser, Simulator)
  *     These preserve native state (PTY sessions, WebView instances).
  *
@@ -22,7 +22,6 @@ import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
 import { BrowserPanel } from "@/features/browser";
 import { SimulatorPanel } from "@/features/simulator";
 import { CloudSimulatorPanel } from "@/features/simulator/cloud";
-import { AppsLauncher, useAppsLaunched, useAppsStopped } from "@/features/apps";
 import { cn } from "@/shared/lib/utils";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
@@ -51,13 +50,6 @@ export function ContentView({
   simulatorAvailable,
   cloudSimulator,
 }: ContentViewProps) {
-  // AAP lifecycle → Browser tabs: open on launch, close on stop/crash.
-  // Both hooks ignore events targeting other workspaces and always mount
-  // during a workspace session so a launch/stop completed while the user
-  // is on a different content tab still takes effect.
-  useAppsLaunched(workspace.id);
-  useAppsStopped(workspace.id);
-
   // The terminal mounts for the LAST LOCAL workspace even while a cloud one
   // is selected — see the comment at the render site. A LOCAL selection uses
   // the live prop directly (no first-frame gap); the committed state only
@@ -158,10 +150,6 @@ export function ContentView({
 
       {activeTab === "config" && (
         <AgentConfigPanel toolbarAction={toolbarAction} workspace={workspace} />
-      )}
-
-      {activeTab === "apps" && (
-        <AppsLauncher toolbarAction={toolbarAction} workspaceId={workspace.id} />
       )}
 
       {/* Persistent tabs — always mounted, hidden when inactive */}

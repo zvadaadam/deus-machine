@@ -1,16 +1,10 @@
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-const DEVICE_USE_PACKAGE_FILES = Object.freeze([
-  ["device-use manifest", "agentic-app.json"],
-  ["device-use package metadata", "package.json"],
-  ["device-use CLI bundle", "dist/cli.js"],
-  ["device-use runtime CLI bundle", "dist/cli-runtime.js"],
-  ["device-use engine bundle", "dist/engine.js"],
-  ["device-use server bundle", "dist/server/index.js"],
-  ["device-use frontend bundle", "dist/frontend/index.html"],
-  ["device-use skill", "skills/device-use/SKILL.md"],
-]);
+// What a packaged app takes from packages/device-use: the engine, which
+// `bun build --compile` folds into deus-runtime, and the two native helpers
+// under Resources/simulator.
+const DEVICE_USE_ENGINE_BUNDLE = "dist/engine.js";
 
 const DEVICE_USE_HELPER_NAMES = Object.freeze({
   simbridge: "simbridge",
@@ -19,10 +13,6 @@ const DEVICE_USE_HELPER_NAMES = Object.freeze({
 
 function deviceUsePackageRoot(projectRoot) {
   return path.join(projectRoot, "packages", "device-use");
-}
-
-function packagedDeviceUseRoot(resourcesDir) {
-  return path.join(resourcesDir, "agentic-apps", "device-use");
 }
 
 function packagedSimulatorDir(resourcesDir) {
@@ -51,10 +41,9 @@ function assertNoBuildLocalInstallName(filePath, projectRoot, label) {
 }
 
 module.exports = {
+  DEVICE_USE_ENGINE_BUNDLE,
   DEVICE_USE_HELPER_NAMES,
-  DEVICE_USE_PACKAGE_FILES,
   assertNoBuildLocalInstallName,
   deviceUsePackageRoot,
-  packagedDeviceUseRoot,
   packagedSimulatorDir,
 };

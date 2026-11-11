@@ -65,23 +65,6 @@ export function ExperimentalSection({ settings, saveSetting }: SettingsSectionPr
           onCheckedChange={(checked) => saveSetting("experimental_browser", checked)}
         />
       </Field>
-
-      <Separator />
-
-      {/* Apps */}
-      <Field orientation="horizontal">
-        <FieldContent>
-          <FieldLabel htmlFor="experimental-apps" className="text-sm">
-            Apps
-          </FieldLabel>
-          <FieldDescription>Launch and manage agentic apps inside the workspace.</FieldDescription>
-        </FieldContent>
-        <Switch
-          id="experimental-apps"
-          checked={settings.experimental_apps === true}
-          onCheckedChange={(checked) => saveSetting("experimental_apps", checked)}
-        />
-      </Field>
     </FieldGroup>
   );
 }

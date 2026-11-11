@@ -4,16 +4,7 @@
 // External code (server.ts, query-engine.ts) imports from "./agent"
 // and gets a unified public API without knowing the internal file layout.
 
-export {
-  init,
-  shutdown,
-  startTurn,
-  stopSession,
-  isConnected,
-  getLocalAgents,
-  registerAapMcp,
-  unregisterAapMcp,
-} from "./service";
+export { init, shutdown, startTurn, stopSession, isConnected, getLocalAgents } from "./service";
 
 export { runCommand } from "./commands";
 export { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";

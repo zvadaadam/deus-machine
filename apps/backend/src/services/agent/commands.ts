@@ -31,7 +31,6 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import * as agentService from "./service";
-import { resolveAapPaths } from "./service";
 import {
   startCloudTurn,
   cancelCloudTurn,
@@ -45,7 +44,6 @@ import {
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
 import * as simulator from "../simulator-context";
-import { launchApp, stopApp } from "../aap";
 import { runAutomationNow, refreshAutomations, openAutomationRun } from "../automations";
 import { broadcast as wsBroadcast } from "../ws.service";
 import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
@@ -345,9 +343,6 @@ export async function runCommand(
         await stopCloudSimulator(workspaceId, parseCloudSimulatorPlatform(params.platform));
         return {};
       })
-      // ---- AAP (agentic apps protocol) commands ----
-      .with("launchApp", () => handleLaunchApp(params))
-      .with("stopApp", () => handleStopApp(params))
       // ---- Automations (cloud-only; agnt executes, deus mirrors) ----
       .with("runAutomationNow", async () => {
         const automationId = requireParam(params, "automationId", "runAutomationNow");
@@ -810,37 +805,6 @@ function scheduleUnconfirmedCancelWatchdog(
   }, UNCONFIRMED_CANCEL_GRACE_MS);
   // A pending watchdog must never hold the process open at shutdown.
   timer.unref?.();
-}
-
-// ---- AAP (agentic apps protocol) ----
-
-/**
- * User-initiated launch from the Apps tab. Resolves workspaceId → workspacePath
- * the same way the Phase 3 agent-server RPC bridge does (service.ts
- * handleAapRpc) so both paths converge on identical inputs to apps.service.
- *
- * Returns the full LaunchAppResult so the q:command_ack carries runningAppId +
- * url + bootstrap for any caller that wants to react before the apps:launched
- * q:event arrives. The frontend's primary path is the event (it listens for
- * all launches, including agent-initiated ones) — this return value is just
- * belt-and-suspenders for the sync command-response path.
- */
-async function handleLaunchApp(params: QueryParams): Promise<CommandResult> {
-  const appId = requireParam(params, "appId", "launchApp");
-  const workspaceId = requireParam(params, "workspaceId", "launchApp");
-
-  // Shared with the agent RPC path — both converge on identical inputs to
-  // apps.service.launchApp. Throws on missing workspace / unresolvable path.
-  const { workspacePath, userDataDir } = resolveAapPaths({ workspaceId });
-
-  const result = await launchApp({ appId, workspaceId, workspacePath, userDataDir });
-  return { ...result };
-}
-
-async function handleStopApp(params: QueryParams): Promise<CommandResult> {
-  const runningAppId = requireParam(params, "runningAppId", "stopApp");
-  await stopApp(runningAppId);
-  return { success: true };
 }
 
 // ---- Helpers ----
