@@ -12,7 +12,7 @@
  * process is purely a desktop shell that spawns it and bridges native OS features.
  */
 
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
@@ -345,20 +345,6 @@ app.whenReady().then(async () => {
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers(quitAfterStopping);
-
-  // Cross-window event relay — forwards a sender's event to all other windows.
-  // Used for chat-insert (e.g. terminal/simulator feeding the main composer).
-  const RELAY_EVENTS = new Set(["chat-insert"]);
-
-  for (const channel of RELAY_EVENTS) {
-    ipcMain.on(channel, (event, ...args) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (win.webContents.id !== event.sender.id && !win.isDestroyed()) {
-          win.webContents.send(channel, ...args);
-        }
-      }
-    });
-  }
 
   logMainProcess("[main] Creating window...");
   // PTY, FS watching, browser server — all handled by backend now

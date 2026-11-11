@@ -34,9 +34,6 @@ export type RelayFrame =
 
 // ---- Client <-> Relay ----
 
-/** First message a client sends after WebSocket connect */
-export type ClientAuthFrame = { type: "authenticate"; token: string };
-
 /** Control frames sent from relay to client (auth + lifecycle) */
 export type RelayClientFrame =
   | { type: "pong"; id: string }

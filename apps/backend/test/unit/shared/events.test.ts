@@ -7,7 +7,6 @@ import {
   PTY_DATA,
   PTY_EXIT,
   BROWSER_NEW_TAB_REQUESTED,
-  CHAT_INSERT,
   GIT_CLONE_PROGRESS,
   GIT_INIT_PROGRESS,
   // Schema map
@@ -16,7 +15,6 @@ import {
   WorkspaceProgressSchema,
   FileChangeSchema,
   PtyDataSchema,
-  ChatInsertSchema,
   GitCloneProgressSchema,
   // Domain constants
   QUERY_RESOURCES,
@@ -35,7 +33,6 @@ describe("shared/events", () => {
       PTY_DATA,
       PTY_EXIT,
       BROWSER_NEW_TAB_REQUESTED,
-      CHAT_INSERT,
       GIT_CLONE_PROGRESS,
       GIT_INIT_PROGRESS,
     ];
@@ -79,39 +76,6 @@ describe("shared/events", () => {
       expect(result.success).toBe(true);
     });
 
-    it("ChatInsertSchema accepts text variant", () => {
-      const result = ChatInsertSchema.safeParse({
-        type: "text",
-        workspaceId: "ws-1",
-        text: "Hello from chat",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("ChatInsertSchema accepts element variant with InspectElement fields", () => {
-      const result = ChatInsertSchema.safeParse({
-        type: "element",
-        workspaceId: "ws-1",
-        element: {
-          ref: "ref-1",
-          tagName: "button",
-          path: "body > div > button",
-          innerText: "Click me",
-          context: "local",
-        },
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("ChatInsertSchema accepts files variant", () => {
-      const result = ChatInsertSchema.safeParse({
-        type: "files",
-        workspaceId: "ws-1",
-        files: [{ name: "shot.png", type: "image/png", lastModified: 123, base64: "abc==" }],
-      });
-      expect(result.success).toBe(true);
-    });
-
     it("GitCloneProgressSchema accepts valid payload", () => {
       const result = GitCloneProgressSchema.safeParse({
         line: "Receiving objects:  42% (100/238), 50.00 KiB | 1.00 MiB/s",
@@ -134,15 +98,6 @@ describe("shared/events", () => {
         workspace_path: "/repo",
         change_type: "deleted",
         affected_count: 1,
-      });
-      expect(result.success).toBe(false);
-    });
-
-    it("ChatInsertSchema rejects element with missing required fields", () => {
-      const result = ChatInsertSchema.safeParse({
-        type: "element",
-        workspaceId: "ws-1",
-        element: { tagName: "div" }, // missing ref and path
       });
       expect(result.success).toBe(false);
     });
@@ -302,7 +257,6 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("fs:changed");
       expect(PROTOCOL_EVENTS).toContain("git-clone-progress");
       expect(PROTOCOL_EVENTS).toContain("git-init-progress");
-      expect(PROTOCOL_EVENTS).toContain("agent-server:request");
       // Simulator events
       expect(PROTOCOL_EVENTS).toContain("sim:streamReady");
       expect(PROTOCOL_EVENTS).toContain("sim:stopped");
@@ -323,7 +277,7 @@ describe("shared/events", () => {
       expect(PROTOCOL_EVENTS).toContain("agent:cli");
       // Remote access: the paired devices list changed
       expect(PROTOCOL_EVENTS).toContain("devices:changed");
-      expect(PROTOCOL_EVENTS).toHaveLength(25);
+      expect(PROTOCOL_EVENTS).toHaveLength(24);
     });
 
     it("has no deus-dialect part/message event names left", () => {

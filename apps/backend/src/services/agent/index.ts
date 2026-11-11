@@ -11,7 +11,6 @@ export {
   stopSession,
   isConnected,
   getLocalAgents,
-  getAgents,
   registerAapMcp,
   unregisterAapMcp,
 } from "./service";

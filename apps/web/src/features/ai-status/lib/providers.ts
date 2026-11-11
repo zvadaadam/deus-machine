@@ -12,13 +12,6 @@ import { match } from "ts-pattern";
 
 export type StatuspageIndicator = "none" | "minor" | "major" | "critical";
 
-export type ComponentStatus =
-  | "operational"
-  | "degraded_performance"
-  | "partial_outage"
-  | "major_outage"
-  | "under_maintenance";
-
 export interface StatuspageStatusResponse {
   status: {
     indicator: StatuspageIndicator;

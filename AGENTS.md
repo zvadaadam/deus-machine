@@ -293,6 +293,7 @@ Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `s
 ```bash
 bun run test:backend          # apps/backend/test/unit/
 bun run test:agent-server     # apps/agent-server/test/
+bun run test:app              # test/unit/ (web app, desktop main, runtime scripts)
 bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or React)
 ```
 
@@ -302,9 +303,14 @@ Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never 
 checked by `bun run typecheck:backend` (its tests included), and
 `bun run typecheck:all` runs every program.
 
-## Code Style
-
-Detailed conventions for Tailwind v4, components, animations, and performance live in `.claude/skills/deus-code-style/`. Read the relevant file before writing or reviewing code.
+`bun run knip` is the dead-code check, and CI fails on it: a file nothing
+imports, a dependency nothing uses, or one used but not declared. Unused
+exports are warnings. It covers the root package and `packages/*`;
+`apps/cloud-relay` and `apps/landing` install on their own and are outside
+it. Delete what it finds rather than adding to its ignore lists (`knip.json`),
+which hold only what it cannot trace: the shadcn component library, the
+`native` bridge object, and a few packages no import names (Tailwind, loaded
+from CSS; the native modules and tools the build and packaging scripts call).
 
 ## Design ↔ code sync (design/deus.pen)
 

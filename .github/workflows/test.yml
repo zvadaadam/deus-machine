@@ -35,9 +35,9 @@ jobs:
         run: bun run lint
 
       - name: Dead code check (Knip)
-        # Non-blocking while we clean up existing unused files/exports.
-        # Once resolved, remove "|| true" and use --max-issues 0 to enforce.
-        run: bun run knip || true
+        # Unused files, unused or undeclared dependencies and unresolved imports
+        # block. Unused exports are reported as warnings and do not.
+        run: bun run knip
 
       - name: Format check (Prettier)
         run: bun run format:check
@@ -180,7 +180,7 @@ jobs:
         run: bun run test:runtime-client
 
       - name: Run app and desktop unit tests
-        run: bun run test:simulator
+        run: bun run test:app
 
       - name: Install browser for UI regression journey
         run: bunx playwright install --with-deps chromium
@@ -193,6 +193,9 @@ jobs:
 
       - name: Verify shared controls with keyboard and touch
         run: bun test/e2e/controls.browser.mjs
+
+      - name: Verify cloud provider accounts in settings
+        run: bun test/e2e/provider-accounts.browser.mjs
 
       - name: Verify development hot reload preserves the backend connection
         run: node test/e2e/query-protocol-hmr.browser.mjs

@@ -122,7 +122,8 @@ export function registerAllTools() {
   toolRegistry.register("BrowserNetworkRequests", BrowserNetworkRequestsToolRenderer);
   toolRegistry.register("BrowserScroll", BrowserScrollToolRenderer);
 
-  // Built-in Deus Simulator tools (agent-server MCP)
+  // Built-in Deus Simulator tools (agent-server MCP). The agent sees them as
+  // `mcp__deus__Simulator*`; the registry looks a tool up by its bare name.
   toolRegistry.register("SimulatorScreenshot", XcodeMcpScreenshotToolRenderer);
   toolRegistry.register("SimulatorTap", XcodeMcpTapToolRenderer);
   toolRegistry.register("SimulatorTypeText", XcodeMcpTypeTextToolRenderer);
@@ -135,49 +136,6 @@ export function registerAllTools() {
   toolRegistry.register("SimulatorWaitFor", XcodeMcpWaitForToolRenderer);
   toolRegistry.register("SimulatorGetProjectInfo", XcodeMcpGetProjectInfoToolRenderer);
   toolRegistry.register("SimulatorListDevices", XcodeMcpRefreshDestinationsToolRenderer);
-
-  // Deus MCP server prefixed names (SDK uses mcp__deus__ToolName format)
-  toolRegistry.register("mcp__deus__SimulatorScreenshot", XcodeMcpScreenshotToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorTap", XcodeMcpTapToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorTypeText", XcodeMcpTypeTextToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorSwipe", XcodeMcpSwipeToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorPressKey", XcodeMcpPressKeyToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorBuild", XcodeMcpBuildToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorLaunch", XcodeMcpLaunchToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorListApps", XcodeMcpRefreshDestinationsToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorReadScreen", XcodeMcpReadScreenToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorWaitFor", XcodeMcpWaitForToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorGetProjectInfo", XcodeMcpGetProjectInfoToolRenderer);
-  toolRegistry.register("mcp__deus__SimulatorListDevices", XcodeMcpRefreshDestinationsToolRenderer);
-
-  // Old tool names from previous sessions (iOSSimulator* via old deus MCP)
-  toolRegistry.register(
-    "mcp__deus__iOSSimulatorListDevices",
-    XcodeMcpRefreshDestinationsToolRenderer
-  );
-  toolRegistry.register("mcp__deus__iOSSimulatorStart", XcodeMcpScreenshotToolRenderer);
-  toolRegistry.register("mcp__deus__iOSSimulatorScreenshot", XcodeMcpScreenshotToolRenderer);
-  toolRegistry.register("mcp__deus__iOSSimulatorTap", XcodeMcpTapToolRenderer);
-  toolRegistry.register("mcp__deus__iOSSimulatorSwipe", XcodeMcpSwipeToolRenderer);
-  toolRegistry.register("mcp__deus__iOSSimulatorTypeText", XcodeMcpTypeTextToolRenderer);
-  toolRegistry.register("mcp__deus__iOSSimulatorPressKey", XcodeMcpPressKeyToolRenderer);
-  toolRegistry.register("mcp__deus__iOSSimulatorBuildAndRun", XcodeMcpBuildToolRenderer);
-
-  // Backward compat: xcode-mcp tool names from existing session history
-  toolRegistry.register("mcp__xcode-mcp__screenshot", XcodeMcpScreenshotToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__tap", XcodeMcpTapToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__type_text", XcodeMcpTypeTextToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__swipe", XcodeMcpSwipeToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__press_key", XcodeMcpPressKeyToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__build", XcodeMcpBuildToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__launch", XcodeMcpLaunchToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__read_screen", XcodeMcpReadScreenToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__wait_for", XcodeMcpWaitForToolRenderer);
-  toolRegistry.register("mcp__xcode-mcp__get_project_info", XcodeMcpGetProjectInfoToolRenderer);
-  toolRegistry.register(
-    "mcp__xcode-mcp__refresh_destinations",
-    XcodeMcpRefreshDestinationsToolRenderer
-  );
 
   // Deus MCP — Workspace tools
   toolRegistry.register("AskUserQuestion", AskUserQuestionToolRenderer);

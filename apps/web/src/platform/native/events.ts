@@ -1,5 +1,5 @@
 import { capabilities } from "../capabilities";
-import { listen, emit } from "../electron/invoke";
+import { listen } from "../electron/invoke";
 import type { AppEventName, AppEventMap } from "@shared/events";
 
 /**
@@ -37,16 +37,4 @@ export function on<K extends AppEventName>(
     cancelled = true;
     cleanup?.();
   };
-}
-
-/**
- * Emit an event to the Electron main process (for cross-window relay).
- * No-op in web mode.
- */
-export async function send<K extends AppEventName>(
-  event: K,
-  payload: AppEventMap[K]
-): Promise<void> {
-  if (!capabilities.ipcEventListeners) return;
-  await emit(event, payload);
 }

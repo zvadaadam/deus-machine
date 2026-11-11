@@ -3,12 +3,6 @@ import path from "path";
 import { getDatabase } from "../lib/database";
 import { NotFoundError } from "../lib/errors";
 import { getWorkspaceForMiddleware } from "../db";
-import type { WorkspaceWithDetailsRow } from "../db";
-
-export interface WorkspaceContext {
-  workspace: WorkspaceWithDetailsRow;
-  workspacePath: string;
-}
 
 /**
  * Compute the filesystem path for a LOCAL workspace.

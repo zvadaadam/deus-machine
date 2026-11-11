@@ -829,7 +829,6 @@
 }
 
 :root {
-  --radius: 0.5rem; /* Legacy — kept for backward compat */
   --traffic-light-clearance: 86px;
 
   /* Radius base values — source of truth for the two-layer system */

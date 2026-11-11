@@ -34,7 +34,6 @@ import {
   planAnswer,
 } from "@shared/agent-asks";
 import { isUnknownEvent } from "@shared/protocol-types";
-import type { AgentInfo } from "@shared/agent-info";
 import { registerAppMcp, unregisterAppMcp } from "../../../../agent-server";
 import { AgentLink } from "./client";
 import { LocalAgents } from "./local-agents";
@@ -318,11 +317,6 @@ async function askQuestions(event: ElicitationRequestedEvent): Promise<Elicitati
 export function getLocalAgents(): LocalAgents {
   if (!localAgents) throw new Error("Agent server not connected");
   return localAgents;
-}
-
-/** Returns the agents discovered during the initialize handshake. */
-export function getAgents(): ReadonlyArray<AgentInfo> {
-  return link?.getAgents() ?? [];
 }
 
 /** Register an AAP app's MCP server with the engine (mid-turn hot-swap). */

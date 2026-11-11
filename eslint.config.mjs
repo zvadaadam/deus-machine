@@ -32,7 +32,6 @@ export default tseslint.config(
       "dist-electron/**",
       "apps/agent-server/dist/**",
       "apps/cli/bundles/**",
-      "apps/web/src/features/browser/automation/dist-inject/**",
       "packages/device-use/bin/**",
     ],
   },

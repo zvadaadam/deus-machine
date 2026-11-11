@@ -41,9 +41,6 @@ export const BROWSER_NEW_TAB_REQUESTED = "browser:new-tab-requested" as const;
 
 // Simulator build logs now use q:event "sim:buildLog" via WebSocket protocol.
 
-/** Chat insert events — main process → frontend */
-export const CHAT_INSERT = "chat-insert" as const;
-
 /** Backend lifecycle — main process → frontend */
 export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
 
@@ -263,8 +260,6 @@ export const PROTOCOL_EVENTS = [
   // Git events
   "git-clone-progress",
   "git-init-progress",
-  // Agent-server bidirectional RPC
-  "agent-server:request",
   // Simulator events
   "sim:streamReady",
   "sim:stopped",
@@ -501,51 +496,6 @@ export const GitInitProgressSchema = z.object({
 });
 export type GitInitProgressEvent = z.infer<typeof GitInitProgressSchema>;
 
-/** InspectElement schema — matches the shape emitted by the browser InSpec handler.
- *  Keep in sync with InspectElement in parseInspectTags.ts. */
-const InspectElementSchema = z.object({
-  ref: z.string(),
-  tagName: z.string(),
-  path: z.string(),
-  innerText: z.string().optional(),
-  context: z.enum(["local", "external"]).optional(),
-  reactComponent: z.string().optional(),
-  file: z.string().optional(),
-  line: z.string().optional(),
-  styles: z.string().optional(),
-  props: z.string().optional(),
-  attributes: z.string().optional(),
-  innerHTML: z.string().optional(),
-});
-
-/** Serialized chat insert payload (main process → frontend).
- *  Keep in sync with SerializedChatInsertPayload in chatInsertStore.ts. */
-export const ChatInsertSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("text"),
-    workspaceId: z.string(),
-    text: z.string(),
-  }),
-  z.object({
-    type: z.literal("element"),
-    workspaceId: z.string(),
-    element: InspectElementSchema,
-  }),
-  z.object({
-    type: z.literal("files"),
-    workspaceId: z.string(),
-    files: z.array(
-      z.object({
-        name: z.string(),
-        type: z.string(),
-        lastModified: z.number(),
-        base64: z.string(),
-      })
-    ),
-  }),
-]);
-export type SerializedChatInsertPayload = z.infer<typeof ChatInsertSchema>;
-
 // ============================================================================
 // Runtime Schema Map (event name → Zod schema)
 // ============================================================================
@@ -562,7 +512,6 @@ export const AppEventSchemaMap = {
   [PTY_DATA]: PtyDataSchema,
   [PTY_EXIT]: PtyExitSchema,
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
-  [CHAT_INSERT]: ChatInsertSchema,
   [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
   [GIT_INIT_PROGRESS]: GitInitProgressSchema,
 } as const satisfies Record<AppEventName, z.ZodTypeAny>;
@@ -592,9 +541,6 @@ export interface AppEventMap {
 
   // Browser
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;
-
-  // Chat
-  [CHAT_INSERT]: SerializedChatInsertPayload;
 
   // Git
   [GIT_CLONE_PROGRESS]: GitCloneProgressEvent;

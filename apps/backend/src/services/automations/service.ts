@@ -80,10 +80,6 @@ export function listAutomationRuns(automationId: string): AutomationRun[] {
   return store.listRuns(automationId) as unknown as AutomationRun[];
 }
 
-export function automationsConfigured(): boolean {
-  return platform.platformConfigured();
-}
-
 // ─── Repo ↔ environment link ─────────────────────────────────
 
 function repoWithOrigin(repositoryId: string): RepositoryRow & { git_origin_url: string } {
