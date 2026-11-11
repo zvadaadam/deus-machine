@@ -127,11 +127,3 @@ export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 export function getKnownAgentConfig(agentHarness: AgentHarness): AgentConfig {
   return AGENT_CONFIGS[agentHarness];
 }
-
-export function getAgentHarnessLabel(agentHarness: AgentHarness): string {
-  return AGENT_CONFIGS[agentHarness].label;
-}
-
-export function getAgentHarnessEventLabel(agentHarness: AgentHarness): string {
-  return agentHarness.toUpperCase();
-}

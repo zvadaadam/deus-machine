@@ -7,7 +7,7 @@
  * Security: contextIsolation=true, nodeIntegration=false, sandbox=false (ESM preload requires sandbox=false).
  * The renderer has zero direct access to Node.js or Electron APIs.
  *
- * The generic invoke/on/send bridge is guarded by an allowlist so the renderer
+ * The generic invoke/on bridge is guarded by an allowlist so the renderer
  * cannot call arbitrary ipcMain handlers — only the channels listed below.
  */
 
@@ -16,7 +16,7 @@ import type { UpdateCheckResult, UpdateState } from "../../../shared/types/updat
 
 // ---------------------------------------------------------------------------
 // IPC channel allowlists — ONLY these channels may be used via the generic
-// invoke/on/send bridge. Every channel MUST have a registered ipcMain.handle()
+// invoke/on bridge. Every channel MUST have a registered ipcMain.handle()
 // or ipcMain.on() in the main process. Update these sets when adding new IPC.
 // ---------------------------------------------------------------------------
 
@@ -62,7 +62,6 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   // Native operations (called via generic invoke from platform layer)
   "native:pickFolder",
   "native:setZoom",
-  "native:setTitle",
   "native:homeDir",
   "native:openExternal",
   "native:openPath",
@@ -96,9 +95,6 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   "browser:new-tab-requested",
 
   // Simulator events — all moved to backend WS (q:event protocol)
-
-  // Chat insert events
-  "chat-insert",
 
   // Git operations
   "git-clone-progress",
@@ -212,13 +208,6 @@ const electronAPI = {
     const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void => callback(...args);
     ipcRenderer.on(event, listener);
     return () => ipcRenderer.removeListener(event, listener);
-  },
-  send: (channel: string, ...args: unknown[]): void => {
-    if (!ALLOWED_EVENT_CHANNELS.has(channel)) {
-      console.warn(`[preload] Send channel "${channel}" is not allowed`);
-      return;
-    }
-    ipcRenderer.send(channel, ...args);
   },
 
   // ---------------------------------------------------------------------------

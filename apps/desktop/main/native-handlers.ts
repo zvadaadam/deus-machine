@@ -408,17 +408,6 @@ export function registerNativeHandlers(): void {
   });
 
   // -------------------------------------------------------------------------
-  // Window title — renderer calls invoke("native:setTitle", { title })
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle("native:setTitle", (_e, { title }: { title: string }) => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.setTitle(title);
-    }
-  });
-
-  // -------------------------------------------------------------------------
   // Home directory — renderer calls invoke("native:homeDir")
   // Used by CloneRepositoryModal and useRepoActions for default clone path
   // -------------------------------------------------------------------------

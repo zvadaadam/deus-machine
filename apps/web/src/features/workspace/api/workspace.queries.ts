@@ -50,41 +50,9 @@ export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
 }
 
 /**
- * Fetch diff stats for a specific workspace
- * Conditionally polls only when workspace is actively working.
- *
- * When `isWatched` is true (file watcher active via notify crate),
- * polling is disabled — cache invalidation comes from fs:changed events.
- * Falls back to 5s polling when not watched.
- *
- * IMPORTANT: Requires workspaceState === "ready" to avoid fetching diffs
- * against incomplete worktrees during initialization. Running git diff on
- * an initializing worktree produces garbage (e.g. +500K/-1M) that gets
- * cached for 30s, persisting as phantom diffs even after the workspace
- * becomes ready. Guard here, not in the UI.
- */
-export function useDiffStats(
-  workspaceId: string | null,
-  sessionStatus?: string | null,
-  isWatched: boolean = false,
-  workspaceState?: string | null
-) {
-  return useQuery({
-    queryKey: queryKeys.workspaces.diffStats(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchDiffStats(workspaceId!),
-    enabled: !!workspaceId && workspaceState === "ready",
-    staleTime: 30000,
-    // Events handle invalidation when watched; fall back to polling otherwise
-    refetchInterval: isWatched ? false : sessionStatus === "working" ? 5000 : false,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
-  });
-}
-
-/**
  * Fetch diff stats for all sidebar workspaces in bulk.
  *
- * Replaces per-item useDiffStats() in the sidebar (N hooks → 1 query).
+ * One query for the whole sidebar instead of a hook per row.
  * - Initial load: fetches ALL ready workspaces in parallel batches of 15
  * - Polling: only re-fetches workspaces with session_status === "working" (5s)
  * - Idle: no polling (staleTime 30s, refetch on window focus)
@@ -166,8 +134,11 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
  * polling is disabled — cache invalidation comes from fs:changed events.
  * Falls back to 5s polling when not watched.
  *
- * IMPORTANT: Requires workspaceState === "ready" — same guard as useDiffStats.
- * See useDiffStats comment for the full explanation of the phantom diff race.
+ * IMPORTANT: Requires workspaceState === "ready" to avoid fetching diffs
+ * against incomplete worktrees during initialization. Running git diff on
+ * an initializing worktree produces garbage (e.g. +500K/-1M) that gets
+ * cached for 30s, persisting as phantom diffs even after the workspace
+ * becomes ready. Guard here, not in the UI.
  */
 export function useFileChanges(
   workspaceId: string | null,

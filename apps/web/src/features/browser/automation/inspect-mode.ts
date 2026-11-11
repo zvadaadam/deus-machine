@@ -22,11 +22,6 @@ export const INSPECT_MODE_DISABLE = `(function(){
   if (window.__deusInspect) window.__deusInspect.disable();
 })()`;
 
-/** Check if inspect mode is active */
-export const INSPECT_MODE_IS_ACTIVE = `(function(){
-  return JSON.stringify({ active: window.__deusInspect ? window.__deusInspect.isActive() : false });
-})()`;
-
 /** Verify that the inspect mode IIFE completed and installed the public API.
  *  Returns JSON with status flags. Used after eval'ing INSPECT_MODE_SETUP
  *  to confirm it didn't silently fail (fire-and-forget eval can't detect

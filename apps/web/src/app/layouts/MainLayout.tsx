@@ -150,7 +150,7 @@ export function MainLayout() {
     });
   }, [selectedCloudWorkspaceId]);
 
-  // Bulk-fetch diff stats for all workspaces (replaces per-item useDiffStats in sidebar)
+  // Bulk-fetch diff stats for all workspaces: one query for the whole sidebar
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);
 
   // Sidebar resize: null = default 344px, number = user-set width

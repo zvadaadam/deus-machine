@@ -2,7 +2,7 @@
  * Electron Platform Wrapper
  *
  * Provides a platform-independent interface for Electron-specific APIs.
- * Provides invoke(), listen(), and emit() for IPC with the Electron main process.
+ * Provides invoke() and listen() for IPC with the Electron main process.
  *
  * All IPC goes through window.electronAPI (exposed by the preload script).
  */
@@ -99,16 +99,4 @@ export async function listen(
   });
 
   return unlisten;
-}
-
-/**
- * Emit an event (send to main process, which can broadcast to all windows)
- */
-export async function emit<T>(event: string, payload?: T): Promise<void> {
-  if (!isElectronEnv) {
-    console.warn(`[Platform] Electron emit called in non-Electron environment: ${event}`);
-    return;
-  }
-
-  window.electronAPI!.send(event, payload);
 }

@@ -103,6 +103,18 @@ bun test/e2e/controls.browser.mjs
 Light, dark and mobile screenshots are saved under `.context/controls-ui` and
 uploaded by CI alongside the workspace usability/layout screenshots.
 
+### `provider-accounts.browser.mjs`
+
+Runs Settings → AI Providers' cloud accounts in an isolated browser against a
+fake cloud API: Claude and Codex keys, several Claude subscriptions, replacing
+a token or key, defaults, the device sign-in (cancel, add, reconnect, retry),
+an identity change, and that no secret stays in the query cache. No backend,
+login or provider call is needed.
+
+```bash
+bun test/e2e/provider-accounts.browser.mjs
+```
+
 ### `environment-secrets.browser.mjs`
 
 Runs the real Environment settings components through both the desktop backend

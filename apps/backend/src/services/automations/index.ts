@@ -15,7 +15,6 @@ export {
   refreshAutomations,
   openAutomationRun,
   initAutomations,
-  automationsConfigured,
   validateSchedule,
   MIN_FIRE_INTERVAL_MS,
   type AutomationInput,

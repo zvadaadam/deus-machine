@@ -4,7 +4,7 @@
  *
  * Port resolution:
  * - Electron app: Uses preload bridge via window.electronAPI.getBackendPort()
- * - Web dev: Uses VITE_BACKEND_PORT environment variable from dev.sh
+ * - Web dev: Uses VITE_BACKEND_PORT, set by `bun run dev:web` (scripts/runtime/dev.ts)
  */
 
 // Import directly from the source module (not the barrel) to avoid circular

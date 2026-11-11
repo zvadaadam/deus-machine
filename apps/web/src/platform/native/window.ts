@@ -17,11 +17,6 @@ export async function show(): Promise<void> {
   await invoke("show_main_window");
 }
 
-export async function setTitle(title: string): Promise<void> {
-  if (!capabilities.windowLifecycle) return;
-  await invoke("native:setTitle", { title });
-}
-
 export async function setZoom(level: number): Promise<void> {
   if (!capabilities.nativeWindowChrome) return;
   await invoke("native:setZoom", { level });

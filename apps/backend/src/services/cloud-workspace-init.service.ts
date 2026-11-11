@@ -8,7 +8,7 @@
 // wait-for-ready here — the sandbox may still be provisioning when the user
 // sends the first prompt; agnt queues it and runs it when the sidecar is up.
 
-import { v7 as uuidv7 } from "uuid";
+import { uuidv7 } from "@shared/lib/uuid";
 import {
   createWorkspace as agntCreateWorkspace,
   createSession as agntCreateSession,
