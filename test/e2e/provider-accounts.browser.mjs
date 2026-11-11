@@ -69,10 +69,16 @@ const server = await createServer({
   server: { host: "127.0.0.1", port: 0 },
 });
 let browser;
+let page;
+const requests = [];
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  page = await browser.newPage();
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://cloud.test"))
+      requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+  });
   await page.addInitScript(() => sessionStorage.setItem("deus_cloud_session", "user-a"));
   const errors = [];
   const refWarnings = [];
@@ -368,7 +374,13 @@ try {
   );
   await nameInput.fill("  personal@example.com  ");
   failNextRename = true;
+  // The row is disabled a moment after the click, so "enabled again" is only
+  // meaningful once the refusal has come back.
+  const refused = page.waitForResponse(
+    (response) => response.request().method() === "PATCH" && response.status() === 503
+  );
   await personalSubscription.getByRole("button", { name: "Save", exact: true }).click();
+  await refused;
   await nameInput.waitFor({ state: "visible" });
   await page.waitForFunction(
     () => !globalThis.document.querySelector('input[aria-label="Account name"]').disabled
@@ -537,6 +549,14 @@ try {
   console.log(
     "Provider accounts browser journey passed: Claude/Codex keys, multiple Claude subscriptions, token/key replacement, mixed defaults, device cancel/add/reconnect/retry, identity change, no secret cache."
   );
+} catch (error) {
+  // What the page showed and asked for, for a failure another machine cannot repeat.
+  const text = await page
+    ?.locator("body")
+    .innerText({ timeout: 2_000 })
+    .catch(() => "(unavailable)");
+  console.error(`Page at failure:\n${text}\nLast requests:\n${requests.slice(-12).join("\n")}`);
+  throw error;
 } finally {
   await browser?.close();
   await server.close();
