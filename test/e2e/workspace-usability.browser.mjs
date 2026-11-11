@@ -56,7 +56,8 @@ function WelcomeSendJourney() {
   // and resolving the child queries must not require a second send attempt.
   useEffect(() => {
     window.welcomeSendAttempts++;
-    void panel.current.sendMessage("Start from home", "codex-app-server:gpt-6-astra")
+    // "?welcome-picked": the home composer's picker chose a thinking level too.
+    void panel.current.sendMessage("Start from home", "codex-app-server:gpt-6-astra", location.search === "?welcome-picked" ? "low" : undefined)
       .then(sent => { window.welcomeSendResult = sent; });
   }, []);
   return <SessionPanel ref={panel} sessionId="history-session" workspacePath="" embedded />;
@@ -580,9 +581,14 @@ try {
   // The welcome effect only gets one attempt when the workspace is selected.
   // Its explicit model must be sufficient before either session or history arrives.
   failHistory = false;
-  for (const existing of [false, true]) {
+  for (const [query, level] of [
+    ["?welcome", "high"],
+    ["?welcome-existing", "medium"],
+    ["?welcome-picked", "low"],
+  ]) {
+    const existing = query === "?welcome-existing";
     delayWelcomeHistory = true;
-    await page.goto(server.resolvedUrls.local[0] + (existing ? "?welcome-existing" : "?welcome"));
+    await page.goto(server.resolvedUrls.local[0] + query);
     await page.waitForFunction(() => window.welcomeSendResult !== undefined);
     assert.equal(
       await page.evaluate(() => window.welcomeSendResult),
@@ -596,16 +602,14 @@ try {
     assert.equal(commands[0].params.content, "Start from home");
     assert.equal(commands[0].params.model, "gpt-6-astra");
     assert.equal(commands[0].params.agentHarness, "codex-app-server");
-    assert.equal(commands[0].params.thinkingLevel, existing ? "medium" : "high");
+    assert.equal(commands[0].params.thinkingLevel, level);
     assert.equal(commands[0].params.permissionMode, existing ? "plan" : undefined);
     delayWelcomeHistory = false;
     for (const respond of pendingWelcomeHistory.splice(0)) respond();
     await page.getByRole("textbox").waitFor();
     await page.evaluate(() => window.deliverWelcomeHistory());
     await page.getByText("Earlier recorded prompt", { exact: true }).waitFor();
-    await page
-      .getByRole("button", { name: "Select model, currently GPT-6-Astra", exact: true })
-      .waitFor();
+    await page.getByRole("button", { name: /^Select model, currently GPT-6-Astra\b/ }).waitFor();
     assert.equal(
       await page.evaluate(() => window.welcomeCommands.length),
       1,
@@ -614,7 +618,7 @@ try {
     assert.equal(await page.evaluate(() => window.welcomeSendAttempts), 1);
     const composer = await page.evaluate(() => window.composerForSession("history-session"));
     assert.equal(composer.model, "codex-app-server:gpt-6-astra");
-    assert.equal(composer.thinkingLevel, existing ? "medium" : "high");
+    assert.equal(composer.thinkingLevel, level);
     assert.equal(composer.planModeEnabled, existing);
   }
   // Exercise the real query retry: failed history must not seed the default model.
@@ -625,9 +629,7 @@ try {
   const failedHistoryRequests = historyRequests;
   failHistory = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Select model, currently GPT-5.6-Sol", exact: true })
-    .waitFor();
+  await page.getByRole("button", { name: /^Select model, currently GPT-5\.6-Sol\b/ }).waitFor();
   await page.getByRole("textbox").waitFor();
   assert.equal(historyRequests, failedHistoryRequests + 1, "Try again must refetch history");
   // Direct cloud history arrives only through the socket. An empty snapshot
@@ -651,9 +653,7 @@ try {
   assert.equal(directSocketAttempts, 0, "No socket is opened without a token");
   failDirectToken = false;
   await historyError.getByRole("button", { name: "Try again", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Select model, currently GPT-5.6-Sol", exact: true })
-    .waitFor();
+  await page.getByRole("button", { name: /^Select model, currently GPT-5\.6-Sol\b/ }).waitFor();
   await page.getByRole("textbox").waitFor();
   // Exhaust connection attempts before a snapshot, this time using the modal composer.
   directSocketOnline = false;
@@ -671,9 +671,7 @@ try {
   failDirectToken = false;
   directSocketOnline = true;
   await retryButton.click();
-  await page
-    .getByRole("button", { name: "Select model, currently GPT-5.6-Sol", exact: true })
-    .waitFor();
+  await page.getByRole("button", { name: /^Select model, currently GPT-5\.6-Sol\b/ }).waitFor();
   await page.getByRole("textbox").waitFor();
   assert.equal(directTokenRequests, beforeRetryTokens + 1, "Retry refreshes the token once");
   assert.equal(

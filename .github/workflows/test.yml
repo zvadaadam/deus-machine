@@ -197,6 +197,9 @@ jobs:
       - name: Verify cloud provider accounts in settings
         run: bun test/e2e/provider-accounts.browser.mjs
 
+      - name: Verify the composer's picker for agent, model and thinking
+        run: bun test/e2e/model-picker.browser.mjs
+
       - name: Verify development hot reload preserves the backend connection
         run: node test/e2e/query-protocol-hmr.browser.mjs
 

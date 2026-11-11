@@ -23,10 +23,10 @@ import { MessageInput } from "./MessageInput";
 import { useSessionActions } from "../hooks";
 import { useSessionWithMessages } from "../api/session.queries";
 import { useProjectEnvironment } from "@/features/workspace/api/workspace.queries";
-import { useSettings } from "@/features/settings/api";
+import { useDefaultThinkingLevel } from "@/features/settings/api";
 import {
   DEFAULT_MODEL,
-  DEFAULT_THINKING_LEVEL,
+  fitThinkingLevel,
   getAgentHarnessForModel,
   getModelId,
   modelThinkingLevels,
@@ -40,14 +40,18 @@ import {
   sessionComposerActions,
   useSessionComposerStore,
 } from "../store/sessionComposerStore";
-import { readThinkingLevel } from "@shared/protocol";
 
 export interface SessionComposerRef {
   /** Send a message bypassing the UI event path. Used by the home-screen
    *  welcome flow, which dispatches before a composer surface mounts.
    *  `modelOverride` forces a model for THIS send only and also updates
-   *  the composer store so subsequent sends keep it. */
-  sendMessage: (content: string, modelOverride?: string) => Promise<boolean>;
+   *  the composer store so subsequent sends keep it; `thinkingOverride` is
+   *  the level picked with it, fitted to what the model offers. */
+  sendMessage: (
+    content: string,
+    modelOverride?: string,
+    thinkingOverride?: ThinkingLevel
+  ) => Promise<boolean>;
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<boolean>;
   createPR: () => Promise<boolean>;
@@ -118,11 +122,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     },
     ref
   ) {
-    const { data: settings } = useSettings();
-    // Settings written by older builds still hold the retired UPPERCASE
-    // spellings — normalize on read rather than migrating the row.
-    const defaultThinking: ThinkingLevel =
-      readThinkingLevel(settings?.default_thinking_level) ?? DEFAULT_THINKING_LEVEL;
+    const defaultThinking = useDefaultThinkingLevel();
 
     // Session-derived props — everything that needs React Query context.
     // Composer state itself (draft/model/etc.) lives in the store;
@@ -159,23 +159,25 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     useImperativeHandle(
       ref,
       () => ({
-        sendMessage: async (content, modelOverride) => {
+        sendMessage: async (content, modelOverride, thinkingOverride) => {
           if (modelOverride) {
             // Welcome sends carry an explicit model before history mounts the input.
+            const levels = modelThinkingLevels(
+              modelLists,
+              getAgentHarnessForModel(modelOverride),
+              getModelId(modelOverride)
+            );
             sessionComposerActions.seedIfAbsent(
               sessionId,
               emptyComposer(modelOverride, defaultThinking)
             );
-            sessionComposerActions.setModel(
-              sessionId,
-              modelOverride,
-              modelThinkingLevels(
-                modelLists,
-                getAgentHarnessForModel(modelOverride),
-                getModelId(modelOverride)
-              ),
-              defaultThinking
-            );
+            sessionComposerActions.setModel(sessionId, modelOverride, levels, defaultThinking);
+            if (thinkingOverride) {
+              sessionComposerActions.setThinkingLevel(
+                sessionId,
+                fitThinkingLevel(thinkingOverride, levels, defaultThinking)
+              );
+            }
           }
           return sendMessage(content, modelOverride);
         },

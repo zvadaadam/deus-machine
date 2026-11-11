@@ -15,7 +15,6 @@ import {
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
-import { getStoredModel, setStoredModel } from "@/features/session/lib/modelPreference";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
 import {
@@ -30,7 +29,10 @@ import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
 import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces";
-import { ModelPicker, CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
+import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
+import { useNewChatSelection } from "./composer/useNewChatSelection";
+import { ModelPicker } from "@/features/session/ui/ModelPicker";
+import type { ThinkingLevel } from "@/shared/agents";
 
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";
@@ -73,7 +75,9 @@ interface HomeViewProps {
     message: string,
     model: string,
     branch?: string,
-    location?: "local" | "cloud"
+    location?: "local" | "cloud",
+    /** The thinking level picked here; absent for a model with no thinking control. */
+    thinkingLevel?: ThinkingLevel
   ) => void;
   onWorkspaceClick?: (workspace: Workspace) => void;
   onOpenProject?: () => void;
@@ -116,7 +120,6 @@ export function HomeView({
 
   // ── Input state ─────────────────────────────────────────────────
   const [message, setMessage] = useState("");
-  const [model, setModel] = useState(getStoredModel);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -178,6 +181,8 @@ export function HomeView({
   // Where the new workspace runs: local worktree (default) or agnt cloud
   // sandbox. Cloud needs a git remote for the sandbox to clone.
   const [location, setLocation] = useState<"local" | "cloud">("local");
+  // The model and thinking level the new chat runs on.
+  const selection = useNewChatSelection(location);
   const [branchSelection, setBranchSelection] = useState<{ repoId: string; branch: string } | null>(
     null
   );
@@ -221,11 +226,6 @@ export function HomeView({
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
-  const handleSelectModel = useCallback((value: string) => {
-    setModel(value);
-    setStoredModel(value);
-  }, []);
-
   // ── Send ────────────────────────────────────────────────────────
   const hasContent = message.trim().length > 0 || attachments.length > 0;
   const canSend = hasContent && !!selectedRepoId && !isSubmitting;
@@ -236,7 +236,14 @@ export function HomeView({
     if (!content) return;
     setIsSubmitting(true);
     try {
-      onSendMessage(selectedRepoId, content, model, selectedBranch ?? undefined, location);
+      onSendMessage(
+        selectedRepoId,
+        content,
+        selection.model,
+        selectedBranch ?? undefined,
+        location,
+        selection.sentThinkingLevel
+      );
       clearAttachments();
       setMessage("");
     } finally {
@@ -246,7 +253,8 @@ export function HomeView({
     canSend,
     selectedRepoId,
     buildCombinedContent,
-    model,
+    selection.model,
+    selection.sentThinkingLevel,
     selectedBranch,
     location,
     onSendMessage,
@@ -728,7 +736,16 @@ export function HomeView({
 
             {/* Bottom toolbar — model picker (left) + send button (right) */}
             <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
-              <ModelPicker model={model} location={location} onModelChange={handleSelectModel} />
+              <ModelPicker
+                model={selection.model}
+                lists={selection.lists}
+                thinkingLevel={selection.thinkingLevel}
+                thinkingLevels={selection.thinkingLevels}
+                hasMessages={false}
+                onModelChange={selection.setModel}
+                onThinkingLevelChange={selection.setThinkingLevel}
+                side="bottom"
+              />
 
               {/* Send button */}
               <button

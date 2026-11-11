@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { apiClient } from "@/shared/api/client";
 import type { SessionPanelRef } from "@/features/session";
+import type { ThinkingLevel } from "@/shared/agents";
 import {
   NewWorkspaceModal,
   NewWorkspacePromptModal,
@@ -204,7 +205,9 @@ export function MainLayout() {
   // then silently never ran. Delivery stays selection-gated (the send rides
   // the selected panel's ref), so an entry simply waits until its workspace
   // is selected again.
-  const pendingWelcomeMessagesRef = useRef(new Map<string, { message: string; model: string }>());
+  const pendingWelcomeMessagesRef = useRef(
+    new Map<string, { message: string; model: string; thinkingLevel?: ThinkingLevel }>()
+  );
   const welcomeSendsInFlightRef = useRef(new Set<string>());
 
   const handleStartWorkspace = useCallback(
@@ -213,14 +216,15 @@ export function MainLayout() {
       message: string,
       model: string,
       branch?: string,
-      location?: "local" | "cloud"
+      location?: "local" | "cloud",
+      thinkingLevel?: ThinkingLevel
     ) => {
       try {
         const workspace = await welcomeCreateMutation.mutateAsync(
           branch || location ? { repositoryId: repoId, source_branch: branch, location } : repoId
         );
         // Store pending message — will be sent when workspace gets a session
-        pendingWelcomeMessagesRef.current.set(workspace.id, { message, model });
+        pendingWelcomeMessagesRef.current.set(workspace.id, { message, model, thinkingLevel });
         selectWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
       } catch (error) {
@@ -264,7 +268,7 @@ export function MainLayout() {
     welcomeSendsInFlightRef.current.add(selectedWorkspace.id);
     const workspaceId = selectedWorkspace.id;
     workspaceChatPanelRef.current
-      .sendMessage(pending.message, pending.model)
+      .sendMessage(pending.message, pending.model, pending.thinkingLevel)
       .then((sent) => {
         // sendMessage RESOLVES on failure too (it toasts and reports false) —
         // only a true delivery may consume the queued prompt.
@@ -565,11 +569,11 @@ export function MainLayout() {
           creating={repoActions.creating}
           onClose={closeNewWorkspaceModal}
           onRepoChange={repoActions.setSelectedRepoId}
-          onSubmit={({ repoId, prompt, branch, location, model }) => {
+          onSubmit={({ repoId, prompt, branch, location, model, thinkingLevel }) => {
             closeNewWorkspaceModal();
             if (prompt) {
               // Composer semantics: create, then the prompt rides as turn one.
-              void handleStartWorkspace(repoId, prompt, model, branch, location);
+              void handleStartWorkspace(repoId, prompt, model, branch, location, thinkingLevel);
             } else {
               void repoActions.createAndSelectWorkspace(repoId, location, branch);
             }

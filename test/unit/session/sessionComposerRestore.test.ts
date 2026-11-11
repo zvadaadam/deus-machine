@@ -24,7 +24,7 @@ vi.mock("@/features/session/api/session.queries", () => ({
 vi.mock("@/features/workspace/api/workspace.queries", () => ({
   useProjectEnvironment: () => ({ isSuccess: false }),
 }));
-vi.mock("@/features/settings/api", () => ({ useSettings: () => ({ data: {} }) }));
+vi.mock("@/features/settings/api", () => ({ useDefaultThinkingLevel: () => "high" }));
 vi.mock("@/shared/hooks/useModelLists", async () => {
   const { CATALOG_MODEL_LISTS } = await import("@shared/models");
   return { useModelLists: () => CATALOG_MODEL_LISTS };
