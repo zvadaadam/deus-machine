@@ -22365,7 +22365,7 @@
             {
               "type": "frame",
               "id": "IberL",
-              "name": "Opus 5",
+              "name": "Opus 5.5",
               "width": "fill_container",
               "fill": "$bg-raised",
               "cornerRadius": "$radius-lg",
@@ -22394,9 +22394,9 @@
                 {
                   "type": "text",
                   "id": "ZA8sv",
-                  "name": "Opus 5",
+                  "name": "Opus 5.5",
                   "fill": "$text-secondary",
-                  "content": "Opus 5",
+                  "content": "Opus 5.5",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -22424,7 +22424,7 @@
             {
               "type": "frame",
               "id": "vjX0u",
-              "name": "Opus 5 1M",
+              "name": "Sonnet 5.5",
               "width": "fill_container",
               "cornerRadius": "$radius-lg",
               "gap": 8,
@@ -22452,44 +22452,13 @@
                 {
                   "type": "text",
                   "id": "t5Bcsi",
-                  "name": "Opus 5 1M",
+                  "name": "Sonnet 5.5",
                   "fill": "$text-secondary",
-                  "content": "Opus 5 1M",
+                  "content": "Sonnet 5.5",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
                   "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "MDZzi",
-                  "x": 100,
-                  "y": 8,
-                  "name": "new",
-                  "enabled": false,
-                  "height": 14,
-                  "fill": "$bg-muted",
-                  "cornerRadius": "$radius-xs",
-                  "stroke": "$border-subtle",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "padding": [
-                    0,
-                    4
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "wOHAm",
-                      "name": "NEW",
-                      "fill": "$text-muted",
-                      "content": "New",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-2xs",
-                      "fontWeight": "normal"
-                    }
-                  ]
                 },
                 {
                   "type": "frame",
@@ -22503,7 +22472,7 @@
             {
               "type": "frame",
               "id": "kuCPF",
-              "name": "Sonnet 5",
+              "name": "Fable 5.1",
               "width": "fill_container",
               "cornerRadius": "$radius-lg",
               "gap": 8,
@@ -22531,9 +22500,9 @@
                 {
                   "type": "text",
                   "id": "EBgg7",
-                  "name": "Sonnet 5",
+                  "name": "Fable 5.1",
                   "fill": "$text-secondary",
-                  "content": "Sonnet 5",
+                  "content": "Fable 5.1",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -22630,7 +22599,7 @@
             {
               "type": "frame",
               "id": "Hx2ZY",
-              "name": "GPT-6 Astra",
+              "name": "GPT-6.1-Sol",
               "width": "fill_container",
               "cornerRadius": "$radius-lg",
               "gap": 8,
@@ -22658,41 +22627,13 @@
                 {
                   "type": "text",
                   "id": "E32uq",
-                  "name": "GPT-6 Astra",
+                  "name": "GPT-6.1-Sol",
                   "fill": "$text-secondary",
-                  "content": "GPT-6 Astra",
+                  "content": "GPT-6.1-Sol",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
                   "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "z0y4kF",
-                  "name": "new",
-                  "height": 14,
-                  "fill": "$bg-muted",
-                  "cornerRadius": "$radius-xs",
-                  "stroke": "$border-subtle",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "padding": [
-                    0,
-                    4
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "GzJkG",
-                      "name": "NEW",
-                      "fill": "$text-muted",
-                      "content": "New",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-2xs",
-                      "fontWeight": "normal"
-                    }
-                  ]
                 },
                 {
                   "type": "frame",
@@ -22706,7 +22647,7 @@
             {
               "type": "frame",
               "id": "js2sY",
-              "name": "GPT-5.6 Sol",
+              "name": "GPT-6-Astra",
               "width": "fill_container",
               "cornerRadius": "$radius-lg",
               "gap": 8,
@@ -22734,41 +22675,13 @@
                 {
                   "type": "text",
                   "id": "NBEOB",
-                  "name": "GPT-5.6 Sol",
+                  "name": "GPT-6-Astra",
                   "fill": "$text-secondary",
-                  "content": "GPT-5.6 Sol",
+                  "content": "GPT-6-Astra",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
                   "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "KORTx",
-                  "name": "new",
-                  "height": 14,
-                  "fill": "$bg-muted",
-                  "cornerRadius": "$radius-xs",
-                  "stroke": "$border-subtle",
-                  "strokeWidth": 1,
-                  "strokeAlignment": "inner",
-                  "padding": [
-                    0,
-                    4
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "SNeu7",
-                      "name": "NEW",
-                      "fill": "$text-muted",
-                      "content": "New",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-2xs",
-                      "fontWeight": "normal"
-                    }
-                  ]
                 },
                 {
                   "type": "frame",
@@ -22782,7 +22695,7 @@
             {
               "type": "frame",
               "id": "avpKG",
-              "name": "GPT-5.5",
+              "name": "GPT-5.6-Sol",
               "width": "fill_container",
               "cornerRadius": "$radius-lg",
               "gap": 8,
@@ -22810,9 +22723,9 @@
                 {
                   "type": "text",
                   "id": "E9oC1k",
-                  "name": "GPT-5.5",
+                  "name": "GPT-5.6-Sol",
                   "fill": "$text-secondary",
-                  "content": "GPT-5.5",
+                  "content": "GPT-5.6-Sol",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -22830,7 +22743,7 @@
             {
               "type": "frame",
               "id": "hqYf4",
-              "name": "GPT-5.4",
+              "name": "GPT-5.5",
               "width": "fill_container",
               "cornerRadius": "$radius-lg",
               "gap": 8,
@@ -22858,9 +22771,9 @@
                 {
                   "type": "text",
                   "id": "VXYRn",
-                  "name": "GPT-5.4",
+                  "name": "GPT-5.5",
                   "fill": "$text-secondary",
-                  "content": "GPT-5.4",
+                  "content": "GPT-5.5",
                   "lineHeight": 1.5,
                   "fontFamily": "$font-sans",
                   "fontSize": "$text-sm",
@@ -22884,7 +22797,7 @@
           "y": 880,
           "name": "ModelPicker · w-60, side=top, agent groups l",
           "fill": "$text-disabled",
-          "content": "ModelPicker · the shared menu surface, with a neutral New badge",
+          "content": "ModelPicker · the shared menu surface. Rows are the engine's list for this login (the first four of each harness are drawn); the chat's own model is always among them.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -23067,6 +22980,33 @@
                   "fontWeight": "normal"
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "U3xOQd",
+              "name": "Max",
+              "width": "fill_container",
+              "cornerRadius": "$radius-lg",
+              "padding": [
+                6,
+                8,
+                6,
+                32
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "p7LeD",
+                  "name": "Level",
+                  "fill": "$text-primary",
+                  "content": "Max",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
             }
           ]
         },
@@ -23079,7 +23019,7 @@
           "fill": "$text-disabled",
           "textGrowth": "fixed-width",
           "width": 260,
-          "content": "ThinkingPicker · choose directly from this model’s supported effort levels.",
+          "content": "ThinkingPicker · choose directly from this model’s supported effort levels, as the engine lists them.",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"

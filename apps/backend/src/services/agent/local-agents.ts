@@ -8,7 +8,12 @@
 // ends, whoever caused it.
 
 import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
-import { signedInBy, type AuthLogin, type HarnessAuth } from "@zvada/agent-server/protocol";
+import {
+  signedInBy,
+  type AuthLogin,
+  type HarnessAuth,
+  type ModelList,
+} from "@zvada/agent-server/protocol";
 import {
   LOCAL_HARNESSES,
   type AgentAuthAnswer,
@@ -56,6 +61,18 @@ export class LocalAgents {
       this.client.authStatus({ harnesses }),
     ]);
     return { auth, clis, logins: [...this.handles.values()].map(answerOf) };
+  }
+
+  /**
+   * The models each harness offers a turn in `cwd`, as its CLI lists them for
+   * this computer's login (the engine keeps a list ten minutes and reads again
+   * when a login changes). A CLI that does not answer gets the engine's own
+   * catalog, with the reason. No `env`, as for `status`.
+   */
+  models(cwd?: string): Promise<ModelList[]> {
+    return Promise.all(
+      LOCAL_HARNESSES.map((harness) => this.client.listModels({ harness, ...(cwd && { cwd }) }))
+    );
   }
 
   /** Install the CLIs turns run, now: answered at once, the install told on "agent:cli". */

@@ -152,6 +152,7 @@ export function NewWorkspacePromptModal({
           <div className="flex items-center justify-between px-1.5 pt-0.5 pb-2">
             <ModelPicker
               model={model}
+              location={location}
               onModelChange={(value) => {
                 setModel(value);
                 setStoredModel(value);

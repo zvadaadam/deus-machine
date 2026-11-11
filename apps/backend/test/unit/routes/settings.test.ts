@@ -12,6 +12,18 @@ vi.mock("../../../src/services/agent/cloud/models", () => ({
   getCloudModelLists: vi.fn(),
 }));
 vi.mock("../../../src/services/automations", () => ({ initAutomations: vi.fn() }));
+const agents = vi.hoisted(() => ({
+  models: vi.fn(),
+  workspace: vi.fn(),
+  folders: new Set<string>(),
+}));
+vi.mock("../../../src/services/agent", () => ({ getLocalAgents: () => agents }));
+vi.mock("../../../src/lib/database", () => ({ getDatabase: () => ({}) }));
+vi.mock("../../../src/db", () => ({ getWorkspaceForMiddleware: agents.workspace }));
+vi.mock("node:fs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:fs")>()),
+  existsSync: (path: string) => agents.folders.has(path),
+}));
 vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: vi.fn() }));
 
 import settingsRoutes from "../../../src/routes/settings";
@@ -88,6 +100,43 @@ describe("POST /settings", () => {
       body: JSON.stringify({ key: "", value: "light" }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /settings/agent-models", () => {
+  const LISTS = [{ harness: "claude-code", source: "live", fetchedAt: 1, models: [] }];
+
+  beforeEach(() => {
+    agents.folders.clear();
+    agents.models.mockResolvedValue(LISTS);
+  });
+
+  it("answers what this computer's CLIs list", async () => {
+    const res = await app.request("/settings/agent-models");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ lists: LISTS });
+    expect(agents.models).toHaveBeenCalledWith(undefined);
+  });
+
+  it("asks for a workspace's own folder, whose settings can narrow the list", async () => {
+    agents.workspace.mockReturnValue({ kind: "worktree", root_path: "/repo", slug: "berlin" });
+    agents.folders.add("/repo/.deus/berlin");
+    await app.request("/settings/agent-models?workspace_id=ws-1");
+    expect(agents.workspace).toHaveBeenCalledWith(expect.anything(), "ws-1");
+    expect(agents.models).toHaveBeenCalledWith("/repo/.deus/berlin");
+  });
+
+  it("asks for no folder when the workspace has none on this computer", async () => {
+    for (const workspace of [
+      undefined,
+      { kind: "cloud", root_path: "/repo", slug: "berlin" },
+      // An archived workspace's folder is gone.
+      { kind: "worktree", root_path: "/repo", slug: "gone" },
+    ]) {
+      agents.workspace.mockReturnValue(workspace);
+      await app.request("/settings/agent-models?workspace_id=ws-1");
+      expect(agents.models).toHaveBeenLastCalledWith(undefined);
+    }
   });
 });
 

@@ -53,12 +53,14 @@ import { serializeInspectElement } from "../lib/parseInspectTags";
 import {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
+  fitThinkingLevel,
   getAgentHarnessForModel,
-  getModelOption,
-  getThinkingLevelsForModel,
+  getModelId,
+  modelThinkingLevels as thinkingLevelsOf,
   type AgentHarness,
   type ThinkingLevel,
 } from "@/shared/agents";
+import { useModelLists } from "@/shared/hooks/useModelLists";
 import { ThinkingPicker } from "./ThinkingPicker";
 import { ModelPicker } from "./ModelPicker";
 import { PlanModeToggle } from "./PlanModeToggle";
@@ -241,10 +243,14 @@ export function MessageInput({
     imageAttachments,
   } = composer;
 
-  const selectedOption = getModelOption(model);
-  const agentHarness: AgentHarness = selectedOption?.agentHarness ?? getAgentHarnessForModel(model);
-  const modelId = selectedOption?.model ?? model;
+  const agentHarness: AgentHarness = getAgentHarnessForModel(model);
   const isClaudeAgent = agentHarness === "claude-code";
+
+  // The models and levels this chat chooses from: the platform's for a cloud
+  // workspace, this computer's CLIs' otherwise.
+  const modelLists = useModelLists({ cloud: workspaceKind === "cloud", workspaceId });
+  const levelsFor = (value: string) =>
+    thinkingLevelsOf(modelLists, getAgentHarnessForModel(value), getModelId(value));
 
   // Build combined message content from all staged sources.
   // See the big block-comment in the previous revision for ordering rationale
@@ -349,7 +355,7 @@ export function MessageInput({
     }
   };
 
-  const modelThinkingLevels = getThinkingLevelsForModel(agentHarness, modelId);
+  const modelThinkingLevels = levelsFor(model);
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
   const setupLocation =
@@ -485,14 +491,16 @@ export function MessageInput({
           <div className="flex items-center gap-0.5">
             <ModelPicker
               model={model}
+              lists={modelLists}
               hasMessages={hasMessages}
-              onModelChange={composer.setModel}
+              onModelChange={(value) => composer.setModel(value, levelsFor(value))}
               onOpenNewTab={onOpenNewTab}
             />
 
             {modelThinkingLevels.length > 0 && (
               <ThinkingPicker
-                level={thinkingLevel}
+                // A level the model lacks runs as the nearest one below: show that one.
+                level={fitThinkingLevel(thinkingLevel, modelThinkingLevels, defaultThinking)}
                 levels={modelThinkingLevels}
                 onLevelChange={composer.setThinkingLevel}
               />

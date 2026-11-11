@@ -85,7 +85,7 @@ function TabJourney() {
     {["gpt-5.6-sol", "gpt-6-astra"].map(model => <button key={model} onClick={() => {
       const sessionId = tabs.activeTab.sessionId;
       sessionComposerActions.seedIfAbsent(sessionId, emptyComposer(tabs.activeTab.initialModel, "high"));
-      sessionComposerActions.setModel(sessionId, "codex-app-server:" + model, "high");
+      sessionComposerActions.setModel(sessionId, "codex-app-server:" + model, ["low", "medium", "high"], "high");
       client.setQueryData(queryKeys.sessions.messages(sessionId), {messages: [], turns: [], compactions: [], has_older: false, has_newer: false});
     }}>Choose {model} in composer</button>)}
     <button onClick={() => tabs.updateChatTabAgentHarness(tabs.activeTab.id, "claude-code")}>Choose Claude</button>
@@ -604,7 +604,7 @@ try {
     await page.evaluate(() => window.deliverWelcomeHistory());
     await page.getByText("Earlier recorded prompt", { exact: true }).waitFor();
     await page
-      .getByRole("button", { name: "Select model, currently GPT-6 Astra", exact: true })
+      .getByRole("button", { name: "Select model, currently GPT-6-Astra", exact: true })
       .waitFor();
     assert.equal(
       await page.evaluate(() => window.welcomeCommands.length),
@@ -626,7 +626,7 @@ try {
   failHistory = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page
-    .getByRole("button", { name: "Select model, currently GPT-5.6 Sol", exact: true })
+    .getByRole("button", { name: "Select model, currently GPT-5.6-Sol", exact: true })
     .waitFor();
   await page.getByRole("textbox").waitFor();
   assert.equal(historyRequests, failedHistoryRequests + 1, "Try again must refetch history");
@@ -652,7 +652,7 @@ try {
   failDirectToken = false;
   await historyError.getByRole("button", { name: "Try again", exact: true }).click();
   await page
-    .getByRole("button", { name: "Select model, currently GPT-5.6 Sol", exact: true })
+    .getByRole("button", { name: "Select model, currently GPT-5.6-Sol", exact: true })
     .waitFor();
   await page.getByRole("textbox").waitFor();
   // Exhaust connection attempts before a snapshot, this time using the modal composer.
@@ -672,7 +672,7 @@ try {
   directSocketOnline = true;
   await retryButton.click();
   await page
-    .getByRole("button", { name: "Select model, currently GPT-5.6 Sol", exact: true })
+    .getByRole("button", { name: "Select model, currently GPT-5.6-Sol", exact: true })
     .waitFor();
   await page.getByRole("textbox").waitFor();
   assert.equal(directTokenRequests, beforeRetryTokens + 1, "Retry refreshes the token once");

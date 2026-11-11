@@ -14,8 +14,8 @@ describe("getDefaultModelForHarness (the composer seed for a reopened session)",
       expect(model.startsWith(`${harness}:`)).toBe(true);
       expect(getAgentHarnessForModel(model)).toBe(harness);
     }
-    // `codex-sdk` is a retired picker spelling: the catalog migrates its value
-    // to the codex-app-server engine, which is what a cloud send must carry.
+    // `codex-sdk` is a retired harness: its value becomes one on
+    // codex-app-server, which is what a cloud send must carry.
     expect(getAgentHarnessForModel(getDefaultModelForHarness("codex-sdk"))).toBe(
       "codex-app-server"
     );
@@ -39,12 +39,16 @@ describe("reopened conversation model", () => {
     ).toBe("codex-app-server:gpt-5.6-sol");
   });
 
-  it("uses the session harness default when no usable selection was recorded", () => {
-    for (const turns of [[], [turn(1, "retired-model")]]) {
-      expect(getModelForSession("codex-app-server", turns)).toBe(
-        getDefaultModelForHarness("codex-app-server")
-      );
-    }
+  it("keeps a recorded model no list names: it is what the chat ran", () => {
+    expect(getModelForSession("codex-app-server", [turn(1, "older-model")])).toBe(
+      "codex-app-server:older-model"
+    );
+  });
+
+  it("uses the session harness default when its harness recorded no selection", () => {
+    expect(getModelForSession("codex-app-server", [])).toBe(
+      getDefaultModelForHarness("codex-app-server")
+    );
     expect(getModelForSession("claude-code", [turn(1, "gpt-5.6-sol")])).toBe(DEFAULT_MODEL);
   });
 });

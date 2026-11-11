@@ -28,12 +28,12 @@ const DB_PATH = process.env.DATABASE_PATH || (() => {
 
 // The wire wants a BARE runtime model id plus the harness as its own field —
 // the frontend splits its "harness:modelId" picker value into the two before
-// sending. Mirrors AGENT_CONFIGS[harness].models[0] in shared/agent-catalog.ts
-// (the source of truth); this script is plain CommonJS and cannot import it.
+// sending. These are models the engine's catalog lists (shared/models.ts reads
+// it); this script is plain CommonJS and cannot import it.
 const DEFAULT_MODEL_BY_HARNESS = {
-  'claude-code': 'claude-fable-5[1m]',
-  'codex-sdk': 'gpt-5.3-codex',
-  'codex-app-server': 'gpt-5.6-sol',
+  'claude-code': 'opus',
+  'codex-sdk': 'gpt-6.1-sol',
+  'codex-app-server': 'gpt-6.1-sol',
 };
 
 // Test state

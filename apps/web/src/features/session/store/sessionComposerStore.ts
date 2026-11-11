@@ -15,12 +15,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import {
-  clampThinkingLevel,
-  getAgentHarnessForModel,
-  getModelId,
-  type ThinkingLevel,
-} from "@/shared/agents";
+import { fitThinkingLevel, type ThinkingLevel } from "@/shared/agents";
 import type { InspectedElement } from "../ui/InspectedElementCard";
 import type { FileMention } from "../ui/FileMentionCard";
 import type { SkillMention } from "../ui/SkillMentionCard";
@@ -156,19 +151,19 @@ export const sessionComposerActions = {
       "appendDraft"
     ),
 
-  /** Switch model; if the new model doesn't support the current thinking
-   *  level, snap to the user's configured default. */
-  setModel: (sid: string, model: string, fallbackThinking: ThinkingLevel) =>
+  /** Switch model. `levels` are the ones the new model offers: the chat keeps
+   *  its level when the model has it, else takes the nearest one below. */
+  setModel: (
+    sid: string,
+    model: string,
+    levels: readonly ThinkingLevel[],
+    fallbackThinking: ThinkingLevel
+  ) =>
     mutate(
       sid,
       (c) => {
         c.model = model;
-        c.thinkingLevel = clampThinkingLevel(
-          c.thinkingLevel,
-          getAgentHarnessForModel(model),
-          getModelId(model),
-          fallbackThinking
-        );
+        c.thinkingLevel = fitThinkingLevel(c.thinkingLevel, levels, fallbackThinking);
       },
       "setModel"
     ),

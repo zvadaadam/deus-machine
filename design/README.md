@@ -585,8 +585,11 @@ in step with it:
 - **The header Open button is an outlined split button**, not a filled pill: a bordered
   `h-7` container, quick-open on the left, a 1px divider, and a chevron on the right.
 - The Changes review CTA reads **"Review Changes"** with the file count after it.
+- **A model picker draws no list of its own.** Its rows are the engine's for the chat (this
+  computer's CLIs for a local one, the platform's for a cloud one), so board `16` draws the
+  first four of each harness and no "New" badge.
 - **A harness is drawn with its own logo, never a generic sparkle.** `apps/web/src/assets/agents/`
-  ships 18 brand SVGs and `getAgentLogo(harness)` resolves them in six places: `ModelPicker`
+  ships the two harness marks and `getAgentLogo(harness)` resolves them in six places: `ModelPicker`
   (trigger + every row), `ComposerControls`, `SessionTab`, `ClosedSessionsPopover`,
   `PlanApprovalOverlay` and `AgentQuestionOverlay`. The marks in this file are those exact
   paths, transcribed with their `viewBox="29 29 42 42"` and bound to a text colour the way

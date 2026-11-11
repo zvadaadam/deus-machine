@@ -24,6 +24,10 @@ vi.mock("@/features/session/lib/modelPreference", () => ({
 vi.mock("@/shared/stores/uiStore", () => ({
   useUIStore: () => vi.fn(),
 }));
+vi.mock("@/shared/hooks/useModelLists", async () => {
+  const { CATALOG_MODEL_LISTS } = await import("@shared/models");
+  return { useModelLists: () => CATALOG_MODEL_LISTS };
+});
 
 beforeEach(() => {
   state.model = "claude-code:claude-fable-5";

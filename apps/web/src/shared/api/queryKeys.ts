@@ -68,6 +68,8 @@ export const queryKeys = {
     commands: ["settings", "commands"] as const,
     agents: ["settings", "agents"] as const,
     agentAuth: ["settings", "agent-auth"] as const,
+    /** Every folder's list sits under this prefix, so a login change resets them all. */
+    agentModels: ["settings", "agent-models"] as const,
     environments: {
       all: ["settings", "environment-secrets"] as const,
       organizations: (accountId: string | null) =>

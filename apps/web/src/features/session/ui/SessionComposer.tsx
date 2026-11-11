@@ -28,10 +28,13 @@ import {
   DEFAULT_MODEL,
   DEFAULT_THINKING_LEVEL,
   getAgentHarnessForModel,
+  getModelId,
+  modelThinkingLevels,
   type AgentHarness,
   type ThinkingLevel,
   getModelForSession,
 } from "@/shared/agents";
+import { useModelLists } from "@/shared/hooks/useModelLists";
 import {
   emptyComposer,
   sessionComposerActions,
@@ -127,6 +130,7 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const { session, messages, turns, error, retry, sessionStatus } =
       useSessionWithMessages(sessionId);
     const environment = useProjectEnvironment(workspaceId);
+    const modelLists = useModelLists({ cloud: session?.workspace_kind === "cloud", workspaceId });
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
     const seedModel =
@@ -162,7 +166,16 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
               sessionId,
               emptyComposer(modelOverride, defaultThinking)
             );
-            sessionComposerActions.setModel(sessionId, modelOverride, defaultThinking);
+            sessionComposerActions.setModel(
+              sessionId,
+              modelOverride,
+              modelThinkingLevels(
+                modelLists,
+                getAgentHarnessForModel(modelOverride),
+                getModelId(modelOverride)
+              ),
+              defaultThinking
+            );
           }
           return sendMessage(content, modelOverride);
         },
@@ -170,7 +183,15 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
         compactConversation,
         createPR,
       }),
-      [sendMessage, stopSession, compactConversation, createPR, sessionId, defaultThinking]
+      [
+        sendMessage,
+        stopSession,
+        compactConversation,
+        createPR,
+        sessionId,
+        defaultThinking,
+        modelLists,
+      ]
     );
 
     // The composer seeds its model ONCE (seedIfAbsent on first mount), so the
