@@ -1,4 +1,5 @@
-import { sendMutate } from "@/platform/ws";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { native } from "@/platform";
 
 export const OnboardingService = {
@@ -7,10 +8,6 @@ export const OnboardingService = {
 
   /** Persist onboarding_completed=true to settings. */
   async completeOnboarding(): Promise<void> {
-    const result = await sendMutate("saveSetting", {
-      key: "onboarding_completed",
-      value: true,
-    });
-    if (!result.success) throw new Error(result.error || "Failed to complete onboarding");
+    await call(api.saveSetting, { key: "onboarding_completed", value: true });
   },
 };

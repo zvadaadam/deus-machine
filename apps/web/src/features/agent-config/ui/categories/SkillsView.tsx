@@ -38,8 +38,8 @@ function toDisplayItems(items: SkillItem[], scope: ConfigScope): ConfigDisplayIt
 }
 
 export function SkillsView({ repoPath, repoName, toolbarAction }: SkillsViewProps) {
-  const globalQuery = useAgentConfigList<SkillItem[]>("skills", "global");
-  const projectQuery = useAgentConfigList<SkillItem[]>("skills", "project", repoPath, {
+  const globalQuery = useAgentConfigList("skills", "global");
+  const projectQuery = useAgentConfigList("skills", "project", repoPath, {
     enabled: !!repoPath,
   });
 
@@ -53,8 +53,8 @@ export function SkillsView({ repoPath, repoName, toolbarAction }: SkillsViewProp
   );
   const isLoading = globalQuery.isLoading || (!!repoPath && projectQuery.isLoading);
 
-  const saveMutation = useSaveConfigItem("skills");
-  const deleteMutation = useDeleteConfigItem("skills");
+  const saveMutation = useSaveConfigItem();
+  const deleteMutation = useDeleteConfigItem();
 
   const [formName, setFormName] = useState("");
   const [formContent, setFormContent] = useState("");
@@ -78,7 +78,9 @@ export function SkillsView({ repoPath, repoName, toolbarAction }: SkillsViewProp
       const scope = originalItem?.scope ?? crud.addingInScope ?? "global";
       saveMutation.mutate(
         {
-          data: { name: formName.trim(), content: formContent },
+          section: "skills",
+          name: formName.trim(),
+          content: formContent,
           scope,
           repoPath: scope === "project" ? repoPath : undefined,
         },
@@ -92,7 +94,8 @@ export function SkillsView({ repoPath, repoName, toolbarAction }: SkillsViewProp
     if (!crud.pendingDelete) return;
     deleteMutation.mutate(
       {
-        id: crud.pendingDelete.id,
+        section: "skills",
+        itemId: crud.pendingDelete.id,
         scope: crud.pendingDelete.scope,
         repoPath: crud.pendingDelete.scope === "project" ? repoPath : undefined,
       },

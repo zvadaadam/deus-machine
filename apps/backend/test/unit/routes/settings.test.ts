@@ -2,33 +2,26 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../../../src/middleware/error-handler";
 
+// The routes that are still fetched over HTTP. What the operations answer is
+// tested in ../api/settings.test.ts.
+
 vi.mock("../../../src/services/settings.service", () => ({
   getAllSettings: vi.fn(() => ({ theme: "dark", lang: "en" })),
   saveSetting: vi.fn(),
   getSetting: vi.fn(() => null),
   PRIVATE_SETTINGS: new Set(["relay_machines"]),
 }));
-vi.mock("../../../src/services/agent/cloud/models", () => ({
-  getCloudModelLists: vi.fn(),
-}));
 vi.mock("../../../src/services/automations", () => ({ initAutomations: vi.fn() }));
-const agents = vi.hoisted(() => ({
-  models: vi.fn(),
-  workspace: vi.fn(),
-  folders: new Set<string>(),
-}));
-vi.mock("../../../src/services/agent", () => ({ getLocalAgents: () => agents }));
-vi.mock("../../../src/lib/database", () => ({ getDatabase: () => ({}) }));
-vi.mock("../../../src/db", () => ({ getWorkspaceForMiddleware: agents.workspace }));
-vi.mock("node:fs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("node:fs")>()),
-  existsSync: (path: string) => agents.folders.has(path),
-}));
 vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: vi.fn() }));
+vi.mock("../../../src/services/keep-awake.service", () => ({ syncKeepAwake: vi.fn() }));
+// POST /settings runs the saveSetting operation's function, whose module also
+// answers for the local agents: keep the engine out of this test.
+vi.mock("../../../src/services/agent", () => ({ getLocalAgents: vi.fn() }));
 
 import settingsRoutes from "../../../src/routes/settings";
 import { getAllSettings, saveSetting } from "../../../src/services/settings.service";
-import { getCloudModelLists } from "../../../src/services/agent/cloud/models";
+import { reconcileRelay } from "../../../src/services/relay.service";
+import { getLocalAgents } from "../../../src/services/agent";
 
 // Wrap the sub-app with error handler like the real app does
 const app = new Hono();
@@ -101,81 +94,39 @@ describe("POST /settings", () => {
     });
     expect(res.status).toBe(400);
   });
-});
 
-describe("GET /settings/agent-models", () => {
-  const LISTS = [{ harness: "claude-code", source: "live", fetchedAt: 1, models: [] }];
-
-  beforeEach(() => {
-    agents.folders.clear();
-    agents.models.mockResolvedValue(LISTS);
-  });
-
-  it("answers what this computer's CLIs list", async () => {
-    const res = await app.request("/settings/agent-models");
+  it("turns remote access on as the operation does: the tunnel follows", async () => {
+    const res = await app.request("/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "remote_access_enabled", value: true }),
+    });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ lists: LISTS });
-    expect(agents.models).toHaveBeenCalledWith(undefined);
-  });
-
-  it("asks for a workspace's own folder, whose settings can narrow the list", async () => {
-    agents.workspace.mockReturnValue({ kind: "worktree", root_path: "/repo", slug: "berlin" });
-    agents.folders.add("/repo/.deus/berlin");
-    await app.request("/settings/agent-models?workspace_id=ws-1");
-    expect(agents.workspace).toHaveBeenCalledWith(expect.anything(), "ws-1");
-    expect(agents.models).toHaveBeenCalledWith("/repo/.deus/berlin");
-  });
-
-  it("asks for no folder when the workspace has none on this computer", async () => {
-    for (const workspace of [
-      undefined,
-      { kind: "cloud", root_path: "/repo", slug: "berlin" },
-      // An archived workspace's folder is gone.
-      { kind: "worktree", root_path: "/repo", slug: "gone" },
-    ]) {
-      agents.workspace.mockReturnValue(workspace);
-      await app.request("/settings/agent-models?workspace_id=ws-1");
-      expect(agents.models).toHaveBeenLastCalledWith(undefined);
-    }
+    expect(saveSetting).toHaveBeenCalledWith("remote_access_enabled", true);
+    expect(reconcileRelay).toHaveBeenCalledExactlyOnceWith({ restart: true });
   });
 });
 
-describe("GET /settings/cloud/models", () => {
-  const LISTS = [
-    {
-      harness: "claude-code",
-      source: "catalog",
-      fetchedAt: 1,
-      models: [
-        {
-          id: "opus",
-          harness: "claude-code",
-          label: "Opus 5.5",
-          thinking: { levels: ["low", "medium", "high", "xhigh", "max"] },
-        },
-      ],
-    },
-  ];
-
-  it("answers the platform's lists as listModels() returns them", async () => {
-    vi.mocked(getCloudModelLists).mockResolvedValue(LISTS as never);
-    const res = await app.request("/settings/cloud/models");
+describe("GET /settings/agent-auth", () => {
+  it("answers each local agent's CLI and login, as the operation does", async () => {
+    const answer = {
+      auth: [{ harness: "claude-code", state: "signed_in", methods: [] }],
+      clis: [{ harness: "claude-code", state: "ready" }],
+      logins: [],
+    };
+    vi.mocked(getLocalAgents).mockReturnValue({ status: async () => answer } as never);
+    const res = await app.request("/settings/agent-auth");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ configured: true, lists: LISTS });
+    expect(await res.json()).toEqual(answer);
   });
 
-  it("answers no lists, not an error, without a cloud account to ask", async () => {
-    vi.mocked(getCloudModelLists).mockResolvedValue(null);
-    const res = await app.request("/settings/cloud/models");
+  it("answers why the engine could not be asked, with a 200", async () => {
+    vi.mocked(getLocalAgents).mockImplementation(() => {
+      throw new Error("Agent server not connected");
+    });
+    const res = await app.request("/settings/agent-auth");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ configured: false, lists: [] });
-  });
-
-  it("says what failed when the platform cannot be read", async () => {
-    vi.mocked(getCloudModelLists).mockRejectedValue(new Error("Request timed out"));
-    const res = await app.request("/settings/cloud/models");
-    expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({ error: "Request timed out" });
+    expect(await res.json()).toMatchObject({ auth: [], error: "Agent server not connected" });
   });
 });
 

@@ -37,8 +37,8 @@ function toDisplayItems(items: AgentItem[], scope: ConfigScope): ConfigDisplayIt
 }
 
 export function AgentsView({ repoPath, repoName, toolbarAction }: AgentsViewProps) {
-  const globalQuery = useAgentConfigList<AgentItem[]>("agents", "global");
-  const projectQuery = useAgentConfigList<AgentItem[]>("agents", "project", repoPath, {
+  const globalQuery = useAgentConfigList("agents", "global");
+  const projectQuery = useAgentConfigList("agents", "project", repoPath, {
     enabled: !!repoPath,
   });
 
@@ -52,8 +52,8 @@ export function AgentsView({ repoPath, repoName, toolbarAction }: AgentsViewProp
   );
   const isLoading = globalQuery.isLoading || (!!repoPath && projectQuery.isLoading);
 
-  const saveMutation = useSaveConfigItem("agents");
-  const deleteMutation = useDeleteConfigItem("agents");
+  const saveMutation = useSaveConfigItem();
+  const deleteMutation = useDeleteConfigItem();
 
   const [formId, setFormId] = useState("");
   const [formName, setFormName] = useState("");
@@ -80,11 +80,10 @@ export function AgentsView({ repoPath, repoName, toolbarAction }: AgentsViewProp
       const scope = originalItem?.scope ?? crud.addingInScope ?? "global";
       saveMutation.mutate(
         {
-          data: {
-            id: formId.trim(),
-            name: formName.trim() || undefined,
-            description: formDescription.trim() || undefined,
-          },
+          section: "agents",
+          id: formId.trim(),
+          name: formName.trim() || undefined,
+          description: formDescription.trim() || undefined,
           scope,
           repoPath: scope === "project" ? repoPath : undefined,
         },
@@ -106,7 +105,8 @@ export function AgentsView({ repoPath, repoName, toolbarAction }: AgentsViewProp
     if (!crud.pendingDelete) return;
     deleteMutation.mutate(
       {
-        id: crud.pendingDelete.id,
+        section: "agents",
+        itemId: crud.pendingDelete.id,
         scope: crud.pendingDelete.scope,
         repoPath: crud.pendingDelete.scope === "project" ? repoPath : undefined,
       },

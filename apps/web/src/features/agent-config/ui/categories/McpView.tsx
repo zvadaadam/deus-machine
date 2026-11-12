@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
  * MCP Servers category view — fetches, displays, and manages CRUD for MCP server configs.
  *
  * MCP servers have: name (identity), command, args (array), env (key-value map).
- * The API endpoint is /agent-config/mcp-servers (hyphenated).
+ * The section is named "mcp-servers" (hyphenated).
  *
- * NOTE: MCP servers are saved as a full array via POST /config/mcp-servers,
- * not individually. The save mutation replaces the entire servers list via POST /agent-config/mcp-servers.
- * For add/edit, we rebuild the full list and POST it.
+ * NOTE: MCP servers are saved as a full array, not individually: the save
+ * replaces the entire servers list. For add/edit/delete, we rebuild the full
+ * list and save it.
  */
 
 import { useState, useMemo, useCallback } from "react";
@@ -39,8 +39,8 @@ function toDisplayItems(items: McpServerItem[], scope: ConfigScope): ConfigDispl
 }
 
 export function McpView({ repoPath, repoName, toolbarAction }: McpViewProps) {
-  const globalQuery = useAgentConfigList<McpServerItem[]>("mcp-servers", "global");
-  const projectQuery = useAgentConfigList<McpServerItem[]>("mcp-servers", "project", repoPath, {
+  const globalQuery = useAgentConfigList("mcp-servers", "global");
+  const projectQuery = useAgentConfigList("mcp-servers", "project", repoPath, {
     enabled: !!repoPath,
   });
 
@@ -54,7 +54,7 @@ export function McpView({ repoPath, repoName, toolbarAction }: McpViewProps) {
   );
   const isLoading = globalQuery.isLoading || (!!repoPath && projectQuery.isLoading);
 
-  const saveMutation = useSaveConfigItem("mcp-servers");
+  const saveMutation = useSaveConfigItem();
 
   const [formName, setFormName] = useState("");
   const [formCommand, setFormCommand] = useState("");
@@ -96,7 +96,7 @@ export function McpView({ repoPath, repoName, toolbarAction }: McpViewProps) {
         if (eq > 0) env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
       }
 
-      // MCP servers endpoint expects { servers: [...] } for a full replace.
+      // Saving MCP servers takes the full list and replaces what was there.
       // Rebuild the list from query data, replacing or appending the edited server.
       const currentList = (scope === "project" ? projectQuery.data : globalQuery.data) ?? [];
       const newServer: McpServerItem = {
@@ -119,7 +119,8 @@ export function McpView({ repoPath, repoName, toolbarAction }: McpViewProps) {
 
       saveMutation.mutate(
         {
-          data: { servers: updatedList },
+          section: "mcp-servers",
+          servers: updatedList,
           scope,
           repoPath: scope === "project" ? repoPath : undefined,
         },
@@ -146,7 +147,8 @@ export function McpView({ repoPath, repoName, toolbarAction }: McpViewProps) {
     const updatedList = currentList.filter((s) => s.name !== crud.pendingDelete!.id);
     saveMutation.mutate(
       {
-        data: { servers: updatedList },
+        section: "mcp-servers",
+        servers: updatedList,
         scope,
         repoPath: scope === "project" ? repoPath : undefined,
       },

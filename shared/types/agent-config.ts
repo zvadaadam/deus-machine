@@ -1,9 +1,6 @@
 /**
- * Agent Config response types — shared between frontend and backend.
- *
- * These describe the shapes returned by the backend config endpoints
- * (GET /config/{category}). Both the backend service functions and
- * the frontend query hooks reference these types.
+ * An agent's configuration, as the backend reads it from Claude Code's files
+ * and as the `agentConfig` operations carry it (`shared/api/settings.ts`).
  *
  * File formats on disk:
  * - Skills: {dir}/skills/{name}/SKILL.md (YAML frontmatter + markdown)
@@ -13,21 +10,20 @@
  * - Hooks: {dir}/settings.json → hooks key (event→handler map)
  */
 
-/** GET /config/skills */
+import { z } from "zod";
+
 export interface SkillItem {
   name: string;
   description: string;
   content: string;
 }
 
-/** GET /config/commands */
 export interface CommandItem {
   name: string;
   description: string;
   content: string;
 }
 
-/** GET /config/agents */
 export interface AgentItem {
   id: string;
   name?: string;
@@ -35,7 +31,6 @@ export interface AgentItem {
   tools?: string[];
 }
 
-/** GET /config/mcp-servers */
 export interface McpServerItem {
   name: string;
   command: string;
@@ -43,18 +38,34 @@ export interface McpServerItem {
   env: Record<string, string>;
 }
 
+// Hooks are Claude Code's own format and are saved whole, so a field Deus does
+// not edit (another hook type, a field added later) is kept as it was read.
+const HookCommandSchema = z.looseObject({
+  type: z.string().optional(),
+  command: z.string(),
+  timeout: z.number().optional(),
+});
+
+const HookMatcherGroupSchema = z.looseObject({
+  matcher: z.string().optional(),
+  hooks: z.array(HookCommandSchema).optional(),
+});
+
+/** Every hook: event name → matcher groups. */
+export const HooksMapSchema = z.record(z.string(), z.array(HookMatcherGroupSchema));
+
 /** Individual hook command within a matcher group */
-export interface HookCommand {
-  type: "command";
-  command: string;
-  timeout?: number;
-}
-
+export type HookCommand = z.infer<typeof HookCommandSchema>;
 /** A matcher group containing one or more hook commands */
-export interface HookMatcherGroup {
-  matcher?: string;
-  hooks?: HookCommand[];
-}
+export type HookMatcherGroup = z.infer<typeof HookMatcherGroupSchema>;
+export type HooksMap = z.infer<typeof HooksMapSchema>;
 
-/** GET /config/hooks — full hooks map (event name → matcher groups) */
-export type HooksMap = Record<string, HookMatcherGroup[]>;
+/** What each section of the configuration reads as. */
+export interface AgentConfigBySection {
+  "mcp-servers": McpServerItem[];
+  commands: CommandItem[];
+  agents: AgentItem[];
+  hooks: HooksMap;
+  skills: SkillItem[];
+}
+export type AgentConfigSection = keyof AgentConfigBySection;

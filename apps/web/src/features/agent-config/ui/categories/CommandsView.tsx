@@ -38,8 +38,8 @@ function toDisplayItems(items: CommandItem[], scope: ConfigScope): ConfigDisplay
 }
 
 export function CommandsView({ repoPath, repoName, toolbarAction }: CommandsViewProps) {
-  const globalQuery = useAgentConfigList<CommandItem[]>("commands", "global");
-  const projectQuery = useAgentConfigList<CommandItem[]>("commands", "project", repoPath, {
+  const globalQuery = useAgentConfigList("commands", "global");
+  const projectQuery = useAgentConfigList("commands", "project", repoPath, {
     enabled: !!repoPath,
   });
 
@@ -53,8 +53,8 @@ export function CommandsView({ repoPath, repoName, toolbarAction }: CommandsView
   );
   const isLoading = globalQuery.isLoading || (!!repoPath && projectQuery.isLoading);
 
-  const saveMutation = useSaveConfigItem("commands");
-  const deleteMutation = useDeleteConfigItem("commands");
+  const saveMutation = useSaveConfigItem();
+  const deleteMutation = useDeleteConfigItem();
 
   const [formName, setFormName] = useState("");
   const [formContent, setFormContent] = useState("");
@@ -78,7 +78,9 @@ export function CommandsView({ repoPath, repoName, toolbarAction }: CommandsView
       const scope = originalItem?.scope ?? crud.addingInScope ?? "global";
       saveMutation.mutate(
         {
-          data: { name: formName.trim(), content: formContent },
+          section: "commands",
+          name: formName.trim(),
+          content: formContent,
           scope,
           repoPath: scope === "project" ? repoPath : undefined,
         },
@@ -92,7 +94,8 @@ export function CommandsView({ repoPath, repoName, toolbarAction }: CommandsView
     if (!crud.pendingDelete) return;
     deleteMutation.mutate(
       {
-        id: crud.pendingDelete.id,
+        section: "commands",
+        itemId: crud.pendingDelete.id,
         scope: crud.pendingDelete.scope,
         repoPath: crud.pendingDelete.scope === "project" ? repoPath : undefined,
       },

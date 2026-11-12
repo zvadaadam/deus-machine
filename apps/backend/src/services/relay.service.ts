@@ -12,6 +12,7 @@ import { execSync } from "child_process";
 import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
+import type { RelayState, RelayStatus } from "@shared/types/devices";
 import { RELAY_PROTOCOL, type ServerFrame, type RelayFrame } from "@shared/types/relay";
 import { getSetting } from "./settings.service";
 import {
@@ -38,9 +39,6 @@ import {
   type WsSendable,
 } from "./ws.service";
 import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "./query-engine";
-
-/** What Settings shows: off, waiting for sign-in, dialing, serving viewers, or removed. */
-export type RelayState = "off" | "signed_out" | "connecting" | "connected" | "removed";
 
 // ---- Tunnel State ----
 
@@ -154,18 +152,8 @@ export function disconnectFromRelay(): void {
   dropClients();
 }
 
-export function getRelayStatus(): {
-  state: RelayState;
-  connected: boolean;
-  clients: number;
-  serverId: string | null;
-  serverName: string;
-  accountId: string | null;
-  relayUrl: string;
-  error: string | null;
-  /** This computer's OS, for a viewer on another device ("Keep this Mac awake"). */
-  platform: NodeJS.Platform;
-} {
+/** What Settings shows about the tunnel (`relayStatus`, and `GET /api/relay/status`). */
+export function getRelayStatus(): RelayStatus {
   const enabled = getSetting("remote_access_enabled") === true;
   const connected = tunnelWs?.readyState === WebSocket.OPEN;
   const session = enabled && !hostAccount ? currentAccountSession() : null;
@@ -194,6 +182,7 @@ export function getRelayStatus(): {
         : state === "removed"
           ? new MachineRemovedError().message
           : null,
+    // For a viewer on another device ("Keep this Mac awake").
     platform: process.platform,
   };
 }

@@ -1,21 +1,11 @@
 import { timingSafeEqual } from "crypto";
 import { Hono } from "hono";
-import type { CloudModelCatalog } from "@shared/cloud-models";
-import { getAllSettings, PRIVATE_SETTINGS, saveSetting } from "../services/settings.service";
-import { CloudCredentialsBody, parseBody, SaveSettingBody } from "../lib/schemas";
+import * as api from "@shared/api/settings";
+import { readAgentAuth, writeSetting } from "../api/settings";
+import { getAllSettings } from "../services/settings.service";
+import { CloudCredentialsBody, parseBody } from "../lib/schemas";
 import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
-import { getCloudModelLists } from "../services/agent/cloud/models";
 import { reconcileRelay } from "../services/relay.service";
-import { syncKeepAwake } from "../services/keep-awake.service";
-import { disconnectDirectDevices } from "../services/ws.service";
-import { invalidateRemoteGateCache } from "../middleware/remote-gate";
-import { getLocalAgents } from "../services/agent";
-import type { AgentAuthAnswer } from "@shared/agent-auth";
-import type { AgentModelsAnswer } from "@shared/models";
-import { existsSync } from "node:fs";
-import { getDatabase } from "../lib/database";
-import { getWorkspaceForMiddleware } from "../db";
-import { computeWorkspacePath } from "../middleware/workspace-loader";
 import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
@@ -26,71 +16,30 @@ import { AppError, ValidationError } from "../lib/errors";
 
 const app = new Hono();
 
-app.get("/settings", (c) => {
-  return c.json(getAllSettings());
-});
+// Preferences, agent configuration and the local agents are operations: see
+// api/settings.ts. What stays here is still fetched over HTTP, by whom each says.
+
+// The remote-access test stack (test/e2e/remote-access) checks who may read the
+// preferences and turns remote access on and off over HTTP.
+app.get("/settings", (c) => c.json(getAllSettings()));
 
 app.post("/settings", async (c) => {
-  const { key, value } = parseBody(SaveSettingBody, await c.req.json());
-  if (PRIVATE_SETTINGS.has(key)) throw new ValidationError(`${key} is not a setting`);
-  saveSetting(key, value);
-
-  if (key === "remote_access_enabled") {
-    // The gate refuses the local network from now on, not in five seconds.
-    invalidateRemoteGateCache();
-    // Turning it on is also how a computer removed from the account is added again.
-    reconcileRelay({ restart: value === true });
-    if (value !== true) disconnectDirectDevices();
-  }
-  if (key === "remote_access_enabled" || key === "remote_keep_awake") syncKeepAwake();
-
+  const { key, value } = parseBody(api.saveSetting.input, await c.req.json());
+  writeSetting(key, value);
   return c.json({ success: true, key, value });
 });
 
-// Each local agent's CLI and login, and the sign-ins under way.
-app.get("/settings/agent-auth", async (c) => {
-  const answer: AgentAuthAnswer = await Promise.resolve()
-    .then(() => getLocalAgents().status())
-    .catch((err: unknown) => ({
-      auth: [],
-      clis: [],
-      logins: [],
-      error: err instanceof Error ? err.message : String(err),
-    }));
-  return c.json(answer);
-});
-
-// The models each local agent offers, as its CLI lists them for this
-// computer's login. A workspace asks for its own folder, whose settings can
-// narrow Claude's list.
-app.get("/settings/agent-models", async (c) => {
-  const workspaceId = c.req.query("workspace_id");
-  const workspace = workspaceId ? getWorkspaceForMiddleware(getDatabase(), workspaceId) : undefined;
-  const folder = workspace ? computeWorkspacePath(workspace) : "";
-  const answer: AgentModelsAnswer = {
-    lists: await getLocalAgents().models(folder && existsSync(folder) ? folder : undefined),
-  };
-  return c.json(answer);
-});
+// `deus status` (apps/cli) lists each local agent's CLI and login.
+app.get("/settings/agent-auth", async (c) => c.json(await readAgentAuth()));
 
 // ── Cloud workspaces ────────────────────────────────────────────────
 
+// The web app asks whether this computer is signed in to Deus Cloud (useCloudSettings).
 app.get("/settings/cloud", async (c) => {
   return c.json(await getCloudSettingsStatus());
 });
 
-// The models Deus Cloud runs, per harness, as the platform lists them.
-app.get("/settings/cloud/models", async (c) => {
-  const lists = await getCloudModelLists().catch((err: unknown) => {
-    // The platform being unreachable is not a backend fault: say what failed.
-    throw new AppError(502, err instanceof Error ? err.message : String(err));
-  });
-  const catalog: CloudModelCatalog = lists
-    ? { configured: true, lists }
-    : { configured: false, lists: [] };
-  return c.json(catalog);
-});
-
+// The web app's Settings → GitHub saves the token cloud sandboxes use (GithubCloudAccess).
 app.post("/settings/cloud/github-token", async (c) => {
   const body = (await c.req.json()) as { token?: string };
   const token = body.token?.trim();

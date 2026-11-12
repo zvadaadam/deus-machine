@@ -28,7 +28,7 @@ import {
   useRevokeDevice,
   useRelayStatus,
 } from "../../api/auth.queries";
-import type { PairedDevice } from "../../api/auth.service";
+import type { PairedDevice } from "@shared/types/devices";
 import type { SettingsSectionProps } from "./types";
 
 // ---------------------------------------------------------------------------

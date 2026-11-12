@@ -8,8 +8,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { toast } from "sonner";
 import type { AgentAuthAnswer, AgentAuthEvent, HarnessCliProgress } from "@shared/agent-auth";
-import { onEvent } from "@/platform/ws";
-import { SettingsService } from "./settings.service";
+import { api } from "@shared/api";
+import { call, onEvent } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
 import type { Settings } from "../types";
@@ -22,7 +22,7 @@ import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings.all,
-    queryFn: () => SettingsService.fetch(),
+    queryFn: () => call(api.settings),
     staleTime: 30000, // Cache for 30s (settings change less frequently)
   });
 }
@@ -34,7 +34,7 @@ export function useSettings() {
 export function useAgentAuth(enabled = true) {
   return useQuery({
     queryKey: queryKeys.settings.agentAuth,
-    queryFn: () => SettingsService.fetchAgentAuth(),
+    queryFn: () => call(api.agentAuth),
     staleTime: 60000, // Cache for 60s — agent-server says when a login changes
     enabled,
   });
@@ -111,7 +111,11 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (settings: Partial<Settings>) => SettingsService.update(settings),
+    // One key at a time: the settings page saves each control as it changes.
+    mutationFn: (settings: Partial<Settings>) => {
+      const [key, value] = Object.entries(settings)[0];
+      return call(api.saveSetting, { key, value });
+    },
 
     // Optimistic update: Apply settings immediately
     onMutate: async (newSettings: Partial<Settings>) => {

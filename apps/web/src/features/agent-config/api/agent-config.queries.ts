@@ -1,8 +1,8 @@
 /**
  * Agent Config Query Hooks — TanStack Query v5
  *
- * One generic list hook per scope+category. Category views call this
- * with their specific type parameter.
+ * One list hook per scope+section. Category views call it with their section
+ * and get that section's type back.
  *
  * In "both" mode, the UI component calls the hook twice (once for
  * global, once for project) and merges results.
@@ -10,43 +10,46 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { queryKeys } from "@/shared/api/queryKeys";
-import { AgentConfigService } from "./agent-config.service";
+import { api, type InputOf } from "@shared/api";
+import type { AgentConfigSection } from "@shared/types/agent-config";
 import { getErrorMessage } from "@shared/lib/errors";
+import { call } from "@/platform/ws";
+import { queryKeys } from "@/shared/api/queryKeys";
+import type { ConfigScope } from "../types";
+import { readAgentConfig } from "./agent-config.service";
 
-/**
- * Fetch config items for a category + scope.
- * T = the shape the backend returns (e.g. SkillItem[], CommandItem[], etc.)
- */
-export function useAgentConfigList<T>(
-  category: string,
-  scope: string,
+/** Fetch one section's config items for a scope. */
+export function useAgentConfigList<Section extends AgentConfigSection>(
+  section: Section,
+  scope: ConfigScope,
   repoPath?: string,
   options?: { enabled?: boolean }
 ) {
   return useQuery({
-    queryKey: queryKeys.agentConfig.category(category, scope, repoPath),
-    queryFn: () => AgentConfigService.list<T>(category, scope, repoPath),
+    queryKey: queryKeys.agentConfig.category(section, scope, repoPath),
+    queryFn: () => readAgentConfig(section, scope, repoPath),
     staleTime: 30_000,
     enabled: options?.enabled,
   });
 }
 
+/** The section's cache entry a write just made stale. */
+function categoryKey(input: { section: string; scope?: ConfigScope; repoPath?: string }) {
+  return queryKeys.agentConfig.category(input.section, input.scope ?? "global", input.repoPath);
+}
+
 /**
- * Save (create or update) a config item.
- * Invalidates the category cache on success.
+ * Save (create or update) a config item, or a whole section for the ones saved
+ * whole. Invalidates the section's cache on success.
  */
-export function useSaveConfigItem(category: string) {
+export function useSaveConfigItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (params: { data: Record<string, unknown>; scope: string; repoPath?: string }) =>
-      AgentConfigService.save(category, params.data, params.scope, params.repoPath),
+    mutationFn: (input: InputOf<typeof api.saveAgentConfig>) => call(api.saveAgentConfig, input),
 
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentConfig.category(category, variables.scope, variables.repoPath),
-      });
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: categoryKey(input) });
     },
 
     onError: (error) => {
@@ -57,19 +60,17 @@ export function useSaveConfigItem(category: string) {
 
 /**
  * Delete a config item.
- * Invalidates the category cache on success.
+ * Invalidates the section's cache on success.
  */
-export function useDeleteConfigItem(category: string) {
+export function useDeleteConfigItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (params: { id: string; scope: string; repoPath?: string }) =>
-      AgentConfigService.remove(category, params.id, params.scope, params.repoPath),
+    mutationFn: (input: InputOf<typeof api.deleteAgentConfig>) =>
+      call(api.deleteAgentConfig, input),
 
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentConfig.category(category, variables.scope, variables.repoPath),
-      });
+    onSuccess: (_data, input) => {
+      queryClient.invalidateQueries({ queryKey: categoryKey(input) });
     },
 
     onError: (error) => {

@@ -30,7 +30,7 @@ export function isLocalHarness(value: unknown): value is LocalHarness {
   return (LOCAL_HARNESSES as readonly unknown[]).includes(value);
 }
 
-/** q:request "agentAuth": each harness's CLI and login, and the sign-ins under way. */
+/** `agentAuth`: each harness's CLI and login, and the sign-ins under way. */
 export interface AgentAuthAnswer {
   auth: HarnessAuth[];
   clis: HarnessCli[];
@@ -41,7 +41,7 @@ export interface AgentAuthAnswer {
 }
 
 /**
- * q:command "agentSignIn": the login this computer already has of that kind
+ * `agentSignIn`: the login this computer already has of that kind
  * (nothing opens), or the sign-in under way.
  */
 export type AgentSignInAnswer = { already: HarnessAuth } | { login: AuthLogin };
