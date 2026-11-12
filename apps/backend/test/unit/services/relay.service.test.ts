@@ -477,7 +477,7 @@ describe("device revocation", () => {
     });
 
     transport.query.mockClear();
-    const frame = { type: "q:command", command: "sendMessage" };
+    const frame = { type: "q:mutate", id: "m1", action: "sendMessage", params: {} };
     handleProtocolMessage(directId, frame);
     receive({ type: "data", clientId: "relay-phone", payload: JSON.stringify(frame) });
     expect(transport.query).not.toHaveBeenCalled();

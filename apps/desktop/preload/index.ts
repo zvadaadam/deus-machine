@@ -67,7 +67,7 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "native:openPath",
   "native:revealInFinder",
 
-  // iOS Simulator — all operations moved to backend (q:command protocol).
+  // iOS Simulator — every operation is the backend's (asked over its socket).
   // No IPC channels needed.
 ]);
 
