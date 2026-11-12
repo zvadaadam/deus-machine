@@ -847,16 +847,16 @@ describe("q:mutate → q:mutate_result", () => {
   });
 });
 
-describe("q:command → q:command_ack", () => {
-  it("sends a message via q:command and returns command_ack", async () => {
+describe("sending and stopping", () => {
+  it("refuses a send no agent can run, and says so in the result", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(
         ws,
         {
-          type: "q:command",
+          type: "q:mutate",
           id: "cmd-1",
-          command: "sendMessage",
+          action: "sendMessage",
           params: {
             sessionId: SESS_ID,
             content: "command test",
@@ -865,17 +865,16 @@ describe("q:command → q:command_ack", () => {
             turnId: "turn-cmd-1",
           },
         },
-        "q:command_ack"
+        "q:mutate_result"
       );
 
       expect(res.id).toBe("cmd-1");
       // There is no agent server behind this test, so NO turn was admitted and
-      // the ack must say so. `accepted: true` here used to be the assertion —
-      // it is the exact bug: the frontend's optimistic bubble is the only copy
-      // of the user's prompt until the engine echoes it (this command writes
-      // no message row, see the count below), and only a rejected ack runs the
-      // rollback. An accepted one strands the bubble for a turn that never ran.
-      expect(res.accepted).toBe(false);
+      // the result must say so. The frontend's optimistic bubble is the only
+      // copy of the user's prompt until the engine echoes it (the send writes
+      // no message row, see the count below), and only a refusal runs the
+      // rollback. A success would strand the bubble for a turn that never ran.
+      expect(res.success).toBe(false);
       expect(res.error).toMatch(/disconnected/i);
 
       // No user message row is written here — the send only flips the session
@@ -885,7 +884,7 @@ describe("q:command → q:command_ack", () => {
         .get(SESS_ID) as { n: number };
       expect(messageCount.n).toBe(3);
 
-      // The session still lands on "error": the rejected ack tells the caller,
+      // The session still lands on "error": the refusal tells the caller,
       // the status tells every other subscriber.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
@@ -896,7 +895,7 @@ describe("q:command → q:command_ack", () => {
     }
   });
 
-  it("acknowledges Stop as unconfirmed when no agent link can confirm it", async () => {
+  it("answers Stop as unconfirmed when no agent link can confirm it", async () => {
     const { ws } = await connectAndAuth();
     try {
       // First set session to working
@@ -905,19 +904,20 @@ describe("q:command → q:command_ack", () => {
       const res = await sendAndReceive(
         ws,
         {
-          type: "q:command",
+          type: "q:mutate",
           id: "cmd-stop-1",
-          command: "stopSession",
+          action: "stopSession",
           params: { sessionId: SESS_ID },
         },
-        "q:command_ack"
+        "q:mutate_result"
       );
 
       expect(res.id).toBe("cmd-stop-1");
-      expect(res.accepted).toBe(true);
+      expect(res.success).toBe(true);
+      expect(res.data).toEqual({ unconfirmed: true });
 
-      // This fixture has no native agent link; accepting the command is not
-      // evidence that its execution stopped.
+      // This fixture has no native agent link; a Stop that was sent is not
+      // evidence that the turn stopped.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
         .get(SESS_ID) as { status: string };
@@ -963,13 +963,13 @@ describe("q:command → q:command_ack", () => {
         "q:snapshot"
       );
 
-      // Send message via q:command — triggers invalidation with sessionId context
+      // Send a message: triggers invalidation with sessionId context
       const deltaPromise = waitForMessage(ws, "q:delta");
       ws.send(
         JSON.stringify({
-          type: "q:command",
+          type: "q:mutate",
           id: "cmd-delta-1",
-          command: "sendMessage",
+          action: "sendMessage",
           params: {
             sessionId: SESS_ID,
             content: "delta check",
@@ -979,14 +979,14 @@ describe("q:command → q:command_ack", () => {
         })
       );
 
-      // Wait for both the command ack and the delta push
-      const [ack, delta] = await Promise.all([waitForMessage(ws, "q:command_ack"), deltaPromise]);
+      // Wait for both the result and the delta push
+      const [ack, delta] = await Promise.all([waitForMessage(ws, "q:mutate_result"), deltaPromise]);
 
       // Rejected (no agent server in this test) — but the point here is the
       // INVALIDATION, which fires on the optimistic "working" flip before the
       // no-turn guard is reached. Subscribers see the flip either way; the
       // caller learns separately that its turn was refused.
-      expect(ack.accepted).toBe(false);
+      expect(ack.success).toBe(false);
       expect(delta.id).toBe("sub_ws_delta");
       expect(delta.upserted).toHaveLength(1);
       expect(delta.upserted[0].id).toBe(WS_ID);

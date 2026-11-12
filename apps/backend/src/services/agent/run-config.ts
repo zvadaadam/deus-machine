@@ -74,12 +74,8 @@ export interface DeusTurnOptions {
   model?: string;
   thinkingLevel?: ThinkingLevel;
   permissionMode?: PermissionMode;
-  maxTurns?: number;
-  additionalDirectories?: string[];
   /** Native session id to resume (sessions.agent_session_id). */
   resume?: string;
-  /** Checkpoint revert: fork the resumed session at a specific message. */
-  resumeSessionAt?: string;
   /** From the initialize handshake — whether this harness accepts image parts. */
   supportsImages?: boolean;
   /** The installed apps' MCP servers (services/integrations/runtime.ts). */
@@ -119,13 +115,11 @@ export function buildTurnStartParams(
       // Deus runs with full access by default, like its cloud runtime.
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",
-      maxTurns: options.maxTurns ?? 1000,
+      maxTurns: 1000,
       // The agent's questions reach the question card (the service answers
       // `elicitation.requested`), Claude's and Codex's alike.
       elicitation: true,
-      additionalDirectories: options.additionalDirectories,
       resumeSessionId: options.resume,
-      resumeSessionAt: options.resumeSessionAt,
       ...(options.mcpServers && Object.keys(options.mcpServers).length
         ? { mcpServers: options.mcpServers }
         : {}),

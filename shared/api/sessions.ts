@@ -1,3 +1,84 @@
 /** Sessions: the chats in a workspace, their transcripts, and sending to them. */
 
-export {};
+import { z } from "zod";
+import { AgentHarnessSchema } from "../enums";
+import type { PaginatedMessages, Session } from "../types/session";
+import { live, out, read, write } from "./op";
+
+const sessionId = z.object({ sessionId: z.string().min(1) });
+const workspaceId = z.object({ workspaceId: z.string().min(1) });
+
+/** A workspace's chats, oldest first: its tabs. */
+export const sessions = live({ name: "sessions", input: workspaceId, output: out<Session[]>() });
+
+/** One chat's facts and status. Null once it has been deleted. */
+export const session = live({ name: "session", input: sessionId, output: out<Session | null>() });
+
+/**
+ * The latest page of a chat's transcript, or the page before `before` (a
+ * message seq). Subscribing does not send a page: it sends the messages
+ * written after the subscription began, as deltas.
+ */
+export const messages = live({
+  name: "messages",
+  input: sessionId.extend({
+    limit: z.number().int().positive().optional(),
+    before: z.number().int().positive().optional(),
+  }),
+  output: out<PaginatedMessages>(),
+});
+
+/** Every chat on this computer, hidden ones included. */
+export const allSessions = read({ name: "allSessions", output: out<Session[]>() });
+
+/**
+ * A short-lived token that lets this client open a cloud chat's own channel
+ * to Deus Cloud, without this computer in between.
+ */
+export const cloudDirectToken = read({
+  name: "cloudDirectToken",
+  input: sessionId,
+  output: out<{
+    token: string;
+    base_url: string;
+    provider_session_id: string;
+    /** Seconds. The client asks again before this runs out. */
+    expires_in: number;
+  }>(),
+});
+
+/** Open a new chat in a workspace and make it the workspace's current one. */
+export const createSession = write({
+  name: "createSession",
+  input: workspaceId,
+  output: out<Session>(),
+});
+
+/**
+ * Start a turn. Answers once the agent has admitted it; the prompt and the
+ * reply then arrive as the session's events. Refused while a turn is running.
+ */
+export const sendMessage = write({
+  name: "sendMessage",
+  input: sessionId.extend({
+    content: z.string().min(1),
+    model: z.string().min(1),
+    agentHarness: AgentHarnessSchema,
+    /** The caller's id for this turn: its optimistic bubble and the agent's echo share it. */
+    turnId: z.string().min(1).optional(),
+    permissionMode: z.string().optional(),
+    /** A cloud turn must name one; a local turn uses the model's default without it. */
+    thinkingLevel: z.string().optional(),
+  }),
+  output: out<{ turnId: string }>(),
+});
+
+/**
+ * Stop the running turn. `unconfirmed` means the stop was sent but the agent
+ * has not acknowledged it: the chat stays as it is until its turn really ends.
+ */
+export const stopSession = write({
+  name: "stopSession",
+  input: sessionId,
+  output: out<{ unconfirmed: boolean }>(),
+});

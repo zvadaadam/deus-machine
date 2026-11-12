@@ -11,7 +11,7 @@ import {
   projectCloudSnapshot,
   type AgentConversationSnapshot,
 } from "@shared/cloud-session-snapshot";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import { isUnknownPart, type LifecycleEvent } from "@shared/protocol-types";
 import type { Message, Session } from "@shared/types/session";
 

@@ -13,7 +13,6 @@ import { getRelayStatus } from "./services/relay.service";
 import { isLocalhost, getClientIp } from "./lib/network";
 import healthRoutes from "./routes/health";
 import workspaceRoutes from "./routes/workspaces";
-import sessionRoutes from "./routes/sessions";
 import repoRoutes from "./routes/repos";
 import agentConfigRoutes from "./routes/agent-config";
 import settingsRoutes from "./routes/settings";
@@ -44,7 +43,6 @@ export function createApp() {
   app.route("/api", healthRoutes);
   app.route("/api", authRoutes);
   app.route("/api", workspaceRoutes);
-  app.route("/api", sessionRoutes);
   app.route("/api", repoRoutes);
   app.route("/api", agentConfigRoutes);
   app.route("/api", settingsRoutes);

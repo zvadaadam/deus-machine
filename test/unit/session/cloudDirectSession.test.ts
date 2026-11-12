@@ -10,7 +10,7 @@ import { messagesKey } from "@/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import { CloudSimulatorEventSchema } from "@shared/events";
 import {
   cloudSimulatorActions,

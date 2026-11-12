@@ -18,7 +18,8 @@
  */
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { SessionService } from "../api/session.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import type { Session } from "../types";
 import { isCloudDirectEnabled } from "./cloudDirectFlag";
 
@@ -31,7 +32,7 @@ import { isCloudDirectEnabled } from "./cloudDirectFlag";
 export function sessionDetailQueryOptions(sessionId: string) {
   return {
     queryKey: queryKeys.sessions.detail(sessionId),
-    queryFn: () => SessionService.fetchById(sessionId),
+    queryFn: () => call(api.session, { sessionId }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   } as const;
@@ -42,7 +43,8 @@ export function sessionDetailQueryOptions(sessionId: string) {
  * cloud tab renders via the Mac lane until its first send assigns
  * provider_session_id, then flips to direct.
  */
-function isDirectRow(session: Session | undefined): boolean {
+/** A deleted session reads as null, an unloaded one as undefined: neither is direct. */
+function isDirectRow(session: Session | null | undefined): boolean {
   return !!session && session.workspace_kind === "cloud" && !!session.provider_session_id;
 }
 

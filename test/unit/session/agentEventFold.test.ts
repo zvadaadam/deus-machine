@@ -29,7 +29,7 @@ import {
   type SessionFold,
 } from "../../../apps/web/src/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
-import type { PaginatedMessages } from "../../../apps/web/src/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../../../shared/types/session";
 import type { LifecycleEvent, Part, WireEventEnvelope } from "../../../shared/protocol-types";
 

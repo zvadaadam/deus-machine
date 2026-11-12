@@ -7,12 +7,15 @@
  */
 
 import type {
+  AgentHarness,
+  MessageRole,
   SessionStatus,
   SetupStatus,
   WorkspaceKind,
   WorkspaceState,
   WorkspaceStatus,
 } from "@shared/enums";
+import type { ErrorCategory } from "@shared/protocol-types";
 
 // ─── repositories ────────────────────────────────────────────
 
@@ -116,15 +119,15 @@ export interface WorkspaceWithDetailsRow {
 export interface SessionRow {
   id: string;
   workspace_id: string;
-  agent_harness: string;
+  agent_harness: AgentHarness;
   agent_session_id: string | null;
   /** agnt session id for cloud-workspace sessions (null for local). */
   provider_session_id: string | null;
   title: string | null;
-  status: string;
+  status: SessionStatus;
   message_count: number;
   error_message: string | null;
-  error_category: string | null;
+  error_category: ErrorCategory | null;
   last_user_message_at: string | null;
   context_token_count: number;
   context_used_percent: number;
@@ -137,7 +140,7 @@ export interface SessionWithDetailsRow extends SessionRow {
   slug: string | null;
   workspace_state: string | null;
   /** Owning workspace's kind, joined on s.workspace_id ("worktree" | "cloud"). */
-  workspace_kind: string | null;
+  workspace_kind: WorkspaceKind | null;
 }
 
 // ─── messages ────────────────────────────────────────────────
@@ -146,7 +149,7 @@ export interface MessageRow {
   id: string;
   session_id: string;
   seq: number;
-  role: string;
+  role: MessageRole;
   turn_id: string | null;
   model: string | null;
   sent_at: string | null;

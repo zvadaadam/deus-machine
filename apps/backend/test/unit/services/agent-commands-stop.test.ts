@@ -29,7 +29,7 @@ const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 
-import { runCommand } from "../../../src/services/agent/commands";
+import { stopSession } from "../../../src/services/agent/commands";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 
@@ -79,7 +79,7 @@ describeWithDb("stopSession", () => {
       turnId: "turn-1",
     });
 
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
 
     expect(status()).toBe("idle");
   });
@@ -87,7 +87,7 @@ describeWithDb("stopSession", () => {
   it("goes idle when there was no active turn to cancel", async () => {
     vi.spyOn(agentService, "stopSession").mockResolvedValue({ outcome: "no_active_turn" });
 
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
 
     expect(status()).toBe("idle");
   });
@@ -97,7 +97,7 @@ describeWithDb("stopSession", () => {
       outcome: "no_active_turn",
       activeTurnId: "turn-2",
     });
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
     expect(status()).toBe("working");
     expect(mockInvalidate).not.toHaveBeenCalled();
   });
@@ -108,7 +108,7 @@ describeWithDb("stopSession", () => {
       turnId: "turn-1",
     });
 
-    const result = await runCommand("stopSession", { sessionId: SESSION });
+    const result = await stopSession({ sessionId: SESSION });
 
     expect(result).toEqual({ unconfirmed: true });
     expect(status()).toBe("working");
@@ -120,7 +120,7 @@ describeWithDb("stopSession", () => {
       turnId: "turn-1",
     });
 
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(status()).toBe("working");
@@ -142,7 +142,7 @@ describeWithDb("stopSession", () => {
         turnId: "turn-1",
       });
 
-      await runCommand("stopSession", { sessionId: SESSION });
+      await stopSession({ sessionId: SESSION });
       expect(status()).toBe(startingStatus);
 
       await vi.advanceTimersByTimeAsync(20_000);
@@ -160,7 +160,7 @@ describeWithDb("stopSession", () => {
       turnId: "turn-1",
     });
 
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
     // turn.ended lands while the watchdog is pending.
     db.prepare(`UPDATE sessions SET status = 'idle' WHERE id = ?`).run(SESSION);
     await vi.advanceTimersByTimeAsync(20_000);
@@ -181,7 +181,7 @@ describeWithDb("stopSession", () => {
       });
       const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
 
-      await runCommand("stopSession", { sessionId: SESSION });
+      await stopSession({ sessionId: SESSION });
 
       // turn-1 ends, turn-2 is admitted, and the session is working again.
       liveTurn.mockReturnValue("turn-2");
@@ -201,7 +201,7 @@ describeWithDb("stopSession", () => {
     });
     vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
 
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(status()).toBe("working");
@@ -218,7 +218,7 @@ describeWithDb("stopSession", () => {
     });
     const liveTurn = vi.spyOn(agentService, "liveTurnId").mockReturnValue("turn-1");
 
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
     liveTurn.mockReturnValue(undefined);
     await vi.advanceTimersByTimeAsync(20_000);
 
@@ -228,7 +228,7 @@ describeWithDb("stopSession", () => {
   it("keeps a failed wire call unconfirmed until its target turn settles", async () => {
     vi.spyOn(agentService, "stopSession").mockRejectedValue(new Error("socket closed"));
 
-    expect(await runCommand("stopSession", { sessionId: SESSION })).toEqual({ unconfirmed: true });
+    expect(await stopSession({ sessionId: SESSION })).toEqual({ unconfirmed: true });
     expect(status()).toBe("working");
     await vi.advanceTimersByTimeAsync(20_000);
     expect(status()).toBe("working");
@@ -237,7 +237,7 @@ describeWithDb("stopSession", () => {
   it("keeps Stop unconfirmed when the agent link is already disconnected", async () => {
     vi.mocked(agentService.isConnected).mockReturnValue(false);
     const stop = vi.spyOn(agentService, "stopSession");
-    expect(await runCommand("stopSession", { sessionId: SESSION })).toEqual({ unconfirmed: true });
+    expect(await stopSession({ sessionId: SESSION })).toEqual({ unconfirmed: true });
     expect(stop).not.toHaveBeenCalled();
     expect(status()).toBe("working");
   });
@@ -247,7 +247,7 @@ describeWithDb("stopSession", () => {
       SESSION
     );
     vi.spyOn(cloudDriver, "cancelCloudTurn").mockRejectedValue(new Error("socket closed"));
-    expect(await runCommand("stopSession", { sessionId: SESSION })).toEqual({ unconfirmed: true });
+    expect(await stopSession({ sessionId: SESSION })).toEqual({ unconfirmed: true });
     expect(status()).toBe("working");
   });
 
@@ -258,7 +258,7 @@ describeWithDb("stopSession", () => {
         vi.mocked(agentService.liveTurnId).mockReturnValue("turn-2");
         return { outcome, turnId: "turn-1" };
       });
-      await runCommand("stopSession", { sessionId: SESSION });
+      await stopSession({ sessionId: SESSION });
       expect(agentService.stopSession).toHaveBeenCalledWith({
         sessionId: SESSION,
         turnId: "turn-1",
@@ -275,7 +275,7 @@ describeWithDb("stopSession", () => {
       vi.mocked(agentService.liveTurnId).mockReturnValue(undefined);
       return { outcome: "unconfirmed", turnId: "turn-1" };
     });
-    await runCommand("stopSession", { sessionId: SESSION });
+    await stopSession({ sessionId: SESSION });
     vi.mocked(agentService.liveTurnId).mockReturnValue("turn-1");
     await vi.advanceTimersByTimeAsync(20_000);
     expect(status()).toBe("working");

@@ -5,7 +5,7 @@
  * Used by mergeMessageDelta (WS q:delta -> cache merge).
  */
 
-import type { PaginatedMessages } from "../api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../types";
 
 /**

@@ -5,8 +5,8 @@
 
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
-import { SessionService } from "./session.service";
-import type { PaginatedMessages } from "./session.service";
+import { api } from "@shared/api";
+import type { PaginatedMessages } from "@shared/types/session";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import { mergeMessageDelta } from "../lib/messageCache";
@@ -24,7 +24,7 @@ import type { RepoGroup } from "@shared/types/workspace";
 import { useEffect, useMemo } from "react";
 import { track } from "@/platform/analytics";
 
-import { sendCommand, connect, isConnected } from "@/platform/ws";
+import { call, connect, isConnected, OpError } from "@/platform/ws";
 import { RuntimeError, runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { emitSendAttemptFailed } from "@/features/connection";
 import type { AgentHarness } from "@/shared/agents";
@@ -34,7 +34,7 @@ import type { AgentHarness } from "@/shared/agents";
  * Stale time is high — tabs only hydrate on mount and after creating new sessions.
  */
 export function useWorkspaceSessions(workspaceId: string | null) {
-  useQuerySubscription("sessions", {
+  useQuerySubscription(api.sessions, {
     queryKey: queryKeys.sessions.byWorkspace(workspaceId || ""),
     params: { workspaceId: workspaceId || "" },
     enabled: !!workspaceId,
@@ -42,7 +42,7 @@ export function useWorkspaceSessions(workspaceId: string | null) {
 
   return useQuery({
     queryKey: queryKeys.sessions.byWorkspace(workspaceId || ""),
-    queryFn: () => SessionService.fetchByWorkspace(workspaceId!),
+    queryFn: () => call(api.sessions, { workspaceId: workspaceId! }),
     enabled: !!workspaceId,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -57,7 +57,7 @@ export function useWorkspaceSessions(workspaceId: string | null) {
  * HTTP queryFn is fallback for initial load before WS connects.
  */
 export function useSession(sessionId: string | null) {
-  useQuerySubscription("session", {
+  useQuerySubscription(api.session, {
     queryKey: queryKeys.sessions.detail(sessionId || ""),
     params: { sessionId: sessionId || "" },
     enabled: !!sessionId,
@@ -87,7 +87,7 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
   useEffect(() => {
     if (!sessionIds.length || !runtime) return;
     const unsubs = sessionIds.map((id) =>
-      runtime.retainQuery("session", { sessionId: id }, queryKeys.sessions.detail(id))
+      runtime.retainQuery(api.session.name, { sessionId: id }, queryKeys.sessions.detail(id))
     );
     return () => unsubs.forEach((u) => u());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,7 +132,7 @@ export function useMessages(sessionId: string | null) {
   const direct = useIsDirectSession(sessionId);
   const macLaneEnabled = !!sessionId && direct === false;
 
-  useQuerySubscription("messages", {
+  useQuerySubscription(api.messages, {
     queryKey: queryKeys.sessions.messages(sessionId || ""),
     params: { sessionId: sessionId || "" },
     enabled: macLaneEnabled,
@@ -143,7 +143,7 @@ export function useMessages(sessionId: string | null) {
 
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),
-    queryFn: () => SessionService.fetchMessages(sessionId!),
+    queryFn: () => call(api.messages, { sessionId: sessionId! }),
     enabled: macLaneEnabled,
     refetchInterval: false,
     staleTime: Infinity,
@@ -200,7 +200,7 @@ export function useLoadOlderMessages() {
           ?.turns.map((turn) => [turn.turnId, turn])
       ),
     mutationFn: ({ sessionId, beforeSeq }: { sessionId: string; beforeSeq: number }) =>
-      SessionService.fetchMessages(sessionId, { before: beforeSeq }),
+      call(api.messages, { sessionId, before: beforeSeq }),
 
     onSuccess: (olderPage, { sessionId }, turnsAtRequest) => {
       queryClient.setQueryData<PaginatedMessages>(queryKeys.sessions.messages(sessionId), (old) => {
@@ -292,19 +292,26 @@ export function useSendMessage() {
 
       // Capture the cache's owner before waiting for connection. A host change
       // disposes this client; it cannot redirect the pending send to the new host.
-      const backend = runtimeForQueryClient(queryClient) ?? { isConnected, connect, sendCommand };
+      const backend = runtimeForQueryClient(queryClient) ?? { isConnected, connect, call };
       if (!backend.isConnected()) await backend.connect();
-      const ack = await backend.sendCommand("sendMessage", {
-        sessionId,
-        content,
-        model,
-        agentHarness,
-        turnId,
-        permissionMode,
-        thinkingLevel,
-      });
-      if (!ack.accepted) throw new SendRejectedError(ack.error || "Agent rejected the query");
-      // No fallback resubmission: a lost ACK can follow a successfully started turn.
+      try {
+        await backend.call(api.sendMessage, {
+          sessionId,
+          content,
+          model,
+          agentHarness,
+          turnId,
+          permissionMode,
+          thinkingLevel,
+        });
+      } catch (error) {
+        // The host understood the send and refused it: sending again would only
+        // be refused again. Anything else (a lost reply, no connection) is
+        // rethrown as it is and never resubmitted: a lost reply can follow a
+        // turn that did start.
+        if (error instanceof OpError) throw new SendRejectedError(error.message);
+        throw error;
+      }
     },
 
     // Optimistic update: show user message immediately.
@@ -432,20 +439,20 @@ export function useStopSession() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (sessionId: string) => {
+    mutationFn: async (sessionId: string): Promise<void> => {
       // Mac-CLOSED direct lane: cancel straight to agnt. The `turn.ended`
       // (cancelled) flows back over the render socket and the fold projects the
       // "Response stopped" divider — the same outcome the Mac stop produces.
       const direct = getDirectSession(sessionId, queryClient);
       if (direct) {
         direct.cancel();
-        return Promise.resolve();
+        return;
       }
       // A pending direct connection must not fall back to the desktop command.
       if (isDirectSessionCached(queryClient, sessionId)) {
         throw new Error("The cloud connection isn't ready yet — try again in a moment");
       }
-      return SessionService.stop(sessionId);
+      await call(api.stopSession, { sessionId });
     },
     onSuccess: (_, sessionId) => {
       const session = queryClient.getQueryData<Session>(queryKeys.sessions.detail(sessionId));
@@ -474,7 +481,7 @@ export function useCreateSession() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workspaceId: string) => SessionService.createSession(workspaceId),
+    mutationFn: (workspaceId: string) => call(api.createSession, { workspaceId }),
     onSuccess: (newSession, workspaceId) => {
       track("session_created", {
         workspace_id: workspaceId,

@@ -19,7 +19,7 @@ import {
   dropOptimisticMessage,
 } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import { messagesKey } from "../../../apps/web/src/features/session/lib/agentEventFold";
-import type { PaginatedMessages } from "../../../apps/web/src/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../../../shared/types/session";
 
 const SESSION = "sess-1";

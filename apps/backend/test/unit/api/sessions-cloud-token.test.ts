@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Hono } from "hono";
+import * as api from "@shared/api/sessions";
+import { operations } from "../../helpers";
 
 const { mockGetSessionRaw, mockGetCloudConfig, mockCreateSessionToken } = vi.hoisted(() => ({
   mockGetSessionRaw: vi.fn(),
@@ -8,15 +9,9 @@ const { mockGetSessionRaw, mockGetCloudConfig, mockCreateSessionToken } = vi.hoi
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn(() => ({})) }));
-vi.mock("../../../src/db", () => ({
+vi.mock("../../../src/db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/db")>()),
   getSessionRaw: mockGetSessionRaw,
-  getAllSessions: vi.fn(),
-  getSessionById: vi.fn(),
-  getCompactions: vi.fn(),
-  getMessages: vi.fn(),
-  hasOlderMessages: vi.fn(),
-  hasNewerMessages: vi.fn(),
-  attachParts: vi.fn(),
 }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
 vi.mock("../../../src/services/agent/cloud/config", async (importOriginal) => ({
@@ -28,14 +23,12 @@ vi.mock("../../../src/services/agent/cloud/config", async (importOriginal) => ({
 }));
 vi.mock("@deus-hq/sdk", () => ({ createSessionToken: mockCreateSessionToken }));
 
-import app from "../../../src/routes/sessions";
-import { errorHandler } from "../../../src/middleware/error-handler";
+import sessionHandlers from "../../../src/api/sessions";
 
-const wrapped = new Hono();
-wrapped.route("/", app);
-wrapped.onError(errorHandler);
+const run = operations(sessionHandlers);
+const token = (sessionId = "s1") => run(api.cloudDirectToken, { sessionId });
 
-describe("GET /sessions/:id/cloud-direct-token (the Mac-up token seam)", () => {
+describe("cloudDirectToken (a client's own channel to a cloud chat)", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllGlobals());
 
@@ -50,9 +43,12 @@ describe("GET /sessions/:id/cloud-direct-token (the Mac-up token seam)", () => {
       async () => new Response(JSON.stringify({ token: "alice-token", expires_in: 600 }))
     );
     vi.stubGlobal("fetch", fetchMock);
-    const response = await wrapped.request("/sessions/s1/cloud-direct-token");
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ token: "alice-token", expires_in: 600 });
+    expect(await token()).toMatchObject({
+      token: "alice-token",
+      expires_in: 600,
+      base_url: "https://api.agnt",
+      provider_session_id: "prov-1",
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.agnt/dashboard/sessions/prov-1/token",
       expect.objectContaining({
@@ -62,20 +58,23 @@ describe("GET /sessions/:id/cloud-direct-token (the Mac-up token seam)", () => {
     expect(mockCreateSessionToken).not.toHaveBeenCalled();
   });
 
-  it.each([401, 403])("returns product exchange %s without trying the org key", async (status) => {
-    mockGetSessionRaw.mockReturnValue({ id: "s1", provider_session_id: "prov-1" });
-    mockGetCloudConfig.mockReturnValue({
-      apiKey: "shared-org-key",
-      baseUrl: "https://api.agnt",
-      deusCloudSessionToken: "alice",
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(null, { status }))
-    );
-    expect((await wrapped.request("/sessions/s1/cloud-direct-token")).status).toBe(status);
-    expect(mockCreateSessionToken).not.toHaveBeenCalled();
-  });
+  it.each([401, 403])(
+    "refuses with the exchange's %s without trying the org key",
+    async (status) => {
+      mockGetSessionRaw.mockReturnValue({ id: "s1", provider_session_id: "prov-1" });
+      mockGetCloudConfig.mockReturnValue({
+        apiKey: "shared-org-key",
+        baseUrl: "https://api.agnt",
+        deusCloudSessionToken: "alice",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(null, { status }))
+      );
+      await expect(token()).rejects.toMatchObject({ statusCode: status });
+      expect(mockCreateSessionToken).not.toHaveBeenCalled();
+    }
+  );
 
   it("does not return a token exchanged before an account switch", async () => {
     mockGetSessionRaw.mockReturnValue({ id: "s1", provider_session_id: "prov-1" });
@@ -92,9 +91,10 @@ describe("GET /sessions/:id/cloud-direct-token (the Mac-up token seam)", () => {
         return new Response(JSON.stringify({ token: "alice-token", expires_in: 3600 }));
       })
     );
-    const response = await wrapped.request("/sessions/s1/cloud-direct-token");
-    expect(response.status).toBe(409);
-    expect(await response.text()).not.toContain("alice-token");
+    const refusal = await token().catch((error: Error & { statusCode?: number }) => error);
+    expect(refusal).toMatchObject({ statusCode: 409 });
+    expect(JSON.stringify(refusal)).not.toContain("alice-token");
+    expect((refusal as Error).message).not.toContain("alice-token");
     expect(mockCreateSessionToken).not.toHaveBeenCalled();
   });
 
@@ -107,28 +107,29 @@ describe("GET /sessions/:id/cloud-direct-token (the Mac-up token seam)", () => {
     });
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const response = await wrapped.request("/sessions/s1/cloud-direct-token");
-    expect(response.status).toBe(401);
-    expect(await response.text()).toContain("Sign in to Deus Cloud");
+    await expect(token()).rejects.toMatchObject({
+      statusCode: 401,
+      message: expect.stringContaining("Sign in to Deus Cloud"),
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mockCreateSessionToken).not.toHaveBeenCalled();
   });
 
-  it("404 when the session is unknown", async () => {
+  it("refuses an unknown session", async () => {
     mockGetSessionRaw.mockReturnValue(undefined);
-    expect((await wrapped.request("/sessions/x/cloud-direct-token")).status).toBe(404);
+    await expect(token("x")).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("400 when the session is not a cloud session (no provider_session_id)", async () => {
+  it("refuses a session that is not a cloud session (no provider_session_id)", async () => {
     mockGetSessionRaw.mockReturnValue({ id: "s1", provider_session_id: null });
-    expect((await wrapped.request("/sessions/s1/cloud-direct-token")).status).toBe(400);
+    await expect(token()).rejects.toMatchObject({ statusCode: 400 });
     expect(mockCreateSessionToken).not.toHaveBeenCalled();
   });
 
-  it("400 when cloud is not configured on this device", async () => {
+  it("refuses when cloud is not configured on this device", async () => {
     mockGetSessionRaw.mockReturnValue({ id: "s1", provider_session_id: "prov-1" });
     mockGetCloudConfig.mockReturnValue(null);
-    expect((await wrapped.request("/sessions/s1/cloud-direct-token")).status).toBe(400);
+    await expect(token()).rejects.toMatchObject({ statusCode: 400 });
     expect(mockCreateSessionToken).not.toHaveBeenCalled();
   });
 });

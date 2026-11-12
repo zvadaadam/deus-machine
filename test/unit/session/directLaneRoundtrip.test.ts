@@ -28,7 +28,7 @@ import {
   type AgentStreamContext,
   type SessionFold,
 } from "@/features/session/lib/agentEventFold";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 
 class MockWs implements WebSocketLike {
   readyState = 0;

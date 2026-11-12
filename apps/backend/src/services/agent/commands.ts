@@ -15,6 +15,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
+import * as api from "@shared/api/sessions";
+import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
 import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
@@ -82,8 +84,10 @@ export async function runCommand(
 ): Promise<CommandResult> {
   return (
     match(command)
-      .with("sendMessage", () => handleSendMessage(params))
-      .with("stopSession", () => handleStopSession(params))
+      // Operations now (api/sessions.ts); these names never reach this dispatch.
+      .with("sendMessage", "stopSession", (name) => {
+        throw new Error(`${name} is an operation`);
+      })
       // ---- PTY commands ----
       .with("pty:spawn", async () => {
         const id = requireParam(params, "id", "pty:spawn");
@@ -391,13 +395,13 @@ export async function runCommand(
 
 // ---- sendMessage ----
 
-async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
-  const sessionId = requireParam(params, "sessionId", "sendMessage");
-  const content = requireParam(params, "content", "sendMessage");
-  const model = requireParam(params, "model", "sendMessage");
-  const agentHarness = requireParam(params, "agentHarness", "sendMessage") as AgentHarness;
-  const permissionMode = readPermissionMode(params.permissionMode);
-  if (params.permissionMode !== undefined && permissionMode === undefined) {
+/** Start a turn in a session. Answers `api.sendMessage`; rejects when the turn is not admitted. */
+export async function sendMessage(
+  input: ParsedInputOf<typeof api.sendMessage>
+): Promise<{ turnId: string }> {
+  const { sessionId, content, model, agentHarness } = input;
+  const permissionMode = readPermissionMode(input.permissionMode);
+  if (input.permissionMode !== undefined && permissionMode === undefined) {
     throw new Error("Unsupported permission mode");
   }
 
@@ -459,7 +463,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     const read = readCloudTurnSelection({
       harness: agentHarness,
       model,
-      thinkingLevel: params.thinkingLevel,
+      thinkingLevel: input.thinkingLevel,
     });
     if (!read.ok) throw new Error(read.message);
     cloudSelection = read.selection;
@@ -535,7 +539,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
   // The turn id is the frontend's correlation key: it seeds the optimistic
   // bubble and matches the engine's user echo when it arrives. The cloud lane
   // passes it through message.send so agnt derives the SAME echo ids.
-  const turnId = readString(params, "turnId") ?? uuidv7();
+  const turnId = input.turnId ?? uuidv7();
 
   if (isCloud && cloudSelection) {
     // Cloud lane (its selection was read above, so this is every cloud send).
@@ -641,14 +645,9 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
       await agentService.startTurn(sessionId, turnId, agentHarness, content, {
         cwd,
         model,
-        thinkingLevel: readThinkingLevel(params.thinkingLevel),
+        thinkingLevel: readThinkingLevel(input.thinkingLevel),
         permissionMode,
-        maxTurns: readNumber(params, "maxTurns"),
-        additionalDirectories: Array.isArray(params.additionalDirectories)
-          ? params.additionalDirectories.filter((dir): dir is string => typeof dir === "string")
-          : undefined,
-        resume: existingAgentSessionId || readString(params, "resume"),
-        resumeSessionAt: readString(params, "resumeSessionAt"),
+        resume: existingAgentSessionId || undefined,
       });
     } catch (err) {
       if (err instanceof WireRequestError && err.code === WIRE_ERROR_CODES.turnActive) {
@@ -685,7 +684,7 @@ async function handleSendMessage(params: QueryParams): Promise<CommandResult> {
     invalidate(["workspaces", "sessions"], { sessionIds: [sessionId] });
   }
 
-  return { commandId: turnId };
+  return { turnId };
 }
 
 // ---- stopSession ----
@@ -709,9 +708,9 @@ const UNCONFIRMED_CANCEL_GRACE_MS = 15_000;
  *                                let turn.ended settle it. The watchdog
  *                                warns if confirmation never arrives.
  */
-async function handleStopSession(params: QueryParams): Promise<CommandResult> {
-  const sessionId = requireParam(params, "sessionId", "stopSession");
-
+export async function stopSession({
+  sessionId,
+}: ParsedInputOf<typeof api.stopSession>): Promise<{ unconfirmed: boolean }> {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
   if (!session) throw new Error("Session not found");
@@ -738,7 +737,7 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
     (live !== undefined && live !== targetTurnId) ||
     (result?.outcome === "no_active_turn" && result.activeTurnId !== undefined)
   )
-    return {};
+    return { unconfirmed: false };
 
   if (result && result.outcome !== "unconfirmed") {
     db.prepare(
@@ -746,7 +745,7 @@ async function handleStopSession(params: QueryParams): Promise<CommandResult> {
        WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
     ).run(sessionId, ...ACTIVE_TURN_STATUSES);
     invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
-    return {};
+    return { unconfirmed: false };
   }
 
   console.warn(

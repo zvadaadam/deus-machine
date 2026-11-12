@@ -8,7 +8,7 @@ import {
   type AgentStreamContext,
   type SessionFold,
 } from "@/features/session/lib/agentEventFold";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 
 const T = 1_700_000_000_000;
 

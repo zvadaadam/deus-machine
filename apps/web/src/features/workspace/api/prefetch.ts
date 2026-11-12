@@ -18,7 +18,8 @@
 
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { SessionService } from "@/features/session/api/session.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { isDirectSessionCached } from "@/features/session/cloud/useIsDirectSession";
 import type { WorkspaceState } from "@shared/enums";
 
@@ -103,7 +104,7 @@ export function prefetchWorkspace(
         queryClient,
         {
           queryKey: queryKeys.sessions.messages(sessionId),
-          queryFn: () => SessionService.fetchMessages(sessionId),
+          queryFn: () => call(api.messages, { sessionId }),
         },
         refreshIfCached
       );
@@ -113,7 +114,7 @@ export function prefetchWorkspace(
       queryClient,
       {
         queryKey: queryKeys.sessions.detail(sessionId),
-        queryFn: () => SessionService.fetchById(sessionId),
+        queryFn: () => call(api.session, { sessionId }),
       },
       refreshIfCached
     );
@@ -123,7 +124,7 @@ export function prefetchWorkspace(
     queryClient,
     {
       queryKey: queryKeys.sessions.byWorkspace(workspace.id),
-      queryFn: () => SessionService.fetchByWorkspace(workspace.id),
+      queryFn: () => call(api.sessions, { workspaceId: workspace.id }),
     },
     refreshIfCached
   );

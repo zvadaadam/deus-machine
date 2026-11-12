@@ -17,7 +17,8 @@
 //
 // All three return the SAME shape, so `useCloudDirect` is source-agnostic.
 
-import { sendRequest } from "@/platform/ws";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { capabilities } from "@/platform/capabilities";
 import { exchangeCloudSessionToken, SessionTokenExchangeError } from "./exchangeSessionToken";
 import {
@@ -76,7 +77,7 @@ export async function resolveCloudDirectToken(
       return mintViaWebExchange(providerSessionId);
     default:
       // The backend maps deus sessionId → provider session id + base URL itself.
-      return sendRequest<CloudDirectTokenResponse>("cloudDirectToken", { sessionId });
+      return call(api.cloudDirectToken, { sessionId });
   }
 }
 

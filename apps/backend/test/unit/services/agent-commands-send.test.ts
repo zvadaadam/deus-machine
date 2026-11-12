@@ -39,7 +39,10 @@ vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidat
 
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
-import { runCommand } from "../../../src/services/agent/commands";
+import * as api from "@shared/api/sessions";
+import type { InputOf } from "@shared/api/op";
+import { operations } from "../../helpers";
+import sessionHandlers from "../../../src/api/sessions";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 
@@ -69,8 +72,12 @@ function createTestDb(): Database.Database {
   return db;
 }
 
+// Through the operation, as a client's frame arrives: input checked, then the send.
+const run = operations(sessionHandlers);
+const sendMessage = (input: InputOf<typeof api.sendMessage>) => run(api.sendMessage, input);
+
 const send = (sessionId: string, turnId = "turn-1") =>
-  runCommand("sendMessage", {
+  sendMessage({
     sessionId,
     content: "hello",
     model: "claude-opus-4-6",
@@ -104,7 +111,7 @@ describeWithDb("sendMessage", () => {
     vi.spyOn(agentService, "isConnected").mockReturnValue(true);
     const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
-    await expect(send(SESSION)).resolves.toEqual({ commandId: "turn-1" });
+    await expect(send(SESSION)).resolves.toEqual({ turnId: "turn-1" });
 
     expect(startTurn).toHaveBeenCalledOnce();
     // The turn id the caller minted, not a fresh one — it is the key the
@@ -113,21 +120,28 @@ describeWithDb("sendMessage", () => {
     expect(row(SESSION).status).toBe("working");
   });
 
-  it.each(["read-only", "bypassPermissions", "", null, 123])(
+  it.each([
+    ["read-only", "Unsupported permission mode"],
+    ["bypassPermissions", "Unsupported permission mode"],
+    ["", "Unsupported permission mode"],
+    // Not even a string: refused where the frame arrives, before the send runs.
+    [null, "sendMessage: permissionMode"],
+    [123, "sendMessage: permissionMode"],
+  ])(
     "rejects an unsupported permission mode %s before changing session state",
-    async (permissionMode) => {
+    async (permissionMode, message) => {
       const startTurn = vi.spyOn(agentService, "startTurn");
       const before = db.prepare("SELECT * FROM sessions WHERE id = ?").get(SESSION);
 
       await expect(
-        runCommand("sendMessage", {
+        sendMessage({
           sessionId: SESSION,
           content: "hello",
           model: "gpt-6-astra",
           agentHarness: "codex-app-server",
-          permissionMode,
+          permissionMode: permissionMode as string,
         })
-      ).rejects.toThrow("Unsupported permission mode");
+      ).rejects.toThrow(message);
 
       expect(startTurn).not.toHaveBeenCalled();
       expect(mockInvalidate).not.toHaveBeenCalled();
@@ -266,8 +280,8 @@ describeWithDb("sendMessage", () => {
   // status is already "working" while `message_count` is still 0, because the
   // user row is written by the engine's echo and not by this command.
   describe("the harness binding", () => {
-    const sendWith = (harness: string, turnId: string) =>
-      runCommand("sendMessage", {
+    const sendWith = (harness: "claude-code" | "codex-sdk" | "codex-app-server", turnId: string) =>
+      sendMessage({
         sessionId: SESSION,
         content: "hello",
         model: "gpt-5.5-codex",
@@ -286,7 +300,7 @@ describeWithDb("sendMessage", () => {
       vi.spyOn(agentService, "isConnected").mockReturnValue(true);
       const startTurn = vi.spyOn(agentService, "startTurn").mockResolvedValue(undefined as never);
 
-      await expect(sendWith("codex-sdk", "turn-1")).resolves.toEqual({ commandId: "turn-1" });
+      await expect(sendWith("codex-sdk", "turn-1")).resolves.toEqual({ turnId: "turn-1" });
 
       expect(harness()).toBe("codex-sdk");
       expect(startTurn.mock.calls[0][2]).toBe("codex-sdk");
@@ -328,7 +342,7 @@ describeWithDb("sendMessage", () => {
       db.prepare(`UPDATE workspaces SET kind = 'cloud', state = 'ready' WHERE id = 'w1'`).run();
 
       await expect(
-        runCommand("sendMessage", {
+        sendMessage({
           sessionId: SESSION,
           content: "hello",
           model: "gpt-6.1-sol",
@@ -336,7 +350,7 @@ describeWithDb("sendMessage", () => {
           thinkingLevel: "medium",
           turnId: "turn-1",
         })
-      ).resolves.toEqual({ commandId: "turn-1" });
+      ).resolves.toEqual({ turnId: "turn-1" });
 
       expect(harness()).toBe("codex-app-server");
       expect(push).toHaveBeenCalledWith(SESSION, { harness: "codex-app-server" });
@@ -356,13 +370,13 @@ describeWithDb("sendMessage", () => {
 
   describe("cloud turns", () => {
     const cloudSend = (thinkingLevel: unknown, model = "opus") =>
-      runCommand("sendMessage", {
+      sendMessage({
         sessionId: SESSION,
         content: "hello",
         model,
         agentHarness: "claude-code",
         turnId: "turn-1",
-        ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+        ...(thinkingLevel !== undefined ? { thinkingLevel: thinkingLevel as string } : {}),
       });
 
     beforeEach(() => {
@@ -376,7 +390,7 @@ describeWithDb("sendMessage", () => {
         .mockResolvedValue(undefined as never);
 
       // `max` is AGNT's level; the engine deus runs locally has no such level.
-      await expect(cloudSend("max")).resolves.toEqual({ commandId: "turn-1" });
+      await expect(cloudSend("max")).resolves.toEqual({ turnId: "turn-1" });
 
       expect(startCloudTurn).toHaveBeenCalledWith(SESSION, "turn-1", "hello", {
         harness: "claude-code",

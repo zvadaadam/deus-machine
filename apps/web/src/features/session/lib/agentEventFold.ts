@@ -63,7 +63,7 @@ import {
   type ConversationState,
   type DecodedWireEventEnvelope,
 } from "@shared/protocol-types";
-import type { PaginatedMessages } from "../api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import { dropOptimisticMessage } from "./optimisticMessage";
 
 // ---- Per-session fold ----

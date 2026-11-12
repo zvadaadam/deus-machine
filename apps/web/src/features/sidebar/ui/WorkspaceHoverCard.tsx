@@ -8,7 +8,9 @@ import { onEvent } from "@/platform/ws";
 import type { Part, ToolPart, UnknownPart, WireEventEnvelope } from "@shared/protocol-types";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
+import { api } from "@shared/api";
+import type { PaginatedMessages } from "@shared/types/session";
+import { call } from "@/platform/ws";
 import type { Workspace, DiffStats } from "@/shared/types";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
@@ -55,7 +57,7 @@ function useLiveTool(sessionId: string): string | null {
     // Isolated key — never the shared sessions.messages cache, whose live
     // streaming state must not be overwritten with DB snapshots.
     queryKey: ["sidebar", "live-activity", sessionId],
-    queryFn: () => SessionService.fetchMessages(sessionId, { limit: 5 }),
+    queryFn: () => call(api.messages, { sessionId, limit: 5 }),
     staleTime: 15_000,
     gcTime: 10_000,
     refetchOnWindowFocus: false,

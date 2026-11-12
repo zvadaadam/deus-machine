@@ -14,7 +14,7 @@ import {
   flushDeltas,
   type AgentStreamContext,
 } from "@/features/session/lib/agentEventFold";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
 
 const { database, broadcast, invalidate, refreshPr, send } = vi.hoisted(() => ({

@@ -1,13 +1,12 @@
 /**
- * GET /sessions/:id/messages — the HTTP fallback for the WS `messages` query.
+ * The `messages` operation: one page of a transcript.
  *
- * Two producers answer the same resource: `runQuery("messages")` over the
- * socket, and this route for clients that cannot hold one. "Same resource" has
- * to mean the same SHAPE — and the field that went missing here is the one no
- * client can notice, because a page with no compactions and a page missing its
- * compactions render identically.
+ * It used to have two producers (the socket's query and an HTTP fallback) that
+ * drifted: the fallback lost `compactions`, the one field no client can notice
+ * missing, because a page with no compactions and a page missing them render
+ * identically. There is one producer now; these tests pin its shape.
  *
- * Runs against a real in-memory SQLite: the route is almost entirely SQL.
+ * Runs against a real in-memory SQLite: the handler is almost entirely SQL.
  */
 
 import Database from "better-sqlite3";
@@ -26,16 +25,13 @@ import { SCHEMA_SQL } from "@shared/schema";
 const { mockGetDatabase } = vi.hoisted(() => ({ mockGetDatabase: vi.fn() }));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 
-import app from "../../../src/routes/sessions";
+import * as api from "@shared/api/sessions";
+import { operations } from "../../helpers";
+import sessionHandlers from "../../../src/api/sessions";
+
+const run = operations(sessionHandlers);
 
 const SESSION = "sess-rest";
-
-interface MessagePage {
-  messages: Array<{ id: string }>;
-  compactions: Array<{ compaction_id: string; turn_id: string }>;
-  has_older: boolean;
-  has_newer: boolean;
-}
 
 function createTestDb(): Database.Database {
   const db = new Database(":memory:");
@@ -64,13 +60,9 @@ function addCompaction(db: Database.Database, id: string, turnId: string): void 
   ).run(id, SESSION, turnId);
 }
 
-const fetchPage = async (): Promise<MessagePage> => {
-  const res = await app.request(`/sessions/${SESSION}/messages`);
-  expect(res.status).toBe(200);
-  return (await res.json()) as MessagePage;
-};
+const fetchPage = () => run(api.messages, { sessionId: SESSION });
 
-describeWithDb("GET /sessions/:id/messages", () => {
+describeWithDb("messages", () => {
   let db: Database.Database;
 
   beforeEach(() => {
@@ -103,14 +95,12 @@ describeWithDb("GET /sessions/:id/messages", () => {
     expect(body.compactions).toEqual([]);
   });
 
-  it("answers every field of the `messages` resource the WS query answers", async () => {
+  it("answers every field of a transcript page", async () => {
     addCompaction(db, "c1", "turn-1");
 
     const body = await fetchPage();
 
-    // The `PaginatedMessages` contract, checked as a whole: while `compactions`
-    // was the one OPTIONAL field, this route could omit it and both the types
-    // and the UI agreed.
+    // The `PaginatedMessages` contract, checked as a whole.
     expect(Object.keys(body).sort()).toEqual([
       "compactions",
       "has_newer",
@@ -118,5 +108,24 @@ describeWithDb("GET /sessions/:id/messages", () => {
       "messages",
       "turns",
     ]);
+  });
+
+  it("pages backwards from a message seq and says whether older history remains", async () => {
+    const [first, second] = (await fetchPage()).messages;
+
+    const older = await run(api.messages, { sessionId: SESSION, before: second.seq });
+    expect(older.messages.map((m) => m.id)).toEqual([first.id]);
+    expect(older.has_older).toBe(false);
+
+    const latest = await run(api.messages, { sessionId: SESSION, limit: 1 });
+    expect(latest.messages.map((m) => m.id)).toEqual([second.id]);
+    expect(latest.has_older).toBe(true);
+  });
+
+  it("refuses a page with no session", async () => {
+    await expect(run(api.messages, {} as never)).rejects.toMatchObject({
+      statusCode: 400,
+      message: "messages requires sessionId",
+    });
   });
 });

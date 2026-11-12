@@ -2,19 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
 
-const { fetchMessages, fetchById, fetchByWorkspace } = vi.hoisted(() => ({
-  fetchMessages: vi.fn(),
-  fetchById: vi.fn(),
-  fetchByWorkspace: vi.fn(),
-}));
-
-vi.mock("@/features/session/api/session.service", () => ({
-  SessionService: {
-    fetchMessages,
-    fetchById,
-    fetchByWorkspace,
-  },
-}));
+// Warming runs through the query client, which is faked below: nothing is sent.
+vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 
 function createQueryClient(options?: { dataUpdatedAt?: number }) {
   return {
@@ -29,9 +18,6 @@ function createQueryClient(options?: { dataUpdatedAt?: number }) {
 describe("prefetchWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    fetchMessages.mockResolvedValue({ messages: [], has_older: false, has_newer: false });
-    fetchById.mockResolvedValue({ id: "session-1", status: "idle" });
-    fetchByWorkspace.mockResolvedValue([]);
   });
 
   it("warms both the restored active tab and current session when they differ", () => {
