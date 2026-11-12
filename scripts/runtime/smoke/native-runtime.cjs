@@ -5,7 +5,7 @@ const { execFileSync } = require("node:child_process");
 const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
-  assertBackendDbRouteFromOutput,
+  assertBackendReadsDatabaseFromOutput,
   assertExecutable,
   assertRuntimeSelfTest,
   bundledAgentCliPatterns,
@@ -77,7 +77,7 @@ async function smokeBackend(runtimeBin, binDir) {
       {
         obsoleteLabel: "Native runtime smoke",
         onReady: async (output) => {
-          await assertBackendDbRouteFromOutput(output);
+          await assertBackendReadsDatabaseFromOutput(output);
           assertEngineStarted(output);
         },
       }
@@ -86,7 +86,7 @@ async function smokeBackend(runtimeBin, binDir) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
   console.log(
-    "[runtime-smoke] native runtime backend resolved bundled CLIs, started the agent engine, and served DB route"
+    "[runtime-smoke] native runtime backend resolved bundled CLIs, started the agent engine, and read its database"
   );
 }
 

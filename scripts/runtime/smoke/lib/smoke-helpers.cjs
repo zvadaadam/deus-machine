@@ -1,7 +1,7 @@
 const fs = require("node:fs");
-const http = require("node:http");
 const path = require("node:path");
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const WebSocket = require("ws");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../../../..");
 const DEFAULT_RUNTIME_TIMEOUT_MS = 45_000;
@@ -416,57 +416,104 @@ function stopChild(child, stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS) {
   });
 }
 
-function getJson(port, pathname) {
+/**
+ * Ask a running backend one read over its socket, the way the app does. From
+ * this computer the backend admits the socket as its own window.
+ */
+function readFromBackend(port, resource, params = {}, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
-    const request = http.get(
-      {
-        hostname: "127.0.0.1",
-        port,
-        path: pathname,
-        timeout: 5_000,
-      },
-      (response) => {
-        let body = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          resolve({ statusCode: response.statusCode, body });
-        });
+    const id = `${resource}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    let settled = false;
+    let sent = false;
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ws.removeAllListeners();
+      try {
+        ws.close();
+      } catch {
+        // Best-effort cleanup.
       }
-    );
-    request.on("error", reject);
-    request.on("timeout", () => request.destroy(new Error(`Timed out requesting ${pathname}`)));
+    };
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const timeout = setTimeout(() => {
+      finish(reject, new Error(`Timed out waiting for q:response ${resource}`));
+    }, timeoutMs);
+    const send = () => {
+      if (sent) return;
+      sent = true;
+      ws.send(JSON.stringify({ type: "q:request", id, resource, params }));
+    };
+
+    ws.on("message", (data) => {
+      let message;
+      try {
+        message = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+      if (message.type === "connected") {
+        send();
+        return;
+      }
+      if (message.type === "ping") {
+        ws.send(JSON.stringify({ type: "pong" }));
+        return;
+      }
+      if (message.id !== id) return;
+      if (message.type === "q:response") {
+        finish(resolve, message.data);
+      } else if (message.type === "q:error") {
+        finish(reject, new Error(`q:request ${resource} rejected: ${message.message}`));
+      }
+    });
+    ws.on("open", () => {
+      // Localhost backends immediately send a connected frame, which triggers
+      // the request. Keep this handler only so websocket errors before open are
+      // clearly separated from a missing connected frame timeout.
+    });
+    ws.on("error", (error) => finish(reject, error));
+    ws.on("close", (code, reason) => {
+      if (!settled) {
+        finish(
+          reject,
+          new Error(`WebSocket closed before q:response ${resource}: ${code} ${reason}`)
+        );
+      }
+    });
   });
 }
 
-async function assertBackendDbRoute(port, label = "Backend DB route") {
-  const response = await getJson(port, "/api/workspaces");
-  if (response.statusCode !== 200) {
-    throw new Error(
-      `${label} failed: GET /api/workspaces returned ${response.statusCode}: ${response.body.slice(
-        0,
-        500
-      )}`
-    );
+/** The backend answers a read that goes through its database (the native SQLite module loaded). */
+async function assertBackendReadsDatabase(port, label = "Backend database read") {
+  let workspaces;
+  try {
+    workspaces = await readFromBackend(port, "workspaces", {}, 10_000);
+  } catch (error) {
+    throw new Error(`${label} failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  const parsed = JSON.parse(response.body);
-  if (!Array.isArray(parsed)) {
-    throw new Error(`${label} returned non-array payload: ${response.body.slice(0, 500)}`);
+  if (!Array.isArray(workspaces)) {
+    throw new Error(
+      `${label} returned a non-array payload: ${JSON.stringify(workspaces).slice(0, 500)}`
+    );
   }
 }
 
-async function assertBackendDbRouteFromOutput(output, options = {}) {
+async function assertBackendReadsDatabaseFromOutput(output, options = {}) {
   const pattern = options.pattern ?? /^\[BACKEND_PORT\](\d+)/m;
   const match = output.match(pattern);
   if (!match) {
     throw new Error(
-      options.missingMessage ?? "Backend DB route check could not find [BACKEND_PORT]"
+      options.missingMessage ?? "Backend database check could not find [BACKEND_PORT]"
     );
   }
-  await assertBackendDbRoute(Number(match[1]), options.label);
+  await assertBackendReadsDatabase(Number(match[1]), options.label);
 }
 
 function assertRuntimeSelfTest(selfTest, options) {
@@ -548,8 +595,8 @@ module.exports = {
   RUNTIME_MANIFESTS,
   appDiagnostics,
   assert,
-  assertBackendDbRoute,
-  assertBackendDbRouteFromOutput,
+  assertBackendReadsDatabase,
+  assertBackendReadsDatabaseFromOutput,
   assertDirectory,
   assertExecutable,
   assertHostRunnableArch,
@@ -558,7 +605,7 @@ module.exports = {
   bundledAgentCliPatterns,
   deterministicRuntimePath,
   escapeRegExp,
-  getJson,
+  readFromBackend,
   macExecutionPolicyHint,
   packagedDesktopEnv,
   pathPattern,

@@ -5,7 +5,7 @@ const { spawn, spawnSync } = require("node:child_process");
 const { assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
-  assertBackendDbRoute,
+  assertBackendReadsDatabase,
   runtimeEnv,
   stopChild,
 } = require("./lib/smoke-helpers.cjs");
@@ -170,13 +170,13 @@ async function main() {
         },
         requiredPatterns: BUNDLED_AGENT_CLI_PATTERNS,
         onReady: async (backendPort, output) => {
-          await assertBackendDbRoute(backendPort);
+          await assertBackendReadsDatabase(backendPort);
           assertEngineStarted(output);
         },
       }
     );
     console.log(
-      `[runtime-source-smoke] backend resolved bundled CLIs, started the agent engine, and served DB route: ${backendPort}`
+      `[runtime-source-smoke] backend resolved bundled CLIs, started the agent engine, and read its database: ${backendPort}`
     );
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
