@@ -6,6 +6,14 @@
  * The `as` casts live in queries.ts, not in route handlers.
  */
 
+import type {
+  SessionStatus,
+  SetupStatus,
+  WorkspaceKind,
+  WorkspaceState,
+  WorkspaceStatus,
+} from "@shared/enums";
+
 // ─── repositories ────────────────────────────────────────────
 
 export interface RepositoryRow {
@@ -35,17 +43,17 @@ export interface WorkspaceRow {
   git_branch: string | null;
   git_target_branch: string | null;
   /** Where the files live: 'worktree' (local) | 'cloud' (agnt sandbox). */
-  kind: string;
+  kind: WorkspaceKind;
   /** agnt workspace id backing a cloud workspace (null for local). */
   provider_workspace_id: string | null;
-  state: string;
-  status: string;
+  state: WorkspaceState;
+  status: WorkspaceStatus;
   current_session_id: string | null;
   pr_url: string | null;
   pr_number: number | null;
   archive_commit: string | null;
   archived_at: string | null;
-  setup_status: string;
+  setup_status: SetupStatus;
   init_stage: string | null;
   error_message: string | null;
   /** Cloud: `https://{{port}}-<sandboxId>.e2b.app`, learned from the running state. */
@@ -66,25 +74,25 @@ export interface WorkspaceWithDetailsRow {
   git_branch: string | null;
   git_target_branch: string | null;
   /** Where the files live: 'worktree' (local) | 'cloud' (agnt sandbox). */
-  kind: string;
+  kind: WorkspaceKind;
   /** agnt workspace id backing a cloud workspace (null for local). */
   provider_workspace_id: string | null;
-  state: string;
-  status: string;
+  state: WorkspaceState;
+  status: WorkspaceStatus;
   current_session_id: string | null;
   pr_url: string | null;
   pr_number: number | null;
-  pr_state: string | null;
+  pr_state: "open" | "merged" | "closed" | null;
   pr_is_draft: number;
-  pr_review_status: string | null;
+  pr_review_status: "approved" | "changes_requested" | "review_required" | "none" | null;
   pr_has_conflicts: number;
-  pr_ci_status: string | null;
+  pr_ci_status: "passing" | "failing" | "pending" | "unknown" | null;
   pr_checked_at: string | null;
   init_stage: string | null;
   updated_at: string;
 
   // Project preparation status
-  setup_status: string;
+  setup_status: SetupStatus;
   error_message: string | null;
 
   // From repositories JOIN
@@ -97,7 +105,7 @@ export interface WorkspaceWithDetailsRow {
   git_origin_url?: string | null;
 
   // From sessions JOIN (null when no active session)
-  session_status: string | null;
+  session_status: SessionStatus | null;
   session_error_category: string | null;
   session_error_message: string | null;
   latest_message_sent_at: string | null;

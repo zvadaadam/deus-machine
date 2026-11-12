@@ -21,11 +21,13 @@ import {
 import {
   RuntimeClient,
   RuntimeError,
+  type CallArgs,
   type EventCallback,
   type QueryRequestInterceptor,
   type ToolResponseInterceptor,
 } from "./runtime-client";
-export { RuntimeClient, RuntimeError } from "./runtime-client";
+import type { AnyOp, OutputOf } from "@shared/api/op";
+export { RuntimeClient, RuntimeError, OpError } from "./runtime-client";
 export { runtimeForQueryClient } from "./runtime-client";
 export type { QueryRequestInterceptor, ToolResponseInterceptor } from "./runtime-client";
 
@@ -160,6 +162,10 @@ export function onRuntimeChange(callback: () => void): () => void {
 export const connect = (serverId?: string): Promise<void> =>
   (serverId === undefined ? getRuntimeClient() : selectRuntime(serverId)).connect();
 export const isConnected = (): boolean => getRuntimeClient().isConnected();
+/** Run an operation from `shared/api` on the selected host. See `RuntimeClient.call`. */
+export function call<O extends AnyOp>(op: O, ...args: CallArgs<O>): Promise<OutputOf<O>> {
+  return getRuntimeClient().call(op, ...args);
+}
 export const sendRequest: RuntimeClient["sendRequest"] = (...args) =>
   getRuntimeClient().sendRequest(...args);
 export const sendMutate: RuntimeClient["sendMutate"] = (...args) =>

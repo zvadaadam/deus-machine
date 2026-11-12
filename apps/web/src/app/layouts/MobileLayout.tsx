@@ -22,7 +22,7 @@ import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
-import type { ProjectTask } from "@/features/workspace/api/workspace.service";
+import type { ProjectTask } from "@shared/types/project-environment";
 import { cn } from "@/shared/lib/utils";
 import { ChatArea } from "./ChatArea";
 import { MobileTabBar } from "./MobileTabBar";

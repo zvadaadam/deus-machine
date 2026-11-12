@@ -275,7 +275,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     }
     const timeoutMs = options?.timeoutMs ?? 30_000;
     const send = (remainingMs: number) =>
-      this.call(
+      this.exchange(
         "request",
         resource,
         { type: "q:request", resource, ...(params ? { params } : {}) },
@@ -317,7 +317,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     params: Record<string, unknown>,
     timeoutMs = 30_000
   ): Promise<MutateResult<T>> =>
-    this.call("mutation", action, { type: "q:mutate", action, params }, timeoutMs) as Promise<
+    this.exchange("mutation", action, { type: "q:mutate", action, params }, timeoutMs) as Promise<
       MutateResult<T>
     >;
 
@@ -326,14 +326,14 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     params: Record<string, unknown>,
     timeoutMs = 30_000
   ): Promise<CommandResult> =>
-    this.call(
+    this.exchange(
       "command",
       command,
       { type: "q:command", command, params },
       timeoutMs
     ) as Promise<CommandResult>;
 
-  private call(
+  private exchange(
     kind: Pending["kind"],
     name: string,
     frame: Record<string, unknown>,

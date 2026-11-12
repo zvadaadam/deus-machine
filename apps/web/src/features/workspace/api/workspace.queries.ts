@@ -6,11 +6,12 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { produce } from "immer";
-import { WorkspaceService } from "./workspace.service";
+import { api } from "@shared/api";
+import { call, sendRequest } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
-import type { PRStatus } from "@/shared/types";
+import type { BranchSummary, PRStatus, PRSummary } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
@@ -35,7 +36,7 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 export const SIDEBAR_WORKSPACE_STATE = "ready,initializing,error";
 
 export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
-  useQuerySubscription("workspaces", {
+  useQuerySubscription(api.workspaces, {
     queryKey: queryKeys.workspaces.byRepo(state),
     params: { state },
     mergeDelta: mergeWorkspaceDelta,
@@ -43,7 +44,7 @@ export function useWorkspacesByRepo(state: string = SIDEBAR_WORKSPACE_STATE) {
 
   return useQuery({
     queryKey: queryKeys.workspaces.byRepo(state),
-    queryFn: () => WorkspaceService.fetchByRepo(state),
+    queryFn: () => call(api.workspaces, { state }),
     staleTime: Infinity, // WS subscription keeps data fresh
     refetchOnWindowFocus: false, // Subscription handles freshness
   });
@@ -110,7 +111,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
         const batch = idsToFetch.slice(i, i + BATCH_SIZE);
         const settled = await Promise.allSettled(
-          batch.map((id) => WorkspaceService.fetchDiffStats(id))
+          batch.map((workspaceId) => call(api.diffStats, { workspaceId }))
         );
 
         batch.forEach((id, j) => {
@@ -149,11 +150,11 @@ export function useFileChanges(
   return useQuery({
     queryKey: queryKeys.workspaces.diffFiles(workspaceId || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchDiffFiles(workspaceId!);
+      const result = await call(api.diffFiles, { workspaceId: workspaceId! });
       return {
         files: result.files || [],
         truncated: result.truncated ?? false,
-        totalCount: result.totalCount ?? result.files?.length ?? 0,
+        totalCount: result.total_count ?? result.files?.length ?? 0,
       };
     },
     enabled: !!workspaceId && workspaceState === "ready",
@@ -173,7 +174,7 @@ export function useFileChanges(
 export function useGhStatus() {
   return useQuery({
     queryKey: queryKeys.github.ghStatus,
-    queryFn: () => WorkspaceService.fetchGhStatus(),
+    queryFn: () => call(api.ghStatus),
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
@@ -187,7 +188,7 @@ export function useGhStatus() {
 export function useRepoPrs(repoId: string | null) {
   return useQuery({
     queryKey: queryKeys.repos.prs(repoId || ""),
-    queryFn: () => WorkspaceService.fetchRepoPrs(repoId!),
+    queryFn: () => sendRequest<PRSummary[]>("repoPrs", { repoId }),
     enabled: !!repoId,
     staleTime: 30_000,
   });
@@ -207,7 +208,7 @@ export function useRepoPrs(repoId: string | null) {
 export function useRepoBranches(repoId: string | null) {
   return useQuery({
     queryKey: queryKeys.repos.branches(repoId || ""),
-    queryFn: () => WorkspaceService.fetchRepoBranches(repoId!),
+    queryFn: () => sendRequest<{ branches: BranchSummary[] }>("repoBranches", { repoId }),
     enabled: !!repoId,
     staleTime: 30_000,
     retry: 5,
@@ -230,7 +231,7 @@ export function usePRStatus(
   const { ghInstalled = true, ghAuthenticated = true, sessionStatus } = options ?? {};
   return useQuery({
     queryKey: queryKeys.workspaces.prStatus(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchPRStatus(workspaceId!),
+    queryFn: () => call(api.prStatus, { workspaceId: workspaceId! }),
     enabled: !!workspaceId && ghInstalled && ghAuthenticated,
     staleTime: 10_000,
     refetchInterval: (query) => {
@@ -256,8 +257,12 @@ export function useFileDiff(workspaceId: string | null, filePath: string | null)
   return useQuery({
     queryKey: queryKeys.workspaces.diffFile(workspaceId || "", filePath || ""),
     queryFn: async () => {
-      const result = await WorkspaceService.fetchFileDiff(workspaceId!, filePath!);
-      return result;
+      const result = await call(api.diffFile, { workspaceId: workspaceId!, file: filePath! });
+      return {
+        diff: result.diff ?? "",
+        oldContent: result.old_content ?? null,
+        newContent: result.new_content ?? null,
+      };
     },
     enabled: !!workspaceId && !!filePath,
     staleTime: 10000, // Cache for 10s since diffs are expensive
@@ -292,20 +297,15 @@ export function useCreateWorkspace() {
   const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
-    mutationFn: (params: CreateWorkspaceParams) => {
-      const repoId = typeof params === "string" ? params : params.repositoryId;
-      const options =
-        typeof params === "string"
-          ? undefined
-          : {
-              location: params.location,
-              source_branch: params.source_branch,
-              pr_number: params.pr_number,
-              pr_url: params.pr_url,
-              pr_title: params.pr_title,
-              target_branch: params.target_branch,
-            };
-      return WorkspaceService.create(repoId, options);
+    mutationFn: async (params: CreateWorkspaceParams) => {
+      const { repositoryId, ...options } =
+        typeof params === "string" ? { repositoryId: params } : params;
+      const { workspaceId } = await call(api.createWorkspace, {
+        repository_id: repositoryId,
+        ...options,
+      });
+      // The full row arrives on the `workspaces` subscription.
+      return { id: workspaceId, repository_id: repositoryId };
     },
 
     onMutate: async (params: CreateWorkspaceParams) => {
@@ -361,7 +361,7 @@ export function useArchiveWorkspace() {
   const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
-    mutationFn: (workspaceId: string) => WorkspaceService.archive(workspaceId),
+    mutationFn: (workspaceId: string) => call(api.archiveWorkspace, { workspaceId }),
     retry: false,
 
     // Optimistic update: Remove workspace from UI immediately
@@ -417,8 +417,8 @@ export function useUpdateWorkspaceStatus() {
   const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
-    mutationFn: ({ workspaceId, status }: { workspaceId: string; status: WorkspaceStatus }) =>
-      WorkspaceService.updateStatus(workspaceId, status),
+    mutationFn: (input: { workspaceId: string; status: WorkspaceStatus }) =>
+      call(api.updateWorkspaceStatus, input),
 
     onMutate: async ({ workspaceId, status }) => {
       await queryClient.cancelQueries({ queryKey });
@@ -475,69 +475,12 @@ export function useUnarchiveWorkspace() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workspaceId: string) => WorkspaceService.update(workspaceId, { state: "ready" }),
+    mutationFn: (workspaceId: string) => call(api.updateWorkspace, { workspaceId, state: "ready" }),
     onSuccess: (_data, workspaceId) => {
       track("workspace_unarchived", { workspace_id: workspaceId });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
-    },
-  });
-}
-
-/**
- * Fetch system prompt for a workspace
- */
-export function useSystemPrompt(workspaceId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.workspaces.systemPrompt(workspaceId || ""),
-    queryFn: async () => {
-      const result = await WorkspaceService.fetchSystemPrompt(workspaceId!);
-      return result.system_prompt || "";
-    },
-    enabled: !!workspaceId,
-    staleTime: 30000, // System prompts don't change often
-  });
-}
-
-/**
- * Update system prompt mutation with optimistic update
- */
-export function useUpdateSystemPrompt() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ workspaceId, systemPrompt }: { workspaceId: string; systemPrompt: string }) =>
-      WorkspaceService.updateSystemPrompt(workspaceId, systemPrompt),
-
-    // Optimistic update: Show new prompt immediately
-    onMutate: async ({ workspaceId, systemPrompt }) => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.workspaces.systemPrompt(workspaceId),
-      });
-
-      const previousPrompt = queryClient.getQueryData<string>(
-        queryKeys.workspaces.systemPrompt(workspaceId)
-      );
-
-      queryClient.setQueryData(queryKeys.workspaces.systemPrompt(workspaceId), systemPrompt);
-
-      return { previousPrompt };
-    },
-
-    onError: (_err, variables, context) => {
-      if (context?.previousPrompt !== undefined) {
-        queryClient.setQueryData(
-          queryKeys.workspaces.systemPrompt(variables.workspaceId),
-          context.previousPrompt
-        );
-      }
-    },
-
-    onSettled: (_, __, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.workspaces.systemPrompt(variables.workspaceId),
-      });
     },
   });
 }
@@ -550,7 +493,7 @@ export function useUpdateSystemPrompt() {
 export function useProjectEnvironment(workspaceId: string | null) {
   return useQuery({
     queryKey: queryKeys.workspaces.environment(workspaceId || ""),
-    queryFn: () => WorkspaceService.fetchEnvironment(workspaceId!),
+    queryFn: () => call(api.workspaceEnvironment, { workspaceId: workspaceId! }),
     enabled: !!workspaceId && !isCloudDirectWebMode(),
     staleTime: Infinity,
   });
@@ -564,7 +507,7 @@ export function useRetrySetup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (workspaceId: string) => WorkspaceService.retrySetup(workspaceId),
+    mutationFn: (workspaceId: string) => call(api.retrySetup, { workspaceId }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },

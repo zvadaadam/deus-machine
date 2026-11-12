@@ -4,6 +4,8 @@
  */
 
 export {
+  call,
+  OpError,
   connect,
   isConnected,
   sendCommand,

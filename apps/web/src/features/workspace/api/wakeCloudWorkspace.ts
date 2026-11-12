@@ -1,12 +1,11 @@
 import { toast } from "sonner";
-import { apiClient } from "@/shared/api/client";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 
-/** All wake controls handle HTTP failures and the route's 200 {ok:false} alike. */
+/** All wake controls handle a refused request and an answered `{ ok: false }` alike. */
 export async function wakeCloudWorkspace(workspaceId: string): Promise<boolean> {
   try {
-    const result = await apiClient.post<{ ok: boolean; status: string; error?: string }>(
-      `/workspaces/${workspaceId}/cloud-wake`
-    );
+    const result = await call(api.wakeCloudWorkspace, { workspaceId });
     if (result.ok) return true;
     if (result.error) {
       toast.error(result.error);

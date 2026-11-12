@@ -1,12 +1,16 @@
+import type { RepoGroup, Workspace } from "@shared/types/workspace";
 import type { WorkspaceWithDetailsRow } from "../db";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 
-export interface RepoGroup {
-  repo_id: string;
-  repo_name: string;
-  sort_order: number;
-  git_origin_url?: string | null;
-  workspaces: unknown[];
+/** A workspace row as clients read it: its folder resolved, its repository named. */
+export function toWorkspace(row: WorkspaceWithDetailsRow): Workspace {
+  return {
+    ...row,
+    repo_name: row.repo_name ?? "Unknown",
+    root_path: row.root_path ?? "",
+    git_default_branch: row.git_default_branch ?? undefined,
+    workspace_path: computeWorkspacePath(row),
+  };
 }
 
 export function groupWorkspacesByRepo(
@@ -26,10 +30,7 @@ export function groupWorkspacesByRepo(
         workspaces: [],
       };
     }
-    grouped[repoId].workspaces.push({
-      ...workspace,
-      workspace_path: computeWorkspacePath(workspace),
-    });
+    grouped[repoId].workspaces.push(toWorkspace(workspace));
   }
 
   for (const repo of allRepos) {

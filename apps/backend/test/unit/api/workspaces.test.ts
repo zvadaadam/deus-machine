@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { Hono } from "hono";
-import { errorHandler } from "../../../src/middleware/error-handler";
+import * as api from "@shared/api/workspaces";
+import { operations } from "../../helpers";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
@@ -119,11 +119,11 @@ vi.mock("os", () => ({
   tmpdir: vi.fn<(...args: any[]) => any>(() => "/tmp"),
 }));
 
-import workspacesRoutes from "../../../src/routes/workspaces";
+import workspaceHandlers from "../../../src/api/workspaces";
 
-const app = new Hono();
-app.route("/", workspacesRoutes);
-app.onError(errorHandler);
+const run = operations(workspaceHandlers);
+const create = (input: Record<string, unknown> = { repository_id: "repo-001" }) =>
+  run(api.createWorkspace, input as never);
 
 // ─── Fixtures ─────────────────────────────────────────────────────
 
@@ -160,62 +160,39 @@ beforeEach(() => {
   mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
 });
 
-// ─── POST /workspaces ─────────────────────────────────────────────
+// ─── createWorkspace ──────────────────────────────────────────────
 
-describe("POST /workspaces", () => {
-  it("returns 400 when repository_id is missing", async () => {
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+describe("createWorkspace", () => {
+  it("refuses a request with no repository_id", async () => {
+    await expect(create({})).rejects.toMatchObject({
+      statusCode: 400,
+      message: "createWorkspace requires repository_id",
     });
-    expect(res.status).toBe(400);
   });
 
-  it("returns 400 when repository_id is empty string", async () => {
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "" }),
-    });
-    expect(res.status).toBe(400);
+  it("refuses an empty repository_id", async () => {
+    await expect(create({ repository_id: "" })).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("returns 404 when repository does not exist", async () => {
+  it("refuses a repository that does not exist", async () => {
     mockStmt.get.mockReturnValueOnce(undefined);
 
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "nonexistent" }),
+    await expect(create({ repository_id: "nonexistent" })).rejects.toMatchObject({
+      statusCode: 404,
     });
-    expect(res.status).toBe(404);
   });
 
-  it("returns 200 with new workspace on success", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+  it("answers with the new workspace's id and tells subscribers", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
-    expect(res.status).toBe(200);
-
-    const body = await res.json();
-    expect(body.id).toBe("ws-test-uuid");
-    expect(body.slug).toBe("europa");
-    expect(body.state).toBe("initializing");
+    expect(await create()).toEqual({ workspaceId: "ws-test-uuid" });
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "stats"]);
   });
 
   it("creates workspace in initializing state", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     // Verify INSERT run args include 'initializing'
     const insertRun = mockStmt.run.mock.calls.find((c: unknown[]) => c.includes("initializing"));
@@ -223,13 +200,9 @@ describe("POST /workspaces", () => {
   });
 
   it("fetches origin/<parent_branch> before creating worktree", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     expect(mockExecFileAsync).toHaveBeenCalledWith(
       "git",
@@ -239,16 +212,12 @@ describe("POST /workspaces", () => {
   });
 
   it("uses origin/<parent_branch> as worktree base when remote exists", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     // Both fetch and show-ref succeed
     mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     // Should verify origin/main via show-ref
     expect(mockExecFileAsync).toHaveBeenCalledWith(
@@ -264,18 +233,14 @@ describe("POST /workspaces", () => {
   });
 
   it("falls back to local branch when origin/<parent> does not exist", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     // fetch succeeds, show-ref fails (no remote branch)
     mockExecFileAsync
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
       .mockRejectedValueOnce(new Error("not a valid ref"));
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ worktreeBase: "main" })
@@ -283,50 +248,34 @@ describe("POST /workspaces", () => {
   });
 
   it("continues creation when git fetch fails (offline)", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     // fetch fails, show-ref also fails
     mockExecFileAsync
       .mockRejectedValueOnce(new Error("network unreachable"))
       .mockRejectedValueOnce(new Error("not a valid ref"));
 
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
-
-    expect(res.status).toBe(200);
+    expect(await create()).toEqual({ workspaceId: "ws-test-uuid" });
     expect(mockInitializeWorkspace).toHaveBeenCalled();
   });
 
   it("fires init pipeline async (returns before pipeline completes)", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     // Pipeline is slow
     mockInitializeWorkspace.mockImplementation(
       () => new Promise((resolve) => setTimeout(resolve, 5000))
     );
 
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
-
-    // Response should return immediately
-    expect(res.status).toBe(200);
+    // Answers at once, without waiting for the pipeline.
+    expect(await create()).toEqual({ workspaceId: "ws-test-uuid" });
     expect(mockInitializeWorkspace).toHaveBeenCalled();
   });
 
   it("passes correct context to init pipeline", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -341,45 +290,22 @@ describe("POST /workspaces", () => {
   });
 
   it("uses git username as branch prefix", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ branchName: "testuser/europa" })
     );
   });
 
-  it("includes computed workspace_path in response", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO).mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
-
-    const res = await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
-
-    const body = await res.json();
-    expect(body.workspace_path).toBe("/repos/my-project/.deus/europa");
-  });
-
   it("uses repo git_default_branch as parent_branch", async () => {
     const repoWithDev = { ...MOCK_REPO, git_default_branch: "develop" };
-    mockStmt.get
-      .mockReturnValueOnce(repoWithDev)
-      .mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, git_target_branch: "develop" });
+    mockStmt.get.mockReturnValueOnce(repoWithDev);
 
     mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     // Should fetch origin/develop
     expect(mockExecFileAsync).toHaveBeenCalledWith(
@@ -394,15 +320,9 @@ describe("POST /workspaces", () => {
   });
 
   it("defaults parent_branch to main when repo has no git_default_branch", async () => {
-    mockStmt.get
-      .mockReturnValueOnce({ ...MOCK_REPO, git_default_branch: null })
-      .mockReturnValueOnce(MOCK_CREATED_WORKSPACE);
+    mockStmt.get.mockReturnValueOnce({ ...MOCK_REPO, git_default_branch: null });
 
-    await app.request("/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repository_id: "repo-001" }),
-    });
+    await create();
 
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ parentBranch: "main" })
@@ -410,28 +330,19 @@ describe("POST /workspaces", () => {
   });
 });
 
-describe("PATCH /workspaces/:id", () => {
+describe("updateWorkspace", () => {
   it("rejects session-only state values like working", async () => {
-    const res = await app.request("/workspaces/ws-test-uuid", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: "working" }),
-    });
-
-    expect(res.status).toBe(400);
+    await expect(
+      run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "working" as never })
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(mockStmt.run).not.toHaveBeenCalled();
   });
 
   it("accepts canonical workspace state values from shared enums", async () => {
     mockStmt.get.mockReturnValueOnce({ ...MOCK_CREATED_WORKSPACE, state: "ready" });
 
-    const res = await app.request("/workspaces/ws-test-uuid", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: "ready" }),
-    });
+    await run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "ready" });
 
-    expect(res.status).toBe(200);
     expect(mockDb.prepare).toHaveBeenCalledWith(
       "UPDATE workspaces SET state = 'ready' WHERE id = ?"
     );
@@ -464,12 +375,13 @@ describe("cloud wake and archive ordering", () => {
   }
 
   const archive = () =>
-    app.request("/workspaces/ws-test-uuid", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: "archived" }),
-    });
-  const wake = () => app.request("/workspaces/ws-test-uuid/cloud-wake", { method: "POST" });
+    run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "archived" });
+  // Settled rather than awaited: one of the two is expected to be refused.
+  const wake = () =>
+    run(api.wakeCloudWorkspace, { workspaceId: "ws-test-uuid" }).then(
+      (answer) => ({ answer }),
+      (error: Error & { statusCode?: number }) => ({ error })
+    );
 
   it("rechecks archived membership when a wake was queued behind Pause", async () => {
     const state = cloudRow();
@@ -485,11 +397,9 @@ describe("cloud wake and archive ordering", () => {
     await vi.waitFor(() => expect(cloud.pause).toHaveBeenCalledOnce());
     const waking = wake();
     release();
-    const [archived, woken] = await Promise.all([archiving, waking]);
-    expect(archived.status).toBe(200);
-    expect(woken.status).toBe(400);
-    expect(await woken.json()).toMatchObject({
-      error: "Workspace is archived — unarchive it first",
+    const [, woken] = await Promise.all([archiving, waking]);
+    expect(woken).toMatchObject({
+      error: { statusCode: 400, message: "Workspace is archived — unarchive it first" },
     });
     expect(cloud.wake).not.toHaveBeenCalled();
     expect(state()).toBe("archived");
@@ -515,9 +425,8 @@ describe("cloud wake and archive ordering", () => {
     // Let the archive request reach its first await before releasing Resume.
     await new Promise((resolve) => setImmediate(resolve));
     release();
-    const [woken, archived] = await Promise.all([waking, archiving]);
-    expect(woken.status).toBe(200);
-    expect(archived.status).toBe(200);
+    const [woken] = await Promise.all([waking, archiving]);
+    expect(woken).toEqual({ answer: { ok: true, status: "resuming" } });
     expect(state()).toBe("archived");
     expect(running).toBe(false);
   });

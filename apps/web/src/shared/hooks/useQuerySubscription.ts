@@ -2,11 +2,16 @@ import { useEffect } from "react";
 import { hashKey, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws/query-protocol-client";
 import type { DeltaMerge } from "@/platform/ws/runtime-client";
+import type { InputOf, Op, OpKind } from "@shared/api/op";
 import type { QueryResource } from "@shared/types/query-protocol";
+import type { z } from "zod";
 
-interface UseQuerySubscriptionOptions {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- any live read, whatever it answers
+type LiveOp = Op<string, z.ZodType, any, OpKind, true>;
+
+interface UseQuerySubscriptionOptions<O extends LiveOp = LiveOp> {
   queryKey: QueryKey;
-  params?: Record<string, unknown>;
+  params?: InputOf<O>;
   enabled?: boolean;
   /** A pure projection of this resource's delta into its cache shape. */
   mergeDelta?: DeltaMerge;
@@ -17,11 +22,13 @@ interface UseQuerySubscriptionOptions {
  * both the wire subscription and its cache write. Reconnect belongs to the
  * client, so a temporary outage never mounts another subscription per observer.
  */
-export function useQuerySubscription(
-  resource: QueryResource,
-  options: UseQuerySubscriptionOptions
+export function useQuerySubscription<O extends LiveOp>(
+  op: O | QueryResource,
+  options: UseQuerySubscriptionOptions<O>
 ): void {
-  const { queryKey, params, enabled = true, mergeDelta } = options;
+  const { queryKey, enabled = true, mergeDelta } = options;
+  const params = options.params as Record<string, unknown> | undefined;
+  const resource = (typeof op === "string" ? op : op.name) as QueryResource;
   const cache = useQueryClient();
   const runtime = runtimeForQueryClient(cache) ?? getRuntimeClient();
   const key = hashKey([resource, params ?? {}, queryKey]);

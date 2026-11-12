@@ -6,13 +6,13 @@ import { remoteGateMiddleware } from "./middleware/remote-gate";
 import { authMiddleware } from "./middleware/remote-auth";
 import { validateDirectDeviceToken } from "./services/remote-auth.service";
 import { addConnection, removeConnection, handleProtocolMessage } from "./services/ws.service";
+import { serveOperations } from "./services/query-engine";
+import { registry } from "./api";
 import { getRelayStatus } from "./services/relay.service";
 // Simulator context is accessed via q:command handlers in commands.ts
 import { isLocalhost, getClientIp } from "./lib/network";
 import healthRoutes from "./routes/health";
 import workspaceRoutes from "./routes/workspaces";
-import workspaceDiffRoutes from "./routes/workspaces.diff";
-import workspacePrRoutes from "./routes/workspaces.pr";
 import sessionRoutes from "./routes/sessions";
 import repoRoutes from "./routes/repos";
 import agentConfigRoutes from "./routes/agent-config";
@@ -28,6 +28,7 @@ import filesRoutes from "./routes/files";
 import browserImportRoutes from "./routes/browser-import";
 import integrationRoutes from "./routes/integrations";
 export function createApp() {
+  serveOperations(registry);
   const app = new Hono();
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
@@ -43,8 +44,6 @@ export function createApp() {
   app.route("/api", healthRoutes);
   app.route("/api", authRoutes);
   app.route("/api", workspaceRoutes);
-  app.route("/api", workspaceDiffRoutes);
-  app.route("/api", workspacePrRoutes);
   app.route("/api", sessionRoutes);
   app.route("/api", repoRoutes);
   app.route("/api", agentConfigRoutes);

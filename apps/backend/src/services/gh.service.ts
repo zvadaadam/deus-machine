@@ -1,4 +1,5 @@
 import { promisify } from "util";
+import type { PRStatus } from "@shared/types/github";
 import { execFile } from "child_process";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
 import { extendCliPath, resolveCliExecutable } from "@shared/lib/cli-path";
@@ -133,29 +134,8 @@ export function classifyCheck(check: any): "passing" | "failing" | "pending" {
   return "passing";
 }
 
-export interface PrStatusResponse {
-  has_pr: boolean;
-  /**
-   * True only when GitHub was successfully queried, so `has_pr: false` means
-   * "authoritatively no PR" rather than "couldn't check" (missing worktree,
-   * detached HEAD, unparseable gh output). Consumers persisting state must
-   * not clear a stored snapshot on inconclusive results.
-   */
-  conclusive?: boolean;
-  pr_number?: number;
-  pr_title?: string;
-  pr_url?: string;
-  pr_state?: "open" | "merged" | "closed";
-  merge_status?: "ready" | "blocked" | "merged";
-  is_draft?: boolean;
-  has_conflicts?: boolean;
-  ci_status?: "passing" | "failing" | "pending" | "unknown";
-  checks_done?: number;
-  checks_total?: number;
-  checks?: Array<{ name: string; status: string; url?: string }>;
-  review_status?: "approved" | "changes_requested" | "review_required" | "none";
-  error: string | null;
-}
+/** What a PR lookup answers: the shape clients read (shared/types/github.ts). */
+export type PrStatusResponse = PRStatus;
 
 /**
  * Resolve the PR status for a workspace by inspecting HEAD branch

@@ -68,6 +68,20 @@ import {
 } from "../lib/query-params";
 import { groupWorkspacesByRepo } from "../lib/workspace-grouping";
 import { subscriptionKey } from "@deus/runtime-client";
+import type { Caller, Registry } from "../api/registry";
+
+// ---- Operations ----
+
+let operations: Registry | null = null;
+
+/**
+ * Hand the engine every operation it may be asked for. Called once at startup
+ * (`createApp`). Injected rather than imported: handlers call `invalidate()`
+ * here, and `invalidate()` re-runs handlers, so a static import would be a cycle.
+ */
+export function serveOperations(registry: Registry): void {
+  operations = registry;
+}
 
 // ---- Subscription State ----
 
@@ -278,7 +292,7 @@ function pushSnapshot(
 ): void {
   try {
     const data = sharedRead(reads, connectionId, [sub.resource, sub.params], () =>
-      runQuery(sub.resource, sub.params)
+      runQuery(sub.resource, sub.params, callerOf(connectionId))
     );
     sendFrame(connectionId, { type: "q:snapshot", id: subId, data });
   } catch (err) {
@@ -310,9 +324,13 @@ async function handleRequest(connectionId: string, msg: ResourceFrameInput): Pro
   const { id, resource, params } = msg;
 
   try {
-    // Try subscribable resource first, then request-only resource
-    if (isQueryResource(resource)) {
-      const data = runQuery(resource, params);
+    if (operations?.find(resource)) {
+      const data = await operations!.run(resource, "read", params, {
+        caller: callerOf(connectionId),
+      });
+      sendFrame(connectionId, { type: "q:response", id, data });
+    } else if (isQueryResource(resource)) {
+      const data = runQuery(resource, params, callerOf(connectionId));
       sendFrame(connectionId, { type: "q:response", id, data });
     } else if (isRequestResource(resource)) {
       const data = await runRequest(resource, params, getRequestContext(connectionId));
@@ -367,7 +385,7 @@ function handleSubscribe(connectionId: string, msg: ResourceFrameInput): void {
     }
 
     // All other resources: send initial snapshot
-    const data = runQuery(typedResource, params);
+    const data = runQuery(typedResource, params, callerOf(connectionId));
     sendFrame(connectionId, { type: "q:snapshot", id, data });
   } catch (err) {
     sendFrame(connectionId, {
@@ -400,7 +418,9 @@ async function handleMutate(connectionId: string, msg: MutateFrameInput): Promis
   const { id, action, params } = msg;
 
   try {
-    const result = await runMutation(action, params);
+    const result = operations?.find(action)
+      ? await operations!.run(action, "write", params, { caller: callerOf(connectionId) })
+      : await runMutation(action, params);
     sendFrame(connectionId, {
       type: "q:mutate_result",
       id,
@@ -469,7 +489,8 @@ function handleToolResponse(msg: QueryParams): void {
 
 // ---- Query Dispatch ----
 
-function runQuery(resource: QueryResource, params: QueryParams): unknown {
+function runQuery(resource: QueryResource, params: QueryParams, caller: Caller): unknown {
+  if (operations?.find(resource)) return operations!.runLive(resource, params, { caller });
   const db = getDatabase();
 
   return match(resource)
@@ -518,6 +539,12 @@ function runQuery(resource: QueryResource, params: QueryParams): unknown {
 
 function isRequestResource(value: string): value is RequestResourceName {
   return (REQUEST_RESOURCES as readonly string[]).includes(value);
+}
+
+/** Who a connection speaks for: this computer's own window, or a paired device. */
+function callerOf(connectionId: string): Caller {
+  const connection = getConnection(connectionId);
+  return { deviceId: connection?.deviceId ?? null, relayed: connection?.isVirtual === true };
 }
 
 function getRequestContext(connectionId: string): RequestContext {

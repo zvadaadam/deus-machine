@@ -10,7 +10,6 @@ interface UseKeyboardShortcutsOptions {
   modalStates?: {
     showNewWorkspaceModal?: boolean;
     selectedFile?: string | null;
-    showSystemPromptModal?: boolean;
   };
 }
 

@@ -5,7 +5,8 @@ import { native } from "@/platform";
 import { getBackendUrl } from "@/shared/config/api.config";
 import { getErrorMessage } from "@shared/lib/errors";
 import { RepoService } from "@/features/repository/api/repository.service";
-import { WorkspaceService } from "@/features/workspace/api/workspace.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { queryClient } from "@/shared/api/queryClient";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useCompleteOnboarding } from "../../api";
@@ -146,7 +147,7 @@ async function cloneAndRegisterInBackground() {
 
     if (repoId) {
       try {
-        await WorkspaceService.create(repoId);
+        await call(api.createWorkspace, { repository_id: repoId });
       } catch {
         console.warn("[Deus] Workspace creation failed, repo still registered");
       }

@@ -1,4 +1,17 @@
 import { vi } from "vitest";
+import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
+import { LOCAL_CALLER, Registry, type Caller, type Handler } from "../src/api/registry";
+
+/**
+ * Call operations the way a client's frame does: by name, through validation,
+ * to the handler. A refusal rejects with the `AppError` the client would be
+ * told about (`statusCode`, `message`, `details`).
+ */
+export function operations(handlers: Handler[], caller: Caller = LOCAL_CALLER) {
+  const registry = new Registry(handlers);
+  return <O extends AnyOp>(op: O, input?: InputOf<O>): Promise<OutputOf<O>> =>
+    registry.run(op.name, op.kind, input, { caller }) as Promise<OutputOf<O>>;
+}
 
 export function createMockDb(overrides: Record<string, any> = {}) {
   const mockStmt = {
