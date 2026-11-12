@@ -8,6 +8,11 @@
 
 import type {
   AgentHarness,
+  AutomationPausedReason,
+  AutomationRunStatus,
+  AutomationRunTrigger,
+  AutomationSessionPolicy,
+  AutomationStatus,
   MessageRole,
   SessionStatus,
   SetupStatus,
@@ -202,9 +207,9 @@ export interface AutomationRow {
   environment: string;
   /** Local repo resolved from the environment name; null off this machine. */
   repository_id: string | null;
-  status: string;
-  paused_reason: string | null;
-  session_policy: string;
+  status: AutomationStatus;
+  paused_reason: AutomationPausedReason | null;
+  session_policy: AutomationSessionPolicy;
   model: string | null;
   thinking_level: string | null;
   next_run_at: string | null;
@@ -220,15 +225,15 @@ export interface AutomationRow {
 /** List/detail shape: row + the derived fields the UI renders. */
 export interface AutomationWithDetailsRow extends AutomationRow {
   repo_name: string | null;
-  last_run_status: string | null;
+  last_run_status: AutomationRunStatus | null;
 }
 
 export interface AutomationRunRow {
   /** agnt run id. */
   id: string;
   automation_id: string;
-  status: string;
-  trigger: string;
+  status: AutomationRunStatus;
+  trigger: AutomationRunTrigger;
   provider_session_id: string | null;
   session_id: string | null;
   workspace_id: string | null;

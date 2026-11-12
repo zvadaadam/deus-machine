@@ -20,42 +20,12 @@
 //   cloud-turns.ts  what a cloud turn carries: apps that reach the cloud, skills
 //   probe.ts        an MCP client that connects and lists tools
 
-import { match } from "ts-pattern";
-import type { QueryParams } from "../../lib/query-params";
-import { requireParam } from "../../lib/query-params";
 import { getErrorMessage } from "@shared/lib/errors";
-import {
-  ConnectAppInputSchema,
-  CustomAppInputSchema,
-  CustomSkillInputSchema,
-  type InstallKind,
-} from "@shared/integrations/types";
-import {
-  addCustomApp,
-  connectApp,
-  disconnectApp,
-  installApp,
-  setAppEnabled,
-  uninstallApp,
-} from "./apps";
 import { setSignInReturnBase } from "./auth/callback";
-import { checkApp } from "./checks";
 import { reconcileCloudAccounts } from "./cloud-apps";
 import { pruneCodexSessionHomes } from "./codex-homes";
 import { setGatewayPort } from "./gateway";
-import { installPlugin, uninstallPlugin } from "./plugins";
-import {
-  addCustomSkill,
-  getLocalSkills,
-  getSkillContent,
-  installSkill,
-  reinstallSkill,
-  resumeSkillInstalls,
-  setSkillEnabled,
-  uninstallSkill,
-} from "./skills";
-import { getCatalog } from "./state";
-import { readAppTools } from "./store";
+import { resumeSkillInstalls } from "./skills";
 import { initVault } from "./vault";
 
 export { completeOAuthCallback } from "./apps";
@@ -86,95 +56,19 @@ export async function startIntegrations(port: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// q:mutate and q:request entry points (query-engine routes them here)
+// What the app's own UI reads and changes is answered in `api/integrations.ts`,
+// which calls apps.ts, skills.ts, plugins.ts, checks.ts and state.ts directly.
+//
+// These two are what is left of the dispatch that used to live here. Nothing
+// reaches them (the registry answers every name first); they exist because the
+// old arms in query-engine.ts and query-request-dispatcher.ts still import
+// them, and go when those arms do.
 // ---------------------------------------------------------------------------
 
-export type IntegrationMutation =
-  | "installIntegration"
-  | "uninstallIntegration"
-  | "setIntegrationEnabled"
-  | "connectApp"
-  | "disconnectApp"
-  | "checkApp"
-  | "addCustomApp"
-  | "addCustomSkill"
-  | "updateSkill";
-
-function readKind(params: QueryParams, action: string): InstallKind {
-  const kind = requireParam(params, "kind", action);
-  if (kind !== "app" && kind !== "skill" && kind !== "plugin") {
-    throw new Error(`${action} kind must be app, skill or plugin`);
-  }
-  return kind;
+export function runIntegrationMutation(action: string, _params: unknown): never {
+  throw new Error(`${action} is answered by api/integrations.ts`);
 }
 
-export async function runIntegrationMutation(
-  action: IntegrationMutation,
-  params: QueryParams
-): Promise<unknown> {
-  return match(action)
-    .with("installIntegration", () => {
-      const id = requireParam(params, "id", action);
-      match(readKind(params, action))
-        .with("app", () => installApp(id))
-        .with("skill", () => installSkill(id))
-        .with("plugin", () => installPlugin(id))
-        .exhaustive();
-      return { success: true };
-    })
-    .with("uninstallIntegration", () => {
-      const id = requireParam(params, "id", action);
-      match(readKind(params, action))
-        .with("app", () => uninstallApp(id))
-        .with("skill", () => uninstallSkill(id))
-        .with("plugin", () => uninstallPlugin(id))
-        .exhaustive();
-      return { success: true };
-    })
-    .with("setIntegrationEnabled", () => {
-      const id = requireParam(params, "id", action);
-      const enabled = params.enabled === true;
-      match(readKind(params, action))
-        .with("app", () => setAppEnabled(id, enabled))
-        .with("skill", () => setSkillEnabled(id, enabled))
-        .with("plugin", () => {
-          throw new Error("A plugin is installed or not; switch its apps and skills instead");
-        })
-        .exhaustive();
-      return { success: true };
-    })
-    .with("connectApp", () => connectApp(ConnectAppInputSchema.parse(params)))
-    .with("disconnectApp", () => {
-      disconnectApp(requireParam(params, "appId", action));
-      return { success: true };
-    })
-    .with("checkApp", async () => {
-      await checkApp(requireParam(params, "appId", action));
-      return { success: true };
-    })
-    .with("addCustomApp", () => addCustomApp(CustomAppInputSchema.parse(params)))
-    .with("addCustomSkill", () => addCustomSkill(CustomSkillInputSchema.parse(params).source))
-    .with("updateSkill", () => {
-      reinstallSkill(requireParam(params, "skillId", action));
-      return { success: true };
-    })
-    .exhaustive();
-}
-
-export type IntegrationRequest =
-  | "integrationsCatalog"
-  | "appTools"
-  | "skillContent"
-  | "localSkills";
-
-export function runIntegrationRequest(
-  resource: IntegrationRequest,
-  params: QueryParams
-): unknown | Promise<unknown> {
-  return match(resource)
-    .with("integrationsCatalog", () => getCatalog())
-    .with("appTools", () => readAppTools(requireParam(params, "appId", resource)))
-    .with("skillContent", () => getSkillContent(requireParam(params, "skillId", resource)))
-    .with("localSkills", () => getLocalSkills())
-    .exhaustive();
+export function runIntegrationRequest(resource: string, _params: unknown): never {
+  throw new Error(`${resource} is answered by api/integrations.ts`);
 }

@@ -7,30 +7,20 @@
  * draws. Lists only a page needs (an app's tools, a skill's SKILL.md, the
  * skills already on this computer) are read when that page opens.
  *
- * Writes are q:mutate actions; their effects arrive through the
- * subscription, so no mutation patches the cache by hand.
+ * The effects of a write arrive through the subscription, so no mutation
+ * patches the cache by hand.
  */
 
 import { useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { api, type InputOf } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
+import { call } from "@/platform/ws";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import { sendMutate, sendRequest } from "@/platform/ws/query-protocol-client";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { composeSnapshot } from "@shared/integrations/compose";
-import type {
-  AppTool,
-  Catalog,
-  ConnectAppInput,
-  ConnectAppResult,
-  CustomAppInput,
-  InstallKind,
-  IntegrationsSnapshot,
-  IntegrationsState,
-  LocalSkill,
-  SkillContent,
-} from "@shared/integrations/types";
+import type { CustomAppInput, IntegrationsSnapshot } from "@shared/integrations/types";
 
 export const integrationKeys = {
   catalog: ["integrations", "catalog"] as const,
@@ -51,10 +41,10 @@ export function useIntegrations(): {
 } {
   // Installs live on the Mac backend; web-direct has none to read.
   const enabled = !isCloudDirectWebMode();
-  useQuerySubscription("integrations", { queryKey: integrationKeys.state, params: {}, enabled });
+  useQuerySubscription(api.integrations, { queryKey: integrationKeys.state, params: {}, enabled });
   const state = useQuery({
     queryKey: integrationKeys.state,
-    queryFn: () => sendRequest<IntegrationsState>("integrations", {}),
+    queryFn: () => call(api.integrations),
     ...ON_DEMAND,
     enabled,
   });
@@ -62,7 +52,7 @@ export function useIntegrations(): {
   const version = state.data?.catalogVersion;
   const catalog = useQuery({
     queryKey: [...integrationKeys.catalog, version ?? "unknown"],
-    queryFn: () => sendRequest<Catalog>("integrationsCatalog", {}),
+    queryFn: () => call(api.integrationsCatalog),
     ...ON_DEMAND,
     enabled: enabled && version !== undefined,
   });
@@ -81,7 +71,7 @@ export function useIntegrations(): {
 export function useAppTools(appId: string, checkedAt: string | null, enabled: boolean) {
   return useQuery({
     queryKey: integrationKeys.appTools(appId, checkedAt),
-    queryFn: () => sendRequest<AppTool[]>("appTools", { appId }),
+    queryFn: () => call(api.appTools, { appId }),
     ...ON_DEMAND,
     enabled,
   });
@@ -91,7 +81,7 @@ export function useAppTools(appId: string, checkedAt: string | null, enabled: bo
 export function useLocalSkills(enabled: boolean) {
   return useQuery({
     queryKey: integrationKeys.localSkills,
-    queryFn: () => sendRequest<LocalSkill[]>("localSkills", {}),
+    queryFn: () => call(api.localSkills),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     enabled,
@@ -104,13 +94,7 @@ export function useLocalSkills(enabled: boolean) {
  * seconds), and adding a skill downloads its repository (120 seconds). The
  * default would give up on them while they are still under way.
  */
-const SLOW_WRITE_MS = 150_000;
-
-async function mutate<T>(action: string, params: object, timeoutMs?: number): Promise<T> {
-  const result = await sendMutate<T>(action, params as Record<string, unknown>, timeoutMs);
-  if (!result.success) throw new Error(result.error || `${action} failed`);
-  return result.data as T;
-}
+const SLOW_WRITE = { timeoutMs: 150_000 };
 
 /**
  * Every write says its own failure, here at the hook: a callback handed to
@@ -119,48 +103,41 @@ async function mutate<T>(action: string, params: object, timeoutMs?: number): Pr
  */
 const reportFailure = { onError: (error: unknown) => void toast.error(getErrorMessage(error)) };
 
-export interface ItemRef {
-  kind: InstallKind;
-  id: string;
-}
-
 export function useInstall() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (item: ItemRef) => mutate("installIntegration", item),
+    mutationFn: (item: InputOf<typeof api.installIntegration>) =>
+      call(api.installIntegration, item),
   });
 }
 
 export function useUninstall() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (item: ItemRef) => mutate("uninstallIntegration", item),
+    mutationFn: (item: InputOf<typeof api.uninstallIntegration>) =>
+      call(api.uninstallIntegration, item),
   });
 }
 
 export function useSetEnabled() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (input: ItemRef & { enabled: boolean }) => mutate("setIntegrationEnabled", input),
+    mutationFn: (input: InputOf<typeof api.setIntegrationEnabled>) =>
+      call(api.setIntegrationEnabled, input),
   });
-}
-
-/** Connect an app. OAuth answers with a URL; `useConnectFlow` opens it in the browser. */
-export function connectApp(input: ConnectAppInput): Promise<ConnectAppResult> {
-  return mutate<ConnectAppResult>("connectApp", input);
 }
 
 export function useDisconnectApp() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (appId: string) => mutate("disconnectApp", { appId }),
+    mutationFn: (appId: string) => call(api.disconnectApp, { appId }),
   });
 }
 
 export function useCheckApp() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (appId: string) => mutate("checkApp", { appId }, SLOW_WRITE_MS),
+    mutationFn: (appId: string) => call(api.checkApp, { appId }, SLOW_WRITE),
   });
 }
 
@@ -180,9 +157,9 @@ export function useAddCustomApp() {
       input: CustomAppInput;
       values?: Record<string, string>;
     }) => {
-      const added = await mutate<{ appId: string }>("addCustomApp", input);
+      const added = await call(api.addCustomApp, input);
       if (values) {
-        await connectApp({ appId: added.appId, values }).catch(reportFailure.onError);
+        await call(api.connectApp, { appId: added.appId, values }).catch(reportFailure.onError);
       }
       return added;
     },
@@ -192,8 +169,7 @@ export function useAddCustomApp() {
 export function useAddCustomSkill() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (source: string) =>
-      mutate<{ skillId: string }>("addCustomSkill", { source }, SLOW_WRITE_MS),
+    mutationFn: (source: string) => call(api.addCustomSkill, { source }, SLOW_WRITE),
   });
 }
 
@@ -201,7 +177,7 @@ export function useAddCustomSkill() {
 export function useUpdateSkill() {
   return useMutation({
     ...reportFailure,
-    mutationFn: (skillId: string) => mutate("updateSkill", { skillId }),
+    mutationFn: (skillId: string) => call(api.updateSkill, { skillId }),
   });
 }
 
@@ -212,7 +188,7 @@ export function useUpdateSkill() {
 export function useSkillContent(skillId: string, installedRef: string | null) {
   return useQuery({
     queryKey: integrationKeys.skillContent(skillId, installedRef),
-    queryFn: () => sendRequest<SkillContent>("skillContent", { skillId }),
+    queryFn: () => call(api.skillContent, { skillId }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: false,

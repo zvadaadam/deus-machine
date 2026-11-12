@@ -3,7 +3,8 @@
 // executes, settles and auto-pauses; this service is the deus half: validate
 // early for instant UX errors, call the platform, mirror the result into the
 // local cache, invalidate the WS subscriptions. One service, two callers:
-// the q:mutate arms and the agent's deus/automation/* tool both land here.
+// the operations in api/automations.ts and the agent's deus/automation/* tool
+// both land here.
 
 import { Cron } from "croner";
 import {
@@ -21,7 +22,7 @@ import { getRepositoryById } from "../../db";
 import { invalidate } from "../query-engine";
 import { environmentNameForRepo, getCloudEnvironmentInfo } from "../cloud-environment.service";
 import { generateUniqueName } from "../workspace.service";
-import type { AutomationWithDetailsRow, RepositoryRow } from "../../db/types";
+import type { RepositoryRow } from "../../db/types";
 import * as platform from "./platform";
 import * as store from "./store";
 import { getProviderAccounts } from "../provider-accounts.service";
@@ -63,21 +64,16 @@ export function validateSchedule(cron: string, timezone: string | null): void {
 
 // ─── Cache reads (the WS query layer is synchronous) ─────────
 
-function toAutomation(row: AutomationWithDetailsRow): Automation {
-  return row as unknown as Automation;
-}
-
 export function listAutomations(): Automation[] {
-  return store.listAutomationsWithDetails().map(toAutomation);
+  return store.listAutomationsWithDetails();
 }
 
 export function getAutomation(id: string): Automation | null {
-  const row = store.getAutomationWithDetails(id);
-  return row ? toAutomation(row) : null;
+  return store.getAutomationWithDetails(id) ?? null;
 }
 
 export function listAutomationRuns(automationId: string): AutomationRun[] {
-  return store.listRuns(automationId) as unknown as AutomationRun[];
+  return store.listRuns(automationId);
 }
 
 // ─── Repo ↔ environment link ─────────────────────────────────
