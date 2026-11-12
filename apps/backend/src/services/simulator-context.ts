@@ -1,9 +1,10 @@
 // backend/src/services/simulator-context.ts
 //
 // Simulator service — owns ALL simulator operations. Both the agent-server
-// (via RPC) and the Simulator Panel (via q:command) talk to this service.
+// (via RPC) and the Simulator Panel (through the operations in
+// api/simulator.ts) talk to this service.
 //
-// Follows the PTY pattern: q:command for actions, q:event for push updates.
+// Requests answer at once; what happens later is pushed as q:event.
 // Works identically in desktop (WS to localhost) and relay/web mode.
 //
 // TODO(relay-streaming): Add MJPEG frame proxy for web/relay mode.
@@ -20,7 +21,13 @@ import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db/queries";
 import { broadcast } from "./ws.service";
-import type { SimulatorCapabilities } from "@shared/types/simulator";
+import type {
+  InspectorNode,
+  InspectorRect,
+  InspectorSnapshot,
+  SimulatorCapabilities,
+  SimulatorInfo,
+} from "@shared/types/simulator";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,36 +46,6 @@ export interface SimulatorContext {
   streaming: boolean;
 }
 
-export interface InspectorRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface InspectorNode {
-  id: string;
-  parentId?: string;
-  className: string;
-  label?: string;
-  identifier?: string;
-  frame: InspectorRect;
-  screenRect: InspectorRect;
-  alpha: number;
-  hidden: boolean;
-  userInteractionEnabled: boolean;
-  properties?: Record<string, string>;
-  children: InspectorNode[];
-}
-
-export interface InspectorSnapshot {
-  bundleId: string;
-  pid: number;
-  timestamp: number;
-  roots: InspectorNode[];
-  source?: "native" | "accessibility";
-}
-
 interface AccessibilityNodeLike {
   role?: string;
   type?: string;
@@ -81,15 +58,6 @@ interface AccessibilityNodeLike {
   focused?: boolean;
   traits?: string[];
   children?: AccessibilityNodeLike[];
-}
-
-export interface SimulatorInfo {
-  name: string;
-  udid: string;
-  state: string;
-  runtime: string;
-  device_type: string;
-  is_available: boolean;
 }
 
 export interface SimulatorCapabilityInput {

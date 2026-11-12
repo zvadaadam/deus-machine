@@ -12,8 +12,9 @@
 
 import { useEffect } from "react";
 import { create } from "zustand";
+import { api } from "@shared/api";
 import { CloudPreviewEventSchema } from "@shared/events";
-import { isConnected, onConnectionChange, onEvent, sendRequest } from "@/platform/ws";
+import { call, isConnected, onConnectionChange, onEvent } from "@/platform/ws";
 
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
@@ -119,7 +120,7 @@ export function useCloudPreviewTemplate(workspaceId: string | null): string | nu
 export function seedCloudPreviewTemplate(workspaceId: string): () => void {
   let cancelled = false;
   const generation = useCloudPreviewStore.getState().generation;
-  sendRequest<string | null | undefined>("cloudPreview", { workspaceId })
+  call(api.cloudPreview, { workspaceId })
     .then((template) => {
       if (cancelled || template === undefined) return;
       const state = useCloudPreviewStore.getState();

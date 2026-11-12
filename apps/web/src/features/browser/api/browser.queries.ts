@@ -8,8 +8,9 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { api } from "@shared/api";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import { sendRequest } from "@/platform/ws/query-protocol-client";
+import { call } from "@/platform/ws";
 import type { LocalServersSnapshot } from "@shared/types";
 
 const EMPTY_SNAPSHOT: LocalServersSnapshot = {
@@ -24,11 +25,11 @@ export function useLocalServers(): {
   data: LocalServersSnapshot;
   isLoading: boolean;
 } {
-  useQuerySubscription("local_servers", { queryKey: QUERY_KEY });
+  useQuerySubscription(api.localServers, { queryKey: QUERY_KEY });
 
   const query = useQuery({
     queryKey: QUERY_KEY,
-    queryFn: () => sendRequest<LocalServersSnapshot>("local_servers", {}),
+    queryFn: () => call(api.localServers),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });

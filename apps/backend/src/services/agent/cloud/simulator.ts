@@ -28,6 +28,7 @@ import {
   type CloudSimulatorPlatform,
   type CloudSimulatorStatus,
 } from "@shared/events";
+import type { CloudSimulatorExecResult } from "@shared/types/simulator";
 import { getCloudConfig } from "./config";
 import { broadcast } from "../../ws.service";
 
@@ -508,13 +509,7 @@ export interface CloudSimulatorExecRequest {
   platform?: CloudSimulatorPlatform;
 }
 
-/** The platform's verdict verbatim — a failed verb is a result, not an exception. */
-export interface CloudSimulatorExecResult {
-  success: boolean;
-  exitCode: number;
-  output: string;
-  error?: string;
-}
+export type { CloudSimulatorExecResult };
 
 /** Narrow a command/request `platform` param. Absent means the workspace's
  *  default device (start), every running device (stop) or the only one (exec). */

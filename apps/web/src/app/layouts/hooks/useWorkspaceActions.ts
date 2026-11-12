@@ -20,7 +20,6 @@ import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
 import { simulatorStoreActions } from "@/features/simulator/store";
-import { simulatorService } from "@/features/simulator/api/simulator.service";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 
@@ -85,7 +84,7 @@ export function useWorkspaceActions({
     // otherwise leak in the HashMap until app close (no lifecycle hook exists).
     const simSession = simulatorStoreActions.getSession(selectedWorkspace.id);
     if (simSession.phase !== "idle") {
-      simulatorService.stopStreaming(selectedWorkspace.id).catch(() => {
+      call(api.simStop, { workspaceId: selectedWorkspace.id }).catch(() => {
         /* Expected: streaming may already be stopped or session may not exist */
       });
       simulatorStoreActions.clearWorkspaceSession(selectedWorkspace.id);

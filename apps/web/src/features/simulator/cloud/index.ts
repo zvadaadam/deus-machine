@@ -1,6 +1,5 @@
 export { CloudSimulatorPanel } from "./CloudSimulatorPanel";
 export { cloudSimulatorService } from "./cloudSimulator.service";
-export type { CloudSimExecResult } from "./cloudSimulator.service";
 export {
   EMPTY_CLOUD_SIM_DEVICE,
   cloudSimulatorActions,

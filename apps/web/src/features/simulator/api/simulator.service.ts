@@ -1,17 +1,15 @@
 /**
- * Simulator Service — communicates with the backend via WebSocket commands.
+ * The simulator operations that need more than one call.
  *
- * All operations go through the q:command protocol, which works identically
- * in desktop mode (WS to localhost) and web/relay mode (WS through relay).
- * No Electron IPC dependency.
- *
- * Commands are fire-and-forget (ack != completion). Stream lifecycle events
- * are pushed via q:event (sim:streamReady, sim:stopped, etc.).
+ * Starting a stream and building an app answer at once and report their
+ * outcome later as q:event frames (sim:streamReady, sim:buildComplete, …);
+ * the functions here wait for that event. Everything else the panel does is a
+ * plain `call(api.sim…)`.
  */
 
-import { sendCommand, sendRequest, onEvent } from "@/platform/ws/query-protocol-client";
-import type { InstalledApp, InspectorSnapshot, SimulatorInfo, StreamInfo } from "../types";
-import type { SimulatorCapabilities } from "@shared/types/simulator";
+import { api } from "@shared/api";
+import { call, onEvent } from "@/platform/ws";
+import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -53,34 +51,13 @@ function parseInstalledApp(payload: Record<string, unknown>): InstalledApp {
   };
 }
 
-function parseInspectorSnapshot(result: unknown): InspectorSnapshot {
-  const snapshot = asRecord(result).snapshot;
-  if (!snapshot || typeof snapshot !== "object") {
-    throw new Error("Malformed inspector snapshot response");
-  }
-  return snapshot as InspectorSnapshot;
-}
-
 export const simulatorService = {
-  getCapabilities: (): Promise<SimulatorCapabilities> =>
-    sendRequest<SimulatorCapabilities>("simulatorCapabilities"),
-
-  /** Fast probe: does this workspace contain a buildable Xcode project? */
-  hasXcodeProject: async (workspacePath: string): Promise<boolean> => {
-    try {
-      const result = await sendCommand("sim:hasXcodeProject", { workspacePath });
-      return asRecord(result).hasProject === true;
-    } catch {
-      return false;
-    }
-  },
-
-  /** List available iOS simulators. */
+  /** The simulators installed on the backend's Mac; none when they cannot be listed. */
   listSimulators: async (): Promise<SimulatorInfo[]> => {
     try {
-      const result = await sendCommand("sim:listDevices", {}, 45_000);
-      const devices = asRecord(result).devices;
-      return Array.isArray(devices) ? (devices as SimulatorInfo[]) : [];
+      // CoreSimulator can take longer than the default 30 s to answer on a fresh macOS install.
+      const { devices } = await call(api.simListDevices, {}, { timeoutMs: 45_000 });
+      return devices;
     } catch (err) {
       console.warn("[Simulator] listSimulators failed:", err);
       return [];
@@ -88,9 +65,8 @@ export const simulatorService = {
   },
 
   /**
-   * Start streaming from a simulator. Fires q:command sim:start which
-   * returns immediately (ack). The actual stream URL arrives via
-   * q:event sim:streamReady { workspaceId, url, port, hidAvailable }.
+   * Start streaming from a simulator. `sim:start` answers at once; the stream
+   * URL arrives as q:event sim:streamReady { workspaceId, url, port, hidAvailable }.
    */
   startStreaming: async (
     workspaceId: string,
@@ -124,59 +100,13 @@ export const simulatorService = {
       });
 
       // Send the start command AFTER listener is registered
-      sendCommand("sim:start", { workspaceId, udid, skipBootCheck }).catch((err) => {
+      call(api.simStart, { workspaceId, udid, skipBootCheck }).catch((err) => {
         clearTimeout(timeout);
         cleanup();
         reject(err);
       });
     });
   },
-
-  stopStreaming: async (workspaceId: string): Promise<void> => {
-    await sendCommand("sim:stop", { workspaceId });
-  },
-
-  sendTouch: (workspaceId: string, x: number, y: number, touchType: string) =>
-    sendCommand("sim:touch", { workspaceId, x, y, touchType }),
-
-  sendScroll: (workspaceId: string, x: number, y: number, dx: number, dy: number) =>
-    sendCommand("sim:scroll", { workspaceId, x, y, dx, dy }),
-
-  sendKey: (workspaceId: string, keycode: number, direction: string) =>
-    sendCommand("sim:key", { workspaceId, keycode, direction }),
-
-  sendButton: (workspaceId: string, buttonType: string) =>
-    sendCommand("sim:button", { workspaceId, buttonType }),
-
-  takeScreenshot: async (workspaceId: string): Promise<number[]> => {
-    const result = await sendCommand("sim:screenshot", { workspaceId });
-    const bytes = asRecord(result).bytes;
-    return Array.isArray(bytes)
-      ? bytes.filter((byte): byte is number => typeof byte === "number")
-      : [];
-  },
-
-  startInspect: async (workspaceId: string, bundleId?: string): Promise<InspectorSnapshot> => {
-    const result = await sendCommand("sim:inspectStart", { workspaceId, bundleId });
-    return parseInspectorSnapshot(result);
-  },
-
-  inspectSnapshot: async (workspaceId: string): Promise<InspectorSnapshot> => {
-    const result = await sendCommand("sim:inspectSnapshot", { workspaceId });
-    return parseInspectorSnapshot(result);
-  },
-
-  pressHome: (workspaceId: string) =>
-    sendCommand("sim:button", { workspaceId, buttonType: "home" }),
-
-  launchApp: (workspaceId: string, bundleId: string) =>
-    sendCommand("sim:launchApp", { workspaceId, bundleId }),
-
-  terminateApp: (workspaceId: string, bundleId: string) =>
-    sendCommand("sim:terminateApp", { workspaceId, bundleId }),
-
-  uninstallApp: (workspaceId: string, bundleId: string) =>
-    sendCommand("sim:uninstallApp", { workspaceId, bundleId }),
 
   buildAndRun: async (workspaceId: string, workspacePath: string): Promise<InstalledApp> => {
     // Register listener BEFORE sending command to avoid race condition
@@ -202,7 +132,7 @@ export const simulatorService = {
         }
       });
 
-      sendCommand("sim:buildAndRun", { workspaceId, workspacePath }).catch((err) => {
+      call(api.simBuildAndRun, { workspaceId, workspacePath }).catch((err) => {
         clearTimeout(timeout);
         cleanup();
         reject(err);

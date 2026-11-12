@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const listeners: Array<(event: string, data: unknown) => void> = [];
-const sendRequest = vi.hoisted(() => vi.fn());
+const call = vi.hoisted(() => vi.fn());
 /** What `isConnected()` answers when a subscription registers. */
 const connectedNow = vi.hoisted(() => ({ value: true }));
 const connectionListeners: Array<(connected: boolean) => void> = [];
@@ -15,7 +15,7 @@ vi.mock("@/platform/ws", () => ({
     connectionListeners.push(cb);
     return () => {};
   },
-  sendRequest,
+  call,
 }));
 
 import {
@@ -73,7 +73,7 @@ describe("cloudPreviewStore reads across an identity change", () => {
   it("drops a one-shot answer that started before cloud:identity — it was the previous account's", async () => {
     const { seedCloudPreviewTemplate } = await import("@/features/browser/cloud/cloudPreviewStore");
     let answer!: (value: unknown) => void;
-    sendRequest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    call.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     const cancel = seedCloudPreviewTemplate("ws-1");
     emit("cloud:identity", { generation: 9 });
     answer("https://{{port}}-accountA.e2b.app");
@@ -85,7 +85,7 @@ describe("cloudPreviewStore reads across an identity change", () => {
 
   it("applies a one-shot answer under an unchanged identity, unless the store learned meanwhile", async () => {
     const { seedCloudPreviewTemplate } = await import("@/features/browser/cloud/cloudPreviewStore");
-    sendRequest.mockResolvedValueOnce("https://{{port}}-sb1.e2b.app");
+    call.mockResolvedValueOnce("https://{{port}}-sb1.e2b.app");
     seedCloudPreviewTemplate("ws-1");
     await Promise.resolve();
     await Promise.resolve();
@@ -93,7 +93,7 @@ describe("cloudPreviewStore reads across an identity change", () => {
       "https://{{port}}-sb1.e2b.app"
     );
     let answer!: (value: unknown) => void;
-    sendRequest.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    call.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     seedCloudPreviewTemplate("ws-2");
     cloudPreviewActions.set("ws-2", "https://{{port}}-live.e2b.app");
     answer("https://{{port}}-stale.e2b.app");

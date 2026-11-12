@@ -11,8 +11,9 @@ import { ChevronDown, Crosshair, Loader2, RotateCcw, Send, Smartphone, X } from 
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
-import { onEvent } from "@/platform/ws/query-protocol-client";
+import { call, onEvent } from "@/platform/ws";
 import { simulatorService } from "../api/simulator.service";
 
 import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
@@ -189,9 +190,9 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     let cancelled = false;
 
     setHasProject(null);
-    simulatorService.hasXcodeProject(workspacePath).then(
-      (result) => {
-        if (!cancelled) setHasProject(result);
+    call(api.simHasXcodeProject, { workspacePath }).then(
+      ({ hasProject }) => {
+        if (!cancelled) setHasProject(hasProject);
       },
       () => {
         if (!cancelled) setHasProject(false);
@@ -491,7 +492,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     // dispatch STOP transitions any active state → idle (auto-deleted from map).
     simulatorStoreActions.dispatch(workspaceId, { type: "STOP" });
     try {
-      await simulatorService.stopStreaming(workspaceId);
+      await call(api.simStop, { workspaceId });
     } catch (e) {
       console.error("Stop failed:", e);
     }
@@ -506,7 +507,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // Home button
   const handleHome = async () => {
     try {
-      await simulatorService.pressHome(workspaceId);
+      await call(api.simButton, { workspaceId, buttonType: "home" });
     } catch (e) {
       console.error("Home button failed:", e);
     }
@@ -516,7 +517,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   const handleRelaunch = async () => {
     if (state.phase !== "running") return;
     try {
-      await simulatorService.launchApp(workspaceId, state.app.bundle_id);
+      await call(api.simLaunchApp, { workspaceId, bundleId: state.app.bundle_id });
     } catch (e) {
       console.error("Relaunch failed:", e);
     }
@@ -526,7 +527,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     if (state.phase !== "running") return;
     const gen = workspaceGenerationRef.current;
     try {
-      await simulatorService.terminateApp(workspaceId, state.app.bundle_id);
+      await call(api.simTerminateApp, { workspaceId, bundleId: state.app.bundle_id });
       if (workspaceGenerationRef.current !== gen) return;
       // App process killed but still installed — drop back to streaming.
       simulatorStoreActions.dispatch(workspaceId, { type: "APP_UNINSTALLED" });
@@ -539,7 +540,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     if (state.phase !== "running") return;
     const gen = workspaceGenerationRef.current;
     try {
-      await simulatorService.uninstallApp(workspaceId, state.app.bundle_id);
+      await call(api.simUninstallApp, { workspaceId, bundleId: state.app.bundle_id });
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       // dispatch validates: APP_UNINSTALLED is only legal from running → streaming.
       simulatorStoreActions.dispatch(workspaceId, { type: "APP_UNINSTALLED" });
@@ -556,7 +557,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     try {
       const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
       if (!sid) return;
-      const bytes = await simulatorService.takeScreenshot(workspaceId);
+      const { bytes } = await call(api.simScreenshot, { workspaceId });
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
       const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, {
         type: "image/png",
@@ -569,7 +570,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   }, [workspaceId]);
 
   const refreshInspectorSnapshot = useCallback(async () => {
-    const snapshot = await simulatorService.inspectSnapshot(workspaceId);
+    const { snapshot } = await call(api.simInspectSnapshot, { workspaceId });
     setInspectorSnapshot(snapshot);
     return snapshot;
   }, [workspaceId]);
@@ -585,10 +586,10 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     setInspectLoading(true);
     setInspectError(null);
     try {
-      const snapshot = await simulatorService.startInspect(
+      const { snapshot } = await call(api.simInspectStart, {
         workspaceId,
-        state.phase === "running" ? state.app.bundle_id : undefined
-      );
+        bundleId: state.phase === "running" ? state.app.bundle_id : undefined,
+      });
       setInspectorSnapshot(snapshot);
       setInspectMode(true);
     } catch (err) {

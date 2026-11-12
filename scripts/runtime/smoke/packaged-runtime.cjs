@@ -91,9 +91,9 @@ function isCliAvailable(command) {
   return result.status === 0;
 }
 
-function sendWsCommand(port, command, params, timeoutMs = 30_000) {
+function sendWsRequest(port, resource, params, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
-    const id = `${command}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const id = `${resource}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     let settled = false;
     let sent = false;
@@ -114,12 +114,12 @@ function sendWsCommand(port, command, params, timeoutMs = 30_000) {
       fn(value);
     };
     const timeout = setTimeout(() => {
-      finish(reject, new Error(`Timed out waiting for q:command_ack ${command}`));
+      finish(reject, new Error(`Timed out waiting for q:response ${resource}`));
     }, timeoutMs);
     const send = () => {
       if (sent) return;
       sent = true;
-      ws.send(JSON.stringify({ type: "q:command", id, command, params }));
+      ws.send(JSON.stringify({ type: "q:request", id, resource, params }));
     };
 
     ws.on("message", (data) => {
@@ -137,16 +137,16 @@ function sendWsCommand(port, command, params, timeoutMs = 30_000) {
         ws.send(JSON.stringify({ type: "pong" }));
         return;
       }
-      if (message.type !== "q:command_ack" || message.id !== id) return;
-      if (message.accepted) {
-        finish(resolve, message);
-      } else {
-        finish(reject, new Error(`q:command ${command} rejected: ${message.error}`));
+      if (message.id !== id) return;
+      if (message.type === "q:response") {
+        finish(resolve, message.data);
+      } else if (message.type === "q:error") {
+        finish(reject, new Error(`q:request ${resource} rejected: ${message.message}`));
       }
     });
     ws.on("open", () => {
       // Localhost backends immediately send a connected frame, which triggers
-      // the command. Keep this handler only so websocket errors before open are
+      // the request. Keep this handler only so websocket errors before open are
       // clearly separated from a missing connected frame timeout.
     });
     ws.on("error", (error) => finish(reject, error));
@@ -154,7 +154,7 @@ function sendWsCommand(port, command, params, timeoutMs = 30_000) {
       if (!settled) {
         finish(
           reject,
-          new Error(`WebSocket closed before q:command_ack ${command}: ${code} ${reason}`)
+          new Error(`WebSocket closed before q:response ${resource}: ${code} ${reason}`)
         );
       }
     });
@@ -173,12 +173,12 @@ async function smokeBackendCommands(port) {
     return;
   }
 
-  const devicesAck = await sendWsCommand(port, "sim:listDevices", {}, 45_000);
-  if (!Array.isArray(devicesAck.devices)) {
-    throw new Error(`sim:listDevices returned unexpected payload: ${JSON.stringify(devicesAck)}`);
+  const answer = await sendWsRequest(port, "sim:listDevices", {}, 45_000);
+  if (!Array.isArray(answer?.devices)) {
+    throw new Error(`sim:listDevices returned unexpected payload: ${JSON.stringify(answer)}`);
   }
   console.log(
-    `[runtime-smoke] packaged backend simulator q:command listed ${devicesAck.devices.length} devices`
+    `[runtime-smoke] packaged backend simulator q:request listed ${answer.devices.length} devices`
   );
 }
 
