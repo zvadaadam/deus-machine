@@ -2,20 +2,7 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { PROJECT_ENVIRONMENT_PATH } from "@deus-hq/api";
-
-interface FileTreeNode {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  size?: number;
-  children?: FileTreeNode[];
-}
-
-interface FileTreeResponse {
-  files: FileTreeNode[];
-  totalFiles: number;
-  totalSize: number;
-}
+import type { FileMatch, FileTreeNode, FileTreeResponse } from "@shared/types/files";
 
 /** In-memory cache with TTL to avoid rescanning on every request. */
 const scanCache = new Map<string, { data: FileTreeResponse; expiresAt: number }>();
@@ -250,10 +237,7 @@ function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
  * Return the top N files, preferring shorter paths (more prominent files).
  * Used when the user opens the @ mention popover without typing a query yet.
  */
-export function listTopFiles(
-  workspacePath: string,
-  limit: number = 15
-): Array<{ path: string; name: string; score: number }> {
+export function listTopFiles(workspacePath: string, limit: number = 15): FileMatch[] {
   let filePaths: string[];
   try {
     filePaths = scanWithGit(workspacePath);
@@ -264,10 +248,7 @@ export function listTopFiles(
 }
 
 /** Depth/length scoring over ANY flat path list — cloud trees reuse this. */
-export function scoreTopFiles(
-  filePaths: string[],
-  limit: number = 15
-): Array<{ path: string; name: string; score: number }> {
+export function scoreTopFiles(filePaths: string[], limit: number = 15): FileMatch[] {
   // Score by path depth (fewer segments = higher score) and shorter names
   const scored = filePaths.map((filePath) => {
     const name = filePath.split("/").pop() || filePath;
@@ -289,7 +270,7 @@ export function fuzzySearchFiles(
   workspacePath: string,
   query: string,
   limit: number = 15
-): Array<{ path: string; name: string; score: number }> {
+): FileMatch[] {
   // Get the flat file list from cache (or trigger a scan)
   let filePaths: string[];
   try {
@@ -305,9 +286,9 @@ export function fuzzySearchPaths(
   filePaths: string[],
   query: string,
   limit: number = 15
-): Array<{ path: string; name: string; score: number }> {
+): FileMatch[] {
   const lowerQuery = query.toLowerCase();
-  const scored: Array<{ path: string; name: string; score: number }> = [];
+  const scored: FileMatch[] = [];
 
   for (const filePath of filePaths) {
     const lowerPath = filePath.toLowerCase();

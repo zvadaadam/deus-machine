@@ -1,22 +1,18 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { Hono } from "hono";
+import * as api from "@shared/api/files";
+import { operations } from "../../helpers";
 
-const { mockRequestCloudFs, mockWithWorkspace, cloudWorkspace, identityState } = vi.hoisted(() => {
+// The file operations for a cloud workspace: handler → resolveNode →
+// RemoteNodeDriver, with the sandbox's fs channel mocked. The local lane is
+// files.test.ts.
+
+const { mockRequestCloudFs, cloudWorkspace, identityState } = vi.hoisted(() => {
   const cloudWorkspace: Record<string, unknown> = {
     id: "ws-cloud-1",
     kind: "cloud",
     current_session_id: "sess-cloud-1",
   };
-  return {
-    cloudWorkspace,
-    identityState: { gen: 0 },
-    mockRequestCloudFs: vi.fn(),
-    mockWithWorkspace: vi.fn((c: any, next: any) => {
-      c.set("workspace", cloudWorkspace);
-      c.set("workspacePath", "");
-      return next();
-    }),
-  };
+  return { cloudWorkspace, identityState: { gen: 0 }, mockRequestCloudFs: vi.fn() };
 });
 
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
@@ -25,18 +21,21 @@ vi.mock("../../../src/services/agent/cloud/driver", () => ({
 }));
 
 vi.mock("../../../src/middleware/workspace-loader", () => ({
-  withWorkspace: mockWithWorkspace,
+  loadWorkspace: () => ({ workspace: cloudWorkspace, workspacePath: "" }),
 }));
 
+vi.mock("../../../src/services/fs-watcher.service", () => ({
+  watchWorkspace: vi.fn(),
+  unwatchWorkspace: vi.fn(),
+}));
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn() }));
 vi.mock("../../../src/db", () => ({ getWorkspaceForMiddleware: vi.fn() }));
 
-import filesRoutes from "../../../src/routes/files";
-import { errorHandler } from "../../../src/middleware/error-handler";
+import fileHandlers from "../../../src/api/files";
 
-const app = new Hono();
-app.route("/", filesRoutes);
-app.onError(errorHandler);
+const run = operations(fileHandlers);
+const workspace = { workspaceId: "ws-cloud-1" };
+const search = (query: string) => run(api.fileSearch, { ...workspace, query });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -44,36 +43,26 @@ beforeEach(() => {
   identityState.gen = 0;
 });
 
-describe("cloud files routes", () => {
+describe("cloud file operations", () => {
   it("tree returns an empty listing (not an error panel) while provisioning", async () => {
     cloudWorkspace.current_session_id = null;
 
-    const res = await app.request("/workspaces/ws-cloud-1/files");
-    const body = (await res.json()) as { files: unknown[]; provisioning?: boolean };
+    const tree = await run(api.workspaceFiles, workspace);
 
-    expect(res.status).toBe(200);
-    expect(body.files).toEqual([]);
-    expect(body.provisioning).toBe(true);
+    expect(tree.files).toEqual([]);
+    expect(tree.provisioning).toBe(true);
     expect(mockRequestCloudFs).not.toHaveBeenCalled();
   });
 
-  it("invalidate-cache clears the cloud tree cache so mentions don't go stale", async () => {
+  it("invalidateFileCache clears the cloud tree cache so mentions don't go stale", async () => {
     cloudWorkspace.current_session_id = "sess-invalidate";
     mockRequestCloudFs.mockResolvedValue({ tree: [{ name: "a.ts", path: "a.ts", type: "file" }] });
     // warm the search cache
-    await app.request("/workspaces/ws-cloud-1/files/search", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ query: "a" }),
-    });
-    await app.request("/workspaces/ws-cloud-1/files/invalidate-cache", { method: "POST" });
+    await search("a");
+    await run(api.invalidateFileCache, workspace);
     mockRequestCloudFs.mockClear();
     // a fresh search must re-list (cache was cleared), not serve the stale set
-    await app.request("/workspaces/ws-cloud-1/files/search", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ query: "a" }),
-    });
+    await search("a");
     expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
   });
 
@@ -90,35 +79,54 @@ describe("cloud files routes", () => {
       truncated: true,
     });
 
-    const res = await app.request("/workspaces/ws-cloud-1/files");
-    const body = (await res.json()) as {
-      files: Array<{ type: string; children?: unknown[] }>;
-      totalFiles: number;
-      truncated: boolean;
-    };
+    const tree = await run(api.workspaceFiles, workspace);
 
-    expect(res.status).toBe(200);
-    expect(body.files[0].type).toBe("directory");
-    expect(body.totalFiles).toBe(1);
-    expect(body.truncated).toBe(true);
+    expect(tree.files[0]).toEqual({
+      name: "src",
+      path: "src",
+      type: "directory",
+      children: [{ name: "a.ts", path: "src/a.ts", type: "file", size: 5 }],
+    });
+    expect(tree.totalFiles).toBe(1);
+    expect(tree.totalSize).toBe(5);
+    expect(tree.truncated).toBe(true);
+  });
+
+  it("read answers with the sandbox file's text", async () => {
+    mockRequestCloudFs.mockResolvedValue({ content: "# Readme\n" });
+
+    expect(await run(api.fileContent, { ...workspace, path: "README.md" })).toEqual({
+      content: "# Readme\n",
+    });
+    expect(mockRequestCloudFs).toHaveBeenCalledWith("sess-cloud-1", {
+      op: "read",
+      path: "README.md",
+    });
   });
 
   it("read refuses traversal before any sandbox round-trip", async () => {
-    const res = await app.request(
-      "/workspaces/ws-cloud-1/file-content?path=" + encodeURIComponent("../../etc/passwd")
-    );
-
-    expect(res.status).toBe(400);
+    await expect(
+      run(api.fileContent, { ...workspace, path: "../../etc/passwd" })
+    ).rejects.toMatchObject({ statusCode: 400, message: "Invalid file path" });
     expect(mockRequestCloudFs).not.toHaveBeenCalled();
+  });
+
+  it("read refuses a file the sandbox has no text for as binary_file (422)", async () => {
+    mockRequestCloudFs.mockResolvedValue({});
+
+    await expect(run(api.fileContent, { ...workspace, path: "logo.png" })).rejects.toMatchObject({
+      statusCode: 422,
+      message: "binary_file",
+    });
   });
 
   it("a sandbox timeout surfaces as an instruction, not a 500", async () => {
     mockRequestCloudFs.mockRejectedValue(new Error("cloud fs request timed out"));
 
-    const res = await app.request("/workspaces/ws-cloud-1/file-content?path=README.md");
-
-    expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/waking|shortly/i);
+    await expect(run(api.fileContent, { ...workspace, path: "README.md" })).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringMatching(/waking|shortly/i),
+    });
   });
 
   it("search caches the flattened tree across keystrokes", async () => {
@@ -127,17 +135,10 @@ describe("cloud files routes", () => {
       tree: [{ name: "alpha.ts", path: "alpha.ts", type: "file" }],
     });
 
-    const search = (q: string) =>
-      app.request("/workspaces/ws-cloud-1/files/search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: q }),
-      });
-    const first = await search("al");
+    await search("al");
     const second = await search("alp");
 
-    expect(first.status).toBe(200);
-    expect(((await second.json()) as Array<{ path: string }>)[0]?.path).toBe("alpha.ts");
+    expect(second[0]?.path).toBe("alpha.ts");
     expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
   });
 
@@ -149,12 +150,6 @@ describe("cloud files routes", () => {
     });
     mockRequestCloudFs.mockReturnValue(listPromise);
 
-    const search = (q: string) =>
-      app.request("/workspaces/ws-cloud-1/files/search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: q }),
-      });
     // three keystrokes land while the first (slow) list is still in flight
     const all = Promise.all([search("a"), search("ab"), search("abc")]);
     await new Promise((r) => setTimeout(r, 0)); // let all three reach the shared await
@@ -170,13 +165,13 @@ describe("cloud files routes", () => {
     cloudWorkspace.current_session_id = "sess-identity";
     mockRequestCloudFs.mockResolvedValue({ tree: [{ name: "a.ts", path: "a.ts", type: "file" }] });
     // account A warms the cache
-    await app.request("/workspaces/ws-cloud-1/files");
+    await run(api.workspaceFiles, workspace);
     expect(mockRequestCloudFs).toHaveBeenCalledTimes(1);
     // sign-out / switch bumps the identity generation
     identityState.gen = 1;
     // a request for the still-persisted session must NOT serve A's cached tree —
     // the generation mismatch forces a fresh (re-authenticating) list
-    await app.request("/workspaces/ws-cloud-1/files");
+    await run(api.workspaceFiles, workspace);
     expect(mockRequestCloudFs).toHaveBeenCalledTimes(2);
   });
 });

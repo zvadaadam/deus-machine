@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { ptyCommands } from "@/platform";
-import { onEvent } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { getErrorMessage } from "@shared/lib/errors";
+import { call, onEvent } from "@/platform/ws";
 import "@xterm/xterm/css/xterm.css";
 import "./Terminal.css";
 
@@ -176,7 +177,10 @@ export function Terminal({
         return;
       }
       if (ready) {
-        ptyCommands.write(ptyId, Array.from(new TextEncoder().encode(data))).catch((err) => {
+        call(api.ptyWrite, {
+          id: ptyId,
+          data: Array.from(new TextEncoder().encode(data)),
+        }).catch((err) => {
           console.error("Failed to write to PTY:", err);
         });
       }
@@ -188,16 +192,15 @@ export function Terminal({
     const startPty = () => {
       ready = false;
       const spawnId = ptyId;
-      ptyCommands
-        .spawn({
-          id: spawnId,
-          command: shell,
-          args: [],
-          cols: xterm.cols,
-          rows: xterm.rows,
-          cwd: workspacePath,
-          ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
-        })
+      call(api.ptySpawn, {
+        id: spawnId,
+        command: shell,
+        args: [],
+        cols: xterm.cols,
+        rows: xterm.rows,
+        cwd: workspacePath,
+        ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
+      })
         .then(() => {
           if (!disposed && spawnId === ptyId) {
             ready = true;
@@ -206,7 +209,7 @@ export function Terminal({
               setTimeout(() => {
                 if (!disposed) {
                   const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
-                  ptyCommands.write(spawnId, encoded).catch((err) => {
+                  call(api.ptyWrite, { id: spawnId, data: encoded }).catch((err) => {
                     console.error("Failed to write initial command:", err);
                   });
                 }
@@ -219,7 +222,7 @@ export function Terminal({
             dead = true;
             console.error("Failed to spawn PTY:", err);
             xterm.write(
-              `\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n\x1b[90mPress Enter to retry\x1b[0m\r\n`
+              `\r\n\x1b[31mFailed to start terminal: ${getErrorMessage(err)}\x1b[0m\r\n\x1b[90mPress Enter to retry\x1b[0m\r\n`
             );
           }
         });
@@ -259,7 +262,7 @@ export function Terminal({
       if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
       safeFit(fitAddon);
       if (ready) {
-        ptyCommands.resize(ptyId, xterm.cols, xterm.rows).catch((err) => {
+        call(api.ptyResize, { id: ptyId, cols: xterm.cols, rows: xterm.rows }).catch((err) => {
           console.error("Failed to resize PTY:", err);
         });
       }
@@ -272,7 +275,7 @@ export function Terminal({
       inputDisposable.dispose();
       unlistenData();
       unlistenExit();
-      ptyCommands.kill(ptyId).catch(() => {
+      call(api.ptyKill, { id: ptyId }).catch(() => {
         /* Expected: PTY process may already be dead or cleaned up */
       });
       xterm.dispose();

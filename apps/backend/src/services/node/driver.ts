@@ -21,6 +21,7 @@
 import path from "path";
 import fs from "fs";
 import { getErrorMessage, isExecError } from "@shared/lib/errors";
+import type { FileMatch, FileTreeResponse } from "@shared/types/files";
 import { ValidationError } from "../../lib/errors";
 import * as gitService from "../git.service";
 import * as filesService from "../files.service";
@@ -67,34 +68,13 @@ export type FsReadOutcome =
   | { ok: true; content: string }
   | { ok: false; status: 422; body: Record<string, unknown> };
 
-/**
- * The workspace file tree the route serializes. `files` is left as `unknown[]`
- * because the two lanes' node shapes differ (local `FileTreeNode` vs the cloud
- * sandbox's mapped nodes); the container fields are what callers rely on.
- * `truncated` / `provisioning` are cloud-only.
- */
-export interface FsTreeResponse {
-  files: unknown[];
-  totalFiles: number;
-  totalSize: number;
-  truncated?: boolean;
-  provisioning?: boolean;
-}
-
-/** A fuzzy file-search hit — identical shape on both lanes. */
-export interface FileMatch {
-  path: string;
-  name: string;
-  score: number;
-}
-
 export interface NodeDriver {
   // diff family
   diffStats(): Promise<DiffStats>;
   diffFiles(): Promise<DiffFilesResult>;
   diffFile(file: string): Promise<DiffFileOutcome>;
   // fs family
-  fsTree(): Promise<FsTreeResponse>;
+  fsTree(): Promise<FileTreeResponse>;
   fsRead(filePath: string): Promise<FsReadOutcome>;
   fsSearch(query: string, limit: number): Promise<FileMatch[]>;
   fsInvalidate(): void;
@@ -195,7 +175,7 @@ class LocalNodeDriver implements NodeDriver {
     }
   }
 
-  async fsTree(): Promise<FsTreeResponse> {
+  async fsTree(): Promise<FileTreeResponse> {
     return filesService.scanWorkspaceFiles(this.workspacePath);
   }
 
@@ -340,7 +320,7 @@ class RemoteNodeDriver implements NodeDriver {
     }
   }
 
-  async fsTree(): Promise<FsTreeResponse> {
+  async fsTree(): Promise<FileTreeResponse> {
     // Null session = still provisioning; return an empty listing (not an error)
     // so Files shows "empty", not a dead panel that never refetches.
     const sessionId = this.workspace.current_session_id;

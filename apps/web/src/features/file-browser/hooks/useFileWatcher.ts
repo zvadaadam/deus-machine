@@ -5,15 +5,16 @@
  * invalidates relevant React Query caches.
  *
  * EVENT FLOW:
- * 1. Component mounts with a workspace → starts watching via WS command
+ * 1. Component mounts with a workspace → asks the backend to watch it
  * 2. Backend chokidar detects changes → debounces → pushes q:event "fs:changed"
  * 3. This hook receives event → invalidates React Query caches
- * 4. Component unmounts → stops watching via WS command
+ * 4. Component unmounts → asks the backend to stop
  */
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { sendCommand, onEvent } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { call, onEvent } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 
 /** Delay before starting watcher to let filesystem settle after worktree checkout */
@@ -43,7 +44,7 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
     const settleTimeout = setTimeout(() => {
       if (!isActive) return;
 
-      sendCommand("fs:watch", { workspacePath })
+      call(api.fsWatch, { workspacePath })
         .then(() => {
           if (isActive) {
             setIsWatching(true);
@@ -89,7 +90,7 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
       isActive = false;
       clearTimeout(settleTimeout);
       setIsWatching(false);
-      sendCommand("fs:unwatch", { workspacePath }).catch(() => {});
+      call(api.fsUnwatch, { workspacePath }).catch(() => {});
       unlisten();
     };
   }, [workspacePath, workspaceId, queryClient]);

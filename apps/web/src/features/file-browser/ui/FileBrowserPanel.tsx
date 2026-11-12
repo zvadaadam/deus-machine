@@ -24,7 +24,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useFiles, invalidateFileCache } from "../api/useFiles";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
+import { useFiles } from "../api/useFiles";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -120,9 +122,8 @@ function enrichTreeWithChanges(nodes: FileTreeNode[], changes: FileChange[]): Fi
 
 /** Filter tree to only files with actual diff changes (and their ancestor directories).
  *
- * Uses `change_status` (set by enrichTreeWithChanges from diff query results) only.
- * Does NOT use `git_status` (from the file scanner) because libgit2's status API
- * produces phantom statuses in git worktrees, causing clean files to appear as changed.
+ * Uses `change_status` (set by enrichTreeWithChanges from diff query results): the
+ * file scan carries no git status.
  */
 function filterToChangedOnly(nodes: FileTreeNode[]): FileTreeNode[] {
   return nodes.reduce((acc, node) => {
@@ -226,7 +227,7 @@ export function FileBrowserPanel({
   const handleRefresh = async () => {
     if (!workspaceId) return;
     try {
-      await invalidateFileCache(workspaceId);
+      await call(api.invalidateFileCache, { workspaceId });
       await refetch({ throwOnError: true });
     } catch (err) {
       toast.error(getErrorMessage(err));
