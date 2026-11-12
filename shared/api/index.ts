@@ -8,9 +8,31 @@
  */
 
 import { isOp, type AnyOp } from "./op";
+import * as automations from "./automations";
+import * as browser from "./browser";
+import * as devices from "./devices";
+import * as files from "./files";
+import * as integrations from "./integrations";
+import * as repos from "./repos";
+import * as sessions from "./sessions";
+import * as settings from "./settings";
+import * as simulator from "./simulator";
+import * as terminal from "./terminal";
 import * as workspaces from "./workspaces";
 
-export const api = { ...workspaces };
+export const api = {
+  ...automations,
+  ...browser,
+  ...devices,
+  ...files,
+  ...integrations,
+  ...repos,
+  ...sessions,
+  ...settings,
+  ...simulator,
+  ...terminal,
+  ...workspaces,
+};
 export type Api = typeof api;
 
 export const ops: readonly AnyOp[] = Object.values(api).filter(isOp);
