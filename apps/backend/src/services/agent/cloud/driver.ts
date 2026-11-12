@@ -31,7 +31,7 @@ import {
   cardQuestions,
   unansweredRequests,
 } from "@shared/agent-asks";
-import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
+import { isLiveOnlyEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { CloudTurnSelection } from "@shared/cloud-models";
 import {
   CloudEnvStateSchema,
@@ -256,12 +256,19 @@ function frameSource(session: CloudSession): CloudSimulatorSource & CloudPreview
   return { workspaceId: session.deusWorkspaceId, sessionId: session.deusSessionId };
 }
 
-/** Wrap one event under the deus session id and feed the shared fold. */
+/**
+ * Wrap one event under the deus session id and feed the shared fold.
+ *
+ * Numbered the way the engine numbers its own log: a kept event takes the next
+ * seq; a token delta takes none and carries the seq of the kept event before
+ * it. Clients tell the two apart by that, and resume after the last kept one.
+ */
 function pushToFold(session: CloudSession, event: Record<string, unknown>): void {
   if (!handler) return;
+  const unkept = isLiveOnlyEvent(event as { type: string }) && session.seq > 0;
   const envelope: DecodedWireEventEnvelope = {
     sessionId: session.deusSessionId,
-    seq: ++session.seq,
+    seq: unkept ? session.seq : ++session.seq,
     event: { ...event, sessionId: session.deusSessionId } as DecodedWireEventEnvelope["event"],
   };
   handler.handle(envelope);

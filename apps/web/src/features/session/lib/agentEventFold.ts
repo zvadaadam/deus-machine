@@ -56,6 +56,7 @@ import {
   turnRecord,
 } from "@shared/conversation-rows";
 import {
+  isLiveEnvelope,
   isUnknownEvent,
   type AnyLifecycleEvent,
   type ConversationChange,
@@ -184,14 +185,23 @@ export function routeEnvelope(ctx: AgentStreamContext, envelope: DecodedWireEven
   const sessionId = envelope?.sessionId;
   if (!sessionId) return;
 
+  // A frame the engine does not keep (a token delta, an open part restated
+  // after a subscription) takes no seq of its own: it carries the seq of the
+  // kept event before it, and is classified against the cursor without moving it.
+  const unkept = isLiveEnvelope(envelope);
+
   // Deus joins a live stream mid-flight — the page comes from SQLite, the
   // socket from wherever the turn already is — so the FIRST envelope seen for
   // a session is never a hole. Seek to just before it and let the cursor's own
   // arithmetic run from there.
-  if (ctx.cursor.last(sessionId) === 0) ctx.cursor.seek(sessionId, envelope.seq - 1);
+  if (ctx.cursor.last(sessionId) === 0) {
+    ctx.cursor.seek(sessionId, unkept ? envelope.seq : envelope.seq - 1);
+  }
 
-  let verdict = ctx.cursor.advance(sessionId, envelope.seq);
-  if (verdict === "duplicate" && envelope.seq !== ctx.cursor.last(sessionId)) {
+  let verdict = unkept
+    ? ctx.cursor.advanceLive(sessionId, envelope.seq)
+    : ctx.cursor.advance(sessionId, envelope.seq);
+  if (!unkept && verdict === "duplicate" && envelope.seq !== ctx.cursor.last(sessionId)) {
     // Backwards beyond the last frame. The engine cursor only calls it a
     // reset when a fresh log is seen FROM seq 1; here the log was replaced
     // and this client first sees it mid-stream (its own reconnect overlapped

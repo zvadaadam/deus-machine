@@ -250,6 +250,37 @@ describe("cloud driver frame → fold contract", () => {
     expect(second.seq).toBe(2);
   });
 
+  it("numbers a token delta the way the engine does: with the seq of the kept event before it", () => {
+    const delta = {
+      type: "message.part.delta",
+      sessionId: "agnt-session-1",
+      turnId: "t1",
+      messageId: "m1",
+      partId: "p1",
+      outputIndex: 1,
+      partIndex: 0,
+      delta: { type: "text", text: "hi" },
+    };
+    capturedOnFrame!({ type: "turn.started", sessionId: "agnt-session-1", turnId: "t1" });
+    capturedOnFrame!(delta);
+    capturedOnFrame!(delta);
+    capturedOnFrame!({
+      type: "message.started",
+      sessionId: "agnt-session-1",
+      messageId: "m1",
+      role: "assistant",
+    });
+
+    // Deltas are never kept or replayed, so they take no number of their own:
+    // a client resumes after the last kept event and loses nothing it needs.
+    expect(handler.handle.mock.calls.map((c) => [c[0].event.type, c[0].seq])).toEqual([
+      ["turn.started", 1],
+      ["message.part.delta", 1],
+      ["message.part.delta", 1],
+      ["message.started", 2],
+    ]);
+  });
+
   it("maps agnt session.error to the engine error event", () => {
     capturedOnFrame!(
       SessionErrorEventSchema.parse({

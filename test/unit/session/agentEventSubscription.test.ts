@@ -259,7 +259,8 @@ describe("shell agent stream subscription", () => {
     try {
       await online();
       runtime.emitLocalEvent("agent:snapshot", snapshot("Streaming", 40));
-      live(41, " so far");
+      // A delta carries the seq of the kept event before it (the snapshot, 40).
+      live(40, " so far");
       flushFrame();
       expect(shown()).toBe("Streaming so far");
 
@@ -272,7 +273,7 @@ describe("shell agent stream subscription", () => {
         .dispatchEvent(
           new MessageEvent("message", { data: JSON.stringify({ type: "connected" }) })
         );
-      live(42, " and more");
+      live(40, " and more");
       flushFrame();
       expect(shown()).toBe("Streaming so far and more");
     } finally {
@@ -315,7 +316,7 @@ describe("shell agent stream subscription", () => {
         runtime.emitLocalEvent("agent:snapshot", snapshot(runtime.identity.host, 40));
         runtime.emitLocalEvent("agent:event", {
           sessionId,
-          seq: 41,
+          seq: 40,
           event: {
             type: "message.part.delta",
             sessionId,
@@ -386,13 +387,13 @@ describe("shell agent stream subscription", () => {
     expect(cached().messages).toContainEqual(older);
     expect(cached().messages.at(-1)).toEqual(pending);
 
-    delta(41, " while hidden");
+    delta(40, " while hidden");
     expect(frames.size).toBe(0);
     expect(text()).toBe("Recovered");
 
     const observer = observe(queryFn);
     expect(observer.getCurrentResult().data).toBe(cached());
-    delta(42, " and visible");
+    delta(40, " and visible");
     expect(frames.size).toBe(1);
     flushFrame();
     expect(text()).toBe("Recovered while hidden and visible");
@@ -411,9 +412,9 @@ describe("shell agent stream subscription", () => {
     const before = cached();
 
     emit("agent:snapshot", snapshot("Backend history"));
-    delta(41, " backend delta");
+    delta(40, " backend delta");
     envelope(
-      42,
+      41,
       TurnEndedEventSchema.parse({
         type: "turn.ended",
         sessionId,
@@ -439,8 +440,9 @@ describe("shell agent stream subscription", () => {
     await queryClient.fetchQuery({ queryKey: messagesKey(sessionId), queryFn });
     observe(queryFn);
     emit("agent:snapshot", snapshot());
-    delta(41, " queued");
-    delta(43, " across a gap");
+    delta(40, " queued");
+    // Kept events 41 and 42 never arrived: a delta from beyond them is a gap.
+    delta(42, " across a gap");
     expect(frames.size).toBe(1);
 
     setLane(true);
@@ -461,7 +463,7 @@ describe("shell agent stream subscription", () => {
     await queryClient.fetchQuery({ queryKey: messagesKey(sessionId), queryFn });
     observe(queryFn);
     emit("agent:snapshot", snapshot("Discarded history"));
-    delta(41, " queued");
+    delta(40, " queued");
 
     observerCleanups.pop()!();
     queryClient.removeQueries({ queryKey: messagesKey(sessionId), exact: true });
@@ -470,7 +472,7 @@ describe("shell agent stream subscription", () => {
     flushFrame();
     expect(cached().messages).toEqual([]);
 
-    envelope(42, {
+    envelope(41, {
       type: "message.started",
       sessionId,
       turnId: TURN,
@@ -479,7 +481,7 @@ describe("shell agent stream subscription", () => {
       role: "assistant",
       timestamp: T,
     });
-    envelope(43, {
+    envelope(42, {
       type: "message.part",
       sessionId,
       turnId: TURN,

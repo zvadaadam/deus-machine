@@ -31,7 +31,12 @@ import {
 import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
 import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../../../shared/types/session";
-import type { LifecycleEvent, Part, WireEventEnvelope } from "../../../shared/protocol-types";
+import {
+  isLiveOnlyEvent,
+  type LifecycleEvent,
+  type Part,
+  type WireEventEnvelope,
+} from "../../../shared/protocol-types";
 
 const SESSION = "sess-1";
 const OTHER = "sess-2";
@@ -76,7 +81,11 @@ function harness(activeSessionId = SESSION): Harness {
     requestRefetch,
     feed(event, over = {}) {
       const sessionId = over.sessionId ?? sessionOf(event) ?? activeSessionId;
-      const next = (seqs.get(sessionId) ?? 0) + 1;
+      // As the engine numbers its log (server/session-log.ts): a kept event
+      // takes the next seq; a token delta takes none and carries the seq of the
+      // kept event before it.
+      const last = seqs.get(sessionId) ?? 0;
+      const next = isLiveOnlyEvent(event) && last > 0 ? last : last + 1;
       seqs.set(sessionId, next);
       routeEnvelope(ctx, { sessionId, seq: next, event, ...over } as WireEventEnvelope);
     },
@@ -239,6 +248,34 @@ describe("message.part.delta — batched to the frame", () => {
 
     expect(text(h)).toBe("AB");
     expect(h.scheduleFlush).toHaveBeenCalled();
+  });
+
+  it("applies deltas that carry the previous kept event's seq, as the engine sends them", () => {
+    // The opening `message.part` above was seq 2; a delta takes no seq of its own.
+    h.feed(delta("p1", "A"), { seq: 2 });
+    h.feed(delta("p1", "B"), { seq: 2 });
+    h.flush();
+
+    expect(text(h)).toBe("AB");
+    expect(h.requestRefetch).not.toHaveBeenCalled();
+    // The cursor did not move: the next kept event is still seq 3.
+    expect(h.ctx.cursor.last(SESSION)).toBe(2);
+  });
+
+  it("drops a delta that is older than the last kept event (its part's snapshot covers it)", () => {
+    h.feed(partEvent(textPart("p1", "C")));
+    h.feed(delta("p1", "stale"), { seq: 2 });
+    h.flush();
+
+    expect(text(h)).toBe("C");
+    expect(h.requestRefetch).not.toHaveBeenCalled();
+  });
+
+  it("reads a delta from beyond the last kept event as missed events, and refetches", () => {
+    h.feed(delta("p1", "ahead"), { seq: 9 });
+
+    expect(h.requestRefetch).toHaveBeenCalledExactlyOnceWith(SESSION);
+    expect(h.ctx.cursor.last(SESSION)).toBe(9);
   });
 
   it("does not write the cache until the frame runs", () => {
@@ -551,7 +588,7 @@ describe("restored cloud conversations", () => {
     const h = harness();
     h.feed(started(), { seq: 40 });
     h.feed(partEvent(textPart("p1", "old")), { seq: 41 });
-    h.feed(delta("p1", " stale pending flush"), { seq: 42 });
+    h.feed(delta("p1", " stale pending flush"), { seq: 41 });
     const restored = harness();
     restored.feed(started());
     restored.feed(partEvent(textPart("p1", "Recovered while disconnected")));
@@ -563,7 +600,8 @@ describe("restored cloud conversations", () => {
       messageIds: ["a1"],
     });
     expect(h.fold().dirtyMessages.size).toBe(0);
-    h.feed(delta("p1", " and continued"), { seq: 2 });
+    // The snapshot is seq 1; a delta carries the seq of the kept event before it.
+    h.feed(delta("p1", " and continued"), { seq: 1 });
     h.flush();
     expect(h.page()!.messages[0].parts?.[0]).toMatchObject({
       text: "Recovered while disconnected and continued",
@@ -626,14 +664,15 @@ describe("routeEnvelope — cursor policy", () => {
     expect(h.requestRefetch).toHaveBeenCalledTimes(1);
   });
 
-  it("drops a duplicate envelope entirely — no fold, no refetch", () => {
+  it("drops a redelivered kept envelope entirely — no fold, no refetch", () => {
     const h = harness();
     h.feed(started(), { seq: 1 });
-    h.feed(partEvent(textPart("p1", "")), { seq: 2 });
-    h.feed(delta("p1", "A"), { seq: 2 });
+    h.feed(partEvent(textPart("p1", "first")), { seq: 2 });
+    // The same seq again, whatever it carries, was already folded.
+    h.feed(partEvent(textPart("p1", "again")), { seq: 2 });
     h.flush();
 
-    expect((h.page()!.messages[0].parts![0] as { text: string }).text).toBe("");
+    expect((h.page()!.messages[0].parts![0] as { text: string }).text).toBe("first");
     expect(h.requestRefetch).not.toHaveBeenCalled();
   });
 
