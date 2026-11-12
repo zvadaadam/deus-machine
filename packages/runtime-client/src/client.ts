@@ -225,6 +225,12 @@ export class RuntimeClient<Resource extends string = string> {
         for (const follower of [...listener.followers])
           this.notify(() => follower.onEvent(frame.data));
       })
+      .with("q:subscribed", () => {
+        const listener = this.listeners.get(id);
+        if (!listener || !this.isConnected()) return;
+        // Where the stream stands: a place to return to even if nothing arrives.
+        if (typeof frame.seq === "number") listener.last = frame.seq;
+      })
       .with("q:reset", () => {
         const listener = this.listeners.get(id);
         if (!listener || !this.isConnected()) return;
@@ -301,10 +307,11 @@ export class RuntimeClient<Resource extends string = string> {
    * same stream and filter share one subscription on the wire.
    *
    * The subscription is restored on every reconnect. Where the stream numbers
-   * its events, the host is told the last one received and sends what
-   * followed it. Where it cannot (the stream is not numbered, nothing had
-   * arrived yet, or the host no longer holds that far back), `onReset` runs:
-   * something may have been missed, so read the state again.
+   * its events, the host says where it stands when the subscription is made,
+   * is told the last number received on a return, and sends what followed it.
+   * Where it cannot (the stream is not numbered, or the host no longer holds
+   * that far back), `onReset` runs: something may have been missed, so read
+   * the state again.
    *
    * A runtime that answers requests itself (no host socket) still keeps its
    * listeners: they receive what `publishLocal` delivers.

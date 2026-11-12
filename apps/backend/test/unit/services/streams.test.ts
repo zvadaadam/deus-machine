@@ -3,7 +3,7 @@ import { z } from "zod";
 import { out } from "@shared/api/op";
 import { resumableStream, stream } from "@shared/api/stream";
 
-const sent = vi.hoisted(() => new Map<string, unknown[]>());
+const sent = vi.hoisted(() => new Map<string, Frame[]>());
 vi.mock("../../../src/services/ws.service", () => ({
   getConnection: (id: string) =>
     sent.has(id)
@@ -14,6 +14,7 @@ vi.mock("../../../src/services/ws.service", () => ({
 import {
   _reset,
   dropConnection,
+  openWith,
   publish,
   subscribe,
   unsubscribe,
@@ -31,13 +32,21 @@ const events = resumableStream({
 });
 const notice = stream({ name: "notice", event: out<string>() });
 
-type Numbered = { seq?: number };
-const seqs = (frames: unknown[]) => frames.map((frame) => (frame as Numbered).seq);
+interface Frame {
+  type: string;
+  id: string;
+  seq?: number;
+  data?: unknown;
+}
 
-function connect(id: string): unknown[] {
+function connect(id: string): Frame[] {
   sent.set(id, []);
   return sent.get(id)!;
 }
+/** The events a connection was sent, without the acknowledgment of each subscription. */
+const heard = (frames: Frame[]) => frames.filter((frame) => frame.type !== "q:subscribed");
+const seqs = (frames: Frame[]) => heard(frames).map((frame) => frame.seq);
+const numbers = (frames: Frame[]) => heard(frames).map((frame) => (frame.data as { n: number }).n);
 
 beforeEach(() => {
   _reset();
@@ -56,12 +65,10 @@ describe("streams", () => {
     publish(output, { workspaceId: "w1", id: "t1" }, { text: "a" });
     publish(output, { workspaceId: "w2", id: "t2" }, { text: "b" });
 
-    expect(phone).toEqual([
+    expect(heard(phone)).toEqual([
       { type: "q:event", id: "s1", event: "terminalOutput", data: { text: "a" } },
     ]);
-    expect(
-      laptop.map((f) => [(f as { id: string }).id, (f as { data: { text: string } }).data.text])
-    ).toEqual([
+    expect(heard(laptop).map((f) => [f.id, (f.data as { text: string }).text])).toEqual([
       ["s1", "a"],
       ["s2", "a"],
       ["s2", "b"],
@@ -79,14 +86,27 @@ describe("streams", () => {
     publish(notice, {}, "two");
     dropConnection("phone");
     publish(notice, {}, "three");
-    expect(phone.map((f) => `${(f as { id: string }).id}:${(f as { data: string }).data}`)).toEqual(
-      ["s1:one", "s2:one", "s2:two"]
-    );
+    expect(heard(phone).map((f) => `${f.id}:${f.data}`)).toEqual(["s1:one", "s2:one", "s2:two"]);
   });
 
   it("refuses a scope the stream does not have", () => {
     connect("phone");
     expect(() => subscribe("phone", "s1", output, { id: 7 })).toThrow("terminalOutput");
+  });
+
+  it("acknowledges a subscription, saying where a numbered scope stands", () => {
+    const phone = connect("phone");
+    publish(events, { sessionId: "a" }, { n: 1 });
+    publish(events, { sessionId: "a" }, { n: 2 });
+    subscribe("phone", "busy", events, { sessionId: "a" });
+    subscribe("phone", "quiet", events, { sessionId: "never" });
+    subscribe("phone", "plain", notice, {});
+    expect(phone).toEqual([
+      { type: "q:subscribed", id: "busy", seq: 2 },
+      // Nothing published here yet: it stands where this process began numbering.
+      { type: "q:subscribed", id: "quiet", seq: 0 },
+      { type: "q:subscribed", id: "plain" },
+    ]);
   });
 
   it("numbers kept events per scope and replays what a returning subscriber missed", () => {
@@ -103,11 +123,25 @@ describe("streams", () => {
     expect(back).toEqual([
       { type: "q:event", id: "s9", event: "sessionEvents", data: { n: 2 }, seq: 2 },
       { type: "q:event", id: "s9", event: "sessionEvents", data: { n: 3 }, seq: 3 },
+      { type: "q:subscribed", id: "s9", seq: 3 },
     ]);
 
     const current = connect("current");
     subscribe("current", "s1", events, { sessionId: "a" }, 3);
-    expect(current).toEqual([]);
+    expect(heard(current)).toEqual([]);
+  });
+
+  it("sends nothing to a subscriber that returns to a scope where nothing happened", () => {
+    // It was told where the scope stood when it first subscribed, and names that.
+    const back = connect("back");
+    subscribe("back", "s1", events, { sessionId: "quiet" }, 0);
+    expect(heard(back)).toEqual([]);
+
+    // What happens there afterwards is replayed to one that was away for it.
+    publish(events, { sessionId: "quiet" }, { n: 1 });
+    const later = connect("later");
+    subscribe("later", "s1", events, { sessionId: "quiet" }, 0);
+    expect(numbers(later)).toEqual([1]);
   });
 
   it("delivers an event nobody keeps under the last kept number, and never replays it", () => {
@@ -116,7 +150,7 @@ describe("streams", () => {
     publish(events, { sessionId: "a" }, { n: 1 });
     publish(events, { sessionId: "a" }, { n: 99 }, { keep: false });
     publish(events, { sessionId: "a" }, { n: 2 });
-    expect(live.map((f) => [(f as { data: { n: number } }).data.n, (f as Numbered).seq])).toEqual([
+    expect(heard(live).map((f) => [(f.data as { n: number }).n, f.seq])).toEqual([
       [1, 1],
       [99, 1],
       [2, 2],
@@ -124,7 +158,7 @@ describe("streams", () => {
 
     const back = connect("back");
     subscribe("back", "s1", events, { sessionId: "a" }, 1);
-    expect(back.map((f) => (f as { data: { n: number } }).data.n)).toEqual([2]);
+    expect(numbers(back)).toEqual([2]);
   });
 
   it("tells a subscriber to read again when it cannot say what was missed", () => {
@@ -133,17 +167,17 @@ describe("streams", () => {
     // Fell out of what is remembered.
     const old = connect("old");
     subscribe("old", "s1", events, { sessionId: "a" }, 10);
-    expect(old).toEqual([{ type: "q:reset", id: "s1", seq: 600 }]);
+    expect(heard(old)).toEqual([{ type: "q:reset", id: "s1", seq: 600 }]);
 
     // A number this log never issued.
     const ahead = connect("ahead");
     subscribe("ahead", "s1", events, { sessionId: "a" }, 900);
-    expect(ahead).toEqual([{ type: "q:reset", id: "s1", seq: 600 }]);
+    expect(heard(ahead)).toEqual([{ type: "q:reset", id: "s1", seq: 600 }]);
 
-    // Nothing has been published under this scope since the process started.
+    // A number for a scope nothing was published under since the process started.
     const unknown = connect("unknown");
     subscribe("unknown", "s1", events, { sessionId: "never" }, 5);
-    expect(unknown).toEqual([{ type: "q:reset", id: "s1" }]);
+    expect(heard(unknown)).toEqual([{ type: "q:reset", id: "s1", seq: 0 }]);
   });
 
   it("never replays one process's events to a subscriber of an earlier one", () => {
@@ -155,10 +189,15 @@ describe("streams", () => {
 
     const back = connect("back");
     subscribe("back", "s1", events, { sessionId: "a" }, 2);
-    expect(back).toEqual([{ type: "q:reset", id: "s1", seq: 1005 }]);
+    expect(heard(back)).toEqual([{ type: "q:reset", id: "s1", seq: 1005 }]);
     // From there it follows the new log.
     publish(events, { sessionId: "a" }, { n: 6 });
     expect(seqs(back)).toEqual([1005, 1006]);
+
+    // Even a scope that was quiet before the restart and is quiet after it.
+    const quiet = connect("quiet");
+    subscribe("quiet", "s1", events, { sessionId: "never" }, 0);
+    expect(heard(quiet)).toEqual([{ type: "q:reset", id: "s1", seq: 1000 }]);
   });
 
   it("starts a replay at a snapshot, whatever the subscriber saw before it", () => {
@@ -175,21 +214,55 @@ describe("streams", () => {
     const all = connect("all");
     subscribe("all", "s1", events, {});
     publish(events, { sessionId: "a" }, { n: 1 });
-    expect(all).toEqual([{ type: "q:event", id: "s1", event: "sessionEvents", data: { n: 1 } }]);
+    expect(all).toEqual([
+      { type: "q:subscribed", id: "s1" },
+      { type: "q:event", id: "s1", event: "sessionEvents", data: { n: 1 } },
+    ]);
 
     // It has no place to resume from, so a return is a reset.
     const back = connect("back");
     subscribe("back", "s1", events, {}, 1);
-    expect(back).toEqual([{ type: "q:reset", id: "s1" }]);
+    expect(heard(back)).toEqual([{ type: "q:reset", id: "s1" }]);
   });
 
-  it("forgets the scope published least recently when it holds too many", () => {
+  it("lets go of the kept events of the scope published longest ago, not of its number", () => {
     for (let n = 0; n < 65; n++) publish(events, { sessionId: `s${n}` }, { n });
+    // What happened in the first scope is no longer held: a return to it reads again,
     const first = connect("first");
     subscribe("first", "s1", events, { sessionId: "s0" }, 0);
-    expect(first).toEqual([{ type: "q:reset", id: "s1" }]);
+    expect(heard(first)).toEqual([{ type: "q:reset", id: "s1", seq: 1 }]);
+    // unless the subscriber had seen it all.
+    const current = connect("current");
+    subscribe("current", "s1", events, { sessionId: "s0" }, 1);
+    expect(heard(current)).toEqual([]);
     const last = connect("last");
     subscribe("last", "s1", events, { sessionId: "s64" }, 0);
     expect(seqs(last)).toEqual([1]);
+  });
+
+  it("opens a subscription with the state events alone do not restate, after what was missed", () => {
+    openWith(events, ({ sessionId }) => (sessionId === "a" ? [{ n: 77 }] : []));
+    publish(events, { sessionId: "a" }, { n: 1 });
+    publish(events, { sessionId: "a" }, { n: 2 });
+
+    const back = connect("back");
+    subscribe("back", "s1", events, { sessionId: "a" }, 1);
+    expect(back).toEqual([
+      { type: "q:event", id: "s1", event: "sessionEvents", data: { n: 2 }, seq: 2 },
+      // Under the scope's current number: it is not an event of its own.
+      { type: "q:event", id: "s1", event: "sessionEvents", data: { n: 77 }, seq: 2 },
+      { type: "q:subscribed", id: "s1", seq: 2 },
+    ]);
+    // It is not kept: a later return is not sent it again as something missed.
+    publish(events, { sessionId: "a" }, { n: 3 });
+    const later = connect("later");
+    subscribe("later", "s1", events, { sessionId: "a" }, 2);
+    expect(numbers(later)).toEqual([3, 77]);
+
+    // A scope with nothing to open with, and a subscription across scopes, get none.
+    const other = connect("other");
+    subscribe("other", "s1", events, { sessionId: "b" });
+    subscribe("other", "s2", events, {});
+    expect(heard(other)).toEqual([]);
   });
 });

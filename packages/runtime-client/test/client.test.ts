@@ -298,6 +298,20 @@ describe("streams", () => {
     expect(reset).toHaveBeenCalledOnce();
   });
 
+  it("returns to where the host said a stream stood, though nothing arrived on it", async () => {
+    const f = fixture();
+    const reset = vi.fn();
+    f.client.listen("sessionEvents", { sessionId: "idle" }, vi.fn(), { onReset: reset });
+    await online(f);
+    const first = f.socket.frames("q:subscribe")[0];
+    f.socket.message({ type: "q:subscribed", id: first.id, seq: 41 });
+
+    await reconnect(f);
+    expect(f.socket.frames("q:subscribe")[0]).toMatchObject({ id: first.id, after: 41 });
+    // It knows where it was: nothing to read again unless the host says so.
+    expect(reset).not.toHaveBeenCalled();
+  });
+
   it("reports a reset when it returns with no place to resume from", async () => {
     const f = fixture();
     const numbered = vi.fn(),
@@ -306,6 +320,9 @@ describe("streams", () => {
     f.client.listen("fileChanges", { workspacePath: "/w" }, vi.fn(), { onReset: plain });
     await online(f);
     const [, files] = f.socket.frames("q:subscribe");
+    // The host acknowledges both; neither acknowledgment names a position.
+    for (const frame of f.socket.frames("q:subscribe"))
+      f.socket.message({ type: "q:subscribed", id: frame.id });
     f.socket.message({ type: "q:event", id: files.id, event: "fileChanges", data: {} });
     // The first time is not a return.
     expect(numbered).not.toHaveBeenCalled();
@@ -316,7 +333,7 @@ describe("streams", () => {
       undefined,
       undefined,
     ]);
-    // Nothing had arrived on one; the other is not numbered. Either may have missed events.
+    // Neither was given a place to return to: either may have missed events.
     expect(numbered).toHaveBeenCalledOnce();
     expect(plain).toHaveBeenCalledOnce();
   });

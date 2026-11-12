@@ -59,14 +59,16 @@ const stop = client.listen("sessionEvents", { sessionId }, (event) => fold(event
 ```
 
 `listen` follows a stream of events narrowed by a filter. Only what was asked
-for arrives, once and in order. The subscription is restored on every
-reconnect: where the host numbers a stream's events (`seq`), the client names
-the last one it received and the host sends what followed. When that is not
-possible (the stream is not numbered, nothing had arrived yet, or the host no
-longer holds that far back and answers `q:reset`), `onReset` runs: something
-may have been missed, so the consumer reads its state again. It does not run
-on the first subscription. A live read that answers with a `cursor` (in its
-snapshot or a delta) is resumed the same way.
+for arrives, once and in order, and listeners of the same stream and filter
+share one subscription on the wire. The subscription is restored on every
+reconnect. Where the host numbers a stream's events (`seq`), it says where the
+stream stands when the subscription is made (`q:subscribed`); on a return the
+client names the last number it has and the host sends what followed. When
+that is not possible (the stream is not numbered, or the host no longer holds
+that far back and answers `q:reset`), `onReset` runs: something may have been
+missed, so the consumer reads its state again. It does not run on the first
+subscription. A live read that answers with a `cursor` (in its snapshot or a
+delta) is resumed the same way.
 
 `publishLocal(stream, scope, data)` delivers an event to this client's own
 listeners, for a source that lives in the client (a channel the browser holds

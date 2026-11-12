@@ -830,7 +830,10 @@ describe("q:subscribe → a stream's q:event", () => {
   it("stops at q:unsubscribe, and refuses a stream nobody declared", async () => {
     const { ws } = await connectAndAuth();
     try {
-      ws.send(JSON.stringify(subscribe("sub", "stream-d")));
+      // A subscription is acknowledged with where its chat stands.
+      const ack = await sendAndReceive(ws, subscribe("sub", "stream-d"), "q:subscribed");
+      expect(ack.id).toBe("sub");
+      expect(ack.seq).toBeGreaterThan(0);
       ws.send(JSON.stringify({ type: "q:unsubscribe", id: "sub" }));
       const refused = await sendAndReceive(
         ws,

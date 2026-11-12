@@ -33,7 +33,7 @@ import type { LiveName } from "@shared/api";
 import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
 import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { invalidate } from "../query-engine";
-import { publish } from "../streams";
+import { openWith, publish } from "../streams";
 import {
   persistChanges,
   persistSessionTitle,
@@ -44,6 +44,7 @@ import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
+import { OpenParts } from "./open-parts";
 
 // ---- Types ----
 
@@ -173,6 +174,12 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
 export function createAgentEventHandler(): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
+  // A client that starts following a chat, or returns to it, first gets the
+  // reply still being typed as it stands (see ./open-parts).
+  const typing = new OpenParts();
+  openWith(sessionEvents, ({ sessionId }) =>
+    typing.of(sessionId, sessions.get(sessionId)?.conversation)
+  );
 
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
@@ -311,6 +318,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         envelope.event
       );
       state.conversation = conversation;
+      typing.saw(envelope);
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the

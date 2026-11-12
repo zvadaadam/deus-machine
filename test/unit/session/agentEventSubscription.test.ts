@@ -34,6 +34,8 @@ vi.mock("@/platform/ws", () => ({
 class HostSocket {
   readyState = 1;
   readonly sent: Array<Record<string, unknown>> = [];
+  /** What the host does with a frame from the client. */
+  onFrame: (frame: Record<string, unknown>) => void = () => {};
   private readonly listeners = new Map<string, Array<(event: unknown) => void>>();
   addEventListener(type: string, listener: (event: never) => void): void {
     const listeners = this.listeners.get(type) ?? [];
@@ -41,7 +43,9 @@ class HostSocket {
     this.listeners.set(type, listeners);
   }
   send(raw: string): void {
-    this.sent.push(JSON.parse(raw));
+    const frame = JSON.parse(raw);
+    this.sent.push(frame);
+    this.onFrame(frame);
   }
   close(): void {
     this.readyState = 3;
@@ -83,6 +87,16 @@ function createHost(name = "host") {
       random: () => 0.5,
       open: () => {
         const socket = new HostSocket();
+        // The host acknowledges a chat's subscription with where the chat stands.
+        socket.onFrame = (frame) => {
+          const chat = (frame.params as { sessionId?: string } | undefined)?.sessionId;
+          if (frame.type !== "q:subscribe" || frame.resource !== "sessionEvents" || !chat) return;
+          socket.deliver({
+            type: "q:subscribed",
+            id: frame.id,
+            seq: numbers.get(chat) ?? FIRST_NUMBER,
+          });
+        };
         sockets.push(socket);
         return socket;
       },
@@ -126,7 +140,7 @@ function createHost(name = "host") {
       socket().deliver({ type: "connected" });
     },
     /** The number of the last kept event the host published for a chat. */
-    position: (chat: string) => numbers.get(chat),
+    position: (chat: string) => numbers.get(chat) ?? FIRST_NUMBER,
     publish(chat: string, update: SessionEvent, keep = true): void {
       const number = (numbers.get(chat) ?? FIRST_NUMBER) + (keep ? 1 : 0);
       numbers.set(chat, number);
@@ -492,7 +506,7 @@ describe("shell agent stream subscription", () => {
       expect(readOther).toHaveBeenCalledTimes(1);
     });
 
-    it("reads a chat again when nothing had arrived on it to resume from", async () => {
+    it("returns to a chat nothing arrived on where the host said it stood, and reads no page again", async () => {
       const busy = `${sessionId}-busy`;
       const readQuiet = vi.fn(async () => page());
       const readBusy = vi.fn(async () => page());
@@ -504,11 +518,11 @@ describe("shell agent stream subscription", () => {
       await host.comeBack();
 
       expect(host.subscriptions().map(({ params, after }) => ({ params, after }))).toEqual([
-        { params: { sessionId }, after: undefined },
+        { params: { sessionId }, after: host.position(sessionId) },
         { params: { sessionId: busy }, after: host.position(busy) },
       ]);
       await vi.advanceTimersByTimeAsync(250);
-      expect(readQuiet).toHaveBeenCalledTimes(2);
+      expect(readQuiet).toHaveBeenCalledTimes(1);
       expect(readBusy).toHaveBeenCalledTimes(1);
     });
 

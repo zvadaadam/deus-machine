@@ -18,7 +18,8 @@ export interface QRequestFrame {
 
 /**
  * Subscribe to a live read (answered with `q:snapshot`, then `q:snapshot` or
- * `q:delta` whenever it changes) or to a stream (answered with `q:event`s).
+ * `q:delta` whenever it changes) or to a stream (answered with `q:subscribed`,
+ * then `q:event`s).
  * A client that returns after a lost connection says where it stopped
  * (`after`: the last `seq` of a stream, the last `cursor` of a read that has
  * one) and is sent what followed, or a `q:reset` when the host cannot say.
@@ -103,6 +104,16 @@ export interface QEventFrame {
 }
 
 /**
+ * A stream subscription is in place. `seq` is where its scope stands on a
+ * resumable stream: the place a client returns to if nothing arrives meanwhile.
+ */
+export interface QSubscribedFrame {
+  type: "q:subscribed";
+  id: string;
+  seq?: number;
+}
+
+/**
  * A stream cannot say what the subscriber missed since the event it named:
  * it reads the state again. `seq` is where the stream stands now, when it has
  * kept anything under that scope.
@@ -127,6 +138,7 @@ export type QServerFrame =
   | QDeltaFrame
   | QMutateResultFrame
   | QEventFrame
+  | QSubscribedFrame
   | QResetFrame
   | QErrorFrame;
 

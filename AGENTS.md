@@ -119,14 +119,18 @@ shell ask before a socket exists.
 service publishes an event under a stream and a scope
 (`publish(sessionEvents, { sessionId }, event)`); a connection receives it only
 if it subscribed to that stream with a filter the scope matches. A resumable
-stream numbers its kept events per scope and remembers the recent ones: a
-client that reconnects names the last one it received and is sent what it
+stream numbers its kept events per scope and remembers the recent ones. A
+subscription is acknowledged (`q:subscribed`) with where its scope stands; a
+client that reconnects names the last number it has and is sent what it
 missed, or a `q:reset` when the host no longer holds that far back (a restart
-included: a number never means two events, even across processes). `messages`
-resumes the same way from its row cursor. The client package does this
-bookkeeping; a consumer supplies only `onReset` ("something may have been
-missed: read the state again"). So a reconnect does not reload the chat on
-screen, and a phone following one chat is not sent every other chat's tokens.
+included: a number never means two events, even across processes). A chat's
+stream then opens with any part still being typed, as it stands
+(`services/agent/open-parts.ts`), so a client that returns mid-reply shows the
+whole reply so far. `messages` resumes the same way from its row cursor. The
+client package does this bookkeeping; a consumer supplies only `onReset`
+("something may have been missed: read the state again"). So a reconnect does
+not reload the chats a window holds, and a phone following one chat is not
+sent every other chat's tokens.
 
 The private workspace package `@deus/runtime-client` (`packages/runtime-client/`)
 owns transport, pending operations and subscriptions. Its root entry has no React,

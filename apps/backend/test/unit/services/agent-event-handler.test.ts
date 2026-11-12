@@ -27,6 +27,7 @@ const {
   mockPersistSessionTitle,
   mockInvalidate,
   mockPublish,
+  mockOpenWith,
   mockRefreshPr,
   outcomes,
 } = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ const {
   mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn<(...args: any[]) => any>(),
   mockPublish: vi.fn<(...args: any[]) => any>(),
+  mockOpenWith: vi.fn<(...args: any[]) => any>(),
   mockRefreshPr: vi.fn<(...args: any[]) => any>(),
   outcomes: [] as Array<{ turn: ConversationTurn; outcome: TurnOutcomeWrite }>,
 }));
@@ -48,7 +50,10 @@ vi.mock("../../../src/services/agent/persistence", () => ({
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
+vi.mock("../../../src/services/streams", () => ({
+  publish: mockPublish,
+  openWith: mockOpenWith,
+}));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: mockRefreshPr,
 }));
@@ -566,6 +571,50 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
         ["message.part.delta", false],
       ]);
+    });
+
+    it("opens a chat's subscription with the reply still being typed, as it stands", () => {
+      // What the stream sends a client that starts following a chat, or returns to it.
+      const [stream, opening] = mockOpenWith.mock.calls.at(-1)!;
+      expect(stream.name).toBe("sessionEvents");
+      expect(opening({ sessionId: SESSION })).toEqual([]);
+
+      const streaming = { ...partEvent.part, text: "", state: "streaming" };
+      handler.handle(envelope({ ...partEvent, part: streaming } as LifecycleEvent));
+      for (const text of ["hel", "lo"]) {
+        handler.handle(
+          envelope({
+            type: "message.part.delta",
+            sessionId: SESSION,
+            turnId: TURN,
+            messageId: "msg-1",
+            outputIndex: 1,
+            partIndex: 0,
+            partId: "part-1",
+            delta: { type: "text", text },
+            timestamp: T,
+          })
+        );
+      }
+
+      expect(opening({ sessionId: SESSION })).toEqual([
+        {
+          type: "event",
+          envelope: expect.objectContaining({
+            sessionId: SESSION,
+            live: true,
+            event: expect.objectContaining({
+              type: "message.part",
+              part: expect.objectContaining({ id: "part-1", text: "hello", state: "streaming" }),
+            }),
+          }),
+        },
+      ]);
+      // Another chat is told nothing of this one.
+      expect(opening({ sessionId: "other-chat" })).toEqual([]);
+
+      handler.handle(envelope(partEvent));
+      expect(opening({ sessionId: SESSION })).toEqual([]);
     });
   });
 

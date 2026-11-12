@@ -33,7 +33,7 @@ const { mockGetDatabase, mockInvalidate, mockPublish, mockRefreshPr } = vi.hoist
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
+vi.mock("../../../src/services/streams", () => ({ publish: mockPublish, openWith: vi.fn() }));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: mockRefreshPr,
 }));

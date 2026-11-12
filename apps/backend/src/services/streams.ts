@@ -8,19 +8,20 @@
 // nothing.
 //
 // A resumable stream numbers its kept events per scope and remembers the most
-// recent ones. A subscriber that says which number it received last is sent
-// what it missed, or a reset when that is no longer held (it then reads the
-// state again, as it did when it first opened it).
+// recent ones. A subscriber is told where the scope stands when it subscribes.
+// One that returns says the last number it received and is sent what it
+// missed, or a reset when that is no longer held (it then reads the state
+// again, as it did when it first opened it).
 
 import { scopeMatches, type AnyStream, type EventOf, type ScopeOf } from "@shared/api/stream";
-import type { QEventFrame, QResetFrame } from "@shared/types/query-protocol";
+import type { QEventFrame, QResetFrame, QSubscribedFrame } from "@shared/types/query-protocol";
 import { subscriptionKey } from "@deus/runtime-client";
 import { ValidationError } from "../lib/errors";
 import { getConnection } from "./ws.service";
 
 /** Kept events remembered per scope of a resumable stream. */
 const KEPT_PER_SCOPE = 512;
-/** Scopes remembered per resumable stream; the least recently published is dropped first. */
+/** Scopes whose kept events are remembered per resumable stream; the least recently published go first. */
 const SCOPES_PER_STREAM = 64;
 
 interface Subscription {
@@ -40,8 +41,16 @@ interface Log {
 }
 
 const subscriptions = new Map<string, Subscription>();
-/** stream name → scope key → log. Insertion order is recency of publishing. */
+/**
+ * stream name → scope key → log. A scope's number is never forgotten, only its
+ * kept events: that is what tells "nothing happened here since you left" from
+ * "what happened is no longer held".
+ */
 const logs = new Map<string, Map<string, Log>>();
+/** stream name → the scopes that still hold kept events, least recently published first. */
+const holding = new Map<string, Set<string>>();
+/** stream name → what a subscriber to one scope is sent first (see `openWith`). */
+const openings = new Map<string, (scope: Record<string, unknown>) => unknown[]>();
 
 /**
  * Where this process starts numbering. A number therefore never means two
@@ -53,7 +62,7 @@ let firstSeq = Date.now() * 1000;
 
 const subscriptionId = (connectionId: string, id: string) => `${connectionId}\n${id}`;
 
-function send(connectionId: string, frame: QEventFrame | QResetFrame): void {
+function send(connectionId: string, frame: QEventFrame | QResetFrame | QSubscribedFrame): void {
   try {
     getConnection(connectionId)?.ws.send(JSON.stringify(frame));
   } catch {
@@ -61,15 +70,25 @@ function send(connectionId: string, frame: QEventFrame | QResetFrame): void {
   }
 }
 
-/** The log an event is published into, made on first use and marked most recent. */
+/** The log an event is published into, made on first use. */
 function logFor(stream: string, scopeKey: string): Log {
   let byScope = logs.get(stream);
   if (!byScope) logs.set(stream, (byScope = new Map()));
-  const log = byScope.get(scopeKey) ?? { latest: firstSeq, kept: [] };
-  byScope.delete(scopeKey);
-  if (byScope.size >= SCOPES_PER_STREAM) byScope.delete(byScope.keys().next().value!);
-  byScope.set(scopeKey, log);
+  let log = byScope.get(scopeKey);
+  if (!log) byScope.set(scopeKey, (log = { latest: firstSeq, kept: [] }));
   return log;
+}
+
+/** A scope kept an event: it is the most recent, and the one published longest ago lets its events go. */
+function hold(stream: string, scopeKey: string): void {
+  let held = holding.get(stream);
+  if (!held) holding.set(stream, (held = new Set()));
+  held.delete(scopeKey);
+  held.add(scopeKey);
+  if (held.size <= SCOPES_PER_STREAM) return;
+  const oldest = held.values().next().value!;
+  held.delete(oldest);
+  logFor(stream, oldest).kept = [];
 }
 
 export interface PublishOptions {
@@ -95,11 +114,13 @@ export function publish<S extends AnyStream>(
 ): void {
   let seq: number | undefined;
   if (stream.resumable) {
-    const log = logFor(stream.name, subscriptionKey(scope));
+    const scopeKey = subscriptionKey(scope);
+    const log = logFor(stream.name, scopeKey);
     if (options.keep !== false) {
       if (options.restart) log.kept = [];
       log.kept.push({ seq: ++log.latest, data, ...(options.restart ? { restart: true } : {}) });
       if (log.kept.length > KEPT_PER_SCOPE) log.kept.shift();
+      hold(stream.name, scopeKey);
     }
     seq = log.latest;
   }
@@ -117,9 +138,22 @@ export function publish<S extends AnyStream>(
 }
 
 /**
+ * Say what a resumable stream sends a subscriber to one scope first, after
+ * anything it missed: the state its kept events do not restate yet (a reply
+ * still being typed). Delivered under the scope's current number, never kept.
+ */
+export function openWith<S extends AnyStream>(
+  stream: S,
+  current: (scope: ScopeOf<S>) => EventOf<S>[]
+): void {
+  openings.set(stream.name, current as (scope: Record<string, unknown>) => unknown[]);
+}
+
+/**
  * Subscribe a connection. `after` is the number of the last event the
  * subscriber received: it is sent what the stream kept since, or a reset when
- * the stream cannot say.
+ * the stream cannot say. Either way it is then told where the scope stands,
+ * so it has a place to return to even if nothing happens while it listens.
  */
 export function subscribe(
   connectionId: string,
@@ -134,42 +168,48 @@ export function subscribe(
   }
   const filter = parsed.data as Record<string, unknown>;
   // A number only means something within one scope.
-  const scope = stream.resumable ? stream.scope.safeParse(filter) : undefined;
+  const whole = stream.resumable ? stream.scope.safeParse(filter) : undefined;
+  const scope = whole?.success ? (whole.data as Record<string, unknown>) : undefined;
   subscriptions.set(subscriptionId(connectionId, id), {
     id,
     connectionId,
     stream: stream.name,
     filter,
-    numbered: scope?.success === true,
+    numbered: scope !== undefined,
   });
-  if (after === undefined) return;
+  const log = scope && logs.get(stream.name)?.get(subscriptionKey(scope));
+  // Where the scope stands: the number of its newest kept event.
+  const position = scope ? (log?.latest ?? firstSeq) : undefined;
 
-  const log = scope?.success
-    ? logs.get(stream.name)?.get(subscriptionKey(scope.data as Record<string, unknown>))
-    : undefined;
-  if (after === log?.latest) return;
-  const oldest = log?.kept[0];
-  // Unbroken from where the subscriber stopped, or from an event that restates the rest.
-  const covered =
-    log !== undefined &&
-    oldest !== undefined &&
-    after < log.latest &&
-    (after + 1 >= oldest.seq || oldest.restart === true);
-  if (!covered) {
-    send(connectionId, { type: "q:reset", id, ...(log ? { seq: log.latest } : {}) });
-    return;
-  }
-  for (const event of log.kept) {
-    if (event.seq > after) {
-      send(connectionId, {
-        type: "q:event",
-        id,
-        event: stream.name,
-        data: event.data,
-        seq: event.seq,
-      });
+  if (after !== undefined && after !== position) {
+    const oldest = log?.kept[0];
+    // Unbroken from where the subscriber stopped, or from an event that restates the rest.
+    const covered =
+      log !== undefined &&
+      oldest !== undefined &&
+      after < log.latest &&
+      (after + 1 >= oldest.seq || oldest.restart === true);
+    if (covered) {
+      for (const event of log.kept) {
+        if (event.seq <= after) continue;
+        send(connectionId, {
+          type: "q:event",
+          id,
+          event: stream.name,
+          data: event.data,
+          seq: event.seq,
+        });
+      }
+    } else {
+      send(connectionId, { type: "q:reset", id, ...(scope ? { seq: position } : {}) });
     }
   }
+  if (scope) {
+    for (const data of openings.get(stream.name)?.(scope) ?? []) {
+      send(connectionId, { type: "q:event", id, event: stream.name, data, seq: position });
+    }
+  }
+  send(connectionId, { type: "q:subscribed", id, ...(scope ? { seq: position } : {}) });
 }
 
 export function unsubscribe(connectionId: string, id: string): boolean {
@@ -187,5 +227,7 @@ export function dropConnection(connectionId: string): void {
 export function _reset(first = 0): void {
   subscriptions.clear();
   logs.clear();
+  holding.clear();
+  openings.clear();
   firstSeq = first;
 }
