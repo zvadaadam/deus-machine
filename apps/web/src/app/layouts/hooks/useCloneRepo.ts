@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { native } from "@/platform";
 import { extractRepoNameFromUrl } from "@/shared/lib/utils";
+import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
 import { getRuntimeClient } from "@/platform/ws";
 
@@ -52,7 +53,7 @@ export function useCloneRepo({
 
   /**
    * Clone a GitHub repository with staleness detection.
-   * All steps go through WS commands/mutations so it works in both
+   * Every step is an operation on the host, so it works in both
    * desktop (local backend) and web (relay) modes.
    */
   async function handleCloneRepository(githubUrl: string, targetPath: string) {
@@ -90,19 +91,17 @@ export function useCloneRepo({
         if (isStale()) return;
       }
 
-      // Phase 1: Git clone via WS command (5min timeout — large repos take a while)
+      // Phase 1: Git clone (5min timeout — large repos take a while). Asked of
+      // the runtime this flow started on, not whichever is selected by then.
       if (isStale()) return;
-      const cloneAck = await runtime.sendCommand(
-        "git:clone",
+      await runtime.call(
+        api.gitClone,
         { url: githubUrl, targetPath: cloneTarget },
-        300_000
+        { timeoutMs: 300_000 }
       );
-      if (!cloneAck.accepted) {
-        throw new Error(cloneAck.error || "Clone failed");
-      }
       if (isStale()) return;
 
-      // Phase 2: Register repository via WS mutation
+      // Phase 2: Register repository
       setCloneStatus("Adding repository...");
       const repo = await addRepoOrUseExisting(cloneTarget);
       if (isStale()) return;

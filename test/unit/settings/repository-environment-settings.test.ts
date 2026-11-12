@@ -32,7 +32,7 @@ vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
   return { ...react, useLayoutEffect: react.useEffect };
 });
-vi.mock("@/features/repository/api/repository.service", () => ({ RepoService: {} }));
+vi.mock("@/platform/ws", () => ({ call: vi.fn() }));
 vi.mock("@/features/settings/api/environment-secrets.service", () => ({}));
 vi.mock("@/features/settings/ui/sections/ConnectEnvironmentRepositories", () => ({
   ConnectEnvironmentRepositories: () => null,

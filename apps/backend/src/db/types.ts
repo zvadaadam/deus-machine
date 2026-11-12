@@ -29,7 +29,7 @@ export interface RepositoryRow {
   updated_at: string;
 }
 
-/** GET /repos — repositories with workspace counts from LEFT JOIN aggregate. */
+/** The `repos` operation: repositories with workspace counts from LEFT JOIN aggregate. */
 export interface RepositoryWithCountsRow extends RepositoryRow {
   ready_count: number;
   archived_count: number;

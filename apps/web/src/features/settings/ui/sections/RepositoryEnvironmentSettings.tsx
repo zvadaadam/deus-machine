@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ProjectEnvironment } from "@deus-hq/api";
 import { queryKeys } from "@/shared/api/queryKeys";
-import { RepoService } from "@/features/repository/api/repository.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { githubRepoSlug } from "@shared/git-origin";
 import {
   getEnvironmentSecretSettings,
@@ -49,7 +50,7 @@ export function RepositoryEnvironmentSettings({
     queryKey: queryKeys.settings.environments.repositoryFile(accountId, orgId, repository.key),
     queryFn: ({ signal }) =>
       local
-        ? RepoService.fetchEnvironmentFile(local.id)
+        ? call(api.repoEnvironmentFile, { repoId: local.id })
         : getRepositoryEnvironmentFile(orgId!, slug!, signal),
     enabled: !!local || (!!orgId && !!slug && access),
     staleTime: 0,
@@ -91,7 +92,7 @@ export function RepositoryEnvironmentSettings({
     signal: AbortSignal
   ) {
     if (local && (savesToFile || destination === "repository")) {
-      await RepoService.saveEnvironmentFile(local.id, next);
+      await call(api.saveRepoEnvironmentFile, { repoId: local.id, project: next });
     } else if (orgId && (repository.repo || environmentId)) {
       await saveCloudEnvironmentSetup(
         orgId,

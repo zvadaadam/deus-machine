@@ -7,11 +7,11 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { useMemo } from "react";
 import { produce } from "immer";
 import { api } from "@shared/api";
-import { call, sendRequest } from "@/platform/ws";
+import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
-import type { BranchSummary, PRStatus, PRSummary } from "@/shared/types";
+import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
@@ -188,7 +188,7 @@ export function useGhStatus() {
 export function useRepoPrs(repoId: string | null) {
   return useQuery({
     queryKey: queryKeys.repos.prs(repoId || ""),
-    queryFn: () => sendRequest<PRSummary[]>("repoPrs", { repoId }),
+    queryFn: () => call(api.repoPrs, { repoId: repoId! }),
     enabled: !!repoId,
     staleTime: 30_000,
   });
@@ -201,14 +201,14 @@ export function useRepoPrs(repoId: string | null) {
  * Currently remote-only (refs/remotes/origin/*). Local-only branches
  * are not included yet — backend endpoint needs to be updated.
  *
- * sendRequest rejects immediately if the WS isn't connected yet (common
+ * The request rejects immediately if the WS isn't connected yet (common
  * during app startup and Vite HMR). We retry with exponential backoff
  * so the query self-heals once the WS is ready (~1-2s after load).
  */
 export function useRepoBranches(repoId: string | null) {
   return useQuery({
     queryKey: queryKeys.repos.branches(repoId || ""),
-    queryFn: () => sendRequest<{ branches: BranchSummary[] }>("repoBranches", { repoId }),
+    queryFn: () => call(api.repoBranches, { repoId: repoId! }),
     enabled: !!repoId,
     staleTime: 30_000,
     retry: 5,

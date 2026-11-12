@@ -416,7 +416,7 @@ export function registerNativeHandlers(): void {
     return homedir();
   });
 
-  // Git clone is now handled by the backend via POST /api/repos/clone
+  // Git clone is handled by the backend (the `git:clone` operation).
 
   // iOS Simulator — all operations moved to backend (simulator-context.ts).
   // Frontend communicates via q:command / q:event over WebSocket.

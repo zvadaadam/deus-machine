@@ -48,7 +48,7 @@ const db = initDatabase();
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
 // Runs once at startup (fire-and-forget) so WS subscribers get the data
-// on their first snapshot instead of waiting for GET /repos.
+// on their first snapshot instead of waiting for a `repos` read.
 async function backfillGitOriginUrls(): Promise<void> {
   const { getGitRemoteUrl } = await import("./lib/git-remotes");
 

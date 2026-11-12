@@ -1,15 +1,9 @@
-import { sendRequest, sendMutate } from "@/platform/ws";
+import { sendMutate } from "@/platform/ws";
 import { native } from "@/platform";
-import type { RecentProject } from "../types";
 
 export const OnboardingService = {
   /** Start GitHub auth through the browser flow using the resolved gh executable. */
   startGhAuthLogin: native.cli.startGhAuthLogin,
-
-  /** Fetch recent projects from Cursor, VS Code, and Claude directories. */
-  async fetchRecentProjects(): Promise<{ projects: RecentProject[] }> {
-    return sendRequest<{ projects: RecentProject[] }>("recentProjects");
-  },
 
   /** Persist onboarding_completed=true to settings. */
   async completeOnboarding(): Promise<void> {

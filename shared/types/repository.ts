@@ -17,6 +17,15 @@ export interface Repository {
   updated_at?: string;
 }
 
+/** What a folder holds as a git repository, read before it is added. */
+export interface InspectedRepository {
+  /** The repository's top-level folder, which may be above the one asked about. */
+  root_path: string;
+  name: string;
+  git_default_branch: string;
+  git_origin_url: string | null;
+}
+
 /**
  * Statistics aggregation
  * System-wide metrics for the Deus application

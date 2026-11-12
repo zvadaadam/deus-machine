@@ -8,6 +8,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
+import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
 import { getRuntimeClient } from "@/platform/ws";
 
@@ -49,7 +50,7 @@ export function useStartNewProject({
 
   /**
    * Create a new project from scratch with staleness detection.
-   * Flow: git:init command → register repo → create workspace → select it.
+   * Flow: git:init → register repo → create workspace → select it.
    */
   async function handleStartNewProject(
     projectName: string,
@@ -79,23 +80,20 @@ export function useStartNewProject({
         if (isStale()) return;
       }
 
-      // Phase 1: Create project via git:init command
+      // Phase 1: Create the project (2min timeout — a template clone and
+      // creating the GitHub repository can take a bit). Asked of the runtime
+      // this flow started on, not whichever is selected by then.
       if (isStale()) return;
-      const initAck = (await runtime.sendCommand(
-        "git:init",
+      const { githubUrl } = await runtime.call(
+        api.gitInit,
         {
           projectName: projectName.trim(),
           targetPath,
           ...(template ? { templateType: template.type, templateUrl: template.url } : {}),
         },
-        120_000 // 2min timeout (template clone + gh repo create can take a bit)
-      )) as { accepted: boolean; error?: string; githubUrl?: string };
-      if (!initAck.accepted) {
-        throw new Error(initAck.error || "Project creation failed");
-      }
+        { timeoutMs: 120_000 }
+      );
       if (isStale()) return;
-
-      const githubUrl = initAck.githubUrl;
 
       // Phase 2: Register repository
       setStartNewStatus("Adding repository...");

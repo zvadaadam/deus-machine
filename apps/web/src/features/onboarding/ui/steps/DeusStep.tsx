@@ -2,9 +2,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { native } from "@/platform";
-import { getBackendUrl } from "@/shared/config/api.config";
 import { getErrorMessage } from "@shared/lib/errors";
-import { RepoService } from "@/features/repository/api/repository.service";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import { queryClient } from "@/shared/api/queryClient";
@@ -15,13 +13,6 @@ import { classifyCloneConflict, isMatchingGitHubRepo } from "../../lib/deus-impo
 interface DeusStepProps {
   onBack: () => void;
   onComplete: () => void;
-}
-
-interface InspectedRepository {
-  root_path: string;
-  name: string;
-  git_default_branch: string;
-  git_origin_url?: string | null;
 }
 
 const REPO = {
@@ -40,25 +31,9 @@ function getUnexpectedRepoMessage(targetPath: string): string {
   return `${targetPath} already contains a different repository. Remove it or add Deus manually from the sidebar.`;
 }
 
-async function inspectRepository(rootPath: string): Promise<InspectedRepository> {
-  const baseUrl = await getBackendUrl();
-  const res = await fetch(`${baseUrl}/api/repos/inspect`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ root_path: rootPath }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Inspect failed" }));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-
-  return (await res.json()) as InspectedRepository;
-}
-
 async function resolveExistingRepoId(targetPath: string): Promise<string | null> {
   try {
-    const repos = await RepoService.fetchAll();
+    const repos = await call(api.repos);
     return repos.find((repo) => repo.root_path === targetPath)?.id ?? null;
   } catch {
     return null;
@@ -69,7 +44,7 @@ async function resolveExistingRepoId(targetPath: string): Promise<string | null>
  * Fire-and-forget: clone repo, register in DB, invalidate queries.
  *
  * Runs independently of React component lifecycle -- safe to call then unmount.
- * Uses only singletons: RepoService, queryClient, toast.
+ * Uses only singletons: the runtime client, queryClient, toast.
  * On success the repo appears in the sidebar via query invalidation.
  * On failure the shared desktop Toaster tells the user what happened.
  */
@@ -82,23 +57,15 @@ async function cloneAndRegisterInBackground() {
     let repoRoot = target;
 
     try {
-      const baseUrl = await getBackendUrl();
-      const res = await fetch(`${baseUrl}/api/repos/clone`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: REPO.url, targetPath: target }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Clone failed" }));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
+      // A clone can outlast the default 30s by a wide margin.
+      await call(api.gitClone, { url: REPO.url, targetPath: target }, { timeoutMs: 300_000 });
     } catch (err) {
       const message = getErrorMessage(err);
       const conflictKind = classifyCloneConflict(message);
 
       if (conflictKind === "already_cloned") {
         try {
-          const inspectedRepo = await inspectRepository(target);
+          const inspectedRepo = await call(api.inspectRepo, { root_path: target });
           if (!isMatchingGitHubRepo(inspectedRepo.git_origin_url, REPO.url)) {
             toast.error(getUnexpectedRepoMessage(target));
             return;
@@ -122,7 +89,7 @@ async function cloneAndRegisterInBackground() {
 
     let repoId: string | null = null;
     try {
-      const repo = await RepoService.add(repoRoot);
+      const repo = await call(api.addRepo, { root_path: repoRoot });
       repoId = repo.id;
     } catch (err) {
       const message = getErrorMessage(err);

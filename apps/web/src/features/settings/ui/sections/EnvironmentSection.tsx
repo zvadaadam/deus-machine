@@ -18,7 +18,8 @@ import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useUIStore } from "@/shared/stores/uiStore";
-import { RepoService } from "@/features/repository/api/repository.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { githubRepoSlug, httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
 import {
   getEnvironmentSecretSettings,
@@ -143,7 +144,7 @@ function RepositoryEnvironments({
   const signIn = useDeusCloudSignIn();
   const repos = useQuery({
     queryKey: queryKeys.repos.all,
-    queryFn: () => RepoService.fetchAll(),
+    queryFn: () => call(api.repos),
     enabled: !isCloudDirectWebMode(),
     staleTime: 10_000,
   });
