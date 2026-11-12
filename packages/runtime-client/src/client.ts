@@ -324,22 +324,24 @@ export class RuntimeClient<Resource extends string = string> {
   ): (() => void) => {
     if (this.ended()) return () => {};
     const key = subscriptionKey([stream, filter ?? {}]);
+    const follower: Follower = { onEvent, options };
     let listener = this.listenersByKey.get(key);
-    if (!listener) {
+    if (listener) {
+      listener.followers.add(follower);
+    } else {
       listener = {
         id: `evt_${++this.sequence}`,
         key,
         stream,
         filter: filter ? structuredClone(filter) : undefined,
-        followers: new Set(),
+        followers: new Set([follower]),
         joined: false,
       };
       this.listeners.set(listener.id, listener);
       this.listenersByKey.set(key, listener);
+      // Asked for once it has someone to deliver to: a transport may answer at once.
       if (this.isConnected()) this.sendListen(listener);
     }
-    const follower: Follower = { onEvent, options };
-    listener.followers.add(follower);
     const shared = listener;
     return () => {
       if (!shared.followers.delete(follower) || shared.followers.size > 0) return;
