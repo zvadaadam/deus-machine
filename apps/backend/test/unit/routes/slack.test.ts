@@ -41,15 +41,6 @@ it("requires organization selection and blocks paired-device or relayed access",
   expect(
     (await paired.request("/api/settings/slack/installations?organizationId=org")).status
   ).toBe(403);
-  expect(
-    (
-      await app.request(
-        "/api/settings/slack/installations?organizationId=org",
-        {},
-        { relayBridged: true }
-      )
-    ).status
-  ).toBe(403);
   expect(fetchMock).not.toHaveBeenCalled();
 });
 

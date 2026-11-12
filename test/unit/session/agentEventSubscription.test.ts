@@ -27,9 +27,7 @@ vi.mock("@/platform/ws", () => ({
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
-  sendRequest: vi.fn(),
-  sendMutate: vi.fn(),
-  sendCommand: vi.fn(),
+  call: vi.fn(),
 }));
 
 const T = Date.parse("2026-09-07T12:00:00Z");

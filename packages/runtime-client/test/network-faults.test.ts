@@ -61,7 +61,7 @@ describe("network faults", () => {
     const read = expect(f.client.sendRequest("rows")).rejects.toMatchObject({
       kind: "unavailable",
     });
-    const write = expect(f.client.sendCommand("create", {})).rejects.toMatchObject({
+    const write = expect(f.client.sendMutate("create", {})).rejects.toMatchObject({
       kind: "unknown-outcome",
     });
     await vi.advanceTimersByTimeAsync(150);
@@ -77,7 +77,7 @@ describe("network faults", () => {
     expect(frames).toHaveLength(1);
     f.socket.message({ type: "q:snapshot", id: frames[0].id, data: ["recovered"] });
     expect(f.client.queryClient.getQueryData(["rows"])).toEqual(["recovered"]);
-    expect(f.sockets.flatMap((socket) => socket.frames("q:command"))).toHaveLength(1);
+    expect(f.sockets.flatMap((socket) => socket.frames("q:mutate"))).toHaveLength(1);
     expect(f.client.diagnostics().pending).toBe(0);
   });
 
@@ -170,10 +170,10 @@ describe("network faults", () => {
     await vi.advanceTimersByTimeAsync(20);
     f.socket.open();
     expect(f.socket.sent).toEqual([{ type: "authenticate", token: "bound-token" }]);
-    await expect(f.client.sendCommand("create", {})).rejects.toMatchObject({ kind: "unavailable" });
+    await expect(f.client.sendMutate("create", {})).rejects.toMatchObject({ kind: "unavailable" });
     f.socket.message({ type: "authenticated" });
     expect(f.socket.frames("q:subscribe")).toHaveLength(1);
-    expect(f.socket.frames("q:command")).toHaveLength(0);
+    expect(f.socket.frames("q:mutate")).toHaveLength(0);
   });
 
   it("bounds retries after repeated failed handshakes and cancels them on disposal", async () => {

@@ -8,6 +8,7 @@
  */
 
 import { isOp, type AnyOp } from "./op";
+import { isStream, type AnyStream } from "./stream";
 import * as automations from "./automations";
 import * as browser from "./browser";
 import * as devices from "./devices";
@@ -35,7 +36,12 @@ export const api = {
 };
 export type Api = typeof api;
 
-export const ops: readonly AnyOp[] = Object.values(api).filter(isOp);
+const declared: unknown[] = Object.values(api);
+
+export const ops: readonly AnyOp[] = declared.filter(isOp);
+
+/** Every stream of events a client can listen to. */
+export const streams: readonly AnyStream[] = declared.filter(isStream);
 
 type NamesWhere<Shape> = {
   [K in keyof Api]: Api[K] extends Shape ? Api[K]["name"] : never;

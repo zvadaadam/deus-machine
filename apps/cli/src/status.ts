@@ -54,7 +54,7 @@ export async function showStatus(): Promise<void> {
   // Fetch all status info in parallel
   const [health, relayStatus, devicesRes, agentAuth] = await Promise.all([
     httpGet<HealthResponse>(port, "/api/health"),
-    httpGet<RelayStatusResponse>(port, "/api/settings/relay-status"),
+    httpGet<RelayStatusResponse>(port, "/api/relay/status"),
     httpGet<{ devices: DeviceInfo[] }>(port, "/api/remote-auth/devices"),
     httpGet<AgentAuthResponse>(port, "/api/settings/agent-auth"),
   ]);

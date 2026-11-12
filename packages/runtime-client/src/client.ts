@@ -13,7 +13,6 @@ import type {
   DeltaCallback,
   StreamCallback,
   ListenOptions,
-  CommandResult,
   MutateResult,
 } from "./types";
 
@@ -34,9 +33,8 @@ type Listener = {
   options?: ListenOptions;
 };
 type Pending = {
-  kind: "request" | "mutation" | "command";
-  /** A request that changes something: a lost reply leaves its outcome unknown. */
-  effect: boolean;
+  /** A mutation changes something: a lost reply leaves its outcome unknown. */
+  kind: "request" | "mutation";
   sent: boolean;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -47,7 +45,7 @@ type Pending = {
  * A transport can be a direct socket or a logical relay stream. Neither changes
  * q: or the agent event contract. Reconnect restores reads; writes are never replayed.
  */
-export class RuntimeClient<Resource extends string = string, Command extends string = string> {
+export class RuntimeClient<Resource extends string = string> {
   readonly identity: Readonly<RuntimeIdentity>;
   private state: RuntimeState = "offline";
   private socket: RuntimeSocket | null = null;
@@ -228,10 +226,6 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         const { type: _type, id: _id, ...result } = frame;
         this.resolve(id, "mutation", result);
       })
-      .with("q:command_ack", () => {
-        const { type: _type, id: _id, ...result } = frame;
-        this.resolve(id, "command", result);
-      })
       .with("q:error", () => {
         const message = typeof frame.message === "string" ? frame.message : "Query failed";
         const pending = this.takePending(id);
@@ -319,8 +313,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
   sendRequest = <T = unknown>(
     resource: string,
     params?: Record<string, unknown>,
-    /** `effect`: the request acts (e.g. a device tap), so a lost reply is not a safe retry. */
-    options?: { timeoutMs?: number; effect?: boolean }
+    options?: { timeoutMs?: number }
   ): Promise<T> => {
     if (this.ended()) return Promise.reject(this.disposedError());
     let intercepted: Promise<unknown> | null = null;
@@ -336,8 +329,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         resource,
         { type: "q:request", resource, ...(params ? { params } : {}) },
         remainingMs,
-        intercepted,
-        options?.effect ?? false
+        intercepted
       ) as Promise<T>;
     // Asked while the connection is being made (startup, a reconnect attempt):
     // wait for it within the request's deadline instead of failing into the
@@ -377,25 +369,12 @@ export class RuntimeClient<Resource extends string = string, Command extends str
       MutateResult<T>
     >;
 
-  sendCommand = (
-    command: Command,
-    params: Record<string, unknown>,
-    timeoutMs = 30_000
-  ): Promise<CommandResult> =>
-    this.exchange(
-      "command",
-      command,
-      { type: "q:command", command, params },
-      timeoutMs
-    ) as Promise<CommandResult>;
-
   private exchange(
     kind: Pending["kind"],
     name: string,
     frame: Record<string, unknown>,
     timeoutMs = 30_000,
-    intercepted: Promise<unknown> | null = null,
-    effect = kind !== "request"
+    intercepted: Promise<unknown> | null = null
   ): Promise<unknown> {
     if (this.ended()) return Promise.reject(this.disposedError());
     if (!intercepted && (this.requestInterceptor || !this.isConnected())) {
@@ -414,7 +393,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         const pending = this.takePending(id);
         pending?.reject(this.pendingError(pending, `${name} timed out`));
       }, timeoutMs);
-      const pending: Pending = { kind, effect, sent: false, resolve, reject, timer };
+      const pending: Pending = { kind, sent: false, resolve, reject, timer };
       this.pending.set(id, pending);
       if (intercepted) {
         void intercepted.then(
@@ -441,7 +420,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
   }
 
   private pendingError(pending: Pending, message: string): RuntimeError {
-    return pending.effect && pending.sent
+    return pending.kind === "mutation" && pending.sent
       ? new RuntimeError(
           "unknown-outcome",
           `${message}. The operation may have completed; check its result before retrying.`

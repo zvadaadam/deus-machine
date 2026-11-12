@@ -1,37 +1,5 @@
 import { z } from "zod";
-import { WorkspaceStateSchema, WorkspaceStatusSchema } from "@shared/enums";
 import { ValidationError } from "./errors";
-
-// ============================================================================
-// Workspace Schemas
-// ============================================================================
-
-// WorkspaceStateSchema imported from shared/enums.ts — single source of truth.
-// Previously had a local 5-value enum including "working" which doesn't belong
-// in workspace state (that's a session status).
-
-export const PatchWorkspaceBody = z.object({
-  state: WorkspaceStateSchema.optional(),
-  status: WorkspaceStatusSchema.optional(),
-});
-
-export const CreateWorkspaceBody = z.object({
-  repository_id: z.string().min(1, "repository_id is required"),
-  /** Where the workspace's files live: local git worktree (default) or an
-   *  agnt cloud sandbox. */
-  location: z.enum(["local", "cloud"]).optional(),
-  source_branch: z
-    .string()
-    .refine((s) => !s.startsWith("-"), "Branch name must not start with a dash")
-    .optional(), // remote branch to base worktree on
-  pr_number: z.number().int().positive().optional(), // pre-populate PR tracking
-  pr_url: z.string().url().optional(),
-  pr_title: z.string().optional(),
-  target_branch: z
-    .string()
-    .refine((s) => !s.startsWith("-"), "Branch name must not start with a dash")
-    .optional(), // PR's base branch (for diff target)
-});
 
 // ============================================================================
 // Config File Schemas (disk reads — used with safeParse for graceful fallback)

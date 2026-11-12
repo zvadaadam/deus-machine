@@ -7,7 +7,7 @@ import {
 } from "@deus/runtime-client";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import type { QueryClient } from "@tanstack/react-query";
-import type { QueryResource, CommandName } from "@shared/types/query-protocol";
+import type { LiveName } from "@shared/api";
 import { createQueryClient } from "@/shared/api/queryClient";
 
 export { RuntimeError } from "@deus/runtime-client";
@@ -48,7 +48,7 @@ export type CallArgs<O extends AnyOp> =
     : [input: InputOf<O>, options?: CallOptions];
 const owners = new WeakMap<QueryClient, RuntimeClient>();
 
-export class RuntimeClient extends QueryRuntimeClient<QueryResource, CommandName> {
+export class RuntimeClient extends QueryRuntimeClient<LiveName> {
   constructor(identity: RuntimeIdentity, ports: RuntimePorts) {
     super(identity, {
       ...ports,

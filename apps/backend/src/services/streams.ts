@@ -13,6 +13,7 @@
 // resource again, as it would on first load).
 
 import { scopeMatches, type AnyStream, type EventOf, type ScopeOf } from "@shared/api/stream";
+import type { QEventFrame, QResetFrame } from "@shared/types/query-protocol";
 import { subscriptionKey } from "@deus/runtime-client";
 import { ValidationError } from "../lib/errors";
 import { getConnection } from "./ws.service";
@@ -36,17 +37,13 @@ interface Log {
   kept: { seq: number; data: unknown; restart?: true }[];
 }
 
-export type StreamFrame =
-  | { type: "q:event"; id: string; event: string; data: unknown; seq?: number }
-  | { type: "q:reset"; id: string; seq: number };
-
 const subscriptions = new Map<string, Subscription>();
 /** stream name → scope key → log. Insertion order is recency of publishing. */
 const logs = new Map<string, Map<string, Log>>();
 
 const subscriptionId = (connectionId: string, id: string) => `${connectionId}\n${id}`;
 
-function send(connectionId: string, frame: StreamFrame): void {
+function send(connectionId: string, frame: QEventFrame | QResetFrame): void {
   try {
     getConnection(connectionId)?.ws.send(JSON.stringify(frame));
   } catch {

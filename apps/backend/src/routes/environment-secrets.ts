@@ -6,12 +6,12 @@ import {
   requestCloudSettings,
 } from "../services/cloud-settings.service";
 
-const app = new Hono<{ Bindings: { relayBridged?: boolean }; Variables: { device?: unknown } }>();
+const app = new Hono<{ Variables: { device?: unknown } }>();
 const prefix = "/settings/environment-secrets";
 
 app.use(`${prefix}/*`, async (c, next) => {
   // Paired-device authority is not the desktop owner's WorkOS identity.
-  if (c.env?.relayBridged || c.get("device"))
+  if (c.get("device"))
     throw new AppError(403, "Manage cloud secrets using your own Deus Cloud sign-in.");
   c.header("cache-control", "no-store");
   await next();

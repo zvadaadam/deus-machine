@@ -2,9 +2,8 @@
  * Workspace Prefetch
  *
  * Warms the TanStack Query cache on hover so workspace switches feel instant.
- * The actual reads still go through the query protocol client's one-shot
- * `sendRequest()` path; once the workspace mounts, the normal WS subscriptions
- * take over for live updates.
+ * The reads are ordinary one-shot operations; once the workspace mounts, its
+ * subscriptions take over for live updates.
  *
  * Prefetches:
  * - Session messages (heaviest path when opening chat)

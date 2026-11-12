@@ -8,7 +8,7 @@
  *   DISCONNECTED  → 30s+, show full banner, dim content
  *
  * Escalation shortcuts:
- *   - If a sendCommand fails while in GRACE_PERIOD or RECONNECTING,
+ *   - If a send fails while in GRACE_PERIOD or RECONNECTING,
  *     immediately jump to DISCONNECTED (user tried to act).
  */
 

@@ -24,6 +24,7 @@ import {
 import { getCatalog, getState } from "../services/integrations/state";
 import { readAppTools } from "../services/integrations/store";
 import { handle } from "./registry";
+import { ValidationError } from "../lib/errors";
 
 // Every write tells `integrations` subscribers itself (`integrationsChanged`).
 export default [
@@ -52,7 +53,9 @@ export default [
       .with("app", () => setAppEnabled(id, enabled))
       .with("skill", () => setSkillEnabled(id, enabled))
       .with("plugin", () => {
-        throw new Error("A plugin is installed or not; switch its apps and skills instead");
+        throw new ValidationError(
+          "A plugin is installed or not; switch its apps and skills instead"
+        );
       })
       .exhaustive()
   ),

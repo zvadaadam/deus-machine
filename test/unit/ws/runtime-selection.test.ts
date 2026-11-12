@@ -133,7 +133,7 @@ describe("selected runtime and device grants", () => {
     const a = api.selectRuntime("A"),
       socketA = await online(a);
     a.queryClient.setQueryData(["session", "same"], "private A");
-    const pending = a.sendCommand("stopSession", { sessionId: "same" });
+    const pending = a.sendMutate("stopSession", { sessionId: "same" });
     const rejected = expect(pending).rejects.toMatchObject({ kind: "unknown-outcome" });
     const b = api.selectRuntime("B");
     await rejected;

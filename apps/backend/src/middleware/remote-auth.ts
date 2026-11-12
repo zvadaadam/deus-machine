@@ -15,22 +15,13 @@ const PUBLIC_PATHS = new Set(["/api/health", "/api/remote-auth/pair"]);
 
 /**
  * Auth middleware for remote access.
- * 1. Relay-bridged (via Hono env bindings) → skip auth
- * 2. Localhost → skip auth entirely
- * 3. Public paths → skip auth
- * 4. Rate-limited IP → 429
- * 5. Valid Bearer token → attach device to context, update last_seen
- * 6. Missing/invalid token → 401
+ * 1. Localhost → skip auth entirely
+ * 2. Public paths → skip auth
+ * 3. Rate-limited IP → 429
+ * 4. Valid Bearer token → attach device to context, update last_seen
+ * 5. Missing/invalid token → 401
  */
 export const authMiddleware = createMiddleware(async (c, next) => {
-  // In-process requests from the HTTP-over-WS bridge pass relayBridged via
-  // Hono env bindings. This is structurally impossible to spoof — external
-  // HTTP requests never pass env bindings to app.fetch().
-  if (c.env?.relayBridged) {
-    await next();
-    return;
-  }
-
   const clientIp = getClientIp(c);
 
   // Localhost exempt — desktop app unchanged

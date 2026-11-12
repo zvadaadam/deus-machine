@@ -18,7 +18,7 @@ import {
 } from "../db";
 import { getCloudConfig } from "../services/agent/cloud/config";
 import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
-import { sendMessage, stopSession } from "../services/agent/commands";
+import { sendMessage, stopSession } from "../services/agent/turns";
 import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
 import { invalidate } from "../services/query-engine";
 import { handle } from "./registry";

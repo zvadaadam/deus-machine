@@ -49,7 +49,6 @@ vi.mock("../../src/server", () => ({
 import fs from "fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { setApp } from "../../src/services/route-delegate";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
 import {
@@ -223,7 +222,6 @@ beforeAll(async () => {
   seedTestData();
 
   const created = createApp();
-  setApp(created.app);
   await new Promise<void>((resolve) => {
     server = serve({ fetch: created.app.fetch, port: 0, hostname: "127.0.0.1" }, (info) => {
       port = info.port;
@@ -412,6 +410,7 @@ describe("q:request → q:response", () => {
 
       expect(res.id).toBe("req-err");
       expect(res.code).toBe("QUERY_ERROR");
+      expect(res.message).toBe("Unknown operation: nonexistent");
     } finally {
       ws.close();
     }
@@ -824,7 +823,7 @@ describe("q:mutate → q:mutate_result", () => {
     }
   });
 
-  it("returns error for unknown mutation", async () => {
+  it("refuses a write nothing answers, and a read sent as a write", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(
@@ -840,7 +839,16 @@ describe("q:mutate → q:mutate_result", () => {
 
       expect(res.id).toBe("mut-err");
       expect(res.success).toBe(false);
-      expect(res.error).toContain("Unknown mutation");
+      expect(res.error).toBe("Unknown operation: deleteEverything");
+      expect(res.status).toBe(404);
+
+      // The frame decides what may run: a read cannot be asked as a write.
+      const wrongKind = await sendAndReceive(
+        ws,
+        { type: "q:mutate", id: "mut-kind", action: "stats", params: {} },
+        "q:mutate_result"
+      );
+      expect(wrongKind).toMatchObject({ success: false, status: 400 });
     } finally {
       ws.close();
     }
@@ -927,23 +935,20 @@ describe("sending and stopping", () => {
     }
   });
 
-  it("returns rejected ack for unknown command", async () => {
+  it("no longer speaks q:command: the frame is refused as unknown", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(
         ws,
         {
           type: "q:command",
-          id: "cmd-err",
-          command: "destroyEverything",
-          params: {},
+          id: "cmd-old",
+          command: "stopSession",
+          params: { sessionId: SESS_ID },
         },
-        "q:command_ack"
+        "q:error"
       );
-
-      expect(res.id).toBe("cmd-err");
-      expect(res.accepted).toBe(false);
-      expect(res.error).toContain("Unknown command");
+      expect(res).toMatchObject({ id: "cmd-old", code: "UNKNOWN_FRAME" });
     } finally {
       ws.close();
     }

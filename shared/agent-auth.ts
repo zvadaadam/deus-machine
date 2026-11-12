@@ -26,10 +26,6 @@ export const LOCAL_HARNESSES = [
 ] as const satisfies readonly AgentHarness[];
 export type LocalHarness = (typeof LOCAL_HARNESSES)[number];
 
-export function isLocalHarness(value: unknown): value is LocalHarness {
-  return (LOCAL_HARNESSES as readonly unknown[]).includes(value);
-}
-
 /** `agentAuth`: each harness's CLI and login, and the sign-ins under way. */
 export interface AgentAuthAnswer {
   auth: HarnessAuth[];

@@ -166,12 +166,6 @@ export const isConnected = (): boolean => getRuntimeClient().isConnected();
 export function call<O extends AnyOp>(op: O, ...args: CallArgs<O>): Promise<OutputOf<O>> {
   return getRuntimeClient().call(op, ...args);
 }
-export const sendRequest: RuntimeClient["sendRequest"] = (...args) =>
-  getRuntimeClient().sendRequest(...args);
-export const sendMutate: RuntimeClient["sendMutate"] = (...args) =>
-  getRuntimeClient().sendMutate(...args);
-export const sendCommand: RuntimeClient["sendCommand"] = (...args) =>
-  getRuntimeClient().sendCommand(...args);
 export const sendToolResponse: RuntimeClient["sendToolResponse"] = (...args) =>
   getRuntimeClient().sendToolResponse(...args);
 export const forceReconnect = (): void => getRuntimeClient().forceReconnect();

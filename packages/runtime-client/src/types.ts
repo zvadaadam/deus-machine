@@ -53,12 +53,6 @@ export interface ListenOptions {
   /** The host refused the subscription. It is not retried. */
   onRefused?: (error: RuntimeError) => void;
 }
-export type CommandResult = {
-  accepted: boolean;
-  commandId?: string;
-  error?: string;
-  [key: string]: unknown;
-};
 /** The q:mutate_result payload, including delegated route error metadata. */
 export interface MutateResult<T = unknown> {
   success: boolean;

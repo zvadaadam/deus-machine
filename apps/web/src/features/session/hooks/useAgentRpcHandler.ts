@@ -19,7 +19,8 @@
 import { match } from "ts-pattern";
 import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
 import { getErrorMessage } from "@shared/lib/errors";
-import { sendRequest } from "@/platform/ws";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
 import { onEvent, sendToolResponse } from "@/platform/ws";
 import { TOOL_CANCEL_EVENT } from "@shared/events";
@@ -291,27 +292,17 @@ export function useAgentRpcHandler(
 
     try {
       if (file) {
-        // Single-file diff via q:request
-        const result = await sendRequest<{
-          diff: string;
-          old_content?: string | null;
-          new_content?: string | null;
-        }>("diffFile", { workspaceId: ws.workspaceId, file });
+        const result = await call(api.diffFile, { workspaceId: ws.workspaceId, file });
         respond({ diff: result.diff });
       } else if (stat) {
-        // File list with stats via q:request
-        const result = await sendRequest<{
-          files: Array<{ file: string; additions: number; deletions: number }>;
-        }>("diffFiles", { workspaceId: ws.workspaceId });
+        const result = await call(api.diffFiles, { workspaceId: ws.workspaceId });
         const statText = result.files
           .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
           .join("\n");
         respond({ diff: statText });
       } else {
         // All changed files list (summary, not full patch — patches can be huge)
-        const result = await sendRequest<{
-          files: Array<{ file: string }>;
-        }>("diffFiles", { workspaceId: ws.workspaceId });
+        const result = await call(api.diffFiles, { workspaceId: ws.workspaceId });
         const fileList = result.files.map((f) => f.file).join("\n");
         respond({ diff: fileList });
       }

@@ -24,7 +24,7 @@ export function applyDeusCloudAuthChange(
   // `retry: false` a failed refetch strands it indefinitely. The curated-subset
   // + invalidate combination is how account B kept seeing A's data, four
   // separate times on this branch. Concretely:
-  //  - settings/* + repo-cloud-environment: A's subscriptions and environments.
+  //  - settings/*: A's subscriptions and environments.
   //  - workspaces + sessions (detail, by-workspace, messages): in web-direct
   //    these are A's repo names and TRANSCRIPTS, cached with staleTime
   //    Infinity; on desktop the mixed list carries A's cloud rows (the local
@@ -40,7 +40,6 @@ export function applyDeusCloudAuthChange(
     ["settings", "environment-secrets"],
     ["settings", "slack"],
     ["settings", "compute-usage"],
-    ["repo-cloud-environment"],
     ["workspaces"],
     ["sessions"],
     ["cloudRepoAccess"],

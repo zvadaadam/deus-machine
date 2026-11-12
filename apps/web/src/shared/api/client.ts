@@ -1,12 +1,10 @@
 /**
- * Base API Client
+ * Plain HTTP to this computer's backend.
  *
- * Lightweight HTTP client used ONLY for pre-auth endpoints that cannot
- * go through the WebSocket q:* protocol (e.g., /remote-auth/generate-pair-code).
- *
- * All data operations now use sendRequest/sendMutate/sendCommand from @/platform/ws.
- * This client exists solely for the handful of localhost-only HTTP endpoints
- * that run before the WS connection is established.
+ * Almost everything the app asks its backend is an operation (`call(api.x, …)`
+ * from @/platform/ws), which works the same through the relay. This client is
+ * for the few routes that are deliberately only reachable on this computer,
+ * such as creating a pairing code: it does not work for a relayed device.
  */
 
 import { getBaseURL } from "../config/api.config";

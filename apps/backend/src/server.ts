@@ -17,7 +17,6 @@ import {
   reconcile as reconcileSimulators,
   destroyAll as destroyAllSimulators,
 } from "./services/simulator-context";
-import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
 import {
   setRefreshListener as setLocalServerRefreshListener,
@@ -88,9 +87,6 @@ void backfillGitOriginUrls();
 
 // Create Hono app + WebSocket injector
 const { app, injectWebSocket } = createApp();
-
-// Register the Hono app for in-process route delegation (q:request/q:mutate → Hono routes)
-setApp(app);
 
 // Global variable to store actual port (used by health endpoint)
 let actualServerPort: number | null = null;

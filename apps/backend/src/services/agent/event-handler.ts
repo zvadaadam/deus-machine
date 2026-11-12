@@ -25,7 +25,8 @@ import type { RestoredCloudConversation } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
 import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
-import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
+import type { LiveName } from "@shared/api";
+import type { QServerFrame } from "@shared/types/query-protocol";
 import { invalidate } from "../query-engine";
 import { broadcast } from "../ws.service";
 import {
@@ -85,15 +86,9 @@ interface SessionState extends SessionFacts {
 
 // ---- Resource groups for invalidation ----
 
-const SESSION_RESOURCES: QueryResource[] = ["workspaces", "sessions", "session", "stats"];
-const MESSAGE_RESOURCES: QueryResource[] = ["messages", "session"];
-const TURN_END_RESOURCES: QueryResource[] = [
-  "workspaces",
-  "sessions",
-  "session",
-  "stats",
-  "messages",
-];
+const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "stats"];
+const MESSAGE_RESOURCES: LiveName[] = ["messages", "session"];
+const TURN_END_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "stats", "messages"];
 
 /**
  * The events the frontend does NOT receive.
@@ -134,7 +129,7 @@ const NOT_PUSHED = new Set([
  * `messages` subscriptions by `ctx.sessionIds`), so the saving would be one
  * query per subscriber of that session.
  */
-const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]>> = {
+const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], LiveName[]>> = {
   message_upserted: MESSAGE_RESOURCES,
   turn_updated: TURN_END_RESOURCES,
   usage_updated: SESSION_RESOURCES,
@@ -146,7 +141,7 @@ const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]
 /** Persist a write and invalidate subscriptions if it succeeded. */
 function persistAndInvalidate(
   result: WriteResult<unknown>,
-  resources: QueryResource[],
+  resources: LiveName[],
   sessionId: string
 ): void {
   if (result.ok) {
@@ -348,7 +343,7 @@ export function createAgentEventHandler(): AgentEventHandler {
             turnProviderCredentialSource(envelope.event)
           );
 
-      const stale = new Set<QueryResource>();
+      const stale = new Set<LiveName>();
       for (const write of writes) {
         if (!write.result.ok) {
           console.warn(

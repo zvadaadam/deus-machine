@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
+import { connectBackend } from "./lib/operations.mjs";
 
 const backend = process.env.DEUS_TEST_BACKEND_URL;
 const web = process.env.DEUS_TEST_WEB_URL;
@@ -24,21 +25,8 @@ await writeFile(path.join(repo, ".gitignore"), ".env*\n.deus/\n");
 await writeFile(path.join(repo, ".env"), "APP_TEST_KEY=local-synthetic-value\n");
 // Settings must also work before a new repository has its first commit.
 assert.throws(() => git("rev-parse", "--verify", "HEAD"));
-const request = async (route, body) => {
-  const response = await fetch(
-    `${backend}/api${route}`,
-    body
-      ? {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      : undefined
-  );
-  assert(response.ok, `${route}: HTTP ${response.status}`);
-  return response.json();
-};
-const registered = await request("/repos", { root_path: repo });
+const operations = await connectBackend(backend);
+const registered = await operations.write("addRepo", { root_path: repo });
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.setDefaultTimeout(20_000);
@@ -60,15 +48,16 @@ try {
   git("add", ".");
   git("commit", "-qm", "Project environment from Settings");
   await page.screenshot({ path: path.join(output, "settings.png"), fullPage: true });
-  const workspace = await request("/workspaces", {
+  const { workspaceId } = await operations.write("createWorkspace", {
     repository_id: registered.id,
     location: "local",
   });
+  const workspace = await operations.read("workspace", { workspaceId });
   const checkout = path.join(repo, ".deus", workspace.slug);
   // Preparation is asynchronous; wait for the persisted status rather than a fixed delay.
   let prepared;
   for (let attempt = 0; attempt < 120; attempt++) {
-    prepared = await request(`/workspaces/${workspace.id}`);
+    prepared = await operations.read("workspace", { workspaceId });
     if (prepared.setup_status === "failed") throw new Error(prepared.error_message);
     if (prepared.setup_status === "completed") break;
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -78,7 +67,8 @@ try {
     await readFile(path.join(checkout, "setup-proof.txt"), "utf8"),
     "local-synthetic-value"
   );
-  assert((await request(`/workspaces/${workspace.id}/setup-logs`)).logs.includes("Setup complete"));
+  const setup = await operations.read("setupLogs", { workspaceId });
+  assert(setup.logs.includes("Setup complete"));
   await page.goto(`${web}/s/local/w/${workspace.id}`);
   await page.getByRole("button", { name: "Run app", exact: true }).click();
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -144,5 +134,6 @@ try {
   console.error(await page.locator("body").innerText());
   throw error;
 } finally {
+  operations.close();
   await browser.close();
 }

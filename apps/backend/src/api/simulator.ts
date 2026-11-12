@@ -12,6 +12,7 @@ import {
 import * as simulator from "../services/simulator-context";
 import { broadcast } from "../services/ws.service";
 import { handle } from "./registry";
+import { ConflictError, ValidationError } from "../lib/errors";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,7 +40,7 @@ async function simctlApp(
   { workspaceId, bundleId }: { workspaceId: string; bundleId: string }
 ): Promise<void> {
   const session = simulator.getContextForWorkspace(workspaceId);
-  if (!session) throw new Error("No active simulator session");
+  if (!session) throw new ConflictError("No active simulator session");
   await execFileAsync("xcrun", ["simctl", verb, session.udid, bundleId]);
 }
 
@@ -56,7 +57,7 @@ export default [
   handle(api.simStart, ({ workspaceId, udid, skipBootCheck }, { caller }) => {
     const capabilities = simulator.getSimulatorCapabilities({ relayClient: caller.relayed });
     if (!capabilities.available) {
-      throw new Error(capabilities.unavailableReason ?? "Simulator is unavailable");
+      throw new ValidationError(capabilities.unavailableReason ?? "Simulator is unavailable");
     }
     // Not awaited: booting takes seconds. `sim:streamReady` says it worked.
     simulator.startStream(workspaceId, udid, skipBootCheck).catch((err) => {

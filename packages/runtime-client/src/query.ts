@@ -12,10 +12,7 @@ export interface QueryRuntimePorts extends RuntimePorts {
 type Binding = { count: number; queryKey: QueryKey; stop: () => void };
 
 /** Optional cache integration. Importing the core client does not load TanStack. */
-export class QueryRuntimeClient<
-  Resource extends string = string,
-  Command extends string = string,
-> extends RuntimeClient<Resource, Command> {
+export class QueryRuntimeClient<Resource extends string = string> extends RuntimeClient<Resource> {
   readonly queryClient: QueryClient;
   private bindings = new Map<string, Binding>();
   private acceptSnapshot: NonNullable<QueryRuntimePorts["acceptSnapshot"]>;

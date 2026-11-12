@@ -78,8 +78,6 @@ export type { PRStatus, GhCliStatus, CheckDetail, PRSummary, BranchSummary } fro
 
 // Query protocol types
 export type {
-  QueryResource,
-  MutationName,
   QClientFrame,
   QServerFrame,
   QRequestFrame,
@@ -90,6 +88,5 @@ export type {
   QSnapshotFrame,
   QDeltaFrame,
   QMutateResultFrame,
-  QInvalidateFrame,
   QErrorFrame,
 } from "./query-protocol";

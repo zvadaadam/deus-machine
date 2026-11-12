@@ -29,7 +29,7 @@ const { mockGetDatabase, mockInvalidate } = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 
-import { stopSession } from "../../../src/services/agent/commands";
+import { stopSession } from "../../../src/services/agent/turns";
 import * as agentService from "../../../src/services/agent/service";
 import * as cloudDriver from "../../../src/services/agent/cloud/driver";
 

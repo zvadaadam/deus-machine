@@ -9,19 +9,14 @@ import { addConnection, removeConnection, handleProtocolMessage } from "./servic
 import { serveOperations } from "./services/query-engine";
 import { registry } from "./api";
 import { getRelayStatus } from "./services/relay.service";
-// Simulator context is accessed via q:command handlers in commands.ts
 import { isLocalhost, getClientIp } from "./lib/network";
 import healthRoutes from "./routes/health";
 import workspaceRoutes from "./routes/workspaces";
-import repoRoutes from "./routes/repos";
-import agentConfigRoutes from "./routes/agent-config";
 import settingsRoutes from "./routes/settings";
 import providerAccountRoutes from "./routes/provider-accounts";
 import computeUsageRoutes from "./routes/compute-usage";
 import environmentSecretRoutes from "./routes/environment-secrets";
 import slackRoutes from "./routes/slack";
-import statsRoutes from "./routes/stats";
-import onboardingRoutes from "./routes/onboarding";
 import authRoutes from "./routes/remote-auth";
 import filesRoutes from "./routes/files";
 import browserImportRoutes from "./routes/browser-import";
@@ -43,28 +38,18 @@ export function createApp() {
   app.route("/api", healthRoutes);
   app.route("/api", authRoutes);
   app.route("/api", workspaceRoutes);
-  app.route("/api", repoRoutes);
-  app.route("/api", agentConfigRoutes);
   app.route("/api", settingsRoutes);
   app.route("/api", providerAccountRoutes);
   app.route("/api", environmentSecretRoutes);
   app.route("/api", slackRoutes);
   app.route("/api", computeUsageRoutes);
-  app.route("/api", statsRoutes);
   app.route("/api", filesRoutes);
   app.route("/api", browserImportRoutes);
   app.route("/api", integrationRoutes);
-  app.route("/api", onboardingRoutes);
 
-  // Relay status endpoint
-  app.get("/api/relay/status", (c) => {
-    return c.json(getRelayStatus());
-  });
-
-  // Simulator operations are handled via q:command protocol (sim:start,
-  // sim:stop, etc.) which works in both desktop and relay mode.
-  // No HTTP endpoints needed — the backend's simulator-context.ts service
-  // is called directly from the command dispatch layer.
+  // The tunnel's state, for the `deus` CLI and scripts on this computer. The
+  // app itself asks the `relayStatus` operation.
+  app.get("/api/relay/status", (c) => c.json(getRelayStatus()));
 
   // WebSocket route for remote access.
   // Localhost connections are auto-authenticated. Remote clients must send

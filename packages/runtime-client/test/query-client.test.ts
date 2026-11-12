@@ -158,15 +158,12 @@ describe("runtime-owned q: client", () => {
   it("blocks all writes while the relay socket is open but the host is unavailable", async () => {
     const f = setup();
     await online(f);
-    const pending = f.client.sendCommand("stopSession", { sessionId: "s" });
+    const pending = f.client.sendMutate("stopSession", { sessionId: "s" });
     const rejected = expect(pending).rejects.toMatchObject({ kind: "unknown-outcome" });
     f.socket.message({ type: "server_reconnecting" });
     await rejected;
     const count = f.socket.sent.length;
     await expect(f.client.sendMutate("createSession", {})).rejects.toMatchObject({
-      kind: "unavailable",
-    });
-    await expect(f.client.sendCommand("stopSession", {})).rejects.toMatchObject({
       kind: "unavailable",
     });
     await expect(f.client.connect()).rejects.toMatchObject({ kind: "unavailable" });
@@ -183,47 +180,41 @@ describe("runtime-owned q: client", () => {
     expect(f.client.isConnected()).toBe(true);
   });
 
-  it.each(["mutation", "command"])(
-    "reports an uncertain %s outcome and never resends it",
-    async (kind) => {
-      const f = setup();
-      await online(f);
-      const promise =
-        kind === "mutation"
-          ? f.client.sendMutate("createSession", {})
-          : f.client.sendCommand("sendMessage", {});
-      const rejected = expect(promise).rejects.toMatchObject({ kind: "unknown-outcome" });
-      f.socket.close();
-      await rejected;
-      await vi.advanceTimersByTimeAsync(100);
-      f.socket.open();
-      f.socket.message({ type: "connected" });
-      expect(f.socket.frames("q:mutate")).toHaveLength(0);
-      expect(f.socket.frames("q:command")).toHaveLength(0);
-      expect(f.client.diagnostics().pending).toBe(0);
-    }
-  );
-
-  it("clears completed command timers and handles q:error for commands", async () => {
+  it("reports an uncertain write outcome and never resends it", async () => {
     const f = setup();
     await online(f);
-    const command = f.client.sendCommand("stopSession", {});
-    f.socket.message({
-      type: "q:command_ack",
-      id: f.socket.frames("q:command")[0].id,
-      accepted: true,
-      extra: "kept",
+    const rejected = expect(f.client.sendMutate("sendMessage", {})).rejects.toMatchObject({
+      kind: "unknown-outcome",
     });
-    expect(await command).toMatchObject({ accepted: true, extra: "kept" });
+    f.socket.close();
+    await rejected;
+    await vi.advanceTimersByTimeAsync(100);
+    f.socket.open();
+    f.socket.message({ type: "connected" });
+    expect(f.socket.frames("q:mutate")).toHaveLength(0);
+    expect(f.client.diagnostics().pending).toBe(0);
+  });
+
+  it("clears completed write timers and handles q:error for writes", async () => {
+    const f = setup();
+    await online(f);
+    const write = f.client.sendMutate("stopSession", {});
+    f.socket.message({
+      type: "q:mutate_result",
+      id: f.socket.frames("q:mutate")[0].id,
+      success: true,
+      data: { unconfirmed: false },
+    });
+    expect(await write).toEqual({ success: true, data: { unconfirmed: false } });
     expect(vi.getTimerCount()).toBe(1);
-    const rejected = f.client.sendCommand("stopSession", {});
+    const rejected = f.client.sendMutate("stopSession", {});
     const check = expect(rejected).rejects.toMatchObject({
       kind: "rejected",
       message: "not permitted",
     });
     f.socket.message({
       type: "q:error",
-      id: f.socket.frames("q:command")[1].id,
+      id: f.socket.frames("q:mutate")[1].id,
       message: "not permitted",
     });
     await check;
@@ -237,7 +228,7 @@ describe("runtime-owned q: client", () => {
     const read = expect(
       f.client.sendRequest("workspaces", undefined, { timeoutMs: 20 })
     ).rejects.toMatchObject({ kind: "unavailable" });
-    const write = expect(f.client.sendCommand("sendMessage", {}, 20)).rejects.toMatchObject({
+    const write = expect(f.client.sendMutate("sendMessage", {}, 20)).rejects.toMatchObject({
       kind: "unknown-outcome",
     });
     await vi.advanceTimersByTimeAsync(20);

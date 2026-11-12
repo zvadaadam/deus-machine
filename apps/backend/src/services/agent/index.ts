@@ -6,5 +6,4 @@
 
 export { init, shutdown, startTurn, stopSession, isConnected, getLocalAgents } from "./service";
 
-export { runCommand } from "./commands";
 export { resolve as resolveToolRelay, reject as rejectToolRelay } from "./tool-relay";

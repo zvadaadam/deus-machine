@@ -55,20 +55,5 @@ export async function startIntegrations(port: number): Promise<void> {
   void reconcileCloudAccounts();
 }
 
-// ---------------------------------------------------------------------------
 // What the app's own UI reads and changes is answered in `api/integrations.ts`,
 // which calls apps.ts, skills.ts, plugins.ts, checks.ts and state.ts directly.
-//
-// These two are what is left of the dispatch that used to live here. Nothing
-// reaches them (the registry answers every name first); they exist because the
-// old arms in query-engine.ts and query-request-dispatcher.ts still import
-// them, and go when those arms do.
-// ---------------------------------------------------------------------------
-
-export function runIntegrationMutation(action: string, _params: unknown): never {
-  throw new Error(`${action} is answered by api/integrations.ts`);
-}
-
-export function runIntegrationRequest(resource: string, _params: unknown): never {
-  throw new Error(`${resource} is answered by api/integrations.ts`);
-}

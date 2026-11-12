@@ -1,31 +1,24 @@
-// backend/src/services/agent/commands.ts
-// Business logic for q:command dispatch.
+// backend/src/services/agent/turns.ts
+// Starting and stopping a turn: what `sendMessage` and `stopSession` do.
 //
-// Each command handler is a focused function that:
-//   1. Validates and extracts typed params
-//   2. Performs DB writes
-//   3. Triggers subscription invalidation
-//   4. Forwards to agent-server when needed
-//
-// The query engine (protocol layer) delegates here — it should never
-// contain business logic directly.
+// A send is admitted or refused as a whole. The user's message row is never
+// written here: the engine echoes the prompt back and that echo is the one
+// path that persists messages. So until the turn is admitted, the only copy
+// of the prompt is the sender's optimistic bubble, and every way a send can
+// fail must reject, which is what tells the sender to take the bubble back.
 
-import { match } from "ts-pattern";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { WireRequestError } from "@zvada/agent-server/client";
 import { WIRE_ERROR_CODES } from "@zvada/agent-server/protocol";
-import * as api from "@shared/api/sessions";
+import type * as api from "@shared/api/sessions";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
 import { readPermissionMode, readThinkingLevel } from "@shared/protocol";
 import { readCloudTurnSelection, type CloudTurnSelection } from "@shared/cloud-models";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import { getDatabase } from "../../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { getSessionRaw, getWorkspaceForMiddleware } from "../../db";
 import { computeWorkspacePath } from "../../middleware/workspace-loader";
-import { ptyRouter } from "../node/pty";
-import { watchWorkspace, unwatchWorkspace } from "../fs-watcher.service";
-import { delegateToRoute } from "../route-delegate";
 import {
   persistLastUserMessageAt,
   persistSessionError,
@@ -40,358 +33,8 @@ import {
   hasLiveCloudSession,
   announceCloudEnv,
   pushCloudSessionFacts,
-  startCloudSimulator,
-  stopCloudSimulator,
-  parseCloudSimulatorPlatform,
 } from "./cloud/driver";
 import { refreshWorkspaceGithubToken } from "../cloud-workspace-init.service";
-import * as simulator from "../simulator-context";
-import { runAutomationNow, refreshAutomations, openAutomationRun } from "../automations";
-import { broadcast as wsBroadcast } from "../ws.service";
-import { ACTIVE_TURN_STATUSES, type AgentHarness } from "@shared/enums";
-import type { CommandName } from "@shared/types/query-protocol";
-import { isLocalHarness, type LocalHarness } from "@shared/agent-auth";
-import {
-  type QueryParams,
-  readStringParam as readString,
-  readNumberParam as readNumber,
-  requireParam,
-} from "../../lib/query-params";
-
-interface CommandResult {
-  commandId?: string;
-  [key: string]: unknown;
-}
-
-const execFileAsync = promisify(execFile);
-
-export interface CommandContext {
-  relayClient?: boolean;
-}
-
-function readLocalHarness(params: QueryParams): LocalHarness {
-  const harness = params.harness;
-  if (!isLocalHarness(harness)) throw new Error(`not a local agent: ${String(harness)}`);
-  return harness;
-}
-
-// ---- Command Dispatch ----
-
-export async function runCommand(
-  command: CommandName,
-  params: QueryParams,
-  context: CommandContext = {}
-): Promise<CommandResult> {
-  return (
-    match(command)
-      // Operations now (api/sessions.ts); these names never reach this dispatch.
-      .with("sendMessage", "stopSession", (name) => {
-        throw new Error(`${name} is an operation`);
-      })
-      // ---- PTY commands ----
-      .with("pty:spawn", async () => {
-        const id = requireParam(params, "id", "pty:spawn");
-        const cmd = readString(params, "command") ?? "bash";
-        const args = Array.isArray(params.args) ? (params.args as string[]) : [];
-        const cols = readNumber(params, "cols") ?? 80;
-        const rows = readNumber(params, "rows") ?? 24;
-        const cwd = readString(params, "cwd");
-        const cloudWorkspaceId = readString(params, "cloudWorkspaceId");
-
-        const commandId = await ptyRouter.open({
-          id,
-          command: cmd,
-          args,
-          cols,
-          rows,
-          cwd,
-          cloudWorkspaceId,
-        });
-        return { commandId };
-      })
-      .with("pty:write", () => {
-        const id = requireParam(params, "id", "pty:write");
-        const data = Array.isArray(params.data) ? (params.data as number[]) : undefined;
-        if (!data) throw new Error("pty:write requires data (number[])");
-
-        ptyRouter.write(id, data);
-        return {};
-      })
-      .with("pty:resize", () => {
-        const id = readString(params, "id");
-        const cols = readNumber(params, "cols");
-        const rows = readNumber(params, "rows");
-        if (!id || cols === undefined || rows === undefined) {
-          throw new Error("pty:resize requires id, cols, and rows");
-        }
-
-        ptyRouter.resize(id, cols, rows);
-        return {};
-      })
-      .with("pty:kill", () => {
-        const id = requireParam(params, "id", "pty:kill");
-
-        ptyRouter.kill(id);
-        return {};
-      })
-      // ---- File system commands ----
-      .with("fs:watch", async () => {
-        const workspacePath = requireParam(params, "workspacePath", "fs:watch");
-
-        await watchWorkspace(workspacePath);
-        return {};
-      })
-      .with("fs:unwatch", async () => {
-        const workspacePath = requireParam(params, "workspacePath", "fs:unwatch");
-
-        await unwatchWorkspace(workspacePath);
-        return {};
-      })
-      // ---- Git commands ----
-      .with("git:clone", async () => {
-        const url = readString(params, "url");
-        const targetPath = readString(params, "targetPath");
-        if (!url || !targetPath) throw new Error("git:clone requires url and targetPath");
-        const result = (await delegateToRoute("POST", "/api/repos/clone", {
-          url,
-          targetPath,
-        })) as { success?: boolean; path?: string; error?: string };
-        if (result.error) throw new Error(result.error);
-        return {};
-      })
-      .with("git:init", async () => {
-        const projectName = readString(params, "projectName");
-        const targetPath = readString(params, "targetPath");
-        if (!projectName || !targetPath)
-          throw new Error("git:init requires projectName and targetPath");
-        const templateType = readString(params, "templateType");
-        const templateUrl = readString(params, "templateUrl");
-        const result = (await delegateToRoute("POST", "/api/repos/init", {
-          projectName,
-          targetPath,
-          ...(templateType ? { template: { type: templateType, url: templateUrl } } : {}),
-        })) as { success?: boolean; path?: string; githubUrl?: string; error?: string };
-        if (result.error) throw new Error(result.error);
-        return { githubUrl: result.githubUrl };
-      })
-      // ---- Route-delegated commands ----
-      .with("createWorkspace", async () => {
-        const repositoryId = requireParam(params, "repository_id", "createWorkspace");
-        const body: Record<string, unknown> = { repository_id: repositoryId };
-        const location = readString(params, "location");
-        if (location) body.location = location;
-        const sourceBranch = readString(params, "source_branch");
-        const prUrl = readString(params, "pr_url");
-        const prTitle = readString(params, "pr_title");
-        const targetBranch = readString(params, "target_branch");
-        if (sourceBranch) body.source_branch = sourceBranch;
-        if (params.pr_number != null) body.pr_number = params.pr_number;
-        if (prUrl) body.pr_url = prUrl;
-        if (prTitle) body.pr_title = prTitle;
-        if (targetBranch) body.target_branch = targetBranch;
-        const result = (await delegateToRoute("POST", "/api/workspaces", body)) as { id?: string };
-        return { commandId: result.id };
-      })
-      .with("retrySetup", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "retrySetup");
-        await delegateToRoute("POST", `/api/workspaces/${workspaceId}/retry-setup`);
-        return {};
-      })
-      // ---- Simulator commands ----
-      .with("sim:listDevices", async () => {
-        const devices = await simulator.listDevices();
-        return { devices };
-      })
-      .with("sim:start", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:start");
-        const udid = requireParam(params, "udid", "sim:start");
-        const skipBootCheck = params.skipBootCheck === true;
-        const capabilities = simulator.getSimulatorCapabilities({
-          relayClient: context.relayClient === true,
-        });
-        if (!capabilities.available) {
-          throw new Error(capabilities.unavailableReason ?? "Simulator is unavailable");
-        }
-        // Async: start returns immediately, pushes sim:streamReady event when ready
-        simulator.startStream(workspaceId, udid, skipBootCheck).catch((err) => {
-          console.error("[Simulator] startStream failed:", err);
-          wsBroadcast(
-            JSON.stringify({
-              type: "q:event",
-              event: "sim:streamFailed",
-              data: { workspaceId, error: err instanceof Error ? err.message : String(err) },
-            })
-          );
-        });
-        return {};
-      })
-      .with("sim:stop", () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:stop");
-        simulator.stopStream(workspaceId);
-        return {};
-      })
-      .with("sim:touch", () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:touch");
-        const x = readNumber(params, "x");
-        const y = readNumber(params, "y");
-        if (x === undefined || y === undefined) {
-          throw new Error("sim:touch requires numeric x and y");
-        }
-        const touchType = readString(params, "touchType") ?? "began";
-        simulator.sendTouch(workspaceId, x, y, touchType);
-        return {};
-      })
-      .with("sim:key", () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:key");
-        const keycode = readNumber(params, "keycode");
-        if (keycode === undefined) {
-          throw new Error("sim:key requires a numeric keycode");
-        }
-        const direction = readString(params, "direction") ?? "down";
-        simulator.sendKey(workspaceId, keycode, direction);
-        return {};
-      })
-      .with("sim:scroll", () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:scroll");
-        const x = readNumber(params, "x");
-        const y = readNumber(params, "y");
-        const dx = readNumber(params, "dx");
-        const dy = readNumber(params, "dy");
-        if (x === undefined || y === undefined || dx === undefined || dy === undefined) {
-          throw new Error("sim:scroll requires numeric x, y, dx, dy");
-        }
-        simulator.sendScroll(workspaceId, x, y, dx, dy);
-        return {};
-      })
-      .with("sim:button", () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:button");
-        const buttonType = readString(params, "buttonType");
-        if (!buttonType) {
-          throw new Error("sim:button requires buttonType");
-        }
-        simulator.sendButton(workspaceId, buttonType);
-        return {};
-      })
-      .with("sim:screenshot", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:screenshot");
-        const bytes = await simulator.takeScreenshot(workspaceId);
-        return { bytes };
-      })
-      .with("sim:inspectStart", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:inspectStart");
-        const bundleId = readString(params, "bundleId");
-        const snapshot = await simulator.startInspector(workspaceId, bundleId ?? undefined);
-        return { snapshot };
-      })
-      .with("sim:inspectSnapshot", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:inspectSnapshot");
-        const snapshot = await simulator.inspectorSnapshot(workspaceId);
-        return { snapshot };
-      })
-      .with("sim:buildAndRun", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:buildAndRun");
-        const workspacePath = requireParam(params, "workspacePath", "sim:buildAndRun");
-        const scheme = readString(params, "scheme");
-        // Async: pushes sim:buildLog, sim:buildComplete or sim:buildFailed events
-        simulator.buildAndRun(workspaceId, workspacePath, scheme ?? undefined).catch((err) => {
-          wsBroadcast(
-            JSON.stringify({
-              type: "q:event",
-              event: "sim:buildFailed",
-              data: { workspaceId, error: err instanceof Error ? err.message : String(err) },
-            })
-          );
-        });
-        return {};
-      })
-      .with("sim:hasXcodeProject", async () => {
-        const workspacePath = requireParam(params, "workspacePath", "sim:hasXcodeProject");
-        const hasProject = await simulator.hasXcodeProject(workspacePath);
-        return { hasProject };
-      })
-      .with("sim:launchApp", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:launchApp");
-        const bundleId = requireParam(params, "bundleId", "sim:launchApp");
-        const session = simulator.getContextForWorkspace(workspaceId);
-        if (!session) throw new Error("No active simulator session");
-        await execFileAsync("xcrun", ["simctl", "launch", session.udid, bundleId]);
-        return {};
-      })
-      .with("sim:terminateApp", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:terminateApp");
-        const bundleId = requireParam(params, "bundleId", "sim:terminateApp");
-        const session = simulator.getContextForWorkspace(workspaceId);
-        if (!session) throw new Error("No active simulator session");
-        await execFileAsync("xcrun", ["simctl", "terminate", session.udid, bundleId]);
-        return {};
-      })
-      .with("sim:uninstallApp", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "sim:uninstallApp");
-        const bundleId = requireParam(params, "bundleId", "sim:uninstallApp");
-        const session = simulator.getContextForWorkspace(workspaceId);
-        if (!session) throw new Error("No active simulator session");
-        await execFileAsync("xcrun", ["simctl", "uninstall", session.udid, bundleId]);
-        return {};
-      })
-      // ---- Cloud simulator (a hosted device on the workspace's sandbox) ----
-      // Awaited only as far as the send: an unreachable sandbox fails the ack
-      // (the tab can say so), while the device outcome itself rides q:event
-      // cloud:simulator + the workspace row — there is nothing to return here.
-      .with("cloudSim:start", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "cloudSim:start");
-        await startCloudSimulator(workspaceId, parseCloudSimulatorPlatform(params.platform));
-        return {};
-      })
-      .with("cloudSim:stop", async () => {
-        const workspaceId = requireParam(params, "workspaceId", "cloudSim:stop");
-        await stopCloudSimulator(workspaceId, parseCloudSimulatorPlatform(params.platform));
-        return {};
-      })
-      // ---- Automations (cloud-only; agnt executes, deus mirrors) ----
-      .with("runAutomationNow", async () => {
-        const automationId = requireParam(params, "automationId", "runAutomationNow");
-        const runId = await runAutomationNow(automationId);
-        return { commandId: runId };
-      })
-      .with("refreshAutomations", async () => {
-        await refreshAutomations(readString(params, "automationId"));
-        return {};
-      })
-      .with("openAutomationRun", async () => {
-        const runId = requireParam(params, "runId", "openAutomationRun");
-        const opened = await openAutomationRun(runId);
-        return { commandId: runId, ...opened };
-      })
-      // ---- The local agents: their CLIs and logins, run by the engine ----
-      .with("agentPrepareClis", () => {
-        agentService.getLocalAgents().prepareClis();
-        return {};
-      })
-      .with("agentSignIn", async () => {
-        const harness = readLocalHarness(params);
-        const method = requireParam(params, "method", "agentSignIn");
-        const apiKey = readString(params, "apiKey")?.trim();
-        return {
-          ...(await agentService.getLocalAgents().signIn(harness, method, apiKey || undefined)),
-        };
-      })
-      .with("agentLoginCode", async () => {
-        const loginId = requireParam(params, "loginId", "agentLoginCode");
-        const code = requireParam(params, "code", "agentLoginCode");
-        return { auth: await agentService.getLocalAgents().complete(loginId, code) };
-      })
-      .with("agentLoginCancel", async () => {
-        await agentService
-          .getLocalAgents()
-          .cancel(requireParam(params, "loginId", "agentLoginCancel"));
-        return {};
-      })
-      .with("agentLogout", async () => ({
-        auth: await agentService.getLocalAgents().logout(readLocalHarness(params)),
-      }))
-      .exhaustive()
-  );
-}
 
 // ---- sendMessage ----
 
@@ -402,7 +45,7 @@ export async function sendMessage(
   const { sessionId, content, model, agentHarness } = input;
   const permissionMode = readPermissionMode(input.permissionMode);
   if (input.permissionMode !== undefined && permissionMode === undefined) {
-    throw new Error("Unsupported permission mode");
+    throw new ValidationError("Unsupported permission mode");
   }
 
   const db = getDatabase();
@@ -413,7 +56,7 @@ export async function sendMessage(
   // authoritative; the UI disables these options too, but this is the source
   // of truth.
   if (session && session.message_count > 0 && session.agent_harness !== agentHarness) {
-    throw new Error(
+    throw new ConflictError(
       `Cannot switch agent from ${session.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
     );
   }
@@ -425,7 +68,7 @@ export async function sendMessage(
   // Reject up front — the q:command error surfaces in the UI. The wire guard
   // stays as the backstop for the status race.
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
-    throw new Error(
+    throw new ConflictError(
       session.status === "working"
         ? "The agent is still working — wait for the current turn to finish."
         : "The agent is waiting for your response — answer the pending prompt first."
@@ -450,7 +93,7 @@ export async function sendMessage(
   // persist it would leave a rejected harness on the row; after the working
   // flip it would strand the session in "working" with no turn to end it.
   if (isCloud && agentHarness !== "claude-code" && agentHarness !== "codex-app-server") {
-    throw new Error(
+    throw new ValidationError(
       "This agent isn't available in cloud workspaces — pick a Claude or Codex model, or use a local workspace."
     );
   }
@@ -465,7 +108,7 @@ export async function sendMessage(
       model,
       thinkingLevel: input.thinkingLevel,
     });
-    if (!read.ok) throw new Error(read.message);
+    if (!read.ok) throw new ValidationError(read.message);
     cloudSelection = read.selection;
   }
 
@@ -501,7 +144,7 @@ export async function sendMessage(
     if (result.changes === 0) {
       const current = getSessionRaw(db, sessionId);
       if (current && current.agent_harness !== agentHarness) {
-        throw new Error(
+        throw new ConflictError(
           `Cannot switch agent from ${current.agent_harness} to ${agentHarness} on a session with messages. Open a new chat tab instead.`
         );
       }
@@ -660,7 +303,9 @@ export async function sendMessage(
         console.warn(
           `[CommandHandler] sendMessage rejected, turn already active: session=${sessionId}`
         );
-        throw new Error("The agent is still working — wait for the current turn to finish.");
+        throw new ConflictError(
+          "The agent is still working — wait for the current turn to finish."
+        );
       }
       // Every other rejection — harness unavailable, shutting down, invalid
       // params, a transport that died mid-request — means no turn was admitted,
@@ -713,7 +358,7 @@ export async function stopSession({
 }: ParsedInputOf<typeof api.stopSession>): Promise<{ unconfirmed: boolean }> {
   const db = getDatabase();
   const session = getSessionRaw(db, sessionId);
-  if (!session) throw new Error("Session not found");
+  if (!session) throw new NotFoundError("Session not found");
 
   const targetTurnId = agentService.liveTurnId(sessionId);
   let result: Awaited<ReturnType<typeof agentService.stopSession>> | undefined;

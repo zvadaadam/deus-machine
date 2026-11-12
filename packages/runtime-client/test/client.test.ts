@@ -102,28 +102,28 @@ describe("headless client", () => {
     expect(await readB).toBe("B");
   });
 
-  it("does not replay a headless command after its acknowledgment is lost", async () => {
+  it("does not replay a headless write after its reply is lost", async () => {
     const f = fixture();
     await online(f);
-    const result = expect(f.client.sendCommand("start-job", { id: "job" })).rejects.toMatchObject({
+    const result = expect(f.client.sendMutate("start-job", { id: "job" })).rejects.toMatchObject({
       kind: "unknown-outcome",
     });
     f.socket.close();
     await result;
     await online(f);
-    expect(f.sockets.flatMap((socket) => socket.frames("q:command"))).toHaveLength(1);
+    expect(f.sockets.flatMap((socket) => socket.frames("q:mutate"))).toHaveLength(1);
     expect(f.client.diagnostics().pending).toBe(0);
   });
 
-  it("reports a lost reply to an acting request as an unknown outcome, unlike a read", async () => {
+  it("reports a lost reply to a write as an unknown outcome, unlike a read", async () => {
     const f = fixture();
     await online(f);
     const read = expect(f.client.sendRequest("inventory")).rejects.toMatchObject({
       kind: "unavailable",
     });
-    const act = expect(
-      f.client.sendRequest("press-button", { id: "go" }, { effect: true })
-    ).rejects.toMatchObject({ kind: "unknown-outcome" });
+    const act = expect(f.client.sendMutate("press-button", { id: "go" })).rejects.toMatchObject({
+      kind: "unknown-outcome",
+    });
     f.socket.close();
     await read;
     await act;
@@ -137,7 +137,7 @@ describe("headless client", () => {
     a.socket.message({ type: "auth_failed" });
     expect(a.client.getState()).toBe("revoked");
     expect(b.client.isConnected()).toBe(true);
-    await expect(a.client.sendCommand("start-job", {})).rejects.toMatchObject({ kind: "disposed" });
+    await expect(a.client.sendMutate("start-job", {})).rejects.toMatchObject({ kind: "disposed" });
   });
 
   it("ends without retrying when the transport factory refuses definitively", async () => {

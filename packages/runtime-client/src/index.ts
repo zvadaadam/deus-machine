@@ -15,6 +15,5 @@ export type {
   DeltaCallback,
   StreamCallback,
   ListenOptions,
-  CommandResult,
   MutateResult,
 } from "./types";

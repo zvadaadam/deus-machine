@@ -86,9 +86,8 @@ const server = await createServer({
         if (id === "\0layout-ws")
           return `
         export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/ws/index.ts"))};
-        export const sendRequest = async (name, params) => {const r=await fetch("/api/query/"+name,{method:"POST",body:JSON.stringify(params)});if(!r.ok)throw new Error("Files temporarily unavailable");return r.json();};
-        export const sendMutate = async () => ({success:true});
-        export const sendCommand = async () => ({accepted:true});
+        const sendRequest = async (name, params) => {const r=await fetch("/api/query/"+name,{method:"POST",body:JSON.stringify(params)});if(!r.ok)throw new Error("Files temporarily unavailable");return r.json();};
+        export const call = async (op, input) => (op.kind === "read" ? sendRequest(op.name, input) : {});
         export const onEvent = () => () => {};
       `;
       },

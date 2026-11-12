@@ -2,8 +2,8 @@ import { useEffect } from "react";
 import { hashKey, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { getRuntimeClient, runtimeForQueryClient } from "@/platform/ws/query-protocol-client";
 import type { DeltaMerge } from "@/platform/ws/runtime-client";
+import type { LiveName } from "@shared/api";
 import type { InputOf, Op, OpKind } from "@shared/api/op";
-import type { QueryResource } from "@shared/types/query-protocol";
 import type { z } from "zod";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- any live read, whatever it answers
@@ -23,12 +23,12 @@ interface UseQuerySubscriptionOptions<O extends LiveOp = LiveOp> {
  * client, so a temporary outage never mounts another subscription per observer.
  */
 export function useQuerySubscription<O extends LiveOp>(
-  op: O | QueryResource,
+  op: O,
   options: UseQuerySubscriptionOptions<O>
 ): void {
   const { queryKey, enabled = true, mergeDelta } = options;
   const params = options.params as Record<string, unknown> | undefined;
-  const resource = (typeof op === "string" ? op : op.name) as QueryResource;
+  const resource = op.name as LiveName;
   const cache = useQueryClient();
   const runtime = runtimeForQueryClient(cache) ?? getRuntimeClient();
   const key = hashKey([resource, params ?? {}, queryKey]);

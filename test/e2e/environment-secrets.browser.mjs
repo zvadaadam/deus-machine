@@ -174,7 +174,7 @@ try {
           enforce: "pre",
           resolveId(id) {
             if (id.endsWith("platform/native/deus-cloud")) return "\0native-secret-fixture";
-            if (id.endsWith("repository.service")) return "\0repository-fixture";
+            if (id.endsWith("/platform/ws")) return "\0repository-fixture";
           },
           load(id) {
             if (id === "\0repository-fixture")
@@ -184,10 +184,15 @@ try {
                 { id: "local-only", name: "local-only", root_path: "/projects/local-only", git_origin_url: null, git_default_branch: "main" },
                 { id: "public", name: "public-app", root_path: "/projects/public-app", git_origin_url: "https://github.com/octocat/Hello-World", git_default_branch: "main" }
               ];
-              export const RepoService = {
-                fetchAll: async () => repos,
-                fetchEnvironmentFile: async (id) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id)); if (!r.ok) throw new Error("Invalid repository environment"); return r.json(); },
-                saveEnvironmentFile: async (id, project) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(project) }); if (!r.ok) throw new Error("Couldn't save environment"); }
+              export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/ws/index.ts"))};
+              const fetchEnvironmentFile = async (id) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id)); if (!r.ok) throw new Error("Invalid repository environment"); return r.json(); };
+              const saveEnvironmentFile = async (id, project) => { const r = await fetch(${JSON.stringify(`${proxy.url.origin}/api/test-environment-file/`)} + encodeURIComponent(id), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(project) }); if (!r.ok) throw new Error("Couldn't save environment"); };
+              // The three repository operations the settings sections ask for.
+              export const call = async (op, input) => {
+                if (op.name === "repos") return repos;
+                if (op.name === "repoEnvironmentFile") return fetchEnvironmentFile(input.repoId);
+                if (op.name === "saveRepoEnvironmentFile") return saveEnvironmentFile(input.repoId, input.project);
+                throw new Error(op.name + " is not part of this fixture");
               };`;
             if (id !== "\0native-secret-fixture") return;
             return `export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/native/deus-cloud.ts"))};

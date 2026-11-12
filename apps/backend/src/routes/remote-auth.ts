@@ -19,12 +19,8 @@ import { isLocalhost, getClientIp } from "../lib/network";
 
 const app = new Hono();
 
-/** Reject non-localhost requests with 403. Relay-bridged requests are trusted. */
+/** Reject non-localhost requests with 403. */
 const localhostOnly = createMiddleware(async (c, next) => {
-  if (c.env?.relayBridged) {
-    await next();
-    return;
-  }
   if (!isLocalhost(getClientIp(c))) {
     return c.json({ error: "This endpoint is only available from localhost" }, 403);
   }
