@@ -5,7 +5,8 @@
  * q:* frame type end-to-end:
  *   - q:request → q:response (one-shot queries for all 4 resources)
  *   - q:subscribe → q:snapshot (initial + live push on invalidation)
- *   - q:subscribe → q:delta (cursor-based message deltas)
+ *   - q:subscribe → q:delta (cursor-based message deltas, resumed by a returning client)
+ *   - q:subscribe → q:event (a stream: scoped delivery, replay, reset)
  *   - q:unsubscribe (stops receiving pushes)
  *   - q:mutate → q:mutate_result (archiveWorkspace, updateWorkspaceTitle, sendMessage)
  *   - Error handling (unknown frames, missing params, connection cleanup)
@@ -56,6 +57,8 @@ import {
   removeConnection,
   closeAll as closeAllWs,
 } from "../../src/services/ws.service";
+import { api } from "@shared/api";
+import { publish } from "../../src/services/streams";
 import { resetStatsCache } from "../../src/db";
 import * as queries from "../../src/db";
 import { handleFrame, invalidate } from "../../src/services/query-engine";
@@ -700,6 +703,144 @@ describe("q:subscribe → q:delta for messages", () => {
       expect(delta2.upserted).toHaveLength(1);
       expect(delta2.upserted[0].id).toBe("msg-q-cur-2");
       expect(delta2.cursor).toBeGreaterThan(cursor1);
+    } finally {
+      ws.close();
+    }
+  });
+});
+
+describe("a returning client", () => {
+  it("is sent the messages written while it was away, from the cursor it names", async () => {
+    const first = await connectAndAuth();
+    const subscribe = { type: "q:subscribe", resource: "messages", params: { sessionId: SESS_ID } };
+    const ack = await sendAndReceive(first.ws, { ...subscribe, id: "sub_away" }, "q:snapshot");
+    // The acknowledgment says where the subscription stands, with no row sent.
+    expect(ack).toMatchObject({ id: "sub_away", data: null });
+    expect(ack.cursor).toBeGreaterThan(0);
+    first.ws.close();
+
+    testDb
+      .prepare(
+        "INSERT INTO messages (id, session_id, role, sent_at) VALUES ('msg-q-away', ?, 'assistant', datetime('now'))"
+      )
+      .run(SESS_ID);
+
+    const back = await connectAndAuth();
+    try {
+      const frames = collectMessages(back.ws, 300);
+      back.ws.send(JSON.stringify({ ...subscribe, id: "sub_back", after: ack.cursor }));
+      const [snapshot, delta, ...rest] = await frames;
+      expect(snapshot).toMatchObject({ type: "q:snapshot", id: "sub_back", cursor: ack.cursor });
+      expect(delta).toMatchObject({ type: "q:delta", id: "sub_back" });
+      expect(delta.upserted.map((row: { id: string }) => row.id)).toEqual(["msg-q-away"]);
+      expect(rest).toEqual([]);
+
+      // A cursor from beyond the newest row (a restored transcript) cannot skip later rows.
+      const ahead = await sendAndReceive(
+        back.ws,
+        { ...subscribe, id: "sub_ahead", after: delta.cursor + 100 },
+        "q:snapshot"
+      );
+      expect(ahead.cursor).toBe(delta.cursor);
+    } finally {
+      back.ws.close();
+    }
+  });
+});
+
+describe("q:subscribe → a stream's q:event", () => {
+  const events = (frames: any[]) => frames.filter((frame) => frame.type === "q:event");
+  const subscribe = (id: string, sessionId: string, after?: number) => ({
+    type: "q:subscribe",
+    id,
+    resource: "sessionEvents",
+    params: { sessionId },
+    ...(after !== undefined ? { after } : {}),
+  });
+  const envelope = (sessionId: string, seq: number) =>
+    ({ sessionId, seq, event: { type: "test.event", sessionId } }) as never;
+  const tell = (sessionId: string, seq: number, keep = true) =>
+    publish(
+      api.sessionEvents,
+      { sessionId },
+      { type: "event", envelope: envelope(sessionId, seq) },
+      { keep }
+    );
+
+  it("sends a chat's events to the connections following that chat, and to no other", async () => {
+    const watching = await connectAndAuth();
+    const elsewhere = await connectAndAuth();
+    const idle = await connectAndAuth();
+    try {
+      watching.ws.send(JSON.stringify(subscribe("mine", "stream-a")));
+      elsewhere.ws.send(JSON.stringify(subscribe("other", "stream-b")));
+      await new Promise((r) => setTimeout(r, 50));
+
+      const heard = [watching, elsewhere, idle].map(({ ws }) => collectMessages(ws, 200));
+      tell("stream-a", 1);
+      tell("stream-a", 2, false);
+      tell("stream-b", 1);
+      const [mine, other, nothing] = await Promise.all(heard);
+
+      expect(events(mine).map((frame) => [frame.id, frame.event, frame.data.envelope.seq])).toEqual(
+        [
+          ["mine", "sessionEvents", 1],
+          ["mine", "sessionEvents", 2],
+        ]
+      );
+      // The event nobody keeps carries the number of the kept one before it.
+      expect(events(mine)[1].seq).toBe(events(mine)[0].seq);
+      expect(events(other).map((frame) => frame.data.envelope.sessionId)).toEqual(["stream-b"]);
+      // A connection that asked for nothing is sent nothing.
+      expect(nothing).toEqual([]);
+    } finally {
+      for (const { ws } of [watching, elsewhere, idle]) ws.close();
+    }
+  });
+
+  it("replays what a returning client missed, and tells it to read again when it cannot", async () => {
+    const first = await connectAndAuth();
+    first.ws.send(JSON.stringify(subscribe("sub", "stream-c")));
+    await new Promise((r) => setTimeout(r, 50));
+    const before = collectMessages(first.ws, 100);
+    tell("stream-c", 1);
+    const [seen] = events(await before);
+    first.ws.close();
+
+    // While it is away: two events worth keeping, and a token delta.
+    tell("stream-c", 2);
+    tell("stream-c", 3, false);
+    tell("stream-c", 4);
+
+    const back = await connectAndAuth();
+    try {
+      const replay = collectMessages(back.ws, 200);
+      back.ws.send(JSON.stringify(subscribe("sub", "stream-c", seen.seq)));
+      expect(events(await replay).map((frame) => frame.data.envelope.seq)).toEqual([2, 4]);
+
+      // A place the host does not hold (another process's number): read again.
+      const reset = await sendAndReceive(back.ws, subscribe("stale", "stream-c", 3), "q:reset");
+      expect(reset.id).toBe("stale");
+      expect(reset.seq).toBeGreaterThan(seen.seq);
+    } finally {
+      back.ws.close();
+    }
+  });
+
+  it("stops at q:unsubscribe, and refuses a stream nobody declared", async () => {
+    const { ws } = await connectAndAuth();
+    try {
+      ws.send(JSON.stringify(subscribe("sub", "stream-d")));
+      ws.send(JSON.stringify({ type: "q:unsubscribe", id: "sub" }));
+      const refused = await sendAndReceive(
+        ws,
+        { type: "q:subscribe", id: "nope", resource: "everything" },
+        "q:error"
+      );
+      expect(refused).toMatchObject({ id: "nope", code: "SUBSCRIBE_ERROR" });
+      const heard = collectMessages(ws, 150);
+      tell("stream-d", 1);
+      expect(await heard).toEqual([]);
     } finally {
       ws.close();
     }

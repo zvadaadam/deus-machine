@@ -28,7 +28,6 @@ import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
 import { emptyComposer, sessionComposerActions, useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
-import { createStreamCursor } from "@/features/session/lib/agentEventFold";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
@@ -65,7 +64,7 @@ function WelcomeSendJourney() {
 window.containsCredential = value => JSON.stringify([client.getQueryCache().getAll().map(q => q.state), client.getMutationCache().getAll().map(m => m.state)]).includes(value);
 window.deliverEmptyCloudSnapshot = () => makeCloudFrameHandler({
   queryClient: client, activeSessionId: "history-session", folds: new Map(),
-  cursor: createStreamCursor(), scheduleFlush: () => {}, requestRefetch: () => {},
+  scheduleFlush: () => {}, requestRefetch: () => {},
 }, "history-session")({
   type: "session.snapshot", messages: [], events: [],
   state: {sessionId: "provider-session", status: "ready", currentTurnId: null, turns: []},

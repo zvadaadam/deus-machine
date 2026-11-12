@@ -5,15 +5,14 @@
 
 export {
   call,
+  follow,
   OpError,
   connect,
   isConnected,
   setQueryRequestInterceptor,
   setToolResponseInterceptor,
-  emitLocalEvent,
   sendToolResponse,
   forceReconnect,
-  onEvent,
   onConnectionChange,
   getRuntimeClient,
   onRuntimeChange,

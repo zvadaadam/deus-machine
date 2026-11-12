@@ -3,9 +3,9 @@ import { turnProviderCredentialSource } from "@shared/conversation-rows";
 /**
  * The fold: one @zvada/agent-server lifecycle envelope → the `messages` cache.
  *
- *   agent:event ──┐
- *                 ├─→ reduceConversationWithChanges ─→ setQueryData() → React
- *   DB snapshot ──┘
+ *   sessionEvents ──┐
+ *                   ├─→ reduceConversationWithChanges ─→ setQueryData() → React
+ *   DB snapshot   ──┘
  *
  * The fold is the ENGINE's, not deus's. What lives here is only the
  * PROJECTION: a `ConversationState` per session, and the SQLite-row writes its
@@ -30,10 +30,14 @@ import { turnProviderCredentialSource } from "@shared/conversation-rows";
  *                included, and the page may be seeded before the first fetch
  *                resolves.
  *   background — any other session that already has a cached page. Only the
- *                DURABLE events: the `messages` subscription is delta-only with
- *                its cursor jumped to MAX(seq), so turn records and part
- *                updates have no other way in. Deltas are skipped — nobody is looking, and the next
- *                snapshot restates them.
+ *                DURABLE events: the `messages` subscription carries new rows
+ *                only, so turn records and part updates have no other way in.
+ *                Deltas are skipped — nobody is looking, and the next snapshot
+ *                restates them.
+ *
+ * Order is not this file's concern. The host's `sessionEvents` stream delivers
+ * each event once, in order, and resumes after a reconnect; when it cannot, it
+ * says so, and the hook drops the session's fold and reads its page again.
  */
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -44,7 +48,6 @@ import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 // shared/protocol-types.ts.
 // eslint-disable-next-line no-restricted-imports -- reduce has no zod-free subpath
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
-import { createSeqCursor, type SeqCursor } from "@zvada/agent-server/protocol/seq-cursor";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Message } from "@shared/types/session";
 import type { RepoGroup } from "@shared/types/workspace";
@@ -56,7 +59,6 @@ import {
   turnRecord,
 } from "@shared/conversation-rows";
 import {
-  isLiveEnvelope,
   isUnknownEvent,
   type AnyLifecycleEvent,
   type ConversationChange,
@@ -89,11 +91,6 @@ export function createSessionFold(): SessionFold {
   return { state: emptyConversation(), dirtyMessages: new Set() };
 }
 
-/** The per-session `seq` bookkeeping — the engine's own, not a fourth copy. */
-export function createStreamCursor(): SeqCursor {
-  return createSeqCursor();
-}
-
 // ---- Stream context ----
 
 export interface AgentStreamContext {
@@ -102,8 +99,6 @@ export interface AgentStreamContext {
   activeSessionId: string | null;
   /** Folded conversation per session; the source of every cache write. */
   folds: Map<string, SessionFold>;
-  /** Per-session wire cursor, for gap and reset detection. */
-  cursor: SeqCursor;
   /** Ask for a delta flush on the next frame. */
   scheduleFlush: () => void;
   /** Ask for a debounced refetch of one session's message page. */
@@ -116,7 +111,7 @@ export function messagesKey(sessionId: string) {
 
 /**
  * Reload one session's message page — the fold's escape hatch, for the changes
- * it cannot project itself (a compaction row, a seq hole, a replaced log).
+ * it cannot project itself (a compaction row, events the stream could not resume).
  *
  * It reaches a BACKGROUND session, and that is the whole requirement: a
  * compaction usually lands on a session whose panel is not mounted, its page
@@ -154,8 +149,7 @@ export function hydrateConversation(
   ctx: AgentStreamContext,
   snapshot: AgentConversationSnapshot
 ): void {
-  const { sessionId, seq, conversation, messageIds } = snapshot;
-  ctx.cursor.seek(sessionId, seq);
+  const { sessionId, conversation, messageIds } = snapshot;
   if (sessionId !== ctx.activeSessionId && !ctx.queryClient.getQueryData(messagesKey(sessionId)))
     return;
   ctx.folds.set(sessionId, { state: conversation, dirtyMessages: new Set() });
@@ -180,64 +174,9 @@ export function hydrateConversation(
   }
 }
 
-/** Fold one envelope. The single entry point the hook calls per WS frame. */
+/** Fold one envelope of the host's stream, for a session someone holds a page of. */
 export function routeEnvelope(ctx: AgentStreamContext, envelope: DecodedWireEventEnvelope): void {
-  const sessionId = envelope?.sessionId;
-  if (!sessionId) return;
-
-  // A frame the engine does not keep (a token delta, an open part restated
-  // after a subscription) takes no seq of its own: it carries the seq of the
-  // kept event before it, and is classified against the cursor without moving it.
-  const unkept = isLiveEnvelope(envelope);
-
-  // Deus joins a live stream mid-flight — the page comes from SQLite, the
-  // socket from wherever the turn already is — so the FIRST envelope seen for
-  // a session is never a hole. Seek to just before it and let the cursor's own
-  // arithmetic run from there.
-  if (ctx.cursor.last(sessionId) === 0) {
-    ctx.cursor.seek(sessionId, unkept ? envelope.seq : envelope.seq - 1);
-  }
-
-  let verdict = unkept
-    ? ctx.cursor.advanceLive(sessionId, envelope.seq)
-    : ctx.cursor.advance(sessionId, envelope.seq);
-  if (!unkept && verdict === "duplicate" && envelope.seq !== ctx.cursor.last(sessionId)) {
-    // Backwards beyond the last frame. The engine cursor only calls it a
-    // reset when a fresh log is seen FROM seq 1; here the log was replaced
-    // and this client first sees it mid-stream (its own reconnect overlapped
-    // the restart, or a restarted backend re-forwards from a healed log).
-    // A real redelivery is only ever the immediately-last frame — anything
-    // further back is a dead watermark, and honoring it would silently drop
-    // every envelope until the new counter catches up.
-    ctx.cursor.seek(sessionId, envelope.seq);
-    verdict = "reset";
-  }
-
-  switch (verdict) {
-    case "duplicate":
-      // Already folded. (The reducer would report no changes for it anyway —
-      // this only saves the work.)
-      return;
-    case "reset":
-      // The agent-server was replaced and its session log starts at 1 again.
-      // Everything folded belongs to the dead log: drop it, and refetch,
-      // because the new log will not restate what the old one already wrote.
-      ctx.folds.delete(sessionId);
-      ctx.requestRefetch(sessionId);
-      break;
-    case "gap":
-      // Envelopes were missed. Nothing in the browser can replay them, so the
-      // hole is accepted as lost — leaving the cursor put (the engine client
-      // does, because it CAN replay) would make every following envelope read
-      // as another gap. Refetch: the snapshots in the hole are durable in
-      // SQLite, the deltas are not.
-      ctx.cursor.seek(sessionId, envelope.seq);
-      ctx.requestRefetch(sessionId);
-      break;
-    case "deliver":
-      break;
-  }
-
+  const { sessionId } = envelope;
   const live = sessionId === ctx.activeSessionId;
   // Never fold for a session nobody has opened: seeding a page from a
   // mid-stream fragment would invent a `has_older: false` transcript.
@@ -255,14 +194,11 @@ function foldFor(ctx: AgentStreamContext, sessionId: string): SessionFold {
 }
 
 /**
- * Fold one already-decoded event, for a lane that has no wire `seq`.
- *
- * The direct-agnt lane's frames carry no seq, so it can't (and needn't) use
- * `routeEnvelope`'s gap/reset/duplicate cursor arithmetic — a socket reconnect
- * heals by re-folding the snapshot (upsert-by-id, idempotent), not by a cursor
- * reset. This is the seq-free entry point it folds through. `live` derives the
- * same way `routeEnvelope` computes it, so delta batching still applies to the
- * mounted session.
+ * Fold one already-decoded event, whether or not its session has a page: the
+ * direct-agnt lane's entry point (it folds only the session it is mounted on,
+ * and a socket reconnect heals by re-folding the snapshot, upsert-by-id).
+ * `live` derives the same way `routeEnvelope` computes it, so delta batching
+ * still applies to the mounted session.
  */
 export function foldEvent(
   ctx: AgentStreamContext,

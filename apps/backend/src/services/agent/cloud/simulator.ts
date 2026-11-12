@@ -30,7 +30,8 @@ import {
 } from "@shared/events";
 import type { CloudSimulatorExecResult } from "@shared/types/simulator";
 import { getCloudConfig } from "./config";
-import { broadcast } from "../../ws.service";
+import { cloudSimulatorEvents } from "@shared/api/simulator";
+import { publish } from "../../streams";
 
 /** The session a frame arrived on — the two ids the event envelope needs. */
 export interface CloudSimulatorSource {
@@ -70,7 +71,7 @@ type WorkspaceDevices = Map<PlatformKey, CloudSimulatorDevice>;
  * platform reports each on its own: an android `stopped` must not erase the
  * ios `ready` that is still running — and billing. The tab shows ONE device,
  * the workspace's primary (see `primaryOf`): the clients keep their
- * single-device shape and every broadcast carries the primary's status.
+ * single-device shape and every event carries the primary's status.
  */
 const cloudSimulators = new Map<string, WorkspaceDevices>();
 
@@ -150,9 +151,9 @@ function primaryOf(devices: WorkspaceDevices | undefined): CloudSimulatorDevice 
   return selectPrimaryCloudSimulator(devices?.values());
 }
 
-/** Push a device event to connected clients (q:event "cloud:simulator"). */
-function broadcastCloudSimulator(event: CloudSimulatorEvent): void {
-  broadcast(JSON.stringify({ type: "q:event", event: "cloud:simulator", data: event }));
+/** Tell the clients following the workspace's cloud device. */
+function tellCloudSimulator(event: CloudSimulatorEvent): void {
+  publish(cloudSimulatorEvents, { workspaceId: event.workspaceId }, event);
 }
 
 /** Tell the clients the workspace's primary device changed — and only then.
@@ -166,11 +167,11 @@ function announcePrimary(
   const after = primaryOf(cloudSimulators.get(workspaceId));
   if (!after) return;
   if (before && sameCloudSimulatorStatus(before, after.status)) return;
-  broadcastCloudSimulator({ workspaceId, sessionId, kind: "status", data: after.status });
+  tellCloudSimulator({ workspaceId, sessionId, kind: "status", data: after.status });
 }
 
 /** Validate one platform simulator frame at the seam (like announceCloudEnv)
- *  and shape it as the q:event payload — the frame minus `type`. A malformed
+ *  and shape it as the event's payload — the frame minus `type`. A malformed
  *  frame is dropped WITH a warning: unlike env progress, a missing device
  *  frame is a visible hole in the tab (a device that never shows up), so it
  *  has to leave a trace in the log. */
@@ -207,7 +208,7 @@ function isNotNewerThanCached(at: number | null, cached: CloudSimulatorDevice): 
 }
 
 /** simulator.status — from the live frame or the snapshot's mirror. The cache
- *  first (a `cloudSimulator` read must never lag a broadcast), then the event
+ *  first (a `cloudSimulator` read must never lag an event), then the event
  *  — which carries the workspace's PRIMARY device, not necessarily this frame. */
 export function applyCloudSimulatorStatus(
   source: CloudSimulatorSource,
@@ -220,7 +221,7 @@ export function applyCloudSimulatorStatus(
   if (key === null) {
     // No device behind it: the clients hear the failure (the panel clears
     // its pending action and shows the text), the cache keeps the devices.
-    broadcastCloudSimulator({ ...source, kind: "status", data });
+    tellCloudSimulator({ ...source, kind: "status", data });
     return;
   }
   const at = cloudSimulatorStatusAt(data);
@@ -272,7 +273,7 @@ export function reconcileCloudSimulatorMirror(
   bumpFrameRevision(source.workspaceId);
   if (devices.size === 0) {
     cloudSimulators.delete(source.workspaceId);
-    broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+    tellCloudSimulator({ ...source, kind: "gone", data: {} });
     return;
   }
   announcePrimary(source.workspaceId, source.sessionId, before);
@@ -296,7 +297,7 @@ export function relayCloudSimulatorEvent(
     if (seen.includes(dedupeKey)) return;
     recentRelays.set(source.workspaceId, [...seen, dedupeKey].slice(-RECENT_RELAYS_KEPT));
   }
-  broadcastCloudSimulator(event);
+  tellCloudSimulator(event);
 }
 
 /** The devices died with their sandbox. Keep each platform (the tab still
@@ -429,7 +430,7 @@ async function restRead(
       }
       if (devices.size === 0) {
         cloudSimulators.delete(workspaceId);
-        broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+        tellCloudSimulator({ ...source, kind: "gone", data: {} });
       }
     }
     return current();
@@ -462,7 +463,7 @@ async function restRead(
     }
     if (held.size === 0) {
       cloudSimulators.delete(workspaceId);
-      broadcastCloudSimulator({ ...source, kind: "gone", data: {} });
+      tellCloudSimulator({ ...source, kind: "gone", data: {} });
       return null;
     }
   }

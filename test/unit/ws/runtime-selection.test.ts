@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cloudIdentity } from "@shared/api/workspaces";
 
 const config = vi.hoisted(() => ({ mode: "web-production", host: "A" }));
 vi.mock("@/shared/config/backend.config", () => ({
@@ -149,6 +150,33 @@ describe("selected runtime and device grants", () => {
     expect(api.getRuntimeClient()).toBe(b);
     expect(auth.getStoredToken("B")).toBe("token-B");
     expect(socketB.sent.some((frame) => frame.type === "q:command")).toBe(false);
+  });
+
+  it("moves an app-wide follow to the newly selected host, until it is stopped", async () => {
+    auth.storeToken("token-A", "Phone", "A");
+    auth.storeToken("token-B", "Tablet", "B");
+    const subscribed = (socket: Socket) =>
+      socket.sent.filter((frame) => frame.type === "q:subscribe");
+    const events = vi.fn();
+    const stop = api.follow(cloudIdentity, {}, events);
+    const socketA = await online(api.selectRuntime("A"));
+    const [onA] = subscribed(socketA);
+    expect(onA).toMatchObject({ resource: "cloudIdentity" });
+    socketA.message({ type: "q:event", id: onA.id, event: "cloudIdentity", data: "from A" });
+    expect(events).toHaveBeenCalledExactlyOnceWith("from A");
+
+    const socketB = await online(api.selectRuntime("B"));
+    const onB = subscribed(socketB);
+    expect(onB).toMatchObject([{ resource: "cloudIdentity" }]);
+    socketB.message({ type: "q:event", id: onB[0].id, event: "cloudIdentity", data: "from B" });
+    expect(events).toHaveBeenLastCalledWith("from B");
+    // The host it left can no longer reach it.
+    socketA.message({ type: "q:event", id: onA.id, event: "cloudIdentity", data: "late" });
+    expect(events).toHaveBeenCalledTimes(2);
+
+    stop();
+    expect(socketB.sent).toContainEqual({ type: "q:unsubscribe", id: onB[0].id });
+    expect(subscribed(await online(api.selectRuntime("A")))).toEqual([]);
   });
 
   it("rotates the cache on same-host re-pairing but not on another host's token change", async () => {

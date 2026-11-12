@@ -7,6 +7,8 @@ import type { ProjectEnvironmentResponse, TaskRunResponse } from "../types/proje
 import type { Stats } from "../types/repository";
 import type { DiffStats, FileChange, RepoGroup, Workspace } from "../types/workspace";
 import { live, out, read, write } from "./op";
+import { stream } from "./stream";
+import type { CloudEnvEvent, CloudIdentityEvent } from "../events";
 
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
 const branchName = z
@@ -144,3 +146,18 @@ export const connectCloudWorkspace = write({
   input: workspaceId,
   output: out<{ ok: boolean }>(),
 });
+
+// ---- Streams ----
+
+/** A cloud workspace's sandbox as it is provisioned, woken, paused or fails. Not stored. */
+export const cloudEnvironment = stream({
+  name: "cloudEnvironment",
+  scope: z.object({ workspaceId: z.string() }),
+  event: out<CloudEnvEvent>(),
+});
+
+/**
+ * This computer signed in to another Deus account, or out: what a client
+ * cached about cloud devices and previews belonged to the previous one.
+ */
+export const cloudIdentity = stream({ name: "cloudIdentity", event: out<CloudIdentityEvent>() });

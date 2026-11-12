@@ -3,13 +3,13 @@
  * TanStack Query hooks for settings management
  */
 
-import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { toast } from "sonner";
-import type { AgentAuthAnswer, AgentAuthEvent, HarnessCliProgress } from "@shared/agent-auth";
+import type { AgentAuthAnswer, HarnessCliProgress } from "@shared/agent-auth";
 import { api } from "@shared/api";
-import { call, onEvent } from "@/platform/ws";
+import { call } from "@/platform/ws";
+import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
 import type { Settings } from "../types";
@@ -78,29 +78,32 @@ export function useDefaultThinkingLevel(): ThinkingLevel {
  */
 export function useAgentAuthEvents(): void {
   const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      onEvent((event, data) => {
-        if (event === "agent:cli") {
-          const progress = data as HarnessCliProgress;
-          queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
-            answer ? withProgress(answer, progress) : answer
-          );
-          if (progress.phase === "ready" || progress.phase === "failed") {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
-          }
-          return;
-        }
-        if (event !== "agent:auth") return;
-        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
-        // Another login lists other models.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
-        const login = (data as AgentAuthEvent | undefined)?.login;
-        if (login && (login.outcome === "failed" || login.outcome === "expired")) {
-          toast.error(login.error ?? "The sign-in didn’t finish");
-        }
-      }),
-    [queryClient]
+  // Whatever changed while the connection was away, the status says it.
+  const readAgain = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
+  useStream(
+    api.agentCliProgress,
+    {},
+    (progress) => {
+      queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
+        answer ? withProgress(answer, progress) : answer
+      );
+      if (progress.phase === "ready" || progress.phase === "failed") readAgain();
+    },
+    readAgain
+  );
+  useStream(
+    api.agentAuthChanges,
+    {},
+    ({ login }) => {
+      readAgain();
+      // Another login lists other models.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
+      if (login && (login.outcome === "failed" || login.outcome === "expired")) {
+        toast.error(login.error ?? "The sign-in didn’t finish");
+      }
+    },
+    readAgain
   );
 }
 

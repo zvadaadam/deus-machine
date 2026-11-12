@@ -22,7 +22,6 @@ import {
   buildCancelFrame,
 } from "@/features/session/cloud/directSessionRegistry";
 import {
-  createStreamCursor,
   flushDeltas,
   messagesKey,
   type AgentStreamContext,
@@ -71,7 +70,6 @@ function makeCtx(qc: QueryClient, sessionId: string, folds: Map<string, SessionF
     queryClient: qc,
     activeSessionId: sessionId,
     folds,
-    cursor: createStreamCursor(),
     scheduleFlush: () => {
       const fold = folds.get(sessionId);
       if (fold) flushDeltas(qc, sessionId, fold);

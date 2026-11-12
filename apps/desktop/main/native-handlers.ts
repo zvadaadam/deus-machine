@@ -419,7 +419,7 @@ export function registerNativeHandlers(): void {
   // Git clone is handled by the backend (the `git:clone` operation).
 
   // iOS Simulator — all operations moved to backend (simulator-context.ts).
-  // Frontend communicates via q:command / q:event over WebSocket.
+  // The frontend asks the backend over its WebSocket.
   // No Electron IPC needed.
 }
 

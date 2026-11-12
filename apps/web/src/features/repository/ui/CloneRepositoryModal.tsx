@@ -11,7 +11,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { onEvent } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { useStream } from "@/shared/hooks/useStream";
 import { native, capabilities } from "@/platform";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 
@@ -57,21 +58,11 @@ export function CloneRepositoryModal({
     })();
   }, [show, isMobile]);
 
-  // Listen for raw git stderr lines while cloning
-  useEffect(() => {
-    if (!cloning) return;
-
-    const unlisten = onEvent((event, data) => {
-      if (event === "git-clone-progress") {
-        const { line } = data as { line: string };
-        if (line) {
-          setLines((prev) => [...prev, line].slice(-MAX_LINES));
-        }
-      }
-    });
-
-    return unlisten;
-  }, [cloning]);
+  // Git's own progress lines. Followed while the dialog is open, so the
+  // first lines of a clone are not lost to a subscription made after it began.
+  useStream(api.gitProgress, show ? { operation: "clone" } : null, ({ line }) => {
+    if (line) setLines((prev) => [...prev, line].slice(-MAX_LINES));
+  });
 
   const handleClone = useCallback(() => {
     if (!githubUrl.trim()) return;

@@ -1,5 +1,5 @@
 /**
- * Ephemeral cloud environment progress — the q:event "cloud:env" stream.
+ * Ephemeral cloud environment progress — the `cloudEnvironment` stream.
  *
  * The backend passes agnt's workspace.state events through verbatim while a
  * cloud session socket is up (provisioning steps, wake/restore, pause, error).
@@ -9,8 +9,8 @@
  */
 
 import { create } from "zustand";
-import { CloudEnvEventSchema } from "@shared/events";
-import { onEvent } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { follow } from "@/platform/ws";
 
 /** One received environment event, as the chat stack consumes it. */
 export interface CloudEnvEntry {
@@ -72,12 +72,7 @@ export function ensureCloudEnvSubscription(): void {
   if (subscribed) return;
   subscribed = true;
 
-  onEvent((event, raw) => {
-    if (event !== "cloud:env") return;
-    const parsed = CloudEnvEventSchema.safeParse(raw);
-    if (!parsed.success) return;
-    const { workspaceId, data } = parsed.data;
-
+  follow(api.cloudEnvironment, {}, ({ workspaceId, data }) => {
     append(workspaceId, {
       status: data.status,
       step: data.step ?? null,

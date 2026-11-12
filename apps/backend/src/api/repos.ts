@@ -25,7 +25,7 @@ import { parseGitHubRepo, runGh } from "../services/gh.service";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
 import { listRecentProjects } from "../services/recent-projects.service";
-import { broadcast } from "../services/ws.service";
+import { publish } from "../services/streams";
 import { handle } from "./registry";
 
 const execFileAsync = promisify(execFile);
@@ -150,11 +150,8 @@ export function addRepository(rootPath: string): Repository {
   return repo;
 }
 
-function pushGitProgress(event: string, line: string): void {
-  broadcast(JSON.stringify({ type: "q:event", event, data: { line } }));
-}
-const pushCloneLine = (line: string) => pushGitProgress("git-clone-progress", line);
-const pushInitLine = (line: string) => pushGitProgress("git-init-progress", line);
+const pushCloneLine = (line: string) => publish(api.gitProgress, { operation: "clone" }, { line });
+const pushInitLine = (line: string) => publish(api.gitProgress, { operation: "init" }, { line });
 
 /**
  * Forward git's stderr progress to a callback one line at a time; git rewrites

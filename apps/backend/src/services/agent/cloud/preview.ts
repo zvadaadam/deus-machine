@@ -6,10 +6,11 @@
 // and is replayed by the platform on every connect (the running frame, the
 // snapshot), so a copy on the workspace row would only be a stale,
 // account-scoped second truth. driver.ts feeds this from the frames; clients
-// read it once (the `cloudPreview` request) and follow `cloud:preview`.
+// read it once (the `cloudPreview` request) and follow `cloudPreviewChanges`.
 
 import type { CloudPreviewEvent } from "@shared/events";
-import { broadcast } from "../../ws.service";
+import { cloudPreviewChanges } from "@shared/api/browser";
+import { publish } from "../../streams";
 
 /** The session a frame arrived on — the two ids the event envelope needs. */
 export interface CloudPreviewSource {
@@ -43,7 +44,7 @@ export function applyCloudPreviewTemplate(
     sessionId: source.sessionId,
     template: value,
   };
-  broadcast(JSON.stringify({ type: "q:event", event: "cloud:preview", data: event }));
+  publish(cloudPreviewChanges, { workspaceId: source.workspaceId }, event);
 }
 
 /** What the cache knows: the template, `null` for a platform-reported "no

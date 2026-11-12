@@ -24,11 +24,16 @@ import type { SessionSnapshotEvent } from "@deus-hq/api";
 import type { RestoredCloudConversation } from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
-import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
+import {
+  isLiveEnvelope,
+  isUnknownEvent,
+  type DecodedWireEventEnvelope,
+} from "@shared/protocol-types";
 import type { LiveName } from "@shared/api";
-import type { QServerFrame } from "@shared/types/query-protocol";
+import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
+import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { invalidate } from "../query-engine";
-import { broadcast } from "../ws.service";
+import { publish } from "../streams";
 import {
   persistChanges,
   persistSessionTitle,
@@ -98,7 +103,7 @@ const TURN_END_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "st
  * session's terminal state are session COLUMNS (q:delta carries them), the
  * "working" flip is written optimistically by the send command before
  * `turn.started` could arrive, the service answers a permission request (a
- * plan goes to the plan card as `tool:request`, a tool's approval is allowed:
+ * plan goes to the plan card as a request on `toolRequests`, a tool's approval is allowed:
  * shared/agent-permissions.ts), and deus never sets `RunConfig.includeRaw`.
  */
 const NOT_PUSHED = new Set([
@@ -150,13 +155,17 @@ function persistAndInvalidate(
 }
 
 /**
- * Push one wire envelope to every frontend connection verbatim. The frontend
- * routes by `sessionId` and orders/dedupes by `seq` — both free because the
- * envelope is not reshaped on its way through the backend.
+ * Send one wire envelope, verbatim, to the clients following its chat. A token
+ * delta is delivered but not kept: a client that was away never needs it, the
+ * part's next event restates what it streamed.
  */
 function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
-  const frame: QServerFrame = { type: "q:event", event: "agent:event", data: envelope };
-  broadcast(JSON.stringify(frame));
+  publish(
+    sessionEvents,
+    { sessionId: envelope.sessionId },
+    { type: "event", envelope },
+    { keep: !isLiveEnvelope(envelope) }
+  );
 }
 
 // ---- Factory ----
@@ -371,9 +380,13 @@ export function createAgentEventHandler(): AgentEventHandler {
           // only grows, and now each entry costs a conversation.
           sessions.delete(sessionId);
         })
-        .with({ type: "turn.ended" }, () => {
+        .with({ type: "turn.ended" }, (ended) => {
           // The agent may have created, updated or pushed a PR during the turn.
           refreshPrSnapshotForSession(sessionId);
+          // A cloud turn whose work did not reach the branch: every client is
+          // warned, not only the ones following this chat.
+          const unsaved = cloudSaveFailure(ended);
+          if (unsaved) publish(cloudSaveFailures, {}, unsaved);
         })
         .with({ type: "error" }, (e) => {
           // A recoverable error means the turn is still running (and

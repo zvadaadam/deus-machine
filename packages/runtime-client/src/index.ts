@@ -10,7 +10,6 @@ export type {
   RuntimePorts,
   QueryRequestInterceptor,
   ToolResponseInterceptor,
-  EventCallback,
   SnapshotCallback,
   DeltaCallback,
   StreamCallback,

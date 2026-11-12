@@ -5,7 +5,7 @@
  * computer's device lives in the platform, which hands us a stream URL to
  * embed. Nothing about it is persisted here: the store is seeded once from the
  * backend's `cloudSimulator` read (its in-memory latest, else the platform's
- * REST answer) and the `cloud:simulator` events keep it live — status,
+ * REST answer) and the `cloudSimulatorEvents` keep it live — status,
  * screenshots and the agent's device actions.
  */
 

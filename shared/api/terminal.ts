@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { out, write } from "./op";
+import { stream } from "./stream";
 
 /** The id the client chose when it opened the terminal. */
 const terminal = z.object({ id: z.string().min(1) });
@@ -9,7 +10,7 @@ const size = { cols: z.number().int().positive(), rows: z.number().int().positiv
 
 /**
  * Open a terminal under an id the client chooses. Its output arrives as
- * `pty-data` events and its end as `pty-exit`, both carrying that id.
+ * `terminalOutput` data events, and its end as an exit event, under that id.
  */
 export const ptySpawn = write({
   name: "pty:spawn",
@@ -43,3 +44,10 @@ export const ptyResize = write({
 
 /** Close a terminal. One that already ended is not an error. */
 export const ptyKill = write({ name: "pty:kill", input: terminal, output: out<void>() });
+
+/** What a terminal prints, and its end. */
+export const terminalOutput = stream({
+  name: "terminalOutput",
+  scope: z.object({ id: z.string() }),
+  event: out<{ type: "data"; data: number[] } | { type: "exit"; error?: string }>(),
+});

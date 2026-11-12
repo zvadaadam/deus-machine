@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "@shared/api";
+import type { CloudSimulatorEvent } from "@shared/events";
+import { emit, following } from "../../helpers";
 
-// The store owns ONE process-wide `onEvent` listener; capture it so tests can
-// push `cloud:simulator` frames through the same validation path production
-// uses (the shared zod schema), not a private setter.
-const { listeners, connectionListeners, connectedNow } = vi.hoisted(() => ({
-  listeners: [] as Array<(event: string, data: unknown) => void>,
+// The store follows the device stream once for the whole app (`follow` is
+// never cleared here), so tests publish typed events to the handler
+// production uses, not to a private setter.
+const { follow, connectionListeners, connectedNow } = vi.hoisted(() => ({
+  follow: vi.fn(() => vi.fn()),
   connectionListeners: [] as Array<(connected: boolean) => void>,
   /** What `isConnected()` answers when a subscription registers. */
   connectedNow: { value: true },
 }));
 vi.mock("@/platform/ws", () => ({
-  onEvent: vi.fn((cb: (event: string, data: unknown) => void) => {
-    listeners.push(cb);
-    return () => {};
-  }),
+  follow,
   isConnected: vi.fn(() => connectedNow.value),
   onConnectionChange: vi.fn((cb: (connected: boolean) => void) => {
     connectionListeners.push(cb);
@@ -33,11 +33,20 @@ import { cloudDeviceLabel, cloudSimPhase } from "@/features/simulator/cloud/clou
 
 const WS = "ws-cloud-1";
 
-function emit(event: string, data: unknown): void {
-  for (const listener of listeners) listener(event, data);
+/** The backend publishes a device event under the workspace it belongs to. */
+function publish(event: CloudSimulatorEvent): void {
+  emit(follow, api.cloudSimulatorEvents, { workspaceId: event.workspaceId }, event);
 }
 
-function statusEvent(data: Record<string, unknown>, workspaceId = WS) {
+/** This computer signed in to another account, or out. */
+function identityChanged(generation: number): void {
+  emit(follow, api.cloudIdentity, {}, { generation });
+}
+
+function statusEvent(
+  data: { status: string } & Record<string, unknown>,
+  workspaceId = WS
+): CloudSimulatorEvent {
   return {
     workspaceId,
     sessionId: "sess-1",
@@ -46,7 +55,7 @@ function statusEvent(data: Record<string, unknown>, workspaceId = WS) {
   };
 }
 
-function actionEvent(verb: string, success: boolean, error?: string) {
+function actionEvent(verb: string, success: boolean, error?: string): CloudSimulatorEvent {
   return {
     workspaceId: WS,
     sessionId: "sess-1",
@@ -109,7 +118,7 @@ describe("cloudSimulatorStore — seeding from the one-shot status read", () => 
   });
 
   it("the live event wins: a read that lands after an event changes nothing", () => {
-    emit("cloud:simulator", statusEvent({ status: "starting", platform: "android" }));
+    publish(statusEvent({ status: "starting", platform: "android" }));
     cloudSimulatorActions.seedIfUnknown(WS, seed());
     expect(device()).toMatchObject({ status: "starting", platform: "android" });
   });
@@ -119,46 +128,41 @@ describe("cloudSimulatorStore — seeding from the one-shot status read", () => 
     expect(device()).toBeUndefined();
   });
 
-  it("registers exactly one process-wide listener no matter how often it is ensured", () => {
+  it("follows each of its two streams once for the whole app, however often it is ensured", () => {
     ensureCloudSimulatorSubscription();
     ensureCloudSimulatorSubscription();
-    expect(listeners).toHaveLength(1);
+    // No filter: one subscription hears every workspace's device, and nothing else.
+    expect(following(follow)).toEqual([
+      { stream: "cloudIdentity", filter: {} },
+      { stream: "cloudSimulatorEvents", filter: {} },
+    ]);
   });
 });
 
 describe("cloudSimulatorStore — live status events", () => {
   it("overwrites the seeded status and clears the URL on 'stopped'", () => {
     cloudSimulatorActions.seedIfUnknown(WS, seed());
-    emit("cloud:simulator", statusEvent({ status: "stopped", platform: "ios" }));
+    publish(statusEvent({ status: "stopped", platform: "ios" }));
     expect(device()).toMatchObject({ status: "stopped", streamUrl: null, error: null });
   });
 
   it("carries the platform's error text and drops it again on the next non-error status", () => {
-    emit("cloud:simulator", statusEvent({ status: "error", error: "boom" }));
+    publish(statusEvent({ status: "error", error: "boom" }));
     expect(device()).toMatchObject({ status: "error", error: "boom", platform: null });
-    emit(
-      "cloud:simulator",
-      statusEvent({ status: "starting", platform: "ios", streamUrl: "https://s/2" })
-    );
+    publish(statusEvent({ status: "starting", platform: "ios", streamUrl: "https://s/2" }));
     expect(device()).toMatchObject({ status: "starting", error: null, streamUrl: "https://s/2" });
   });
 
   it("dedupes an identical re-announcement (reconnect snapshot) — same state reference", () => {
-    emit("cloud:simulator", statusEvent({ status: "ready", platform: "ios", streamUrl: "u" }));
+    publish(statusEvent({ status: "ready", platform: "ios", streamUrl: "u" }));
     const first = device();
-    emit("cloud:simulator", statusEvent({ status: "ready", platform: "ios", streamUrl: "u" }));
+    publish(statusEvent({ status: "ready", platform: "ios", streamUrl: "u" }));
     expect(device()).toBe(first);
   });
 
-  it("ignores frames that fail the shared schema and frames for other events", () => {
-    emit("cloud:simulator", { kind: "status", data: {} }); // no workspaceId / sessionId
-    emit("cloud:env", statusEvent({ status: "ready" }));
-    expect(device()).toBeUndefined();
-  });
-
   it("keeps entries per workspace", () => {
-    emit("cloud:simulator", statusEvent({ status: "ready", platform: "ios" }, "ws-a"));
-    emit("cloud:simulator", statusEvent({ status: "stopped", platform: "ios" }, "ws-b"));
+    publish(statusEvent({ status: "ready", platform: "ios" }, "ws-a"));
+    publish(statusEvent({ status: "stopped", platform: "ios" }, "ws-b"));
     const { byWorkspace } = useCloudSimulatorStore.getState();
     expect(byWorkspace["ws-a"].status).toBe("ready");
     expect(byWorkspace["ws-b"].status).toBe("stopped");
@@ -171,17 +175,14 @@ describe("cloudSimulatorStore — the panel's optimistic busy marker", () => {
     cloudSimulatorActions.seedIfUnknown(WS, seed({ status: "stopped", streamUrl: null }));
     expect(device()).toMatchObject({ status: "stopped", busy: "starting" });
 
-    emit("cloud:simulator", statusEvent({ status: "stopped", platform: "ios" }));
+    publish(statusEvent({ status: "stopped", platform: "ios" }));
     expect(device().busy).toBeNull();
   });
 
   it("is cleared by the status event that moved the device", () => {
     cloudSimulatorActions.seedIfUnknown(WS, seed({ status: "stopped", streamUrl: null }));
     cloudSimulatorActions.setBusy(WS, "starting");
-    emit(
-      "cloud:simulator",
-      statusEvent({ status: "starting", platform: "ios", streamUrl: "https://s/1" })
-    );
+    publish(statusEvent({ status: "starting", platform: "ios", streamUrl: "https://s/1" }));
     expect(device()).toMatchObject({ status: "starting", busy: null });
   });
 });
@@ -189,13 +190,13 @@ describe("cloudSimulatorStore — the panel's optimistic busy marker", () => {
 describe("cloudSimulatorStore — screenshots and action results", () => {
   it("keeps only the latest screenshot, stamped with its arrival time", () => {
     const before = Date.now();
-    emit("cloud:simulator", {
+    publish({
       workspaceId: WS,
       sessionId: "sess-1",
       kind: "screenshot",
       data: { sessionId: "sess-1", platform: "ios", imageBase64: "AAAA", format: "png" },
     });
-    emit("cloud:simulator", {
+    publish({
       workspaceId: WS,
       sessionId: "sess-1",
       kind: "screenshot",
@@ -205,26 +206,27 @@ describe("cloudSimulatorStore — screenshots and action results", () => {
     expect(device().lastScreenshot?.at).toBeGreaterThanOrEqual(before);
   });
 
-  it("drops a screenshot frame without image bytes", () => {
-    emit("cloud:simulator", {
+  it("drops a screenshot without image bytes", () => {
+    // Not a shape the contract allows; the store guards the one field it stores as is.
+    publish({
       workspaceId: WS,
       sessionId: "sess-1",
       kind: "screenshot",
       data: { sessionId: "sess-1", platform: "ios", format: "png" },
-    });
+    } as unknown as CloudSimulatorEvent);
     expect(device()).toBeUndefined();
   });
 
   it("appends action results oldest-first with the failure text, capped at a ring of 20", () => {
-    emit("cloud:simulator", actionEvent("press", true));
-    emit("cloud:simulator", actionEvent("fill", false, "no such ref"));
+    publish(actionEvent("press", true));
+    publish(actionEvent("fill", false, "no such ref"));
     expect(device().actions.map((a) => [a.verb, a.success, a.error])).toEqual([
       ["press", true, null],
       ["fill", false, "no such ref"],
     ]);
     expect(device().actions[0].args).toEqual(["a"]);
 
-    for (let i = 0; i < 25; i++) emit("cloud:simulator", actionEvent(`verb-${i}`, true));
+    for (let i = 0; i < 25; i++) publish(actionEvent(`verb-${i}`, true));
     const verbs = device().actions.map((a) => a.verb);
     expect(verbs).toHaveLength(20);
     expect(verbs[0]).toBe("verb-5");
@@ -235,8 +237,8 @@ describe("cloudSimulatorStore — screenshots and action results", () => {
   });
 
   it("survives a status change — recent agent activity is still worth showing", () => {
-    emit("cloud:simulator", actionEvent("press", true));
-    emit("cloud:simulator", statusEvent({ status: "stopped", platform: "ios" }));
+    publish(actionEvent("press", true));
+    publish(statusEvent({ status: "stopped", platform: "ios" }));
     expect(device().actions).toHaveLength(1);
   });
 });
@@ -291,37 +293,33 @@ describe("describeCloudSimulatorError", () => {
 });
 
 describe("cloudSimulatorStore on identity change", () => {
-  it("forgets every device on cloud:identity — the entries were the previous account's", () => {
-    emit(
-      "cloud:simulator",
+  it("forgets every device when the account changes — the entries were the previous account's", () => {
+    publish(
       statusEvent({ status: "ready", platform: "ios", streamUrl: "https://stream.example/a" })
     );
-    emit("cloud:simulator", actionEvent("fill", true));
+    publish(actionEvent("fill", true));
     expect(device().status).toBe("ready");
     expect(device().actions).toHaveLength(1);
-    emit("cloud:identity", { generation: 2 });
+    identityChanged(2);
     expect(useCloudSimulatorStore.getState().byWorkspace).toEqual({});
     // And a device seen afterwards is the new account's, from scratch.
-    emit("cloud:simulator", statusEvent({ status: "starting", platform: "android" }));
+    publish(statusEvent({ status: "starting", platform: "android" }));
     expect(device().platform).toBe("android");
     expect(device().actions).toEqual([]);
   });
 });
 
 describe("cloudSimulatorStore generation and gone", () => {
-  it("bumps the generation on cloud:identity so in-flight seeds can be disowned", () => {
+  it("bumps the generation when the account changes so in-flight seeds can be disowned", () => {
     const before = useCloudSimulatorStore.getState().generation;
-    emit("cloud:identity", { generation: 1 });
+    identityChanged(1);
     expect(useCloudSimulatorStore.getState().generation).toBe(before + 1);
   });
 
   it("drops the entry on a gone event — the platform knows of no device any more", () => {
-    emit(
-      "cloud:simulator",
-      statusEvent({ status: "ready", platform: "ios", streamUrl: "https://s/1" })
-    );
-    emit("cloud:simulator", actionEvent("tap", true));
-    emit("cloud:simulator", { workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
+    publish(statusEvent({ status: "ready", platform: "ios", streamUrl: "https://s/1" }));
+    publish(actionEvent("tap", true));
+    publish({ workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
     expect(useCloudSimulatorStore.getState().byWorkspace[WS]).toBeUndefined();
     expect(device()).toBeUndefined();
   });
@@ -331,17 +329,14 @@ describe("cloudSimulatorStore across a reconnect", () => {
   const connection = (connected: boolean) => connectionListeners.forEach((l) => l(connected));
 
   it("keeps its entries on the initial connect, forgets them after a drop and reconnect", () => {
-    emit(
-      "cloud:simulator",
-      statusEvent({ status: "ready", platform: "ios", streamUrl: "https://s/1" })
-    );
+    publish(statusEvent({ status: "ready", platform: "ios", streamUrl: "https://s/1" }));
     const before = useCloudSimulatorStore.getState().generation;
     connection(true); // the first connect of the session: nothing was missed
     expect(device().status).toBe("ready");
     expect(useCloudSimulatorStore.getState().generation).toBe(before);
     connection(false);
     expect(device().status).toBe("ready"); // offline: keep showing what we knew
-    connection(true); // broadcasts may have been missed: start over, re-seed
+    connection(true); // events may have been missed: start over, re-seed
     expect(useCloudSimulatorStore.getState().byWorkspace).toEqual({});
     expect(useCloudSimulatorStore.getState().generation).toBe(before + 1);
   });
@@ -353,7 +348,7 @@ describe("cloudSimulatorStore — a gone invalidates the seed in flight", () => 
     const epochAtAsk = useCloudSimulatorStore.getState().epochs[WS] ?? 0;
     expect(device()).toBeUndefined();
     // The platform says: no device (a later read saw it gone).
-    emit("cloud:simulator", { workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
+    publish({ workspaceId: WS, sessionId: "sess-1", kind: "gone", data: {} });
     expect(useCloudSimulatorStore.getState().epochs[WS]).toBe(epochAtAsk + 1);
     // The earlier read's answer lands afterwards: the dead stream must not come back.
     cloudSimulatorActions.seedIfUnknown(WS, seed(), epochAtAsk);
@@ -370,14 +365,14 @@ describe("cloudSimulatorStore — a gone invalidates the seed in flight", () => 
 
 describe("cloudSimulatorStore — screenshots remember their platform", () => {
   it("keeps the platform a capture came from, so a request for the other device can ignore it", () => {
-    emit("cloud:simulator", {
+    publish({
       workspaceId: WS,
       sessionId: "sess-1",
       kind: "screenshot",
       data: { sessionId: "sess-1", platform: "android", imageBase64: "CCCC", format: "png" },
     });
     expect(device().lastScreenshot).toMatchObject({ base64: "CCCC", platform: "android" });
-    emit("cloud:simulator", {
+    publish({
       workspaceId: WS,
       sessionId: "sess-1",
       kind: "screenshot",
@@ -390,7 +385,7 @@ describe("cloudSimulatorStore — screenshots remember their platform", () => {
       },
     });
     expect(device().lastScreenshot).toMatchObject({ base64: "EEEE", platform: "ios" });
-    emit("cloud:simulator", {
+    publish({
       workspaceId: WS,
       sessionId: "sess-1",
       kind: "screenshot",
@@ -401,8 +396,8 @@ describe("cloudSimulatorStore — screenshots remember their platform", () => {
 });
 
 describe("cloudSimulatorStore registered while the socket is down", () => {
-  // Last in the file: it re-evaluates the store module, which registers a
-  // second process-wide listener — earlier tests count exactly one.
+  // Last in the file: it re-evaluates the store module, which follows both
+  // streams a second time — earlier tests count each exactly once.
   it("treats the connect that follows as a reconnect and starts over", async () => {
     connectedNow.value = false;
     vi.resetModules();

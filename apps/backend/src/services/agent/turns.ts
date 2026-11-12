@@ -65,7 +65,7 @@ export async function sendMessage(
   // will ever answer (the wire rejects the turn with turnActive and the
   // composer shows nothing). "Needs input" counts as active too: plan
   // approval and questions park the RUNNING turn while the overlay waits.
-  // Reject up front — the q:command error surfaces in the UI. The wire guard
+  // Reject up front — the refusal surfaces in the UI. The wire guard
   // stays as the backstop for the status race.
   if (session && ACTIVE_TURN_STATUSES.includes(session.status)) {
     throw new ConflictError(
@@ -248,8 +248,8 @@ export async function sendMessage(
     }
   } else {
     // No engine turn can be admitted from here. Flipping the session to "error"
-    // is only half the job: this handler's return value IS the q:command_ack, so
-    // returning normally would answer `accepted: true` for a turn that never ran.
+    // is only half the job: this handler's return value IS the write's answer, so
+    // returning normally would report success for a turn that never ran.
     // The user's prompt exists in exactly one place at this moment — the
     // frontend's optimistic bubble — because the backend never writes the user
     // row (the engine's echo is the single persistence path). A false accept

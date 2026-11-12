@@ -1,27 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@shared/api";
+import { emit, following } from "../../helpers";
 
-// Starting a stream and building answer at once; their outcome is an event.
-// The service is what turns "asked" plus "event" into one promise.
-const { call, listeners } = vi.hoisted(() => ({
+// Starting a stream and building answer at once; their outcome is an event on
+// the workspace's `simulatorEvents`. The service is what turns "asked" plus
+// "event" into one promise.
+const { call, follow } = vi.hoisted(() => ({
   call: vi.fn(),
-  listeners: new Set<(event: string, data: unknown) => void>(),
+  follow: vi.fn(() => vi.fn()),
 }));
-vi.mock("@/platform/ws", () => ({
-  call,
-  onEvent: (listener: (event: string, data: unknown) => void) => {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  },
-}));
+vi.mock("@/platform/ws", () => ({ call, follow }));
 
 import { simulatorService } from "@/features/simulator/api/simulator.service";
 
-const emit = (event: string, data: unknown) => [...listeners].forEach((l) => l(event, data));
-
 beforeEach(() => {
   call.mockReset().mockResolvedValue(undefined);
-  listeners.clear();
+  follow.mockClear();
 });
 
 describe("simulatorService.listSimulators", () => {
@@ -40,34 +34,52 @@ describe("simulatorService.listSimulators", () => {
 });
 
 describe("simulatorService.startStreaming", () => {
-  it("resolves with the stream once this workspace's sim:streamReady arrives", async () => {
+  it("resolves with the stream once this workspace's simulator reports it ready", async () => {
     const stream = simulatorService.startStreaming("ws-1", "U1", true);
     expect(call).toHaveBeenCalledExactlyOnceWith(api.simStart, {
       workspaceId: "ws-1",
       udid: "U1",
       skipBootCheck: true,
     });
+    expect(following(follow)).toEqual([
+      { stream: "simulatorEvents", filter: { workspaceId: "ws-1" } },
+    ]);
     // Another workspace's stream is not ours.
-    emit("sim:streamReady", { workspaceId: "ws-2", url: "http://localhost:9/s", port: 9 });
-    emit("sim:streamReady", {
-      workspaceId: "ws-1",
-      url: "http://localhost:3100/stream.mjpeg",
-      port: 3100,
-      hidAvailable: true,
-    });
+    emit(
+      follow,
+      api.simulatorEvents,
+      { workspaceId: "ws-2" },
+      { type: "streamReady", url: "http://localhost:9/s", port: 9, hidAvailable: false }
+    );
+    emit(
+      follow,
+      api.simulatorEvents,
+      { workspaceId: "ws-1" },
+      {
+        type: "streamReady",
+        url: "http://localhost:3100/stream.mjpeg",
+        port: 3100,
+        hidAvailable: true,
+      }
+    );
     await expect(stream).resolves.toEqual({
       url: "http://localhost:3100/stream.mjpeg",
       port: 3100,
       hid_available: true,
     });
-    expect(listeners.size).toBe(0);
+    expect(following(follow)).toEqual([]);
   });
 
   it("rejects with the backend's reason when the stream fails to start", async () => {
     const stream = simulatorService.startStreaming("ws-1", "U1");
-    emit("sim:streamFailed", { workspaceId: "ws-1", error: "Failed to boot simulator: nope" });
+    emit(
+      follow,
+      api.simulatorEvents,
+      { workspaceId: "ws-1" },
+      { type: "streamFailed", error: "Failed to boot simulator: nope" }
+    );
     await expect(stream).rejects.toThrow("Failed to boot simulator: nope");
-    expect(listeners.size).toBe(0);
+    expect(following(follow)).toEqual([]);
   });
 
   it("rejects at once when the start itself is refused, without waiting for an event", async () => {
@@ -75,35 +87,55 @@ describe("simulatorService.startStreaming", () => {
       new Error("iOS Simulator streaming is unavailable over remote relay in this build.")
     );
     await expect(simulatorService.startStreaming("ws-1", "U1")).rejects.toThrow("remote relay");
-    expect(listeners.size).toBe(0);
+    expect(following(follow)).toEqual([]);
   });
 });
 
 describe("simulatorService.buildAndRun", () => {
-  it("resolves with the installed app on sim:buildComplete", async () => {
+  it("resolves with the installed app once the build completes", async () => {
     const build = simulatorService.buildAndRun("ws-1", "/repo/ws");
     expect(call).toHaveBeenCalledExactlyOnceWith(api.simBuildAndRun, {
       workspaceId: "ws-1",
       workspacePath: "/repo/ws",
     });
-    emit("sim:buildLog", { workspaceId: "ws-1", line: "Compiling…" });
-    emit("sim:buildComplete", {
-      workspaceId: "ws-1",
-      bundleId: "com.example.app",
-      appName: "Example",
-      appPath: "/repo/ws/build/Example.app",
-    });
+    expect(following(follow)).toEqual([
+      { stream: "simulatorEvents", filter: { workspaceId: "ws-1" } },
+    ]);
+    // A line of the build's output is not its outcome.
+    emit(
+      follow,
+      api.simulatorEvents,
+      { workspaceId: "ws-1" },
+      { type: "buildLog", line: "Compiling…" }
+    );
+    expect(following(follow)).toHaveLength(1);
+    emit(
+      follow,
+      api.simulatorEvents,
+      { workspaceId: "ws-1" },
+      {
+        type: "buildComplete",
+        bundleId: "com.example.app",
+        appName: "Example",
+        appPath: "/repo/ws/build/Example.app",
+      }
+    );
     await expect(build).resolves.toEqual({
       bundle_id: "com.example.app",
       name: "Example",
       app_path: "/repo/ws/build/Example.app",
     });
-    expect(listeners.size).toBe(0);
+    expect(following(follow)).toEqual([]);
   });
 
-  it("rejects with the build's error on sim:buildFailed", async () => {
+  it("rejects with the build's error when the build fails", async () => {
     const build = simulatorService.buildAndRun("ws-1", "/repo/ws");
-    emit("sim:buildFailed", { workspaceId: "ws-1", error: "xcodebuild exited with code 65" });
+    emit(
+      follow,
+      api.simulatorEvents,
+      { workspaceId: "ws-1" },
+      { type: "buildFailed", error: "xcodebuild exited with code 65" }
+    );
     await expect(build).rejects.toThrow("xcodebuild exited with code 65");
   });
 });

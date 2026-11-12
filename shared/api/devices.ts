@@ -2,10 +2,10 @@
 
 import { z } from "zod";
 import type { PairedDevice, RelayStatus } from "../types/devices";
-import { out, read, write } from "./op";
+import { live, out, read, write } from "./op";
 
 /** The devices this computer approved, and which of them are connected right now. */
-export const pairedDevices = read({
+export const pairedDevices = live({
   name: "pairedDevices",
   output: out<{ devices: PairedDevice[] }>(),
 });

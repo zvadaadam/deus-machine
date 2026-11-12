@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "@shared/api/simulator";
 import { isOp } from "@shared/api/op";
-import { operations } from "../../helpers";
+import { operations, published } from "../../helpers";
 
 // The simulator operations through the real handlers, with the Mac's simulator
-// service, the cloud driver and the socket broadcast replaced: what each
-// handler asks of them, and what a client is told.
+// service, the cloud driver and the stream hub replaced: what each handler
+// asks of them, and what the clients following a workspace's simulator are told.
 
 const sim = vi.hoisted(() => ({
   getSimulatorCapabilities: vi.fn(),
@@ -33,8 +33,8 @@ const cloud = vi.hoisted(() => ({
 }));
 vi.mock("../../../src/services/agent/cloud/driver", () => cloud);
 
-const socket = vi.hoisted(() => ({ broadcast: vi.fn() }));
-vi.mock("../../../src/services/ws.service", () => socket);
+const mockPublish = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 const execFile = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execFile }));
@@ -48,8 +48,15 @@ const WS = { workspaceId: "ws-1" };
 const SNAPSHOT = { bundleId: "com.example.app", pid: 7, timestamp: 1, roots: [] };
 const RELAY_REASON = "iOS Simulator streaming is unavailable over remote relay in this build.";
 
-/** The q:event frames broadcast so far, parsed. */
-const events = () => socket.broadcast.mock.calls.map(([frame]) => JSON.parse(frame as string));
+/**
+ * What was published on `simulatorEvents` so far, each with the workspace
+ * whose clients receive it, and that nothing went out on any other stream.
+ */
+const events = () => {
+  const sent = published(mockPublish, api.simulatorEvents);
+  expect(sent).toHaveLength(mockPublish.mock.calls.length);
+  return sent;
+};
 /** Let a rejection the handler did not wait for reach its catch. */
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -171,10 +178,10 @@ describe("starting and stopping a stream", () => {
     sim.startStream.mockReturnValue(new Promise(() => {}));
     await expect(run(api.simStart, { ...WS, udid: "sim-1" })).resolves.toBeUndefined();
     expect(sim.startStream).toHaveBeenCalledWith("ws-1", "sim-1", undefined);
-    expect(socket.broadcast).not.toHaveBeenCalled();
+    expect(mockPublish).not.toHaveBeenCalled();
   });
 
-  it("passes skipBootCheck through, and broadcasts a later failure as sim:streamFailed", async () => {
+  it("passes skipBootCheck through, and tells the clients following that workspace's simulator of a later failure", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     sim.startStream.mockRejectedValue(new Error("Failed to boot simulator: no such device"));
     await run(api.simStart, { ...WS, udid: "sim-1", skipBootCheck: true });
@@ -182,9 +189,29 @@ describe("starting and stopping a stream", () => {
     await settle();
     expect(events()).toEqual([
       {
-        type: "q:event",
-        event: "sim:streamFailed",
-        data: { workspaceId: "ws-1", error: "Failed to boot simulator: no such device" },
+        scope: { workspaceId: "ws-1" },
+        event: { type: "streamFailed", error: "Failed to boot simulator: no such device" },
+      },
+    ]);
+  });
+
+  it("publishes each workspace's failed start under its own scope", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    sim.startStream.mockImplementation(async (workspaceId: string) => {
+      throw new Error(`no device for ${workspaceId}`);
+    });
+    await run(api.simStart, { workspaceId: "ws-1", udid: "sim-1" });
+    await run(api.simStart, { workspaceId: "ws-2", udid: "sim-2" });
+    await settle();
+    // The panel of ws-2 never hears that ws-1's simulator failed, nor the reverse.
+    expect(events()).toEqual([
+      {
+        scope: { workspaceId: "ws-1" },
+        event: { type: "streamFailed", error: "no device for ws-1" },
+      },
+      {
+        scope: { workspaceId: "ws-2" },
+        event: { type: "streamFailed", error: "no device for ws-2" },
       },
     ]);
   });
@@ -268,19 +295,37 @@ describe("build and run", () => {
       run(api.simBuildAndRun, { ...WS, workspacePath: "/repo/ws", scheme: "App" })
     ).resolves.toBeUndefined();
     expect(sim.buildAndRun).toHaveBeenCalledWith("ws-1", "/repo/ws", "App");
-    expect(socket.broadcast).not.toHaveBeenCalled();
+    expect(mockPublish).not.toHaveBeenCalled();
   });
 
-  it("broadcasts a failed build as sim:buildFailed", async () => {
+  it("tells the clients following that workspace's simulator of a failed build", async () => {
     sim.buildAndRun.mockRejectedValue(new Error("xcodebuild exited with code 65"));
     await run(api.simBuildAndRun, { ...WS, workspacePath: "/repo/ws" });
     expect(sim.buildAndRun).toHaveBeenCalledWith("ws-1", "/repo/ws", undefined);
     await settle();
     expect(events()).toEqual([
       {
-        type: "q:event",
-        event: "sim:buildFailed",
-        data: { workspaceId: "ws-1", error: "xcodebuild exited with code 65" },
+        scope: { workspaceId: "ws-1" },
+        event: { type: "buildFailed", error: "xcodebuild exited with code 65" },
+      },
+    ]);
+  });
+
+  it("publishes each workspace's failed build under its own scope", async () => {
+    sim.buildAndRun.mockImplementation(async (workspaceId: string) => {
+      throw new Error(`build failed in ${workspaceId}`);
+    });
+    await run(api.simBuildAndRun, { workspaceId: "ws-1", workspacePath: "/repo/ws" });
+    await run(api.simBuildAndRun, { workspaceId: "ws-2", workspacePath: "/repo/other" });
+    await settle();
+    expect(events()).toEqual([
+      {
+        scope: { workspaceId: "ws-1" },
+        event: { type: "buildFailed", error: "build failed in ws-1" },
+      },
+      {
+        scope: { workspaceId: "ws-2" },
+        event: { type: "buildFailed", error: "build failed in ws-2" },
       },
     ]);
   });

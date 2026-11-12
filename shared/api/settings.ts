@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   LOCAL_HARNESSES,
   type AgentAuthAnswer,
+  type AgentAuthEvent,
   type AgentSignInAnswer,
   type HarnessAuth,
 } from "../agent-auth";
@@ -16,6 +17,8 @@ import {
 } from "../types/agent-config";
 import type { Settings } from "../types/settings";
 import { out, read, write } from "./op";
+import { stream } from "./stream";
+import type { HarnessCliProgress } from "@zvada/agent-server/protocol";
 
 // ── Preferences ────────────────────────────────────────────────────────────
 
@@ -127,13 +130,13 @@ export const agentModels = read({
 /** The models Deus Cloud runs, as the platform lists them; none without a cloud account. */
 export const cloudModels = read({ name: "cloudModels", output: out<CloudModelCatalog>() });
 
-/** Install the agents' CLIs now. Answers at once; progress arrives as `agent:cli` events. */
+/** Install the agents' CLIs now. Answers at once; progress arrives on `agentCliProgress`. */
 export const agentPrepareClis = write({ name: "agentPrepareClis", output: out<void>() });
 
 /**
  * Sign a local agent in. A login this computer already has of that kind is
  * picked up; otherwise the CLI's own sign-in starts and ends as an
- * `agent:auth` event.
+ * `agentAuthChanges` event.
  */
 export const agentSignIn = write({
   name: "agentSignIn",
@@ -163,4 +166,13 @@ export const agentLogout = write({
   name: "agentLogout",
   input: z.object({ harness: localHarness }),
   output: out<{ auth: HarnessAuth }>(),
+});
+
+/** A local agent's login changed, or a sign-in started or ended, whoever caused it. */
+export const agentAuthChanges = stream({ name: "agentAuthChanges", event: out<AgentAuthEvent>() });
+
+/** A local agent's CLI being installed. */
+export const agentCliProgress = stream({
+  name: "agentCliProgress",
+  event: out<HarnessCliProgress>(),
 });

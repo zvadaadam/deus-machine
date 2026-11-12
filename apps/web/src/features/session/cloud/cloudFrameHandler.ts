@@ -37,6 +37,7 @@ import {
   type AgentStreamContext,
 } from "../lib/agentEventFold";
 import { bustCloudSessionsListCache } from "./cloudDataAdapter";
+import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { notifyCloudAutosaveFailure } from "./notifyCloudAutosaveFailure";
 
 const LIFECYCLE_TYPES: ReadonlySet<string> = new Set(LIFECYCLE_EVENT_TYPES);
@@ -77,7 +78,9 @@ export function makeCloudFrameHandler(
       type === "error" && typeof (frame as { category?: unknown }).category === "string";
     if (LIFECYCLE_TYPES.has(type) || isEngineError) {
       route(frame as unknown as AnyLifecycleEvent);
-      if (type === "turn.ended") notifyCloudAutosaveFailure(frame);
+      // A live turn's end only: a reconnect's snapshot restates old turns and must not warn again.
+      const unsaved = type === "turn.ended" ? cloudSaveFailure(frame) : null;
+      if (unsaved) notifyCloudAutosaveFailure(unsaved);
       // The direct lane has no q: push keeping `sessions.detail` fresh, so the
       // working indicator / Stop button would never move — project the turn
       // lifecycle onto the row here (the Mac lane gets this from the backend).

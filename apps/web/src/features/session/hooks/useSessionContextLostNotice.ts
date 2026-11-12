@@ -13,8 +13,9 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { onEvent } from "@/platform/ws";
-import type { WireEventEnvelope } from "@shared/protocol-types";
+import { api } from "@shared/api";
+import { isUnknownEvent } from "@shared/protocol-types";
+import { useStream } from "@/shared/hooks/useStream";
 
 export function useSessionContextLostNotice(sessionId: string | null) {
   // Counter, not a boolean: a second resume failure must re-surface the notice
@@ -27,17 +28,12 @@ export function useSessionContextLostNotice(sessionId: string | null) {
     setDismissed(0);
   }, [sessionId]);
 
-  useEffect(() => {
-    if (!sessionId) return;
-    return onEvent((name: string, raw: unknown) => {
-      if (name !== "agent:event") return;
-      const envelope = raw as WireEventEnvelope;
-      if (envelope?.sessionId !== sessionId) return;
-      const event = envelope.event;
-      if (event?.type !== "session.created" || event.resumed !== false) return;
-      setOccurrence((n) => n + 1);
-    });
-  }, [sessionId]);
+  useStream(api.sessionEvents, sessionId ? { sessionId } : null, (update) => {
+    if (update.type !== "event") return;
+    const { event } = update.envelope;
+    if (isUnknownEvent(event)) return;
+    if (event.type === "session.created" && event.resumed === false) setOccurrence((n) => n + 1);
+  });
 
   const dismiss = useCallback(() => setDismissed(occurrence), [occurrence]);
 

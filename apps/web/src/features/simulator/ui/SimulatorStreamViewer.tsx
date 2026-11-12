@@ -17,7 +17,7 @@
  * TODO(relay-streaming): In web/relay mode the MJPEG URL is not directly
  * accessible (it's on the remote Mac). To support relay streaming:
  *   1. Backend subscribes to simbridge MJPEG HTTP, parses multipart frames
- *   2. Pushes frames via `q:event sim:frame { base64 }` to frontend
+ *   2. Publishes frames on a stream (`{ base64 }` per frame) to the frontend
  *   3. This component renders WS-pushed frames instead of <img> MJPEG source
  *   4. Add frame rate/quality negotiation for bandwidth control
  *   5. Detect relay mode: if stream URL is not localhost, use WS frame path

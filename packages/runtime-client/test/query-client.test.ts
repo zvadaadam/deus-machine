@@ -245,6 +245,9 @@ describe("runtime-owned q: client", () => {
     await online(b);
     a.client.queryClient.setQueryData(["secret"], "A");
     b.client.queryClient.setQueryData(["secret"], "B");
+    const events = vi.fn();
+    a.client.listen("sessionEvents", { sessionId: "s" }, events);
+    const listening = a.socket.frames("q:subscribe")[0].id;
     const rejected = expect(a.client.sendRequest("settings")).rejects.toMatchObject({
       kind: "unavailable",
     });
@@ -252,8 +255,9 @@ describe("runtime-owned q: client", () => {
     a.socket.close(4001);
     await rejected;
     stale.message({ type: "connected" });
-    stale.message({ type: "q:event", event: "stale", data: "A" });
+    stale.message({ type: "q:event", id: listening, event: "sessionEvents", data: "A" });
     await vi.advanceTimersByTimeAsync(30_000);
+    expect(events).not.toHaveBeenCalled();
     expect(a.client.getState()).toBe("revoked");
     expect(a.client.queryClient.getQueryCache().getAll()).toHaveLength(0);
     expect(a.sockets).toHaveLength(1);
@@ -266,15 +270,20 @@ describe("runtime-owned q: client", () => {
     const f = setup();
     await online(f);
     const events = vi.fn();
-    f.client.onEvent(events);
+    f.client.listen("sessionEvents", { sessionId: "s" }, events);
     const old = f.socket;
+    const { id } = old.frames("q:subscribe")[0];
     f.client.forceReconnect();
     await Promise.resolve();
     f.socket.open();
     f.socket.message({ type: "connected" });
+    // The listener returns on the new socket under the same id: only the socket tells them apart.
+    expect(f.socket.frames("q:subscribe")).toMatchObject([{ id, resource: "sessionEvents" }]);
     old.close();
-    old.message({ type: "q:event", event: "wrong-host", data: 1 });
+    old.message({ type: "q:event", id, event: "sessionEvents", data: "wrong-host" });
     expect(events).not.toHaveBeenCalled();
+    f.socket.message({ type: "q:event", id, event: "sessionEvents", data: "current" });
+    expect(events).toHaveBeenCalledExactlyOnceWith("current");
     expect(f.client.isConnected()).toBe(true);
     expect(vi.getTimerCount()).toBe(1);
   });

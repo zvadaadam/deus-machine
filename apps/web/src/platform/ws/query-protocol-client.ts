@@ -22,7 +22,6 @@ import {
   RuntimeClient,
   RuntimeError,
   type CallArgs,
-  type EventCallback,
   type QueryRequestInterceptor,
   type ToolResponseInterceptor,
 } from "./runtime-client";
@@ -37,7 +36,12 @@ let selected:
   | undefined;
 let nextGrant = 0;
 const runtimeListeners = new Set<() => void>();
-const eventListeners = new Set<EventCallback>();
+/** A stream followed app-wide: how to start it on a client, and how to stop the current one. */
+interface Follow {
+  start: (client: RuntimeClient) => () => void;
+  stop: () => void;
+}
+const follows = new Set<Follow>();
 const connectionListeners = new Set<(connected: boolean) => void>();
 // These are adapter registrations, not operation/cache state. Each new runtime
 // receives the adapter appropriate to its mode; pending work stays on its owner.
@@ -124,15 +128,8 @@ export function selectRuntime(serverId?: string): RuntimeClient {
   );
   active = client;
   setActiveQueryClient(client.queryClient);
-  client.onEvent((event, data) => {
-    for (const callback of eventListeners) {
-      try {
-        callback(event, data);
-      } catch (error) {
-        console.error("[WS] Event listener failed:", error);
-      }
-    }
-  });
+  // The disposed client dropped its listeners; the app-wide ones move to this one.
+  for (const entry of follows) entry.stop = entry.start(client);
   client.onConnectionChange((connected) => {
     for (const callback of connectionListeners) {
       try {
@@ -162,6 +159,23 @@ export function onRuntimeChange(callback: () => void): () => void {
 export const connect = (serverId?: string): Promise<void> =>
   (serverId === undefined ? getRuntimeClient() : selectRuntime(serverId)).connect();
 export const isConnected = (): boolean => getRuntimeClient().isConnected();
+/**
+ * Follow a stream on the selected host, and on whichever host is selected
+ * after it: an app-wide store keeps listening through a change of host. A
+ * component follows its own runtime instead (`useStream`).
+ */
+export const follow: RuntimeClient["follow"] = (stream, filter, onEvent, options) => {
+  const entry: Follow = {
+    start: (client) => client.follow(stream, filter, onEvent, options),
+    stop: () => {},
+  };
+  entry.stop = entry.start(getRuntimeClient());
+  follows.add(entry);
+  return () => {
+    follows.delete(entry);
+    entry.stop();
+  };
+};
 /** Run an operation from `shared/api` on the selected host. See `RuntimeClient.call`. */
 export function call<O extends AnyOp>(op: O, ...args: CallArgs<O>): Promise<OutputOf<O>> {
   return getRuntimeClient().call(op, ...args);
@@ -169,16 +183,7 @@ export function call<O extends AnyOp>(op: O, ...args: CallArgs<O>): Promise<Outp
 export const sendToolResponse: RuntimeClient["sendToolResponse"] = (...args) =>
   getRuntimeClient().sendToolResponse(...args);
 export const forceReconnect = (): void => getRuntimeClient().forceReconnect();
-export const emitLocalEvent: RuntimeClient["emitLocalEvent"] = (...args) =>
-  getRuntimeClient().emitLocalEvent(...args);
-
 /** App-wide notifications follow the selected runtime; domain hooks use its instance. */
-export function onEvent(callback: EventCallback): () => void {
-  eventListeners.add(callback);
-  return () => {
-    eventListeners.delete(callback);
-  };
-}
 export function onConnectionChange(callback: (connected: boolean) => void): () => void {
   connectionListeners.add(callback);
   return () => {

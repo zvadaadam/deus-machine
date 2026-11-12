@@ -53,7 +53,7 @@ function reasonOf(error: unknown, otherwise: string): string {
   return (error instanceof Error && error.message) || otherwise;
 }
 
-/** Install the agents' CLIs now; the install is followed on q:event "agent:cli". */
+/** Install the agents' CLIs now; the install is followed on the `agentCliProgress` stream. */
 export async function installLocalAgents(): Promise<void> {
   try {
     await call(api.agentPrepareClis);
@@ -77,7 +77,7 @@ export function canSignIn(auth: HarnessAuth): boolean {
  * Sign this computer's agent in. A login it already has of that kind (a
  * terminal's, another app's) is picked up and nothing opens; otherwise the
  * CLI's own sign-in opens in the browser, and its end arrives as
- * q:event "agent:auth".
+ * The `agentAuthChanges` stream.
  */
 export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth): Promise<void> {
   const method = browserSignIn(auth);

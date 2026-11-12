@@ -287,7 +287,13 @@ try {
   await mobile.setOffline(false);
   await settled(b);
   await visible(b, "Changed during outage");
-  assert.equal(netB.sent.filter((frame) => frame.type === "q:mutate").length, 0);
+  // The write refused while offline was never put on the wire, then or after reconnecting.
+  assert.equal(
+    netB.sent.filter(
+      (frame) => frame.type === "q:mutate" && frame.params?.title === "Must not queue"
+    ).length,
+    0
+  );
   check(
     "Offline viewer retains cached data, rejects writes immediately and catches up automatically"
   );

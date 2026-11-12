@@ -1,5 +1,5 @@
 /**
- * Cloud preview template — the q:event "cloud:preview" stream.
+ * Cloud preview template — the `cloudPreviewChanges` stream.
  *
  * One entry per cloud workspace: the computer's public host template
  * (`https://{{port}}-<sandbox>.e2b.app`), a capability URL template that
@@ -13,12 +13,11 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api } from "@shared/api";
-import { CloudPreviewEventSchema } from "@shared/events";
-import { call, isConnected, onConnectionChange, onEvent } from "@/platform/ws";
+import { call, follow, isConnected, onConnectionChange } from "@/platform/ws";
 
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
-  /** Bumped on every cloud:identity. A one-shot read that started under an
+  /** Bumped on every `cloudIdentity` event. A one-shot read that started under an
    *  earlier generation answers for the previous account and is dropped. */
   generation: number;
 }
@@ -69,18 +68,12 @@ export function ensureCloudPreviewSubscription(): void {
     wasDisconnected = false;
     forgetAllCloudPreviews();
   });
-  onEvent((event, raw) => {
-    if (event === "cloud:identity") {
-      // The templates were the previous account's sandboxes: forget them all,
-      // and disown every read still in flight.
-      forgetAllCloudPreviews();
-      return;
-    }
-    if (event !== "cloud:preview") return;
-    const parsed = CloudPreviewEventSchema.safeParse(raw);
-    if (!parsed.success) return;
-    cloudPreviewActions.set(parsed.data.workspaceId, parsed.data.template);
-  });
+  // The templates were the previous account's sandboxes: forget them all,
+  // and disown every read still in flight.
+  follow(api.cloudIdentity, {}, forgetAllCloudPreviews);
+  follow(api.cloudPreviewChanges, {}, ({ workspaceId, template }) =>
+    cloudPreviewActions.set(workspaceId, template)
+  );
 }
 
 /**

@@ -88,7 +88,7 @@ const server = await createServer({
         export * from ${JSON.stringify(path.join(root, "apps/web/src/platform/ws/index.ts"))};
         const sendRequest = async (name, params) => {const r=await fetch("/api/query/"+name,{method:"POST",body:JSON.stringify(params)});if(!r.ok)throw new Error("Files temporarily unavailable");return r.json();};
         export const call = async (op, input) => (op.kind === "read" ? sendRequest(op.name, input) : {});
-        export const onEvent = () => () => {};
+        export const follow = () => () => {};
       `;
       },
       configureServer(vite) {

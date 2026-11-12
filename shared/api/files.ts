@@ -3,6 +3,7 @@
 import { z } from "zod";
 import type { FileMatch, FileTreeResponse } from "../types/files";
 import { out, read, write } from "./op";
+import { stream } from "./stream";
 
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
 /** A folder on the computer that runs the backend, as an absolute path. */
@@ -45,7 +46,19 @@ export const invalidateFileCache = write({
   output: out<void>(),
 });
 
-/** Start announcing changes under a local workspace's folder as `fs:changed` events. */
+/** Start announcing changes under a local workspace's folder on `fileChanges`. */
 export const fsWatch = write({ name: "fs:watch", input: workspacePath, output: out<void>() });
 
 export const fsUnwatch = write({ name: "fs:unwatch", input: workspacePath, output: out<void>() });
+
+export interface FileChangeEvent {
+  change_type: "add" | "change" | "unlink" | "mixed" | "metadataonly";
+  affected_count: number;
+}
+
+/** Files changed in a watched workspace folder (see `fs:watch`), a burst at a time. */
+export const fileChanges = stream({
+  name: "fileChanges",
+  scope: workspacePath,
+  event: out<FileChangeEvent>(),
+});

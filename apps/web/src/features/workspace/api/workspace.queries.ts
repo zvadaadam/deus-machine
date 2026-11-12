@@ -132,7 +132,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
  * Conditionally polls only when workspace is actively working.
  *
  * When `isWatched` is true (file watcher active via notify crate),
- * polling is disabled — cache invalidation comes from fs:changed events.
+ * polling is disabled — cache invalidation comes from `fileChanges` events.
  * Falls back to 5s polling when not watched.
  *
  * IMPORTANT: Requires workspaceState === "ready" to avoid fetching diffs

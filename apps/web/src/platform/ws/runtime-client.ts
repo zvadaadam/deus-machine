@@ -2,10 +2,12 @@
 import { QueryRuntimeClient } from "@deus/runtime-client/query";
 import {
   RuntimeError,
+  type ListenOptions,
   type RuntimeIdentity,
   type RuntimePorts as ClientPorts,
 } from "@deus/runtime-client";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
+import type { AnyStream, EventOf, FilterOf, ScopeOf } from "@shared/api/stream";
 import type { QueryClient } from "@tanstack/react-query";
 import type { LiveName } from "@shared/api";
 import { createQueryClient } from "@/shared/api/queryClient";
@@ -18,7 +20,6 @@ export type {
   RuntimeFailureKind,
   QueryRequestInterceptor,
   ToolResponseInterceptor,
-  EventCallback,
 } from "@deus/runtime-client";
 export type { DeltaMerge } from "@deus/runtime-client/query";
 
@@ -74,6 +75,28 @@ export class RuntimeClient extends QueryRuntimeClient<LiveName> {
     }
     return result.data as OutputOf<O>;
   };
+
+  /**
+   * Follow a stream from `shared/api`, narrowed by `filter`. Only what was
+   * asked for arrives, once and in order; `options.onReset` runs when events
+   * may have been missed. Returns the function that stops it.
+   */
+  follow = <S extends AnyStream>(
+    stream: S,
+    filter: FilterOf<S>,
+    onEvent: (event: EventOf<S>) => void,
+    options?: ListenOptions
+  ): (() => void) =>
+    this.listen(
+      stream.name,
+      filter as Record<string, unknown>,
+      onEvent as (data: unknown) => void,
+      options
+    );
+
+  /** Deliver an event produced in this client to whoever follows that stream here. */
+  publish = <S extends AnyStream>(stream: S, scope: ScopeOf<S>, event: EventOf<S>): void =>
+    this.publishLocal(stream.name, scope as Record<string, unknown>, event);
 }
 export function runtimeForQueryClient(cache: QueryClient): RuntimeClient | undefined {
   return owners.get(cache);

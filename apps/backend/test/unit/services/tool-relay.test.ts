@@ -4,13 +4,9 @@ import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 // Mocks
 // ============================================================================
 
-const { mockBroadcast } = vi.hoisted(() => ({
-  mockBroadcast: vi.fn(),
-}));
+const mockPublish = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../src/services/ws.service", () => ({
-  broadcast: mockBroadcast,
-}));
+vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 // ============================================================================
 // Import after mocks
@@ -29,6 +25,8 @@ import {
 // deleted; this test kept importing it because the backend tests were not in
 // any tsconfig, so nothing checked the reference.
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
+import { toolRequests } from "@shared/api/sessions";
+import { published } from "../../helpers";
 
 // ============================================================================
 // Helpers
@@ -71,24 +69,43 @@ describe("ToolRelay", () => {
   // ==========================================================================
 
   describe("relay", () => {
-    it("broadcasts q:event tool:request to all WS clients", () => {
+    it("publishes the request to the clients following that chat, and nowhere else", () => {
       const event = makeToolRequestEvent();
       const promise = relay(event);
       promise.catch(() => {}); // prevent unhandled rejection from afterEach clearAll
 
-      expect(mockBroadcast).toHaveBeenCalledTimes(1);
-      const frame = JSON.parse(mockBroadcast.mock.calls[0][0]);
-      expect(frame).toEqual({
-        type: "q:event",
-        event: "tool:request",
-        data: {
-          requestId: "req-1",
-          sessionId: "sess-1",
-          method: "getDiff",
-          params: { sessionId: "sess-1", stat: true },
-          timeoutMs: 5000,
+      // One publish in all, on `toolRequests`, under the asking chat's scope.
+      expect(mockPublish).toHaveBeenCalledTimes(1);
+      expect(published(mockPublish, toolRequests)).toEqual([
+        {
+          scope: { sessionId: "sess-1" },
+          event: {
+            type: "request",
+            request: {
+              requestId: "req-1",
+              sessionId: "sess-1",
+              method: "getDiff",
+              params: { sessionId: "sess-1", stat: true },
+              timeoutMs: 5000,
+            },
+          },
         },
-      });
+      ]);
+    });
+
+    it("publishes each chat's request under its own scope", () => {
+      relay(makeToolRequestEvent({ requestId: "r1", sessionId: "sess-1" })).catch(() => {});
+      relay(makeToolRequestEvent({ requestId: "r2", sessionId: "sess-2" })).catch(() => {});
+
+      expect(
+        published(mockPublish, toolRequests).map(({ scope, event }) => [
+          scope,
+          event.type === "request" ? event.request.requestId : event.type,
+        ])
+      ).toEqual([
+        [{ sessionId: "sess-1" }, "r1"],
+        [{ sessionId: "sess-2" }, "r2"],
+      ]);
     });
 
     it("increments pending count", () => {
@@ -237,29 +254,38 @@ describe("ToolRelay", () => {
 
 describe("cancelSessionRelays", () => {
   beforeEach(() => {
-    mockBroadcast.mockClear();
+    mockPublish.mockClear();
   });
   afterEach(() => {
     clearAll();
   });
 
-  it("rejects the session's pending relays, broadcasts tool:cancel for each, leaves other sessions alone", async () => {
+  it("rejects the session's pending relays, publishes a cancel for each to that chat's clients, leaves other sessions alone", async () => {
     const mine = relay(makeToolRequestEvent({ requestId: "q-1", sessionId: "sess-1" }));
+    const second = relay(makeToolRequestEvent({ requestId: "q-3", sessionId: "sess-1" }));
     const other = relay(makeToolRequestEvent({ requestId: "q-2", sessionId: "sess-2" }));
     mine.catch(() => {});
+    second.catch(() => {});
     other.catch(() => {});
-    mockBroadcast.mockClear();
+    mockPublish.mockClear();
 
-    expect(cancelSessionRelays("sess-1", "turn ended")).toEqual(["q-1"]);
+    expect(cancelSessionRelays("sess-1", "turn ended")).toEqual(["q-1", "q-3"]);
 
     await expect(mine).rejects.toThrow(/cancelled: turn ended/);
+    await expect(second).rejects.toThrow(/cancelled: turn ended/);
     expect(getPendingCount()).toBe(1);
-    expect(mockBroadcast).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toEqual({
-      type: "q:event",
-      event: "tool:cancel",
-      data: { sessionId: "sess-1", requestId: "q-1" },
-    });
+    // Nothing was published but the two cancels, and nothing under sess-2's scope.
+    expect(mockPublish).toHaveBeenCalledTimes(2);
+    expect(published(mockPublish, toolRequests)).toEqual([
+      {
+        scope: { sessionId: "sess-1" },
+        event: { type: "cancel", sessionId: "sess-1", requestId: "q-1" },
+      },
+      {
+        scope: { sessionId: "sess-1" },
+        event: { type: "cancel", sessionId: "sess-1", requestId: "q-3" },
+      },
+    ]);
     // The other session's relay is untouched and still resolvable.
     expect(resolve("q-2", { ok: true })).toBe(true);
     await expect(other).resolves.toEqual({ ok: true });
@@ -268,25 +294,29 @@ describe("cancelSessionRelays", () => {
 
 describe("cancelRelay", () => {
   beforeEach(() => {
-    mockBroadcast.mockClear();
+    mockPublish.mockClear();
   });
   afterEach(() => {
     clearAll();
   });
 
-  it("rejects one pending relay and tells the renderer to drop its overlay", async () => {
+  it("rejects one pending relay and tells that chat's clients to drop its overlay", async () => {
     const asked = relay(makeToolRequestEvent({ requestId: "q-1", sessionId: "sess-1" }));
     asked.catch(() => {});
-    mockBroadcast.mockClear();
+    mockPublish.mockClear();
 
     expect(cancelRelay("q-1", "resolved elsewhere")).toBe(true);
     await expect(asked).rejects.toThrow(/cancelled: resolved elsewhere/);
     expect(getPendingCount()).toBe(0);
-    expect(JSON.parse(mockBroadcast.mock.calls[0][0] as string)).toEqual({
-      type: "q:event",
-      event: "tool:cancel",
-      data: { sessionId: "sess-1", requestId: "q-1" },
-    });
+    expect(mockPublish).toHaveBeenCalledTimes(1);
+    expect(published(mockPublish, toolRequests)).toEqual([
+      {
+        scope: { sessionId: "sess-1" },
+        event: { type: "cancel", sessionId: "sess-1", requestId: "q-1" },
+      },
+    ]);
+    // Already gone: nothing is cancelled, and nothing more is published.
     expect(cancelRelay("q-1", "again")).toBe(false);
+    expect(mockPublish).toHaveBeenCalledTimes(1);
   });
 });

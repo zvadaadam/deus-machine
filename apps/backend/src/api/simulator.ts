@@ -10,7 +10,7 @@ import {
   stopCloudSimulator,
 } from "../services/agent/cloud/driver";
 import * as simulator from "../services/simulator-context";
-import { broadcast } from "../services/ws.service";
+import { publish } from "../services/streams";
 import { handle } from "./registry";
 import { ConflictError, ValidationError } from "../lib/errors";
 
@@ -21,16 +21,14 @@ const execFileAsync = promisify(execFile);
  * panel that asked is waiting on an event, so the failure goes out as one.
  */
 function pushFailure(
-  event: "sim:streamFailed" | "sim:buildFailed",
+  type: "streamFailed" | "buildFailed",
   workspaceId: string,
   err: unknown
 ): void {
-  broadcast(
-    JSON.stringify({
-      type: "q:event",
-      event,
-      data: { workspaceId, error: err instanceof Error ? err.message : String(err) },
-    })
+  publish(
+    api.simulatorEvents,
+    { workspaceId },
+    { type, error: err instanceof Error ? err.message : String(err) }
   );
 }
 
@@ -59,10 +57,10 @@ export default [
     if (!capabilities.available) {
       throw new ValidationError(capabilities.unavailableReason ?? "Simulator is unavailable");
     }
-    // Not awaited: booting takes seconds. `sim:streamReady` says it worked.
+    // Not awaited: booting takes seconds. a `streamReady` event says it worked.
     simulator.startStream(workspaceId, udid, skipBootCheck).catch((err) => {
       console.error("[Simulator] startStream failed:", err);
-      pushFailure("sim:streamFailed", workspaceId, err);
+      pushFailure("streamFailed", workspaceId, err);
     });
   }),
   handle(api.simStop, ({ workspaceId }) => simulator.stopStream(workspaceId)),
@@ -88,10 +86,10 @@ export default [
     snapshot: await simulator.inspectorSnapshot(workspaceId),
   })),
   handle(api.simBuildAndRun, ({ workspaceId, workspacePath, scheme }) => {
-    // Not awaited: a build takes minutes. `sim:buildLog` carries its output,
-    // `sim:buildComplete` its result.
+    // Not awaited: a build takes minutes. `buildLog` events carry its output,
+    // `buildComplete` its result.
     simulator.buildAndRun(workspaceId, workspacePath, scheme).catch((err) => {
-      pushFailure("sim:buildFailed", workspaceId, err);
+      pushFailure("buildFailed", workspaceId, err);
     });
   }),
   handle(api.simLaunchApp, (app) => simctlApp("launch", app)),
@@ -101,7 +99,7 @@ export default [
   // ---- The cloud device on a workspace's sandbox ----
   handle(api.cloudSimulator, ({ workspaceId }) => getCloudSimulatorStatus(workspaceId)),
   // Start and stop wait only for the send: an unreachable sandbox refuses the
-  // request, and what the device then does arrives as `cloud:simulator` events.
+  // request, and what the device then does arrives as `cloudSimulatorEvents`.
   handle(api.cloudSimStart, ({ workspaceId, platform }) =>
     startCloudSimulator(workspaceId, platform)
   ),

@@ -83,12 +83,21 @@ describe("network faults", () => {
 
   it("requires the matching pong even when unrelated inbound traffic still arrives", async () => {
     const f = fixture();
+    const background = vi.fn();
+    f.client.listen("fileChanges", { workspacePath: "/w" }, background);
     await online(f);
     await vi.advanceTimersByTimeAsync(100);
     expect(f.socket.frames("ping")).toHaveLength(1);
     f.socket.message({ type: "pong", id: "another-probe" });
-    f.socket.message({ type: "q:event", event: "background", data: true });
+    f.socket.message({
+      type: "q:event",
+      id: f.socket.frames("q:subscribe")[0].id,
+      event: "fileChanges",
+      data: true,
+    });
     f.socket.message({ type: "ping" });
+    // The event was delivered, and still does not stand in for the probe's answer.
+    expect(background).toHaveBeenCalledExactlyOnceWith(true);
     await vi.advanceTimersByTimeAsync(50);
     expect(f.client.getState()).toBe("offline");
   });
@@ -191,19 +200,27 @@ describe("network faults", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("isolates malformed frames and failed observers from healthy consumers", async () => {
+  it("isolates malformed frames and failed listeners from healthy consumers", async () => {
     const f = fixture();
     await online(f);
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failures = vi.spyOn(console, "error").mockImplementation(() => {});
     const healthy = vi.fn();
-    f.client.onEvent(() => {
+    f.client.listen("sessionEvents", { sessionId: "a" }, () => {
       throw new Error("Broken consumer");
     });
-    f.client.onEvent(healthy);
+    f.client.listen("sessionEvents", { sessionId: "a" }, healthy);
+    // Both follow one stream and filter, so they share a subscription.
+    const [shared, ...others] = f.socket.frames("q:subscribe");
+    expect(others).toEqual([]);
     for (const data of ["not-json", "null", "[]", "42", '{"type":"unknown"}'])
       f.socket.emit("message", { data });
-    f.socket.message({ type: "q:event", event: "valid", data: 7 });
-    expect(healthy).toHaveBeenCalledExactlyOnceWith("valid", 7);
+    // One event from the host reaches both: the first failing stops nothing.
+    f.socket.message({ type: "q:event", id: shared.id, event: "sessionEvents", data: 7 });
+    expect(healthy).toHaveBeenCalledExactlyOnceWith(7);
+    // The same holds for an event published in the client.
+    f.client.publishLocal("sessionEvents", { sessionId: "a" }, 8);
+    expect(healthy).toHaveBeenLastCalledWith(8);
+    expect(failures).toHaveBeenCalledTimes(2);
     expect(f.client.isConnected()).toBe(true);
   });
 

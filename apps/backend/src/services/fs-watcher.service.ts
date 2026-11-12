@@ -2,21 +2,18 @@
  * File System Watcher Service — Backend
  *
  * Manages chokidar watchers for workspace directories.
- * File change events are broadcast to all WS clients as q:event frames.
+ * Changes go to the clients following that folder (the `fileChanges` stream).
  */
 
 import chokidar, { type FSWatcher } from "chokidar";
 import path from "node:path";
-import { broadcast } from "./ws.service";
+import { fileChanges, type FileChangeEvent } from "@shared/api/files";
+import { publish } from "./streams";
 
 // Active watchers keyed by workspace path
 const watchers = new Map<string, FSWatcher>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DEBOUNCE_MS = 500;
-
-function pushEvent(event: string, data: unknown): void {
-  broadcast(JSON.stringify({ type: "q:event", event, data }));
-}
 
 export async function watchWorkspace(workspacePath: string): Promise<void> {
   if (watchers.has(workspacePath)) return; // Already watching
@@ -43,21 +40,21 @@ export async function watchWorkspace(workspacePath: string): Promise<void> {
   });
 
   let pendingCount = 0;
-  let pendingType: string | null = null;
+  let pendingType: FileChangeEvent["change_type"] | null = null;
 
   const flushChanges = (): void => {
     if (pendingCount > 0) {
-      pushEvent("fs:changed", {
-        workspace_path: workspacePath,
-        change_type: pendingType ?? "mixed",
-        affected_count: pendingCount,
-      });
+      publish(
+        fileChanges,
+        { workspacePath },
+        { change_type: pendingType ?? "mixed", affected_count: pendingCount }
+      );
     }
     pendingCount = 0;
     pendingType = null;
   };
 
-  const onFileChange = (changeType: string): void => {
+  const onFileChange = (changeType: "add" | "change" | "unlink"): void => {
     pendingCount++;
     pendingType =
       pendingType === null ? changeType : pendingType === changeType ? changeType : "mixed";

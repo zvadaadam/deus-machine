@@ -1,7 +1,7 @@
 /**
  * Cloud environment progress — the Cursor-style setup story in the chat.
  *
- * Renders the ephemeral q:event "cloud:env" stream (agnt workspace.state
+ * Renders the ephemeral `cloudEnvironment` stream (agnt workspace.state
  * passthrough) as a COLLAPSED one-liner in the transcript, matching the
  * tool-call group pattern: the summary line is the live truth (active step
  * spinning while in flight, "Computer ready" when done, "Sandbox paused"

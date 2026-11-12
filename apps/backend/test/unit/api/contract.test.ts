@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { api, ops } from "@shared/api";
+import { api, ops, streams } from "@shared/api";
+import { isStream } from "@shared/api/stream";
 import { registry } from "../../../src/api";
 
 /**
@@ -9,8 +10,8 @@ import { registry } from "../../../src/api";
  * fails here instead of at runtime.
  */
 describe("the operation contract", () => {
-  it("names every operation once", () => {
-    const names = ops.map((op) => op.name);
+  it("names every operation and stream once: a subscription says one name for either", () => {
+    const names = [...ops, ...streams].map((declared) => declared.name);
     expect(names.filter((name, i) => names.indexOf(name) !== i)).toEqual([]);
   });
 
@@ -20,8 +21,13 @@ describe("the operation contract", () => {
     for (const op of ops) expect(registry.find(op.name)).toBe(op);
   });
 
-  it("exports nothing from the contract that is not an operation", () => {
-    expect(Object.keys(api)).toHaveLength(ops.length);
+  it("exports nothing from the contract that is not an operation or a stream", () => {
+    expect(Object.keys(api)).toHaveLength(ops.length + streams.length);
+  });
+
+  it("exports each stream under its own name", () => {
+    const exported = Object.entries(api).filter(([, declared]) => isStream(declared));
+    for (const [key, declared] of exported) expect(declared.name).toBe(key);
   });
 
   it("only lets reads be subscribed to", () => {

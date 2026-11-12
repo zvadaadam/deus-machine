@@ -1,8 +1,8 @@
 // src/shared/hooks/useWsToolRequest.ts
 //
-// Shared hook that listens for tool:request events arriving via the WebSocket
-// q:event channel. Dispatches to a handler callback and sends responses back
-// via q:tool_response.
+// Shared hook that follows what agents ask of this client (the `toolRequests`
+// stream, every chat's). Dispatches to a handler callback and sends responses
+// back via q:tool_response.
 //
 // Multiple hook instances (e.g. useAgentRpcHandler) may be mounted
 // simultaneously. A module-level Set prevents duplicate responses to
@@ -15,9 +15,10 @@
 //       .otherwise(() => {}); // not mine, skip
 //   });
 
-import { useEffect, useLayoutEffect, useRef } from "react";
-import { onEvent, sendToolResponse } from "@/platform/ws";
-import type { ToolRequestEventData } from "@shared/types/query-protocol";
+import { useLayoutEffect, useRef } from "react";
+import { api } from "@shared/api";
+import { sendToolResponse } from "@/platform/ws";
+import { useStream } from "./useStream";
 
 /**
  * Callback signature for WS tool request handlers.
@@ -37,7 +38,7 @@ export type WsToolRequestHandler = (
 ) => void;
 
 /**
- * Hook that listens for tool:request events via WebSocket and dispatches
+ * Hook that follows tool requests and dispatches each
  * to the provided handler. The handler decides which methods to claim.
  *
  * Responses are sent via q:tool_response back through the WS connection.
@@ -52,37 +53,29 @@ export function useWsToolRequest(handler: WsToolRequestHandler): void {
   // Using a module-level Set so it's shared across all instances within the same page.
   const handledRef = useRef(handledRequestIds);
 
-  useEffect(() => {
-    const unsubscribe = onEvent((event: string, data: unknown) => {
-      if (event !== "tool:request") return;
+  useStream(api.toolRequests, {}, (event) => {
+    if (event.type !== "request") return;
+    const { requestId, method, params } = event.request;
 
-      const payload = data as ToolRequestEventData;
-      if (!payload?.requestId || !payload?.method) return;
+    // Check if already handled by another hook instance
+    if (handledRef.current.has(requestId)) return;
 
-      const { requestId, method, params } = payload;
+    const respond = (result: unknown) => {
+      if (handledRef.current.has(requestId)) return; // guard double-response
+      if (!sendToolResponse(requestId, result)) return; // WS send failed — let other handlers try
+      handledRef.current.add(requestId);
+      scheduleCleanup(requestId);
+    };
 
-      // Check if already handled by another hook instance
+    const respondError = (error: string) => {
       if (handledRef.current.has(requestId)) return;
+      if (!sendToolResponse(requestId, undefined, error)) return;
+      handledRef.current.add(requestId);
+      scheduleCleanup(requestId);
+    };
 
-      const respond = (result: unknown) => {
-        if (handledRef.current.has(requestId)) return; // guard double-response
-        if (!sendToolResponse(requestId, result)) return; // WS send failed — let other handlers try
-        handledRef.current.add(requestId);
-        scheduleCleanup(requestId);
-      };
-
-      const respondError = (error: string) => {
-        if (handledRef.current.has(requestId)) return;
-        if (!sendToolResponse(requestId, undefined, error)) return;
-        handledRef.current.add(requestId);
-        scheduleCleanup(requestId);
-      };
-
-      handlerRef.current(method, requestId, params, respond, respondError);
-    });
-
-    return unsubscribe;
-  }, []);
+    handlerRef.current(method, requestId, params, respond, respondError);
+  });
 }
 
 // ---- Deduplication state ----

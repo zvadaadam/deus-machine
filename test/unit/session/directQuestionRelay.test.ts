@@ -13,7 +13,7 @@ const QUESTIONS = [
   { id: "notes", question: "Any notes?", multiSelect: true, options: [{ label: "Yes" }] },
 ];
 
-describe("toolRequestFromElicitation (agnt elicitation.requested → renderer tool:request)", () => {
+describe("toolRequestFromElicitation (agnt elicitation.requested → the renderer's tool request)", () => {
   it("maps the engine's questions onto the card's shape and rewrites the session id", () => {
     const asked = toolRequestFromElicitation(
       {

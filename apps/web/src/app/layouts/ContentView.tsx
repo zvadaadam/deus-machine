@@ -105,7 +105,7 @@ export function ContentView({
     }
   }, [workspace.kind, workspace.id]);
   const browserTarget = workspace.kind !== "cloud" ? workspace.id : lastLocalBrowser;
-  // The computer's host template: in memory, seeded once, live on cloud:preview.
+  // The computer's host template: in memory, seeded once, live on `cloudPreviewChanges`.
   const cloudPreviewTemplate = useCloudPreviewTemplate(
     workspace.kind === "cloud" ? workspace.id : null
   );
@@ -202,7 +202,7 @@ export function ContentView({
       >
         {cloudTerminalId && (
           // The REAL remote shell: pty frames ride the sidecar session
-          // channel and come back on the same pty-data/pty-exit events the
+          // channel and come back on the same `terminalOutput` events the
           // local terminal speaks — a separate panel instance so cloud ids
           // never mix into the frozen local panel below. Only ever a SERVING
           // workspace's id (see the freeze above), so the shell never spawns

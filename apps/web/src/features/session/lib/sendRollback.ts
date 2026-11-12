@@ -9,7 +9,7 @@
  *   The server ANSWERED (a rejection). It is authoritative, and it has already
  *   said so on the wire — `handleSendMessage` writes the session's status and
  *   calls `invalidate` BEFORE it throws, so the q:snapshot carrying the real
- *   status is written to the socket ahead of the `q:command_ack` that rejects
+ *   status is written to the socket ahead of the `q:mutate_result` that rejects
  *   us. By the time this runs, the cache already holds the truth. Restoring the
  *   pre-send snapshot over it is a straight overwrite of newer data with older
  *   — and `staleTime: Infinity` means nothing ever corrects it, so the sidebar

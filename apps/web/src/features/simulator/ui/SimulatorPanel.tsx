@@ -13,7 +13,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
-import { call, onEvent } from "@/platform/ws";
+import { call } from "@/platform/ws";
+import { useStream } from "@/shared/hooks/useStream";
 import { simulatorService } from "../api/simulator.service";
 
 import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
@@ -160,7 +161,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // previous visit. The MJPEG effect reacts to the non-null streamUrl from the
   // store and reconnects immediately — no IPC round-trip.
   //
-  // Stream recovery on app-restart now flows through the sim:streamReady event
+  // Stream recovery on app-restart now flows through the `streamReady` event
   // pushed by the backend on reconnect, not a polled probe.
   useEffect(() => {
     workspaceGenerationRef.current += 1;
@@ -223,24 +224,19 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     setInspectPrompt("");
   }, [workspaceId]);
 
-  // Listen for build log events streamed from backend via q:event.
-  // Filter to only this workspace so concurrent builds don't interleave.
+  // This workspace's build log, a line at a time. Followed while the panel
+  // is open, so a build's first lines are not lost to a late subscription.
+  const building = state.phase === "building";
   useEffect(() => {
-    if (state.phase !== "building") {
-      setBuildLogs([]);
-      return;
-    }
-    const cleanup = onEvent((event, data) => {
-      if (event !== "sim:buildLog") return;
-      const d = data as { workspaceId: string; line: string };
-      if (d.workspaceId !== workspaceId) return;
-      setBuildLogs((prev) => {
-        const next = [...prev, d.line];
-        return next.length > MAX_BUILD_LOG_LINES ? next.slice(-MAX_BUILD_LOG_LINES) : next;
-      });
+    if (!building) setBuildLogs([]);
+  }, [building]);
+  useStream(api.simulatorEvents, { workspaceId }, (event) => {
+    if (event.type !== "buildLog") return;
+    setBuildLogs((prev) => {
+      const next = [...prev, event.line];
+      return next.length > MAX_BUILD_LOG_LINES ? next.slice(-MAX_BUILD_LOG_LINES) : next;
     });
-    return cleanup;
-  }, [state.phase, workspaceId]);
+  });
 
   // Auto-scroll build log to bottom when new lines arrive
   useEffect(() => {
@@ -349,7 +345,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // Auto-reconnect to an already-booted simulator (app-restart recovery).
   //
   // The fast path is the store itself: when the backend is alive it pushes
-  // sim:streamReady, and the MJPEG effect reconnects from the store's stream URL.
+  // a `streamReady` event, and the MJPEG effect reconnects from the store's stream URL.
   //
   // This effect handles the slower path: backend was restarted (no sessions in
   // memory), but simctl still shows the simulator as "Booted". We re-establish

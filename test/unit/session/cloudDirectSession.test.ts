@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { SessionErrorEventSchema, SessionSnapshotEventSchema } from "@deus-hq/api";
 import { useCloudDirectSession } from "@/features/session/hooks/useCloudDirectSession";
-import { emitLocalEvent } from "@/platform/ws";
 import { getDirectSession } from "@/features/session/cloud/directSessionRegistry";
 import { hasParkedDirectQuestion } from "@/features/session/cloud/directQuestionState";
 import { RuntimeClient } from "@/platform/ws/runtime-client";
@@ -11,17 +10,20 @@ import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMe
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { PaginatedMessages } from "@shared/types/session";
-import { CloudSimulatorEventSchema } from "@shared/events";
+import { api } from "@shared/api";
+import type { ToolRequestEvent } from "@shared/api/sessions";
 import {
   cloudSimulatorActions,
   useCloudSimulatorStore,
 } from "@/features/simulator/cloud/cloudSimulatorStore";
 
 // Exercise the hook's actual frame routing; only React mounting and the socket
-// are replaced. The transcript fold, query cache and simulator store remain real.
-const { effects, setState } = vi.hoisted(() => ({
+// are replaced. The transcript fold, query cache, simulator store and the
+// runtime the lane publishes on remain real.
+const { effects, setState, selected } = vi.hoisted(() => ({
   effects: [] as Array<() => void | (() => void)>,
   setState: vi.fn(),
+  selected: {} as { runtime?: unknown },
 }));
 vi.mock("react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react")>()),
@@ -35,7 +37,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => queryClient,
 }));
 vi.mock("@/platform/ws", () => ({
-  emitLocalEvent: vi.fn(),
+  getRuntimeClient: () => selected.runtime,
   setToolResponseInterceptor: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
@@ -53,19 +55,51 @@ vi.mock("@/features/session/cloud/cloudSessionSocket", () => ({
 /** What every direct send names: AGNT refuses a turn without its harness, model and level. */
 const TURN = { agentHarness: "claude-code", model: "opus", thinkingLevel: "high" };
 
+const TOOLS = api.toolRequests.name;
+const SIMULATOR = api.cloudSimulatorEvents.name;
+const PREVIEW = api.cloudPreviewChanges.name;
+
+function createRuntime(name: string): RuntimeClient {
+  return new RuntimeClient(
+    { host: name, account: name, grant: name },
+    {
+      open: () => {
+        throw new Error("The q: transport is unused");
+      },
+    }
+  );
+}
+
+/**
+ * Follow everything the direct lane publishes on a runtime, every chat's and
+ * workspace's, the way the app's own listeners do. Calls are (stream, event),
+ * in the order they were published.
+ */
+function followAll(runtime: RuntimeClient) {
+  const events = vi.fn<(stream: string, event: unknown) => void>();
+  runtime.follow(api.toolRequests, {}, (event) => events(TOOLS, event));
+  runtime.follow(api.cloudSimulatorEvents, {}, (event) => events(SIMULATOR, event));
+  runtime.follow(api.cloudPreviewChanges, {}, (event) => events(PREVIEW, event));
+  return events;
+}
+
+let runtime: RuntimeClient;
+let published: ReturnType<typeof followAll>;
 let cleanup: void | (() => void);
 beforeEach(() => {
   vi.clearAllMocks();
   useCloudSimulatorStore.setState({ byWorkspace: {}, epochs: {} });
-  vi.mocked(emitLocalEvent).mockImplementation((event, raw) => {
-    if (event !== "cloud:simulator") return;
-    const frame = CloudSimulatorEventSchema.parse(raw);
-    if (frame.kind === "status")
-      cloudSimulatorActions.applyStatusEvent(frame.workspaceId, frame.data);
-    else if (frame.kind === "gone") cloudSimulatorActions.forget(frame.workspaceId);
+  runtime = createRuntime("host");
+  selected.runtime = runtime;
+  published = followAll(runtime);
+  // What the simulator store does with the device events it follows.
+  runtime.follow(api.cloudSimulatorEvents, {}, (event) => {
+    if (event.kind === "status")
+      cloudSimulatorActions.applyStatusEvent(event.workspaceId, event.data);
+    else if (event.kind === "gone") cloudSimulatorActions.forget(event.workspaceId);
   });
   effects.length = 0;
-  queryClient = new QueryClient();
+  queryClient = runtime.queryClient;
   vi.stubGlobal("requestAnimationFrame", () => 1);
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   useCloudDirectSession({
@@ -79,6 +113,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup?.();
   queryClient.clear();
+  runtime.dispose();
   vi.unstubAllGlobals();
 });
 
@@ -108,15 +143,10 @@ function snapshot(status: "ready" | "stopped") {
 describe("direct cloud session published frames", () => {
   it("isolates colliding sessions and disposes a runtime's channel, questions and late frames", () => {
     cleanup?.();
-    const open = () => {
-      throw new Error("The q: transport is unused");
-    };
-    const a = new RuntimeClient({ host: "A", account: "A", grant: "A" }, { open });
-    const b = new RuntimeClient({ host: "B", account: "B", grant: "B" }, { open });
-    const eventsA = vi.fn(),
-      eventsB = vi.fn();
-    a.onEvent(eventsA);
-    b.onEvent(eventsB);
+    const a = createRuntime("A"),
+      b = createRuntime("B");
+    const eventsA = followAll(a),
+      eventsB = followAll(b);
     const mount = (runtime: RuntimeClient) => {
       queryClient = runtime.queryClient;
       useCloudDirectSession({
@@ -142,8 +172,10 @@ describe("direct cloud session published frames", () => {
       });
       expect(hasParkedDirectQuestion("same", a.queryClient)).toBe(true);
       expect(hasParkedDirectQuestion("same", b.queryClient)).toBe(false);
-      expect(eventsA).toHaveBeenCalledWith("tool:request", expect.anything());
+      expect(eventsA).toHaveBeenCalledWith(TOOLS, { type: "request", request: expect.anything() });
       expect(eventsB).not.toHaveBeenCalled();
+      // Nor does it reach the runtime the app has selected, which is neither.
+      expect(published).not.toHaveBeenCalled();
       // A's active turn must not block B's independent session.
       expect(() =>
         getDirectSession("same", b.queryClient)!.sendMessage("For B", "B-turn", TURN)
@@ -151,7 +183,9 @@ describe("direct cloud session published frames", () => {
       a.dispose();
       expect(getDirectSession("same", a.queryClient)).toBeUndefined();
       expect(hasParkedDirectQuestion("same", a.queryClient)).toBe(false);
+      eventsA.mockClear();
       first.frame({ type: "workspace.state", data: { sandboxUrlTemplate: "https://late-A" } });
+      expect(eventsA).not.toHaveBeenCalled();
       expect(eventsB).not.toHaveBeenCalled();
       expect(a.queryClient.getQueryCache().getAll()).toHaveLength(0);
       expect(getDirectSession("same", b.queryClient)).toBeDefined();
@@ -175,7 +209,7 @@ describe("direct cloud session published frames", () => {
     onFrame({ type: "turn.started", turnId: "turn-current", timestamp: 1 });
     onFrame({ ...question, requestId: "answered-on-phone" });
     expect(hasParkedDirectQuestion("deus-direct-1", queryClient)).toBe(true);
-    vi.mocked(emitLocalEvent).mockClear();
+    published.mockClear();
 
     // The phone answered while this socket was down, and the agent asked again.
     onFrame(
@@ -227,16 +261,60 @@ describe("direct cloud session published frames", () => {
         }),
       })
     );
-    const shown = vi
-      .mocked(emitLocalEvent)
-      .mock.calls.filter(([event]) => event === "tool:request")
-      .map(([, data]) => (data as { requestId: string }).requestId);
+    const shown = published.mock.calls
+      .filter(([stream]) => stream === TOOLS)
+      .map(([, event]) => event as ToolRequestEvent)
+      .flatMap((event) => (event.type === "request" ? [event.request.requestId] : []));
     expect(shown).toEqual([expect.stringMatching(/^asked-while-away#/)]);
-    expect(emitLocalEvent).toHaveBeenCalledWith("tool:cancel", {
+    expect(published).toHaveBeenCalledWith(TOOLS, {
+      type: "cancel",
       sessionId: "deus-direct-1",
       requestId: expect.stringMatching(/^answered-on-phone#/),
     });
     expect(hasParkedDirectQuestion("deus-direct-1", queryClient)).toBe(true);
+  });
+
+  it("publishes under its own chat, so a listener narrowed to another one receives nothing", () => {
+    const mine = vi.fn(),
+      another = vi.fn();
+    runtime.follow(api.toolRequests, { sessionId: "deus-direct-1" }, mine);
+    runtime.follow(api.cloudSimulatorEvents, { workspaceId: "deus-direct-1" }, mine);
+    runtime.follow(api.cloudPreviewChanges, { workspaceId: "deus-direct-1" }, mine);
+    runtime.follow(api.toolRequests, { sessionId: "another-chat" }, another);
+    runtime.follow(api.cloudSimulatorEvents, { workspaceId: "another-chat" }, another);
+    runtime.follow(api.cloudPreviewChanges, { workspaceId: "another-chat" }, another);
+
+    // A device status and a preview address, then a question.
+    onFrame(snapshot("ready"));
+    onFrame({
+      type: "elicitation.requested",
+      sessionId: "agnt-direct-1",
+      turnId: "turn-current",
+      requestId: "question",
+      mode: "question",
+      questions: [{ id: "q1", question: "Ship it?" }],
+    });
+
+    expect(mine.mock.calls.map(([event]) => event)).toEqual([
+      expect.objectContaining({ template: "https://port-{{port}}.sandbox.test" }),
+      expect.objectContaining({ kind: "status" }),
+      expect.objectContaining({ type: "request" }),
+    ]);
+    expect(another).not.toHaveBeenCalled();
+  });
+
+  it("publishes a device frame only when it is well formed", () => {
+    onFrame({ type: "simulator.screenshot", platform: "ios", format: "png" });
+    onFrame({ type: "simulator.action_result", platform: "ios", verb: "press", success: "yes" });
+    expect(published).not.toHaveBeenCalled();
+
+    onFrame({ type: "simulator.screenshot", platform: "ios", imageBase64: "AAAA", format: "png" });
+    expect(published).toHaveBeenCalledExactlyOnceWith(SIMULATOR, {
+      workspaceId: "deus-direct-1",
+      sessionId: "deus-direct-1",
+      kind: "screenshot",
+      data: { platform: "ios", imageBase64: "AAAA", format: "png" },
+    });
   });
 
   it("removes only the rejected optimistic send and leaves unrelated errors alone", () => {
@@ -387,7 +465,7 @@ describe("direct cloud session published frames", () => {
 
   it("restores the device and refreshes it when reconnect reports it stopped", () => {
     onFrame(snapshot("ready"));
-    expect(emitLocalEvent).toHaveBeenCalledWith("cloud:simulator", {
+    expect(published).toHaveBeenCalledWith(SIMULATOR, {
       workspaceId: "deus-direct-1",
       sessionId: "deus-direct-1",
       kind: "status",
@@ -396,15 +474,15 @@ describe("direct cloud session published frames", () => {
         streamUrl: "https://stream.expo.dev/device",
       }),
     });
-    expect(emitLocalEvent).toHaveBeenCalledWith("cloud:preview", {
+    expect(published).toHaveBeenCalledWith(PREVIEW, {
       workspaceId: "deus-direct-1",
       sessionId: "deus-direct-1",
       template: "https://port-{{port}}.sandbox.test",
     });
 
-    vi.mocked(emitLocalEvent).mockClear();
+    published.mockClear();
     onFrame(snapshot("stopped"));
-    expect(emitLocalEvent).toHaveBeenCalledWith("cloud:simulator", {
+    expect(published).toHaveBeenCalledWith(SIMULATOR, {
       workspaceId: "deus-direct-1",
       sessionId: "deus-direct-1",
       kind: "status",
@@ -426,7 +504,7 @@ describe("direct cloud session published frames", () => {
         latestSimulatorStatus: android,
         latestSimulatorStatuses: reverse ? [android, ios] : [ios, android],
       });
-      expect(emitLocalEvent).toHaveBeenLastCalledWith("cloud:simulator", {
+      expect(published).toHaveBeenLastCalledWith(SIMULATOR, {
         workspaceId: "deus-direct-1",
         sessionId: "deus-direct-1",
         kind: "status",
@@ -442,15 +520,15 @@ describe("direct cloud session published frames", () => {
       latestSimulatorStatus: undefined,
       latestSimulatorStatuses: [frame.latestSimulatorStatus],
     });
-    expect(emitLocalEvent).toHaveBeenLastCalledWith(
-      "cloud:simulator",
+    expect(published).toHaveBeenLastCalledWith(
+      SIMULATOR,
       expect.objectContaining({
         kind: "status",
         data: expect.objectContaining({ status: "ready" }),
       })
     );
     onFrame({ ...frame, latestSimulatorStatuses: [] });
-    expect(emitLocalEvent).toHaveBeenLastCalledWith("cloud:simulator", {
+    expect(published).toHaveBeenLastCalledWith(SIMULATOR, {
       workspaceId: "deus-direct-1",
       sessionId: "deus-direct-1",
       kind: "gone",
@@ -461,10 +539,10 @@ describe("direct cloud session published frames", () => {
   it("keeps the primary command busy across unrelated transitions and replays until a fresh answer", () => {
     onFrame(snapshot("ready"));
     cloudSimulatorActions.setBusy("deus-direct-1", "stopping");
-    vi.mocked(emitLocalEvent).mockClear();
+    published.mockClear();
     onFrame({ ...snapshot("stopped").latestSimulatorStatus, platform: "android" });
     onFrame(snapshot("ready").latestSimulatorStatus!);
-    expect(emitLocalEvent).not.toHaveBeenCalled();
+    expect(published).not.toHaveBeenCalled();
     expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"]).toMatchObject({
       platform: "ios",
       status: "ready",
@@ -480,8 +558,8 @@ describe("direct cloud session published frames", () => {
       ...snapshot("stopped"),
       latestSimulatorStatus: { ...snapshot("stopped").latestSimulatorStatus, platform: "android" },
     });
-    expect(emitLocalEvent).toHaveBeenLastCalledWith(
-      "cloud:simulator",
+    expect(published).toHaveBeenLastCalledWith(
+      SIMULATOR,
       expect.objectContaining({
         kind: "status",
         data: expect.objectContaining({ platform: "ios", status: "ready" }),
@@ -520,16 +598,14 @@ describe("direct cloud session published frames", () => {
   it("ignores a malformed complete mirror without clearing or changing the device", () => {
     const frame = snapshot("ready");
     onFrame(frame);
-    vi.mocked(emitLocalEvent).mockClear();
+    published.mockClear();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       onFrame({
         ...frame,
         latestSimulatorStatuses: [{ ...frame.latestSimulatorStatus, status: "stopped" }, null],
       });
-      expect(
-        vi.mocked(emitLocalEvent).mock.calls.filter(([kind]) => kind === "cloud:simulator")
-      ).toEqual([]);
+      expect(published.mock.calls.filter(([stream]) => stream === SIMULATOR)).toEqual([]);
       onFrame({ ...snapshot("stopped").latestSimulatorStatus, platform: "android" });
       expect(useCloudSimulatorStore.getState().byWorkspace["deus-direct-1"]).toMatchObject({
         platform: "ios",

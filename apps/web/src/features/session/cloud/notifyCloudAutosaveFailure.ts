@@ -1,16 +1,8 @@
-import { TurnEndedEventSchema } from "@deus-hq/api";
 import { toast } from "sonner";
+import type { CloudSaveFailure } from "@shared/cloud-autosave";
 
-/** Live turn failures only; reconnect snapshots must not replay notifications. */
-export function notifyCloudAutosaveFailure(event: unknown): void {
-  const parsed = TurnEndedEventSchema.safeParse(event);
-  if (!parsed.success) return;
-  const { gitSync, sessionId, turnId } = parsed.data;
-  const error =
-    gitSync?.error ||
-    (gitSync?.conflict ? "Git push hit a conflict with the remote repository." : undefined);
-  if (!error) return;
-
+/** Warn that a cloud turn's work was not saved. One toast per turn, however often it is told. */
+export function notifyCloudAutosaveFailure({ sessionId, turnId, error }: CloudSaveFailure): void {
   toast.warning("Cloud autosave failed", {
     description: error,
     id: `cloud-autosave-${sessionId}-${turnId}`,

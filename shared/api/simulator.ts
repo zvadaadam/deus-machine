@@ -1,7 +1,11 @@
 /** Simulators: the local iOS Simulator and the cloud device attached to a workspace. */
 
 import { z } from "zod";
-import { CloudSimulatorPlatformSchema, type CloudSimulatorStatus } from "../events";
+import {
+  CloudSimulatorPlatformSchema,
+  type CloudSimulatorEvent,
+  type CloudSimulatorStatus,
+} from "../events";
 import type {
   CloudSimulatorExecResult,
   InspectorSnapshot,
@@ -9,6 +13,7 @@ import type {
   SimulatorInfo,
 } from "../types/simulator";
 import { out, read, write } from "./op";
+import { stream } from "./stream";
 
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
 /** An app on the simulator the workspace is streaming. */
@@ -40,7 +45,7 @@ export const simHasXcodeProject = read({
 
 /**
  * Boot a simulator and stream its screen into the workspace. Answers at once;
- * the stream's address arrives as `sim:streamReady`, a failure as `sim:streamFailed`.
+ * the stream's address arrives as a `streamReady` event on `simulatorEvents`, a failure as `streamFailed`.
  */
 export const simStart = write({
   name: "sim:start",
@@ -112,8 +117,8 @@ export const simInspectSnapshot = read({
 
 /**
  * Build the folder's Xcode project and run it on the streaming simulator.
- * Answers at once; the build's output arrives as `sim:buildLog`, its result as
- * `sim:buildComplete` or `sim:buildFailed`.
+ * Answers at once; the build's output arrives as `buildLog` events on `simulatorEvents`, its result as
+ * `buildComplete` or `buildFailed`.
  */
 export const simBuildAndRun = write({
   name: "sim:buildAndRun",
@@ -154,7 +159,7 @@ export const cloudSimulator = read({
 
 /**
  * Ask the sandbox to boot a device. The answer only says the sandbox was
- * reached; the device's progress arrives as `cloud:simulator` status events.
+ * reached; the device's progress arrives as `cloudSimulatorEvents` status events.
  */
 export const cloudSimStart = write({
   name: "cloudSim:start",
@@ -172,10 +177,31 @@ export const cloudSimStop = write({
 /**
  * Do one thing on the cloud device (`press`, `fill`, `home`, `screenshot`, …).
  * Any verb counts as activity for the platform's idle stop. A screenshot's
- * image arrives as a `cloud:simulator` event, not in the answer.
+ * image arrives as a `cloudSimulatorEvents` event, not in the answer.
  */
 export const cloudSimExec = write({
   name: "cloudSimExec",
   input: cloudDevice.extend({ verb: z.string().min(1), args: z.array(z.string()).optional() }),
   output: out<CloudSimulatorExecResult>(),
+});
+
+export type SimulatorEvent =
+  | { type: "streamReady"; url: string; port: number; hidAvailable: boolean }
+  | { type: "streamFailed"; error: string }
+  | { type: "buildLog"; line: string }
+  | { type: "buildComplete"; bundleId: string; appName: string; appPath: string }
+  | { type: "buildFailed"; error: string };
+
+/** A workspace's local simulator: its stream starting and stopping, and a build's progress. */
+export const simulatorEvents = stream({
+  name: "simulatorEvents",
+  scope: z.object({ workspaceId: z.string() }),
+  event: out<SimulatorEvent>(),
+});
+
+/** A workspace's cloud device: its status, screenshots and the results of actions on it. */
+export const cloudSimulatorEvents = stream({
+  name: "cloudSimulatorEvents",
+  scope: z.object({ workspaceId: z.string() }),
+  event: out<CloudSimulatorEvent>(),
 });

@@ -7,10 +7,12 @@ import type {
   HarnessCliProgress,
 } from "@zvada/agent-server/protocol";
 
-const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
-vi.mock("../../../src/services/ws.service", () => ({ broadcast }));
+const mockPublish = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 import { LocalAgents } from "../../../src/services/agent/local-agents";
+import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
+import { published } from "../../helpers";
 
 const browser = { id: "claudeai", kind: "browser", label: "Claude", credential: "subscription" };
 const signedOut: HarnessAuth = { harness: "claude-code", state: "signed_out", methods: [browser] };
@@ -78,10 +80,7 @@ function engine(auth: HarnessAuth) {
   };
 }
 
-const told = () =>
-  broadcast.mock.calls.map(([frame]) => JSON.parse(frame as string) as Record<string, unknown>);
-
-beforeEach(() => broadcast.mockClear());
+beforeEach(() => mockPublish.mockClear());
 
 describe("LocalAgents", () => {
   it("asks each harness's CLI for its models, for the folder a turn would run in", async () => {
@@ -119,31 +118,31 @@ describe("LocalAgents", () => {
     await expect(logins.complete("login-1", "late")).rejects.toThrow("no longer under way");
   });
 
-  it("tells every window when a login changes, a sign-in starts, and a sign-in lost the engine", async () => {
+  it("tells every client following logins when a login changes, a sign-in starts, and a sign-in lost the engine", async () => {
     const { logins, settle, tellUpdate } = engine(signedOut);
     tellUpdate({ auth: signedIn, login: { loginId: "other", outcome: "succeeded" } });
     await logins.signIn("claude-code", "claudeai");
     settle().reject(new LoginError({ loginId: "login-1", outcome: "disconnected" }));
-    await vi.waitFor(() => expect(told()).toHaveLength(3));
-    expect(told()).toEqual([
+    await vi.waitFor(() => expect(published(mockPublish, agentAuthChanges)).toHaveLength(3));
+    // The stream has no scope to narrow by: whoever follows it hears every login.
+    expect(published(mockPublish, agentAuthChanges)).toEqual([
       {
-        type: "q:event",
-        event: "agent:auth",
-        data: { auth: signedIn, login: { loginId: "other", outcome: "succeeded" } },
+        scope: {},
+        event: { auth: signedIn, login: { loginId: "other", outcome: "succeeded" } },
       },
       {
-        type: "q:event",
-        event: "agent:auth",
-        data: {
+        scope: {},
+        event: {
           started: expect.objectContaining({ loginId: "login-1", url: "https://claude.ai/oauth" }),
         },
       },
       {
-        type: "q:event",
-        event: "agent:auth",
-        data: { login: { loginId: "login-1", outcome: "disconnected" } },
+        scope: {},
+        event: { login: { loginId: "login-1", outcome: "disconnected" } },
       },
     ]);
+    // Nothing went out on any other stream.
+    expect(mockPublish).toHaveBeenCalledTimes(3);
   });
 
   it("drops an ended sign-in before the windows read the status again", async () => {
@@ -168,7 +167,9 @@ describe("LocalAgents", () => {
       totalBytes: 4,
     };
     tellProgress(progress);
-    expect(told()).toEqual([{ type: "q:event", event: "agent:cli", data: progress }]);
+    // To the clients following installs, and not as a login change.
+    expect(published(mockPublish, agentCliProgress)).toEqual([{ scope: {}, event: progress }]);
+    expect(mockPublish).toHaveBeenCalledTimes(1);
   });
 
   it("signs in with a key without reading the status first", async () => {

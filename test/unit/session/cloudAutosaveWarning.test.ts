@@ -2,7 +2,6 @@ import { QueryClient } from "@tanstack/react-query";
 import { SessionSnapshotEventSchema } from "@deus-hq/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
-import { createStreamCursor } from "@/features/session/lib/agentEventFold";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { Session } from "@shared/types/session";
 
@@ -35,7 +34,6 @@ beforeEach(() => {
       queryClient,
       activeSessionId: "s",
       folds: new Map(),
-      cursor: createStreamCursor(),
       scheduleFlush: () => {},
       requestRefetch: () => {},
     },

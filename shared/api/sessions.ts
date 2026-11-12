@@ -4,6 +4,11 @@ import { z } from "zod";
 import { AgentHarnessSchema } from "../enums";
 import type { PaginatedMessages, Session } from "../types/session";
 import { live, out, read, write } from "./op";
+import { resumableStream, stream } from "./stream";
+import type { CloudSaveFailure } from "../cloud-autosave";
+import type { AgentConversationSnapshot } from "../cloud-session-snapshot";
+import type { DecodedWireEventEnvelope } from "../protocol-types";
+import type { ToolRequestEventData } from "../types/query-protocol";
 
 const sessionId = z.object({ sessionId: z.string().min(1) });
 const workspaceId = z.object({ workspaceId: z.string().min(1) });
@@ -81,4 +86,48 @@ export const stopSession = write({
   name: "stopSession",
   input: sessionId,
   output: out<{ unconfirmed: boolean }>(),
+});
+
+// ---- Streams ----
+
+export type SessionEvent =
+  /**
+   * One agent event, as the engine sent it. A token delta is delivered but not
+   * kept: the part's next event restates what it streamed.
+   */
+  | { type: "event"; envelope: DecodedWireEventEnvelope }
+  /** The whole conversation restated (a cloud chat restored after a reconnect). */
+  | { type: "snapshot"; snapshot: AgentConversationSnapshot };
+
+/**
+ * A chat's agent events, in order. A client that was away is sent what it
+ * missed, or told to read the transcript again when that is no longer held.
+ */
+export const sessionEvents = resumableStream({
+  name: "sessionEvents",
+  scope: sessionId,
+  event: out<SessionEvent>(),
+});
+
+/**
+ * A cloud chat's turn ended but its work did not reach the branch. Every
+ * client hears it, whichever chats it has open: the warning is about the
+ * person's work, not about what is on screen.
+ */
+export const cloudSaveFailures = stream({
+  name: "cloudSaveFailures",
+  event: out<CloudSaveFailure>(),
+});
+
+export type ToolRequestEvent =
+  /** An agent asks a client to do or answer something (approve a plan, show a diff). */
+  | { type: "request"; request: ToolRequestEventData }
+  /** The agent no longer waits for that answer: drop the prompt. */
+  | { type: "cancel"; sessionId: string; requestId: string };
+
+/** What a chat's agent is asking of the people and clients connected to it. */
+export const toolRequests = stream({
+  name: "toolRequests",
+  scope: sessionId,
+  event: out<ToolRequestEvent>(),
 });

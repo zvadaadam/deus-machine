@@ -7,6 +7,7 @@ import type { BranchSummary, PRSummary } from "../types/github";
 import type { RecentProject } from "../types/onboarding";
 import type { InspectedRepository, Repository } from "../types/repository";
 import { out, read, write } from "./op";
+import { stream } from "./stream";
 
 const repoId = z.object({ repoId: z.string().min(1) });
 const rootPath = z.object({ root_path: z.string().min(1) });
@@ -99,4 +100,11 @@ export const gitInit = write({
     }),
   /** `githubUrl` is null when no GitHub repository was created. */
   output: out<{ path: string; githubUrl: string | null }>(),
+});
+
+/** Git's own progress lines while a repository is cloned or a new project is created. */
+export const gitProgress = stream({
+  name: "gitProgress",
+  scope: z.object({ operation: z.enum(["clone", "init"]) }),
+  event: out<{ line: string }>(),
 });

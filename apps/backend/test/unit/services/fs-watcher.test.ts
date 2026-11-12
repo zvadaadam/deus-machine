@@ -6,15 +6,13 @@ import path from "node:path";
 // Mocks
 // ============================================================================
 
-const { mockBroadcast, mockWatcherOn, mockWatcherClose } = vi.hoisted(() => ({
-  mockBroadcast: vi.fn(),
+const { mockPublish, mockWatcherOn, mockWatcherClose } = vi.hoisted(() => ({
+  mockPublish: vi.fn(),
   mockWatcherOn: vi.fn().mockReturnThis(), // chainable .on()
   mockWatcherClose: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../../src/services/ws.service", () => ({
-  broadcast: mockBroadcast,
-}));
+vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 vi.mock("chokidar", () => ({
   default: {
@@ -35,15 +33,30 @@ import {
   unwatchWorkspace,
   destroyAllWatchers,
 } from "../../../src/services/fs-watcher.service";
+import { fileChanges } from "@shared/api/files";
+import { published } from "../../helpers";
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/** Extract the handler registered for a chokidar event (e.g. "change", "add") */
-function getChokidarHandler(eventName: string): ((...args: unknown[]) => void) | undefined {
-  const call = mockWatcherOn.mock.calls.find((c: unknown[]) => c[0] === eventName);
+/**
+ * Extract the handler registered for a chokidar event (e.g. "change", "add").
+ * `watcher` picks which watched folder's handler, in the order they were watched.
+ */
+function getChokidarHandler(
+  eventName: string,
+  watcher = 0
+): ((...args: unknown[]) => void) | undefined {
+  const call = mockWatcherOn.mock.calls.filter((c: unknown[]) => c[0] === eventName)[watcher];
   return call?.[1] as ((...args: unknown[]) => void) | undefined;
+}
+
+/** What went to the clients following a folder, and that nothing went anywhere else. */
+function changes() {
+  const sent = published(mockPublish, fileChanges);
+  expect(sent).toHaveLength(mockPublish.mock.calls.length);
+  return sent;
 }
 
 // ============================================================================
@@ -166,7 +179,7 @@ describe("fs-watcher.service", () => {
     });
   });
 
-  it("broadcasts real recipe edits inside a .deus workspace while ignoring private and generated files", async () => {
+  it("publishes real recipe edits inside a .deus workspace to that folder's clients while ignoring private and generated files", async () => {
     vi.useRealTimers();
     const realChokidar = await vi.importActual<typeof import("chokidar")>("chokidar");
     vi.mocked(chokidar.watch).mockImplementationOnce(realChokidar.watch);
@@ -200,16 +213,10 @@ describe("fs-watcher.service", () => {
       });
 
       await Promise.all([recipePath, ...ignoredFiles].map((file) => writeFile(file, "changed\n")));
-      await vi.waitFor(() => expect(mockBroadcast).toHaveBeenCalledOnce(), { timeout: 3000 });
-      expect(JSON.parse(mockBroadcast.mock.calls[0][0])).toEqual({
-        type: "q:event",
-        event: "fs:changed",
-        data: {
-          workspace_path: workspacePath,
-          change_type: "change",
-          affected_count: 1,
-        },
-      });
+      await vi.waitFor(() => expect(mockPublish).toHaveBeenCalledOnce(), { timeout: 3000 });
+      expect(changes()).toEqual([
+        { scope: { workspacePath }, event: { change_type: "change", affected_count: 1 } },
+      ]);
     } finally {
       await unwatchWorkspace(workspacePath);
       await rm(fixture, { recursive: true, force: true });
@@ -217,11 +224,11 @@ describe("fs-watcher.service", () => {
   });
 
   // --------------------------------------------------------------------------
-  // Event debouncing + broadcast
+  // Event debouncing + publishing to the folder's clients
   // --------------------------------------------------------------------------
 
   describe("file change events", () => {
-    it("debounces rapid changes into a single broadcast", async () => {
+    it("debounces rapid changes into a single event for the clients following that folder", async () => {
       const workspacePath = "/tmp/workspace";
       await watchWorkspace(workspacePath);
 
@@ -234,23 +241,48 @@ describe("fs-watcher.service", () => {
       onFileChange("src/d.ts");
       onFileChange("src/e.ts");
 
-      // Not broadcast yet — debounce timer hasn't fired
-      expect(mockBroadcast).not.toHaveBeenCalled();
+      // Not published yet — debounce timer hasn't fired
+      expect(mockPublish).not.toHaveBeenCalled();
 
       // Advance past the 500ms debounce
       vi.advanceTimersByTime(500);
 
-      expect(mockBroadcast).toHaveBeenCalledOnce();
-      const frame = JSON.parse(mockBroadcast.mock.calls[0][0]);
-      expect(frame).toEqual({
-        type: "q:event",
-        event: "fs:changed",
-        data: {
-          workspace_path: workspacePath,
-          change_type: "change",
-          affected_count: 5,
+      // The folder is the scope (who receives it), no longer a field of the event.
+      expect(changes()).toEqual([
+        { scope: { workspacePath }, event: { change_type: "change", affected_count: 5 } },
+      ]);
+    });
+
+    it("publishes each folder's changes under its own scope, so another folder's clients hear nothing", async () => {
+      await watchWorkspace("/tmp/workspace-a");
+      await watchWorkspace("/tmp/workspace-b");
+      const changeInA = getChokidarHandler("change", 0)!;
+      const addInB = getChokidarHandler("add", 1)!;
+
+      changeInA("src/a.ts");
+      vi.advanceTimersByTime(500);
+      expect(changes()).toEqual([
+        {
+          scope: { workspacePath: "/tmp/workspace-a" },
+          event: { change_type: "change", affected_count: 1 },
         },
-      });
+      ]);
+
+      // Both folders change in the same burst: one event each, counted apart.
+      changeInA("src/a.ts");
+      addInB("src/b.ts");
+      addInB("src/c.ts");
+      vi.advanceTimersByTime(500);
+      expect(changes().slice(1)).toEqual([
+        {
+          scope: { workspacePath: "/tmp/workspace-a" },
+          event: { change_type: "change", affected_count: 1 },
+        },
+        {
+          scope: { workspacePath: "/tmp/workspace-b" },
+          event: { change_type: "add", affected_count: 2 },
+        },
+      ]);
     });
 
     it("reports mixed change_type when different event types fire together", async () => {
@@ -267,9 +299,9 @@ describe("fs-watcher.service", () => {
 
       vi.advanceTimersByTime(500);
 
-      const frame = JSON.parse(mockBroadcast.mock.calls[0][0]);
-      expect(frame.data.change_type).toBe("mixed");
-      expect(frame.data.affected_count).toBe(3);
+      expect(changes()).toEqual([
+        { scope: { workspacePath }, event: { change_type: "mixed", affected_count: 3 } },
+      ]);
     });
 
     it("resets count after flushing", async () => {
@@ -282,24 +314,22 @@ describe("fs-watcher.service", () => {
       onChange("b.ts");
       vi.advanceTimersByTime(500);
 
-      expect(mockBroadcast).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(mockBroadcast.mock.calls[0][0]).data.affected_count).toBe(2);
+      expect(changes().map(({ event }) => event.affected_count)).toEqual([2]);
 
       // Second batch
       onChange("c.ts");
       vi.advanceTimersByTime(500);
 
-      expect(mockBroadcast).toHaveBeenCalledTimes(2);
-      expect(JSON.parse(mockBroadcast.mock.calls[1][0]).data.affected_count).toBe(1);
+      expect(changes().map(({ event }) => event.affected_count)).toEqual([2, 1]);
     });
 
-    it("does not broadcast if no changes occurred", async () => {
+    it("publishes nothing if no changes occurred", async () => {
       await watchWorkspace("/tmp/workspace");
 
       // Just advance time without any file changes
       vi.advanceTimersByTime(5000);
 
-      expect(mockBroadcast).not.toHaveBeenCalled();
+      expect(mockPublish).not.toHaveBeenCalled();
     });
   });
 
@@ -328,9 +358,9 @@ describe("fs-watcher.service", () => {
 
       await unwatchWorkspace("/tmp/workspace");
 
-      // Advance past debounce — should NOT broadcast since we unwatched
+      // Advance past debounce — should NOT publish since we unwatched
       vi.advanceTimersByTime(500);
-      expect(mockBroadcast).not.toHaveBeenCalled();
+      expect(mockPublish).not.toHaveBeenCalled();
     });
 
     it("no-ops for paths that are not being watched", async () => {

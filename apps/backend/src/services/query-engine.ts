@@ -94,7 +94,8 @@ const subs = new Map<string, Map<string, Sub>>();
 /**
  * `messages` is subscribed to as a stream of inserts, not as snapshots: the
  * client reads its page once and then receives rows written after this seq.
- * Key: `${connectionId}:${subId}`.
+ * The acknowledgment and each delta tell it where it stands, so a client that
+ * reconnects resumes from there. Key: `${connectionId}:${subId}`.
  */
 const messageCursors = new Map<string, number>();
 
@@ -199,7 +200,13 @@ function handleSubscribe(connectionId: string, { id, name, params }: Call, msg: 
       } catch {
         // An unreadable session is followed from its beginning.
       }
-      messageCursors.set(`${connectionId}:${id}`, cursor);
+      // A returning client names the last row it received, and gets the rows
+      // written since. (Never past the newest row: a later one would be skipped.)
+      const after = typeof msg.after === "number" ? Math.min(msg.after, cursor) : undefined;
+      messageCursors.set(`${connectionId}:${id}`, after ?? cursor);
+      sendFrame(connectionId, { type: "q:snapshot", id, data, cursor: after ?? cursor });
+      if (after !== undefined) pushMessageDelta(connectionId, id, sessionId, new Map());
+      return;
     }
     sendFrame(connectionId, { type: "q:snapshot", id, data });
   } catch (error) {

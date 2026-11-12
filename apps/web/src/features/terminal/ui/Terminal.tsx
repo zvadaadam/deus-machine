@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
-import { call, onEvent } from "@/platform/ws";
+import { call, follow } from "@/platform/ws";
 import "@xterm/xterm/css/xterm.css";
 import "./Terminal.css";
 
@@ -189,9 +189,22 @@ export function Terminal({
     // Spawn PTY — cloud terminals ride the sandbox session channel; the
     // backend picks the shell there, so command/cwd only matter locally.
     const shell = navigator.platform?.startsWith("Win") ? "powershell.exe" : "/bin/zsh";
+    let stopOutput = () => {};
     const startPty = () => {
       ready = false;
       const spawnId = ptyId;
+      // Followed before the shell is asked for, so its first output is not missed.
+      stopOutput();
+      stopOutput = follow(api.terminalOutput, { id: spawnId }, (output) => {
+        if (disposed) return;
+        if (output.type === "data") {
+          xterm.write(new TextDecoder().decode(new Uint8Array(output.data)));
+          return;
+        }
+        dead = true;
+        if (output.error) xterm.write(`\r\n\x1b[31m${output.error}\x1b[0m\r\n`);
+        xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
+      });
       call(api.ptySpawn, {
         id: spawnId,
         command: shell,
@@ -229,32 +242,6 @@ export function Terminal({
     };
     startPty();
 
-    // Listen for PTY data via WS q:event
-    const unlistenData = onEvent((event, data) => {
-      if (disposed) return;
-      if (event === "pty-data") {
-        const payload = data as { id: string; data: number[] };
-        if (payload.id === ptyId) {
-          xterm.write(new TextDecoder().decode(new Uint8Array(payload.data)));
-        }
-      }
-    });
-
-    // Listen for PTY exit via WS q:event
-    const unlistenExit = onEvent((event, data) => {
-      if (disposed) return;
-      if (event === "pty-exit") {
-        const payload = data as { id: string; error?: string };
-        if (payload.id === ptyId) {
-          dead = true;
-          if (payload.error) {
-            xterm.write(`\r\n\x1b[31m${payload.error}\x1b[0m\r\n`);
-          }
-          xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
-        }
-      }
-    });
-
     // Handle resize — skip when container is CSS-hidden (reports 0 dimensions)
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
@@ -273,8 +260,7 @@ export function Terminal({
       disposed = true;
       resizeObserver.disconnect();
       inputDisposable.dispose();
-      unlistenData();
-      unlistenExit();
+      stopOutput();
       call(api.ptyKill, { id: ptyId }).catch(() => {
         /* Expected: PTY process may already be dead or cleaned up */
       });

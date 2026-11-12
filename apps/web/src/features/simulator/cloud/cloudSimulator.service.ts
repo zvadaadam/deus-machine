@@ -2,7 +2,7 @@
  * Cloud simulator service — the device operations, with the deadlines they need.
  *
  * Start/Stop answer once the driver took them; the OUTCOME arrives as a
- * `cloud:simulator` status event plus the row update. A device operation
+ * `cloudSimulatorEvents` status event plus the row update. A device operation
  * (`cloudSimExec`) is answered with the platform's exec result verbatim — a
  * failed exec is data for the caller, not an exception (the panel shows the
  * platform's text).
@@ -46,7 +46,7 @@ export const cloudSimulatorService = {
   ): Promise<CloudSimulatorExecResult> =>
     call(api.cloudSimExec, { workspaceId, verb, args, platform }, { timeoutMs: EXEC_TIMEOUT_MS }),
 
-  /** The PNG does not come back here — it arrives as a `cloud:simulator`
+  /** The PNG does not come back here — it arrives as a `cloudSimulatorEvents`
    *  screenshot event (the platform fans captures out to every viewer). */
   screenshot: (
     workspaceId: string,

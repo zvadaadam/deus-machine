@@ -1,34 +1,27 @@
 // TanStack Query hooks for remote access: paired devices and the relay tunnel.
 
-import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/api";
-import { call, onConnectionChange, onEvent } from "@/platform/ws";
+import { call } from "@/platform/ws";
 import { apiClient } from "@/shared/api/client";
+import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 
 const authKeys = {
   devices: ["auth", "devices"] as const,
   relayStatus: ["auth", "relay-status"] as const,
 };
 
-/** Paired devices, read again whenever the backend says one was added, connected, left or
- *  revoked, and after a reconnect (a change while the socket was down sent nothing). */
+/** Paired devices, kept current: the host sends the list again whenever one is added,
+ *  connects, leaves or is revoked. */
 export function usePairedDevices(enabled: boolean) {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!enabled) return;
-    const refresh = () => void queryClient.invalidateQueries({ queryKey: authKeys.devices });
-    const stopEvents = onEvent((event) => event === "devices:changed" && refresh());
-    const stopConnection = onConnectionChange((connected) => connected && refresh());
-    return () => {
-      stopEvents();
-      stopConnection();
-    };
-  }, [enabled, queryClient]);
+  useQuerySubscription(api.pairedDevices, { queryKey: authKeys.devices, enabled });
   return useQuery({
     queryKey: authKeys.devices,
-    queryFn: () => call(api.pairedDevices).then((answer) => answer.devices),
+    queryFn: () => call(api.pairedDevices),
+    select: (answer) => answer.devices,
     enabled,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 }
 

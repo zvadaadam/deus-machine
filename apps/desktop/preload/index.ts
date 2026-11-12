@@ -81,23 +81,11 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   // Workspace progress
   "workspace:progress",
 
-  // File system events
-  "fs:changed",
-
-  // PTY events
-  "pty-data",
-  "pty-exit",
-
   // Browser — only popup requests (window.open / target="_blank") need
   // main→renderer forwarding. Everything else about the <webview> (load,
   // title, url, console, keyboard) is received directly as DOM events on
   // the element in the renderer, with no main-process round-trip.
   "browser:new-tab-requested",
-
-  // Simulator events — all moved to backend WS (q:event protocol)
-
-  // Git operations
-  "git-clone-progress",
 
   // Auto-update state
   "update:state",
