@@ -13,6 +13,8 @@ export type {
   EventCallback,
   SnapshotCallback,
   DeltaCallback,
+  StreamCallback,
+  ListenOptions,
   CommandResult,
   MutateResult,
 } from "./types";

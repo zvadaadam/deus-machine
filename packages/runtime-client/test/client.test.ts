@@ -189,3 +189,88 @@ describe("headless client", () => {
     }
   });
 });
+
+describe("streams", () => {
+  it("delivers only the events of a subscription the caller made, by its id", async () => {
+    const f = fixture();
+    const chat = vi.fn(),
+      terminal = vi.fn(),
+      ambient = vi.fn();
+    f.client.onEvent(ambient);
+    f.client.listen("sessionEvents", { sessionId: "a" }, chat);
+    f.client.listen("terminalOutput", { id: "t1" }, terminal);
+    await online(f);
+    const [chatSub, terminalSub] = f.socket.frames("q:subscribe");
+    expect(chatSub).toMatchObject({ resource: "sessionEvents", params: { sessionId: "a" } });
+    expect(chatSub).not.toHaveProperty("after");
+
+    f.socket.message({
+      type: "q:event",
+      id: chatSub.id,
+      event: "sessionEvents",
+      data: "hi",
+      seq: 4,
+    });
+    f.socket.message({ type: "q:event", id: terminalSub.id, event: "terminalOutput", data: "$ " });
+    f.socket.message({ type: "q:event", id: "evt_unknown", event: "sessionEvents", data: "stray" });
+
+    expect(chat).toHaveBeenCalledExactlyOnceWith("hi", 4);
+    expect(terminal).toHaveBeenCalledExactlyOnceWith("$ ", undefined);
+    // An event for a subscription nobody holds is not an ambient event.
+    expect(ambient).not.toHaveBeenCalled();
+  });
+
+  it("resumes after the last event seen on every reconnect, and reports a reset", async () => {
+    const f = fixture();
+    let last = 0;
+    const reset = vi.fn();
+    f.client.listen(
+      "sessionEvents",
+      { sessionId: "a" },
+      (_data, seq) => {
+        last = seq ?? last;
+      },
+      { after: () => last, onReset: reset }
+    );
+    await online(f);
+    const first = f.socket.frames("q:subscribe")[0];
+    expect(first.after).toBe(0);
+    f.socket.message({ type: "q:event", id: first.id, event: "sessionEvents", data: 1, seq: 7 });
+
+    f.socket.close(1006);
+    await vi.waitFor(() => expect(f.sockets).toHaveLength(2));
+    f.socket.open();
+    f.socket.message({ type: "connected" });
+    const again = f.socket.frames("q:subscribe")[0];
+    expect(again).toMatchObject({ id: first.id, resource: "sessionEvents", after: 7 });
+
+    f.socket.message({ type: "q:reset", id: again.id, seq: 40 });
+    expect(reset).toHaveBeenCalledExactlyOnceWith(40);
+  });
+
+  it("stops listening when asked, and drops a subscription the host refuses", async () => {
+    const f = fixture();
+    const events = vi.fn(),
+      refused = vi.fn();
+    const stop = f.client.listen("sessionEvents", { sessionId: "a" }, events);
+    f.client.listen("secrets", undefined, events, { onRefused: refused });
+    await online(f);
+    const [kept, denied] = f.socket.frames("q:subscribe");
+
+    f.socket.message({ type: "q:error", id: denied.id, code: "SUBSCRIBE_ERROR", message: "no" });
+    expect(refused).toHaveBeenCalledOnce();
+    expect(refused.mock.calls[0][0]).toMatchObject({ kind: "rejected", message: "no" });
+
+    stop();
+    expect(f.socket.frames("q:unsubscribe")).toEqual([{ type: "q:unsubscribe", id: kept.id }]);
+    f.socket.message({ type: "q:event", id: kept.id, event: "sessionEvents", data: "late" });
+    expect(events).not.toHaveBeenCalled();
+
+    // Neither comes back after a reconnect.
+    f.socket.close(1006);
+    await vi.waitFor(() => expect(f.sockets).toHaveLength(2));
+    f.socket.open();
+    f.socket.message({ type: "connected" });
+    expect(f.socket.frames("q:subscribe")).toEqual([]);
+  });
+});

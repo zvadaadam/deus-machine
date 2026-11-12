@@ -11,6 +11,8 @@ import type {
   EventCallback,
   SnapshotCallback,
   DeltaCallback,
+  StreamCallback,
+  ListenOptions,
   CommandResult,
   MutateResult,
 } from "./types";
@@ -23,6 +25,13 @@ type Subscription = {
   params?: Record<string, unknown>;
   observers: Set<Observer>;
   fresh: boolean;
+};
+type Listener = {
+  id: string;
+  stream: string;
+  filter?: Record<string, unknown>;
+  onEvent: StreamCallback;
+  options?: ListenOptions;
 };
 type Pending = {
   kind: "request" | "mutation" | "command";
@@ -56,6 +65,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
   };
   private subscriptions = new Map<string, Subscription>();
   private byId = new Map<string, Subscription>();
+  private listeners = new Map<string, Listener>();
   private pending = new Map<string, Pending>();
   private events = new Set<EventCallback>();
   private states = new Set<(state: RuntimeState) => void>();
@@ -161,6 +171,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         this.state = "online";
         this.scheduleHeartbeat();
         for (const sub of this.subscriptions.values()) this.sendSubscription(sub);
+        for (const listener of this.listeners.values()) this.sendListen(listener);
         this.connection?.resolve();
         this.connection = undefined;
         this.notifyState();
@@ -197,8 +208,20 @@ export class RuntimeClient<Resource extends string = string, Command extends str
           );
       })
       .with("q:event", () => {
-        if (this.isConnected() && typeof frame.event === "string")
+        if (!this.isConnected()) return;
+        const listener = this.listeners.get(id);
+        if (listener) {
+          const seq = typeof frame.seq === "number" ? frame.seq : undefined;
+          this.notify(() => listener.onEvent(frame.data, seq));
+        } else if (!id && typeof frame.event === "string") {
           this.emitLocalEvent(frame.event, frame.data);
+        }
+      })
+      .with("q:reset", () => {
+        const listener = this.listeners.get(id);
+        if (!listener || !this.isConnected()) return;
+        const seq = typeof frame.seq === "number" ? frame.seq : 0;
+        this.notify(() => listener.options?.onReset?.(seq));
       })
       .with("q:response", () => this.resolve(id, "request", frame.data))
       .with("q:mutate_result", () => {
@@ -213,7 +236,12 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         const message = typeof frame.message === "string" ? frame.message : "Query failed";
         const pending = this.takePending(id);
         if (pending) pending.reject(new RuntimeError("rejected", message));
-        else {
+        else if (this.listeners.has(id)) {
+          // Refused for good (no such stream, or not allowed): redialing will not change it.
+          const listener = this.listeners.get(id)!;
+          this.listeners.delete(id);
+          this.notify(() => listener.options?.onRefused?.(new RuntimeError("rejected", message)));
+        } else {
           const sub = this.byId.get(id);
           if (sub) sub.fresh = false;
           console.warn("[RuntimeClient] Subscription error:", message);
@@ -257,6 +285,34 @@ export class RuntimeClient<Resource extends string = string, Command extends str
       this.subscriptions.delete(key);
       this.byId.delete(entry.id);
       this.write({ type: "q:unsubscribe", id: entry.id });
+    };
+  };
+
+  /**
+   * Listen to a stream of events, narrowed by `filter`. Nothing arrives that
+   * was not asked for. The subscription is restored on every reconnect; with
+   * `options.after`, the host is told the last event seen and sends what
+   * followed it, or calls `onReset` when it can no longer say.
+   */
+  listen = (
+    stream: string,
+    filter: Record<string, unknown> | undefined,
+    onEvent: StreamCallback,
+    options?: ListenOptions
+  ): (() => void) => {
+    if (this.ended() || this.requestInterceptor) return () => {};
+    const listener: Listener = {
+      id: `evt_${++this.sequence}`,
+      stream,
+      filter: filter ? structuredClone(filter) : undefined,
+      onEvent,
+      options,
+    };
+    this.listeners.set(listener.id, listener);
+    if (this.isConnected()) this.sendListen(listener);
+    return () => {
+      if (this.listeners.delete(listener.id))
+        this.write({ type: "q:unsubscribe", id: listener.id });
     };
   };
 
@@ -486,6 +542,16 @@ export class RuntimeClient<Resource extends string = string, Command extends str
       ...(sub.params ? { params: sub.params } : {}),
     });
   }
+  private sendListen(listener: Listener): void {
+    const after = listener.options?.after?.();
+    this.write({
+      type: "q:subscribe",
+      id: listener.id,
+      resource: listener.stream,
+      ...(listener.filter ? { params: listener.filter } : {}),
+      ...(after !== undefined ? { after } : {}),
+    });
+  }
   private write(frame: Record<string, unknown>, control = false): boolean {
     if ((!control && !this.isConnected()) || this.socket?.readyState !== 1) return false;
     try {
@@ -562,6 +628,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     this.disposals.clear();
     this.subscriptions.clear();
     this.byId.clear();
+    this.listeners.clear();
     this.notifyState();
     this.events.clear();
     this.states.clear();

@@ -43,6 +43,16 @@ export type ToolResponseInterceptor = (
 export type EventCallback = (event: string, data: unknown) => void;
 export type SnapshotCallback = (data: unknown) => void;
 export type DeltaCallback = (upserted?: unknown[], removed?: string[], cursor?: number) => void;
+/** One event of a stream. `seq` is set on a resumable stream's events. */
+export type StreamCallback = (data: unknown, seq: number | undefined) => void;
+export interface ListenOptions {
+  /** The last seq this listener saw, asked at each (re)subscribe so the host sends what followed. */
+  after?: () => number | undefined;
+  /** The host cannot say what was missed since `after`: read the resource again. */
+  onReset?: (seq: number) => void;
+  /** The host refused the subscription. It is not retried. */
+  onRefused?: (error: RuntimeError) => void;
+}
 export type CommandResult = {
   accepted: boolean;
   commandId?: string;
