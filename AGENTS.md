@@ -65,16 +65,16 @@ This should produce both `dist-electron/Deus-*.AppImage` and `dist-electron/deus
 
 ```text
 Frontend (React)
-  ├── WebSocket → Backend (apps/backend/) — all data + commands
+  ├── WebSocket → Backend (apps/backend/) — every read, write and stream
   ├── Electron IPC → Desktop Main (apps/desktop/) — native ops only
-  └── HTTP REST → Backend — fallback + workspace creation
+  └── HTTP → Backend — only what a socket cannot serve (pairing, OAuth, file streaming)
 
 Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire on an in-process channel
 ```
 
 **Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic.
 
-**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Routes under `/api`. Runs the agent engine in its own process.
+**Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process.
 
 **Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop.
 
@@ -95,20 +95,44 @@ When debugging agent-server behavior (event shapes, turn admission, cancel seman
 
 Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 
-| Frame                                    | Purpose                                                             |
-| ---------------------------------------- | ------------------------------------------------------------------- |
-| `q:subscribe` / `q:snapshot` / `q:delta` | Reactive data subscriptions (workspaces, stats, sessions, messages) |
-| `q:mutate` / `q:mutate_result`           | Sync writes (archiveWorkspace, updateWorkspaceTitle)                |
-| `q:command` / `q:command_ack`            | Async actions (sendMessage, stopSession)                            |
-| `q:event`                                | Ephemeral push (tool relay, plan-mode)                              |
+| Frame                                    | Purpose                                                                                                    |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
+| `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, stats, sessions, messages)             |
+| `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
+| `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, stopSession)                                     |
+| `q:tool_response`                        | The answer to something an agent asked this client                                                         |
 
-Resources, mutations, commands, and events are all defined in `shared/events.ts`. Frontend subscribes via `useQuerySubscription()`.
+**One contract.** Every operation and stream a host offers is declared once in
+`shared/api/<domain>.ts` (`read`, `live`, `write`, `stream`, `resumableStream`:
+its name, zod input and output type) and exported together as `api` from
+`shared/api`. The backend answers each operation with one handler in
+`apps/backend/src/api/<domain>.ts` (`handle(api.x, fn)`); a test holds the two
+lists equal. Clients use the declaration itself: `call(api.x, input)`,
+`useQuerySubscription(api.x, …)`, `useStream(api.x, filter, onEvent, onReset)` or
+`follow(…)`. There is no second list of names and no HTTP route per operation.
+The HTTP routes left are the ones a socket cannot serve: pairing, OAuth
+callbacks, the MCP gateway, file streaming, and what the CLI and the desktop
+shell ask before a socket exists.
+
+**Streams** (`apps/backend/src/services/streams.ts`). Nothing is broadcast. A
+service publishes an event under a stream and a scope
+(`publish(sessionEvents, { sessionId }, event)`); a connection receives it only
+if it subscribed to that stream with a filter the scope matches. A resumable
+stream numbers its kept events per scope and remembers the recent ones: a
+client that reconnects names the last one it received and is sent what it
+missed, or a `q:reset` when the host no longer holds that far back (a restart
+included: a number never means two events, even across processes). `messages`
+resumes the same way from its row cursor. The client package does this
+bookkeeping; a consumer supplies only `onReset` ("something may have been
+missed: read the state again"). So a reconnect does not reload the chat on
+screen, and a phone following one chat is not sent every other chat's tokens.
 
 The private workspace package `@deus/runtime-client` (`packages/runtime-client/`)
 owns transport, pending operations and subscriptions. Its root entry has no React,
 TanStack or app dependencies; `/query` adds a dedicated TanStack Query cache.
-`apps/web/src/platform/ws/runtime-client.ts` binds the package to Deus resource
-names, cache defaults and the cache-to-runtime lookup. Keep host selection,
+`apps/web/src/platform/ws/runtime-client.ts` binds the package to the Deus
+contract (`call`, `follow`), cache defaults and the cache-to-runtime lookup. Keep host selection,
 credentials, routing, React hooks and domain projections in the app. The package
 uses the existing `q:` wire; `@zvada/agent-server/client` serves the separate agent
 execution protocol. See `packages/runtime-client/README.md` for the boundary.
@@ -119,8 +143,8 @@ their originating client across awaits. Equal resource/parameter subscriptions
 share one wire subscription, and equal resource/parameter/query-key bindings
 share one cache projection. Agent folds and cloud-direct channels belong to that
 same cache and survive reconnects (only disposal drops them). Reconnect restores
-reads; it never resends writes. A lost acknowledgment is an `unknown-outcome`, not
-permission to retry a command. Correlated ping/pong probes detect silent
+reads and streams; it never resends writes. A lost acknowledgment is an
+`unknown-outcome`, not permission to retry a write. Correlated ping/pong probes detect silent
 connections (30s interval, 10s timeout). When a relay host is replaced,
 already-authorized viewers reconnect and authorize again before their
 subscriptions resume; a connected tunnel alone is not readiness.
@@ -269,13 +293,18 @@ the catalog can move to a package the day Deus Cloud reads it too.
   or removed; a folder is swapped in by two renames, never half written.
   `DEUS_SKILLS_HOME` points it elsewhere (tests, dev).
 
-### Adding a New WS Resource
+### Adding an operation or a stream
 
-1. Add resource to `QUERY_RESOURCES` in `shared/events.ts`
-2. Add `runQuery` match in `apps/backend/src/services/query-engine.ts`
-3. Add invalidation in `agent-event-handler.ts` or relevant route
-4. Use `useQuerySubscription(resource, { queryKey, params })` in frontend
-5. Set `staleTime: Infinity`, `refetchOnWindowFocus: false` (WS handles freshness)
+1. Declare it in `shared/api/<domain>.ts`: `read` (asked once), `live` (a read
+   clients subscribe to), `write`, or `stream` / `resumableStream` (events).
+2. Answer it in `apps/backend/src/api/<domain>.ts` with `handle(api.<name>, fn)`.
+   A live read's handler is synchronous. A stream has no handler: the service
+   that produces the events calls `publish(api.<name>, scope, event)`.
+3. For a live read, call `invalidate(["<name>"])` wherever its value changes.
+4. In the frontend: `call(api.<name>, input)`;
+   `useQuerySubscription(api.<name>, { queryKey, params })` with
+   `staleTime: Infinity`, `refetchOnWindowFocus: false` (the socket keeps it
+   fresh); `useStream(api.<name>, filter, onEvent, onReset)`.
 
 ## Database
 

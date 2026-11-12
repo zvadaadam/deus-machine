@@ -4,15 +4,15 @@ Private Bun workspace package for the `q:` application-data protocol. The web an
 Electron renderer consume the same client. It is source TypeScript, resolved by
 the workspace's bundler; it is not a published SDK.
 
-| Entry                                        | Owns                                                                                                         | Dependencies                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
-| `@deus/runtime-client`                       | Connection lifecycle, authentication handshake, reconnect, pending requests, subscription sharing and events | `ts-pattern`; injected socket                     |
-| `@deus/runtime-client/query`                 | One projection per subscription and query key, cache invalidation on disconnect, cache cleanup on disposal   | Core client; optional `@tanstack/query-core` peer |
-| `apps/web/src/platform/ws/runtime-client.ts` | Deus resource/command types, cache defaults, cache-to-runtime lookup                                         | App code                                          |
+| Entry                                        | Owns                                                                                                       | Dependencies                                      |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `@deus/runtime-client`                       | Connection lifecycle, authentication handshake, reconnect, pending requests, subscription sharing, streams | `ts-pattern`; injected socket                     |
+| `@deus/runtime-client/query`                 | One projection per subscription and query key, cache invalidation on disconnect, cache cleanup on disposal | Core client; optional `@tanstack/query-core` peer |
+| `apps/web/src/platform/ws/runtime-client.ts` | The Deus contract (`call`, `follow` over `shared/api`), cache defaults, cache-to-runtime lookup            | App code                                          |
 
 Host selection, credential storage, relay URLs, React hooks, routing and chat
-projections stay in the app. The backend query engine and its resource definitions
-also stay there. This package does not replace `@zvada/agent-server/client`, which
+projections stay in the app. The backend query engine and the contract
+(`shared/api`) also stay there: this package carries names and values, and knows none of them. This package does not replace `@zvada/agent-server/client`, which
 speaks the separate agent-execution protocol.
 
 ## Core client
@@ -49,6 +49,29 @@ remains visible but stale; pending writes have an unknown outcome. Configure
 `heartbeatIntervalMs` / `heartbeatTimeoutMs` for another transport, or set the
 interval to `0` for a legacy host without probe support. Ship the backend's probe
 handler with the new client.
+
+### Streams
+
+```ts
+const stop = client.listen("sessionEvents", { sessionId }, (event) => fold(event), {
+  onReset: () => readAgain(),
+});
+```
+
+`listen` follows a stream of events narrowed by a filter. Only what was asked
+for arrives, once and in order. The subscription is restored on every
+reconnect: where the host numbers a stream's events (`seq`), the client names
+the last one it received and the host sends what followed. When that is not
+possible (the stream is not numbered, nothing had arrived yet, or the host no
+longer holds that far back and answers `q:reset`), `onReset` runs: something
+may have been missed, so the consumer reads its state again. It does not run
+on the first subscription. A live read that answers with a `cursor` (in its
+snapshot or a delta) is resumed the same way.
+
+`publishLocal(stream, scope, data)` delivers an event to this client's own
+listeners, for a source that lives in the client (a channel the browser holds
+itself). A subscription the host refuses is dropped and reported to
+`onRefused`; it is not retried.
 
 Create a new runtime when host, account or grant changes. Disposal closes the
 socket, rejects pending work and stops subscriptions. Keep the originating
@@ -93,11 +116,11 @@ Snapshots containing `null` clear absent resources. An application can supply
 uses this for the messages resource's null acknowledgment. That exception does
 not apply to a deleted session or other resource.
 
-Reconnect restores subscriptions and snapshots. It never resends mutations or
-commands. A write whose acknowledgment is lost rejects with a `RuntimeError`
+Reconnect restores subscriptions, snapshots and streams. It never resends a
+write. A write whose acknowledgment is lost rejects with a `RuntimeError`
 whose `kind` is `unknown-outcome`: the server may already have committed it.
 Higher layers must reconcile state instead of automatically retrying that write.
-The package provides neither durable command replay nor relay encryption.
+The package provides neither durable write replay nor relay encryption.
 
 ## Checks
 

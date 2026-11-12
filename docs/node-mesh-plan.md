@@ -365,12 +365,17 @@ killed; expand from there.
 
 ## Sharp edges (go in eyes-open)
 
-1. **The untagged `q:event` bus.** Every agent/token/fs/pty event fans out to
-   global listeners with **no id and no source**; consumers self-filter by event
-   _name_. Federating `q:` forces a wire-contract change (stamp `nodeId`) + a
-   rewrite of ~7 consumers, chiefly `useAgentEvents.ts`. Only bites in Option B,
-   and NRP's per-connection stream dissolves it. This is the single reason
-   invariant (2)/(3) is worth paying for early.
+1. **The untagged `q:event` bus — gone (2026-11-12).** Every agent/token/fs/pty
+   event used to fan out to global listeners with no id and no source, and
+   consumers filtered by event _name_. Events are now streams declared in
+   `shared/api`: a client subscribes to one with a scope (`{ sessionId }`), the
+   host sends it only what it asked for under that subscription's id, and a
+   resumable stream replays what a reconnecting client missed
+   (`apps/backend/src/services/streams.ts`). A subscription belongs to one
+   runtime (one host), so an event's source is the connection it arrived on:
+   nothing needs a `nodeId` stamp. The same change put every operation behind
+   one typed contract (`shared/api` + `apps/backend/src/api`), which is what a
+   second host has to speak.
 2. **Asymmetric cross-boundary trust.** The only genuinely new crypto. A foreign
    verifier checking a signature it independently trusts requires per-node /
    per-org keypairs + JWKS. Only needed for Option C; GitHub's App model is a
