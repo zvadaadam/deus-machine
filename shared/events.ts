@@ -58,6 +58,8 @@ export const CloudEnvStateSchema = z
     errorMessage: z.string().optional(),
     /** running only: the sandbox came back with session state restored. */
     snapshotRestored: z.boolean().optional(),
+    /** running only: the sandbox's public host template (`{{port}}` placeholder). */
+    sandboxUrlTemplate: z.string().nullable().optional(),
   })
   .loose();
 export type CloudEnvState = z.infer<typeof CloudEnvStateSchema>;
@@ -66,6 +68,15 @@ export interface CloudEnvEvent {
   workspaceId: string;
   sessionId: string;
   data: CloudEnvState;
+}
+
+/** The computer's host template for a workspace — a capability URL template
+ *  (`https://{{port}}-<sandbox>.e2b.app`) that changes with every reprovision;
+ *  null = the platform reports no sandbox. */
+export interface CloudPreviewEvent {
+  workspaceId: string;
+  sessionId: string;
+  template: string | null;
 }
 
 /** The backend's identity generation after the account it acts for changed. */

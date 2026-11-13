@@ -150,13 +150,16 @@ import {
   execCloudSimulator,
   parseCloudSimulatorPlatform,
   getCloudSimulatorStatus,
+  readCloudPreviewTemplate,
 } from "../../../src/services/agent/cloud/driver";
+import { getCloudPreviewTemplate } from "../../../src/services/agent/cloud/preview";
 import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
 } from "../../../src/services/agent/cloud/config";
 import { unarchiveWorkspace } from "../../../src/services/workspace-archive.service";
 import { persistSessionBackToWorking } from "../../../src/services/agent/persistence";
+import { cloudPreviewChanges } from "@shared/api/browser";
 import { sessionEvents } from "@shared/api/sessions";
 import { cloudSimulatorEvents } from "@shared/api/simulator";
 import { cloudEnvironment, cloudIdentity } from "@shared/api/workspaces";
@@ -1102,18 +1105,94 @@ describe("cloud driver frame → fold contract", () => {
     }
   );
 
-  it("gives the sandbox's public address no channel of its own", () => {
-    // The Browser is this computer's; nothing here opens the sandbox by its public address.
+  it("remembers the sandbox's public host template in memory (running state + snapshot) and announces it", () => {
+    mockPrepare.mockClear();
     mockPublish.mockClear();
     capturedOnFrame!({
       type: "workspace.state",
       data: { status: "running", sandboxUrlTemplate: "https://{{port}}-sb123.e2b.app" },
     });
+    expect(getCloudPreviewTemplate("deus-ws-1")).toBe("https://{{port}}-sb123.e2b.app");
+    // The template is a capability URL: it never touches the row.
+    expect(mockPrepare).not.toHaveBeenCalledWith(expect.stringContaining("cloud_preview"));
+    const previews = () => published(mockPublish, cloudPreviewChanges);
+    // Announced to the clients following this workspace's preview, and no one else's.
+    expect(previews()).toEqual([
+      {
+        scope: { workspaceId: "deus-ws-1" },
+        event: {
+          workspaceId: "deus-ws-1",
+          sessionId: "deus-session-1",
+          template: "https://{{port}}-sb123.e2b.app",
+        },
+      },
+    ]);
+
+    // A reconnect snapshot repeating the value is not re-announced; a new
+    // sandbox (reprovision) is.
     capturedOnFrame!({
       type: "session.snapshot",
       state: { status: "ready", sandboxUrlTemplate: "https://{{port}}-sb123.e2b.app", turns: [] },
+      messages: [],
     });
-    expect(mockPublish.mock.calls.map(([stream]) => stream.name)).toEqual([cloudEnvironment.name]);
+    expect(previews()).toHaveLength(1);
+    capturedOnFrame!({
+      type: "session.snapshot",
+      state: { status: "ready", sandboxUrlTemplate: "https://{{port}}-sb456.e2b.app", turns: [] },
+      messages: [],
+    });
+    expect(getCloudPreviewTemplate("deus-ws-1")).toBe("https://{{port}}-sb456.e2b.app");
+    expect(previews()).toHaveLength(2);
+    expect(previews()[1]).toEqual({
+      scope: { workspaceId: "deus-ws-1" },
+      event: {
+        workspaceId: "deus-ws-1",
+        sessionId: "deus-session-1",
+        template: "https://{{port}}-sb456.e2b.app",
+      },
+    });
+  });
+
+  it("drops the host template when the platform reports none (no sandbox behind the session)", () => {
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: "https://{{port}}-sb1.e2b.app" },
+    });
+    mockPublish.mockClear();
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: null },
+    });
+    expect(getCloudPreviewTemplate("deus-ws-1")).toBeNull();
+    // The first thing published, ahead of the state that carried it.
+    expect(mockPublish.mock.calls[0][0]).toBe(cloudPreviewChanges);
+    expect(published(mockPublish, cloudPreviewChanges)).toEqual([
+      {
+        scope: { workspaceId: "deus-ws-1" },
+        event: { workspaceId: "deus-ws-1", sessionId: "deus-session-1", template: null },
+      },
+    ]);
+
+    // Absent (an older platform, or a state that never carries it): untouched.
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: "https://{{port}}-sb2.e2b.app" },
+    });
+    capturedOnFrame!({ type: "workspace.state", data: { status: "provisioning" } });
+    expect(getCloudPreviewTemplate("deus-ws-1")).toBe("https://{{port}}-sb2.e2b.app");
+  });
+
+  it("forgets every host template when the platform identity changes — they were account A's computers", () => {
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: "https://{{port}}-sbA.e2b.app" },
+    });
+    mockPrepare.mockClear();
+    identityChanged!();
+    // Never told again — not "no sandbox" (null): the read must re-seed.
+    expect(getCloudPreviewTemplate("deus-ws-1")).toBeUndefined();
+    // No cloud capability URL lives on a row any more: nothing to clear there.
+    expect(mockPrepare).not.toHaveBeenCalledWith(expect.stringContaining("UPDATE workspaces"));
   });
 
   it("publishes workspace.state as an ephemeral event to the clients following that workspace", () => {
@@ -1297,6 +1376,33 @@ describe("cloud driver session lifecycle", () => {
     expect(connectCount).toBe(1);
   });
 });
+
+describe("cloud driver preview template read", () => {
+  it("answers undefined and opens the workspace's session when the template was never told", async () => {
+    shutdownCloudDriver();
+    initCloudDriver(handler);
+    connectCount = 0;
+    currentSessionRow();
+    expect(readCloudPreviewTemplate("deus-ws-1")).toBeUndefined();
+    await vi.waitFor(() => expect(connectCount).toBe(1));
+  });
+
+  it("answers null for a platform-reported 'no sandbox' without touching the socket", async () => {
+    await ensureCloudSession("deus-session-1");
+    connectCount = 0;
+    capturedOnFrame!({
+      type: "workspace.state",
+      data: { status: "running", sandboxUrlTemplate: null },
+    });
+    expect(readCloudPreviewTemplate("deus-ws-1")).toBeNull();
+    expect(connectCount).toBe(0);
+  });
+});
+
+/** The workspace → current-session lookup behind the preview read. */
+function currentSessionRow() {
+  mockGet.mockReturnValueOnce({ kind: "cloud", session_id: "deus-session-1" } as never);
+}
 
 describe("cloud driver turn API", () => {
   const SELECTION = { harness: "claude-code", model: "opus", thinkingLevel: "high" } as const;

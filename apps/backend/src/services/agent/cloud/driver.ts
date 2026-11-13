@@ -9,6 +9,7 @@
 // push all run unchanged. The platform half becomes deus effects here:
 // workspace.state → workspace row, session.error → engine error event,
 // simulator.* → ./simulator (an in-memory device cache + `cloudSimulatorEvents`),
+// sandboxUrlTemplate → ./preview (an in-memory template cache + `cloudPreviewChanges`),
 // elicitation.requested → the existing askUserQuestion relay (and the fold), permission.request →
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
@@ -53,6 +54,12 @@ import {
   type CloudSimulatorSource,
   reconcileCloudSimulatorMirror,
 } from "./simulator";
+import {
+  applyCloudPreviewTemplate,
+  forgetCloudPreviewTemplates,
+  getCloudPreviewTemplate,
+  type CloudPreviewSource,
+} from "./preview";
 import { getCloudConfig, runCloudConnectHook, setCloudIdentityChangedHandler } from "./config";
 import { connectSessionSocket, type SessionSocket } from "./session-socket";
 import { mintCloudSessionToken } from "./session-token";
@@ -133,8 +140,12 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     // are capability URLs): forget them; the next connect under the right
     // account replays whatever is really there.
     forgetCloudSimulators();
-    // The clients hold the same account-scoped caches (device stores,
-    // screenshots): tell them to start over.
+    // Same for the computers' host templates: capability URLs of account A's
+    // sandboxes. The next running frame / snapshot under the right account
+    // restores whatever is really there.
+    forgetCloudPreviewTemplates();
+    // The clients hold the same account-scoped caches (device stores, host
+    // templates, screenshots): tell them to start over.
     publish(cloudIdentity, {}, { generation: identityGeneration });
   });
 }
@@ -171,6 +182,7 @@ function settlePending(
 
 export function shutdownCloudDriver(): void {
   forgetCloudSimulators();
+  forgetCloudPreviewTemplates();
   for (const s of sessions.values()) {
     rejectPendingDiffs(s, "cloud driver shutting down");
     clearTurnKill(s);
@@ -235,8 +247,8 @@ function tellCloudEnv(session: CloudSession, data: unknown): void {
 
 // ---- Frame dispatch ----
 
-/** The ids a platform frame is attributed to (see ./simulator). */
-function frameSource(session: CloudSession): CloudSimulatorSource {
+/** The ids a platform frame is attributed to (see ./simulator, ./preview). */
+function frameSource(session: CloudSession): CloudSimulatorSource & CloudPreviewSource {
   return { workspaceId: session.deusWorkspaceId, sessionId: session.deusSessionId };
 }
 
@@ -415,6 +427,11 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       // states hit the row AND the chat stack ("paused — wakes on your next
       // message"); awake ones just clear a stale asleep marker, silently.
       const sessionStatus = typeof state.status === "string" ? state.status : "";
+      // The snapshot carries the host template too — the only source after a
+      // backend restart, when no `running` transition will fire again.
+      if (typeof state.sandboxUrlTemplate === "string" || state.sandboxUrlTemplate === null) {
+        applyCloudPreviewTemplate(frameSource(session), state.sandboxUrlTemplate);
+      }
       // The devices' last known statuses ride the snapshot too: after a
       // backend restart they are the only way to learn of a device that is
       // still running — and billing. A platform that mirrors every device
@@ -475,11 +492,19 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         step?: string;
         reason?: string;
         recovering?: boolean;
+        sandboxUrlTemplate?: string | null;
       };
       // Workspace owns recovery; its intermediate error is wake progress,
       // not evidence that the turn or its hosted device stopped.
       const data = raw.status === "error" && raw.recovering ? { ...raw, status: "resuming" } : raw;
       updateCloudWorkspace(session.deusWorkspaceId, data);
+      // The public host template rides the running state: a new sandbox
+      // (reprovision) brings a new one, a platform-reported `null` means no
+      // sandbox behind the session. Absent = an older platform / a state that
+      // never carries it: untouched.
+      if (data.sandboxUrlTemplate !== undefined) {
+        applyCloudPreviewTemplate(frameSource(session), data.sandboxUrlTemplate);
+      }
       tellCloudEnv(session, data);
       // Real case: sidecar dies on a credential error → clean WS close →
       // workspace 'stopped', and the only trace was an ephemeral env line.
@@ -1410,6 +1435,28 @@ export async function getCloudSimulatorStatus(
     context = { sessionId: null, providerSessionId: null, liveSocket: false };
   }
   return readCloudSimulatorStatus(workspaceId, context);
+}
+
+/** The one-shot read behind `cloudPreview`. The platform's REST carries no
+ *  template — only a session socket does (the running frame, the snapshot) —
+ *  so an unknown template with no socket to bring it (this backend restarted,
+ *  or an identity change closed every socket while the workspace stayed
+ *  selected) is an unanswerable read: open the workspace's session and let its
+ *  snapshot announce the template on `cloudPreviewChanges`. `undefined` tells the
+ *  client to keep waiting rather than render "no sandbox". */
+export function readCloudPreviewTemplate(workspaceId: string): string | null | undefined {
+  const known = getCloudPreviewTemplate(workspaceId);
+  if (known !== undefined) return known;
+  try {
+    void cloudSessionForWorkspace(workspaceId).catch((err) => {
+      console.warn(
+        `[CloudDriver] preview reseed connect failed for ${workspaceId}: ${String(err)}`
+      );
+    });
+  } catch {
+    // Not a cloud workspace, or no session yet: nothing could carry a template.
+  }
+  return undefined;
 }
 
 /** Boot a hosted device. The outcome rides simulator.status (starting → ready,

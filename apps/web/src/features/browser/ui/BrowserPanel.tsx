@@ -342,8 +342,8 @@ export function BrowserPanel({
   useEffect(() => {
     const unlisten = native.events.on(BROWSER_NEW_TAB_REQUESTED, (data) => {
       // The event is window-wide: every mounted panel hears every popup, and
-      // only the one whose tab spawned it may act — another workspace's links
-      // must not land in a frozen workspace's tab list. A main that
+      // only the one whose tab spawned it may act — a cloud preview's links
+      // must not land in some frozen local workspace's tab list. A main that
       // predates the source stamp sends none; accept those as before.
       if (
         data.sourceWebContentsId !== undefined &&

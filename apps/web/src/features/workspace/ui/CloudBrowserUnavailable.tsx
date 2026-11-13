@@ -2,12 +2,10 @@ import type { ReactNode } from "react";
 import { Globe } from "lucide-react";
 
 /**
- * The Browser tab on a cloud workspace. The Browser is this computer's own;
- * a cloud workspace's agent works in the browser on the workspace's computer,
- * and showing that one here is not built. Pointing this computer's browser at
- * the sandbox's public address was removed: it was another browser (other
- * cookies, other state, not what the agent sees) reaching the sandbox by a
- * URL whose only secret was the sandbox id.
+ * The Browser tab on a cloud computer BEFORE the platform has reported the
+ * sandbox's public address (it arrives with the running workspace state and
+ * the session snapshot). Once known, ContentView mounts CloudPreviewPanel
+ * instead — this is the honest interim, not a "coming soon".
  */
 export function CloudBrowserUnavailable({ toolbarAction }: { toolbarAction?: ReactNode }) {
   return (
@@ -16,12 +14,10 @@ export function CloudBrowserUnavailable({ toolbarAction }: { toolbarAction?: Rea
       <div className="bg-bg-muted/30 flex h-10 w-10 items-center justify-center rounded-xl">
         <Globe className="text-text-muted/60 h-5 w-5" aria-hidden="true" />
       </div>
-      <p className="text-text-secondary text-sm font-medium">
-        The browser is on the cloud computer
-      </p>
+      <p className="text-text-secondary text-sm font-medium">Waiting for the computer's address</p>
       <p className="text-text-muted max-w-xs text-xs">
-        This workspace's agent uses the browser on its own computer in the cloud. Watching that
-        browser from here isn't available yet.
+        The preview opens the dev server running inside this cloud computer. Its address arrives
+        once the sandbox is running — send a message to wake it if it's asleep.
       </p>
     </div>
   );

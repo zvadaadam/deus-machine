@@ -83,9 +83,9 @@ export const PRELAUNCH_RETIRED_COLUMNS = {
   messages: ["content", "cancelled_at", "tokens", "cost", "turn_stop_reason", "turn_attribution"],
   // `workspaces.cloud_preview_template` mirrored the cloud computer's public
   // host template — a capability URL the platform replays on every connect.
-  // Deus no longer keeps or opens that address at all; a database that still
-  // carries the column also carries a stale capability URL on disk, so it
-  // takes the reset rather than a silent leftover.
+  // It moved to the driver's memory (services/agent/cloud/preview.ts); a
+  // database that still carries the column also carries a stale capability
+  // URL on disk, so it takes the reset rather than a silent leftover.
   workspaces: ["cloud_preview_template"],
 } as const satisfies Record<string, readonly string[]>;
 
