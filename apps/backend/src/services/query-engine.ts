@@ -23,13 +23,7 @@ import type { Caller, Registry } from "../api/registry";
 import { getDatabase } from "../lib/database";
 import { AppError } from "../lib/errors";
 import { toWorkspace } from "../lib/workspace-grouping";
-import {
-  attachParts,
-  getMaxMessageSeq,
-  getMessagesDelta,
-  getWorkspacesBySessionIds,
-  resetStatsCache,
-} from "../db";
+import { getWorkspacesBySessionIds, resetStatsCache } from "../db";
 import { rejectToolRelay, resolveToolRelay } from "./agent";
 import * as streamHub from "./streams";
 import { getConnection } from "./ws.service";
@@ -91,14 +85,6 @@ interface Sub {
 /** Per-connection live reads, keyed by the subscription id the client chose. */
 const subs = new Map<string, Map<string, Sub>>();
 
-/**
- * `messages` is subscribed to as a stream of inserts, not as snapshots: the
- * client reads its page once and then receives rows written after this seq.
- * The acknowledgment and each delta tell it where it stands, so a client that
- * reconnects resumes from there. Key: `${connectionId}:${subId}`.
- */
-const messageCursors = new Map<string, number>();
-
 // ---- Frames ----
 
 /** Handle one q:* frame from an admitted connection. */
@@ -132,9 +118,6 @@ export function handleFrame(connectionId: string, msg: Params): void {
 
 /** A connection closed: forget what it was subscribed to. */
 export function removeSubs(connectionId: string): void {
-  for (const [subId, sub] of subs.get(connectionId) ?? []) {
-    if (sub.resource === "messages") messageCursors.delete(`${connectionId}:${subId}`);
-  }
   subs.delete(connectionId);
   streamHub.dropConnection(connectionId);
 }
@@ -182,32 +165,11 @@ function handleSubscribe(connectionId: string, { id, name, params }: Call, msg: 
     }
 
     const resource = name as LiveName;
-    // `messages` answers its subscription with an acknowledgment, not a page
-    // (see messageCursors), so its handler is checked without being run.
-    const acknowledge = resource === "messages";
-    if (acknowledge && !registry().find(name)?.live) throw new Error(`Unknown operation: ${name}`);
-    const data = acknowledge ? null : registry().runLive(name, params, liveCtx(connectionId));
+    const data = registry().runLive(name, params, liveCtx(connectionId));
 
     let connSubs = subs.get(connectionId);
     if (!connSubs) subs.set(connectionId, (connSubs = new Map()));
     connSubs.set(id, { id, resource, params });
-
-    const sessionId = typeof params.sessionId === "string" ? params.sessionId : undefined;
-    if (acknowledge && sessionId) {
-      let cursor = 0;
-      try {
-        cursor = getMaxMessageSeq(getDatabase(), sessionId);
-      } catch {
-        // An unreadable session is followed from its beginning.
-      }
-      // A returning client names the last row it received, and gets the rows
-      // written since. (Never past the newest row: a later one would be skipped.)
-      const after = typeof msg.after === "number" ? Math.min(msg.after, cursor) : undefined;
-      messageCursors.set(`${connectionId}:${id}`, after ?? cursor);
-      sendFrame(connectionId, { type: "q:snapshot", id, data, cursor: after ?? cursor });
-      if (after !== undefined) pushMessageDelta(connectionId, id, sessionId, new Map());
-      return;
-    }
     sendFrame(connectionId, { type: "q:snapshot", id, data });
   } catch (error) {
     const { message } = describeFailure(error, "Subscribe failed");
@@ -220,7 +182,6 @@ function handleUnsubscribe(connectionId: string, id: string): void {
   const connSubs = subs.get(connectionId);
   const sub = connSubs?.get(id);
   if (!connSubs || !sub) return;
-  if (sub.resource === "messages") messageCursors.delete(`${connectionId}:${id}`);
   connSubs.delete(id);
   if (connSubs.size === 0) subs.delete(connectionId);
 }
@@ -246,16 +207,13 @@ function handleToolResponse(msg: Params): void {
 interface InvalidateContext {
   /** Only these sessions changed: narrows which subscriptions are re-sent, and how. */
   sessionIds?: string[];
-  /** A full transcript snapshot follows; resume insert deltas from its new order. */
-  resetMessageCursors?: boolean;
 }
 
 /**
  * These live reads changed: send them again to the connections subscribed to
  * them, before returning.
  *
- * `messages` is sent as the rows inserted since each subscriber's cursor. With
- * `ctx.sessionIds`, `workspaces` is sent as a delta of just the workspaces
+ * With `ctx.sessionIds`, `workspaces` is sent as a delta of just the workspaces
  * those sessions belong to.
  */
 export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void {
@@ -275,20 +233,6 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
       const concerned =
         !ctx?.sessionIds?.length || (!!sessionId && ctx.sessionIds.includes(sessionId));
 
-      if (sub.resource === "messages") {
-        if (!concerned) continue;
-        if (ctx?.resetMessageCursors) {
-          if (sessionId && ctx.sessionIds?.includes(sessionId)) {
-            messageCursors.set(
-              `${connectionId}:${subId}`,
-              getMaxMessageSeq(getDatabase(), sessionId)
-            );
-          }
-          continue;
-        }
-        if (sessionId) pushMessageDelta(connectionId, subId, sessionId, reads);
-        continue;
-      }
       if (sub.resource === "session" && !concerned) continue;
       if (
         sub.resource === "workspaces" &&
@@ -344,28 +288,6 @@ function pushWorkspaceDelta(
   } catch (error) {
     console.error("[QueryEngine] Workspace delta failed, falling back to snapshot:", error);
     return false;
-  }
-}
-
-function pushMessageDelta(
-  connectionId: string,
-  subId: string,
-  sessionId: string,
-  reads: Map<string, unknown>
-): void {
-  const cursorKey = `${connectionId}:${subId}`;
-  const lastSeq = messageCursors.get(cursorKey) ?? 0;
-  try {
-    const db = getDatabase();
-    const inserted = sharedRead(reads, connectionId, ["message-delta", sessionId, lastSeq], () =>
-      attachParts(db, getMessagesDelta(db, sessionId, lastSeq))
-    );
-    if (inserted.length === 0) return;
-    const cursor = inserted[inserted.length - 1].seq;
-    messageCursors.set(cursorKey, cursor);
-    sendFrame(connectionId, { type: "q:delta", id: subId, upserted: inserted, cursor });
-  } catch (error) {
-    console.error("[QueryEngine] Message delta push failed:", error);
   }
 }
 

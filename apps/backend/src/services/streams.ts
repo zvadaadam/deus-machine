@@ -212,6 +212,23 @@ export function subscribe(
   send(connectionId, { type: "q:subscribed", id, ...(scope ? { seq: position } : {}) });
 }
 
+/**
+ * The state under a scope changed in a way its events do not say (rows filled
+ * in from elsewhere): the connections following it read again.
+ */
+export function resetSubscribers<S extends AnyStream>(stream: S, scope: ScopeOf<S>): void {
+  const scopeRecord = scope as Record<string, unknown>;
+  const position = logs.get(stream.name)?.get(subscriptionKey(scope))?.latest ?? firstSeq;
+  for (const sub of subscriptions.values()) {
+    if (sub.stream !== stream.name || !scopeMatches(sub.filter, scopeRecord)) continue;
+    send(sub.connectionId, {
+      type: "q:reset",
+      id: sub.id,
+      ...(sub.numbered ? { seq: position } : {}),
+    });
+  }
+}
+
 export function unsubscribe(connectionId: string, id: string): boolean {
   return subscriptions.delete(subscriptionId(connectionId, id));
 }

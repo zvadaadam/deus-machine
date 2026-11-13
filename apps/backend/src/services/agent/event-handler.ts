@@ -93,8 +93,8 @@ interface SessionState extends SessionFacts {
 // ---- Resource groups for invalidation ----
 
 const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "stats"];
-const MESSAGE_RESOURCES: LiveName[] = ["messages", "session"];
-const TURN_END_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "stats", "messages"];
+/** A message or a compaction row was written: the session's own row counts them. */
+const TRANSCRIPT_RESOURCES: LiveName[] = ["session"];
 
 /**
  * The events the frontend does NOT receive.
@@ -119,27 +119,17 @@ const NOT_PUSHED = new Set([
 /**
  * What a successful write of each change kind makes stale.
  *
- * `part-upserted` is deliberately absent: the frontend already has the part
- * from the pushed envelope, so a q:delta would only run a wasted query.
- *
- * `message-upserted` KEEPS `messages` even though the same argument nearly
- * applies (the fold projects `message.started` from the pushed envelope for
- * the live session and for every background one with a cached page). Reviewed
- * and left in place deliberately: the two paths have not been shown equivalent
- * at runtime for a client that reconnects mid-turn or subscribes before its
- * page resolves, and `mergeMessageDelta` dedupes by id, so the redundant case
- * costs a query and a frame while the missing case would cost a lost row.
- * Whoever exercises those two paths can drop `"messages"` here and make the
- * fold the single writer of message rows. `invalidate` already narrows a
- * `messages` push to the changed sessions (query-engine.ts filters
- * `messages` subscriptions by `ctx.sessionIds`), so the saving would be one
- * query per subscriber of that session.
+ * The transcript itself is never among them: a client folds the published
+ * envelope into its page (rows, parts, turns), so the chat's stream is the one
+ * way a transcript changes on a client. The stream resumes for a client that
+ * was away, or tells it to read the page again. What is invalidated here are
+ * the reads that summarize a chat: its row, its workspace, the counts.
  */
 const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], LiveName[]>> = {
-  message_upserted: MESSAGE_RESOURCES,
-  turn_updated: TURN_END_RESOURCES,
+  message_upserted: TRANSCRIPT_RESOURCES,
+  turn_updated: SESSION_RESOURCES,
   usage_updated: SESSION_RESOURCES,
-  compaction_upserted: MESSAGE_RESOURCES,
+  compaction_upserted: TRANSCRIPT_RESOURCES,
 };
 
 // ---- Helpers ----
@@ -210,7 +200,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         state.turnId = snapshot.state.currentTurnId ?? undefined;
         state.errorReported = snapshot.state.status === "error";
       }
-      invalidate(TURN_END_RESOURCES, { sessionIds: [sessionId], resetMessageCursors: true });
+      invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
       return result.value;
     },
 
@@ -292,7 +282,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       state.errorReported = true;
       persistAndInvalidate(
         persistSessionError(sessionId, message, "network", confirmed ? "error" : "working"),
-        TURN_END_RESOURCES,
+        SESSION_RESOURCES,
         sessionId
       );
     },

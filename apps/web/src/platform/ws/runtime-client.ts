@@ -54,8 +54,6 @@ export class RuntimeClient extends QueryRuntimeClient<LiveName> {
     super(identity, {
       ...ports,
       queryClient: ports.queryClient ?? createQueryClient(),
-      // The messages resource sends null as a delta-stream acknowledgment.
-      acceptSnapshot: (resource, data) => resource !== "messages" || data !== null,
     });
     owners.set(this.queryClient, this);
   }

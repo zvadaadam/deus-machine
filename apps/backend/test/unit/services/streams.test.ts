@@ -16,6 +16,7 @@ import {
   dropConnection,
   openWith,
   publish,
+  resetSubscribers,
   subscribe,
   unsubscribe,
 } from "../../../src/services/streams";
@@ -238,6 +239,22 @@ describe("streams", () => {
     const last = connect("last");
     subscribe("last", "s1", events, { sessionId: "s64" }, 0);
     expect(seqs(last)).toEqual([1]);
+  });
+
+  it("tells the followers of a scope to read again when its state changed without events", () => {
+    const watching = connect("watching");
+    const elsewhere = connect("elsewhere");
+    publish(events, { sessionId: "a" }, { n: 1 });
+    subscribe("watching", "s1", events, { sessionId: "a" });
+    subscribe("elsewhere", "s1", events, { sessionId: "b" });
+    subscribe("elsewhere", "all", events, {});
+
+    resetSubscribers(events, { sessionId: "a" });
+
+    // With where the scope stands: what follows is delivered from there.
+    expect(heard(watching)).toEqual([{ type: "q:reset", id: "s1", seq: 1 }]);
+    // A subscription across scopes hears it too, without a number; another chat's does not.
+    expect(heard(elsewhere)).toEqual([{ type: "q:reset", id: "all" }]);
   });
 
   it("opens a subscription with the state events alone do not restate, after what was missed", () => {

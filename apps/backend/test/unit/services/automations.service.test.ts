@@ -22,6 +22,7 @@ import { SCHEMA_SQL } from "@shared/schema";
 const {
   mockGetDatabase,
   mockInvalidate,
+  mockResetSubscribers,
   mockGetCloudConfig,
   mockGetCloudEnvironmentInfo,
   mockGetProviderAccounts,
@@ -29,6 +30,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
   mockInvalidate: vi.fn(),
+  mockResetSubscribers: vi.fn(),
   mockGetCloudConfig: vi.fn(),
   mockGetCloudEnvironmentInfo: vi.fn(),
   mockGetProviderAccounts: vi.fn(),
@@ -50,6 +52,7 @@ const {
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
+vi.mock("../../../src/services/streams", () => ({ resetSubscribers: mockResetSubscribers }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
   // The workspace-init service registers its pre-connect refresh at import.
   setCloudConnectHook: () => {},
@@ -899,6 +902,26 @@ describeWithDb("openAutomationRun", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM workspaces").get()).toEqual({ n: 1 });
   });
 
+  it("tells whoever has the chat open to read it again once its transcript is filled in", async () => {
+    sdk.getSession.mockResolvedValue({
+      workspaceId: "agnt-ws-1",
+      session: {},
+      status: "idle",
+      messages: [{ id: "ran-in-the-cloud", role: "assistant", parts: [] }],
+      createdAt: null,
+    });
+    mockResetSubscribers.mockClear();
+
+    const adopted = await openAutomationRun("run-1");
+
+    expect(db.prepare("SELECT id FROM messages").all()).toEqual([{ id: "ran-in-the-cloud" }]);
+    // No event of the chat announced these rows: its stream says to read the page again.
+    expect(mockResetSubscribers).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ name: "sessionEvents" }),
+      { sessionId: adopted.sessionId }
+    );
+  });
+
   it("does not adopt a late session after the account changes", async () => {
     sdk.getSession.mockImplementationOnce(async () => {
       mockGetCloudConfig.mockReturnValue({
@@ -932,6 +955,7 @@ describeWithDb("openAutomationRun", () => {
     });
     db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(adopted.workspaceId);
     mockInvalidate.mockClear();
+    mockResetSubscribers.mockClear();
     sdk.getSession.mockImplementationOnce(async () => {
       mockGetCloudConfig.mockReturnValue({
         ...CLOUD_CONFIG,
@@ -953,7 +977,8 @@ describeWithDb("openAutomationRun", () => {
     ).toEqual({
       state: "archived",
     });
-    expect(mockInvalidate.mock.calls.flatMap(([resources]) => resources)).not.toContain("messages");
+    // Nothing of the other account's transcript was written, so nobody is told to read it.
+    expect(mockResetSubscribers).not.toHaveBeenCalled();
   });
 
   it("refuses when the run has no session or the repo isn't local", async () => {

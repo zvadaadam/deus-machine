@@ -19,7 +19,9 @@ import type { Automation, AutomationRun } from "@shared/types";
 import { httpsOrigin } from "@shared/git-origin";
 import { getDatabase } from "../../lib/database";
 import { getRepositoryById } from "../../db";
+import { sessionEvents } from "@shared/api/sessions";
 import { invalidate } from "../query-engine";
+import { resetSubscribers } from "../streams";
 import { environmentNameForRepo, getCloudEnvironmentInfo } from "../cloud-environment.service";
 import { generateUniqueName } from "../workspace.service";
 import type { RepositoryRow } from "../../db/types";
@@ -575,8 +577,10 @@ export async function openAutomationRun(
     console.log(
       `[Automations] backfilled ${inserted} message(s) for adopted run ${runId} → session ${sessionId}`
     );
+    // Rows no event of the chat announced: whoever has its transcript open reads it again.
+    resetSubscribers(sessionEvents, { sessionId });
   }
-  invalidate(["workspaces", "sessions", "session", "messages", "stats", ...AUTOMATION_RESOURCES], {
+  invalidate(["workspaces", "sessions", "session", "stats", ...AUTOMATION_RESOURCES], {
     sessionIds: [sessionId],
   });
 
@@ -605,7 +609,9 @@ async function backfillTranscript(
     if (getCloudConnectionIdentity() !== identity) return;
     const inserted = store.backfillSessionTranscript(deusSessionId, detail.messages);
     if (inserted > 0) {
-      invalidate(["sessions", "session", "messages"], { sessionIds: [deusSessionId] });
+      invalidate(["sessions", "session"], { sessionIds: [deusSessionId] });
+      // Rows no event of the chat announced: whoever has its transcript open reads it again.
+      resetSubscribers(sessionEvents, { sessionId: deusSessionId });
     }
   } catch (err) {
     console.warn(`[Automations] transcript backfill failed for ${deusSessionId}:`, err);

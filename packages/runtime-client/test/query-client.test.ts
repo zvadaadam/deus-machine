@@ -144,17 +144,6 @@ describe("runtime-owned q: client", () => {
     expect(f.client.queryClient.getQueryState(["session", "original"])?.isInvalidated).toBe(false);
   });
 
-  it("does not treat a null messages acknowledgement as an empty transcript", async () => {
-    const f = setup("A", {
-      acceptSnapshot: (resource, data) => resource !== "messages" || data !== null,
-    });
-    f.client.queryClient.setQueryData(["messages"], { messages: ["history"] });
-    f.client.retainQuery("messages", { sessionId: "session" }, ["messages"]);
-    await online(f);
-    f.socket.message({ type: "q:snapshot", id: f.socket.frames("q:subscribe")[0].id, data: null });
-    expect(f.client.queryClient.getQueryData(["messages"])).toEqual({ messages: ["history"] });
-  });
-
   it("blocks all writes while the relay socket is open but the host is unavailable", async () => {
     const f = setup();
     await online(f);

@@ -67,8 +67,7 @@ client names the last number it has and the host sends what followed. When
 that is not possible (the stream is not numbered, or the host no longer holds
 that far back and answers `q:reset`), `onReset` runs: something may have been
 missed, so the consumer reads its state again. It does not run on the first
-subscription. A live read that answers with a `cursor` (in its snapshot or a
-delta) is resumed the same way.
+subscription.
 
 `publishLocal(stream, scope, data)` delivers an event to this client's own
 listeners, for a source that lives in the client (a channel the browser holds
@@ -113,10 +112,8 @@ parameters and cache key also share one projection, so multiple components do
 not apply a delta more than once. (Two different subscriptions written into one
 cache key would each merge into it; give each subscription its own key.)
 
-Snapshots containing `null` clear absent resources. An application can supply
-`acceptSnapshot(resource, data)` to exclude acknowledgment-only snapshots; Deus
-uses this for the messages resource's null acknowledgment. That exception does
-not apply to a deleted session or other resource.
+Snapshots containing `null` clear absent resources (a deleted session, for
+example).
 
 Reconnect restores subscriptions, snapshots and streams. It never resends a
 write. A write whose acknowledgment is lost rejects with a `RuntimeError`

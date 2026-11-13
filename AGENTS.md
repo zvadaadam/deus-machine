@@ -98,7 +98,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | Frame                                    | Purpose                                                                                                    |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
-| `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, stats, sessions, messages)             |
+| `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, stats, sessions)                       |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
 | `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, stopSession)                                     |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
@@ -126,7 +126,8 @@ missed, or a `q:reset` when the host no longer holds that far back (a restart
 included: a number never means two events, even across processes). A chat's
 stream then opens with any part still being typed, as it stands
 (`services/agent/open-parts.ts`), so a client that returns mid-reply shows the
-whole reply so far. `messages` resumes the same way from its row cursor. The
+whole reply so far. A transcript is read once (`messages`) and then changes on
+a client in one way only: its chat's stream, folded into the page. The
 client package does this bookkeeping; a consumer supplies only `onReset`
 ("something may have been missed: read the state again"). So a reconnect does
 not reload the chats a window holds, and a phone following one chat is not

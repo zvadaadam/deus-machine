@@ -9,7 +9,6 @@ import { api } from "@shared/api";
 import type { PaginatedMessages } from "@shared/types/session";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
-import { mergeMessageDelta } from "../lib/messageCache";
 import { createOptimisticUserMessage, dropOptimisticMessage } from "../lib/optimisticMessage";
 import { SendRejectedError, rollbackSendStatus } from "../lib/sendRollback";
 import {
@@ -111,35 +110,24 @@ export function useWorkingSessionIds(sessionIds: string[]): Set<string> {
 }
 
 /**
- * Fetch messages for a session — fully WS-driven.
+ * A session's transcript page.
  *
- * WS subscription pushes q:delta frames with new messages since last cursor.
- * mergeMessageDelta handles the PaginatedMessages shape, deduplication,
- * and optimistic placeholder cleanup.
- * HTTP queryFn loads the latest page; useLoadOlderMessages prepends history.
- * The virtualizer limits how many loaded messages render at once.
+ * The page is read once. What happens to the chat afterwards is folded into
+ * this cache from its `sessionEvents` stream (`useAgentEvents`), which follows
+ * every chat with a page here; `useLoadOlderMessages` prepends history. The
+ * virtualizer limits how many loaded messages render at once.
  */
 export function useMessages(sessionId: string | null) {
   // Cloud-direct (Path B): the browser folds the agnt socket into this same
-  // cache key itself (`useCloudDirect`), so the Mac-backend lanes — the WS
-  // `messages` subscription, the reconnect-invalidate, and the HTTP fetch — must
-  // all stand down for a direct session, or an authoritative-empty fetch would
-  // clobber the folded transcript. Direct mode is DERIVED here (not a threaded
+  // cache key itself (`useCloudDirect`), so the Mac-backend read must stand
+  // down for a direct session, or an authoritative-empty fetch would clobber
+  // the folded transcript. Direct mode is DERIVED here (not a threaded
   // param) so EVERY consumer respects it — including the composer mounted outside
   // SessionPanel's tree. `direct === false` is strict, so the unknown beat
   // (session row unloaded) holds the Mac lane DOWN: a wrongly-armed Mac lane
   // clobbers a fold; a wrongly-held one only delays a fetch by one round-trip.
   const direct = useIsDirectSession(sessionId);
   const macLaneEnabled = !!sessionId && direct === false;
-
-  useQuerySubscription(api.messages, {
-    queryKey: queryKeys.sessions.messages(sessionId || ""),
-    params: { sessionId: sessionId || "" },
-    enabled: macLaneEnabled,
-    mergeDelta: mergeMessageDelta,
-  });
-
-  // The runtime-owned agent subscription recovers cached transcripts on reconnect.
 
   const query = useQuery({
     queryKey: queryKeys.sessions.messages(sessionId || ""),

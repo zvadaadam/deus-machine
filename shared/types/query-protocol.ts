@@ -20,9 +20,9 @@ export interface QRequestFrame {
  * Subscribe to a live read (answered with `q:snapshot`, then `q:snapshot` or
  * `q:delta` whenever it changes) or to a stream (answered with `q:subscribed`,
  * then `q:event`s).
- * A client that returns after a lost connection says where it stopped
- * (`after`: the last `seq` of a stream, the last `cursor` of a read that has
- * one) and is sent what followed, or a `q:reset` when the host cannot say.
+ * A client that returns to a stream after a lost connection says where it
+ * stopped (`after`: the last `seq` it has) and is sent what followed, or a
+ * `q:reset` when the host cannot say.
  */
 export interface QSubscribeFrame {
   type: "q:subscribe";
@@ -65,15 +65,11 @@ export interface QResponseFrame {
   data: unknown;
 }
 
-/**
- * A live read's whole value, keyed by the subscription's id. A read that sends
- * rows since a cursor (`messages`) answers with where it stands instead.
- */
+/** A live read's whole value, keyed by the subscription's id. */
 export interface QSnapshotFrame {
   type: "q:snapshot";
   id: string;
   data: unknown;
-  cursor?: number;
 }
 
 /** A change to a live read: rows to upsert by id, ids to remove. */
@@ -82,7 +78,6 @@ export interface QDeltaFrame {
   id: string;
   upserted?: unknown[];
   removed?: string[];
-  cursor?: number;
 }
 
 export interface QMutateResultFrame<T = unknown> extends MutateResult<T> {

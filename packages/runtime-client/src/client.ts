@@ -23,8 +23,6 @@ type Subscription = {
   params?: Record<string, unknown>;
   observers: Set<Observer>;
   fresh: boolean;
-  /** Where a read that answers with rows since a cursor stands: where a return resumes. */
-  cursor?: number;
 };
 type Follower = { onEvent: StreamCallback; options?: ListenOptions };
 /** One wire subscription to a stream, shared by everyone here who follows it with that filter. */
@@ -199,21 +197,18 @@ export class RuntimeClient<Resource extends string = string> {
       .with("q:snapshot", () => {
         const sub = this.byId.get(id);
         if (!sub || !this.isConnected()) return;
-        // A null resource can be authoritative. Ack-only snapshots are an app policy.
+        // A null resource can be authoritative.
         sub.fresh = true;
-        if (typeof frame.cursor === "number") sub.cursor = frame.cursor;
         for (const observer of sub.observers) this.notify(() => observer.snapshot(frame.data));
       })
       .with("q:delta", () => {
         const sub = this.byId.get(id);
         if (!sub || !this.isConnected()) return;
-        if (typeof frame.cursor === "number") sub.cursor = frame.cursor;
         for (const observer of sub.observers)
           this.notify(() =>
             observer.delta?.(
               frame.upserted as unknown[] | undefined,
-              frame.removed as string[] | undefined,
-              frame.cursor as number | undefined
+              frame.removed as string[] | undefined
             )
           );
       })
@@ -570,7 +565,6 @@ export class RuntimeClient<Resource extends string = string> {
       id: sub.id,
       resource: sub.resource,
       ...(sub.params ? { params: sub.params } : {}),
-      ...(sub.cursor !== undefined ? { after: sub.cursor } : {}),
     });
   }
   private sendListen(listener: Listener): void {

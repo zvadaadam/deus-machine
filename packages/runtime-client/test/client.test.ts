@@ -57,53 +57,15 @@ describe("headless client", () => {
     await online(f);
     const id = f.socket.frames("q:subscribe")[0].id;
     f.socket.message({ type: "q:snapshot", id, data: [{ id: "tool", stock: 3 }] });
-    f.socket.message({ type: "q:delta", id, upserted: [{ id: "tool", stock: 2 }], cursor: 9 });
+    f.socket.message({ type: "q:delta", id, upserted: [{ id: "tool", stock: 2 }] });
     expect(snapshot).toHaveBeenCalledExactlyOnceWith([{ id: "tool", stock: 3 }]);
-    expect(delta).toHaveBeenCalledExactlyOnceWith([{ id: "tool", stock: 2 }], undefined, 9);
+    expect(delta).toHaveBeenCalledExactlyOnceWith([{ id: "tool", stock: 2 }], undefined);
     const request = f.client.sendRequest("inventory-count");
     f.socket.message({ type: "q:response", id: f.socket.frames("q:request")[0].id, data: 2 });
     expect(await request).toBe(2);
     stop();
     expect(f.client.diagnostics()).toMatchObject({ subscriptions: 0, observers: 0, pending: 0 });
     expect(f.client).not.toHaveProperty("queryClient");
-  });
-
-  it("returns to a live read after the last cursor it was answered with", async () => {
-    const f = fixture();
-    f.client.subscribe("messages", { sessionId: "empty" }, vi.fn(), vi.fn());
-    f.client.subscribe("messages", { sessionId: "moved" }, vi.fn(), vi.fn());
-    f.client.subscribe("workspaces", undefined, vi.fn(), vi.fn());
-    await online(f);
-    const [empty, moved, plain] = f.socket.frames("q:subscribe");
-    // The first time there is nowhere to resume from.
-    for (const frame of [empty, moved, plain]) expect(frame).not.toHaveProperty("after");
-    // Where the read stands arrives with its acknowledgment (0 before any row: still a
-    // place to return to), and moves with each delta.
-    f.socket.message({ type: "q:snapshot", id: empty.id, data: null, cursor: 0 });
-    f.socket.message({ type: "q:snapshot", id: moved.id, data: null, cursor: 3 });
-    f.socket.message({ type: "q:delta", id: moved.id, upserted: [{ id: "m", seq: 5 }], cursor: 5 });
-    // A read that is sent again whole says nothing about where it stands.
-    f.socket.message({ type: "q:snapshot", id: plain.id, data: [{ id: "w" }] });
-    f.socket.message({ type: "q:delta", id: plain.id, upserted: [{ id: "w", title: "renamed" }] });
-
-    await reconnect(f);
-    expect(f.socket.frames("q:subscribe")).toEqual([
-      {
-        type: "q:subscribe",
-        id: empty.id,
-        resource: "messages",
-        params: { sessionId: "empty" },
-        after: 0,
-      },
-      {
-        type: "q:subscribe",
-        id: moved.id,
-        resource: "messages",
-        params: { sessionId: "moved" },
-        after: 5,
-      },
-      { type: "q:subscribe", id: plain.id, resource: "workspaces" },
-    ]);
   });
 
   it("sends a request made while connecting once the connection is up, not into a retry", async () => {

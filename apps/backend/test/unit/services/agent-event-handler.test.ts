@@ -453,7 +453,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("message.started", () => {
-    it("folds the engine's user echo into a message row and invalidates the page", () => {
+    it("folds the engine's user echo into a message row and invalidates the session, not the transcript", () => {
       const echo = messageStarted({ role: "user", outputIndex: 0, messageId: "user-msg" });
 
       handler.handle(envelope(echo));
@@ -465,9 +465,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         role: "user",
         turnId: TURN,
       });
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: [SESSION],
-      });
+      // The row reaches clients on the chat's stream; only the session's own row is read again.
+      expect(mockInvalidate).toHaveBeenCalledWith(["session"], { sessionIds: [SESSION] });
+      expect(pushedEnvelopes().map((e) => e.event.type)).toEqual(["message.started"]);
     });
 
     it("carries turn, parent tool call and model into the folded message", () => {
@@ -900,9 +900,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         compactionId: "cmp-1",
         status: "completed",
       });
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: [SESSION],
-      });
+      expect(mockInvalidate).toHaveBeenCalledWith(["session"], { sessionIds: [SESSION] });
       expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
         ["session.compaction", true],
       ]);

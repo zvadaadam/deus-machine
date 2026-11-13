@@ -169,9 +169,7 @@ export async function sendMessage(
   const sentAt = new Date().toISOString();
   const working = persistSessionWorking(sessionId);
   if (!working.ok) throw new Error(working.error);
-  invalidate(["workspaces", "sessions", "session", "messages", "stats"], {
-    sessionIds: [sessionId],
-  });
+  invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
 
   // 2. Forward to agent-server. The ACK is NOT out yet: handleCommand sends it
   // from THIS function's outcome, which is what lets the guards below — and

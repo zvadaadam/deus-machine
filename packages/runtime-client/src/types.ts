@@ -41,7 +41,7 @@ export type ToolResponseInterceptor = (
   error: string | undefined
 ) => boolean;
 export type SnapshotCallback = (data: unknown) => void;
-export type DeltaCallback = (upserted?: unknown[], removed?: string[], cursor?: number) => void;
+export type DeltaCallback = (upserted?: unknown[], removed?: string[]) => void;
 /** One event of a stream. */
 export type StreamCallback = (data: unknown) => void;
 export interface ListenOptions {

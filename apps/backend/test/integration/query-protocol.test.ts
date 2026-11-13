@@ -5,7 +5,6 @@
  * q:* frame type end-to-end:
  *   - q:request → q:response (one-shot queries for all 4 resources)
  *   - q:subscribe → q:snapshot (initial + live push on invalidation)
- *   - q:subscribe → q:delta (cursor-based message deltas, resumed by a returning client)
  *   - q:subscribe → q:event (a stream: scoped delivery, replay, reset)
  *   - q:unsubscribe (stops receiving pushes)
  *   - q:mutate → q:mutate_result (archiveWorkspace, updateWorkspaceTitle, sendMessage)
@@ -465,10 +464,10 @@ describe("q:subscribe → initial q:snapshot", () => {
     }
   });
 
-  it("sends null snapshot for messages (delta-only subscription)", async () => {
+  it("refuses a subscription to a read that is not live: a transcript is read, then followed", async () => {
     const { ws } = await connectAndAuth();
     try {
-      const snap = await sendAndReceive(
+      const refused = await sendAndReceive(
         ws,
         {
           type: "q:subscribe",
@@ -476,13 +475,10 @@ describe("q:subscribe → initial q:snapshot", () => {
           resource: "messages",
           params: { sessionId: SESS_ID },
         },
-        "q:snapshot"
+        "q:error"
       );
-
-      expect(snap.id).toBe("sub_msg_1");
-      // Messages subscription is delta-only: sends null snapshot as ack.
-      // The HTTP queryFn loads the full set; WS only pushes deltas.
-      expect(snap.data).toBeNull();
+      expect(refused).toMatchObject({ id: "sub_msg_1", code: "SUBSCRIBE_ERROR" });
+      expect(refused.message).toBe("messages cannot be subscribed to");
     } finally {
       ws.close();
     }
@@ -556,194 +552,6 @@ describe("q:subscribe → live q:snapshot push", () => {
       expect(snapshots).toHaveLength(0);
     } finally {
       ws.close();
-    }
-  });
-});
-
-describe("q:subscribe → q:delta for messages", () => {
-  it("continues delivering inserts after restored history resets the sequence order", async () => {
-    testDb.exec("UPDATE messages SET seq = seq + 100");
-    const { ws } = await connectAndAuth();
-    try {
-      await sendAndReceive(
-        ws,
-        {
-          type: "q:subscribe",
-          id: "sub_restored",
-          resource: "messages",
-          params: { sessionId: SESS_ID },
-        },
-        "q:snapshot"
-      );
-      const restored = restoreCloudSnapshot(
-        SESS_ID,
-        {
-          type: "session.snapshot",
-          state: {
-            sessionId: "cloud-session",
-            organizationId: "org",
-            workspaceId: "workspace",
-            status: "ready",
-            turns: [],
-          },
-          messages: ["msg-q-001", "msg-q-002", "msg-q-003"].map((id, messageIndex) => ({
-            id,
-            sessionId: "cloud-session",
-            turnId: "turn",
-            role: "assistant",
-            messageIndex,
-            outputIndex: messageIndex + 1,
-            createdAt: Date.now(),
-            parts: [],
-          })),
-        },
-        false
-      );
-      expect(restored.ok).toBe(true);
-      invalidate(["messages"], { sessionIds: [SESS_ID], resetMessageCursors: true });
-      testDb
-        .prepare(
-          "INSERT INTO messages (id, session_id, role) VALUES ('msg-after-restore', ?, 'user')"
-        )
-        .run(SESS_ID);
-      const delivery = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta = await delivery;
-      expect(delta.upserted.map((message: { id: string }) => message.id)).toEqual([
-        "msg-after-restore",
-      ]);
-      expect(delta.cursor).toBe(4);
-    } finally {
-      ws.close();
-    }
-  });
-
-  it("pushes delta with new messages after invalidation", async () => {
-    const { ws } = await connectAndAuth();
-    try {
-      // Subscribe to messages
-      await sendAndReceive(
-        ws,
-        {
-          type: "q:subscribe",
-          id: "sub_delta_1",
-          resource: "messages",
-          params: { sessionId: SESS_ID },
-        },
-        "q:snapshot"
-      );
-
-      // Insert a new message directly
-      testDb
-        .prepare(
-          `
-        INSERT INTO messages (id, session_id, role, sent_at)
-        VALUES ('msg-q-new-1', ?, 'user', datetime('now'))
-      `
-        )
-        .run(SESS_ID);
-
-      // Trigger invalidation and wait for delta
-      const deltaPromise = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta = await deltaPromise;
-
-      expect(delta.id).toBe("sub_delta_1");
-      expect(delta.upserted).toHaveLength(1);
-      expect(delta.upserted[0].id).toBe("msg-q-new-1");
-      expect(delta.cursor).toBeGreaterThan(0);
-    } finally {
-      ws.close();
-    }
-  });
-
-  it("advances cursor correctly across multiple deltas", async () => {
-    const { ws } = await connectAndAuth();
-    try {
-      // Subscribe
-      await sendAndReceive(
-        ws,
-        {
-          type: "q:subscribe",
-          id: "sub_cursor",
-          resource: "messages",
-          params: { sessionId: SESS_ID },
-        },
-        "q:snapshot"
-      );
-
-      // First delta
-      testDb
-        .prepare(
-          `
-        INSERT INTO messages (id, session_id, role, sent_at)
-        VALUES ('msg-q-cur-1', ?, 'user', datetime('now'))
-      `
-        )
-        .run(SESS_ID);
-      const delta1Promise = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta1 = await delta1Promise;
-      expect(delta1.upserted).toHaveLength(1);
-      const cursor1 = delta1.cursor;
-
-      // Second delta — should only contain the newest message
-      testDb
-        .prepare(
-          `
-        INSERT INTO messages (id, session_id, role, sent_at)
-        VALUES ('msg-q-cur-2', ?, 'assistant', datetime('now'))
-      `
-        )
-        .run(SESS_ID);
-      const delta2Promise = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta2 = await delta2Promise;
-
-      expect(delta2.upserted).toHaveLength(1);
-      expect(delta2.upserted[0].id).toBe("msg-q-cur-2");
-      expect(delta2.cursor).toBeGreaterThan(cursor1);
-    } finally {
-      ws.close();
-    }
-  });
-});
-
-describe("a returning client", () => {
-  it("is sent the messages written while it was away, from the cursor it names", async () => {
-    const first = await connectAndAuth();
-    const subscribe = { type: "q:subscribe", resource: "messages", params: { sessionId: SESS_ID } };
-    const ack = await sendAndReceive(first.ws, { ...subscribe, id: "sub_away" }, "q:snapshot");
-    // The acknowledgment says where the subscription stands, with no row sent.
-    expect(ack).toMatchObject({ id: "sub_away", data: null });
-    expect(ack.cursor).toBeGreaterThan(0);
-    first.ws.close();
-
-    testDb
-      .prepare(
-        "INSERT INTO messages (id, session_id, role, sent_at) VALUES ('msg-q-away', ?, 'assistant', datetime('now'))"
-      )
-      .run(SESS_ID);
-
-    const back = await connectAndAuth();
-    try {
-      const frames = collectMessages(back.ws, 300);
-      back.ws.send(JSON.stringify({ ...subscribe, id: "sub_back", after: ack.cursor }));
-      const [snapshot, delta, ...rest] = await frames;
-      expect(snapshot).toMatchObject({ type: "q:snapshot", id: "sub_back", cursor: ack.cursor });
-      expect(delta).toMatchObject({ type: "q:delta", id: "sub_back" });
-      expect(delta.upserted.map((row: { id: string }) => row.id)).toEqual(["msg-q-away"]);
-      expect(rest).toEqual([]);
-
-      // A cursor from beyond the newest row (a restored transcript) cannot skip later rows.
-      const ahead = await sendAndReceive(
-        back.ws,
-        { ...subscribe, id: "sub_ahead", after: delta.cursor + 100 },
-        "q:snapshot"
-      );
-      expect(ahead.cursor).toBe(delta.cursor);
-    } finally {
-      back.ws.close();
     }
   });
 });
@@ -1215,7 +1023,6 @@ describe("invalidation sharing and filtered deltas", () => {
       id: string;
       data?: Array<{ workspaces: Array<{ id: string; title: string }> }>;
       upserted?: Array<{ id: string }>;
-      cursor?: number;
     }> = [];
     const id = addConnection(
       { send: (raw) => frames.push(JSON.parse(String(raw))), close: () => {} },
@@ -1271,35 +1078,6 @@ describe("invalidation sharing and filtered deltas", () => {
       expect(read).toHaveBeenCalledTimes(4);
     } finally {
       viewers.forEach((v) => v.close());
-      read.mockRestore();
-    }
-  });
-
-  it("only reads affected message subscriptions and shares equal cursors", () => {
-    const a = viewer(),
-      b = viewer();
-    const read = vi.spyOn(queries, "getMessagesDelta");
-    try {
-      a.subscribe("affected-a", "messages", { sessionId: SESS_ID });
-      b.subscribe("affected-b", "messages", { sessionId: SESS_ID });
-      a.subscribe("unaffected", "messages", { sessionId: "another-session" });
-      testDb
-        .prepare(
-          "INSERT INTO messages (id, session_id, role) VALUES ('shared-delta', ?, 'assistant')"
-        )
-        .run(SESS_ID);
-      read.mockClear();
-      a.frames.length = 0;
-      b.frames.length = 0;
-      invalidate(["messages"], { sessionIds: [SESS_ID] });
-      expect(read).toHaveBeenCalledTimes(1);
-      expect(a.frames).toHaveLength(1);
-      expect(b.frames).toHaveLength(1);
-      expect(a.frames[0].upserted?.[0].id).toBe("shared-delta");
-      expect(b.frames[0].cursor).toBe(a.frames[0].cursor);
-    } finally {
-      a.close();
-      b.close();
       read.mockRestore();
     }
   });

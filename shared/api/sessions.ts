@@ -21,10 +21,9 @@ export const session = live({ name: "session", input: sessionId, output: out<Ses
 
 /**
  * The latest page of a chat's transcript, or the page before `before` (a
- * message seq). Subscribing does not send a page: it sends the messages
- * written after the subscription began, as deltas.
+ * message seq). What happens to the chat afterwards arrives on `sessionEvents`.
  */
-export const messages = live({
+export const messages = read({
   name: "messages",
   input: sessionId.extend({
     limit: z.number().int().positive().optional(),
