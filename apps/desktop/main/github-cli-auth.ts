@@ -23,7 +23,7 @@ function wasKilled(error: unknown): boolean {
  * Internal: read the active github.com login from `gh auth status`.
  * Used only by `logoutGhAuth` to find which user to sign out. The web
  * UI gets identity (login + display name + avatar) from the backend's
- * /api/gh-status endpoint, which calls `gh api user` for the full record.
+ * `ghStatus` operation, which calls `gh api user` for the full record.
  */
 async function readActiveGhLogin(ghPath: string): Promise<string | null> {
   try {

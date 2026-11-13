@@ -22,6 +22,7 @@ import {
 } from "@deus-hq/sdk";
 import type { AutomationSpecInput } from "@deus-hq/api";
 import type { CloudThinkingLevel } from "@shared/cloud-models";
+import type { AutomationRunStatus } from "@shared/enums";
 import { getCloudConfig } from "../agent/cloud/config";
 import type { AutomationRow, AutomationRunRow } from "../../db/types";
 
@@ -237,7 +238,7 @@ export async function resumePlatformAutomation(id: string): Promise<void> {
 export async function triggerPlatformAutomation(
   id: string,
   idempotencyKey: string
-): Promise<{ runId: string; status: string }> {
+): Promise<{ runId: string; status: AutomationRunStatus }> {
   const response = await sdkTriggerAutomation(id, {
     ...requireAutomationPlatform(),
     idempotencyKey,

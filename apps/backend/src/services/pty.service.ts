@@ -2,12 +2,14 @@
  * PTY Service — Backend
  *
  * Manages pseudo-terminal sessions using node-pty.
- * PTY data and exit events are broadcast to all WS clients as q:event frames.
+ * What a terminal prints, and its end, go to the clients following it
+ * (the `terminalOutput` stream).
  */
 
 import type * as Pty from "node-pty";
 import { createRequire } from "node:module";
-import { broadcast } from "./ws.service";
+import { terminalOutput } from "@shared/api/terminal";
+import { publish } from "./streams";
 
 // Active PTY sessions, keyed by client-provided ID
 const sessions = new Map<string, Pty.IPty>();
@@ -19,20 +21,15 @@ function getPtyModule(): typeof Pty {
   return ptyModule;
 }
 
-/** Broadcast a q:event frame to all connected WS clients. */
-function pushEvent(event: string, data: unknown): void {
-  broadcast(JSON.stringify({ type: "q:event", event, data }));
-}
-
-// The single home for the frontend's terminal event names — the cloud PTY
-// relay (agent/cloud/driver.ts) emits through these so local and remote
-// terminals are indistinguishable to xterm.
+// What a terminal prints and its end, to the clients following it. The cloud
+// PTY relay (agent/cloud/driver.ts) emits through these too, so local and
+// remote terminals are indistinguishable to xterm.
 export function emitPtyData(id: string, bytes: number[]): void {
-  pushEvent("pty-data", { id, data: bytes });
+  publish(terminalOutput, { id }, { type: "data", data: bytes });
 }
 
 export function emitPtyExit(id: string, error?: string): void {
-  pushEvent("pty-exit", { id, ...(error ? { error } : {}) });
+  publish(terminalOutput, { id }, { type: "exit", ...(error ? { error } : {}) });
 }
 
 export function spawnPty(args: {
@@ -59,16 +56,10 @@ export function spawnPty(args: {
       (args.env as Record<string, string> | undefined) ?? (process.env as Record<string, string>),
   });
 
-  // Forward PTY output as q:event "pty-data"
-  ptyProcess.onData((data: string) => {
-    const bytes = Array.from(Buffer.from(data));
-    pushEvent("pty-data", { id, data: bytes });
-  });
-
-  // Forward PTY exit as q:event "pty-exit"
+  ptyProcess.onData((data: string) => emitPtyData(id, Array.from(Buffer.from(data))));
   ptyProcess.onExit(() => {
     sessions.delete(id);
-    pushEvent("pty-exit", { id });
+    emitPtyExit(id);
   });
 
   sessions.set(id, ptyProcess);

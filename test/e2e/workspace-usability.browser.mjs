@@ -28,7 +28,6 @@ import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
 import { emptyComposer, sessionComposerActions, useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
-import { createStreamCursor } from "@/features/session/lib/agentEventFold";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
 import { useChatTabs } from "@/app/layouts/useChatTabs";
@@ -65,7 +64,7 @@ function WelcomeSendJourney() {
 window.containsCredential = value => JSON.stringify([client.getQueryCache().getAll().map(q => q.state), client.getMutationCache().getAll().map(m => m.state)]).includes(value);
 window.deliverEmptyCloudSnapshot = () => makeCloudFrameHandler({
   queryClient: client, activeSessionId: "history-session", folds: new Map(),
-  cursor: createStreamCursor(), scheduleFlush: () => {}, requestRefetch: () => {},
+  scheduleFlush: () => {}, requestRefetch: () => {},
 }, "history-session")({
   type: "session.snapshot", messages: [], events: [],
   state: {sessionId: "provider-session", status: "ready", currentTurnId: null, turns: []},
@@ -193,10 +192,18 @@ const server = await createServer({
         const listeners = new Set();
         window.reconnectFiles = () => { for (const fn of listeners) fn(true); };
         export const onConnectionChange = fn => { listeners.add(fn); return () => listeners.delete(fn); };
-        export const sendRequest = async name => { const r = await fetch("/api/query/" + name); if (!r.ok) throw new Error("Cloud computer is reconnecting"); return r.json(); };
-        export const sendMutate = async (name, params) => { const r = await fetch("/api/mutate/" + name, {method: "POST", body: JSON.stringify(params)}); return r.json(); };
+        const sendRequest = async name => { const r = await fetch("/api/query/" + name); if (!r.ok) throw new Error("Cloud computer is reconnecting"); return r.json(); };
+        const sendMutate = async (name, params) => { const r = await fetch("/api/mutate/" + name, {method: "POST", body: JSON.stringify(params)}); return r.json(); };
         export const isConnected = () => location.search.startsWith("?welcome");
-        export const sendCommand = async (name, params) => { window.welcomeCommands.push({name, params}); return {accepted: true}; };
+        // Writes this fixture answers are fetched; every other write is recorded for the test to inspect.
+        const answered = new Set(["createSession", "invalidateFileCache", "addRepo", "saveSetting"]);
+        export const call = async (op, input) => {
+          if (op.kind === "read") return sendRequest(op.name);
+          if (!answered.has(op.name)) { window.welcomeCommands.push({name: op.name, params: input}); return {}; }
+          const result = await sendMutate(op.name, input);
+          if (!result.success) throw new Error(result.error || op.name + " failed");
+          return result.data;
+        };
       `;
       },
       configureServer(vite) {

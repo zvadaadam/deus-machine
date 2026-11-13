@@ -1,150 +1,125 @@
-// Query protocol — WebSocket wire format for the cloud relay.
-// All frame types prefixed with "q:" so they route cleanly in the ws.service dispatcher.
+// The q: wire: the frames a client and a Deus host exchange over one socket.
 //
-// Domain constants (QUERY_RESOURCES, MUTATION_NAMES, COMMAND_NAMES, PROTOCOL_EVENTS)
-// live in shared/events.ts — the single source of truth for all app events
-// and resources. This file only defines the wire format that carries them.
+// What a frame names (an operation or a stream) is declared in `shared/api`;
+// this file is only the envelope that carries it. A client never builds these
+// by hand: `call(op, input)` and the subscription hooks do.
 
 import type { MutateResult } from "@deus/runtime-client";
-import type {
-  QueryResource,
-  RequestResource,
-  MutationName,
-  CommandName,
-  ProtocolEvent,
-} from "../events";
 
-// Re-export so existing `import { QueryResource } from "query-protocol"` still works.
-export type { QueryResource, RequestResource, MutationName, CommandName, ProtocolEvent };
-export {
-  QUERY_RESOURCES,
-  REQUEST_RESOURCES,
-  MUTATION_NAMES,
-  COMMAND_NAMES,
-  PROTOCOL_EVENTS,
-} from "../events";
+// ---- Client → host ----
 
-// ---- Client → Server Frames ----
-
-/** Client requests data (one-shot). Accepts both subscribable and request-only resources. */
+/** Ask a read. Answered once with `q:response`, or `q:error`. */
 export interface QRequestFrame {
   type: "q:request";
   id: string;
-  resource: RequestResource;
+  resource: string;
   params?: Record<string, unknown>;
 }
 
-/** Client subscribes to live updates for a resource. */
+/**
+ * Subscribe to a live read (answered with `q:snapshot`, then `q:snapshot` or
+ * `q:delta` whenever it changes) or to a stream (answered with `q:subscribed`,
+ * then `q:event`s).
+ * A client that returns to a stream after a lost connection says where it
+ * stopped (`after`: the last `seq` it has) and is sent what followed, or a
+ * `q:reset` when the host cannot say.
+ */
 export interface QSubscribeFrame {
   type: "q:subscribe";
   id: string;
-  resource: QueryResource;
+  resource: string;
   params?: Record<string, unknown>;
+  after?: number;
 }
 
-/** Client unsubscribes by subscription ID (no resource/params needed). */
 export interface QUnsubscribeFrame {
   type: "q:unsubscribe";
   id: string;
 }
 
-/** Client requests a mutation. Field is `action`, not `mutation`. */
+/** Ask a write. Answered once with `q:mutate_result`; never sent twice. */
 export interface QMutateFrame {
   type: "q:mutate";
   id: string;
-  action: MutationName;
+  action: string;
   params: Record<string, unknown>;
 }
 
-/** Client sends an async command (e.g. sendMessage, stopSession). */
-export interface QCommandFrame {
-  type: "q:command";
-  id: string;
-  command: CommandName;
-  params: Record<string, unknown>;
-}
+/** Answer something an agent asked this client (a request on `toolRequests`). */
+export type QToolResponseFrame =
+  | { type: "q:tool_response"; requestId: string; result: unknown; error?: never }
+  | { type: "q:tool_response"; requestId: string; error: string; result?: never };
 
-/** Client responds to a tool relay request (q:event tool:request → q:tool_response). */
-export interface QToolResponseSuccessFrame {
-  type: "q:tool_response";
-  requestId: string;
-  result: unknown;
-  error?: never;
-}
-
-export interface QToolResponseErrorFrame {
-  type: "q:tool_response";
-  requestId: string;
-  error: string;
-  result?: never;
-}
-
-export type QToolResponseFrame = QToolResponseSuccessFrame | QToolResponseErrorFrame;
-
-/** All frames a client can send. */
 export type QClientFrame =
   | QRequestFrame
   | QSubscribeFrame
   | QUnsubscribeFrame
   | QMutateFrame
-  | QCommandFrame
   | QToolResponseFrame;
 
-// ---- Server → Client Frames ----
+// ---- Host → client ----
 
-/** Server returns data for a one-shot request. */
 export interface QResponseFrame {
   type: "q:response";
   id: string;
   data: unknown;
 }
 
-/** Server pushes a full snapshot to a subscriber (keyed by subscription ID). */
+/** A live read's whole value, keyed by the subscription's id. */
 export interface QSnapshotFrame {
   type: "q:snapshot";
   id: string;
   data: unknown;
-  cursor?: number;
 }
 
-/** Server pushes incremental update (keyed by subscription ID). */
+/** A change to a live read: rows to upsert by id, ids to remove. */
 export interface QDeltaFrame {
   type: "q:delta";
   id: string;
   upserted?: unknown[];
   removed?: string[];
-  cursor?: number;
 }
 
-/** Server returns mutation result. Uses `success`, not `ok`. */
 export interface QMutateResultFrame<T = unknown> extends MutateResult<T> {
   type: "q:mutate_result";
   id: string;
 }
 
-/** Server tells clients to refetch stale resources. */
-export interface QInvalidateFrame {
-  type: "q:invalidate";
-  resources: QueryResource[];
-}
-
-/** Server acknowledges an async command. */
-export interface QCommandAckFrame {
-  type: "q:command_ack";
-  id: string;
-  accepted: boolean;
-  commandId?: string;
-  error?: string;
-}
-
-/** Server pushes an ephemeral event (no subscription needed). */
+/**
+ * One event of a stream, for the subscription `id`. `seq` numbers it within
+ * its scope on a resumable stream (an event the stream does not keep carries
+ * the number of the kept one before it).
+ */
 export interface QEventFrame {
   type: "q:event";
-  event: ProtocolEvent;
+  id: string;
+  event: string;
   data: unknown;
+  seq?: number;
 }
 
-/** Server error for a specific request. */
+/**
+ * A stream subscription is in place. `seq` is where its scope stands on a
+ * resumable stream: the place a client returns to if nothing arrives meanwhile.
+ */
+export interface QSubscribedFrame {
+  type: "q:subscribed";
+  id: string;
+  seq?: number;
+}
+
+/**
+ * A stream cannot say what the subscriber missed since the event it named:
+ * it reads the state again. `seq` is where the stream stands now, when it has
+ * kept anything under that scope.
+ */
+export interface QResetFrame {
+  type: "q:reset";
+  id: string;
+  seq?: number;
+}
+
+/** A read or a subscription was refused. */
 export interface QErrorFrame {
   type: "q:error";
   id: string;
@@ -152,22 +127,19 @@ export interface QErrorFrame {
   message: string;
 }
 
-/** All frames a server can send. */
 export type QServerFrame =
   | QResponseFrame
   | QSnapshotFrame
   | QDeltaFrame
   | QMutateResultFrame
-  | QCommandAckFrame
   | QEventFrame
-  | QInvalidateFrame
+  | QSubscribedFrame
+  | QResetFrame
   | QErrorFrame;
 
-// ---- Tool Relay Event Payload ----
+// ---- Tool requests ----
 
-/** Payload shape for q:event with event: "tool:request".
- *  Sent by the backend when relaying a tool request from the agent to the frontend.
- *  The WS frame wraps this in q:event, not as a standalone event. */
+/** Something an agent asks a client to do or answer (sent on `toolRequests`). */
 export interface ToolRequestEventData {
   requestId: string;
   sessionId: string;
@@ -175,9 +147,3 @@ export interface ToolRequestEventData {
   params: Record<string, unknown>;
   timeoutMs: number;
 }
-
-// The payload of q:event with event "agent:event" is one sequenced
-// @zvada/agent-server lifecycle envelope, forwarded verbatim: deus reshapes
-// nothing, so `seq` ordering/dedupe is free, and both sides name the shape
-// `DecodedWireEventEnvelope` (shared/protocol-types) rather than aliasing it
-// here — Law 7, an alias with no consumer reads as a capability.

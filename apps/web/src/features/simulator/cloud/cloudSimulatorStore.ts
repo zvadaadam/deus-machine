@@ -1,9 +1,9 @@
 /**
- * Cloud simulator device state — the q:event "cloud:simulator" stream.
+ * Cloud simulator device state — the `cloudSimulatorEvents` stream.
  *
  * One entry per cloud workspace. Nothing is persisted anywhere — the platform
  * is the truth (it replays the latest status on every connect and serves it
- * over REST): live `cloud:simulator` events feed this store, and a panel that
+ * over REST): live `cloudSimulatorEvents` feed this store, and a panel that
  * mounts on a workspace nothing was seen for yet seeds it once from the
  * backend's `cloudSimulator` read. Screenshots and the agent's device actions
  * exist ONLY here — a refresh clears them by design.
@@ -11,8 +11,8 @@
 
 import { create } from "zustand";
 import { match } from "ts-pattern";
-import { CloudSimulatorEventSchema } from "@shared/events";
-import { isConnected, onConnectionChange, onEvent } from "@/platform/ws";
+import { api } from "@shared/api";
+import { follow, isConnected, onConnectionChange } from "@/platform/ws";
 
 export type CloudSimPlatform = "ios" | "android";
 
@@ -72,7 +72,7 @@ export const EMPTY_CLOUD_SIM_DEVICE: CloudSimDevice = Object.freeze({
 
 interface CloudSimulatorStore {
   byWorkspace: Record<string, CloudSimDevice>;
-  /** Bumped on every cloud:identity. A one-shot status read that started
+  /** Bumped on every `cloudIdentity` event. A one-shot status read that started
    *  under an earlier generation answers for the previous account and is
    *  dropped (see CloudSimulatorPanel's seed). */
   generation: number;
@@ -262,21 +262,15 @@ export function ensureCloudSimulatorSubscription(): void {
     forgetAllCloudSimulators();
   });
 
-  onEvent((event, raw) => {
-    if (event === "cloud:identity") {
-      // Sign-out / account switch: every entry was the previous account's
-      // device — stream URLs, screenshots, the agent's actions and their
-      // arguments. Start over; a mounted panel re-seeds under the new identity.
-      forgetAllCloudSimulators();
-      return;
-    }
-    if (event !== "cloud:simulator") return;
-    const parsed = CloudSimulatorEventSchema.safeParse(raw);
-    if (!parsed.success) return;
+  // Sign-out / account switch: every entry was the previous account's
+  // device — stream URLs, screenshots, the agent's actions and their
+  // arguments. Start over; a mounted panel re-seeds under the new identity.
+  follow(api.cloudIdentity, {}, forgetAllCloudSimulators);
 
+  follow(api.cloudSimulatorEvents, {}, (event) => {
     // The device belongs to the WORKSPACE (agnt fans its status out to every
     // session), so entries key on workspaceId, never on the session.
-    match(parsed.data)
+    match(event)
       .with({ kind: "status" }, ({ workspaceId, data }) =>
         cloudSimulatorActions.applyStatusEvent(workspaceId, data)
       )

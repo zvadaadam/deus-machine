@@ -14,14 +14,14 @@ const EMPTY_TABS: PersistedTerminalTab[] = [];
 // Cap the number of workspaces whose terminals stay alive simultaneously.
 // Beyond this, the oldest non-current workspace is evicted — its Terminal
 // components unmount, killing PTYs, disposing xterm, and tearing down
-// IPC event listeners. Prevents O(N) pty-data fan-out at scale.
+// IPC event listeners. Prevents O(N) terminal-output fan-out at scale.
 const MAX_CACHED_WORKSPACES = 5;
 
 interface TerminalPanelProps {
   workspaceId: string;
   workspacePath: string;
   /** Cloud workspaces: shells spawn in the SANDBOX over the session channel
-   *  (same pty-data/pty-exit events — xterm can't tell). Path is unused. */
+   *  (same `terminalOutput` events — xterm can't tell). Path is unused. */
   cloud?: boolean;
   /** Whether the terminal panel is the active (visible) right-side tab */
   panelVisible?: boolean;

@@ -1,20 +1,18 @@
 /**
- * WebSocket Platform API
- * Public exports for the WebSocket query protocol client.
+ * How the app talks to the selected host: `call` an operation from
+ * `shared/api`, subscribe through the hooks, listen for events.
  */
 
 export {
+  call,
+  follow,
+  OpError,
   connect,
   isConnected,
-  sendCommand,
-  sendRequest,
   setQueryRequestInterceptor,
   setToolResponseInterceptor,
-  emitLocalEvent,
-  sendMutate,
   sendToolResponse,
   forceReconnect,
-  onEvent,
   onConnectionChange,
   getRuntimeClient,
   onRuntimeChange,

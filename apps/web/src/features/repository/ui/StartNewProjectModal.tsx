@@ -11,8 +11,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { onEvent } from "@/platform/ws/query-protocol-client";
-import { GIT_INIT_PROGRESS, type GitInitProgressEvent } from "@shared/events";
+import { api } from "@shared/api";
+import { useStream } from "@/shared/hooks/useStream";
 import { native, capabilities } from "@/platform";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { cn } from "@/shared/lib/utils";
@@ -67,19 +67,11 @@ export function StartNewProjectModal({
     })();
   }, [show, isMobile]);
 
-  // Listen for git-init-progress events while creating
-  useEffect(() => {
-    if (!creating) return;
-    const unlisten = onEvent((event, data) => {
-      if (event === GIT_INIT_PROGRESS) {
-        const { line } = data as GitInitProgressEvent;
-        if (line) {
-          setLines((prev) => [...prev, line].slice(-MAX_LINES));
-        }
-      }
-    });
-    return unlisten;
-  }, [creating]);
+  // Git's own progress lines. Followed while the dialog is open, so the
+  // first lines are not lost to a subscription made after the work began.
+  useStream(api.gitProgress, show ? { operation: "init" } : null, ({ line }) => {
+    if (line) setLines((prev) => [...prev, line].slice(-MAX_LINES));
+  });
 
   const effectiveBasePath = isMobile ? defaultBasePath : basePath.trim() || defaultBasePath;
   const fullPath = projectName.trim() ? `${effectiveBasePath}/${projectName.trim()}` : "";

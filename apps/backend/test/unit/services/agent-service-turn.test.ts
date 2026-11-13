@@ -9,8 +9,8 @@
  * next envelope folds into. `abortTurn` is what keeps the local view honest.
  *
  * The rollback is also load-bearing one layer up: sendMessage now awaits
- * admission and rethrows the refusal so the q:command_ack says
- * `accepted: false`. A rollback that did not happen here would leave the
+ * admission and rethrows the refusal so the write's answer says
+ * it was refused. A rollback that did not happen here would leave the
  * backend believing a turn is live for a send the frontend has already rolled
  * back — see agent-commands-send.test.ts for that half.
  */

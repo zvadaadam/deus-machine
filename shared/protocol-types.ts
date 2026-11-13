@@ -114,4 +114,9 @@ export type AnyLifecycleEvent = DecodedLifecycleEvent | UnknownEvent;
  * decides membership against ITS frozen list, so a package that learns a new
  * event type stops calling it unknown here on the same bump.
  */
-export { isUnknownEvent, isUnknownPart } from "@zvada/agent-server/protocol/guards";
+export {
+  isLiveEnvelope,
+  isLiveOnlyEvent,
+  isUnknownEvent,
+  isUnknownPart,
+} from "@zvada/agent-server/protocol/guards";

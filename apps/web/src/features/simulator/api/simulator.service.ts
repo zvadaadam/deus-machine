@@ -1,212 +1,86 @@
 /**
- * Simulator Service — communicates with the backend via WebSocket commands.
+ * The simulator operations that need more than one call.
  *
- * All operations go through the q:command protocol, which works identically
- * in desktop mode (WS to localhost) and web/relay mode (WS through relay).
- * No Electron IPC dependency.
- *
- * Commands are fire-and-forget (ack != completion). Stream lifecycle events
- * are pushed via q:event (sim:streamReady, sim:stopped, etc.).
+ * Starting a stream and building an app answer at once and report their
+ * outcome later on the workspace's `simulatorEvents`; the functions here wait
+ * for it. Everything else the panel does is a plain `call(api.sim…)`.
  */
 
-import { sendCommand, sendRequest, onEvent } from "@/platform/ws/query-protocol-client";
-import type { InstalledApp, InspectorSnapshot, SimulatorInfo, StreamInfo } from "../types";
-import type { SimulatorCapabilities } from "@shared/types/simulator";
+import { api } from "@shared/api";
+import type { SimulatorEvent } from "@shared/api/simulator";
+import { call, follow } from "@/platform/ws";
+import type { InstalledApp, SimulatorInfo, StreamInfo } from "../types";
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function workspacePayload(data: unknown, workspaceId: string): Record<string, unknown> | null {
-  const payload = asRecord(data);
-  return payload.workspaceId === workspaceId ? payload : null;
-}
-
-function eventError(payload: Record<string, unknown>, fallback: string): Error {
-  return new Error(asString(payload.error) ?? fallback);
-}
-
-function parseStreamInfo(payload: Record<string, unknown>): StreamInfo | null {
-  const url = asString(payload.url);
-  const port = asNumber(payload.port);
-  if (!url || port === null) return null;
-  return {
-    url,
-    port,
-    hid_available: payload.hidAvailable === true,
-  };
-}
-
-function parseInstalledApp(payload: Record<string, unknown>): InstalledApp {
-  return {
-    bundle_id: asString(payload.bundleId) ?? "",
-    name: asString(payload.appName) ?? "App",
-    app_path: asString(payload.appPath) ?? "",
-  };
-}
-
-function parseInspectorSnapshot(result: unknown): InspectorSnapshot {
-  const snapshot = asRecord(result).snapshot;
-  if (!snapshot || typeof snapshot !== "object") {
-    throw new Error("Malformed inspector snapshot response");
-  }
-  return snapshot as InspectorSnapshot;
+/**
+ * Ask for something and wait for the workspace's simulator to report how it
+ * went. It listens before it asks, so an outcome that comes at once is heard.
+ * `settle` answers with the result or the failure, or nothing for an event
+ * that is not the outcome.
+ */
+function outcome<T>(
+  workspaceId: string,
+  ask: () => Promise<unknown>,
+  settle: (event: SimulatorEvent) => T | Error | undefined,
+  timeout: { ms: number; message: string }
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const finish = (result: T | Error) => {
+      clearTimeout(timer);
+      stop();
+      if (result instanceof Error) reject(result);
+      else resolve(result);
+    };
+    const timer = setTimeout(() => finish(new Error(timeout.message)), timeout.ms);
+    const stop = follow(api.simulatorEvents, { workspaceId }, (event) => {
+      const result = settle(event);
+      if (result !== undefined) finish(result);
+    });
+    ask().catch((error: unknown) =>
+      finish(error instanceof Error ? error : new Error(String(error)))
+    );
+  });
 }
 
 export const simulatorService = {
-  getCapabilities: (): Promise<SimulatorCapabilities> =>
-    sendRequest<SimulatorCapabilities>("simulatorCapabilities"),
-
-  /** Fast probe: does this workspace contain a buildable Xcode project? */
-  hasXcodeProject: async (workspacePath: string): Promise<boolean> => {
-    try {
-      const result = await sendCommand("sim:hasXcodeProject", { workspacePath });
-      return asRecord(result).hasProject === true;
-    } catch {
-      return false;
-    }
-  },
-
-  /** List available iOS simulators. */
+  /** The simulators installed on the backend's Mac; none when they cannot be listed. */
   listSimulators: async (): Promise<SimulatorInfo[]> => {
     try {
-      const result = await sendCommand("sim:listDevices", {}, 45_000);
-      const devices = asRecord(result).devices;
-      return Array.isArray(devices) ? (devices as SimulatorInfo[]) : [];
+      // CoreSimulator can take longer than the default 30 s to answer on a fresh macOS install.
+      const { devices } = await call(api.simListDevices, {}, { timeoutMs: 45_000 });
+      return devices;
     } catch (err) {
       console.warn("[Simulator] listSimulators failed:", err);
       return [];
     }
   },
 
-  /**
-   * Start streaming from a simulator. Fires q:command sim:start which
-   * returns immediately (ack). The actual stream URL arrives via
-   * q:event sim:streamReady { workspaceId, url, port, hidAvailable }.
-   */
-  startStreaming: async (
-    workspaceId: string,
-    udid: string,
-    skipBootCheck = false
-  ): Promise<StreamInfo> => {
-    // Register listener BEFORE sending command to avoid race condition
-    // (backend could push sim:streamReady before we start listening).
-    return new Promise<StreamInfo>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error("Simulator stream did not start within 30s"));
-      }, 30_000);
-
-      const cleanup = onEvent((event, data) => {
-        const payload = workspacePayload(data, workspaceId);
-        if (!payload) return;
-
-        if (event === "sim:streamReady") {
-          clearTimeout(timeout);
-          cleanup();
-          const stream = parseStreamInfo(payload);
-          if (stream) resolve(stream);
-          else reject(new Error("Malformed simulator streamReady event"));
+  /** Start streaming from a simulator, and wait for its stream. */
+  startStreaming: (workspaceId: string, udid: string, skipBootCheck = false): Promise<StreamInfo> =>
+    outcome(
+      workspaceId,
+      () => call(api.simStart, { workspaceId, udid, skipBootCheck }),
+      (event) => {
+        if (event.type === "streamReady") {
+          return { url: event.url, port: event.port, hid_available: event.hidAvailable };
         }
-        if (event === "sim:streamFailed") {
-          clearTimeout(timeout);
-          cleanup();
-          reject(eventError(payload, "Failed to start simulator"));
+        if (event.type === "streamFailed") return new Error(event.error);
+        return undefined;
+      },
+      { ms: 30_000, message: "Simulator stream did not start within 30s" }
+    ),
+
+  /** Build the workspace's app and run it on its simulator, and wait for the build. */
+  buildAndRun: (workspaceId: string, workspacePath: string): Promise<InstalledApp> =>
+    outcome(
+      workspaceId,
+      () => call(api.simBuildAndRun, { workspaceId, workspacePath }),
+      (event) => {
+        if (event.type === "buildComplete") {
+          return { bundle_id: event.bundleId, name: event.appName, app_path: event.appPath };
         }
-      });
-
-      // Send the start command AFTER listener is registered
-      sendCommand("sim:start", { workspaceId, udid, skipBootCheck }).catch((err) => {
-        clearTimeout(timeout);
-        cleanup();
-        reject(err);
-      });
-    });
-  },
-
-  stopStreaming: async (workspaceId: string): Promise<void> => {
-    await sendCommand("sim:stop", { workspaceId });
-  },
-
-  sendTouch: (workspaceId: string, x: number, y: number, touchType: string) =>
-    sendCommand("sim:touch", { workspaceId, x, y, touchType }),
-
-  sendScroll: (workspaceId: string, x: number, y: number, dx: number, dy: number) =>
-    sendCommand("sim:scroll", { workspaceId, x, y, dx, dy }),
-
-  sendKey: (workspaceId: string, keycode: number, direction: string) =>
-    sendCommand("sim:key", { workspaceId, keycode, direction }),
-
-  sendButton: (workspaceId: string, buttonType: string) =>
-    sendCommand("sim:button", { workspaceId, buttonType }),
-
-  takeScreenshot: async (workspaceId: string): Promise<number[]> => {
-    const result = await sendCommand("sim:screenshot", { workspaceId });
-    const bytes = asRecord(result).bytes;
-    return Array.isArray(bytes)
-      ? bytes.filter((byte): byte is number => typeof byte === "number")
-      : [];
-  },
-
-  startInspect: async (workspaceId: string, bundleId?: string): Promise<InspectorSnapshot> => {
-    const result = await sendCommand("sim:inspectStart", { workspaceId, bundleId });
-    return parseInspectorSnapshot(result);
-  },
-
-  inspectSnapshot: async (workspaceId: string): Promise<InspectorSnapshot> => {
-    const result = await sendCommand("sim:inspectSnapshot", { workspaceId });
-    return parseInspectorSnapshot(result);
-  },
-
-  pressHome: (workspaceId: string) =>
-    sendCommand("sim:button", { workspaceId, buttonType: "home" }),
-
-  launchApp: (workspaceId: string, bundleId: string) =>
-    sendCommand("sim:launchApp", { workspaceId, bundleId }),
-
-  terminateApp: (workspaceId: string, bundleId: string) =>
-    sendCommand("sim:terminateApp", { workspaceId, bundleId }),
-
-  uninstallApp: (workspaceId: string, bundleId: string) =>
-    sendCommand("sim:uninstallApp", { workspaceId, bundleId }),
-
-  buildAndRun: async (workspaceId: string, workspacePath: string): Promise<InstalledApp> => {
-    // Register listener BEFORE sending command to avoid race condition
-    return new Promise<InstalledApp>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error("Build timed out after 10 minutes"));
-      }, 600_000);
-
-      const cleanup = onEvent((event, data) => {
-        const payload = workspacePayload(data, workspaceId);
-        if (!payload) return;
-
-        if (event === "sim:buildComplete") {
-          clearTimeout(timeout);
-          cleanup();
-          resolve(parseInstalledApp(payload));
-        }
-        if (event === "sim:buildFailed") {
-          clearTimeout(timeout);
-          cleanup();
-          reject(eventError(payload, "Build failed"));
-        }
-      });
-
-      sendCommand("sim:buildAndRun", { workspaceId, workspacePath }).catch((err) => {
-        clearTimeout(timeout);
-        cleanup();
-        reject(err);
-      });
-    });
-  },
+        if (event.type === "buildFailed") return new Error(event.error);
+        return undefined;
+      },
+      { ms: 600_000, message: "Build timed out after 10 minutes" }
+    ),
 };

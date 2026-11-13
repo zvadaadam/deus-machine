@@ -8,6 +8,16 @@ export class AppError extends Error {
     this.statusCode = statusCode;
     this.details = details;
   }
+
+  /** From a `{ error | message, details }` body a service built for a failed request. */
+  static fromBody(statusCode: number, body: Record<string, unknown>): AppError {
+    const message = body.error ?? body.message;
+    return new AppError(
+      statusCode,
+      typeof message === "string" ? message : `Request failed (${statusCode})`,
+      body.details
+    );
+  }
 }
 
 export class NotFoundError extends AppError {

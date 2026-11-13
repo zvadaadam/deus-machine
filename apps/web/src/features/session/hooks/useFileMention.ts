@@ -3,19 +3,17 @@
  *
  * Watches the current input value and cursor position to detect when the user
  * types `@` to start a file mention. Extracts the search query (text after @)
- * and calls the backend HTTP endpoint for fuzzy file search results.
+ * and asks the backend for fuzzy file search results.
  *
  * Returns state and handlers that the MessageInput and FileMentionPopover consume.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { sendRequest } from "@/platform/ws";
+import { api } from "@shared/api";
+import type { FileMatch } from "@shared/types/files";
+import { call } from "@/platform/ws";
 
-export interface FuzzyFileResult {
-  path: string;
-  name: string;
-  score: number;
-}
+export type FuzzyFileResult = FileMatch;
 
 interface UseFileMentionOptions {
   /** Current textarea value */
@@ -149,11 +147,7 @@ export function useFileMention({
 
     searchTimerRef.current = setTimeout(async () => {
       try {
-        const searchResults = await sendRequest<FuzzyFileResult[]>("fileSearch", {
-          workspaceId,
-          query: query || "",
-          limit: 15,
-        });
+        const searchResults = await call(api.fileSearch, { workspaceId, query, limit: 15 });
         // Only apply results if this is still the latest search
         if (searchIdRef.current !== currentSearchId) return;
         setResults(searchResults);

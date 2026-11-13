@@ -50,6 +50,22 @@ export interface Compaction {
 }
 
 /**
+ * One page of a session's transcript, newest messages last.
+ *
+ * `compactions` is required, not optional: an answer that left it out was
+ * indistinguishable from a session that never compacted, and every divider
+ * vanished from the transcript without the types objecting.
+ */
+export interface PaginatedMessages {
+  messages: Message[];
+  turns: SessionTurn[];
+  /** Positional siblings of messages, not parts: the transcript orders them. */
+  compactions: Compaction[];
+  has_older: boolean;
+  has_newer: boolean;
+}
+
+/**
  * Session information
  * Metadata about a Claude Code session
  * Matches the sessions database table schema

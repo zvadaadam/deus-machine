@@ -10,9 +10,9 @@ export type {
   RuntimePorts,
   QueryRequestInterceptor,
   ToolResponseInterceptor,
-  EventCallback,
   SnapshotCallback,
   DeltaCallback,
-  CommandResult,
+  StreamCallback,
+  ListenOptions,
   MutateResult,
 } from "./types";

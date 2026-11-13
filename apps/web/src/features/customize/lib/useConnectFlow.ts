@@ -13,11 +13,12 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { api } from "@shared/api";
 import type { AppView, ConnectAppResult } from "@shared/integrations/types";
 import { getErrorMessage } from "@shared/lib/errors";
 import { openExternalPending, type PendingExternalWindow } from "@/platform/native/window";
+import { call } from "@/platform/ws";
 import { needsRemoteAuth } from "@/platform/ws/device-auth";
-import { connectApp } from "../api/integrations.queries";
 
 /**
  * A browser sign-in returns to the computer Deus runs on, so it can only be
@@ -37,7 +38,10 @@ interface ConnectRequest {
 
 async function connect({ view, values, tab }: ConnectRequest): Promise<ConnectAppResult> {
   try {
-    const result = await connectApp({ appId: view.app.id, ...(values ? { values } : {}) });
+    const result = await call(api.connectApp, {
+      appId: view.app.id,
+      ...(values ? { values } : {}),
+    });
     if (result.status === "redirect") {
       await tab?.open(result.url);
       toast(`Finish signing in to ${view.app.name} in your browser`);

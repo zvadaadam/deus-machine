@@ -2,24 +2,21 @@ import { describe, it, expect, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import {
-  createStreamCursor,
   flushDeltas,
   messagesKey,
   type AgentStreamContext,
   type SessionFold,
 } from "@/features/session/lib/agentEventFold";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 
 const T = 1_700_000_000_000;
 
 function makeCtx(qc: QueryClient, sessionId: string): AgentStreamContext {
   const folds = new Map<string, SessionFold>();
-  const cursor = createStreamCursor();
   return {
     queryClient: qc,
     activeSessionId: sessionId,
     folds,
-    cursor,
     // Flush synchronously in the test (no requestAnimationFrame).
     scheduleFlush: () => {
       const fold = folds.get(sessionId);
@@ -344,13 +341,11 @@ describe("makeCloudFrameHandler", () => {
 
     // A shared fold lane (folds survive remounts, like the hook's).
     const folds = new Map<string, SessionFold>();
-    const cursor = createStreamCursor();
     const requestRefetch = vi.fn();
     const ctx: AgentStreamContext = {
       queryClient: qc,
       activeSessionId: SESSION,
       folds,
-      cursor,
       scheduleFlush: () => {
         const fold = folds.get(SESSION);
         if (fold) flushDeltas(qc, SESSION, fold);
@@ -394,8 +389,8 @@ describe("makeCloudFrameHandler", () => {
     requestRefetch.mockClear();
     makeCloudFrameHandler(ctx, SESSION)(snapshot);
 
-    // Re-folding the same snapshot is upsert-by-id — no duplicates, and with no
-    // wire seq there is no cursor to reset, so no refetch churn.
+    // Re-folding the same snapshot is upsert-by-id — no duplicates, and nothing
+    // in the fold reads a restated snapshot as lost events, so no refetch churn.
     expect(qc.getQueryData<PaginatedMessages>(messagesKey(SESSION))!.messages).toHaveLength(2);
     expect(requestRefetch).not.toHaveBeenCalled();
   });

@@ -310,25 +310,6 @@ export function hasNewerMessages(db: Database.Database, sessionId: string, seq: 
     .get(sessionId, seq);
 }
 
-/** Get the highest seq for a session (cursor initialization for real-time streaming). */
-export function getMaxMessageSeq(db: Database.Database, sessionId: string): number {
-  const row = db
-    .prepare("SELECT COALESCE(MAX(seq), 0) as max_seq FROM messages WHERE session_id = ?")
-    .get(sessionId) as { max_seq: number } | undefined;
-  return row?.max_seq ?? 0;
-}
-
-/** Fetch all messages after a given seq (delta push for real-time streaming). */
-export function getMessagesDelta(
-  db: Database.Database,
-  sessionId: string,
-  afterSeq: number
-): MessageRow[] {
-  return db
-    .prepare("SELECT * FROM messages WHERE session_id = ? AND seq > ? ORDER BY seq ASC")
-    .all(sessionId, afterSeq) as MessageRow[];
-}
-
 // ─── Parts Queries ──────────────────────────────────────────
 
 /**

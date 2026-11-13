@@ -5,7 +5,7 @@
  * q:* frame type end-to-end:
  *   - q:request → q:response (one-shot queries for all 4 resources)
  *   - q:subscribe → q:snapshot (initial + live push on invalidation)
- *   - q:subscribe → q:delta (cursor-based message deltas)
+ *   - q:subscribe → q:event (a stream: scoped delivery, replay, reset)
  *   - q:unsubscribe (stops receiving pushes)
  *   - q:mutate → q:mutate_result (archiveWorkspace, updateWorkspaceTitle, sendMessage)
  *   - Error handling (unknown frames, missing params, connection cleanup)
@@ -49,7 +49,6 @@ vi.mock("../../src/server", () => ({
 import fs from "fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { setApp } from "../../src/services/route-delegate";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
 import {
@@ -57,6 +56,8 @@ import {
   removeConnection,
   closeAll as closeAllWs,
 } from "../../src/services/ws.service";
+import { api } from "@shared/api";
+import { publish } from "../../src/services/streams";
 import { resetStatsCache } from "../../src/db";
 import * as queries from "../../src/db";
 import { handleFrame, invalidate } from "../../src/services/query-engine";
@@ -223,7 +224,6 @@ beforeAll(async () => {
   seedTestData();
 
   const created = createApp();
-  setApp(created.app);
   await new Promise<void>((resolve) => {
     server = serve({ fetch: created.app.fetch, port: 0, hostname: "127.0.0.1" }, (info) => {
       port = info.port;
@@ -412,6 +412,7 @@ describe("q:request → q:response", () => {
 
       expect(res.id).toBe("req-err");
       expect(res.code).toBe("QUERY_ERROR");
+      expect(res.message).toBe("Unknown operation: nonexistent");
     } finally {
       ws.close();
     }
@@ -463,10 +464,10 @@ describe("q:subscribe → initial q:snapshot", () => {
     }
   });
 
-  it("sends null snapshot for messages (delta-only subscription)", async () => {
+  it("refuses a subscription to a read that is not live: a transcript is read, then followed", async () => {
     const { ws } = await connectAndAuth();
     try {
-      const snap = await sendAndReceive(
+      const refused = await sendAndReceive(
         ws,
         {
           type: "q:subscribe",
@@ -474,13 +475,10 @@ describe("q:subscribe → initial q:snapshot", () => {
           resource: "messages",
           params: { sessionId: SESS_ID },
         },
-        "q:snapshot"
+        "q:error"
       );
-
-      expect(snap.id).toBe("sub_msg_1");
-      // Messages subscription is delta-only: sends null snapshot as ack.
-      // The HTTP queryFn loads the full set; WS only pushes deltas.
-      expect(snap.data).toBeNull();
+      expect(refused).toMatchObject({ id: "sub_msg_1", code: "SUBSCRIBE_ERROR" });
+      expect(refused.message).toBe("messages cannot be subscribed to");
     } finally {
       ws.close();
     }
@@ -558,149 +556,102 @@ describe("q:subscribe → live q:snapshot push", () => {
   });
 });
 
-describe("q:subscribe → q:delta for messages", () => {
-  it("continues delivering inserts after restored history resets the sequence order", async () => {
-    testDb.exec("UPDATE messages SET seq = seq + 100");
-    const { ws } = await connectAndAuth();
+describe("q:subscribe → a stream's q:event", () => {
+  const events = (frames: any[]) => frames.filter((frame) => frame.type === "q:event");
+  const subscribe = (id: string, sessionId: string, after?: number) => ({
+    type: "q:subscribe",
+    id,
+    resource: "sessionEvents",
+    params: { sessionId },
+    ...(after !== undefined ? { after } : {}),
+  });
+  const envelope = (sessionId: string, seq: number) =>
+    ({ sessionId, seq, event: { type: "test.event", sessionId } }) as never;
+  const tell = (sessionId: string, seq: number, keep = true) =>
+    publish(
+      api.sessionEvents,
+      { sessionId },
+      { type: "event", envelope: envelope(sessionId, seq) },
+      { keep }
+    );
+
+  it("sends a chat's events to the connections following that chat, and to no other", async () => {
+    const watching = await connectAndAuth();
+    const elsewhere = await connectAndAuth();
+    const idle = await connectAndAuth();
     try {
-      await sendAndReceive(
-        ws,
-        {
-          type: "q:subscribe",
-          id: "sub_restored",
-          resource: "messages",
-          params: { sessionId: SESS_ID },
-        },
-        "q:snapshot"
+      watching.ws.send(JSON.stringify(subscribe("mine", "stream-a")));
+      elsewhere.ws.send(JSON.stringify(subscribe("other", "stream-b")));
+      await new Promise((r) => setTimeout(r, 50));
+
+      const heard = [watching, elsewhere, idle].map(({ ws }) => collectMessages(ws, 200));
+      tell("stream-a", 1);
+      tell("stream-a", 2, false);
+      tell("stream-b", 1);
+      const [mine, other, nothing] = await Promise.all(heard);
+
+      expect(events(mine).map((frame) => [frame.id, frame.event, frame.data.envelope.seq])).toEqual(
+        [
+          ["mine", "sessionEvents", 1],
+          ["mine", "sessionEvents", 2],
+        ]
       );
-      const restored = restoreCloudSnapshot(
-        SESS_ID,
-        {
-          type: "session.snapshot",
-          state: {
-            sessionId: "cloud-session",
-            organizationId: "org",
-            workspaceId: "workspace",
-            status: "ready",
-            turns: [],
-          },
-          messages: ["msg-q-001", "msg-q-002", "msg-q-003"].map((id, messageIndex) => ({
-            id,
-            sessionId: "cloud-session",
-            turnId: "turn",
-            role: "assistant",
-            messageIndex,
-            outputIndex: messageIndex + 1,
-            createdAt: Date.now(),
-            parts: [],
-          })),
-        },
-        false
-      );
-      expect(restored.ok).toBe(true);
-      invalidate(["messages"], { sessionIds: [SESS_ID], resetMessageCursors: true });
-      testDb
-        .prepare(
-          "INSERT INTO messages (id, session_id, role) VALUES ('msg-after-restore', ?, 'user')"
-        )
-        .run(SESS_ID);
-      const delivery = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta = await delivery;
-      expect(delta.upserted.map((message: { id: string }) => message.id)).toEqual([
-        "msg-after-restore",
-      ]);
-      expect(delta.cursor).toBe(4);
+      // The event nobody keeps carries the number of the kept one before it.
+      expect(events(mine)[1].seq).toBe(events(mine)[0].seq);
+      expect(events(other).map((frame) => frame.data.envelope.sessionId)).toEqual(["stream-b"]);
+      // A connection that asked for nothing is sent nothing.
+      expect(nothing).toEqual([]);
     } finally {
-      ws.close();
+      for (const { ws } of [watching, elsewhere, idle]) ws.close();
     }
   });
 
-  it("pushes delta with new messages after invalidation", async () => {
-    const { ws } = await connectAndAuth();
+  it("replays what a returning client missed, and tells it to read again when it cannot", async () => {
+    const first = await connectAndAuth();
+    first.ws.send(JSON.stringify(subscribe("sub", "stream-c")));
+    await new Promise((r) => setTimeout(r, 50));
+    const before = collectMessages(first.ws, 100);
+    tell("stream-c", 1);
+    const [seen] = events(await before);
+    first.ws.close();
+
+    // While it is away: two events worth keeping, and a token delta.
+    tell("stream-c", 2);
+    tell("stream-c", 3, false);
+    tell("stream-c", 4);
+
+    const back = await connectAndAuth();
     try {
-      // Subscribe to messages
-      await sendAndReceive(
-        ws,
-        {
-          type: "q:subscribe",
-          id: "sub_delta_1",
-          resource: "messages",
-          params: { sessionId: SESS_ID },
-        },
-        "q:snapshot"
-      );
+      const replay = collectMessages(back.ws, 200);
+      back.ws.send(JSON.stringify(subscribe("sub", "stream-c", seen.seq)));
+      expect(events(await replay).map((frame) => frame.data.envelope.seq)).toEqual([2, 4]);
 
-      // Insert a new message directly
-      testDb
-        .prepare(
-          `
-        INSERT INTO messages (id, session_id, role, sent_at)
-        VALUES ('msg-q-new-1', ?, 'user', datetime('now'))
-      `
-        )
-        .run(SESS_ID);
-
-      // Trigger invalidation and wait for delta
-      const deltaPromise = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta = await deltaPromise;
-
-      expect(delta.id).toBe("sub_delta_1");
-      expect(delta.upserted).toHaveLength(1);
-      expect(delta.upserted[0].id).toBe("msg-q-new-1");
-      expect(delta.cursor).toBeGreaterThan(0);
+      // A place the host does not hold (another process's number): read again.
+      const reset = await sendAndReceive(back.ws, subscribe("stale", "stream-c", 3), "q:reset");
+      expect(reset.id).toBe("stale");
+      expect(reset.seq).toBeGreaterThan(seen.seq);
     } finally {
-      ws.close();
+      back.ws.close();
     }
   });
 
-  it("advances cursor correctly across multiple deltas", async () => {
+  it("stops at q:unsubscribe, and refuses a stream nobody declared", async () => {
     const { ws } = await connectAndAuth();
     try {
-      // Subscribe
-      await sendAndReceive(
+      // A subscription is acknowledged with where its chat stands.
+      const ack = await sendAndReceive(ws, subscribe("sub", "stream-d"), "q:subscribed");
+      expect(ack.id).toBe("sub");
+      expect(ack.seq).toBeGreaterThan(0);
+      ws.send(JSON.stringify({ type: "q:unsubscribe", id: "sub" }));
+      const refused = await sendAndReceive(
         ws,
-        {
-          type: "q:subscribe",
-          id: "sub_cursor",
-          resource: "messages",
-          params: { sessionId: SESS_ID },
-        },
-        "q:snapshot"
+        { type: "q:subscribe", id: "nope", resource: "everything" },
+        "q:error"
       );
-
-      // First delta
-      testDb
-        .prepare(
-          `
-        INSERT INTO messages (id, session_id, role, sent_at)
-        VALUES ('msg-q-cur-1', ?, 'user', datetime('now'))
-      `
-        )
-        .run(SESS_ID);
-      const delta1Promise = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta1 = await delta1Promise;
-      expect(delta1.upserted).toHaveLength(1);
-      const cursor1 = delta1.cursor;
-
-      // Second delta — should only contain the newest message
-      testDb
-        .prepare(
-          `
-        INSERT INTO messages (id, session_id, role, sent_at)
-        VALUES ('msg-q-cur-2', ?, 'assistant', datetime('now'))
-      `
-        )
-        .run(SESS_ID);
-      const delta2Promise = waitForMessage(ws, "q:delta");
-      invalidate(["messages"]);
-      const delta2 = await delta2Promise;
-
-      expect(delta2.upserted).toHaveLength(1);
-      expect(delta2.upserted[0].id).toBe("msg-q-cur-2");
-      expect(delta2.cursor).toBeGreaterThan(cursor1);
+      expect(refused).toMatchObject({ id: "nope", code: "SUBSCRIBE_ERROR" });
+      const heard = collectMessages(ws, 150);
+      tell("stream-d", 1);
+      expect(await heard).toEqual([]);
     } finally {
       ws.close();
     }
@@ -824,7 +775,7 @@ describe("q:mutate → q:mutate_result", () => {
     }
   });
 
-  it("returns error for unknown mutation", async () => {
+  it("refuses a write nothing answers, and a read sent as a write", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(
@@ -840,23 +791,32 @@ describe("q:mutate → q:mutate_result", () => {
 
       expect(res.id).toBe("mut-err");
       expect(res.success).toBe(false);
-      expect(res.error).toContain("Unknown mutation");
+      expect(res.error).toBe("Unknown operation: deleteEverything");
+      expect(res.status).toBe(404);
+
+      // The frame decides what may run: a read cannot be asked as a write.
+      const wrongKind = await sendAndReceive(
+        ws,
+        { type: "q:mutate", id: "mut-kind", action: "stats", params: {} },
+        "q:mutate_result"
+      );
+      expect(wrongKind).toMatchObject({ success: false, status: 400 });
     } finally {
       ws.close();
     }
   });
 });
 
-describe("q:command → q:command_ack", () => {
-  it("sends a message via q:command and returns command_ack", async () => {
+describe("sending and stopping", () => {
+  it("refuses a send no agent can run, and says so in the result", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(
         ws,
         {
-          type: "q:command",
+          type: "q:mutate",
           id: "cmd-1",
-          command: "sendMessage",
+          action: "sendMessage",
           params: {
             sessionId: SESS_ID,
             content: "command test",
@@ -865,17 +825,16 @@ describe("q:command → q:command_ack", () => {
             turnId: "turn-cmd-1",
           },
         },
-        "q:command_ack"
+        "q:mutate_result"
       );
 
       expect(res.id).toBe("cmd-1");
       // There is no agent server behind this test, so NO turn was admitted and
-      // the ack must say so. `accepted: true` here used to be the assertion —
-      // it is the exact bug: the frontend's optimistic bubble is the only copy
-      // of the user's prompt until the engine echoes it (this command writes
-      // no message row, see the count below), and only a rejected ack runs the
-      // rollback. An accepted one strands the bubble for a turn that never ran.
-      expect(res.accepted).toBe(false);
+      // the result must say so. The frontend's optimistic bubble is the only
+      // copy of the user's prompt until the engine echoes it (the send writes
+      // no message row, see the count below), and only a refusal runs the
+      // rollback. A success would strand the bubble for a turn that never ran.
+      expect(res.success).toBe(false);
       expect(res.error).toMatch(/disconnected/i);
 
       // No user message row is written here — the send only flips the session
@@ -885,7 +844,7 @@ describe("q:command → q:command_ack", () => {
         .get(SESS_ID) as { n: number };
       expect(messageCount.n).toBe(3);
 
-      // The session still lands on "error": the rejected ack tells the caller,
+      // The session still lands on "error": the refusal tells the caller,
       // the status tells every other subscriber.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
@@ -896,7 +855,7 @@ describe("q:command → q:command_ack", () => {
     }
   });
 
-  it("acknowledges Stop as unconfirmed when no agent link can confirm it", async () => {
+  it("answers Stop as unconfirmed when no agent link can confirm it", async () => {
     const { ws } = await connectAndAuth();
     try {
       // First set session to working
@@ -905,19 +864,20 @@ describe("q:command → q:command_ack", () => {
       const res = await sendAndReceive(
         ws,
         {
-          type: "q:command",
+          type: "q:mutate",
           id: "cmd-stop-1",
-          command: "stopSession",
+          action: "stopSession",
           params: { sessionId: SESS_ID },
         },
-        "q:command_ack"
+        "q:mutate_result"
       );
 
       expect(res.id).toBe("cmd-stop-1");
-      expect(res.accepted).toBe(true);
+      expect(res.success).toBe(true);
+      expect(res.data).toEqual({ unconfirmed: true });
 
-      // This fixture has no native agent link; accepting the command is not
-      // evidence that its execution stopped.
+      // This fixture has no native agent link; a Stop that was sent is not
+      // evidence that the turn stopped.
       const sessionRow = testDb
         .prepare("SELECT status FROM sessions WHERE id = ?")
         .get(SESS_ID) as { status: string };
@@ -927,23 +887,20 @@ describe("q:command → q:command_ack", () => {
     }
   });
 
-  it("returns rejected ack for unknown command", async () => {
+  it("no longer speaks q:command: the frame is refused as unknown", async () => {
     const { ws } = await connectAndAuth();
     try {
       const res = await sendAndReceive(
         ws,
         {
           type: "q:command",
-          id: "cmd-err",
-          command: "destroyEverything",
-          params: {},
+          id: "cmd-old",
+          command: "stopSession",
+          params: { sessionId: SESS_ID },
         },
-        "q:command_ack"
+        "q:error"
       );
-
-      expect(res.id).toBe("cmd-err");
-      expect(res.accepted).toBe(false);
-      expect(res.error).toContain("Unknown command");
+      expect(res).toMatchObject({ id: "cmd-old", code: "UNKNOWN_FRAME" });
     } finally {
       ws.close();
     }
@@ -963,13 +920,13 @@ describe("q:command → q:command_ack", () => {
         "q:snapshot"
       );
 
-      // Send message via q:command — triggers invalidation with sessionId context
+      // Send a message: triggers invalidation with sessionId context
       const deltaPromise = waitForMessage(ws, "q:delta");
       ws.send(
         JSON.stringify({
-          type: "q:command",
+          type: "q:mutate",
           id: "cmd-delta-1",
-          command: "sendMessage",
+          action: "sendMessage",
           params: {
             sessionId: SESS_ID,
             content: "delta check",
@@ -979,14 +936,14 @@ describe("q:command → q:command_ack", () => {
         })
       );
 
-      // Wait for both the command ack and the delta push
-      const [ack, delta] = await Promise.all([waitForMessage(ws, "q:command_ack"), deltaPromise]);
+      // Wait for both the result and the delta push
+      const [ack, delta] = await Promise.all([waitForMessage(ws, "q:mutate_result"), deltaPromise]);
 
       // Rejected (no agent server in this test) — but the point here is the
       // INVALIDATION, which fires on the optimistic "working" flip before the
       // no-turn guard is reached. Subscribers see the flip either way; the
       // caller learns separately that its turn was refused.
-      expect(ack.accepted).toBe(false);
+      expect(ack.success).toBe(false);
       expect(delta.id).toBe("sub_ws_delta");
       expect(delta.upserted).toHaveLength(1);
       expect(delta.upserted[0].id).toBe(WS_ID);
@@ -1066,7 +1023,6 @@ describe("invalidation sharing and filtered deltas", () => {
       id: string;
       data?: Array<{ workspaces: Array<{ id: string; title: string }> }>;
       upserted?: Array<{ id: string }>;
-      cursor?: number;
     }> = [];
     const id = addConnection(
       { send: (raw) => frames.push(JSON.parse(String(raw))), close: () => {} },
@@ -1122,35 +1078,6 @@ describe("invalidation sharing and filtered deltas", () => {
       expect(read).toHaveBeenCalledTimes(4);
     } finally {
       viewers.forEach((v) => v.close());
-      read.mockRestore();
-    }
-  });
-
-  it("only reads affected message subscriptions and shares equal cursors", () => {
-    const a = viewer(),
-      b = viewer();
-    const read = vi.spyOn(queries, "getMessagesDelta");
-    try {
-      a.subscribe("affected-a", "messages", { sessionId: SESS_ID });
-      b.subscribe("affected-b", "messages", { sessionId: SESS_ID });
-      a.subscribe("unaffected", "messages", { sessionId: "another-session" });
-      testDb
-        .prepare(
-          "INSERT INTO messages (id, session_id, role) VALUES ('shared-delta', ?, 'assistant')"
-        )
-        .run(SESS_ID);
-      read.mockClear();
-      a.frames.length = 0;
-      b.frames.length = 0;
-      invalidate(["messages"], { sessionIds: [SESS_ID] });
-      expect(read).toHaveBeenCalledTimes(1);
-      expect(a.frames).toHaveLength(1);
-      expect(b.frames).toHaveLength(1);
-      expect(a.frames[0].upserted?.[0].id).toBe("shared-delta");
-      expect(b.frames[0].cursor).toBe(a.frames[0].cursor);
-    } finally {
-      a.close();
-      b.close();
       read.mockRestore();
     }
   });

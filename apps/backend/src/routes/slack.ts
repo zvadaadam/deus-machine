@@ -3,13 +3,12 @@ import { AppError } from "../lib/errors";
 import { getDeusCloudSessionConfig } from "../services/agent/cloud/config";
 import { requestCloudSettings } from "../services/cloud-settings.service";
 
-const app = new Hono<{ Bindings: { relayBridged?: boolean }; Variables: { device?: unknown } }>();
+const app = new Hono<{ Variables: { device?: unknown } }>();
 const prefix = "/settings/slack";
 
 app.use(`${prefix}/*`, async (c, next) => {
   // Paired-device authority is not the desktop owner's WorkOS identity.
-  if (c.env?.relayBridged || c.get("device"))
-    throw new AppError(403, "Manage Slack using your own Deus Cloud sign-in.");
+  if (c.get("device")) throw new AppError(403, "Manage Slack using your own Deus Cloud sign-in.");
   c.header("cache-control", "no-store");
   await next();
 });

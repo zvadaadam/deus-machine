@@ -2,15 +2,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
-const WebSocket = require("ws");
 const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
-  assertBackendDbRouteFromOutput,
+  assertBackendReadsDatabaseFromOutput,
   assertExecutable,
   assertHostRunnableArch,
   assertRuntimeSelfTest,
   bundledAgentCliPatterns,
+  readFromBackend,
   resolveDefaultAppPath,
   runRuntimeCommand,
   waitForRuntimePatterns,
@@ -91,76 +91,6 @@ function isCliAvailable(command) {
   return result.status === 0;
 }
 
-function sendWsCommand(port, command, params, timeoutMs = 30_000) {
-  return new Promise((resolve, reject) => {
-    const id = `${command}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-    let settled = false;
-    let sent = false;
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      ws.removeAllListeners();
-      try {
-        ws.close();
-      } catch {
-        // Best-effort cleanup.
-      }
-    };
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      fn(value);
-    };
-    const timeout = setTimeout(() => {
-      finish(reject, new Error(`Timed out waiting for q:command_ack ${command}`));
-    }, timeoutMs);
-    const send = () => {
-      if (sent) return;
-      sent = true;
-      ws.send(JSON.stringify({ type: "q:command", id, command, params }));
-    };
-
-    ws.on("message", (data) => {
-      let message;
-      try {
-        message = JSON.parse(data.toString());
-      } catch {
-        return;
-      }
-      if (message.type === "connected") {
-        send();
-        return;
-      }
-      if (message.type === "ping") {
-        ws.send(JSON.stringify({ type: "pong" }));
-        return;
-      }
-      if (message.type !== "q:command_ack" || message.id !== id) return;
-      if (message.accepted) {
-        finish(resolve, message);
-      } else {
-        finish(reject, new Error(`q:command ${command} rejected: ${message.error}`));
-      }
-    });
-    ws.on("open", () => {
-      // Localhost backends immediately send a connected frame, which triggers
-      // the command. Keep this handler only so websocket errors before open are
-      // clearly separated from a missing connected frame timeout.
-    });
-    ws.on("error", (error) => finish(reject, error));
-    ws.on("close", (code, reason) => {
-      if (!settled) {
-        finish(
-          reject,
-          new Error(`WebSocket closed before q:command_ack ${command}: ${code} ${reason}`)
-        );
-      }
-    });
-  });
-}
-
 async function smokeBackendCommands(port) {
   if (process.platform !== "darwin") {
     console.log("[runtime-smoke] packaged backend simulator command smoke skipped off macOS");
@@ -173,12 +103,12 @@ async function smokeBackendCommands(port) {
     return;
   }
 
-  const devicesAck = await sendWsCommand(port, "sim:listDevices", {}, 45_000);
-  if (!Array.isArray(devicesAck.devices)) {
-    throw new Error(`sim:listDevices returned unexpected payload: ${JSON.stringify(devicesAck)}`);
+  const answer = await readFromBackend(port, "simListDevices", {}, 45_000);
+  if (!Array.isArray(answer?.devices)) {
+    throw new Error(`simListDevices returned unexpected payload: ${JSON.stringify(answer)}`);
   }
   console.log(
-    `[runtime-smoke] packaged backend simulator q:command listed ${devicesAck.devices.length} devices`
+    `[runtime-smoke] packaged backend simulator q:request listed ${answer.devices.length} devices`
   );
 }
 
@@ -194,7 +124,7 @@ async function smokeBackend(runtimeBin, binDir) {
         obsoleteLabel: "Packaged runtime smoke",
         onReady: async (output) => {
           const port = readBackendPort(output);
-          await assertBackendDbRouteFromOutput(output);
+          await assertBackendReadsDatabaseFromOutput(output);
           assertEngineStarted(output);
           await smokeBackendCommands(port);
         },
@@ -204,7 +134,7 @@ async function smokeBackend(runtimeBin, binDir) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
   console.log(
-    "[runtime-smoke] packaged runtime backend resolved bundled CLIs, started the agent engine, and served DB route"
+    "[runtime-smoke] packaged runtime backend resolved bundled CLIs, started the agent engine, and read its database"
   );
 }
 

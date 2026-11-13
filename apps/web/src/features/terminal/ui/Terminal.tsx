@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { ptyCommands } from "@/platform";
-import { onEvent } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { getErrorMessage } from "@shared/lib/errors";
+import { call, follow } from "@/platform/ws";
 import "@xterm/xterm/css/xterm.css";
 import "./Terminal.css";
 
@@ -176,7 +177,10 @@ export function Terminal({
         return;
       }
       if (ready) {
-        ptyCommands.write(ptyId, Array.from(new TextEncoder().encode(data))).catch((err) => {
+        call(api.ptyWrite, {
+          id: ptyId,
+          data: Array.from(new TextEncoder().encode(data)),
+        }).catch((err) => {
           console.error("Failed to write to PTY:", err);
         });
       }
@@ -185,19 +189,31 @@ export function Terminal({
     // Spawn PTY — cloud terminals ride the sandbox session channel; the
     // backend picks the shell there, so command/cwd only matter locally.
     const shell = navigator.platform?.startsWith("Win") ? "powershell.exe" : "/bin/zsh";
+    let stopOutput = () => {};
     const startPty = () => {
       ready = false;
       const spawnId = ptyId;
-      ptyCommands
-        .spawn({
-          id: spawnId,
-          command: shell,
-          args: [],
-          cols: xterm.cols,
-          rows: xterm.rows,
-          cwd: workspacePath,
-          ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
-        })
+      // Followed before the shell is asked for, so its first output is not missed.
+      stopOutput();
+      stopOutput = follow(api.terminalOutput, { id: spawnId }, (output) => {
+        if (disposed) return;
+        if (output.type === "data") {
+          xterm.write(new TextDecoder().decode(new Uint8Array(output.data)));
+          return;
+        }
+        dead = true;
+        if (output.error) xterm.write(`\r\n\x1b[31m${output.error}\x1b[0m\r\n`);
+        xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
+      });
+      call(api.ptySpawn, {
+        id: spawnId,
+        command: shell,
+        args: [],
+        cols: xterm.cols,
+        rows: xterm.rows,
+        cwd: workspacePath,
+        ...(cloudWorkspaceId ? { cloudWorkspaceId } : {}),
+      })
         .then(() => {
           if (!disposed && spawnId === ptyId) {
             ready = true;
@@ -206,7 +222,7 @@ export function Terminal({
               setTimeout(() => {
                 if (!disposed) {
                   const encoded = Array.from(new TextEncoder().encode(commandToRun + "\n"));
-                  ptyCommands.write(spawnId, encoded).catch((err) => {
+                  call(api.ptyWrite, { id: spawnId, data: encoded }).catch((err) => {
                     console.error("Failed to write initial command:", err);
                   });
                 }
@@ -219,38 +235,12 @@ export function Terminal({
             dead = true;
             console.error("Failed to spawn PTY:", err);
             xterm.write(
-              `\r\n\x1b[31mFailed to start terminal: ${err}\x1b[0m\r\n\x1b[90mPress Enter to retry\x1b[0m\r\n`
+              `\r\n\x1b[31mFailed to start terminal: ${getErrorMessage(err)}\x1b[0m\r\n\x1b[90mPress Enter to retry\x1b[0m\r\n`
             );
           }
         });
     };
     startPty();
-
-    // Listen for PTY data via WS q:event
-    const unlistenData = onEvent((event, data) => {
-      if (disposed) return;
-      if (event === "pty-data") {
-        const payload = data as { id: string; data: number[] };
-        if (payload.id === ptyId) {
-          xterm.write(new TextDecoder().decode(new Uint8Array(payload.data)));
-        }
-      }
-    });
-
-    // Listen for PTY exit via WS q:event
-    const unlistenExit = onEvent((event, data) => {
-      if (disposed) return;
-      if (event === "pty-exit") {
-        const payload = data as { id: string; error?: string };
-        if (payload.id === ptyId) {
-          dead = true;
-          if (payload.error) {
-            xterm.write(`\r\n\x1b[31m${payload.error}\x1b[0m\r\n`);
-          }
-          xterm.write("\r\n\x1b[90mSession ended — press Enter to restart\x1b[0m\r\n");
-        }
-      }
-    });
 
     // Handle resize — skip when container is CSS-hidden (reports 0 dimensions)
     const resizeObserver = new ResizeObserver(() => {
@@ -259,7 +249,7 @@ export function Terminal({
       if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
       safeFit(fitAddon);
       if (ready) {
-        ptyCommands.resize(ptyId, xterm.cols, xterm.rows).catch((err) => {
+        call(api.ptyResize, { id: ptyId, cols: xterm.cols, rows: xterm.rows }).catch((err) => {
           console.error("Failed to resize PTY:", err);
         });
       }
@@ -270,9 +260,8 @@ export function Terminal({
       disposed = true;
       resizeObserver.disconnect();
       inputDisposable.dispose();
-      unlistenData();
-      unlistenExit();
-      ptyCommands.kill(ptyId).catch(() => {
+      stopOutput();
+      call(api.ptyKill, { id: ptyId }).catch(() => {
         /* Expected: PTY process may already be dead or cleaned up */
       });
       xterm.dispose();

@@ -3,5 +3,5 @@
  * Barrel exports for API hooks
  */
 
-export { useFiles, invalidateFileCache } from "./useFiles";
+export { useFiles } from "./useFiles";
 export { useFileContent } from "./useFileContent";

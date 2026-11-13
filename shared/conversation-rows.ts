@@ -9,7 +9,13 @@ import type {
   ConversationState,
   ConversationTurn,
 } from "./protocol-types";
-import { isUnknownEvent, type AnyLifecycleEvent } from "./protocol-types";
+import {
+  isUnknownEvent,
+  isUnknownPart,
+  type AnyLifecycleEvent,
+  type Part,
+  type UnknownPart,
+} from "./protocol-types";
 import type { Compaction, SessionTurn } from "./types/session";
 
 /**
@@ -28,6 +34,17 @@ export function findConversationMessage(
     if (entry.kind === "message" && entry.messageId === messageId) return entry;
   }
   return undefined;
+}
+
+/**
+ * Content beyond this part's last kept snapshot may still arrive (text or
+ * reasoning being typed, a tool whose input is still arriving): its stored row
+ * is behind whoever folds the tokens.
+ */
+export function isOpenPart(part: Part | UnknownPart): boolean {
+  if (isUnknownPart(part)) return false;
+  if (part.type === "text" || part.type === "reasoning") return part.state === "streaming";
+  return part.type === "tool" && part.state.status === "pending";
 }
 
 /**

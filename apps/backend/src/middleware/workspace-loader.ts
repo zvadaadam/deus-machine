@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import path from "path";
 import { getDatabase } from "../lib/database";
 import { NotFoundError } from "../lib/errors";
-import { getWorkspaceForMiddleware } from "../db";
+import { getWorkspaceForMiddleware, type WorkspaceWithDetailsRow } from "../db";
 
 /**
  * Compute the filesystem path for a LOCAL workspace.
@@ -22,28 +22,26 @@ export function computeWorkspacePath(ws: {
 }
 
 /**
- * Middleware that loads a workspace by :id param from the database.
- * Sets c.set('workspace') and c.set('workspacePath') on the Hono context.
- * Throws NotFoundError if workspace not found. Cloud workspaces pass through
- * with an empty workspacePath — local-FS routes must guard on workspace.kind.
+ * A workspace and where its files are on this computer ("" for a cloud
+ * workspace: gate local-file features on the owning node, not on the path).
+ * Throws NotFoundError when there is no such workspace.
  */
-export const withWorkspace = createMiddleware(async (c, next) => {
-  const id = c.req.param("id")!;
-  const db = getDatabase();
-
-  const workspace = getWorkspaceForMiddleware(db, id);
-
-  if (!workspace) {
-    throw new NotFoundError("Workspace not found");
-  }
+export function loadWorkspace(id: string): {
+  workspace: WorkspaceWithDetailsRow;
+  workspacePath: string;
+} {
+  const workspace = getWorkspaceForMiddleware(getDatabase(), id);
+  if (!workspace) throw new NotFoundError("Workspace not found");
   if (workspace.kind !== "cloud" && (!workspace.root_path || !workspace.slug)) {
     throw new NotFoundError("Workspace not found");
   }
+  return { workspace, workspacePath: computeWorkspacePath(workspace) };
+}
 
-  const workspacePath = computeWorkspacePath(workspace);
-
+/** HTTP form of `loadWorkspace`: sets `workspace` and `workspacePath` from the `:id` param. */
+export const withWorkspace = createMiddleware(async (c, next) => {
+  const { workspace, workspacePath } = loadWorkspace(c.req.param("id")!);
   c.set("workspace", workspace);
   c.set("workspacePath", workspacePath);
-
   await next();
 });

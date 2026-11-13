@@ -4,7 +4,7 @@
 // Flow:
 //   Agent emits tool.request event
 //   → handleAgentEvent calls toolRelay.relay()
-//   → Backend pushes q:event { event: "tool:request", data: {...} } to all frontend WS clients
+//   → Backend publishes it on `toolRequests` to the clients following that chat
 //   → Frontend handles the request (browser automation, diff, terminal, plan, question)
 //   → Frontend sends q:tool_response { requestId, result/error } back via WS
 //   → Backend calls toolRelay.resolve/reject
@@ -13,9 +13,9 @@
 // Timeout handling: each tool request has a timeout (set by the agent-server).
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
 
-import type { ToolRequestEventData, QServerFrame } from "@shared/types/query-protocol";
-import { TOOL_CANCEL_EVENT } from "@shared/events";
-import { broadcast } from "../ws.service";
+import type { ToolRequestEventData } from "@shared/types/query-protocol";
+import { toolRequests } from "@shared/api/sessions";
+import { publish } from "../streams";
 
 // ---- Types ----
 
@@ -65,22 +65,11 @@ export function relay(event: ToolRequestEventData & { type?: string }): Promise<
     // Store the pending relay
     pending.set(requestId, { resolve, reject, timer, sessionId, method });
 
-    // Push q:event to all connected frontend clients
-    const eventData: ToolRequestEventData = {
-      requestId,
-      sessionId,
-      method,
-      params,
-      timeoutMs,
-    };
-
-    const frame: QServerFrame = {
-      type: "q:event",
-      event: "tool:request",
-      data: eventData,
-    };
-
-    broadcast(JSON.stringify(frame));
+    publish(
+      toolRequests,
+      { sessionId },
+      { type: "request", request: { requestId, sessionId, method, params, timeoutMs } }
+    );
   });
 }
 
@@ -122,12 +111,8 @@ export function cancelRelay(requestId: string, reason: string): boolean {
   clearTimeout(entry.timer);
   pending.delete(requestId);
   entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
-  const frame: QServerFrame = {
-    type: "q:event",
-    event: TOOL_CANCEL_EVENT,
-    data: { sessionId: entry.sessionId, requestId },
-  };
-  broadcast(JSON.stringify(frame));
+  const { sessionId } = entry;
+  publish(toolRequests, { sessionId }, { type: "cancel", sessionId, requestId });
   return true;
 }
 

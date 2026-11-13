@@ -75,7 +75,7 @@ async function faultNetwork(page) {
     bytesPerSecond: Infinity,
     blackhole: false,
     dropAck: false,
-    delayCommandAck: 0,
+    delayWriteResult: 0,
     connections: [],
     sent: [],
     received: [],
@@ -142,7 +142,7 @@ async function faultNetwork(page) {
           close();
           return;
         }
-        queue("down", raw, frame.type === "q:command_ack" ? control.delayCommandAck : 0);
+        queue("down", raw, frame.type === "q:mutate_result" ? control.delayWriteResult : 0);
       });
     }
   );
@@ -287,7 +287,13 @@ try {
   await mobile.setOffline(false);
   await settled(b);
   await visible(b, "Changed during outage");
-  assert.equal(netB.sent.filter((frame) => frame.type === "q:mutate").length, 0);
+  // The write refused while offline was never put on the wire, then or after reconnecting.
+  assert.equal(
+    netB.sent.filter(
+      (frame) => frame.type === "q:mutate" && frame.params?.title === "Must not queue"
+    ).length,
+    0
+  );
   check(
     "Offline viewer retains cached data, rejects writes immediately and catches up automatically"
   );
@@ -323,10 +329,10 @@ try {
   );
   check("Actual New chat click commits once when its ACK is lost; reconnect never resends it");
 
-  netA.delayCommandAck = 500;
+  netA.delayWriteResult = 500;
   const timedOut = await a.evaluate(async (session) => {
     try {
-      return await window.testClient.sendCommand("stopSession", { sessionId: session }, 50);
+      return await window.testClient.sendMutate("stopSession", { sessionId: session }, 50);
     } catch (error) {
       return { kind: error.kind };
     }
@@ -335,8 +341,8 @@ try {
   assert.equal((await rename(a, "After late acknowledgment")).success, true);
   await visible(a, "After late acknowledgment");
   assert.equal((await diagnostics(a)).pending, 0);
-  netA.delayCommandAck = 0;
-  check("A delayed command ACK times out as uncertain and cannot complete a later request");
+  netA.delayWriteResult = 0;
+  check("A delayed write result times out as uncertain and cannot complete a later request");
 
   // Exercise authoritative absence through the actual backend and app binding.
   await a.evaluate(() => {

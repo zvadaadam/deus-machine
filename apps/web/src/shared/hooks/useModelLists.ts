@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { sendRequest } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import { CATALOG_MODEL_LISTS, type AgentModelsAnswer, type HarnessModels } from "@shared/models";
+import { CATALOG_MODEL_LISTS, type HarnessModels } from "@shared/models";
 import { useCloudModels } from "./useCloudModels";
 
 /**
@@ -21,8 +22,7 @@ export function useModelLists(chat: {
   const workspaceId = chat.workspaceId ?? null;
   const local = useQuery({
     queryKey: [...queryKeys.settings.agentModels, workspaceId],
-    queryFn: () =>
-      sendRequest<AgentModelsAnswer>("agentModels", workspaceId ? { workspaceId } : {}),
+    queryFn: () => call(api.agentModels, workspaceId ? { workspaceId } : {}),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,

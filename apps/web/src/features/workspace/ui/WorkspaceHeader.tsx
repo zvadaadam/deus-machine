@@ -31,7 +31,7 @@ import type { InstalledApp } from "@/platform";
 import { track } from "@/platform/analytics";
 import type { SetupStatus } from "@/shared/types";
 import type { WorkspaceKind, WorkspaceStatus } from "@shared/enums";
-import type { ProjectTask } from "../api/workspace.service";
+import type { ProjectTask } from "@shared/types/project-environment";
 import { HeaderRunButton } from "./HeaderRunButton";
 import { WorkflowStatusIcon } from "@/features/sidebar/ui/WorkflowStatusIcon";
 import { WorkspaceStatusMenu } from "@/features/sidebar/ui/WorkspaceStatusMenu";

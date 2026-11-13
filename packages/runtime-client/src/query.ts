@@ -6,24 +6,17 @@ export type DeltaMerge = (old: unknown, upserted?: unknown[], removed?: string[]
 export interface QueryRuntimePorts extends RuntimePorts {
   /** A dedicated cache for this runtime. Its defaults are application policy. */
   queryClient: QueryClient;
-  /** Some resources use snapshots as acknowledgments rather than cache values. */
-  acceptSnapshot?: (resource: string, data: unknown) => boolean;
 }
 type Binding = { count: number; queryKey: QueryKey; stop: () => void };
 
 /** Optional cache integration. Importing the core client does not load TanStack. */
-export class QueryRuntimeClient<
-  Resource extends string = string,
-  Command extends string = string,
-> extends RuntimeClient<Resource, Command> {
+export class QueryRuntimeClient<Resource extends string = string> extends RuntimeClient<Resource> {
   readonly queryClient: QueryClient;
   private bindings = new Map<string, Binding>();
-  private acceptSnapshot: NonNullable<QueryRuntimePorts["acceptSnapshot"]>;
 
   constructor(identity: RuntimeIdentity, ports: QueryRuntimePorts) {
     super(identity, ports);
     this.queryClient = ports.queryClient;
-    this.acceptSnapshot = ports.acceptSnapshot ?? (() => true);
     this.onStateChange((state) => {
       if (state === "online") return;
       for (const binding of this.bindings.values()) {
@@ -57,7 +50,7 @@ export class QueryRuntimeClient<
         resource,
         params,
         (data) => {
-          if (this.acceptSnapshot(resource, data)) this.queryClient.setQueryData(cacheKey, data);
+          this.queryClient.setQueryData(cacheKey, data);
         },
         (upserted, removed) => {
           if (upserted || removed)

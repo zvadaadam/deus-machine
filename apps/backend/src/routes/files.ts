@@ -5,7 +5,6 @@ import { tmpdir } from "os";
 import { Readable } from "stream";
 import { withWorkspace } from "../middleware/workspace-loader";
 import { ValidationError } from "../lib/errors";
-import { resolveNode } from "../services/node/driver";
 import * as gitService from "../services/git.service";
 import type { WorkspaceWithDetailsRow } from "../db";
 
@@ -13,54 +12,9 @@ type Env = { Variables: { workspace: WorkspaceWithDetailsRow; workspacePath: str
 const app = new Hono<Env>();
 
 /**
- * The file-tree / read / search / invalidate routes delegate to the owning
- * node's driver (local fs or the cloud session socket) — see
- * services/node/driver.ts. The route only knows the HTTP shape; which node
- * answers is the driver's concern. The media routes below are local-only.
+ * Files a browser loads by URL: previews and recorded media, local only. The
+ * tree, a file's text and search are operations (`api/files.ts`).
  */
-
-/**
- * GET /workspaces/:id/files — Scan workspace files.
- * Returns a hierarchical tree of all files (.gitignore-aware).
- */
-app.get("/workspaces/:id/files", withWorkspace, async (c) => {
-  return c.json(await resolveNode(c.get("workspace"), c.get("workspacePath")).fsTree());
-});
-
-/**
- * POST /workspaces/:id/files/invalidate-cache — Clear file scan cache for this workspace.
- */
-app.post("/workspaces/:id/files/invalidate-cache", withWorkspace, (c) => {
-  resolveNode(c.get("workspace"), c.get("workspacePath")).fsInvalidate();
-  return c.json({ ok: true });
-});
-
-/**
- * GET /workspaces/:id/file-content — Read a file's text content.
- * Query param: ?path=relative/file/path
- */
-app.get("/workspaces/:id/file-content", withWorkspace, async (c) => {
-  const filePath = c.req.query("path");
-  if (!filePath) throw new ValidationError("path parameter is required");
-
-  const outcome = await resolveNode(c.get("workspace"), c.get("workspacePath")).fsRead(filePath);
-  if (!outcome.ok) return c.json(outcome.body, outcome.status);
-  return c.json({ content: outcome.content });
-});
-
-/**
- * POST /workspaces/:id/files/search — Fuzzy search workspace files by name.
- * Body: { query: string, limit?: number }
- * Returns: Array<{ path, name, score }>
- */
-app.post("/workspaces/:id/files/search", withWorkspace, async (c) => {
-  const { query, limit = 15 } = await c.req.json<{ query: string; limit?: number }>();
-  const results = await resolveNode(c.get("workspace"), c.get("workspacePath")).fsSearch(
-    query,
-    limit
-  );
-  return c.json(results);
-});
 
 // ---------------------------------------------------------------------------
 // Media streaming — serves local video/image files for recording previews.

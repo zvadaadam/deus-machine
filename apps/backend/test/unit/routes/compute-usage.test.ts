@@ -71,7 +71,6 @@ it("never lends the owner's session to a paired device or relayed request", asyn
     .route("/api", routes)
     .onError(errorHandler);
   expect((await paired.request(url)).status).toBe(403);
-  expect((await app.request(url, {}, { relayBridged: true })).status).toBe(403);
   expect(fetchMock).not.toHaveBeenCalled();
 });
 

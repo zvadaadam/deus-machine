@@ -3,7 +3,7 @@
 // Handles agent-initiated RPC requests that require frontend interaction or data access.
 //
 // Architecture:
-//   Agent-server → Backend → q:event tool:request → this handler
+//   Agent-server → Backend → the `toolRequests` stream → this handler
 //   Handler responds via: sendToolResponse (q:tool_response frame)
 //
 // Handled methods:
@@ -19,10 +19,11 @@
 import { match } from "ts-pattern";
 import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
 import { getErrorMessage } from "@shared/lib/errors";
-import { sendRequest } from "@/platform/ws";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { useWsToolRequest } from "@/shared/hooks/useWsToolRequest";
-import { onEvent, sendToolResponse } from "@/platform/ws";
-import { TOOL_CANCEL_EVENT } from "@shared/events";
+import { sendToolResponse } from "@/platform/ws";
+import { useStream } from "@/shared/hooks/useStream";
 
 // ============================================================================
 // Types
@@ -175,25 +176,17 @@ export function useAgentRpcHandler(
   // The direct lane retracts a question it can no longer answer (its turn
   // ended while the socket was down): drop that request's overlay, or a stale
   // card stays answerable for an agent that has moved on.
-  useEffect(
-    () =>
-      onEvent((event, data) => {
-        if (event !== TOOL_CANCEL_EVENT) return;
-        const { sessionId, requestId } = (data ?? {}) as {
-          sessionId?: unknown;
-          requestId?: unknown;
-        };
-        if (typeof sessionId !== "string" || typeof requestId !== "string") return;
-        setPendingAndNotify((prev) => {
-          const current = prev.get(sessionId);
-          if (!current || current.wsRequestId !== requestId) return prev;
-          const next = new Map(prev);
-          next.delete(sessionId);
-          return next;
-        });
-      }),
-    [setPendingAndNotify]
-  );
+  useStream(api.toolRequests, {}, (event) => {
+    if (event.type !== "cancel") return;
+    const { sessionId, requestId } = event;
+    setPendingAndNotify((prev) => {
+      const current = prev.get(sessionId);
+      if (!current || current.wsRequestId !== requestId) return prev;
+      const next = new Map(prev);
+      next.delete(sessionId);
+      return next;
+    });
+  });
 
   // ============================================================================
   // exitPlanMode: store pending, wait for user approve/reject
@@ -291,27 +284,17 @@ export function useAgentRpcHandler(
 
     try {
       if (file) {
-        // Single-file diff via q:request
-        const result = await sendRequest<{
-          diff: string;
-          old_content?: string | null;
-          new_content?: string | null;
-        }>("diffFile", { workspaceId: ws.workspaceId, file });
+        const result = await call(api.diffFile, { workspaceId: ws.workspaceId, file });
         respond({ diff: result.diff });
       } else if (stat) {
-        // File list with stats via q:request
-        const result = await sendRequest<{
-          files: Array<{ file: string; additions: number; deletions: number }>;
-        }>("diffFiles", { workspaceId: ws.workspaceId });
+        const result = await call(api.diffFiles, { workspaceId: ws.workspaceId });
         const statText = result.files
           .map((f) => `${f.file}: +${f.additions} -${f.deletions}`)
           .join("\n");
         respond({ diff: statText });
       } else {
         // All changed files list (summary, not full patch — patches can be huge)
-        const result = await sendRequest<{
-          files: Array<{ file: string }>;
-        }>("diffFiles", { workspaceId: ws.workspaceId });
+        const result = await call(api.diffFiles, { workspaceId: ws.workspaceId });
         const fileList = result.files.map((f) => f.file).join("\n");
         respond({ diff: fileList });
       }
@@ -344,7 +327,7 @@ export function useAgentRpcHandler(
   const handleGetTerminalOutput = useCallback(
     async (_params: Record<string, unknown>, respond: RespondFn) => {
       // Terminal output is not available via buffered read. node-pty streams data
-      // as it arrives (via q:event "pty-data" frames) and does not maintain a
+      // as it arrives (on the `terminalOutput` stream) and does not maintain a
       // scrollback buffer. There is no backend endpoint or Electron IPC handler
       // that can retrieve past output.
       //
@@ -403,7 +386,7 @@ export function useAgentRpcHandler(
   );
 
   // ============================================================================
-  // WS event listener (agent-server → backend → q:event tool:request)
+  // WS event listener (agent-server → backend → the `toolRequests` stream)
   // ============================================================================
 
   useWsToolRequest((method, requestId, params, respond, _respondError) => {

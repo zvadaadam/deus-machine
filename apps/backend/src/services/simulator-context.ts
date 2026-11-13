@@ -1,9 +1,10 @@
 // backend/src/services/simulator-context.ts
 //
 // Simulator service — owns ALL simulator operations. Both the agent-server
-// (via RPC) and the Simulator Panel (via q:command) talk to this service.
+// (via RPC) and the Simulator Panel (through the operations in
+// api/simulator.ts) talk to this service.
 //
-// Follows the PTY pattern: q:command for actions, q:event for push updates.
+// Requests answer at once; what happens later is published on `simulatorEvents`.
 // Works identically in desktop (WS to localhost) and relay/web mode.
 //
 // TODO(relay-streaming): Add MJPEG frame proxy for web/relay mode.
@@ -19,8 +20,15 @@ import { createHash } from "crypto";
 import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
 import { getSessionRaw } from "../db/queries";
-import { broadcast } from "./ws.service";
-import type { SimulatorCapabilities } from "@shared/types/simulator";
+import { simulatorEvents, type SimulatorEvent } from "@shared/api/simulator";
+import { publish } from "./streams";
+import type {
+  InspectorNode,
+  InspectorRect,
+  InspectorSnapshot,
+  SimulatorCapabilities,
+  SimulatorInfo,
+} from "@shared/types/simulator";
 
 const execFileAsync = promisify(execFile);
 
@@ -39,36 +47,6 @@ export interface SimulatorContext {
   streaming: boolean;
 }
 
-export interface InspectorRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface InspectorNode {
-  id: string;
-  parentId?: string;
-  className: string;
-  label?: string;
-  identifier?: string;
-  frame: InspectorRect;
-  screenRect: InspectorRect;
-  alpha: number;
-  hidden: boolean;
-  userInteractionEnabled: boolean;
-  properties?: Record<string, string>;
-  children: InspectorNode[];
-}
-
-export interface InspectorSnapshot {
-  bundleId: string;
-  pid: number;
-  timestamp: number;
-  roots: InspectorNode[];
-  source?: "native" | "accessibility";
-}
-
 interface AccessibilityNodeLike {
   role?: string;
   type?: string;
@@ -81,15 +59,6 @@ interface AccessibilityNodeLike {
   focused?: boolean;
   traits?: string[];
   children?: AccessibilityNodeLike[];
-}
-
-export interface SimulatorInfo {
-  name: string;
-  udid: string;
-  state: string;
-  runtime: string;
-  device_type: string;
-  is_available: boolean;
 }
 
 export interface SimulatorCapabilityInput {
@@ -198,12 +167,9 @@ export function getSimulatorCapabilities(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Event pushing (q:event broadcast to all WS clients)
-// ---------------------------------------------------------------------------
-
-function pushEvent(event: string, data: unknown): void {
-  broadcast(JSON.stringify({ type: "q:event", event, data }));
+/** Tell the clients following a workspace's simulator. */
+function pushEvent(workspaceId: string, event: SimulatorEvent): void {
+  publish(simulatorEvents, { workspaceId }, event);
 }
 
 function closeHidSocket(session: SimulatorSession): void {
@@ -728,16 +694,12 @@ export async function startStream(
       streamStartedAt: Date.now(),
     });
 
-    // Push stream ready event to frontend
-    const streamReadyPayload = {
-      workspaceId,
+    pushEvent(workspaceId, {
+      type: "streamReady",
       url: `http://localhost:${streamInfo.port}/stream.mjpeg`,
       port: streamInfo.port,
       hidAvailable: hidConnected,
-      deviceName: deviceInfo?.name ?? udid,
-      udid,
-    };
-    pushEvent("sim:streamReady", streamReadyPayload);
+    });
   } catch (err) {
     if (hidWs) {
       try {
@@ -758,7 +720,6 @@ export function stopStream(workspaceId: string): void {
   if (!session) return;
 
   releaseWorkspaceSession(workspaceId);
-  pushEvent("sim:stopped", { workspaceId });
 }
 
 // ---------------------------------------------------------------------------
@@ -1113,7 +1074,7 @@ export async function buildAndRun(
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? ""; // keep incomplete trailing line
         for (const line of lines) {
-          if (line) pushEvent("sim:buildLog", { workspaceId, line });
+          if (line) pushEvent(workspaceId, { type: "buildLog", line });
         }
       };
     };
@@ -1181,7 +1142,7 @@ export async function buildAndRun(
   session.appBundleId = bundleId;
   session.appName = appName;
 
-  pushEvent("sim:buildComplete", { workspaceId, bundleId, appName, appPath });
+  pushEvent(workspaceId, { type: "buildComplete", bundleId, appName, appPath });
 
   return { bundle_id: bundleId, name: appName, app_path: appPath };
 }

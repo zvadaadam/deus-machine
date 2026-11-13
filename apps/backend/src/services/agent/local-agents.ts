@@ -3,9 +3,9 @@
 // harness's CLI (`clis/*`: the one turns run, installed ahead of a turn with
 // its progress) and its login (`auth/*`: as the CLI says it, a sign-in
 // through the CLI's own flow, the code a sign-in from another device shows,
-// cancel and sign out). Every window hears q:event "agent:cli" while a CLI
-// installs, and "agent:auth" when a login changes or a sign-in starts or
-// ends, whoever caused it.
+// cancel and sign out). Clients follow `agentCliProgress` while a CLI installs,
+// and `agentAuthChanges` for a login that changes and a sign-in that starts
+// or ends, whoever caused it.
 
 import { LoginError, type AgentServerClient, type LoginHandle } from "@zvada/agent-server/client";
 import {
@@ -17,16 +17,12 @@ import {
 import {
   LOCAL_HARNESSES,
   type AgentAuthAnswer,
-  type AgentAuthEvent,
   type AgentSignInAnswer,
   type LocalHarness,
 } from "@shared/agent-auth";
+import { agentAuthChanges, agentCliProgress } from "@shared/api/settings";
 import { ValidationError } from "../../lib/errors";
-import { broadcast } from "../ws.service";
-
-function tell(event: "agent:auth" | "agent:cli", data: unknown): void {
-  broadcast(JSON.stringify({ type: "q:event", event, data }));
-}
+import { publish } from "../streams";
 
 /** What a sign-in's start answered, without the handle's functions. */
 function answerOf(handle: LoginHandle): AuthLogin {
@@ -44,9 +40,9 @@ export class LocalAgents {
       client.onAuthUpdated((update) => {
         // An ended sign-in leaves the list before the windows read it again.
         if (update.login) this.handles.delete(update.login.loginId);
-        tell("agent:auth", update satisfies AgentAuthEvent);
+        publish(agentAuthChanges, {}, update);
       }),
-      client.onCliProgress((progress) => tell("agent:cli", progress)),
+      client.onCliProgress((progress) => publish(agentCliProgress, {}, progress)),
     ];
   }
 
@@ -75,7 +71,7 @@ export class LocalAgents {
     );
   }
 
-  /** Install the CLIs turns run, now: answered at once, the install told on "agent:cli". */
+  /** Install the CLIs turns run, now: answered at once, the install told on `agentCliProgress`. */
   prepareClis(): void {
     this.client.prepareClis([...LOCAL_HARNESSES]).catch((error: unknown) => {
       console.warn("[LocalAgents] CLI install failed:", error);
@@ -97,16 +93,20 @@ export class LocalAgents {
     const login = answerOf(handle);
     this.handles.set(login.loginId, handle);
     // Every window shows it under way (Cancel, the code's form), not "Sign in".
-    tell("agent:auth", { started: login } satisfies AgentAuthEvent);
+    publish(agentAuthChanges, {}, { started: login });
     void handle.done.then(
       () => this.handles.delete(login.loginId),
       (error: unknown) => {
         this.handles.delete(login.loginId);
         // Its end was told on a connection that dropped: say so, and the UI reads again.
         if (error instanceof LoginError && error.outcome === "disconnected") {
-          tell("agent:auth", {
-            login: { loginId: login.loginId, outcome: "disconnected" },
-          } satisfies AgentAuthEvent);
+          publish(
+            agentAuthChanges,
+            {},
+            {
+              login: { loginId: login.loginId, outcome: "disconnected" },
+            }
+          );
         }
       }
     );

@@ -32,7 +32,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { parseAgentInput } from "@zvada/agent-server/protocol";
 import { createUserEchoParts, echoMessageId } from "@zvada/agent-server/protocol/factories";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { PaginatedMessages } from "../api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../types";
 import type { AgentInput } from "@shared/protocol-types";
 

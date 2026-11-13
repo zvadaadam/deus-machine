@@ -26,11 +26,7 @@ export const LOCAL_HARNESSES = [
 ] as const satisfies readonly AgentHarness[];
 export type LocalHarness = (typeof LOCAL_HARNESSES)[number];
 
-export function isLocalHarness(value: unknown): value is LocalHarness {
-  return (LOCAL_HARNESSES as readonly unknown[]).includes(value);
-}
-
-/** q:request "agentAuth": each harness's CLI and login, and the sign-ins under way. */
+/** `agentAuth`: each harness's CLI and login, and the sign-ins under way. */
 export interface AgentAuthAnswer {
   auth: HarnessAuth[];
   clis: HarnessCli[];
@@ -41,13 +37,13 @@ export interface AgentAuthAnswer {
 }
 
 /**
- * q:command "agentSignIn": the login this computer already has of that kind
+ * `agentSignIn`: the login this computer already has of that kind
  * (nothing opens), or the sign-in under way.
  */
 export type AgentSignInAnswer = { already: HarnessAuth } | { login: AuthLogin };
 
 /**
- * q:event "agent:auth": a harness's login changed, a sign-in started
+ * The `agentAuthChanges` stream: a harness's login changed, a sign-in started
  * (`started`) or ended (`login`), whoever caused it; or a sign-in this
  * backend followed lost the engine (`disconnected`, no `auth`): read the
  * status again.

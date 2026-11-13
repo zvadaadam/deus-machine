@@ -14,6 +14,9 @@ import type {
   TurnEndedEvent,
   WireEventEnvelope,
 } from "@zvada/agent-server/protocol";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import { SessionSnapshotEventSchema, type SessionSnapshotEvent } from "@deus-hq/api";
+import { projectCloudSnapshot } from "@shared/cloud-session-snapshot";
 import type { ChangeWrite, TurnOutcomeWrite } from "../../../src/services/agent/persistence";
 
 // ============================================================================
@@ -26,16 +29,20 @@ const {
   mockPersistSessionError,
   mockPersistSessionTitle,
   mockInvalidate,
-  mockBroadcast,
+  mockPublish,
+  mockOpenWith,
   mockRefreshPr,
+  mockRestoreCloudSnapshot,
   outcomes,
 } = vi.hoisted(() => ({
+  mockRestoreCloudSnapshot: vi.fn<(...args: any[]) => any>(),
   mockPersistAgentSessionId: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistChanges: vi.fn<(...args: any[]) => any>(),
   mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistSessionTitle: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockInvalidate: vi.fn<(...args: any[]) => any>(),
-  mockBroadcast: vi.fn<(...args: any[]) => any>(),
+  mockPublish: vi.fn<(...args: any[]) => any>(),
+  mockOpenWith: vi.fn<(...args: any[]) => any>(),
   mockRefreshPr: vi.fn<(...args: any[]) => any>(),
   outcomes: [] as Array<{ turn: ConversationTurn; outcome: TurnOutcomeWrite }>,
 }));
@@ -48,9 +55,15 @@ vi.mock("../../../src/services/agent/persistence", () => ({
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/ws.service", () => ({ broadcast: mockBroadcast }));
+vi.mock("../../../src/services/streams", () => ({
+  publish: mockPublish,
+  openWith: mockOpenWith,
+}));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: mockRefreshPr,
+}));
+vi.mock("../../../src/services/agent/cloud/snapshot", () => ({
+  restoreCloudSnapshot: mockRestoreCloudSnapshot,
 }));
 
 /**
@@ -95,6 +108,8 @@ function invalidated(): string[] {
 // ============================================================================
 
 import { createAgentEventHandler } from "../../../src/services/agent/event-handler";
+import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
+import { published } from "../../helpers";
 
 const SESSION = "sess-1";
 const TURN = "turn-1";
@@ -147,12 +162,27 @@ const partEvent: LifecycleEvent = {
   timestamp: T,
 };
 
-/** Every agent:event frame the handler pushed, decoded. */
+/**
+ * Every envelope the handler published, with whether the stream keeps it for a
+ * client that was away. The handler publishes on `sessionEvents` only, and each
+ * envelope under its own chat's scope: the clients following another chat never
+ * receive it. Both are checked here, so every test that reads a push checks them.
+ */
+function pushed(): { envelope: WireEventEnvelope; keep: boolean | undefined }[] {
+  const sent = published(mockPublish, sessionEvents);
+  expect(sent).toHaveLength(mockPublish.mock.calls.length);
+  return sent.map(({ scope, event, options }) => {
+    if (event.type !== "event") throw new Error(`the handler published a ${event.type}`);
+    expect(scope).toEqual({ sessionId: event.envelope.sessionId });
+    // Never a restart: only a snapshot restates what came before it.
+    expect(options).toEqual({ keep: expect.any(Boolean) });
+    return { envelope: event.envelope as WireEventEnvelope, keep: options?.keep };
+  });
+}
+
+/** Every envelope the handler published to the clients following its chat. */
 function pushedEnvelopes(): WireEventEnvelope[] {
-  return mockBroadcast.mock.calls
-    .map(([raw]) => JSON.parse(raw as unknown as string))
-    .filter((frame) => frame.event === "agent:event")
-    .map((frame) => frame.data as WireEventEnvelope);
+  return pushed().map(({ envelope }) => envelope);
 }
 
 describe("agent event handler (canonical lifecycle stream)", () => {
@@ -231,9 +261,11 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         invalidatedFor: mockInvalidate.mock.calls
           .filter(([, opts]) => (opts as { sessionIds?: string[] })?.sessionIds?.includes(sid))
           .flatMap(([resources]) => resources as string[]),
-        pushedTypes: pushedEnvelopes()
-          .filter((e) => e.sessionId === sid)
-          .map((e) => e.event.type),
+        // By the scope it was published under: that, not the envelope's own
+        // field, is what decides which clients receive it.
+        pushedTypes: published(mockPublish, sessionEvents)
+          .filter(({ scope }) => scope.sessionId === sid)
+          .map(({ event }) => (event.type === "event" ? event.envelope.event.type : event.type)),
       };
     }
 
@@ -252,7 +284,140 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       expect(a.persistedFor).toBeGreaterThan(0);
       expect(b.persistedFor).toBe(a.persistedFor);
       expect(b.invalidatedFor).toEqual(a.invalidatedFor);
+      expect(a.pushedTypes).toEqual([
+        "session.created",
+        "message.started",
+        "message.part",
+        "turn.ended",
+      ]);
       expect(b.pushedTypes).toEqual(a.pushedTypes);
+      // Each chat's envelopes went under that chat's scope, and nothing else was published.
+      expect(pushed().map(({ envelope }) => envelope.sessionId)).toEqual([
+        ...Array(4).fill("node-a-sess"),
+        ...Array(4).fill("node-b-sess"),
+      ]);
+    });
+  });
+
+  // ==========================================================================
+  // The push: to the chat's own clients, kept unless it is a token delta
+  // ==========================================================================
+
+  describe("publishing to the clients following the chat", () => {
+    const delta: LifecycleEvent = {
+      type: "message.part.delta",
+      sessionId: SESSION,
+      turnId: TURN,
+      messageId: "msg-1",
+      outputIndex: 1,
+      partIndex: 0,
+      partId: "part-1",
+      delta: { type: "text", text: "he" },
+      timestamp: T,
+    };
+
+    it("publishes the envelope as it arrived, under its chat's scope", () => {
+      const sent = envelope(messageStarted());
+
+      handler.handle(sent);
+
+      expect(mockPublish).toHaveBeenCalledTimes(1);
+      const [stream, scope, event] = mockPublish.mock.calls[0];
+      expect(stream).toBe(sessionEvents);
+      expect(scope).toEqual({ sessionId: SESSION });
+      // Not reshaped on its way through: the client folds what the engine sent.
+      expect(event).toEqual({ type: "event", envelope: sent });
+      expect(event.envelope).toBe(sent);
+    });
+
+    it("scopes by the envelope's session, so another chat's clients receive nothing", () => {
+      handler.handle({
+        sessionId: "sess-2",
+        seq: 1,
+        event: messageStarted({ sessionId: "sess-2" }),
+      });
+      handler.handle(envelope(messageStarted()));
+
+      expect(
+        published(mockPublish, sessionEvents).map(({ scope, event }) => [
+          scope,
+          event.type === "event" && event.envelope.sessionId,
+        ])
+      ).toEqual([
+        [{ sessionId: "sess-2" }, "sess-2"],
+        [{ sessionId: SESSION }, SESSION],
+      ]);
+    });
+
+    it("keeps what a returning client must replay, and does not keep a token delta", () => {
+      handler.handle(envelope(messageStarted()));
+      handler.handle(envelope(delta));
+      handler.handle(envelope(partEvent));
+      handler.handle(envelope(turnEnded()));
+
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["message.started", true],
+        // Delivered, never replayed: the part's next event restates what it streamed.
+        ["message.part.delta", false],
+        ["message.part", true],
+        ["turn.ended", true],
+      ]);
+    });
+
+    it("does not keep an open part the engine sent live after a subscription", () => {
+      // `live: true` carries the seq of the last kept event before it; keeping
+      // it would number an event the engine itself did not keep.
+      handler.handle({ ...envelope(partEvent), live: true });
+
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["message.part", false],
+      ]);
+    });
+
+    it("publishes nothing for the events that reach the clients another way, or not at all", () => {
+      const quiet: LifecycleEvent[] = [
+        { type: "session.usage", sessionId: SESSION, turnId: TURN, used: 1, timestamp: T },
+        {
+          type: "permission.requested",
+          sessionId: SESSION,
+          turnId: TURN,
+          requestId: "r",
+          title: "Allow?",
+          options: [],
+          timestamp: T,
+        },
+        {
+          type: "permission.resolved",
+          sessionId: SESSION,
+          turnId: TURN,
+          requestId: "r",
+          outcome: { outcome: "cancelled" },
+          timestamp: T,
+        },
+        {
+          type: "raw",
+          sessionId: SESSION,
+          turnId: TURN,
+          harness: "claude-code",
+          data: {},
+          timestamp: T,
+        },
+        { type: "session.ended", sessionId: SESSION, reason: "idle", timestamp: T },
+      ];
+
+      for (const event of quiet) handler.handle(envelope(event));
+
+      expect(mockPublish).not.toHaveBeenCalled();
+    });
+
+    it("publishes a turn's start: a client has no other source for when it began", () => {
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      // Kept, so a client that was away when the turn began still learns its start.
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["turn.started", true],
+      ]);
     });
   });
 
@@ -285,8 +450,12 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       handler.handle(envelope(created(false)));
 
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("did NOT resume"));
-      // The flag reaches the UI too — the envelope is pushed verbatim.
-      expect(pushedEnvelopes().at(-1)?.event).toMatchObject({ resumed: false });
+      // The flag reaches the UI too — the envelope is published verbatim, and
+      // kept: a client that reconnects must still learn the context was lost.
+      expect(pushed().at(-1)).toMatchObject({
+        envelope: { sessionId: SESSION, event: { type: "session.created", resumed: false } },
+        keep: true,
+      });
     });
 
     it("does not warn on a successful resume", () => {
@@ -301,7 +470,7 @@ describe("agent event handler (canonical lifecycle stream)", () => {
   // ==========================================================================
 
   describe("message.started", () => {
-    it("folds the engine's user echo into a message row and invalidates the page", () => {
+    it("folds the engine's user echo into a message row and invalidates the session, not the transcript", () => {
       const echo = messageStarted({ role: "user", outputIndex: 0, messageId: "user-msg" });
 
       handler.handle(envelope(echo));
@@ -313,9 +482,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         role: "user",
         turnId: TURN,
       });
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: [SESSION],
-      });
+      // The row reaches clients on the chat's stream; only the session's own row is read again.
+      expect(mockInvalidate).toHaveBeenCalledWith(["session"], { sessionIds: [SESSION] });
+      expect(pushedEnvelopes().map((e) => e.event.type)).toEqual(["message.started"]);
     });
 
     it("carries turn, parent tool call and model into the folded message", () => {
@@ -344,7 +513,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       expect(mockInvalidate).not.toHaveBeenCalled();
       // The push still happens: live rendering must not depend on the write.
-      expect(pushedEnvelopes()).toHaveLength(1);
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["message.started", true],
+      ]);
     });
 
     it("reports only the part when its message is already known, and does not re-invalidate", () => {
@@ -386,10 +557,12 @@ describe("agent event handler (canonical lifecycle stream)", () => {
           partIndex: 0,
         },
       ]);
-      expect(pushedEnvelopes()).toHaveLength(1);
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["message.part", true],
+      ]);
     });
 
-    it("forwards deltas without touching the database", () => {
+    it("forwards deltas without touching the database, and without keeping them", () => {
       handler.handle(
         envelope({
           type: "message.part.delta",
@@ -410,7 +583,139 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       // protocol does not promise. The settling message.part snapshot writes.
       expect(mockPersistChanges).not.toHaveBeenCalled();
       expect(mockInvalidate).not.toHaveBeenCalled();
-      expect(pushedEnvelopes()).toHaveLength(1);
+      // Delivered to the chat's clients now; a client that was away never gets
+      // it again (the settling message.part restates the text).
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["message.part.delta", false],
+      ]);
+    });
+
+    it("opens a chat's subscription with the reply still being typed, as it stands", () => {
+      // What the stream sends a client that starts following a chat, or returns to it.
+      const [stream, opening] = mockOpenWith.mock.calls.at(-1)!;
+      expect(stream.name).toBe("sessionEvents");
+      expect(opening({ sessionId: SESSION })).toEqual([]);
+
+      const streaming = { ...partEvent.part, text: "", state: "streaming" };
+      handler.handle(envelope({ ...partEvent, part: streaming } as LifecycleEvent));
+      for (const text of ["hel", "lo"]) {
+        handler.handle(
+          envelope({
+            type: "message.part.delta",
+            sessionId: SESSION,
+            turnId: TURN,
+            messageId: "msg-1",
+            outputIndex: 1,
+            partIndex: 0,
+            partId: "part-1",
+            delta: { type: "text", text },
+            timestamp: T,
+          })
+        );
+      }
+
+      expect(opening({ sessionId: SESSION })).toEqual([
+        {
+          type: "event",
+          envelope: expect.objectContaining({
+            sessionId: SESSION,
+            live: true,
+            event: expect.objectContaining({
+              type: "message.part",
+              part: expect.objectContaining({ id: "part-1", text: "hello", state: "streaming" }),
+            }),
+          }),
+        },
+      ]);
+      // Another chat is told nothing of this one.
+      expect(opening({ sessionId: "other-chat" })).toEqual([]);
+
+      handler.handle(envelope(partEvent));
+      expect(opening({ sessionId: SESSION })).toEqual([]);
+    });
+
+    it("opens it with the part a restored cloud transcript left being typed", () => {
+      // The backend attached to a cloud chat mid-reply: the platform's snapshot holds the
+      // part as typed so far, and its tokens keep arriving on the live stream.
+      const snapshot = SessionSnapshotEventSchema.parse({
+        type: "session.snapshot",
+        state: {
+          sessionId: "agnt-session",
+          organizationId: "org",
+          workspaceId: "workspace",
+          status: "ready",
+          currentTurnId: TURN,
+        },
+        messages: [
+          {
+            id: "msg-1",
+            sessionId: "agnt-session",
+            turnId: TURN,
+            messageIndex: 0,
+            outputIndex: 1,
+            role: "assistant",
+            createdAt: T,
+            parts: [
+              {
+                type: "text",
+                id: "part-1",
+                sessionId: "agnt-session",
+                messageId: "msg-1",
+                text: "Typed so",
+                state: "streaming",
+              },
+            ],
+          },
+        ],
+      });
+      mockRestoreCloudSnapshot.mockImplementation(
+        (sessionId: string, restored: SessionSnapshotEvent) => ({
+          ok: true,
+          value: {
+            conversation: projectCloudSnapshot(restored).events.reduce(
+              (state, event) => reduceConversationWithChanges(state, { ...event, sessionId }).state,
+              emptyConversation()
+            ),
+            messageIds: ["msg-1"],
+            providerCredentialSources: {},
+          },
+        })
+      );
+      handler.hydrateCloudSnapshot(SESSION, snapshot);
+      handler.handle(
+        envelope({
+          type: "message.part.delta",
+          sessionId: SESSION,
+          turnId: TURN,
+          messageId: "msg-1",
+          outputIndex: 1,
+          partIndex: 0,
+          partId: "part-1",
+          delta: { type: "text", text: " far" },
+          timestamp: T,
+        })
+      );
+
+      // A client that opens the chat only now is sent the part as it stands.
+      const [, opening] = mockOpenWith.mock.calls.at(-1)!;
+      expect(opening({ sessionId: SESSION })).toEqual([
+        {
+          type: "event",
+          envelope: expect.objectContaining({
+            sessionId: SESSION,
+            live: true,
+            event: expect.objectContaining({
+              type: "message.part",
+              sessionId: SESSION,
+              part: expect.objectContaining({
+                id: "part-1",
+                text: "Typed so far",
+                state: "streaming",
+              }),
+            }),
+          }),
+        },
+      ]);
     });
   });
 
@@ -438,6 +743,25 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       });
       expect(lastOutcome()).toEqual({ status: "idle" });
       expect(mockRefreshPr).toHaveBeenCalledWith(SESSION);
+    });
+
+    it("tells every client when a cloud turn's work was not saved, and nothing when it was", () => {
+      const saved = { committed: true, pushed: true, sha: "remote-commit" };
+      handler.handle(envelope(turnEnded({ gitSync: saved } as Partial<TurnEndedEvent>)));
+      expect(published(mockPublish, cloudSaveFailures)).toEqual([]);
+
+      const failed = { committed: true, pushed: false, error: "GitHub rejected the push" };
+      handler.handle(
+        envelope(turnEnded({ turnId: "turn-2", gitSync: failed } as Partial<TurnEndedEvent>))
+      );
+      // Under no scope: a client hears it whichever chats it follows.
+      expect(published(mockPublish, cloudSaveFailures)).toEqual([
+        {
+          scope: {},
+          event: { sessionId: SESSION, turnId: "turn-2", error: "GitHub rejected the push" },
+          options: undefined,
+        },
+      ]);
     });
 
     it("marks a cancelled turn instead of inserting a synthetic message", () => {
@@ -677,10 +1001,10 @@ describe("agent event handler (canonical lifecycle stream)", () => {
         compactionId: "cmp-1",
         status: "completed",
       });
-      expect(mockInvalidate).toHaveBeenCalledWith(["messages", "session"], {
-        sessionIds: [SESSION],
-      });
-      expect(pushedEnvelopes()).toHaveLength(1);
+      expect(mockInvalidate).toHaveBeenCalledWith(["session"], { sessionIds: [SESSION] });
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["session.compaction", true],
+      ]);
     });
   });
 
@@ -701,7 +1025,9 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       expect(mockPersistSessionError).not.toHaveBeenCalled();
       expect(invalidated()).toEqual([]);
       // Still forwarded as a diagnostic.
-      expect(pushedEnvelopes()).toHaveLength(1);
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["error", true],
+      ]);
     });
 
     it("keeps a swallowed recoverable error from suppressing the real one", () => {
@@ -915,9 +1241,13 @@ describe("agent event handler (canonical lifecycle stream)", () => {
     } as unknown as LifecycleEvent;
 
     it("forwards it verbatim instead of throwing or dropping it", () => {
-      expect(() => handler.handle(envelope(future))).not.toThrow();
+      const sent = envelope(future);
 
-      expect(pushedEnvelopes().map((e) => e.event.type)).toEqual(["session.checkpoint"]);
+      expect(() => handler.handle(sent)).not.toThrow();
+
+      // Kept like any event the engine numbered: leaving it out of a replay
+      // would be the same hole in a returning client's transcript.
+      expect(pushed()).toEqual([{ envelope: sent, keep: true }]);
     });
 
     it("persists nothing — there are no columns for a shape it cannot read", () => {

@@ -1,7 +1,7 @@
 /**
  * useCloudDirectSession — render a cloud session by connecting DIRECTLY to agnt.
  *
- * Path B, slice 2. The Mac-backed path folds the `q:` `agent:event` stream
+ * Path B, slice 2. The Mac-backed path folds the host's `sessionEvents` stream
  * (`useAgentEvents`); this is its twin for "Mac closed": it opens the agnt
  * session socket in the browser and drives the SAME fold into the SAME cache key
  * (`queryKeys.sessions.messages(sessionId)`), so `SessionPanel`/`useMessages`
@@ -10,7 +10,7 @@
  *
  * A cloud session is rendered by EITHER lane, never both: use this hook instead
  * of `useAgentEvents` when the session is served direct. So it keeps its own
- * `folds`/`cursor` per cache, isolated from the Mac lane's.
+ * folds per cache, isolated from the Mac lane's.
  *
  * The token is provided by the caller (`useCloudDirect`, minted at the backend
  * seam or via the dashboard exchange — `exchangeSessionToken.ts`). Where the
@@ -29,7 +29,6 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { SessionErrorEventSchema } from "@deus-hq/api";
 import {
-  createStreamCursor,
   flushDeltas,
   patchSessionDetail,
   pruneFolds,
@@ -52,10 +51,12 @@ import {
   buildPermissionResponseFrame,
   toolRequestFromElicitation,
 } from "../cloud/directSessionRegistry";
-import { emitLocalEvent, setToolResponseInterceptor } from "@/platform/ws";
+import { getRuntimeClient, setToolResponseInterceptor } from "@/platform/ws";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
+import { api } from "@shared/api";
+import type { AnyStream, EventOf, ScopeOf } from "@shared/api/stream";
 import {
-  TOOL_CANCEL_EVENT,
+  CloudSimulatorEventSchema,
   CloudSimulatorStatusSchema,
   type CloudSimulatorEventKind,
   type CloudSimulatorPlatform,
@@ -74,7 +75,7 @@ import { unansweredRequests } from "@shared/agent-asks";
 // ---- Question round-trip ----------------------------------------------------
 // The agent's questions (Claude's AskUserQuestion, Codex's request_user_input)
 // reach the browser as `elicitation.requested` events on the direct socket. The
-// Mac lane relays these to the renderer as a `tool:request` q:event and answers
+// Mac lane relays these to the renderer as a request on `toolRequests` and answers
 // over its own socket; here the renderer IS the client, so each frame is handed
 // to the same handlers locally and the answer goes back on whichever socket
 // serves the session WHEN the user answers — a remount, a reconnect or a brief
@@ -105,7 +106,12 @@ let localRequestCounter = 0;
 function presentDirectQuestion(pending: PendingDirectQuestion): void {
   const localId = `${pending.wireRequestId}#${++localRequestCounter}`;
   pendingDirectQuestions.set(localId, pending);
-  emitForCache(pending.queryClient, "tool:request", { ...pending.request, requestId: localId });
+  publishFor(
+    pending.queryClient,
+    api.toolRequests,
+    { sessionId: pending.sessionId },
+    { type: "request", request: { ...pending.request, requestId: localId } }
+  );
 }
 
 function parkDirectQuestion(pending: PendingDirectQuestion): void {
@@ -134,8 +140,8 @@ function settleDirectQuestionState(
   // after the turn ended (or was stopped) must not revive a finished session.
   const live =
     liveOverride ??
-    projectionFor(qc)
-      .folds.get(sessionId)
+    foldsFor(qc)
+      .get(sessionId)
       ?.state.turns.some((turn) => turn.status === "active") ??
     false;
   patchWorkspaceSessionStatus(qc, sessionId, live ? "working" : "idle");
@@ -144,8 +150,8 @@ function settleDirectQuestionState(
 
 /** The fold's active turn — what a freshly arrived question belongs to. */
 function activeTurnId(sessionId: string, qc: QueryClient): string | undefined {
-  return projectionFor(qc)
-    .folds.get(sessionId)
+  return foldsFor(qc)
+    .get(sessionId)
     ?.state.turns.find((turn) => turn.status === "active")?.turnId;
 }
 
@@ -160,10 +166,13 @@ function retractDirectQuestion(
   live: boolean
 ): void {
   pendingDirectQuestions.delete(localId);
-  emitForCache(pending.queryClient, TOOL_CANCEL_EVENT, {
-    sessionId: pending.sessionId,
-    requestId: localId,
-  });
+  const { sessionId } = pending;
+  publishFor(
+    pending.queryClient,
+    api.toolRequests,
+    { sessionId },
+    { type: "cancel", sessionId, requestId: localId }
+  );
   settleDirectQuestionState(pending.sessionId, pending.queryClient, live);
 }
 
@@ -207,9 +216,9 @@ const REFETCH_DEBOUNCE_MS = 250;
 
 // ---- Device frames ----------------------------------------------------------
 // The platform's simulator.* frames have no fold surface; the Simulator tab
-// reads them from the `cloud:simulator` store, which the Mac lane feeds through
-// the driver's q:event broadcast. Re-emit them locally so the SAME store serves
-// this lane. Web-direct rows are keyed by the session (the adapter's workspace
+// reads them from the cloud simulator store, which the Mac lane feeds from the
+// host's `cloudSimulatorEvents`. Publish them on that stream here so the SAME
+// store serves this lane. Web-direct rows are keyed by the session (the adapter's workspace
 // IS the session), hence workspaceId = sessionId.
 const SIMULATOR_FRAME_KINDS = new Map<string, CloudSimulatorEventKind>([
   ["simulator.status", "status"],
@@ -224,32 +233,30 @@ function emitSimulatorEvent(
   frame: Record<string, unknown>
 ): void {
   const { type: _type, ...data } = frame;
-  emitForCache(qc, "cloud:simulator", { workspaceId: sessionId, sessionId, kind, data });
+  // The platform's frame, unchecked until here: a malformed one is dropped.
+  const event = CloudSimulatorEventSchema.safeParse({
+    workspaceId: sessionId,
+    sessionId,
+    kind,
+    data,
+  });
+  if (event.success) {
+    publishFor(qc, api.cloudSimulatorEvents, { workspaceId: sessionId }, event.data);
+  }
 }
 
 /**
  * The direct-agnt lane's own fold set — module state, separate from the Mac
- * lane's in `useAgentEvents`, because the stream outlives the panel. Unlike the
- * Mac lane it keeps no cursor: agnt frames carry no seq, so `makeCloudFrameHandler`
- * folds straight through (see its header); the throwaway `cursor` below only
- * satisfies the shared `AgentStreamContext` type, which the Mac lane needs.
+ * lane's in `useAgentEvents`, because the stream outlives the panel.
  */
-const projections = new WeakMap<
-  QueryClient,
-  {
-    folds: Map<string, SessionFold>;
-    cursor: ReturnType<typeof createStreamCursor>;
-  }
->();
-function projectionFor(qc: QueryClient) {
-  let projection = projections.get(qc);
-  if (!projection) {
-    projection = { folds: new Map(), cursor: createStreamCursor() };
-    projections.set(qc, projection);
-    const owned = projection;
+const projections = new WeakMap<QueryClient, Map<string, SessionFold>>();
+function foldsFor(qc: QueryClient): Map<string, SessionFold> {
+  let folds = projections.get(qc);
+  if (!folds) {
+    projections.set(qc, (folds = new Map()));
+    const owned = folds;
     runtimeForQueryClient(qc)?.onDispose(() => {
-      owned.folds.clear();
-      for (const session of owned.cursor.sessions()) owned.cursor.reset(session);
+      owned.clear();
       for (const [id, pending] of pendingDirectQuestions) {
         if (pending.queryClient !== qc) continue;
         pendingDirectQuestions.delete(id);
@@ -257,12 +264,16 @@ function projectionFor(qc: QueryClient) {
       }
     });
   }
-  return projection;
+  return folds;
 }
-function emitForCache(qc: QueryClient, event: string, data: unknown): void {
-  const runtime = runtimeForQueryClient(qc);
-  if (runtime) runtime.emitLocalEvent(event, data);
-  else emitLocalEvent(event, data);
+/** Deliver an event this lane produced to whoever follows that stream on the cache's runtime. */
+function publishFor<S extends AnyStream>(
+  qc: QueryClient,
+  stream: S,
+  scope: ScopeOf<S>,
+  event: EventOf<S>
+): void {
+  (runtimeForQueryClient(qc) ?? getRuntimeClient()).publish(stream, scope, event);
 }
 
 export interface CloudDirectSessionParams {
@@ -310,7 +321,7 @@ export function useCloudDirectSession(
 
     const runtime = runtimeForQueryClient(queryClient);
     if (runtime?.getState() === "disposed" || runtime?.getState() === "revoked") return;
-    const { folds, cursor } = projectionFor(queryClient);
+    const folds = foldsFor(queryClient);
     let closed = false;
     pruneFolds(queryClient, folds);
     setStatus("connecting");
@@ -323,7 +334,6 @@ export function useCloudDirectSession(
       queryClient,
       activeSessionId: sessionId,
       folds,
-      cursor,
       scheduleFlush: () => {
         if (frame !== null) return;
         frame = requestAnimationFrame(() => {
@@ -392,7 +402,7 @@ export function useCloudDirectSession(
       pendingTurn !== null && Date.now() - pendingTurn.at < PENDING_TURN_STALE_MS;
 
     // The agent asked the user something: park it for the overlay (the same
-    // `tool:request` the Mac lane delivers) and mark the row as waiting so
+    // request the Mac lane delivers on `toolRequests`) and mark the row as waiting so
     // the sidebar shows attention, not a spinner. Answered via the
     // interceptor above; the sidecar's own timeout is the fallback.
     const askUser = (event: Record<string, unknown>) => {
@@ -439,16 +449,17 @@ export function useCloudDirectSession(
         return;
       }
       // The computer's host template rides workspace.state: one store for every
-      // lane (the Mac lane's driver announces cloud:preview; here the frame is
+      // lane (the Mac lane's driver publishes on `cloudPreviewChanges`; here the frame is
       // re-emitted locally, keyed by the session like every web-direct row).
       if (frame.type === "workspace.state") {
         const data = (frame.data ?? {}) as { sandboxUrlTemplate?: string | null };
         if (data.sandboxUrlTemplate !== undefined) {
-          emitForCache(queryClient, "cloud:preview", {
-            workspaceId: sessionId,
-            sessionId,
-            template: data.sandboxUrlTemplate || null,
-          });
+          publishFor(
+            queryClient,
+            api.cloudPreviewChanges,
+            { workspaceId: sessionId },
+            { workspaceId: sessionId, sessionId, template: data.sandboxUrlTemplate || null }
+          );
         }
       }
       // Device frames: one store for every lane (see emitSimulatorEvent); the
@@ -481,11 +492,12 @@ export function useCloudDirectSession(
             }
           | undefined;
         if (typeof state?.sandboxUrlTemplate === "string" || state?.sandboxUrlTemplate === null) {
-          emitForCache(queryClient, "cloud:preview", {
-            workspaceId: sessionId,
-            sessionId,
-            template: state.sandboxUrlTemplate || null,
-          });
+          publishFor(
+            queryClient,
+            api.cloudPreviewChanges,
+            { workspaceId: sessionId },
+            { workspaceId: sessionId, sessionId, template: state.sandboxUrlTemplate || null }
+          );
         }
         // A late joiner learns the device's current status here — the platform
         // does not replay the status frame it sent before this socket existed.

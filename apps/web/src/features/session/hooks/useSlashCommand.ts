@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { sendRequest } from "@/platform/ws";
+import { readAgentConfig } from "@/features/agent-config/api/agent-config.service";
 import type { SkillItem, CommandItem } from "@shared/types/agent-config";
 
 export interface SlashCommandItem {
@@ -106,22 +106,10 @@ export function useSlashCommand({
       try {
         const [globalSkills, globalCommands, projectSkills, projectCommands] =
           await Promise.allSettled([
-            sendRequest<SkillItem[]>("agentConfig", { section: "skills", scope: "global" }),
-            sendRequest<CommandItem[]>("agentConfig", { section: "commands", scope: "global" }),
-            workspacePath
-              ? sendRequest<SkillItem[]>("agentConfig", {
-                  section: "skills",
-                  scope: "project",
-                  repoPath: workspacePath,
-                })
-              : Promise.resolve([]),
-            workspacePath
-              ? sendRequest<CommandItem[]>("agentConfig", {
-                  section: "commands",
-                  scope: "project",
-                  repoPath: workspacePath,
-                })
-              : Promise.resolve([]),
+            readAgentConfig("skills", "global"),
+            readAgentConfig("commands", "global"),
+            workspacePath ? readAgentConfig("skills", "project", workspacePath) : [],
+            workspacePath ? readAgentConfig("commands", "project", workspacePath) : [],
           ]);
 
         const items: SlashCommandItem[] = [];

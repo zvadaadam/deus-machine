@@ -40,7 +40,7 @@ export const ptyRouter = {
   async open(params: PtySpawnParams): Promise<string> {
     // A cloud terminal never touches node-pty: the frontend names the cloud
     // WORKSPACE, the backend resolves its current session, and the driver
-    // reroutes the same pty-data/pty-exit events — xterm cannot tell the
+    // reroutes the same `terminalOutput` events — xterm cannot tell the
     // difference.
     if (params.cloudWorkspaceId) {
       const row = getWorkspaceRaw(getDatabase(), params.cloudWorkspaceId);

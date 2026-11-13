@@ -16,10 +16,10 @@ import {
   useRetrySetup,
   useProjectEnvironment,
 } from "@/features/workspace/api/workspace.queries";
-import { WorkspaceService } from "@/features/workspace/api/workspace.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { queueTerminalTask } from "@/features/terminal/store/terminalTaskStore";
 import { simulatorStoreActions } from "@/features/simulator/store";
-import { simulatorService } from "@/features/simulator/api/simulator.service";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
 
@@ -84,7 +84,7 @@ export function useWorkspaceActions({
     // otherwise leak in the HashMap until app close (no lifecycle hook exists).
     const simSession = simulatorStoreActions.getSession(selectedWorkspace.id);
     if (simSession.phase !== "idle") {
-      simulatorService.stopStreaming(selectedWorkspace.id).catch(() => {
+      call(api.simStop, { workspaceId: selectedWorkspace.id }).catch(() => {
         /* Expected: streaming may already be stopped or session may not exist */
       });
       simulatorStoreActions.clearWorkspaceSession(selectedWorkspace.id);
@@ -102,7 +102,7 @@ export function useWorkspaceActions({
 
   const handleViewSetupLogs = useCallback(() => {
     if (!selectedWorkspace) return;
-    WorkspaceService.fetchSetupLogs(selectedWorkspace.id)
+    call(api.setupLogs, { workspaceId: selectedWorkspace.id })
       .then(({ logs }) => {
         if (!logs) {
           toast.error("No setup logs available.");
@@ -127,7 +127,7 @@ export function useWorkspaceActions({
   const handleRunTask = useCallback(
     (taskName: string) => {
       if (!selectedWorkspace) return;
-      WorkspaceService.runTask(selectedWorkspace.id, taskName)
+      call(api.runTask, { workspaceId: selectedWorkspace.id, taskName })
         .then(({ command }) => {
           // Open a new terminal tab running the task command (scoped to this
           // workspace so it can only run in its own repo)

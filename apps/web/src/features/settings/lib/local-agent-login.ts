@@ -1,7 +1,8 @@
 import { toast } from "sonner";
 import type { AgentAuthAnswer, AuthLogin, HarnessAuth, LocalHarness } from "@shared/agent-auth";
+import { api } from "@shared/api";
 import { openExternalPending } from "@/platform/native/window";
-import { sendCommand } from "@/platform/ws";
+import { call } from "@/platform/ws";
 
 /** A local agent as the engine has it: its CLI, then its login, read from the CLI. */
 export type LocalAgentState =
@@ -47,10 +48,18 @@ export function readLocalAgent(
   return { status: "signed-out", auth, ...(login && { login }) };
 }
 
-/** Install the agents' CLIs now; the install is followed on q:event "agent:cli". */
+/** Why a request was refused or failed, for a toast. */
+function reasonOf(error: unknown, otherwise: string): string {
+  return (error instanceof Error && error.message) || otherwise;
+}
+
+/** Install the agents' CLIs now; the install is followed on the `agentCliProgress` stream. */
 export async function installLocalAgents(): Promise<void> {
-  const ack = await sendCommand("agentPrepareClis", {});
-  if (!ack.accepted) toast.error(ack.error || "Couldn’t start the install");
+  try {
+    await call(api.agentPrepareClis);
+  } catch (error) {
+    toast.error(reasonOf(error, "Couldn’t start the install"));
+  }
 }
 
 /** The sign-in Deus offers: the subscription's own, in the browser. */
@@ -68,7 +77,7 @@ export function canSignIn(auth: HarnessAuth): boolean {
  * Sign this computer's agent in. A login it already has of that kind (a
  * terminal's, another app's) is picked up and nothing opens; otherwise the
  * CLI's own sign-in opens in the browser, and its end arrives as
- * q:event "agent:auth".
+ * The `agentAuthChanges` stream.
  */
 export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth): Promise<void> {
   const method = browserSignIn(auth);
@@ -77,35 +86,42 @@ export async function signInLocalAgent(harness: LocalHarness, auth: HarnessAuth)
   // and send it to the sign-in page once the backend answers.
   const page = openExternalPending();
   try {
-    const ack = await sendCommand("agentSignIn", { harness, method: method.id }, 60_000);
-    if (!ack.accepted) throw new Error(ack.error || "Couldn’t start the sign-in");
-    const answer = ack as unknown as Partial<{ already: HarnessAuth; login: AuthLogin }>;
-    if (answer.already) {
+    const answer = await call(
+      api.agentSignIn,
+      { harness, method: method.id },
+      { timeoutMs: 60_000 }
+    );
+    if ("already" in answer) {
       page.cancel();
       toast.success(`Already signed in on this computer: ${accountLine(answer.already)}`);
       return;
     }
-    if (!answer.login) throw new Error("The sign-in didn’t start");
     const url = answer.login.url ?? answer.login.codeUrl;
     if (url) await page.open(url);
     else page.cancel();
   } catch (error) {
     page.cancel();
-    toast.error(error instanceof Error ? error.message : "Couldn’t start the sign-in");
+    toast.error(reasonOf(error, "Couldn’t start the sign-in"));
   }
 }
 
 /** The code the sign-in page showed (signing in on another device). */
 export async function finishLocalSignIn(loginId: string, code: string): Promise<void> {
-  const ack = await sendCommand("agentLoginCode", { loginId, code });
-  if (!ack.accepted) toast.error(ack.error || "That code didn’t work");
+  try {
+    await call(api.agentLoginCode, { loginId, code });
+  } catch (error) {
+    toast.error(reasonOf(error, "That code didn’t work"));
+  }
 }
 
 export async function cancelLocalSignIn(loginId: string): Promise<void> {
-  await sendCommand("agentLoginCancel", { loginId }).catch(() => {});
+  await call(api.agentLoginCancel, { loginId }).catch(() => {});
 }
 
 export async function signOutLocalAgent(harness: LocalHarness): Promise<void> {
-  const ack = await sendCommand("agentLogout", { harness });
-  if (!ack.accepted) toast.error(ack.error || "Couldn’t sign out");
+  try {
+    await call(api.agentLogout, { harness });
+  } catch (error) {
+    toast.error(reasonOf(error, "Couldn’t sign out"));
+  }
 }

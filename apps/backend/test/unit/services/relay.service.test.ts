@@ -16,6 +16,8 @@ const transport = vi.hoisted(() => ({
   }>,
   query: vi.fn(),
   unsubscribe: vi.fn(),
+  /** The live reads told to answer again (`invalidate`): how a device list change reaches clients. */
+  invalidate: vi.fn(),
   device: {
     id: "phone",
     name: "Phone",
@@ -101,6 +103,7 @@ vi.mock("../../../src/services/remote-machine.service", () => ({
 vi.mock("../../../src/services/query-engine", () => ({
   handleFrame: transport.query,
   removeSubs: transport.unsubscribe,
+  invalidate: transport.invalidate,
 }));
 
 import {
@@ -359,6 +362,8 @@ describe("account-bound device grants", () => {
     expect(frames().at(-1)).toMatchObject({ type: "pair_response", pairId: "p1", success: true });
     const insert = transport.run.mock.calls.find(([sql]) => String(sql).includes("INSERT"))!;
     expect(insert.slice(-2)).toEqual(["user_a", MACHINE]);
+    // A device was added: the clients showing the list are sent it again.
+    expect(transport.invalidate.mock.calls).toEqual([[["pairedDevices"]]]);
   });
 
   it("retires grants made for a machine the account later removed", () => {
@@ -372,6 +377,8 @@ describe("account-bound device grants", () => {
     receive({ type: "pair_request", pairId: "p1", code, deviceName: "Phone", accountId: "user_b" });
     expect(frames().at(-1)).toMatchObject({ type: "pair_response", success: false });
     expect(transport.run).not.toHaveBeenCalled();
+    // No device was added, so no list is read again.
+    expect(transport.invalidate).not.toHaveBeenCalled();
   });
 });
 
@@ -400,6 +407,7 @@ describe("relay pairing", () => {
       reason: "Too many failed attempts. Try again later.",
     });
     expect(transport.run).not.toHaveBeenCalled();
+    expect(transport.invalidate).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(5 * 60_000);
     receive({
@@ -418,6 +426,8 @@ describe("relay pairing", () => {
     });
     expect(frames().at(-1)).toMatchObject({ type: "pair_response", success: true });
     expect(transport.run).toHaveBeenCalledOnce();
+    // Only the pairing that succeeded changed the device list.
+    expect(transport.invalidate.mock.calls).toEqual([[["pairedDevices"]]]);
   });
 });
 
@@ -444,12 +454,16 @@ describe("device revocation", () => {
       expect.stringContaining("UPDATE paired_devices"),
       "hash"
     );
+    // No grant has been added or removed yet.
+    expect(transport.invalidate).not.toHaveBeenCalled();
 
     const response = await authRoutes.request("/remote-auth/devices/phone", {
       method: "DELETE",
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
     expect(response.status).toBe(200);
+    // The device left the list: the clients showing it are sent it again, once.
+    expect(transport.invalidate.mock.calls).toEqual([[["pairedDevices"]]]);
     expect(getConnection(directId)).toBeUndefined();
     expect(getConnection(relayId)).toBeUndefined();
     expect(direct.close).toHaveBeenCalledWith(4001, "Device access revoked");
@@ -463,7 +477,7 @@ describe("device revocation", () => {
     });
 
     transport.query.mockClear();
-    const frame = { type: "q:command", command: "sendMessage" };
+    const frame = { type: "q:mutate", id: "m1", action: "sendMessage", params: {} };
     handleProtocolMessage(directId, frame);
     receive({ type: "data", clientId: "relay-phone", payload: JSON.stringify(frame) });
     expect(transport.query).not.toHaveBeenCalled();

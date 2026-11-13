@@ -17,7 +17,6 @@ import {
   reconcile as reconcileSimulators,
   destroyAll as destroyAllSimulators,
 } from "./services/simulator-context";
-import { setApp } from "./services/route-delegate";
 import { invalidate } from "./services/query-engine";
 import {
   setRefreshListener as setLocalServerRefreshListener,
@@ -48,7 +47,7 @@ const db = initDatabase();
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
 // Runs once at startup (fire-and-forget) so WS subscribers get the data
-// on their first snapshot instead of waiting for GET /repos.
+// on their first snapshot instead of waiting for a `repos` read.
 async function backfillGitOriginUrls(): Promise<void> {
   const { getGitRemoteUrl } = await import("./lib/git-remotes");
 
@@ -88,9 +87,6 @@ void backfillGitOriginUrls();
 
 // Create Hono app + WebSocket injector
 const { app, injectWebSocket } = createApp();
-
-// Register the Hono app for in-process route delegation (q:request/q:mutate → Hono routes)
-setApp(app);
 
 // Global variable to store actual port (used by health endpoint)
 let actualServerPort: number | null = null;
@@ -139,8 +135,8 @@ async function onListening(port: number): Promise<void> {
 
   // Periodic localhost dev-server discovery. Probes a curated port list
   // every 60s; the refresh listener pushes a fresh snapshot to all
-  // `local_servers` WS subscribers each time a sweep completes.
-  setLocalServerRefreshListener(() => invalidate(["local_servers"]));
+  // `localServers` WS subscribers each time a sweep completes.
+  setLocalServerRefreshListener(() => invalidate(["localServers"]));
   startLocalServerDiscovery();
 
   // Automations are cloud-only (agnt schedules + executes) — just mirror the

@@ -8,7 +8,8 @@
 
 import { randomBytes, randomInt, createHash } from "crypto";
 import { getDatabase } from "../lib/database";
-import { broadcast, closeDeviceConnections, connectedDeviceIds } from "./ws.service";
+import { invalidate } from "./query-engine";
+import { closeDeviceConnections, connectedDeviceIds } from "./ws.service";
 
 // ---- Types ----
 
@@ -508,9 +509,9 @@ export function updateLastSeen(tokenHash: string): void {
   );
 }
 
-/** Clients showing the device list read it again: a device was added, connected, left or revoked. */
+/** A device was added, connected, left or revoked: the clients showing the list get it again. */
 export function notifyDevicesChanged(): void {
-  broadcast(JSON.stringify({ type: "q:event", event: "devices:changed", data: {} }));
+  invalidate(["pairedDevices"]);
 }
 
 /** List all paired devices (token_hash excluded from the returned objects for safety). */

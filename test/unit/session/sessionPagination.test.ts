@@ -2,10 +2,16 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { api } from "@shared/api";
 import { useLoadOlderMessages } from "@/features/session/api/session.queries";
-import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { Message, SessionTurn } from "@shared/types/session";
+import type { Message, PaginatedMessages, SessionTurn } from "@shared/types/session";
+
+const call = vi.hoisted(() => vi.fn());
+vi.mock("@/platform/ws", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/platform/ws")>()),
+  call,
+}));
 
 function message(id: string, seq: number): Message {
   return { id, seq, session_id: "session", role: "assistant", turn_id: "boundary" };
@@ -34,7 +40,7 @@ describe("turn accounting while loading older messages", () => {
       const live: SessionTurn = { ...fetched, endedAt: 3000, cost: 0.2 };
       const started = Promise.withResolvers<void>();
       const response = Promise.withResolvers<PaginatedMessages>();
-      const fetch = vi.spyOn(SessionService, "fetchMessages").mockImplementation(() => {
+      call.mockImplementation(() => {
         started.resolve();
         return response.promise;
       });
@@ -47,6 +53,10 @@ describe("turn accounting while loading older messages", () => {
         renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(Probe)));
         const pending = load({ sessionId: "session", beforeSeq: 3 });
         await started.promise;
+        expect(call).toHaveBeenCalledExactlyOnceWith(api.messages, {
+          sessionId: "session",
+          before: 3,
+        });
         if (liveUpdate) client.setQueryData(key, { ...initial, turns: [live] });
         response.resolve({
           ...initial,
@@ -60,7 +70,7 @@ describe("turn accounting while loading older messages", () => {
         expect(result.messages.map((row) => row.id)).toEqual(["older", "latest"]);
         expect(result.has_older).toBe(false);
       } finally {
-        fetch.mockRestore();
+        call.mockReset();
         client.clear();
       }
     }

@@ -112,17 +112,6 @@ export function recordPong(id: string): void {
   if (conn) conn.lastPong = Date.now();
 }
 
-/** Broadcast a message to all connected clients. */
-export function broadcast(message: string): void {
-  for (const conn of connections.values()) {
-    try {
-      conn.ws.send(message);
-    } catch {
-      // Connection may have closed — will be cleaned up on next heartbeat
-    }
-  }
-}
-
 /** Close all connections and stop heartbeat (for shutdown). */
 export function closeAll(): void {
   stopHeartbeat();

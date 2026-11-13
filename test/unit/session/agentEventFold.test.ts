@@ -2,11 +2,14 @@
  * The projection that turns the canonical agent stream into the message cache.
  *
  * The FOLD is the engine's (`reduceConversationWithChanges`), and its rules —
- * upsert by part id, snapshots beating deltas, replay convergence, the seq
- * cursor's four verdicts — are tested in the package. What is deus's, and what
- * is tested here, is everything downstream of `changes`: which SQLite-row
- * writes each change implies, which columns survive them, the two delivery
- * grades, and the routing policy for a browser that cannot replay a hole.
+ * upsert by part id, snapshots beating deltas, replay convergence — are tested
+ * in the package. What is deus's, and what is tested here, is everything
+ * downstream of `changes`: which SQLite-row writes each change implies, which
+ * columns survive them, and the two delivery grades.
+ *
+ * Order is not the fold's to keep: the host's `sessionEvents` stream delivers
+ * each event once and in order, and says so when it cannot. What the app does
+ * then is tested with the subscription (agentEventSubscription.test.ts).
  *
  * Everything runs against a REAL QueryClient: the projection IS its cache
  * writes, so mocking setQueryData would only pin the call shape.
@@ -18,7 +21,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createSessionFold,
-  createStreamCursor,
   flushDeltas,
   hydrateConversation,
   messagesKey,
@@ -29,9 +31,14 @@ import {
   type SessionFold,
 } from "../../../apps/web/src/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "../../../apps/web/src/features/session/lib/optimisticMessage";
-import type { PaginatedMessages } from "../../../apps/web/src/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
 import type { Message } from "../../../shared/types/session";
-import type { LifecycleEvent, Part, WireEventEnvelope } from "../../../shared/protocol-types";
+import {
+  isLiveOnlyEvent,
+  type LifecycleEvent,
+  type Part,
+  type WireEventEnvelope,
+} from "../../../shared/protocol-types";
 
 const SESSION = "sess-1";
 const OTHER = "sess-2";
@@ -47,7 +54,7 @@ interface Harness {
   qc: QueryClient;
   scheduleFlush: ReturnType<typeof vi.fn>;
   requestRefetch: ReturnType<typeof vi.fn>;
-  /** Feed one envelope, auto-numbering `seq` per session. */
+  /** Feed one envelope, numbered per session as the engine numbers its log. */
   feed: (event: LifecycleEvent, over?: Partial<WireEventEnvelope>) => void;
   page: (sessionId?: string) => PaginatedMessages | undefined;
   fold: (sessionId?: string) => SessionFold;
@@ -63,7 +70,6 @@ function harness(activeSessionId = SESSION): Harness {
     queryClient: qc,
     activeSessionId,
     folds: new Map(),
-    cursor: createStreamCursor(),
     scheduleFlush,
     requestRefetch,
   };
@@ -76,7 +82,11 @@ function harness(activeSessionId = SESSION): Harness {
     requestRefetch,
     feed(event, over = {}) {
       const sessionId = over.sessionId ?? sessionOf(event) ?? activeSessionId;
-      const next = (seqs.get(sessionId) ?? 0) + 1;
+      // As the engine numbers its log (server/session-log.ts): a kept event
+      // takes the next seq; a token delta takes none and carries the seq of the
+      // kept event before it. The fold reads none of it.
+      const last = seqs.get(sessionId) ?? 0;
+      const next = isLiveOnlyEvent(event) && last > 0 ? last : last + 1;
       seqs.set(sessionId, next);
       routeEnvelope(ctx, { sessionId, seq: next, event, ...over } as WireEventEnvelope);
     },
@@ -422,7 +432,7 @@ describe("message.started{role:user} — the predicted echo", () => {
 });
 
 // ===========================================================================
-// I3: routing a stream the browser cannot replay
+// I3: a conversation the host restates whole
 // ===========================================================================
 
 describe("restored cloud conversations", () => {
@@ -434,7 +444,6 @@ describe("restored cloud conversations", () => {
     restored.feed(started({ messageId: "later", turnId: "later-turn" }));
     hydrateConversation(h.ctx, {
       sessionId: SESSION,
-      seq: 3,
       conversation: restored.fold().state,
       messageIds: ["prompt", "later"],
     });
@@ -459,7 +468,6 @@ describe("restored cloud conversations", () => {
 
     hydrateConversation(h.ctx, {
       sessionId: SESSION,
-      seq: 1,
       conversation: createSessionFold().state,
       messageIds: [],
     });
@@ -499,7 +507,6 @@ describe("restored cloud conversations", () => {
     restored.feed(turnEnded({ stopReason: "cancelled" }));
     hydrateConversation(h.ctx, {
       sessionId: SESSION,
-      seq: 1,
       conversation: restored.fold().state,
       messageIds: [],
     });
@@ -530,7 +537,6 @@ describe("restored cloud conversations", () => {
     restored.feed(partEvent(textPart("p1", "Recovered history")));
     hydrateConversation(h.ctx, {
       sessionId: SESSION,
-      seq: 3,
       conversation: restored.fold().state,
       messageIds: ["a1"],
     });
@@ -547,23 +553,22 @@ describe("restored cloud conversations", () => {
     expect(h.qc.getQueryState(messagesKey(SESSION))?.fetchStatus).toBe("idle");
   });
 
-  it("replaces a stale fold and cursor so streaming continues from recovered text", () => {
+  it("replaces a stale fold so streaming continues from recovered text", () => {
     const h = harness();
-    h.feed(started(), { seq: 40 });
-    h.feed(partEvent(textPart("p1", "old")), { seq: 41 });
-    h.feed(delta("p1", " stale pending flush"), { seq: 42 });
+    h.feed(started());
+    h.feed(partEvent(textPart("p1", "old")));
+    h.feed(delta("p1", " stale pending flush"));
     const restored = harness();
     restored.feed(started());
     restored.feed(partEvent(textPart("p1", "Recovered while disconnected")));
 
     hydrateConversation(h.ctx, {
       sessionId: SESSION,
-      seq: 1,
       conversation: restored.fold().state,
       messageIds: ["a1"],
     });
     expect(h.fold().dirtyMessages.size).toBe(0);
-    h.feed(delta("p1", " and continued"), { seq: 2 });
+    h.feed(delta("p1", " and continued"));
     h.flush();
     expect(h.page()!.messages[0].parts?.[0]).toMatchObject({
       text: "Recovered while disconnected and continued",
@@ -578,7 +583,6 @@ describe("restored cloud conversations", () => {
     restored.feed(started({ sessionId: OTHER }));
     hydrateConversation(h.ctx, {
       sessionId: OTHER,
-      seq: 5,
       conversation: restored.fold(OTHER).state,
       messageIds: ["a1"],
     });
@@ -590,7 +594,6 @@ describe("restored cloud conversations", () => {
     const h = harness();
     hydrateConversation(h.ctx, {
       sessionId: OTHER,
-      seq: 5,
       conversation: createSessionFold().state,
       messageIds: [],
     });
@@ -599,85 +602,7 @@ describe("restored cloud conversations", () => {
   });
 });
 
-describe("routeEnvelope — cursor policy", () => {
-  it("joins mid-stream without calling the first envelope a gap", () => {
-    // Deus attaches to a turn already in flight: the page came from SQLite and
-    // the socket from wherever the engine is now. Reporting a hole here would
-    // refetch the page deus just fetched, on every session.
-    const h = harness();
-    h.feed(started(), { seq: 42 });
-
-    expect(h.requestRefetch).not.toHaveBeenCalled();
-    expect(h.page()!.messages.map((m) => m.id)).toEqual(["a1"]);
-  });
-
-  it("asks for exactly one refetch per gap, folds the event, and keeps counting", () => {
-    const h = harness();
-    h.feed(started(), { seq: 1 });
-    h.feed(partEvent(textPart("p1", "kept")), { seq: 9 });
-
-    expect(h.requestRefetch).toHaveBeenCalledTimes(1);
-    expect(h.requestRefetch).toHaveBeenCalledWith(SESSION);
-    expect(h.page()!.messages[0].parts).toHaveLength(1);
-
-    // The hole was accepted as lost, so the stream continues normally rather
-    // than reporting every following envelope as another gap.
-    h.feed(partEvent(textPart("p2", "next"), { partIndex: 1 }), { seq: 10 });
-    expect(h.requestRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  it("drops a duplicate envelope entirely — no fold, no refetch", () => {
-    const h = harness();
-    h.feed(started(), { seq: 1 });
-    h.feed(partEvent(textPart("p1", "")), { seq: 2 });
-    h.feed(delta("p1", "A"), { seq: 2 });
-    h.flush();
-
-    expect((h.page()!.messages[0].parts![0] as { text: string }).text).toBe("");
-    expect(h.requestRefetch).not.toHaveBeenCalled();
-  });
-
-  it("drops the folded state when the log restarts at 1", () => {
-    const h = harness();
-    h.feed(started(), { seq: 1 });
-    h.feed(partEvent(textPart("p1", "before")), { seq: 2 });
-    expect(h.fold().state.timeline).toHaveLength(1);
-
-    // The agent-server was replaced: the session log begins again.
-    h.feed(started({ messageId: "a2" }), { seq: 1 });
-
-    expect(h.requestRefetch).toHaveBeenCalledWith(SESSION);
-    // Nothing from the dead log survives in the fold — it would otherwise
-    // shadow the new log's own messages by id forever.
-    expect(h.fold().state.timeline.map((e) => e.kind === "message" && e.messageId)).toEqual(["a2"]);
-  });
-
-  it("treats a mid-stream backwards seq as a log replacement, not a duplicate", () => {
-    // The engine cursor only recognizes a restart seen FROM seq 1. If this
-    // client's reconnect overlapped the restart (or a restarted backend
-    // re-forwards from a healed log), its first sight of the new log is some
-    // seq far below the dead watermark — reading that as "duplicate" would
-    // silently drop every envelope until the new counter caught up.
-    const h = harness();
-    h.feed(started(), { seq: 41 });
-    h.feed(partEvent(textPart("p1", "old")), { seq: 42 });
-    expect(h.requestRefetch).not.toHaveBeenCalled();
-
-    h.feed(started({ messageId: "a2" }), { seq: 5 });
-
-    expect(h.requestRefetch).toHaveBeenCalledWith(SESSION);
-    // The dead log's fold is gone; the new log's message is the only one.
-    expect(h.fold().state.timeline.map((e) => e.kind === "message" && e.messageId)).toEqual(["a2"]);
-
-    // And the stream keeps counting from the replacement.
-    h.feed(partEvent(textPart("p2", "new", { messageId: "a2" })), { seq: 6 });
-    expect(h.requestRefetch).toHaveBeenCalledTimes(1);
-
-    // The immediately-last frame is still an ordinary duplicate.
-    h.feed(partEvent(textPart("p2", "new", { messageId: "a2" })), { seq: 6 });
-    expect(h.requestRefetch).toHaveBeenCalledTimes(1);
-  });
-
+describe("session.compaction — the reload request", () => {
   it("refetches the message page when a compaction marker lands", () => {
     const h = harness();
     h.feed({
@@ -690,16 +615,6 @@ describe("routeEnvelope — cursor policy", () => {
     } as LifecycleEvent);
 
     expect(h.requestRefetch).toHaveBeenCalledWith(SESSION);
-  });
-
-  it("tracks each session's stream separately", () => {
-    const h = harness(SESSION);
-    seed(h.qc, OTHER, []);
-    h.feed(started(), { seq: 7 });
-    h.feed(started({ sessionId: OTHER, messageId: "b1" }), { sessionId: OTHER, seq: 1 });
-    h.feed(partEvent(textPart("p1", "x")), { seq: 8 });
-
-    expect(h.requestRefetch).not.toHaveBeenCalled();
   });
 });
 
@@ -812,14 +727,14 @@ describe("mid-stream attach — the fold is a fragment, the page is the truth", 
       } as Message,
     ]);
 
-    h.feed(partEvent(textPart("p3", "live"), { partIndex: 2 }), { seq: 42 });
+    h.feed(partEvent(textPart("p3", "live"), { partIndex: 2 }));
 
     const parts = h.page()!.messages[0].parts!;
     expect(parts.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
     expect((parts[2] as { text: string }).text).toBe("live");
 
     // And a re-stated part the fold DOES know replaces in place, not appends.
-    h.feed(partEvent(textPart("p3", "live (final)"), { partIndex: 2 }), { seq: 43 });
+    h.feed(partEvent(textPart("p3", "live (final)"), { partIndex: 2 }));
     expect(h.page()!.messages[0].parts!.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
     expect((h.page()!.messages[0].parts![2] as { text: string }).text).toBe("live (final)");
   });
@@ -870,15 +785,20 @@ describe("background sessions", () => {
     expect(h.page(OTHER)!.messages[0].parts!.map((p) => p.id)).toEqual(["bp1"]);
   });
 
-  it("never invents a page — or a fold — for a session that was never opened", () => {
+  it("never invents a page for a chat whose page has not arrived, and folds what it is sent meanwhile", () => {
     const h = harness(SESSION);
 
+    h.feed({ type: "turn.started", sessionId: OTHER, turnId: TURN, timestamp: T });
     h.feed(started({ sessionId: OTHER, messageId: "b1" }), { sessionId: OTHER });
+    h.feed(turnEnded({ sessionId: OTHER }), { sessionId: OTHER });
 
+    // A page made from a fragment would claim there is nothing older, and
+    // being fresh forever it would keep the chat's history from being read.
     expect(h.page(OTHER)).toBeUndefined();
-    // Not folding it is what keeps the memory cost bounded by the pages the
-    // cache already holds, rather than by every session on the socket.
-    expect(h.ctx.folds.has(OTHER)).toBe(false);
+    // The fold is kept: a part's tokens only extend a part it has seen open.
+    // Only followed chats are sent events, and a chat is followed while its
+    // page's query exists, so the folds stay bounded by the cache.
+    expect(h.ctx.folds.has(OTHER)).toBe(true);
   });
 
   it("skips deltas for background sessions — the snapshot restates them", () => {
@@ -914,10 +834,10 @@ describe("background sessions", () => {
 
 /**
  * `SessionPanel` is rendered `key={sessionId}`, so switching tabs unmounts it
- * and remounts a new one — which is why `useAgentEvents` keeps its folds and
- * cursor in MODULE state rather than in a ref. The cost of not doing so is not
- * abstract: the two tests below feed the same stream, once with the fold kept
- * across the switch and once dropped, as a per-panel ref would have been.
+ * and remounts a new one — which is why `useAgentEvents` keeps its folds in
+ * MODULE state (per cache) rather than in a ref. The cost of not doing so is
+ * not abstract: the two tests below feed the same stream, once with the fold
+ * kept across the switch and once dropped, as a per-panel ref would have been.
  */
 describe("across a tab switch", () => {
   const toolStatus = (h: Harness) =>
@@ -934,8 +854,7 @@ describe("across a tab switch", () => {
     openATool(h);
 
     // The new panel folds against the SAME state, which is why nothing about
-    // the ctx is reset here. A kept cursor also means the first envelope after
-    // the switch reads as contiguous rather than as a hole.
+    // the ctx is reset here.
     h.feed(turnEnded({ stopReason: "cancelled", timestamp: T + 5 }));
 
     expect(toolStatus(h)).toBe("cancelled");

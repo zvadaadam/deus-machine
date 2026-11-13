@@ -8,10 +8,10 @@ import type {
   RuntimePorts,
   QueryRequestInterceptor,
   ToolResponseInterceptor,
-  EventCallback,
   SnapshotCallback,
   DeltaCallback,
-  CommandResult,
+  StreamCallback,
+  ListenOptions,
   MutateResult,
 } from "./types";
 
@@ -24,10 +24,22 @@ type Subscription = {
   observers: Set<Observer>;
   fresh: boolean;
 };
+type Follower = { onEvent: StreamCallback; options?: ListenOptions };
+/** One wire subscription to a stream, shared by everyone here who follows it with that filter. */
+type Listener = {
+  id: string;
+  key: string;
+  stream: string;
+  filter?: Record<string, unknown>;
+  followers: Set<Follower>;
+  /** The host has been asked for this stream before: the next ask is a return. */
+  joined: boolean;
+  /** Number of the last event received, on a stream that numbers them: where a return resumes. */
+  last?: number;
+};
 type Pending = {
-  kind: "request" | "mutation" | "command";
-  /** A request that changes something: a lost reply leaves its outcome unknown. */
-  effect: boolean;
+  /** A mutation changes something: a lost reply leaves its outcome unknown. */
+  kind: "request" | "mutation";
   sent: boolean;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -38,7 +50,7 @@ type Pending = {
  * A transport can be a direct socket or a logical relay stream. Neither changes
  * q: or the agent event contract. Reconnect restores reads; writes are never replayed.
  */
-export class RuntimeClient<Resource extends string = string, Command extends string = string> {
+export class RuntimeClient<Resource extends string = string> {
   readonly identity: Readonly<RuntimeIdentity>;
   private state: RuntimeState = "offline";
   private socket: RuntimeSocket | null = null;
@@ -56,8 +68,9 @@ export class RuntimeClient<Resource extends string = string, Command extends str
   };
   private subscriptions = new Map<string, Subscription>();
   private byId = new Map<string, Subscription>();
+  private listeners = new Map<string, Listener>();
+  private listenersByKey = new Map<string, Listener>();
   private pending = new Map<string, Pending>();
-  private events = new Set<EventCallback>();
   private states = new Set<(state: RuntimeState) => void>();
   private disposals = new Set<() => void>();
   private requestInterceptor: QueryRequestInterceptor | null;
@@ -161,6 +174,10 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         this.state = "online";
         this.scheduleHeartbeat();
         for (const sub of this.subscriptions.values()) this.sendSubscription(sub);
+        // A reset may stop a listener later in this pass: it is not asked for again.
+        for (const listener of [...this.listeners.values()]) {
+          if (this.listeners.has(listener.id)) this.sendListen(listener);
+        }
         this.connection?.resolve();
         this.connection = undefined;
         this.notifyState();
@@ -180,7 +197,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
       .with("q:snapshot", () => {
         const sub = this.byId.get(id);
         if (!sub || !this.isConnected()) return;
-        // A null resource can be authoritative. Ack-only snapshots are an app policy.
+        // A null resource can be authoritative.
         sub.fresh = true;
         for (const observer of sub.observers) this.notify(() => observer.snapshot(frame.data));
       })
@@ -191,29 +208,48 @@ export class RuntimeClient<Resource extends string = string, Command extends str
           this.notify(() =>
             observer.delta?.(
               frame.upserted as unknown[] | undefined,
-              frame.removed as string[] | undefined,
-              frame.cursor as number | undefined
+              frame.removed as string[] | undefined
             )
           );
       })
       .with("q:event", () => {
-        if (this.isConnected() && typeof frame.event === "string")
-          this.emitLocalEvent(frame.event, frame.data);
+        if (!this.isConnected()) return;
+        const listener = this.listeners.get(id);
+        if (!listener) return;
+        if (typeof frame.seq === "number") listener.last = frame.seq;
+        for (const follower of [...listener.followers])
+          this.notify(() => follower.onEvent(frame.data));
+      })
+      .with("q:subscribed", () => {
+        const listener = this.listeners.get(id);
+        if (!listener || !this.isConnected()) return;
+        // Where the stream stands: a place to return to even if nothing arrives.
+        if (typeof frame.seq === "number") listener.last = frame.seq;
+      })
+      .with("q:reset", () => {
+        const listener = this.listeners.get(id);
+        if (!listener || !this.isConnected()) return;
+        // Where the stream stands now: what follows is delivered from there.
+        listener.last = typeof frame.seq === "number" ? frame.seq : undefined;
+        this.resetFollowers(listener);
       })
       .with("q:response", () => this.resolve(id, "request", frame.data))
       .with("q:mutate_result", () => {
         const { type: _type, id: _id, ...result } = frame;
         this.resolve(id, "mutation", result);
       })
-      .with("q:command_ack", () => {
-        const { type: _type, id: _id, ...result } = frame;
-        this.resolve(id, "command", result);
-      })
       .with("q:error", () => {
         const message = typeof frame.message === "string" ? frame.message : "Query failed";
         const pending = this.takePending(id);
         if (pending) pending.reject(new RuntimeError("rejected", message));
-        else {
+        else if (this.listeners.has(id)) {
+          // Refused for good (no such stream, or not allowed): redialing will not change it.
+          const listener = this.listeners.get(id)!;
+          this.listeners.delete(id);
+          this.listenersByKey.delete(listener.key);
+          for (const follower of listener.followers)
+            this.notify(() => follower.options?.onRefused?.(new RuntimeError("rejected", message)));
+        } else {
           const sub = this.byId.get(id);
           if (sub) sub.fresh = false;
           console.warn("[RuntimeClient] Subscription error:", message);
@@ -260,11 +296,79 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     };
   };
 
+  /**
+   * Listen to a stream of events, narrowed by `filter`. Nothing arrives that
+   * was not asked for, and each event arrives once, in order. Listeners of the
+   * same stream and filter share one subscription on the wire.
+   *
+   * The subscription is restored on every reconnect. Where the stream numbers
+   * its events, the host says where it stands when the subscription is made,
+   * is told the last number received on a return, and sends what followed it.
+   * Where it cannot (the stream is not numbered, or the host no longer holds
+   * that far back), `onReset` runs: something may have been missed, so read
+   * the state again.
+   *
+   * A runtime that answers requests itself (no host socket) still keeps its
+   * listeners: they receive what `publishLocal` delivers.
+   */
+  listen = (
+    stream: string,
+    filter: Record<string, unknown> | undefined,
+    onEvent: StreamCallback,
+    options?: ListenOptions
+  ): (() => void) => {
+    if (this.ended()) return () => {};
+    const key = subscriptionKey([stream, filter ?? {}]);
+    const follower: Follower = { onEvent, options };
+    let listener = this.listenersByKey.get(key);
+    if (listener) {
+      listener.followers.add(follower);
+    } else {
+      listener = {
+        id: `evt_${++this.sequence}`,
+        key,
+        stream,
+        filter: filter ? structuredClone(filter) : undefined,
+        followers: new Set([follower]),
+        joined: false,
+      };
+      this.listeners.set(listener.id, listener);
+      this.listenersByKey.set(key, listener);
+      // Asked for once it has someone to deliver to: a transport may answer at once.
+      if (this.isConnected()) this.sendListen(listener);
+    }
+    const shared = listener;
+    return () => {
+      if (!shared.followers.delete(follower) || shared.followers.size > 0) return;
+      if (this.listeners.get(shared.id) !== shared) return;
+      this.listeners.delete(shared.id);
+      this.listenersByKey.delete(key);
+      this.write({ type: "q:unsubscribe", id: shared.id });
+    };
+  };
+
+  /**
+   * Deliver an event to this client's own listeners, as if the host had
+   * published it under `scope`. For a source that lives in the client (a
+   * channel the browser holds itself) and feeds the same listeners.
+   */
+  publishLocal = (stream: string, scope: Record<string, unknown>, data: unknown): void => {
+    if (this.ended()) return;
+    for (const listener of this.listeners.values()) {
+      if (listener.stream !== stream) continue;
+      const filter = listener.filter ?? {};
+      if (
+        Object.keys(filter).every((key) => filter[key] === undefined || filter[key] === scope[key])
+      ) {
+        for (const follower of [...listener.followers]) this.notify(() => follower.onEvent(data));
+      }
+    }
+  };
+
   sendRequest = <T = unknown>(
     resource: string,
     params?: Record<string, unknown>,
-    /** `effect`: the request acts (e.g. a device tap), so a lost reply is not a safe retry. */
-    options?: { timeoutMs?: number; effect?: boolean }
+    options?: { timeoutMs?: number }
   ): Promise<T> => {
     if (this.ended()) return Promise.reject(this.disposedError());
     let intercepted: Promise<unknown> | null = null;
@@ -275,13 +379,12 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     }
     const timeoutMs = options?.timeoutMs ?? 30_000;
     const send = (remainingMs: number) =>
-      this.call(
+      this.exchange(
         "request",
         resource,
         { type: "q:request", resource, ...(params ? { params } : {}) },
         remainingMs,
-        intercepted,
-        options?.effect ?? false
+        intercepted
       ) as Promise<T>;
     // Asked while the connection is being made (startup, a reconnect attempt):
     // wait for it within the request's deadline instead of failing into the
@@ -317,29 +420,16 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     params: Record<string, unknown>,
     timeoutMs = 30_000
   ): Promise<MutateResult<T>> =>
-    this.call("mutation", action, { type: "q:mutate", action, params }, timeoutMs) as Promise<
+    this.exchange("mutation", action, { type: "q:mutate", action, params }, timeoutMs) as Promise<
       MutateResult<T>
     >;
 
-  sendCommand = (
-    command: Command,
-    params: Record<string, unknown>,
-    timeoutMs = 30_000
-  ): Promise<CommandResult> =>
-    this.call(
-      "command",
-      command,
-      { type: "q:command", command, params },
-      timeoutMs
-    ) as Promise<CommandResult>;
-
-  private call(
+  private exchange(
     kind: Pending["kind"],
     name: string,
     frame: Record<string, unknown>,
     timeoutMs = 30_000,
-    intercepted: Promise<unknown> | null = null,
-    effect = kind !== "request"
+    intercepted: Promise<unknown> | null = null
   ): Promise<unknown> {
     if (this.ended()) return Promise.reject(this.disposedError());
     if (!intercepted && (this.requestInterceptor || !this.isConnected())) {
@@ -358,7 +448,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
         const pending = this.takePending(id);
         pending?.reject(this.pendingError(pending, `${name} timed out`));
       }, timeoutMs);
-      const pending: Pending = { kind, effect, sent: false, resolve, reject, timer };
+      const pending: Pending = { kind, sent: false, resolve, reject, timer };
       this.pending.set(id, pending);
       if (intercepted) {
         void intercepted.then(
@@ -385,7 +475,7 @@ export class RuntimeClient<Resource extends string = string, Command extends str
   }
 
   private pendingError(pending: Pending, message: string): RuntimeError {
-    return pending.effect && pending.sent
+    return pending.kind === "mutation" && pending.sent
       ? new RuntimeError(
           "unknown-outcome",
           `${message}. The operation may have completed; check its result before retrying.`
@@ -393,15 +483,6 @@ export class RuntimeClient<Resource extends string = string, Command extends str
       : new RuntimeError("unavailable", message);
   }
 
-  onEvent = (callback: EventCallback): (() => void) => {
-    this.events.add(callback);
-    return () => {
-      this.events.delete(callback);
-    };
-  };
-  emitLocalEvent = (event: string, data: unknown): void => {
-    if (!this.ended()) for (const callback of this.events) this.notify(() => callback(event, data));
-  };
   onStateChange = (callback: (state: RuntimeState) => void): (() => void) => {
     this.states.add(callback);
     return () => {
@@ -486,6 +567,24 @@ export class RuntimeClient<Resource extends string = string, Command extends str
       ...(sub.params ? { params: sub.params } : {}),
     });
   }
+  private sendListen(listener: Listener): void {
+    if (this.requestInterceptor) return;
+    const returning = listener.joined;
+    listener.joined = true;
+    this.write({
+      type: "q:subscribe",
+      id: listener.id,
+      resource: listener.stream,
+      ...(listener.filter ? { params: listener.filter } : {}),
+      ...(listener.last !== undefined ? { after: listener.last } : {}),
+    });
+    // Back with no place to resume from: what happened meanwhile is unknown.
+    if (returning && listener.last === undefined) this.resetFollowers(listener);
+  }
+  private resetFollowers(listener: Listener): void {
+    for (const follower of [...listener.followers])
+      this.notify(() => follower.options?.onReset?.());
+  }
   private write(frame: Record<string, unknown>, control = false): boolean {
     if ((!control && !this.isConnected()) || this.socket?.readyState !== 1) return false;
     try {
@@ -562,8 +661,9 @@ export class RuntimeClient<Resource extends string = string, Command extends str
     this.disposals.clear();
     this.subscriptions.clear();
     this.byId.clear();
+    this.listeners.clear();
+    this.listenersByKey.clear();
     this.notifyState();
-    this.events.clear();
     this.states.clear();
     this.requestInterceptor = null;
     this.toolResponseInterceptor = null;

@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionActions } from "@/features/session/hooks/useSessionActions";
 import { registerDirectSession } from "@/features/session/cloud/directSessionRegistry";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { api } from "@shared/api";
 import type { Session } from "@shared/types/session";
+import { OpError } from "@/platform/ws/runtime-client";
 
 const state = vi.hoisted(() => ({
   queryClient: null as QueryClient | null,
-  sendCommand: vi.fn(),
+  call: vi.fn(),
   connect: vi.fn(),
   isConnected: vi.fn(),
   error: vi.fn(),
@@ -36,10 +38,11 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/platform/ws", () => ({
-  sendCommand: state.sendCommand,
+vi.mock("@/platform/ws", async () => ({
+  call: state.call,
   connect: state.connect,
   isConnected: state.isConnected,
+  OpError: (await import("@/platform/ws/runtime-client")).OpError,
 }));
 vi.mock("sonner", () => ({ toast: { error: state.error } }));
 vi.mock("@/features/connection", () => ({ emitSendAttemptFailed: vi.fn() }));
@@ -56,7 +59,7 @@ beforeEach(() => {
   });
   vi.spyOn(console, "error").mockImplementation(() => {});
   state.isConnected.mockReturnValue(true);
-  state.sendCommand.mockResolvedValue({ accepted: true });
+  state.call.mockResolvedValue({ unconfirmed: false });
   state.queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: Infinity }, mutations: { gcTime: Infinity } },
   });
@@ -98,7 +101,7 @@ describe("Stop delivery", () => {
     expect(state.error).toHaveBeenCalledExactlyOnceWith(
       "The cloud connection isn't ready yet — try again in a moment"
     );
-    expect(state.sendCommand).not.toHaveBeenCalled();
+    expect(state.call).not.toHaveBeenCalled();
     expectUnstopped();
 
     const cancel = vi.fn();
@@ -114,7 +117,7 @@ describe("Stop delivery", () => {
     state.error.mockClear();
     await actions.stopSession();
     expect(cancel).toHaveBeenCalledExactlyOnceWith();
-    expect(state.sendCommand).not.toHaveBeenCalled();
+    expect(state.call).not.toHaveBeenCalled();
     expect(state.error).not.toHaveBeenCalled();
   });
 
@@ -135,7 +138,7 @@ describe("Stop delivery", () => {
     );
     await useSessionActions({ sessionId: SESSION }).stopSession();
     expect(state.error).toHaveBeenCalledExactlyOnceWith(message);
-    expect(state.sendCommand).not.toHaveBeenCalled();
+    expect(state.call).not.toHaveBeenCalled();
     expectUnstopped();
   });
 
@@ -144,9 +147,7 @@ describe("Stop delivery", () => {
     state.isConnected.mockReturnValue(false);
     await useSessionActions({ sessionId: SESSION }).stopSession();
     expect(state.connect).toHaveBeenCalledOnce();
-    expect(state.sendCommand).toHaveBeenCalledExactlyOnceWith("stopSession", {
-      sessionId: SESSION,
-    });
+    expect(state.call).toHaveBeenCalledExactlyOnceWith(api.stopSession, { sessionId: SESSION });
     expect(state.error).not.toHaveBeenCalled();
   });
 
@@ -156,7 +157,7 @@ describe("Stop delivery", () => {
       workspace_kind: "worktree",
       provider_session_id: null,
     }));
-    state.sendCommand.mockResolvedValue({ accepted: false, error: "Stop could not be delivered" });
+    state.call.mockRejectedValue(new OpError("Stop could not be delivered"));
     await useSessionActions({ sessionId: SESSION }).stopSession();
     expect(state.error).toHaveBeenCalledExactlyOnceWith("Stop could not be delivered");
     expectUnstopped();
@@ -176,11 +177,11 @@ describe("backend prompt delivery", () => {
     }));
   }
 
-  it("does not resubmit a prompt after losing the command acknowledgment", async () => {
+  it("does not resubmit a prompt after losing the reply", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");
     const { RuntimeError } = await import("@/platform/ws/runtime-client");
     const failure = new RuntimeError("unknown-outcome", "Acknowledgment lost");
-    state.sendCommand.mockRejectedValue(failure);
+    state.call.mockRejectedValue(failure);
     await expect(
       useSendMessage().mutateAsync({
         sessionId: SESSION,
@@ -188,13 +189,13 @@ describe("backend prompt delivery", () => {
         turnId: "turn-once",
       })
     ).rejects.toBe(failure);
-    expect(state.sendCommand).toHaveBeenCalledTimes(1);
-    expect(state.sendCommand.mock.calls[0][0]).toBe("sendMessage");
+    expect(state.call).toHaveBeenCalledTimes(1);
+    expect(state.call.mock.calls[0][0]).toBe(api.sendMessage);
   });
 
   it("does not resubmit an authoritative rejection", async () => {
     const { useSendMessage } = await import("@/features/session/api/session.queries");
-    state.sendCommand.mockResolvedValue({ accepted: false, error: "Already running" });
+    state.call.mockRejectedValue(new OpError("Already running"));
     await expect(
       useSendMessage().mutateAsync({
         sessionId: SESSION,
@@ -202,7 +203,7 @@ describe("backend prompt delivery", () => {
         turnId: "turn-rejected",
       })
     ).rejects.toThrow("Already running");
-    expect(state.sendCommand).toHaveBeenCalledTimes(1);
+    expect(state.call).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a send waiting for connection on its original runtime when that runtime is disposed", async () => {
@@ -221,7 +222,7 @@ describe("backend prompt delivery", () => {
         open: () => new Promise(() => {}),
       }
     );
-    const otherSend = vi.spyOn(next, "sendCommand");
+    const otherSend = vi.spyOn(next, "call");
     const result = useSendMessage().mutateAsync({
       sessionId: SESSION,
       content: "Only for A",
@@ -231,7 +232,7 @@ describe("backend prompt delivery", () => {
     await vi.waitFor(() => expect(original.getState()).toBe("connecting"));
     original.dispose();
     await rejected;
-    expect(state.sendCommand).not.toHaveBeenCalled();
+    expect(state.call).not.toHaveBeenCalled();
     expect(otherSend).not.toHaveBeenCalled();
     next.dispose();
   });

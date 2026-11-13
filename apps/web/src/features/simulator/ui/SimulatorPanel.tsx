@@ -11,8 +11,10 @@ import { ChevronDown, Crosshair, Loader2, RotateCcw, Send, Smartphone, X } from 
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { api } from "@shared/api";
 import { getErrorMessage } from "@shared/lib/errors";
-import { onEvent } from "@/platform/ws/query-protocol-client";
+import { call } from "@/platform/ws";
+import { useStream } from "@/shared/hooks/useStream";
 import { simulatorService } from "../api/simulator.service";
 
 import { useSimulatorStatusStore, simulatorStoreActions } from "../store";
@@ -159,7 +161,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // previous visit. The MJPEG effect reacts to the non-null streamUrl from the
   // store and reconnects immediately — no IPC round-trip.
   //
-  // Stream recovery on app-restart now flows through the sim:streamReady event
+  // Stream recovery on app-restart now flows through the `streamReady` event
   // pushed by the backend on reconnect, not a polled probe.
   useEffect(() => {
     workspaceGenerationRef.current += 1;
@@ -189,9 +191,9 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     let cancelled = false;
 
     setHasProject(null);
-    simulatorService.hasXcodeProject(workspacePath).then(
-      (result) => {
-        if (!cancelled) setHasProject(result);
+    call(api.simHasXcodeProject, { workspacePath }).then(
+      ({ hasProject }) => {
+        if (!cancelled) setHasProject(hasProject);
       },
       () => {
         if (!cancelled) setHasProject(false);
@@ -222,24 +224,19 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     setInspectPrompt("");
   }, [workspaceId]);
 
-  // Listen for build log events streamed from backend via q:event.
-  // Filter to only this workspace so concurrent builds don't interleave.
+  // This workspace's build log, a line at a time. Followed while the panel
+  // is open, so a build's first lines are not lost to a late subscription.
+  const building = state.phase === "building";
   useEffect(() => {
-    if (state.phase !== "building") {
-      setBuildLogs([]);
-      return;
-    }
-    const cleanup = onEvent((event, data) => {
-      if (event !== "sim:buildLog") return;
-      const d = data as { workspaceId: string; line: string };
-      if (d.workspaceId !== workspaceId) return;
-      setBuildLogs((prev) => {
-        const next = [...prev, d.line];
-        return next.length > MAX_BUILD_LOG_LINES ? next.slice(-MAX_BUILD_LOG_LINES) : next;
-      });
+    if (!building) setBuildLogs([]);
+  }, [building]);
+  useStream(api.simulatorEvents, { workspaceId }, (event) => {
+    if (event.type !== "buildLog") return;
+    setBuildLogs((prev) => {
+      const next = [...prev, event.line];
+      return next.length > MAX_BUILD_LOG_LINES ? next.slice(-MAX_BUILD_LOG_LINES) : next;
     });
-    return cleanup;
-  }, [state.phase, workspaceId]);
+  });
 
   // Auto-scroll build log to bottom when new lines arrive
   useEffect(() => {
@@ -348,7 +345,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // Auto-reconnect to an already-booted simulator (app-restart recovery).
   //
   // The fast path is the store itself: when the backend is alive it pushes
-  // sim:streamReady, and the MJPEG effect reconnects from the store's stream URL.
+  // a `streamReady` event, and the MJPEG effect reconnects from the store's stream URL.
   //
   // This effect handles the slower path: backend was restarted (no sessions in
   // memory), but simctl still shows the simulator as "Booted". We re-establish
@@ -491,7 +488,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     // dispatch STOP transitions any active state → idle (auto-deleted from map).
     simulatorStoreActions.dispatch(workspaceId, { type: "STOP" });
     try {
-      await simulatorService.stopStreaming(workspaceId);
+      await call(api.simStop, { workspaceId });
     } catch (e) {
       console.error("Stop failed:", e);
     }
@@ -506,7 +503,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   // Home button
   const handleHome = async () => {
     try {
-      await simulatorService.pressHome(workspaceId);
+      await call(api.simButton, { workspaceId, buttonType: "home" });
     } catch (e) {
       console.error("Home button failed:", e);
     }
@@ -516,7 +513,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   const handleRelaunch = async () => {
     if (state.phase !== "running") return;
     try {
-      await simulatorService.launchApp(workspaceId, state.app.bundle_id);
+      await call(api.simLaunchApp, { workspaceId, bundleId: state.app.bundle_id });
     } catch (e) {
       console.error("Relaunch failed:", e);
     }
@@ -526,7 +523,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     if (state.phase !== "running") return;
     const gen = workspaceGenerationRef.current;
     try {
-      await simulatorService.terminateApp(workspaceId, state.app.bundle_id);
+      await call(api.simTerminateApp, { workspaceId, bundleId: state.app.bundle_id });
       if (workspaceGenerationRef.current !== gen) return;
       // App process killed but still installed — drop back to streaming.
       simulatorStoreActions.dispatch(workspaceId, { type: "APP_UNINSTALLED" });
@@ -539,7 +536,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     if (state.phase !== "running") return;
     const gen = workspaceGenerationRef.current;
     try {
-      await simulatorService.uninstallApp(workspaceId, state.app.bundle_id);
+      await call(api.simUninstallApp, { workspaceId, bundleId: state.app.bundle_id });
       if (workspaceGenerationRef.current !== gen) return; // Guard: workspace may have changed
       // dispatch validates: APP_UNINSTALLED is only legal from running → streaming.
       simulatorStoreActions.dispatch(workspaceId, { type: "APP_UNINSTALLED" });
@@ -556,7 +553,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     try {
       const sid = workspaceLayoutActions.getLayout(workspaceId).activeChatTabSessionId;
       if (!sid) return;
-      const bytes = await simulatorService.takeScreenshot(workspaceId);
+      const { bytes } = await call(api.simScreenshot, { workspaceId });
       const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
       const file = new File([blob], `simulator-screenshot-${Date.now()}.png`, {
         type: "image/png",
@@ -569,7 +566,7 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
   }, [workspaceId]);
 
   const refreshInspectorSnapshot = useCallback(async () => {
-    const snapshot = await simulatorService.inspectSnapshot(workspaceId);
+    const { snapshot } = await call(api.simInspectSnapshot, { workspaceId });
     setInspectorSnapshot(snapshot);
     return snapshot;
   }, [workspaceId]);
@@ -585,10 +582,10 @@ export function SimulatorPanel({ workspaceId, workspacePath, toolbarAction }: Si
     setInspectLoading(true);
     setInspectError(null);
     try {
-      const snapshot = await simulatorService.startInspect(
+      const { snapshot } = await call(api.simInspectStart, {
         workspaceId,
-        state.phase === "running" ? state.app.bundle_id : undefined
-      );
+        bundleId: state.phase === "running" ? state.app.bundle_id : undefined,
+      });
       setInspectorSnapshot(snapshot);
       setInspectMode(true);
     } catch (err) {

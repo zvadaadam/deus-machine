@@ -234,7 +234,9 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   local API-key inputs; `55` shows cloud connection state and links to AI Providers, GitHub, and Environment.
   Hosted web exposes Account, AI Providers, and Environment, without desktop CLI controls.
 - `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
-  `64` Start new project · `65` System prompt · `66` Pair a device
+  `64` Start new project · `65` System prompt · `66` Pair a device.
+  `65` no longer has a counterpart in the app: nothing could open the dialog and
+  the backend ignored its save, so the code was removed. Delete the frame.
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
 - `80` Your computers — the `/connect` web route (the account's computers, from Deus Cloud).
   The relay gates in front of a computer's workspace, mobile size: `81` sign in

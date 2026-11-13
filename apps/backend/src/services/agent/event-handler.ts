@@ -21,13 +21,22 @@ import { turnProviderCredentialSource } from "@shared/conversation-rows";
 import { match } from "ts-pattern";
 import type { SessionEventGap } from "@zvada/agent-server/client";
 import type { SessionSnapshotEvent } from "@deus-hq/api";
-import type { RestoredCloudConversation } from "@shared/cloud-session-snapshot";
+import {
+  projectCloudSnapshot,
+  type RestoredCloudConversation,
+} from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
-import { isUnknownEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
-import type { QueryResource, QServerFrame } from "@shared/types/query-protocol";
+import {
+  isLiveEnvelope,
+  isUnknownEvent,
+  type DecodedWireEventEnvelope,
+} from "@shared/protocol-types";
+import type { LiveName } from "@shared/api";
+import { cloudSaveFailures, sessionEvents } from "@shared/api/sessions";
+import { cloudSaveFailure } from "@shared/cloud-autosave";
 import { invalidate } from "../query-engine";
-import { broadcast } from "../ws.service";
+import { openWith, publish } from "../streams";
 import {
   persistChanges,
   persistSessionTitle,
@@ -38,6 +47,7 @@ import { pushCloudSessionTitle } from "./cloud/driver";
 import { applySessionFacts, describeEvent, turnOutcomeFor, type SessionFacts } from "./event-facts";
 import { refreshPrSnapshotForSession } from "../pr-snapshot.service";
 import { restoreCloudSnapshot } from "./cloud/snapshot";
+import { OpenParts } from "./open-parts";
 
 // ---- Types ----
 
@@ -85,31 +95,27 @@ interface SessionState extends SessionFacts {
 
 // ---- Resource groups for invalidation ----
 
-const SESSION_RESOURCES: QueryResource[] = ["workspaces", "sessions", "session", "stats"];
-const MESSAGE_RESOURCES: QueryResource[] = ["messages", "session"];
-const TURN_END_RESOURCES: QueryResource[] = [
-  "workspaces",
-  "sessions",
-  "session",
-  "stats",
-  "messages",
-];
+const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "stats"];
+/** A message or a compaction row was written: the session's own row counts them. */
+const TRANSCRIPT_RESOURCES: LiveName[] = ["session"];
 
 /**
  * The events the frontend does NOT receive.
  *
- * Everything else is pushed verbatim, because the frontend folds it. These
- * five reach the UI another way or not at all: the context gauge and the
- * session's terminal state are session COLUMNS (q:delta carries them), the
- * "working" flip is written optimistically by the send command before
- * `turn.started` could arrive, the service answers a permission request (a
- * plan goes to the plan card as `tool:request`, a tool's approval is allowed:
+ * Everything else is published verbatim, because the frontend folds it. These
+ * reach the UI another way or not at all: the context gauge and the session's
+ * terminal state are session COLUMNS (the `session` read carries them), the
+ * service answers a permission request (a plan goes to the plan card as a
+ * request on `toolRequests`, a tool's approval is allowed:
  * shared/agent-permissions.ts), and deus never sets `RunConfig.includeRaw`.
+ *
+ * `turn.started` IS published: it is where a turn's start time and what it
+ * runs on come from, and a client has no other source for them while the turn
+ * is live (the transcript page is read once, then only the stream changes it).
  */
 const NOT_PUSHED = new Set([
   "session.ended",
   "session.usage",
-  "turn.started",
   "permission.requested",
   "permission.resolved",
   "raw",
@@ -118,27 +124,17 @@ const NOT_PUSHED = new Set([
 /**
  * What a successful write of each change kind makes stale.
  *
- * `part-upserted` is deliberately absent: the frontend already has the part
- * from the pushed envelope, so a q:delta would only run a wasted query.
- *
- * `message-upserted` KEEPS `messages` even though the same argument nearly
- * applies (the fold projects `message.started` from the pushed envelope for
- * the live session and for every background one with a cached page). Reviewed
- * and left in place deliberately: the two paths have not been shown equivalent
- * at runtime for a client that reconnects mid-turn or subscribes before its
- * page resolves, and `mergeMessageDelta` dedupes by id, so the redundant case
- * costs a query and a frame while the missing case would cost a lost row.
- * Whoever exercises those two paths can drop `"messages"` here and make the
- * fold the single writer of message rows. `invalidate` already narrows a
- * `messages` push to the changed sessions (query-engine.ts filters
- * `messages` subscriptions by `ctx.sessionIds`), so the saving would be one
- * query per subscriber of that session.
+ * The transcript itself is never among them: a client folds the published
+ * envelope into its page (rows, parts, turns), so the chat's stream is the one
+ * way a transcript changes on a client. The stream resumes for a client that
+ * was away, or tells it to read the page again. What is invalidated here are
+ * the reads that summarize a chat: its row, its workspace, the counts.
  */
-const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]>> = {
-  message_upserted: MESSAGE_RESOURCES,
-  turn_updated: TURN_END_RESOURCES,
+const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], LiveName[]>> = {
+  message_upserted: TRANSCRIPT_RESOURCES,
+  turn_updated: SESSION_RESOURCES,
   usage_updated: SESSION_RESOURCES,
-  compaction_upserted: MESSAGE_RESOURCES,
+  compaction_upserted: TRANSCRIPT_RESOURCES,
 };
 
 // ---- Helpers ----
@@ -146,7 +142,7 @@ const INVALIDATED_BY: Partial<Record<ConversationChange["kind"], QueryResource[]
 /** Persist a write and invalidate subscriptions if it succeeded. */
 function persistAndInvalidate(
   result: WriteResult<unknown>,
-  resources: QueryResource[],
+  resources: LiveName[],
   sessionId: string
 ): void {
   if (result.ok) {
@@ -155,13 +151,17 @@ function persistAndInvalidate(
 }
 
 /**
- * Push one wire envelope to every frontend connection verbatim. The frontend
- * routes by `sessionId` and orders/dedupes by `seq` — both free because the
- * envelope is not reshaped on its way through the backend.
+ * Send one wire envelope, verbatim, to the clients following its chat. A token
+ * delta is delivered but not kept: a client that was away never needs it, the
+ * part's next event restates what it streamed.
  */
 function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
-  const frame: QServerFrame = { type: "q:event", event: "agent:event", data: envelope };
-  broadcast(JSON.stringify(frame));
+  publish(
+    sessionEvents,
+    { sessionId: envelope.sessionId },
+    { type: "event", envelope },
+    { keep: !isLiveEnvelope(envelope) }
+  );
 }
 
 // ---- Factory ----
@@ -169,6 +169,12 @@ function pushEnvelope(envelope: DecodedWireEventEnvelope): void {
 /** Create the agent event handler: persistence + WS push per lifecycle event. */
 export function createAgentEventHandler(): AgentEventHandler {
   const sessions = new Map<string, SessionState>();
+  // A client that starts following a chat, or returns to it, first gets the
+  // reply still being typed as it stands (see ./open-parts).
+  const typing = new OpenParts();
+  openWith(sessionEvents, ({ sessionId }) =>
+    typing.of(sessionId, sessions.get(sessionId)?.conversation)
+  );
 
   const stateFor = (sessionId: string): SessionState => {
     const existing = sessions.get(sessionId);
@@ -195,11 +201,13 @@ export function createAgentEventHandler(): AgentEventHandler {
         return;
       }
       state.conversation = result.value.conversation;
+      // A reply being typed when the transcript was restored is open from here on.
+      typing.restored(sessionId, projectCloudSnapshot(snapshot).events);
       if (!pending) {
         state.turnId = snapshot.state.currentTurnId ?? undefined;
         state.errorReported = snapshot.state.status === "error";
       }
-      invalidate(TURN_END_RESOURCES, { sessionIds: [sessionId], resetMessageCursors: true });
+      invalidate(SESSION_RESOURCES, { sessionIds: [sessionId] });
       return result.value;
     },
 
@@ -281,7 +289,7 @@ export function createAgentEventHandler(): AgentEventHandler {
       state.errorReported = true;
       persistAndInvalidate(
         persistSessionError(sessionId, message, "network", confirmed ? "error" : "working"),
-        TURN_END_RESOURCES,
+        SESSION_RESOURCES,
         sessionId
       );
     },
@@ -307,6 +315,7 @@ export function createAgentEventHandler(): AgentEventHandler {
         envelope.event
       );
       state.conversation = conversation;
+      typing.saw(envelope);
 
       if (isUnknownEvent(envelope.event)) {
         // Law 6: forward it verbatim. Dropping it would be a hole in the
@@ -348,7 +357,7 @@ export function createAgentEventHandler(): AgentEventHandler {
             turnProviderCredentialSource(envelope.event)
           );
 
-      const stale = new Set<QueryResource>();
+      const stale = new Set<LiveName>();
       for (const write of writes) {
         if (!write.result.ok) {
           console.warn(
@@ -376,9 +385,13 @@ export function createAgentEventHandler(): AgentEventHandler {
           // only grows, and now each entry costs a conversation.
           sessions.delete(sessionId);
         })
-        .with({ type: "turn.ended" }, () => {
+        .with({ type: "turn.ended" }, (ended) => {
           // The agent may have created, updated or pushed a PR during the turn.
           refreshPrSnapshotForSession(sessionId);
+          // A cloud turn whose work did not reach the branch: every client is
+          // warned, not only the ones following this chat.
+          const unsaved = cloudSaveFailure(ended);
+          if (unsaved) publish(cloudSaveFailures, {}, unsaved);
         })
         .with({ type: "error" }, (e) => {
           // A recoverable error means the turn is still running (and

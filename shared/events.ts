@@ -1,20 +1,14 @@
 /**
- * App Event Catalog
+ * Two things live here.
  *
- * Single source of truth for ALL real-time event names and their payload schemas.
- * These events flow through the app via different transports (Electron IPC, stdout
- * relay, Unix socket) but the contracts are defined here regardless of how
- * they're delivered.
+ * The desktop's events: what the Electron main process sends the renderer
+ * (`native.events.on`), each with its name, schema and payload type. Every
+ * `listen()` call in the frontend uses a name from this file, and the main
+ * process (apps/desktop/main/) is kept in sync by hand.
  *
- * Every `listen()` call in the frontend MUST use an event name from this file.
- * The Electron main process (apps/desktop/main/) must be kept in sync manually.
- *
- * Adding a new event:
- *   1. Add the event name constant below
- *   2. Define the Zod schema + inferred type
- *   3. Add the mapping to AppEventMap
- *   4. If emitted from main process, update the corresponding handler in apps/desktop/main/
- *   5. TypeScript will enforce correct payload types at all listen() call sites
+ * The cloud payloads: what a cloud workspace's sandbox, device and preview
+ * report, as the host passes them on. What a HOST sends a client is not named
+ * here: those are the streams declared in `shared/api`.
  */
 
 import { z } from "zod";
@@ -26,274 +20,14 @@ import { z } from "zod";
 /** Workspace events — backend → main process → frontend */
 export const WORKSPACE_PROGRESS = "workspace:progress" as const;
 
-/** File system events — chokidar watcher → frontend */
-export const FS_CHANGED = "fs:changed" as const;
-
-/** PTY events — node-pty manager → frontend */
-export const PTY_DATA = "pty-data" as const;
-export const PTY_EXIT = "pty-exit" as const;
-
 /** Browser guest-page popup requests — main process → renderer.
  *  Fired when a <webview>'s guest page calls window.open() or navigates a
  *  `target="_blank"` link. The main renderer opens a new browser tab so the
  *  flow (OAuth redirects, etc.) stays in-app. */
 export const BROWSER_NEW_TAB_REQUESTED = "browser:new-tab-requested" as const;
 
-// Simulator build logs now use q:event "sim:buildLog" via WebSocket protocol.
-
 /** Backend lifecycle — main process → frontend */
 export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
-
-/** Git operations — main process → frontend */
-export const GIT_CLONE_PROGRESS = "git-clone-progress" as const;
-export const GIT_INIT_PROGRESS = "git-init-progress" as const;
-
-// ============================================================================
-// Domain Constants (queryable resources, mutations, agent-server notifications)
-// ============================================================================
-
-/** Queryable resources — subscribable via q:subscribe for real-time push.
- *  Derive the type from the const array so runtime validators and
- *  compile-time checks always stay in sync. */
-export const QUERY_RESOURCES = [
-  "workspaces",
-  "stats",
-  "sessions",
-  "session",
-  "messages",
-  // Localhost dev-server discovery (curated port probe + page metadata)
-  "local_servers",
-  // Automations (prompts on a schedule) + their run ledger (param: automationId)
-  "automations",
-  "automation_runs",
-  // Customize (Apps, Plugins and Skills): what is installed and connected on
-  // this computer (IntegrationsState, shared/integrations/types.ts). State
-  // only: the catalog it refers to is the `integrationsCatalog` request.
-  "integrations",
-] as const;
-export type QueryResource = (typeof QUERY_RESOURCES)[number];
-
-/** Request-only resources — one-shot reads via q:request, not subscribable.
- *  These delegate to existing Hono routes under the hood. */
-export const REQUEST_RESOURCES = [
-  "settings",
-  "repos",
-  "repoEnvironmentFile",
-  "agentConfig",
-  "ghStatus",
-  "prStatus",
-  "workspace",
-  "allWorkspaces",
-  "workspaceEnvironment",
-  "setupLogs",
-  "diffStats",
-  "diffFiles",
-  "diffFile",
-  "workspaceFiles",
-  "fileContent",
-  "fileSearch",
-  "recentProjects",
-  "pairedDevices",
-  "relayStatus",
-  "simulatorCapabilities",
-  "allSessions",
-  "repoPrs",
-  "repoBranches",
-  "agentAuth",
-  // The models each local agent offers, as its CLI lists them for this
-  // computer's login. Params { workspaceId? } (its folder's settings can
-  // narrow Claude's list) → AgentModelsAnswer (shared/models.ts).
-  "agentModels",
-  "cloudDirectToken",
-  "cloudRepoAccess",
-  // Cloud simulator: one device verb against the workspace's hosted device,
-  // answered by the platform's simulator.exec.response (60 s). Params
-  // { workspaceId, verb, args?, platform? } → { success, exitCode, output, error? }.
-  "cloudSimExec",
-  // Cloud simulator: the workspace's device status right now — the backend's
-  // in-memory latest, else the platform's REST read. Params { workspaceId } →
-  // CloudSimulatorStatus | null. Nothing is persisted: the platform replays its
-  // latest status on every connect and serves it here on demand.
-  "cloudSimulator",
-  // Cloud preview: the computer's public host template right now (the
-  // backend's in-memory latest; the platform's REST carries none). Params
-  // { workspaceId } → string | null. Nothing is persisted: the platform
-  // replays it on every connect.
-  "cloudPreview",
-  // Cloud models: what Deus Cloud runs, per harness, as the platform lists it
-  // (listModels(), cached a few minutes by the backend). No params →
-  // CloudModelCatalog (shared/cloud-models.ts).
-  "cloudModels",
-  // Customize, read on demand (services/integrations). The catalog is static
-  // for a build: no params → Catalog. An app's tools as last listed:
-  // { appId } → AppTool[]. A skill's SKILL.md and files: { skillId } →
-  // SkillContent. Skills on this computer Deus did not add: → LocalSkill[].
-  "integrationsCatalog",
-  "appTools",
-  "skillContent",
-  "localSkills",
-] as const;
-export type RequestResource = QueryResource | (typeof REQUEST_RESOURCES)[number];
-
-/** Mutation action names for the WebSocket relay protocol (sync data writes). */
-export const MUTATION_NAMES = [
-  "archiveWorkspace",
-  "updateWorkspaceTitle",
-  "updateWorkspaceStatus",
-  // New mutations
-  "updateWorkspace",
-  "createSession",
-  "addRepo",
-  "saveRepoEnvironmentFile",
-  "saveAgentConfig",
-  "deleteAgentConfig",
-  "saveSetting",
-  "invalidateFileCache",
-  "runTask",
-  "revokeDevice",
-  // Automations — one service, two callers: these mutations and the agent's
-  // deus/automation/* side-channel tools converge on automations.service.
-  "saveAutomation",
-  "deleteAutomation",
-  "toggleAutomation",
-  // Apps, Plugins and Skills (services/integrations). Install/uninstall/enable
-  // take { kind: "app" | "skill" | "plugin", id }; connectApp takes
-  // ConnectAppInput and answers ConnectAppResult (a URL to open for OAuth).
-  "installIntegration",
-  "uninstallIntegration",
-  "setIntegrationEnabled",
-  "connectApp",
-  "disconnectApp",
-  "checkApp",
-  "addCustomApp",
-  "addCustomSkill",
-  "updateSkill",
-] as const;
-export type MutationName = (typeof MUTATION_NAMES)[number];
-
-/** Command names for the WebSocket relay protocol (async actions). */
-export const COMMAND_NAMES = [
-  "sendMessage",
-  "stopSession",
-  // PTY commands
-  "pty:spawn",
-  "pty:write",
-  "pty:resize",
-  "pty:kill",
-  // File system commands
-  "fs:watch",
-  "fs:unwatch",
-  // Git commands
-  "git:clone",
-  "git:init",
-  // New commands
-  "createWorkspace",
-  "retrySetup",
-  // Simulator commands
-  "sim:listDevices",
-  "sim:start",
-  "sim:stop",
-  "sim:touch",
-  "sim:key",
-  "sim:scroll",
-  "sim:button",
-  "sim:screenshot",
-  "sim:inspectStart",
-  "sim:inspectSnapshot",
-  "sim:buildAndRun",
-  "sim:hasXcodeProject",
-  "sim:launchApp",
-  "sim:terminateApp",
-  "sim:uninstallApp",
-  // Automations (cloud-only; agnt is the scheduler + source of truth).
-  // runAutomationNow triggers a platform fire; refreshAutomations re-mirrors
-  // the platform into the local cache (optionally one automation + its runs);
-  // openAutomationRun adopts a run's sandbox session into deus rows.
-  "runAutomationNow",
-  "refreshAutomations",
-  "openAutomationRun",
-  // Cloud simulator (a hosted EAS device attached to the workspace's sandbox).
-  // Params { workspaceId, platform? }. Fire-and-forget: the ack only says the
-  // sandbox was reachable; the device outcome rides q:event "cloud:simulator"
-  // (kind status) and the `cloudSimulator` read.
-  "cloudSim:start",
-  "cloudSim:stop",
-  // The local agents' logins, run by the engine through each CLI (shared/agent-auth.ts).
-  // agentSignIn { harness, method, apiKey? } → AgentSignInAnswer; agentLoginCode
-  // { loginId, code } → { auth }; agentLoginCancel { loginId }; agentLogout { harness } → { auth }.
-  // How a sign-in ends rides q:event "agent:auth". agentPrepareClis installs
-  // the CLIs turns run, answered at once; the install rides q:event "agent:cli".
-  "agentPrepareClis",
-  "agentSignIn",
-  "agentLoginCode",
-  "agentLoginCancel",
-  "agentLogout",
-] as const;
-export type CommandName = (typeof COMMAND_NAMES)[number];
-
-/** Protocol events — ephemeral notifications pushed to all connected clients. */
-/** The relay retracts a request the agent has abandoned (its turn ended):
- *  the renderer drops that request's overlay. Payload `{ sessionId, requestId }`.
- *  Emitted by the backend relay (q:event) AND locally by the direct lane. */
-export const TOOL_CANCEL_EVENT = "tool:cancel" as const;
-
-export const PROTOCOL_EVENTS = [
-  "tool:request",
-  TOOL_CANCEL_EVENT,
-  // The agent lifecycle stream: ONE event carrying a sequenced
-  // @zvada/agent-server WireEventEnvelope verbatim (session/turn/message/part/
-  // compaction/error). The frontend folds it with the ENGINE's
-  // reduceConversationWithChanges and projects the reported changes onto the
-  // paginated SQLite-row cache (features/session/lib/agentEventFold).
-  "agent:event",
-  // A cloud reconnect restored the backend fold and its durable transcript.
-  "agent:snapshot",
-  // PTY events (high-throughput)
-  "pty-data",
-  "pty-exit",
-  // File system events
-  "fs:changed",
-  // Git events
-  "git-clone-progress",
-  "git-init-progress",
-  // Simulator events
-  "sim:streamReady",
-  "sim:stopped",
-  "sim:buildLog",
-  "sim:buildComplete",
-  "sim:buildFailed",
-  "sim:streamFailed",
-  // Cloud sandbox environment progress (workspace.state passthrough from the
-  // agnt session socket). Ephemeral by design: the chat renders these as a
-  // live provisioning/wake progress stack and nothing is persisted — a
-  // refresh clears them. Payload: { workspaceId, sessionId, data } where data
-  // is agnt's WorkspaceStateData ({ status, step?, reason?, ... }).
-  "cloud:env",
-  // Hosted simulator traffic (simulator.status / .screenshot / .action_result
-  // passthrough from the agnt session socket). Nothing is persisted: the
-  // backend keeps the latest status per workspace in memory (read on demand
-  // through the `cloudSimulator` request); the platform is the truth and
-  // replays it on every connect. Payload: CloudSimulatorEvent.
-  "cloud:simulator",
-  // The cloud computer's public host template changed (a running frame or a
-  // snapshot carried it; null = no sandbox behind the session). Nothing is
-  // persisted — see `cloudPreview`. Payload: CloudPreviewEvent.
-  "cloud:preview",
-  // The desktop's platform identity changed (sign-out, account or org switch):
-  // every device status, screenshot and host template a client cached was the
-  // previous account's. Clients drop their cloud caches; a mounted panel
-  // re-seeds under the new identity. Payload: CloudIdentityEvent.
-  "cloud:identity",
-  // A local agent's login changed, or a sign-in ended, whoever caused it.
-  // Payload: AgentAuthEvent (shared/agent-auth.ts).
-  "agent:auth",
-  // A local agent's CLI installing. Payload: HarnessCliProgress.
-  "agent:cli",
-  // A paired device was added, connected, disconnected or revoked: read the
-  // `pairedDevices` list again. No payload.
-  "devices:changed",
-] as const;
-export type ProtocolEvent = (typeof PROTOCOL_EVENTS)[number];
 
 // ============================================================================
 // Payload Schemas
@@ -308,7 +42,7 @@ export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
 
 /**
  * Cloud sandbox state, as passed through from the platform's workspace.state
- * events ("cloud:env"). Deliberately lenient — `status` is an open string and
+ * events (the `cloudEnvironment` stream). Deliberately lenient — `status` is an open string and
  * unknown fields pass through — so a newer platform can add statuses without
  * breaking older clients; the UI treats unknown statuses as in-flight.
  */
@@ -330,36 +64,35 @@ export const CloudEnvStateSchema = z
   .loose();
 export type CloudEnvState = z.infer<typeof CloudEnvStateSchema>;
 
-export const CloudEnvEventSchema = z.object({
-  workspaceId: z.string(),
-  sessionId: z.string(),
-  data: CloudEnvStateSchema,
-});
-export type CloudEnvEvent = z.infer<typeof CloudEnvEventSchema>;
+export interface CloudEnvEvent {
+  workspaceId: string;
+  sessionId: string;
+  data: CloudEnvState;
+}
 
-/** "cloud:preview": the computer's host template for a workspace — a
- *  capability URL template (`https://{{port}}-<sandbox>.e2b.app`) that changes
- *  with every reprovision; null = the platform reports no sandbox. */
-export const CloudPreviewEventSchema = z.object({
-  workspaceId: z.string(),
-  sessionId: z.string(),
-  template: z.string().nullable(),
-});
-export type CloudPreviewEvent = z.infer<typeof CloudPreviewEventSchema>;
+/** The computer's host template for a workspace — a capability URL template
+ *  (`https://{{port}}-<sandbox>.e2b.app`) that changes with every reprovision;
+ *  null = the platform reports no sandbox. */
+export interface CloudPreviewEvent {
+  workspaceId: string;
+  sessionId: string;
+  template: string | null;
+}
 
-/** q:event "cloud:identity" — the backend's identity generation after the change. */
-export const CloudIdentityEventSchema = z.object({ generation: z.number().int().nonnegative() });
-export type CloudIdentityEvent = z.infer<typeof CloudIdentityEventSchema>;
+/** The backend's identity generation after the account it acts for changed. */
+export interface CloudIdentityEvent {
+  generation: number;
+}
 
 /**
- * Hosted simulator events ("cloud:simulator"): the platform's simulator.*
+ * Hosted simulator events (`cloudSimulatorEvents`): the platform's simulator.*
  * frames passed through minus their `type`. Same tolerance policy as
  * CloudEnvStateSchema — `status` is an open string and unknown fields pass
  * through, because the platform deploys continuously while desktop builds
  * don't; the UI treats an unknown status as in-flight. `platform` stays a
  * closed enum: the device frame keys off it, and a new
  * platform is a pin bump on both sides, not a silent addition. (The row
- * holds none of this — see the `cloud:simulator` note above.)
+ * holds none of this — see the note above.)
  *
  * `data` is the platform payload verbatim: its `sessionId` (when present) is
  * the agnt session id; the top-level `sessionId` is the deus session the
@@ -441,24 +174,6 @@ export const CloudSimulatorEventSchema = z.discriminatedUnion("kind", [
 export type CloudSimulatorEvent = z.infer<typeof CloudSimulatorEventSchema>;
 export type CloudSimulatorEventKind = CloudSimulatorEvent["kind"];
 
-export const FileChangeSchema = z.object({
-  workspace_path: z.string(),
-  change_type: z.enum(["add", "change", "unlink", "mixed", "metadataonly"]),
-  affected_count: z.number(),
-});
-export type FileChangeEvent = z.infer<typeof FileChangeSchema>;
-
-export const PtyDataSchema = z.object({
-  id: z.string(),
-  data: z.array(z.number()),
-});
-export type PtyDataEvent = z.infer<typeof PtyDataSchema>;
-
-export const PtyExitSchema = z.object({
-  id: z.string(),
-});
-export type PtyExitEvent = z.infer<typeof PtyExitSchema>;
-
 const BrowserNewTabRequestedSchema = z.object({
   url: z.string(),
   disposition: z.string().optional(),
@@ -473,18 +188,6 @@ const BackendPortChangedSchema = z.object({
 });
 type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
 
-export const GitCloneProgressSchema = z.object({
-  /** Raw stderr line from git clone --progress */
-  line: z.string(),
-});
-export type GitCloneProgressEvent = z.infer<typeof GitCloneProgressSchema>;
-
-export const GitInitProgressSchema = z.object({
-  /** Progress line from git init / gh repo create */
-  line: z.string(),
-});
-export type GitInitProgressEvent = z.infer<typeof GitInitProgressSchema>;
-
 // ============================================================================
 // Runtime Schema Map (event name → Zod schema)
 // ============================================================================
@@ -497,12 +200,7 @@ export type GitInitProgressEvent = z.infer<typeof GitInitProgressSchema>;
 export const AppEventSchemaMap = {
   [BACKEND_PORT_CHANGED]: BackendPortChangedSchema,
   [WORKSPACE_PROGRESS]: WorkspaceProgressSchema,
-  [FS_CHANGED]: FileChangeSchema,
-  [PTY_DATA]: PtyDataSchema,
-  [PTY_EXIT]: PtyExitSchema,
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
-  [GIT_CLONE_PROGRESS]: GitCloneProgressSchema,
-  [GIT_INIT_PROGRESS]: GitInitProgressSchema,
 } as const satisfies Record<AppEventName, z.ZodTypeAny>;
 
 // ============================================================================
@@ -521,19 +219,8 @@ export interface AppEventMap {
   // Workspace
   [WORKSPACE_PROGRESS]: WorkspaceProgressEvent;
 
-  // File system
-  [FS_CHANGED]: FileChangeEvent;
-
-  // PTY
-  [PTY_DATA]: PtyDataEvent;
-  [PTY_EXIT]: PtyExitEvent;
-
   // Browser
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;
-
-  // Git
-  [GIT_CLONE_PROGRESS]: GitCloneProgressEvent;
-  [GIT_INIT_PROGRESS]: GitInitProgressEvent;
 }
 
 /** Union of all known app event names */

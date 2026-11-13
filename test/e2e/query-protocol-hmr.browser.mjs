@@ -32,13 +32,14 @@ await writeFile(
   path.join(fixture, "ChatAction.tsx"),
   `import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { sendMutate } from "@/platform/ws";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 export function ChatAction() {
   const [result, setResult] = useState("");
   return <><Button onClick={async () => {
     try {
-      const response = await sendMutate("createSession", { workspaceId: "fixture-workspace" });
-      setResult(response.data.id);
+      const session = await call(api.createSession, { workspaceId: "fixture-workspace" });
+      setResult(session.id);
     } catch (error) { setResult(error.message); }
   }}>New chat</Button><output>{result}</output></>;
 }

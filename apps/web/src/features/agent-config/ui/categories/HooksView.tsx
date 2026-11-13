@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
  *
  * Hooks are stored as { [eventName]: matcherGroup[] } in settings.json.
  * Each matcher group: { matcher: string, hooks: Array<{ type, command, timeout? }> }
- * The save endpoint expects the full hooks object — add/edit/delete rebuild
- * the complete map and POST it.
+ * Saving takes the full hooks object — add/edit/delete rebuild the complete
+ * map and save it.
  *
  * Display: summarizes commands inline (e.g. "→ setup.sh (10s)" instead of "1 handler").
  * Editor: structured form with matcher pattern, command rows, and timeout fields.
@@ -202,8 +202,8 @@ function getMatcherHint(event: string): string {
 /* ------------------------------------------------------------------ */
 
 export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps) {
-  const globalQuery = useAgentConfigList<HooksMap>("hooks", "global");
-  const projectQuery = useAgentConfigList<HooksMap>("hooks", "project", repoPath, {
+  const globalQuery = useAgentConfigList("hooks", "global");
+  const projectQuery = useAgentConfigList("hooks", "project", repoPath, {
     enabled: !!repoPath,
   });
 
@@ -217,7 +217,7 @@ export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps)
   );
   const isLoading = globalQuery.isLoading || (!!repoPath && projectQuery.isLoading);
 
-  const saveMutation = useSaveConfigItem("hooks");
+  const saveMutation = useSaveConfigItem();
 
   const [formEvent, setFormEvent] = useState("");
   const [formGroups, setFormGroups] = useState<FormMatcherGroup[]>(createEmptyGroups);
@@ -294,7 +294,8 @@ export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps)
 
       saveMutation.mutate(
         {
-          data: { hooks: updatedHooks },
+          section: "hooks",
+          hooks: updatedHooks,
           scope,
           repoPath: scope === "project" ? repoPath : undefined,
         },
@@ -304,7 +305,7 @@ export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps)
     [formEvent, formGroups, crud, repoPath, saveMutation, globalQuery.data, projectQuery.data]
   );
 
-  // Hooks don't have a separate delete endpoint — deletion is done by
+  // Hooks have no delete of their own — deletion is done by
   // removing the event key from the hooks object and saving the full map.
   const handleConfirmDelete = useCallback(() => {
     if (!crud.pendingDelete) return;
@@ -312,7 +313,12 @@ export function HooksView({ repoPath, repoName, toolbarAction }: HooksViewProps)
     const currentHooks = (scope === "project" ? projectQuery.data : globalQuery.data) ?? {};
     const { [crud.pendingDelete.id]: _, ...remaining } = currentHooks;
     saveMutation.mutate(
-      { data: { hooks: remaining }, scope, repoPath: scope === "project" ? repoPath : undefined },
+      {
+        section: "hooks",
+        hooks: remaining,
+        scope,
+        repoPath: scope === "project" ? repoPath : undefined,
+      },
       { onSettled: () => crud.setPendingDelete(null) }
     );
   }, [crud, repoPath, saveMutation, globalQuery.data, projectQuery.data]);

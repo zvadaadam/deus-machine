@@ -53,15 +53,13 @@ function buildFileLookup(nodes: FileTreeNode[]): Map<string, FileTreeNode> {
   return map;
 }
 
-// change_status (from diff) is authoritative when present; fall back
-// to git_status from the file scan.
+// The badge is the diff's verdict (change_status); the file scan carries no status.
 function buildGitStatus(nodes: FileTreeNode[]): GitStatusEntry[] {
   const entries: GitStatusEntry[] = [];
   const visit = (list: FileTreeNode[]) => {
     for (const node of list) {
       if (node.type === "file") {
-        const status = node.change_status ?? node.git_status;
-        if (status) entries.push({ path: node.path, status });
+        if (node.change_status) entries.push({ path: node.path, status: node.change_status });
       }
       if (node.children?.length) visit(node.children);
     }

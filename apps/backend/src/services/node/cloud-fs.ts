@@ -4,6 +4,7 @@
  * RemoteNodeDriver owns it (see driver.ts). Behavior is unchanged;
  * cloud-files.test.ts pins the coalescing and cross-account invalidation.
  */
+import type { FileTreeNode, FileTreeResponse } from "@shared/types/files";
 import { requestCloudFs, getCloudIdentityGeneration } from "../agent/cloud/driver";
 import { ValidationError } from "../../lib/errors";
 
@@ -108,10 +109,10 @@ export function flattenCloudTree(tree: CloudFsNode[]): string[] {
 }
 
 /** Map the sandbox fs-channel tree onto the local file-tree response shape. */
-export function cloudTreeToResponse(tree: CloudFsNode[]) {
+export function cloudTreeToResponse(tree: CloudFsNode[]): FileTreeResponse {
   let totalFiles = 0;
   let totalSize = 0;
-  const map = (node: CloudFsNode): Record<string, unknown> => {
+  const map = (node: CloudFsNode): FileTreeNode => {
     if (node.type === "file") {
       totalFiles += 1;
       totalSize += node.size ?? 0;

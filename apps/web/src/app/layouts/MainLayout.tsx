@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
-import { apiClient } from "@/shared/api/client";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import type { SessionPanelRef } from "@/features/session";
 import type { ThinkingLevel } from "@/shared/agents";
 import {
@@ -9,7 +10,6 @@ import {
   CloneRepositoryModal,
   StartNewProjectModal,
 } from "@/features/repository";
-import { SystemPromptModal } from "@/features/session";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
   useKeyboardShortcuts,
@@ -50,7 +50,6 @@ import { GitHubPickerModal } from "@/features/sidebar/ui/GitHubPickerModal";
 import { useConnectionStateInit } from "@/features/connection";
 import { MainContent } from "./MainContent";
 import { useRepoActions } from "./hooks/useRepoActions";
-import { useSystemPrompt, useUpdateSystemPrompt } from "@/features/workspace/api";
 import { toast } from "sonner";
 import { getErrorMessage } from "@shared/lib/errors";
 import { useCreateWorkspace } from "@/features/workspace/api";
@@ -102,7 +101,6 @@ export function MainLayout() {
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
   const newWorkspaceDraft = useUIStore((s) => s.newWorkspaceDraft);
-  const showSystemPromptModal = useUIStore((s) => s.showSystemPromptModal);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
   const openAutomations = useUIStore((s) => s.openAutomations);
@@ -110,7 +108,6 @@ export function MainLayout() {
   const openCustomize = useUIStore((s) => s.openCustomize);
   const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
   const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
-  const closeSystemPromptModal = useUIStore((s) => s.closeSystemPromptModal);
 
   // TanStack Query
   const workspacesQuery = useWorkspacesByRepo();
@@ -146,7 +143,7 @@ export function MainLayout() {
     selectedWorkspace?.kind === "cloud" ? selectedWorkspace.id : null;
   useEffect(() => {
     if (!selectedCloudWorkspaceId) return;
-    apiClient.post(`/workspaces/${selectedCloudWorkspaceId}/cloud-connect`).catch(() => {
+    call(api.connectCloudWorkspace, { workspaceId: selectedCloudWorkspaceId }).catch(() => {
       // Best-effort — an unreachable platform just means no truth refresh.
     });
   }, [selectedCloudWorkspaceId]);
@@ -297,31 +294,6 @@ export function MainLayout() {
   // Note: <webview> elements stack normally under dialogs/modals — no
   // hideAll IPC dance needed when dialogs open.
 
-  // --- System prompt (inline — small scope, one modal) ---
-
-  const systemPromptQuery = useSystemPrompt(selectedWorkspace?.id || null);
-  const updateSystemPromptMutation = useUpdateSystemPrompt();
-  // Track user edits separately; reset to null when modal closes so the
-  // derived value from the query takes over again (no useEffect + setState).
-  const [systemPromptEdit, setSystemPromptEdit] = useState<string | null>(null);
-  const systemPromptDraft = systemPromptEdit ?? (systemPromptQuery.data || "");
-  const setSystemPromptDraft = useCallback((value: string) => setSystemPromptEdit(value), []);
-
-  async function saveSystemPrompt() {
-    if (!selectedWorkspace) return;
-    try {
-      await updateSystemPromptMutation.mutateAsync({
-        workspaceId: selectedWorkspace.id,
-        systemPrompt: systemPromptDraft,
-      });
-      closeSystemPromptModal();
-      setSystemPromptEdit(null);
-    } catch (error) {
-      console.error("Failed to save system prompt:", error);
-      toast.error(getErrorMessage(error));
-    }
-  }
-
   // --- Archive with undo (ref-stable for memoized sidebar items) ---
 
   const archiveWorkspaceMutation = useArchiveWorkspace();
@@ -433,18 +405,11 @@ export function MainLayout() {
       }
     },
     onEscape: () => {
-      if (showNewWorkspaceModal) {
-        closeNewWorkspaceModal();
-      } else if (showSystemPromptModal) {
-        closeSystemPromptModal();
-      }
+      if (showNewWorkspaceModal) closeNewWorkspaceModal();
     },
     onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
     selectedWorkspace,
-    modalStates: {
-      showNewWorkspaceModal,
-      showSystemPromptModal,
-    },
+    modalStates: { showNewWorkspaceModal },
   });
 
   // Archive + workflow status are Mac-backend mutations; web-direct has no
@@ -580,20 +545,6 @@ export function MainLayout() {
           }}
         />
       )}
-
-      <SystemPromptModal
-        show={showSystemPromptModal && !!selectedWorkspace}
-        workspaceName={selectedWorkspace?.slug || ""}
-        systemPrompt={systemPromptDraft}
-        loading={systemPromptQuery.isLoading}
-        saving={updateSystemPromptMutation.isPending}
-        onClose={() => {
-          closeSystemPromptModal();
-          setSystemPromptEdit(null);
-        }}
-        onChange={setSystemPromptDraft}
-        onSave={saveSystemPrompt}
-      />
 
       <CloneRepositoryModal
         show={repoActions.showCloneModal}

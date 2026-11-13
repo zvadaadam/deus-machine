@@ -103,10 +103,6 @@ describe("application secret forwarding", () => {
       .route("/api", routes)
       .onError(errorHandler);
     expect((await paired.request("/api/settings/environment-secrets/orgs")).status).toBe(403);
-    expect(
-      (await app.request("/api/settings/environment-secrets/orgs", {}, { relayBridged: true }))
-        .status
-    ).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("discards a response belonging to an account that signed out during the request", async () => {

@@ -21,7 +21,6 @@ interface UIState {
   newWorkspaceMode: NewWorkspaceMode;
   /** Prefill for the prompt-first workspace modal (consumed via remount key). */
   newWorkspaceDraft: string | null;
-  showSystemPromptModal: boolean;
 
   // Command palette
   commandPaletteOpen: boolean;
@@ -47,8 +46,6 @@ interface UIState {
   /** Open the prompt-first modal with a starter prompt (Create with AI). */
   openNewWorkspaceModalWithDraft: (draft: string) => void;
   closeNewWorkspaceModal: () => void;
-  openSystemPromptModal: () => void;
-  closeSystemPromptModal: () => void;
 
   // Actions - Command palette
   openCommandPalette: () => void;
@@ -82,7 +79,6 @@ export const useUIStore = create<UIState>()(
       showNewWorkspaceModal: false,
       newWorkspaceMode: "default" as NewWorkspaceMode,
       newWorkspaceDraft: null,
-      showSystemPromptModal: false,
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
@@ -119,12 +115,6 @@ export const useUIStore = create<UIState>()(
           false,
           "ui/closeNewWorkspaceModal"
         ),
-
-      openSystemPromptModal: () =>
-        set({ showSystemPromptModal: true }, false, "ui/openSystemPromptModal"),
-
-      closeSystemPromptModal: () =>
-        set({ showSystemPromptModal: false }, false, "ui/closeSystemPromptModal"),
 
       // Command palette actions
       openCommandPalette: () => set({ commandPaletteOpen: true }, false, "ui/openCommandPalette"),
@@ -209,7 +199,6 @@ export const useUIStore = create<UIState>()(
           {
             showNewWorkspaceModal: false,
             newWorkspaceMode: "default" as NewWorkspaceMode,
-            showSystemPromptModal: false,
             commandPaletteOpen: false,
             settingsOpen: false,
             environmentSettingsTarget: null,
@@ -242,8 +231,6 @@ export const uiActions = {
   openNewWorkspaceModalWithDraft: (draft: string) =>
     useUIStore.getState().openNewWorkspaceModalWithDraft(draft),
   closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
-  openSystemPromptModal: () => useUIStore.getState().openSystemPromptModal(),
-  closeSystemPromptModal: () => useUIStore.getState().closeSystemPromptModal(),
   openSettings: () => useUIStore.getState().openSettings(),
   openEnvironmentSettings: (repoId: string, location: "local" | "cloud") =>
     useUIStore.getState().openEnvironmentSettings(repoId, location),

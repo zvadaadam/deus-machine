@@ -223,7 +223,8 @@ export type Catalog = z.infer<typeof CatalogSchema>;
 // `composeSnapshot` (compose.ts) joins the two into the views the UI draws.
 // ---------------------------------------------------------------------------
 
-export type InstallKind = "app" | "skill" | "plugin";
+export const InstallKindSchema = z.enum(["app", "skill", "plugin"]);
+export type InstallKind = z.infer<typeof InstallKindSchema>;
 
 /** Where an item came from: the curated catalog, or the user's own. */
 export type ItemSource = "catalog" | "custom";

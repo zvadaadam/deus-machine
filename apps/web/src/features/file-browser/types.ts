@@ -2,14 +2,13 @@
  * File Browser Types
  */
 
-export interface FileTreeNode {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  size?: number;
-  modified?: string;
+import type { FileTreeNode as ScannedNode } from "@shared/types/files";
+
+export type { FileTreeResponse } from "@shared/types/files";
+
+/** A file or folder from the workspace's tree, with what the diff says about it laid over. */
+export interface FileTreeNode extends ScannedNode {
   children?: FileTreeNode[];
-  git_status?: "modified" | "added" | "deleted" | "untracked";
   /** Line additions from git diff (overlaid from file changes data) */
   additions?: number;
   /** Line deletions from git diff (overlaid from file changes data) */
@@ -18,10 +17,4 @@ export interface FileTreeNode {
   change_status?: "added" | "modified" | "deleted";
   /** true = committed (in HEAD), false = uncommitted (working dir only) */
   committed?: boolean;
-}
-
-export interface FileTreeResponse {
-  files: FileTreeNode[];
-  totalFiles: number;
-  totalSize: number;
 }

@@ -4,11 +4,12 @@ import { Cloud, ClockFading, GitBranch, Laptop } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@/shared/lib/utils";
-import { onEvent } from "@/platform/ws";
-import type { Part, ToolPart, UnknownPart, WireEventEnvelope } from "@shared/protocol-types";
+import { follow } from "@/platform/ws";
+import { isUnknownEvent, type Part, type ToolPart, type UnknownPart } from "@shared/protocol-types";
 import { formatTimeAgo } from "@/shared/lib/formatters";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { SessionService, type PaginatedMessages } from "@/features/session/api/session.service";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import type { Workspace, DiffStats } from "@/shared/types";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
@@ -45,8 +46,8 @@ function isInFlight(part: Part | UnknownPart): part is ToolPart {
 
 /**
  * Live tool label: the running-tool map is seeded from a one-shot fetch and
- * kept current by the part events the backend already broadcasts to every
- * client — no polling. Snapshot seeding reconciles against completions that
+ * kept current by the chat's part events, followed while the card is open
+ * — no polling. Snapshot seeding reconciles against completions that
  * arrived first, so a card opened mid-turn with parallel tools stays correct
  * when one of them finishes.
  */
@@ -55,7 +56,7 @@ function useLiveTool(sessionId: string): string | null {
     // Isolated key — never the shared sessions.messages cache, whose live
     // streaming state must not be overwritten with DB snapshots.
     queryKey: ["sidebar", "live-activity", sessionId],
-    queryFn: () => SessionService.fetchMessages(sessionId, { limit: 5 }),
+    queryFn: () => call(api.messages, { sessionId, limit: 5 }),
     staleTime: 15_000,
     gcTime: 10_000,
     refetchOnWindowFocus: false,
@@ -70,11 +71,10 @@ function useLiveTool(sessionId: string): string | null {
     completedRef.current = new Set();
     setLabel(null);
 
-    return onEvent((name: string, raw: unknown) => {
-      if (name !== "agent:event") return;
-      const envelope = raw as WireEventEnvelope;
-      if (envelope?.sessionId !== sessionId) return;
-      const event = envelope.event;
+    return follow(api.sessionEvents, { sessionId }, (update) => {
+      if (update.type !== "event") return;
+      const event = update.envelope.event;
+      if (isUnknownEvent(event)) return;
       if (event.type !== "message.part" || event.part.type !== "tool") return;
 
       const running = runningRef.current;

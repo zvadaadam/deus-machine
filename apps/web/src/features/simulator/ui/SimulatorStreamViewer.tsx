@@ -17,15 +17,16 @@
  * TODO(relay-streaming): In web/relay mode the MJPEG URL is not directly
  * accessible (it's on the remote Mac). To support relay streaming:
  *   1. Backend subscribes to simbridge MJPEG HTTP, parses multipart frames
- *   2. Pushes frames via `q:event sim:frame { base64 }` to frontend
+ *   2. Publishes frames on a stream (`{ base64 }` per frame) to the frontend
  *   3. This component renders WS-pushed frames instead of <img> MJPEG source
  *   4. Add frame rate/quality negotiation for bandwidth control
  *   5. Detect relay mode: if stream URL is not localhost, use WS frame path
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { cn } from "@/shared/lib/utils";
-import { simulatorService } from "../api/simulator.service";
 import type { InspectorNode, InspectorSnapshot } from "../types";
 import { DeviceFrame } from "./DeviceFrame";
 
@@ -371,7 +372,7 @@ export function SimulatorStreamViewer({
       }
       const coords = getNormalizedCoords(e);
       if (coords)
-        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "began").catch(warnTouchFailed);
+        call(api.simTouch, { workspaceId, ...coords, touchType: "began" }).catch(warnTouchFailed);
     },
     [
       getInspectorNode,
@@ -393,7 +394,7 @@ export function SimulatorStreamViewer({
       if (!isLive || e.buttons !== 1) return;
       const coords = getNormalizedCoords(e);
       if (coords)
-        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "moved").catch(warnTouchFailed);
+        call(api.simTouch, { workspaceId, ...coords, touchType: "moved" }).catch(warnTouchFailed);
     },
     [
       getInspectorNode,
@@ -412,7 +413,7 @@ export function SimulatorStreamViewer({
       if (!lastCoordsRef.current) return;
       const coords = getNormalizedCoords(e) ?? lastCoordsRef.current;
       if (coords) {
-        simulatorService.sendTouch(workspaceId, coords.x, coords.y, "ended").catch(warnTouchFailed);
+        call(api.simTouch, { workspaceId, ...coords, touchType: "ended" }).catch(warnTouchFailed);
         lastCoordsRef.current = null;
       }
     },
@@ -425,9 +426,11 @@ export function SimulatorStreamViewer({
       if (!isLive) return;
       const coords = lastCoordsRef.current;
       if (coords) {
-        simulatorService
-          .sendTouch(workspaceIdRef.current, coords.x, coords.y, "ended")
-          .catch(warnTouchFailed);
+        call(api.simTouch, {
+          workspaceId: workspaceIdRef.current,
+          ...coords,
+          touchType: "ended",
+        }).catch(warnTouchFailed);
         lastCoordsRef.current = null;
       }
     };
@@ -445,9 +448,7 @@ export function SimulatorStreamViewer({
       const coords = getNormalizedCoords(e, false);
       if (!coords) return;
       e.preventDefault();
-      simulatorService
-        .sendScroll(workspaceId, coords.x, coords.y, -e.deltaX, -e.deltaY)
-        .catch(() => {});
+      call(api.simScroll, { workspaceId, ...coords, dx: -e.deltaX, dy: -e.deltaY }).catch(() => {});
     },
     [getNormalizedCoords, isLive, workspaceId]
   );
@@ -474,7 +475,7 @@ export function SimulatorStreamViewer({
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
-        simulatorService.sendKey(workspaceId, keycode, "down").catch(() => {});
+        call(api.simKey, { workspaceId, keycode, direction: "down" }).catch(() => {});
       }
     },
     [isLive, workspaceId, hidAvailable, onScreenshot]
@@ -486,7 +487,7 @@ export function SimulatorStreamViewer({
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
-        simulatorService.sendKey(workspaceId, keycode, "up").catch(() => {});
+        call(api.simKey, { workspaceId, keycode, direction: "up" }).catch(() => {});
       }
     },
     [isLive, workspaceId, hidAvailable]

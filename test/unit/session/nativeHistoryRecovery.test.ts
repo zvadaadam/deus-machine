@@ -17,17 +17,24 @@ import {
   type WireEventEnvelope,
 } from "@zvada/agent-server/protocol";
 import { SCHEMA_SQL } from "@shared/schema";
+import { sessionEvents, type SessionEvent } from "@shared/api/sessions";
 import {
-  createStreamCursor,
   flushDeltas,
   routeEnvelope,
   messagesKey,
   type AgentStreamContext,
 } from "@/features/session/lib/agentEventFold";
 
-const { database, broadcast } = vi.hoisted(() => ({ database: vi.fn(), broadcast: vi.fn() }));
+const { database, received } = vi.hoisted(() => ({
+  database: vi.fn(),
+  /** Every frame the backend sent the desktop window's connection. */
+  received: vi.fn(),
+}));
 vi.mock("../../../apps/backend/src/lib/database", () => ({ getDatabase: database }));
-vi.mock("../../../apps/backend/src/services/ws.service", () => ({ broadcast }));
+// The streams are real; only the socket they send on is replaced.
+vi.mock("../../../apps/backend/src/services/ws.service", () => ({
+  getConnection: () => ({ ws: { send: received } }),
+}));
 vi.mock("../../../apps/backend/src/services/query-engine", () => ({ invalidate: vi.fn() }));
 vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: vi.fn(),
@@ -36,6 +43,7 @@ vi.mock("../../../apps/backend/src/services/agent/cloud/driver", () => ({
   pushCloudSessionTitle: vi.fn(),
 }));
 import { createAgentEventHandler } from "../../../apps/backend/src/services/agent/event-handler";
+import { _reset, subscribe } from "../../../apps/backend/src/services/streams";
 import { persistSessionWorking } from "../../../apps/backend/src/services/agent/persistence";
 
 const SESSION = "native-recovery";
@@ -83,16 +91,20 @@ describe("native replay through the published engine, SQLite and desktop fold", 
       queryClient: new QueryClient(),
       activeSessionId: SESSION,
       folds: new Map(),
-      cursor: createStreamCursor(),
       requestRefetch: vi.fn(),
       scheduleFlush: () => {
         const fold = ui.folds.get(SESSION);
         if (fold) flushDeltas(ui.queryClient, SESSION, fold);
       },
     };
-    broadcast.mockImplementation((raw) => {
+    // The desktop window follows this chat, as it does once its page is cached.
+    _reset();
+    subscribe("desktop", "chat", sessionEvents, { sessionId: SESSION });
+    received.mockImplementation((raw: string) => {
       const frame = JSON.parse(raw);
-      if (frame.event === "agent:event") routeEnvelope(ui, frame.data);
+      if (frame.type !== "q:event" || frame.event !== sessionEvents.name) return;
+      const update: SessionEvent = frame.data;
+      if (update.type === "event") routeEnvelope(ui, update.envelope);
     });
   });
   afterEach(() => {

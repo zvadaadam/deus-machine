@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
 import { useLastRun } from "@/shared/hooks/useLastRun";
-import type { ProjectTask } from "../api/workspace.service";
+import type { ProjectTask } from "@shared/types/project-environment";
 
 interface HeaderRunButtonProps {
   tasks: ProjectTask[];

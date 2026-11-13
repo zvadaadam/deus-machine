@@ -128,8 +128,8 @@ export function buildCancelFrame(turnId?: string): Record<string, unknown> {
 
 // ---- Question round-trip (pure; agnt's elicitation.requested ↔ elicitation.respond) ----
 
-/** The `tool:request` payload the renderer's RPC handlers consume — the SAME
- *  contract the Mac lane's q:event carries, so the direct lane can't drift. */
+/** The tool request the renderer's RPC handlers consume — the SAME
+ *  contract the Mac lane's `toolRequests` stream carries, so the direct lane can't drift. */
 export type DirectToolRequest = ToolRequestEventData;
 
 /** Long: the sidecar owns the real deadline; this mirrors the Mac driver's relay. */
@@ -137,8 +137,8 @@ const QUESTION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 /**
  * An agnt `elicitation.requested` event in question mode (Claude's
- * AskUserQuestion, Codex's request_user_input) → the same `tool:request` the
- * Mac lane delivers via q:event, so `useAgentRpcHandler` shows the existing
+ * AskUserQuestion, Codex's request_user_input) → the same tool request the
+ * Mac lane delivers on `toolRequests`, so `useAgentRpcHandler` shows the existing
  * overlay without knowing which lane asked. The card's questions come from
  * the shared converter (shared/agent-asks.ts), as on the local lane; the deus
  * session id replaces the wire's provider id, exactly as the fold does. The

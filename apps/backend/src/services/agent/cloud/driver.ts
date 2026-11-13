@@ -8,8 +8,8 @@
 // and handed to the one event handler; persistence, invalidation and the WS
 // push all run unchanged. The platform half becomes deus effects here:
 // workspace.state → workspace row, session.error → engine error event,
-// simulator.* → ./simulator (an in-memory device cache + q:event cloud:simulator),
-// sandboxUrlTemplate → ./preview (an in-memory template cache + q:event cloud:preview),
+// simulator.* → ./simulator (an in-memory device cache + `cloudSimulatorEvents`),
+// sandboxUrlTemplate → ./preview (an in-memory template cache + `cloudPreviewChanges`),
 // elicitation.requested → the existing askUserQuestion relay (and the fold), permission.request →
 // auto-allow (parity with the local ClaudeToolPolicy, which answers every
 // tool-use question in-process — deus has no interactive permission UI).
@@ -31,7 +31,7 @@ import {
   cardQuestions,
   unansweredRequests,
 } from "@shared/agent-asks";
-import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
+import { isLiveOnlyEvent, type DecodedWireEventEnvelope } from "@shared/protocol-types";
 import type { CloudTurnSelection } from "@shared/cloud-models";
 import {
   CloudEnvStateSchema,
@@ -67,7 +67,9 @@ import type { AgentEventHandler } from "../event-handler";
 import { relay, cancelRelay, cancelSessionRelays } from "../tool-relay";
 import { persistSessionNeedsResponse, persistSessionBackToWorking } from "../persistence";
 import { invalidate } from "../../query-engine";
-import { broadcast } from "../../ws.service";
+import { sessionEvents } from "@shared/api/sessions";
+import { cloudEnvironment, cloudIdentity } from "@shared/api/workspaces";
+import { publish } from "../../streams";
 import { getDatabase } from "../../../lib/database";
 import { emitPtyData, emitPtyExit } from "../../pty.service";
 import { getSessionRaw } from "../../../db";
@@ -144,13 +146,7 @@ export function initCloudDriver(eventHandler: AgentEventHandler): void {
     forgetCloudPreviewTemplates();
     // The clients hold the same account-scoped caches (device stores, host
     // templates, screenshots): tell them to start over.
-    broadcast(
-      JSON.stringify({
-        type: "q:event",
-        event: "cloud:identity",
-        data: { generation: identityGeneration },
-      })
-    );
+    publish(cloudIdentity, {}, { generation: identityGeneration });
   });
 }
 
@@ -231,7 +227,7 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
   invalidate(["workspaces", "stats"], {});
 }
 
-/** Push an environment event to connected clients (q:event "cloud:env").
+/** Tell the clients following a workspace's environment (`cloudEnvironment`).
  *  Ephemeral on purpose: the chat shows a live provisioning/wake progress
  *  stack from these; nothing is persisted and a refresh clears them.
  *  Validated at this seam — a malformed platform frame is dropped here, not
@@ -242,10 +238,10 @@ export function announceCloudEnv(workspaceId: string, sessionId: string, data: u
   const parsed = CloudEnvStateSchema.safeParse(data);
   if (!parsed.success) return;
   const payload: CloudEnvEvent = { workspaceId, sessionId, data: parsed.data };
-  broadcast(JSON.stringify({ type: "q:event", event: "cloud:env", data: payload }));
+  publish(cloudEnvironment, { workspaceId }, payload);
 }
 
-function broadcastCloudEnv(session: CloudSession, data: unknown): void {
+function tellCloudEnv(session: CloudSession, data: unknown): void {
   announceCloudEnv(session.deusWorkspaceId, session.deusSessionId, data);
 }
 
@@ -256,12 +252,19 @@ function frameSource(session: CloudSession): CloudSimulatorSource & CloudPreview
   return { workspaceId: session.deusWorkspaceId, sessionId: session.deusSessionId };
 }
 
-/** Wrap one event under the deus session id and feed the shared fold. */
+/**
+ * Wrap one event under the deus session id and feed the shared fold.
+ *
+ * Numbered the way the engine numbers its own log: a kept event takes the next
+ * seq; a token delta takes none and carries the seq of the kept event before
+ * it. Clients tell the two apart by that, and resume after the last kept one.
+ */
 function pushToFold(session: CloudSession, event: Record<string, unknown>): void {
   if (!handler) return;
+  const unkept = isLiveOnlyEvent(event as { type: string }) && session.seq > 0;
   const envelope: DecodedWireEventEnvelope = {
     sessionId: session.deusSessionId,
-    seq: ++session.seq,
+    seq: unkept ? session.seq : ++session.seq,
     event: { ...event, sessionId: session.deusSessionId } as DecodedWireEventEnvelope["event"],
   };
   handler.handle(envelope);
@@ -368,7 +371,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
 
   // A question relayed during this turn can no longer be answered once the
   // turn is over (stopped, killed, timed out): settle its relay now — the
-  // renderer drops the overlay on the tool:cancel it broadcasts — instead of
+  // renderer drops the overlay on the cancel it publishes on `toolRequests` — instead of
   // leaving a 24h wait whose eventual answer would reach a request the agent
   // has abandoned. (The runtime cancels a turn's open requests itself, so the
   // relay answers nothing.)
@@ -407,16 +410,12 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         } else {
           const restored = handler.hydrateCloudSnapshot(session.deusSessionId, parsed.data);
           if (restored) {
-            broadcast(
-              JSON.stringify({
-                type: "q:event",
-                event: "agent:snapshot",
-                data: {
-                  sessionId: session.deusSessionId,
-                  seq: ++session.seq,
-                  ...restored,
-                },
-              })
+            // It restates the chat: a client that was away starts again from it.
+            publish(
+              sessionEvents,
+              { sessionId: session.deusSessionId },
+              { type: "snapshot", snapshot: { sessionId: session.deusSessionId, ...restored } },
+              { restart: true }
             );
           }
         }
@@ -452,7 +451,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       }
       if (sessionStatus === "paused" || sessionStatus === "stopped") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: sessionStatus });
-        broadcastCloudEnv(session, { status: sessionStatus });
+        tellCloudEnv(session, { status: sessionStatus });
         // The live `workspace.state` frame is LOST when the socket is down
         // while the sandbox stops; this snapshot is then the only truth, and
         // the `currentTurnId === live` early return below would strand the
@@ -460,14 +459,14 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
         if (sessionStatus === "stopped") scheduleTurnKill(session, "stopped");
       } else if (sessionStatus === "error") {
         updateCloudWorkspace(session.deusWorkspaceId, { status: "error" });
-        broadcastCloudEnv(session, { status: "error" });
+        tellCloudEnv(session, { status: "error" });
         scheduleTurnKill(session, "error");
       } else if (sessionStatus === "provisioning") {
         // Connected mid-setup (fresh create attaches while the sandbox is
         // still building) — show the stack immediately; the step events
         // that follow append to it.
         updateCloudWorkspace(session.deusWorkspaceId, { status: "provisioning" });
-        broadcastCloudEnv(session, { status: "provisioning" });
+        tellCloudEnv(session, { status: "provisioning" });
         // Recovery truth can arrive VIA the snapshot when the live
         // workspace.state frame fell into a socket gap — the reconnect
         // doesn't fire onDown (the socket retries internally), so an armed
@@ -506,7 +505,7 @@ function dispatchFrame(session: CloudSession, frame: Record<string, unknown>): v
       if (data.sandboxUrlTemplate !== undefined) {
         applyCloudPreviewTemplate(frameSource(session), data.sandboxUrlTemplate);
       }
-      broadcastCloudEnv(session, data);
+      tellCloudEnv(session, data);
       // Real case: sidecar dies on a credential error → clean WS close →
       // workspace 'stopped', and the only trace was an ephemeral env line.
       if (data.status === "stopped" || data.status === "error") {
@@ -1422,7 +1421,7 @@ export async function getCloudSimulatorStatus(
       // identity change closed every socket while the workspace stayed
       // selected — and on mobile nothing else reopens it): a REST answer of
       // `starting` would otherwise never become `ready`. Open the session;
-      // its frames resume as cloud:simulator broadcasts. The read itself does
+      // its frames resume on `cloudSimulatorEvents`. The read itself does
       // not wait for it — the platform's REST answers now.
       void ensureCloudSession(row.sessionId).catch((err) => {
         console.warn(
@@ -1443,7 +1442,7 @@ export async function getCloudSimulatorStatus(
  *  so an unknown template with no socket to bring it (this backend restarted,
  *  or an identity change closed every socket while the workspace stayed
  *  selected) is an unanswerable read: open the workspace's session and let its
- *  snapshot announce the template as cloud:preview. `undefined` tells the
+ *  snapshot announce the template on `cloudPreviewChanges`. `undefined` tells the
  *  client to keep waiting rather than render "no sandbox". */
 export function readCloudPreviewTemplate(workspaceId: string): string | null | undefined {
   const known = getCloudPreviewTemplate(workspaceId);

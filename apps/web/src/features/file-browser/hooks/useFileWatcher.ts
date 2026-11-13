@@ -1,19 +1,19 @@
 /**
  * File Watcher Hook
  *
- * Listens for filesystem change events from the backend via WebSocket and
- * invalidates relevant React Query caches.
+ * Follows a workspace folder's changes and invalidates the caches they stale.
  *
- * EVENT FLOW:
- * 1. Component mounts with a workspace → starts watching via WS command
- * 2. Backend chokidar detects changes → debounces → pushes q:event "fs:changed"
- * 3. This hook receives event → invalidates React Query caches
- * 4. Component unmounts → stops watching via WS command
+ * 1. Component mounts with a workspace → asks the backend to watch it
+ * 2. Backend chokidar detects changes → debounces → publishes on `fileChanges`
+ * 3. This hook invalidates the caches (also after a reconnect, when changes
+ *    may have gone unheard)
+ * 4. Component unmounts → asks the backend to stop
  */
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { sendCommand, onEvent } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { call, follow } from "@/platform/ws";
 import { queryKeys } from "@/shared/api/queryKeys";
 
 /** Delay before starting watcher to let filesystem settle after worktree checkout */
@@ -43,7 +43,7 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
     const settleTimeout = setTimeout(() => {
       if (!isActive) return;
 
-      sendCommand("fs:watch", { workspacePath })
+      call(api.fsWatch, { workspacePath })
         .then(() => {
           if (isActive) {
             setIsWatching(true);
@@ -59,23 +59,7 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
         });
     }, WATCHER_SETTLING_DELAY_MS);
 
-    // Listen for debounced change events via WS
-    const unlisten = onEvent((event, data) => {
-      if (event !== "fs:changed") return;
-      const payload = data as {
-        workspace_path: string;
-        change_type: string;
-        affected_count: number;
-      };
-
-      // Only process events for THIS workspace
-      if (payload.workspace_path !== workspacePath) return;
-      if (payload.change_type === "metadataonly") return;
-
-      if (import.meta.env.DEV) {
-        console.log(`[FileWatcher] ${payload.affected_count} files changed in workspace`);
-      }
-
+    const readAgain = () => {
       queryClient.invalidateQueries({ queryKey: ["files", workspaceId] });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.environment(workspaceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId) });
@@ -83,13 +67,21 @@ export function useFileWatcher(workspacePath: string | null, workspaceId: string
       // Invalidate individual file diffs — prefix match covers all files in the workspace.
       // Without this, the diff viewer shows stale content after agent edits.
       queryClient.invalidateQueries({ queryKey: ["workspaces", "diff-file", workspaceId] });
-    });
+    };
+    const unlisten = follow(
+      api.fileChanges,
+      { workspacePath },
+      (change) => {
+        if (change.change_type !== "metadataonly") readAgain();
+      },
+      { onReset: readAgain }
+    );
 
     return () => {
       isActive = false;
       clearTimeout(settleTimeout);
       setIsWatching(false);
-      sendCommand("fs:unwatch", { workspacePath }).catch(() => {});
+      call(api.fsUnwatch, { workspacePath }).catch(() => {});
       unlisten();
     };
   }, [workspacePath, workspaceId, queryClient]);

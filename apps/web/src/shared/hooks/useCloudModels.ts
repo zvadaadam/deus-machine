@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { sendRequest } from "@/platform/ws/query-protocol-client";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
-import type { CloudModelCatalog } from "@shared/cloud-models";
 
 /**
  * The models Deus Cloud runs, per harness, as the platform lists them — the
@@ -18,7 +18,7 @@ export const CLOUD_MODELS_QUERY_KEY = ["settings", "cloud", "models"] as const;
 export function useCloudModels({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: CLOUD_MODELS_QUERY_KEY,
-    queryFn: () => sendRequest<CloudModelCatalog>("cloudModels", {}),
+    queryFn: () => call(api.cloudModels),
     staleTime: 5 * 60_000,
     retry: 1,
     // Web-direct has no Mac backend to ask (and no automations to edit).

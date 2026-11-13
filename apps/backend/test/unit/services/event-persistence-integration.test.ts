@@ -24,16 +24,16 @@ const describeWithDb = canUseDatabase ? describe : describe.skip;
 import { SCHEMA_SQL } from "@shared/schema";
 import { getTurn } from "../../../src/db/turns";
 
-const { mockGetDatabase, mockInvalidate, mockBroadcast, mockRefreshPr } = vi.hoisted(() => ({
+const { mockGetDatabase, mockInvalidate, mockPublish, mockRefreshPr } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
   mockInvalidate: vi.fn(),
-  mockBroadcast: vi.fn(),
+  mockPublish: vi.fn(),
   mockRefreshPr: vi.fn(),
 }));
 
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
-vi.mock("../../../src/services/ws.service", () => ({ broadcast: mockBroadcast }));
+vi.mock("../../../src/services/streams", () => ({ publish: mockPublish, openWith: vi.fn() }));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: mockRefreshPr,
 }));

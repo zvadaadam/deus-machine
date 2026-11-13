@@ -5,10 +5,9 @@
 import type { SessionSnapshotEvent, TurnProviderCredentialSource } from "@deus-hq/api";
 import type { AnyLifecycleEvent, ConversationState } from "./protocol-types";
 
-/** Backend fold restored from cloud history, at its new stream position. */
+/** Backend fold restored from cloud history. */
 export interface AgentConversationSnapshot {
   sessionId: string;
-  seq: number;
   conversation: ConversationState;
   providerCredentialSources?: Record<string, TurnProviderCredentialSource>;
   /** SQLite's complete message order, including local-only rows. */

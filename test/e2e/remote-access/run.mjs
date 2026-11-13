@@ -380,7 +380,7 @@ try {
     await assert.rejects(waiting.runtime.connect(), (error) => error.kind === "unavailable");
     await pause(1_500);
     assert.equal(title(a), "Through the relay");
-    await assert.rejects(a.runtime.sendCommand("stopSession", {}), (e) => e.kind === "unavailable");
+    await assert.rejects(a.runtime.sendMutate("stopSession", {}), (e) => e.kind === "unavailable");
     // Pairing needs the Mac itself. The relay says so on the socket: a browser
     // cannot read a refused upgrade's status.
     await assert.rejects(

@@ -7,25 +7,29 @@ import { SessionSnapshotEventSchema, type SessionSnapshotEvent } from "@deus-hq/
 import { SCHEMA_SQL } from "@shared/schema";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  createStreamCursor,
   hydrateConversation,
   routeEnvelope,
   messagesKey,
   flushDeltas,
   type AgentStreamContext,
 } from "@/features/session/lib/agentEventFold";
-import type { PaginatedMessages } from "@/features/session/api/session.service";
+import type { PaginatedMessages } from "@shared/types/session";
+import { sessionEvents, type SessionEvent } from "@shared/api/sessions";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
 
-const { database, broadcast, invalidate, refreshPr, send } = vi.hoisted(() => ({
+const { database, received, invalidate, refreshPr, send } = vi.hoisted(() => ({
   database: vi.fn(),
-  broadcast: vi.fn(),
+  /** Every frame the backend sent the desktop window's connection. */
+  received: vi.fn(),
   invalidate: vi.fn(),
   refreshPr: vi.fn(),
   send: vi.fn(),
 }));
 vi.mock("../../../apps/backend/src/lib/database", () => ({ getDatabase: database }));
-vi.mock("../../../apps/backend/src/services/ws.service", () => ({ broadcast }));
+// The streams are real; only the socket they send on is replaced.
+vi.mock("../../../apps/backend/src/services/ws.service", () => ({
+  getConnection: () => ({ ws: { send: received } }),
+}));
 vi.mock("../../../apps/backend/src/services/query-engine", () => ({ invalidate }));
 vi.mock("../../../apps/backend/src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: refreshPr,
@@ -57,6 +61,7 @@ vi.mock("../../../apps/backend/src/services/agent/cloud/session-socket", () => (
 }));
 
 import { createAgentEventHandler } from "../../../apps/backend/src/services/agent/event-handler";
+import { _reset, subscribe } from "../../../apps/backend/src/services/streams";
 import {
   ensureCloudSession,
   initCloudDriver,
@@ -164,17 +169,21 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
       queryClient: new QueryClient(),
       activeSessionId: SESSION,
       folds: new Map(),
-      cursor: createStreamCursor(),
       requestRefetch: vi.fn(),
       scheduleFlush: () => {
         const fold = ui.folds.get(SESSION);
         if (fold) flushDeltas(ui.queryClient, SESSION, fold);
       },
     };
-    broadcast.mockImplementation((raw) => {
+    // The desktop window follows this chat, as it does once its page is cached.
+    _reset();
+    subscribe("desktop", "chat", sessionEvents, { sessionId: SESSION });
+    received.mockImplementation((raw: string) => {
       const frame = JSON.parse(raw);
-      if (frame.event === "agent:snapshot") hydrateConversation(ui, frame.data);
-      if (frame.event === "agent:event") routeEnvelope(ui, frame.data);
+      if (frame.type !== "q:event" || frame.event !== sessionEvents.name) return;
+      const update: SessionEvent = frame.data;
+      if (update.type === "snapshot") hydrateConversation(ui, update.snapshot);
+      else routeEnvelope(ui, update.envelope);
     });
     await connect();
   });
@@ -191,9 +200,9 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   const turn = (turnId: string) => getTurn(db, SESSION, turnId)!;
   const page = () => ui.queryClient.getQueryData<PaginatedMessages>(messagesKey(SESSION))!;
   const hydrated = () =>
-    broadcast.mock.calls
+    received.mock.calls
       .map(([raw]) => JSON.parse(raw))
-      .filter((frame) => frame.event === "agent:snapshot");
+      .filter((frame) => frame.event === sessionEvents.name && frame.data.type === "snapshot");
 
   it("retains reported cache usage in SQLite and the desktop cache after reconnect", async () => {
     const tokens = {
@@ -606,7 +615,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   it("rolls back a failed restore and does not publish a half-restored fold", () => {
     onFrame(snapshot([message("original", 0)]));
     const before = rows();
-    broadcast.mockClear();
+    received.mockClear();
     handler.beginTurn(SESSION, "turn-1");
     onFrame({ type: "turn.started", sessionId: PROVIDER, turnId: "turn-1", timestamp: T });
     db.exec(
@@ -654,7 +663,7 @@ describe("cloud history through the socket driver, real SQLite and desktop cache
   it("rejects malformed or mismatched transcripts without erasing existing rows", () => {
     onFrame(snapshot([message("original", 0)]));
     const before = rows();
-    broadcast.mockClear();
+    received.mockClear();
     onFrame({ ...snapshot([]), messages: [{ ...message("invalid", 1), role: "broken" }] });
     onFrame(snapshot([], { sessionId: "another-provider-session" }));
     expect(rows()).toEqual(before);

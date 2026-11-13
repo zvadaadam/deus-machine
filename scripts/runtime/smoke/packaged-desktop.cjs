@@ -7,7 +7,7 @@ const {
   PROJECT_ROOT,
   appDiagnostics,
   assert,
-  assertBackendDbRoute,
+  assertBackendReadsDatabase,
   assertExecutable,
   assertHostRunnableArch,
   macExecutionPolicyHint,
@@ -120,10 +120,10 @@ function requiredLogPatterns(binDir) {
   ];
 }
 
-async function assertBackendDbRouteFromLog(logContents) {
+async function assertBackendReadsDatabaseFromLog(logContents) {
   const match = logContents.match(/\[backend\] \[BACKEND_PORT\](\d+)/);
   if (!match) throw new Error("Packaged desktop log did not include [BACKEND_PORT]");
-  await assertBackendDbRoute(Number(match[1]), "Packaged desktop backend DB route");
+  await assertBackendReadsDatabase(Number(match[1]), "Packaged desktop backend database read");
 }
 
 function runAppCheck(appPath, options) {
@@ -308,9 +308,9 @@ async function smokePackagedDesktop(options) {
       getProcessOutput
     );
     assertEngineStarted(contents);
-    await assertBackendDbRouteFromLog(contents);
+    await assertBackendReadsDatabaseFromLog(contents);
     console.log(
-      `[runtime-smoke] packaged desktop reached readiness, started the agent engine, and served DB route; log=${logPath}`
+      `[runtime-smoke] packaged desktop reached readiness, started the agent engine, and read its database; log=${logPath}`
     );
   } catch (error) {
     if (stderr.trim()) {

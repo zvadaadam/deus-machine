@@ -40,15 +40,19 @@ export type ToolResponseInterceptor = (
   result: unknown,
   error: string | undefined
 ) => boolean;
-export type EventCallback = (event: string, data: unknown) => void;
 export type SnapshotCallback = (data: unknown) => void;
-export type DeltaCallback = (upserted?: unknown[], removed?: string[], cursor?: number) => void;
-export type CommandResult = {
-  accepted: boolean;
-  commandId?: string;
-  error?: string;
-  [key: string]: unknown;
-};
+export type DeltaCallback = (upserted?: unknown[], removed?: string[]) => void;
+/** One event of a stream. */
+export type StreamCallback = (data: unknown) => void;
+export interface ListenOptions {
+  /**
+   * Events may have been missed: the connection was lost and the host cannot
+   * send what followed the last one received. Read the state again.
+   */
+  onReset?: () => void;
+  /** The host refused the subscription. It is not retried. */
+  onRefused?: (error: RuntimeError) => void;
+}
 /** The q:mutate_result payload, including delegated route error metadata. */
 export interface MutateResult<T = unknown> {
   success: boolean;

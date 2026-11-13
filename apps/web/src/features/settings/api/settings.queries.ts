@@ -3,13 +3,13 @@
  * TanStack Query hooks for settings management
  */
 
-import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produce } from "immer";
 import { toast } from "sonner";
-import type { AgentAuthAnswer, AgentAuthEvent, HarnessCliProgress } from "@shared/agent-auth";
-import { onEvent } from "@/platform/ws";
-import { SettingsService } from "./settings.service";
+import type { AgentAuthAnswer, HarnessCliProgress } from "@shared/agent-auth";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
+import { useStream } from "@/shared/hooks/useStream";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { track } from "@/platform/analytics";
 import type { Settings } from "../types";
@@ -22,7 +22,7 @@ import { readThinkingLevel, type ThinkingLevel } from "@shared/protocol";
 export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings.all,
-    queryFn: () => SettingsService.fetch(),
+    queryFn: () => call(api.settings),
     staleTime: 30000, // Cache for 30s (settings change less frequently)
   });
 }
@@ -34,7 +34,7 @@ export function useSettings() {
 export function useAgentAuth(enabled = true) {
   return useQuery({
     queryKey: queryKeys.settings.agentAuth,
-    queryFn: () => SettingsService.fetchAgentAuth(),
+    queryFn: () => call(api.agentAuth),
     staleTime: 60000, // Cache for 60s — agent-server says when a login changes
     enabled,
   });
@@ -78,29 +78,32 @@ export function useDefaultThinkingLevel(): ThinkingLevel {
  */
 export function useAgentAuthEvents(): void {
   const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      onEvent((event, data) => {
-        if (event === "agent:cli") {
-          const progress = data as HarnessCliProgress;
-          queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
-            answer ? withProgress(answer, progress) : answer
-          );
-          if (progress.phase === "ready" || progress.phase === "failed") {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
-          }
-          return;
-        }
-        if (event !== "agent:auth") return;
-        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
-        // Another login lists other models.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
-        const login = (data as AgentAuthEvent | undefined)?.login;
-        if (login && (login.outcome === "failed" || login.outcome === "expired")) {
-          toast.error(login.error ?? "The sign-in didn’t finish");
-        }
-      }),
-    [queryClient]
+  // Whatever changed while the connection was away, the status says it.
+  const readAgain = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentAuth });
+  useStream(
+    api.agentCliProgress,
+    {},
+    (progress) => {
+      queryClient.setQueryData<AgentAuthAnswer>(queryKeys.settings.agentAuth, (answer) =>
+        answer ? withProgress(answer, progress) : answer
+      );
+      if (progress.phase === "ready" || progress.phase === "failed") readAgain();
+    },
+    readAgain
+  );
+  useStream(
+    api.agentAuthChanges,
+    {},
+    ({ login }) => {
+      readAgain();
+      // Another login lists other models.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings.agentModels });
+      if (login && (login.outcome === "failed" || login.outcome === "expired")) {
+        toast.error(login.error ?? "The sign-in didn’t finish");
+      }
+    },
+    readAgain
   );
 }
 
@@ -111,7 +114,11 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (settings: Partial<Settings>) => SettingsService.update(settings),
+    // One key at a time: the settings page saves each control as it changes.
+    mutationFn: (settings: Partial<Settings>) => {
+      const [key, value] = Object.entries(settings)[0];
+      return call(api.saveSetting, { key, value });
+    },
 
     // Optimistic update: Apply settings immediately
     onMutate: async (newSettings: Partial<Settings>) => {

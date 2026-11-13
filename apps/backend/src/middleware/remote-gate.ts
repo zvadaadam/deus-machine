@@ -24,16 +24,8 @@ function isRemoteEnabled(): boolean {
 /**
  * If remote_access_enabled is false, reject any non-localhost request with 403.
  * Localhost requests always pass through (desktop app is unaffected).
- * In-process relay bridge requests (via Hono env bindings) bypass the gate.
  */
 export const remoteGateMiddleware = createMiddleware(async (c, next) => {
-  // In-process requests from the HTTP-over-WS bridge pass relayBridged via
-  // Hono env bindings. Structurally impossible to spoof from external clients.
-  if (c.env?.relayBridged) {
-    await next();
-    return;
-  }
-
   const clientIp = getClientIp(c);
 
   if (isLocalhost(clientIp)) {

@@ -1,35 +1,39 @@
 /**
- * useAgentEvents — subscribe to the canonical agent stream and fold it.
+ * useAgentEvents — follow the canonical agent stream and fold it.
  *
- * The backend forwards every @zvada/agent-server lifecycle envelope verbatim
- * as `agent:event`; `agent:snapshot` replaces the fold after cloud recovery.
- * This hook owns only the browser-shaped parts
- * of consuming it — the socket subscription, the animation-frame delta flush
- * and the debounced page reload. The fold itself lives in `lib/agentEventFold`,
- * so it can be tested without React, a DOM or a socket.
+ * The host sends every @zvada/agent-server lifecycle envelope verbatim on a
+ * chat's `sessionEvents`, and the whole conversation restated after a cloud
+ * recovery. This hook owns only the browser-shaped parts of consuming it —
+ * which chats to follow, the animation-frame delta flush and the debounced
+ * page reload. The fold itself lives in `lib/agentEventFold`, so it can be
+ * tested without React, a DOM or a socket.
  *
- * The subscription and fold belong to one runtime and cover all its sessions:
- * envelopes for OTHER sessions still patch their cached pages, because
- * turn records change when a turn starts or ends, while the delta-only
- * `messages` subscription only carries new messages. Without
- * that, starting a turn and switching tabs left the footer permanently blank.
+ * It follows every chat this runtime's cache holds a message page for, not
+ * only the one on screen: turn records change when a turn starts or ends, and
+ * the `messages` subscription only carries new rows. Without that, starting a
+ * turn and switching tabs left the footer permanently blank. A chat nobody
+ * opened is not followed, so its events are never sent here.
+ *
+ * The stream delivers each event once and in order, and resumes after a
+ * reconnect. When the host cannot say what was missed, the chat's fold is
+ * dropped and its page read again.
  */
 
 import { useEffect } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { onEvent } from "@/platform/ws";
+import { api } from "@shared/api";
+import type { SessionEvent } from "@shared/api/sessions";
+import { getRuntimeClient } from "@/platform/ws";
 import { runtimeForQueryClient } from "@/platform/ws/runtime-client";
 import { queryKeys } from "@/shared/api/queryKeys";
-import type { DecodedWireEventEnvelope } from "@shared/protocol-types";
-import type { AgentConversationSnapshot } from "@shared/cloud-session-snapshot";
 import { isCloudDirectEnabled } from "../cloud/cloudDirectFlag";
 import { isDirectSessionCached } from "../cloud/useIsDirectSession";
 import { notifyCloudAutosaveFailure } from "../cloud/notifyCloudAutosaveFailure";
 import {
-  createStreamCursor,
   flushDeltas,
   hydrateConversation,
   messagesKey,
+  projectOpenParts,
   pruneFolds,
   refetchMessages,
   routeEnvelope,
@@ -37,27 +41,26 @@ import {
   type SessionFold,
 } from "../lib/agentEventFold";
 
-/** A burst of gaps must not become a burst of full-page refetches. */
+/** A burst of resets must not become a burst of full-page refetches. */
 const REFETCH_DEBOUNCE_MS = 250;
 
-// A cache belongs to one authenticated runtime. Retain across shell remounts,
-// never across a host/grant change, even when two hosts reuse the same session ID.
-const projections = new WeakMap<
-  QueryClient,
-  {
-    folds: Map<string, SessionFold>;
-    cursor: ReturnType<typeof createStreamCursor>;
-  }
->();
+// A cache belongs to one authenticated runtime. Folds are retained across shell
+// remounts, never across a host/grant change, even when two hosts reuse the
+// same session ID.
+const projections = new WeakMap<QueryClient, Map<string, SessionFold>>();
+
+/** The session a `["sessions", "messages", id]` cache key is the page of. */
+function messagePageSession(queryKey: readonly unknown[]): string | null {
+  const [scope, resource, sessionId] = queryKey;
+  return scope === "sessions" && resource === "messages" && typeof sessionId === "string"
+    ? sessionId
+    : null;
+}
 
 export function subscribeToAgentEvents(queryClient: QueryClient): () => void {
-  let projection = projections.get(queryClient);
-  if (!projection) {
-    projection = { folds: new Map(), cursor: createStreamCursor() };
-    projections.set(queryClient, projection);
-  }
-  const { folds, cursor } = projection;
-  const runtime = runtimeForQueryClient(queryClient);
+  const folds = projections.get(queryClient) ?? new Map<string, SessionFold>();
+  projections.set(queryClient, folds);
+  const runtime = runtimeForQueryClient(queryClient) ?? getRuntimeClient();
   pruneFolds(queryClient, folds);
   let frame: number | null = null;
   const refetchTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -74,7 +77,6 @@ export function subscribeToAgentEvents(queryClient: QueryClient): () => void {
     queryClient,
     activeSessionId: null,
     folds,
-    cursor,
     scheduleFlush: () => {
       if (frame !== null) return;
       frame = requestAnimationFrame(() => {
@@ -96,67 +98,84 @@ export function subscribeToAgentEvents(queryClient: QueryClient): () => void {
     },
   };
 
-  const unsub = (runtime?.onEvent ?? onEvent)((name: string, raw: unknown) => {
-    if (name !== "agent:snapshot" && name !== "agent:event") return;
-    const sessionId = (raw as { sessionId?: string })?.sessionId;
+  function receive(sessionId: string, update: SessionEvent): void {
     // Disabled observers also exist for direct/unknown sessions. Only the
     // confirmed backend lane may write, including deferred work above.
-    if (!sessionId || !usesBackend(sessionId)) return;
-    const query = queryClient
+    if (!usesBackend(sessionId)) return;
+    const page = queryClient
       .getQueryCache()
       .find({ queryKey: messagesKey(sessionId), exact: true });
-    ctx.activeSessionId = query?.getObserversCount() ? sessionId : null;
-    if (name === "agent:snapshot") {
-      const snapshot = raw as AgentConversationSnapshot;
-      clearTimeout(refetchTimers.get(snapshot.sessionId));
-      refetchTimers.delete(snapshot.sessionId);
-      hydrateConversation(ctx, snapshot);
+    ctx.activeSessionId = page?.getObserversCount() ? sessionId : null;
+    if (update.type === "snapshot") {
+      clearTimeout(refetchTimers.get(sessionId));
+      refetchTimers.delete(sessionId);
+      hydrateConversation(ctx, update.snapshot);
       return;
     }
-    const envelope = raw as DecodedWireEventEnvelope;
-    if (envelope.event.type === "turn.ended" && envelope.seq !== cursor.last(sessionId)) {
-      notifyCloudAutosaveFailure(envelope.event);
-    }
-    routeEnvelope(ctx, envelope);
-  });
+    routeEnvelope(ctx, update.envelope);
+  }
 
+  /** Events were missed and the host cannot say which: what was folded may be behind. */
+  function startOver(sessionId: string): void {
+    folds.delete(sessionId);
+    ctx.requestRefetch(sessionId);
+  }
+
+  // One subscription per chat with a message page, made when the page's query
+  // is (before its first read is sent, so nothing falls between the two).
+  const following = new Map<string, () => void>();
+  function follow(sessionId: string): void {
+    if (following.has(sessionId)) return;
+    following.set(
+      sessionId,
+      runtime.follow(api.sessionEvents, { sessionId }, (update) => receive(sessionId, update), {
+        onReset: () => startOver(sessionId),
+      })
+    );
+  }
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["sessions", "messages"] })) {
+    const sessionId = messagePageSession(query.queryKey);
+    if (!sessionId) continue;
+    follow(sessionId);
+    // A page cached before this started (the shell left and came back on the
+    // same runtime) was followed by nobody in between.
+    startOver(sessionId);
+  }
   const unsubCache = queryClient.getQueryCache().subscribe((event) => {
-    const [scope, resource, sessionId] = event.query.queryKey;
-    if (event.type === "removed" && scope === "sessions" && resource === "messages") {
-      folds.delete(sessionId as string);
-      cursor.reset(sessionId as string);
+    const sessionId = messagePageSession(event.query.queryKey);
+    if (!sessionId) return;
+    if (event.type === "added") follow(sessionId);
+    // A page was read (not written here): the fold is ahead of it wherever a part is open.
+    if (event.type === "updated" && event.action.type === "success" && !event.action.manual) {
+      const fold = folds.get(sessionId);
+      if (fold && usesBackend(sessionId)) projectOpenParts(queryClient, sessionId, fold);
+    }
+    if (event.type === "removed") {
+      folds.delete(sessionId);
+      following.get(sessionId)?.();
+      following.delete(sessionId);
     }
   });
 
-  const clearProjection = () => {
+  // A turn whose work was not saved is told to every client, whatever it follows.
+  const unsubSaves = runtime.follow(api.cloudSaveFailures, {}, notifyCloudAutosaveFailure);
+
+  // Folds are kept through an outage: an open part keeps streaming onto its
+  // fold when the stream resumes. Only a disposed runtime (another host,
+  // account or grant) drops them.
+  const unsubDispose = runtime.onDispose(() => {
     folds.clear();
-    for (const sessionId of cursor.sessions()) cursor.reset(sessionId);
     if (frame !== null) cancelAnimationFrame(frame);
     frame = null;
     refetchTimers.forEach((timer) => clearTimeout(timer));
     refetchTimers.clear();
-  };
-  const unsubState = runtime?.onConnectionChange((connected) => {
-    // Keep folds and cursors through an outage: an open part keeps streaming
-    // onto its fold, and the cursor flags any gap the outage left. Only a
-    // disposed runtime (another host, account or grant) drops them.
-    if (!connected) return;
-    // Recover cached background transcripts too. A delta-only subscription's
-    // new cursor cannot recover turn accounting or parts updated while offline.
-    for (const query of queryClient
-      .getQueryCache()
-      .findAll({ queryKey: ["sessions", "messages"] })) {
-      const sessionId = query.queryKey[2];
-      if (typeof sessionId === "string" && usesBackend(sessionId)) ctx.requestRefetch(sessionId);
-    }
   });
-  const unsubDispose = runtime?.onDispose(clearProjection);
 
   return () => {
-    unsub();
+    following.forEach((stop) => stop());
+    unsubSaves();
     unsubCache();
-    unsubState?.();
-    unsubDispose?.();
+    unsubDispose();
     if (frame !== null) cancelAnimationFrame(frame);
     refetchTimers.forEach((timer) => clearTimeout(timer));
     refetchTimers.clear();

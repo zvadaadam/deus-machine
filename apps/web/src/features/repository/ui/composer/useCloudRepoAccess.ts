@@ -15,7 +15,8 @@
  * install page — event-driven, not a poll — and the gate continues into cloud.
  */
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { sendRequest } from "@/platform/ws";
+import { api } from "@shared/api";
+import { call } from "@/platform/ws";
 import type { CloudRepoAccess } from "@shared/types/cloud-access";
 
 export function useCloudRepoAccess(
@@ -25,7 +26,7 @@ export function useCloudRepoAccess(
   const { enabled = true, watch = false } = opts;
   return useQuery({
     queryKey: ["cloudRepoAccess", repoId],
-    queryFn: () => sendRequest<CloudRepoAccess>("cloudRepoAccess", { repoId: repoId! }),
+    queryFn: () => call(api.cloudRepoAccess, { repoId: repoId! }),
     enabled: enabled && !!repoId,
     // A mint + a probe — cache a few minutes so browsing repos doesn't re-mint.
     // While the gate is live (`watch`), drop staleTime to 0 so the window-focus
