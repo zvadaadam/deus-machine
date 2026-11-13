@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 describe("cloudSimulatorService — start / stop (the outcome arrives as events)", () => {
-  it("calls cloudSim:start with the platform only when one is named", async () => {
+  it("calls cloudSimStart with the platform only when one is named", async () => {
     await cloudSimulatorService.start("ws-1", "android");
     expect(call).toHaveBeenLastCalledWith(
       api.cloudSimStart,
@@ -30,7 +30,7 @@ describe("cloudSimulatorService — start / stop (the outcome arrives as events)
     );
   });
 
-  it("calls cloudSim:stop; no platform means every running device", async () => {
+  it("calls cloudSimStop; no platform means every running device", async () => {
     await cloudSimulatorService.stop("ws-1");
     expect(call).toHaveBeenLastCalledWith(
       api.cloudSimStop,

@@ -2,7 +2,7 @@
  * Browser-feature TanStack Query hooks.
  *
  * Currently just `useLocalServers()` — subscribes to the backend's
- * `local_servers` resource (curated-port HTTP probe) and returns the
+ * `localServers` resource (curated-port HTTP probe) and returns the
  * snapshot. Single global cache; not workspace-scoped because the
  * probe is a property of the host machine, not the active workspace.
  */

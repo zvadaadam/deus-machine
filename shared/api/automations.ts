@@ -33,7 +33,7 @@ export const automations = live({ name: "automations", output: out<Automation[]>
 
 /** One automation's latest runs, newest first. */
 export const automationRuns = live({
-  name: "automation_runs",
+  name: "automationRuns",
   input: automationId,
   output: out<AutomationRun[]>(),
 });
@@ -70,7 +70,7 @@ export const runAutomationNow = write({
 
 /**
  * Read Deus Cloud again: one automation and its runs, or without an id the
- * whole list. The result arrives on `automations` and `automation_runs`.
+ * whole list. The result arrives on `automations` and `automationRuns`.
  */
 export const refreshAutomations = write({
   name: "refreshAutomations",

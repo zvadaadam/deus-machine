@@ -416,7 +416,7 @@ export function registerNativeHandlers(): void {
     return homedir();
   });
 
-  // Git clone is handled by the backend (the `git:clone` operation).
+  // Git clone is handled by the backend (the `gitClone` operation).
 
   // iOS Simulator — all operations moved to backend (simulator-context.ts).
   // The frontend asks the backend over its WebSocket.

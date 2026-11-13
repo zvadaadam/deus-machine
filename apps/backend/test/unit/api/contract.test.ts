@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { api, ops, streams } from "@shared/api";
-import { isStream } from "@shared/api/stream";
 import { registry } from "../../../src/api";
 
 /**
@@ -25,9 +24,8 @@ describe("the operation contract", () => {
     expect(Object.keys(api)).toHaveLength(ops.length + streams.length);
   });
 
-  it("exports each stream under its own name", () => {
-    const exported = Object.entries(api).filter(([, declared]) => isStream(declared));
-    for (const [key, declared] of exported) expect(declared.name).toBe(key);
+  it("exports every operation and stream under the name it has on the wire", () => {
+    for (const [key, declared] of Object.entries(api)) expect(declared.name).toBe(key);
   });
 
   it("only lets reads be subscribed to", () => {

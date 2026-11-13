@@ -32,12 +32,12 @@ describe("local dev servers", () => {
   };
 
   it("keeps the name the discovery sweep invalidates", () => {
-    expect(api.localServers).toMatchObject({ name: "local_servers", kind: "read", live: true });
+    expect(api.localServers).toMatchObject({ name: "localServers", kind: "read", live: true });
   });
 
   it("answers a subscriber in the same tick, from the last sweep", () => {
     servers.getDiscoveredServers.mockReturnValue(snapshot);
-    const live = new Registry(handlers).runLive("local_servers", {}, { caller: LOCAL_CALLER });
+    const live = new Registry(handlers).runLive("localServers", {}, { caller: LOCAL_CALLER });
     expect(live).toBe(snapshot);
   });
 

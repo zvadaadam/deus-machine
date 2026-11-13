@@ -279,7 +279,7 @@ describe("inspectRepo", () => {
   });
 });
 
-describe("git:clone", () => {
+describe("gitClone", () => {
   const url = "https://github.com/example/deus";
 
   it("returns a specific error when the target exists but is not a git repo", async () => {
@@ -376,13 +376,13 @@ describe("git:clone", () => {
   });
 });
 
-describe("git:init", () => {
+describe("gitInit", () => {
   const input = { projectName: "demo", targetPath: TARGET };
 
   it("refuses a name that is not a plain folder name", async () => {
     await expect(run(api.gitInit, { ...input, projectName: "../demo" })).rejects.toMatchObject({
       statusCode: 400,
-      message: "git:init: projectName: Invalid project name",
+      message: "gitInit: projectName: Invalid project name",
     });
   });
 
@@ -392,7 +392,7 @@ describe("git:init", () => {
         run(api.gitInit, { ...input, templateType: "github", templateUrl })
       ).rejects.toMatchObject({
         statusCode: 400,
-        message: "git:init: templateUrl: Only HTTPS URLs are allowed",
+        message: "gitInit: templateUrl: Only HTTPS URLs are allowed",
       });
     }
     expect(mockSpawn).not.toHaveBeenCalled();

@@ -6,6 +6,6 @@ import { handle } from "./registry";
 
 export default [
   // Answers from the last sweep and starts a new one when that is stale; the
-  // server invalidates `local_servers` when each sweep ends.
+  // server invalidates `localServers` when each sweep ends.
   handle(api.localServers, () => getDiscoveredServers()),
 ];

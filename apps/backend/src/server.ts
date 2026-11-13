@@ -135,8 +135,8 @@ async function onListening(port: number): Promise<void> {
 
   // Periodic localhost dev-server discovery. Probes a curated port list
   // every 60s; the refresh listener pushes a fresh snapshot to all
-  // `local_servers` WS subscribers each time a sweep completes.
-  setLocalServerRefreshListener(() => invalidate(["local_servers"]));
+  // `localServers` WS subscribers each time a sweep completes.
+  setLocalServerRefreshListener(() => invalidate(["localServers"]));
   startLocalServerDiscovery();
 
   // Automations are cloud-only (agnt schedules + executes) — just mirror the

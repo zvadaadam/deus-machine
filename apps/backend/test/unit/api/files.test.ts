@@ -189,7 +189,7 @@ describe("fileSearch", () => {
   });
 });
 
-describe("fs:watch and fs:unwatch", () => {
+describe("fsWatch and fsUnwatch", () => {
   it("start and stop the watcher for the named folder", async () => {
     expect(await run(api.fsWatch, { workspacePath: WORKSPACE_PATH })).toBeUndefined();
     expect(watcher.watchWorkspace).toHaveBeenCalledExactlyOnceWith(WORKSPACE_PATH);
@@ -201,11 +201,11 @@ describe("fs:watch and fs:unwatch", () => {
   it("are refused without a folder", async () => {
     await expect(run(api.fsWatch, {} as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "fs:watch requires workspacePath",
+      message: "fsWatch requires workspacePath",
     });
     await expect(run(api.fsUnwatch, {} as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "fs:unwatch requires workspacePath",
+      message: "fsUnwatch requires workspacePath",
     });
     expect(watcher.watchWorkspace).not.toHaveBeenCalled();
   });

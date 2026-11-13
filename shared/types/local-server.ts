@@ -47,7 +47,7 @@ export interface LocalServer {
   source: LocalServerSource;
 }
 
-/** Top-level shape returned by the `local_servers` query. */
+/** Top-level shape returned by the `localServers` query. */
 export interface LocalServersSnapshot {
   /** Servers sorted by port ascending. */
   servers: LocalServer[];

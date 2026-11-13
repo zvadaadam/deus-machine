@@ -52,7 +52,7 @@ describe("the lists", () => {
     const ctx = { caller: LOCAL_CALLER };
 
     expect(live.runLive("automations", {}, ctx)).toEqual([AUTOMATION]);
-    expect(live.runLive("automation_runs", { automationId: "auto-1" }, ctx)).toEqual([
+    expect(live.runLive("automationRuns", { automationId: "auto-1" }, ctx)).toEqual([
       { id: "run-1" },
     ]);
     expect(service.listAutomationRuns).toHaveBeenCalledWith("auto-1");
@@ -61,7 +61,7 @@ describe("the lists", () => {
   it("runs are one automation's: the id is required", async () => {
     await expect(run(api.automationRuns, {} as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "automation_runs requires automationId",
+      message: "automationRuns requires automationId",
     });
     expect(service.listAutomationRuns).not.toHaveBeenCalled();
   });

@@ -50,7 +50,7 @@ export function useStartNewProject({
 
   /**
    * Create a new project from scratch with staleness detection.
-   * Flow: git:init → register repo → create workspace → select it.
+   * Flow: gitInit → register repo → create workspace → select it.
    */
   async function handleStartNewProject(
     projectName: string,

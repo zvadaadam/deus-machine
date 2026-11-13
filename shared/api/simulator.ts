@@ -32,13 +32,13 @@ export const simulatorCapabilities = read({
 });
 
 export const simListDevices = read({
-  name: "sim:listDevices",
+  name: "simListDevices",
   output: out<{ devices: SimulatorInfo[] }>(),
 });
 
 /** Whether the folder holds an Xcode project that Build & Run could build. */
 export const simHasXcodeProject = read({
-  name: "sim:hasXcodeProject",
+  name: "simHasXcodeProject",
   input: z.object({ workspacePath: z.string().min(1) }),
   output: out<{ hasProject: boolean }>(),
 });
@@ -48,7 +48,7 @@ export const simHasXcodeProject = read({
  * the stream's address arrives as a `streamReady` event on `simulatorEvents`, a failure as `streamFailed`.
  */
 export const simStart = write({
-  name: "sim:start",
+  name: "simStart",
   input: workspaceId.extend({
     udid: z.string().min(1),
     /** The device is already booted: skip asking it to boot. */
@@ -58,23 +58,23 @@ export const simStart = write({
 });
 
 /** Stop the workspace's stream. The simulator itself stays booted. */
-export const simStop = write({ name: "sim:stop", input: workspaceId, output: out<void>() });
+export const simStop = write({ name: "simStop", input: workspaceId, output: out<void>() });
 
 export const simTouch = write({
-  name: "sim:touch",
+  name: "simTouch",
   input: point.extend({ touchType: z.enum(["began", "moved", "ended"]).default("began") }),
   output: out<void>(),
 });
 
 /** One swipe of `dx`, `dy` wheel pixels starting at the point. */
 export const simScroll = write({
-  name: "sim:scroll",
+  name: "simScroll",
   input: point.extend({ dx: z.number(), dy: z.number() }),
   output: out<void>(),
 });
 
 export const simKey = write({
-  name: "sim:key",
+  name: "simKey",
   input: workspaceId.extend({
     /** A USB HID usage code, not a macOS virtual keycode. */
     keycode: z.number(),
@@ -85,14 +85,14 @@ export const simKey = write({
 
 /** Press a hardware button, such as `home`. */
 export const simButton = write({
-  name: "sim:button",
+  name: "simButton",
   input: workspaceId.extend({ buttonType: z.string().min(1) }),
   output: out<void>(),
 });
 
 /** The simulator's screen right now, as the bytes of a JPEG. */
 export const simScreenshot = read({
-  name: "sim:screenshot",
+  name: "simScreenshot",
   input: workspaceId,
   output: out<{ bytes: number[] }>(),
 });
@@ -103,14 +103,14 @@ export const simScreenshot = read({
  * with none it falls back to the accessibility tree.
  */
 export const simInspectStart = write({
-  name: "sim:inspectStart",
+  name: "simInspectStart",
   input: workspaceId.extend({ bundleId: z.string().optional() }),
   output: out<{ snapshot: InspectorSnapshot }>(),
 });
 
-/** The elements on screen right now, from whichever source `sim:inspectStart` set up. */
+/** The elements on screen right now, from whichever source `simInspectStart` set up. */
 export const simInspectSnapshot = read({
-  name: "sim:inspectSnapshot",
+  name: "simInspectSnapshot",
   input: workspaceId,
   output: out<{ snapshot: InspectorSnapshot }>(),
 });
@@ -121,7 +121,7 @@ export const simInspectSnapshot = read({
  * `buildComplete` or `buildFailed`.
  */
 export const simBuildAndRun = write({
-  name: "sim:buildAndRun",
+  name: "simBuildAndRun",
   input: workspaceId.extend({
     workspacePath: z.string().min(1),
     /** Required only when the project has more than one scheme. */
@@ -131,19 +131,19 @@ export const simBuildAndRun = write({
 });
 
 export const simLaunchApp = write({
-  name: "sim:launchApp",
+  name: "simLaunchApp",
   input: installedApp,
   output: out<void>(),
 });
 
 export const simTerminateApp = write({
-  name: "sim:terminateApp",
+  name: "simTerminateApp",
   input: installedApp,
   output: out<void>(),
 });
 
 export const simUninstallApp = write({
-  name: "sim:uninstallApp",
+  name: "simUninstallApp",
   input: installedApp,
   output: out<void>(),
 });
@@ -162,14 +162,14 @@ export const cloudSimulator = read({
  * reached; the device's progress arrives as `cloudSimulatorEvents` status events.
  */
 export const cloudSimStart = write({
-  name: "cloudSim:start",
+  name: "cloudSimStart",
   input: cloudDevice,
   output: out<void>(),
 });
 
 /** Ask the sandbox to stop a device; like starting, the outcome arrives as events. */
 export const cloudSimStop = write({
-  name: "cloudSim:stop",
+  name: "cloudSimStop",
   input: cloudDevice,
   output: out<void>(),
 });

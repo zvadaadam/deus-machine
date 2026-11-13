@@ -103,9 +103,9 @@ async function smokeBackendCommands(port) {
     return;
   }
 
-  const answer = await readFromBackend(port, "sim:listDevices", {}, 45_000);
+  const answer = await readFromBackend(port, "simListDevices", {}, 45_000);
   if (!Array.isArray(answer?.devices)) {
-    throw new Error(`sim:listDevices returned unexpected payload: ${JSON.stringify(answer)}`);
+    throw new Error(`simListDevices returned unexpected payload: ${JSON.stringify(answer)}`);
   }
   console.log(
     `[runtime-smoke] packaged backend simulator q:request listed ${answer.devices.length} devices`

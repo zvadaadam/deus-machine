@@ -13,7 +13,7 @@ const size = { cols: z.number().int().positive(), rows: z.number().int().positiv
  * `terminalOutput` data events, and its end as an exit event, under that id.
  */
 export const ptySpawn = write({
-  name: "pty:spawn",
+  name: "ptySpawn",
   input: terminal.extend({
     command: z.string().default("bash"),
     args: z.array(z.string()).default([]),
@@ -28,7 +28,7 @@ export const ptySpawn = write({
 
 /** Type into a terminal. */
 export const ptyWrite = write({
-  name: "pty:write",
+  name: "ptyWrite",
   input: terminal.extend({
     /** The input's bytes, one number each. */
     data: z.array(z.number()),
@@ -37,13 +37,13 @@ export const ptyWrite = write({
 });
 
 export const ptyResize = write({
-  name: "pty:resize",
+  name: "ptyResize",
   input: terminal.extend(size),
   output: out<void>(),
 });
 
 /** Close a terminal. One that already ended is not an error. */
-export const ptyKill = write({ name: "pty:kill", input: terminal, output: out<void>() });
+export const ptyKill = write({ name: "ptyKill", input: terminal, output: out<void>() });
 
 /** What a terminal prints, and its end. */
 export const terminalOutput = stream({

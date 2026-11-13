@@ -33,7 +33,7 @@ import { getCloudModelLists } from "../agent/cloud/models";
 /** Platform parity: next-fire gaps must be at least 5 minutes apart. */
 export const MIN_FIRE_INTERVAL_MS = 5 * 60 * 1000;
 
-const AUTOMATION_RESOURCES = ["automations", "automation_runs"] as const;
+const AUTOMATION_RESOURCES = ["automations", "automationRuns"] as const;
 
 function assertCurrentAccount(identity: string): void {
   if (getCloudConnectionIdentity() !== identity) {

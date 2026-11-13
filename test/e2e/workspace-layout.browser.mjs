@@ -140,7 +140,7 @@ const server = await createServer({
               : json({}, 503);
           if (resource === "simulatorCapabilities") return json({ available: true });
           if (resource === "diffFiles") return json({ files: [] });
-          if (resource === "local_servers")
+          if (resource === "localServers")
             return json({ servers: [], isLoading: false, refreshedAt: null });
           if (req.url.includes("environment")) return json({ tasks: [] });
           if (resource === "ghStatus") return json({ isInstalled: true, isAuthenticated: true });

@@ -14,7 +14,7 @@ import {
 } from "../services/automations";
 import { handle } from "./registry";
 
-// The service invalidates `automations` and `automation_runs` itself, and
+// The service invalidates `automations` and `automationRuns` itself, and
 // every write waits for Deus Cloud: a refusal there fails the write.
 export default [
   handle(api.automations, () => listAutomations()),

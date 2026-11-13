@@ -82,25 +82,25 @@ describe("which simulator operations are reads", () => {
     expect(kinds).toEqual({
       // Ask as often as you like: nothing on the Mac or the device changes.
       simulatorCapabilities: "read",
-      "sim:listDevices": "read",
-      "sim:hasXcodeProject": "read",
-      "sim:screenshot": "read",
-      "sim:inspectSnapshot": "read",
+      simListDevices: "read",
+      simHasXcodeProject: "read",
+      simScreenshot: "read",
+      simInspectSnapshot: "read",
       cloudSimulator: "read",
       // Start, stop or act on something: sent once, never repeated.
-      "sim:start": "write",
-      "sim:stop": "write",
-      "sim:touch": "write",
-      "sim:scroll": "write",
-      "sim:key": "write",
-      "sim:button": "write",
-      "sim:inspectStart": "write",
-      "sim:buildAndRun": "write",
-      "sim:launchApp": "write",
-      "sim:terminateApp": "write",
-      "sim:uninstallApp": "write",
-      "cloudSim:start": "write",
-      "cloudSim:stop": "write",
+      simStart: "write",
+      simStop: "write",
+      simTouch: "write",
+      simScroll: "write",
+      simKey: "write",
+      simButton: "write",
+      simInspectStart: "write",
+      simBuildAndRun: "write",
+      simLaunchApp: "write",
+      simTerminateApp: "write",
+      simUninstallApp: "write",
+      cloudSimStart: "write",
+      cloudSimStop: "write",
       cloudSimExec: "write",
     });
     expect(handlers).toHaveLength(Object.values(api).filter(isOp).length);
@@ -149,7 +149,7 @@ describe("the local simulator's reads", () => {
     expect(sim.hasXcodeProject).toHaveBeenCalledWith("/repo/ws");
     await expect(run(api.simHasXcodeProject, {} as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "sim:hasXcodeProject requires workspacePath",
+      message: "simHasXcodeProject requires workspacePath",
     });
   });
 
@@ -233,7 +233,7 @@ describe("input sent to the simulator", () => {
   it("refuses a touch without numeric coordinates or with an unknown phase", async () => {
     await expect(run(api.simTouch, { ...WS, x: 0.25 } as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "sim:touch requires y",
+      message: "simTouch requires y",
     });
     await expect(run(api.simTouch, { ...WS, x: "0.25", y: 0.5 } as never)).rejects.toMatchObject({
       statusCode: 400,
@@ -257,7 +257,7 @@ describe("input sent to the simulator", () => {
     await run(api.simScroll, { ...WS, x: 0.5, y: 0.5, dx: 0, dy: -120 });
     expect(sim.sendScroll).toHaveBeenCalledWith("ws-1", 0.5, 0.5, 0, -120);
     await expect(run(api.simScroll, { ...WS, x: 0.5, y: 0.5, dx: 0 } as never)).rejects.toThrow(
-      "sim:scroll requires dy"
+      "simScroll requires dy"
     );
   });
 
@@ -266,13 +266,13 @@ describe("input sent to the simulator", () => {
     expect(sim.sendKey).toHaveBeenLastCalledWith("ws-1", 4, "down");
     await run(api.simKey, { ...WS, keycode: 4, direction: "up" });
     expect(sim.sendKey).toHaveBeenLastCalledWith("ws-1", 4, "up");
-    await expect(run(api.simKey, WS as never)).rejects.toThrow("sim:key requires keycode");
+    await expect(run(api.simKey, WS as never)).rejects.toThrow("simKey requires keycode");
   });
 
   it("forwards a hardware button", async () => {
     await run(api.simButton, { ...WS, buttonType: "home" });
     expect(sim.sendButton).toHaveBeenCalledWith("ws-1", "home");
-    await expect(run(api.simButton, WS as never)).rejects.toThrow("sim:button requires buttonType");
+    await expect(run(api.simButton, WS as never)).rejects.toThrow("simButton requires buttonType");
   });
 });
 

@@ -40,7 +40,7 @@ it("surfaces a refused spawn so Terminal can offer retry", async () => {
 it("forwards cloud routing and resolves an accepted spawn with the terminal's id", async () => {
   sendMutate.mockResolvedValue({ success: true, data: { id: "terminal" } });
   await expect(client.call(api.ptySpawn, options)).resolves.toEqual({ id: "terminal" });
-  expect(sendMutate).toHaveBeenCalledExactlyOnceWith("pty:spawn", options, undefined);
+  expect(sendMutate).toHaveBeenCalledExactlyOnceWith("ptySpawn", options, undefined);
 });
 
 it("preserves transport errors", async () => {
@@ -54,7 +54,7 @@ it("sends input as an array of byte values", async () => {
     client.call(api.ptyWrite, { id: "terminal", data: [108, 115, 13] })
   ).resolves.toBeUndefined();
   expect(sendMutate).toHaveBeenCalledExactlyOnceWith(
-    "pty:write",
+    "ptyWrite",
     { id: "terminal", data: [108, 115, 13] },
     undefined
   );

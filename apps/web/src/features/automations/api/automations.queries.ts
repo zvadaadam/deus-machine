@@ -1,7 +1,7 @@
 /**
  * Automations data layer.
  *
- * Reads flow in via WebSocket (q:subscribe "automations" / "automation_runs"
+ * Reads flow in via WebSocket (q:subscribe "automations" / "automationRuns"
  * → snapshots on every invalidate); the queryFn is the initial-load fallback.
  * staleTime Infinity — freshness is the subscription's job.
  */

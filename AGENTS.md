@@ -300,7 +300,8 @@ the catalog can move to a package the day Deus Cloud reads it too.
 ### Adding an operation or a stream
 
 1. Declare it in `shared/api/<domain>.ts`: `read` (asked once), `live` (a read
-   clients subscribe to), `write`, or `stream` / `resumableStream` (events).
+   clients subscribe to), `write`, or `stream` / `resumableStream` (events). Its
+   `name` on the wire is the name it is exported under (a test holds that).
 2. Answer it in `apps/backend/src/api/<domain>.ts` with `handle(api.<name>, fn)`.
    A live read's handler is synchronous. A stream has no handler: the service
    that produces the events calls `publish(api.<name>, scope, event)`.

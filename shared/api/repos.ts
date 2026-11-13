@@ -71,7 +71,7 @@ export const saveRepoEnvironmentFile = write({
  * as `git-clone-progress` events.
  */
 export const gitClone = write({
-  name: "git:clone",
+  name: "gitClone",
   input: z.object({ url: z.string().min(1), targetPath: z.string().min(1) }),
   /** Where the repository now is, with `~` expanded. */
   output: out<{ path: string }>(),
@@ -82,7 +82,7 @@ export const gitClone = write({
  * in, a private repository for it. Progress arrives as `git-init-progress` events.
  */
 export const gitInit = write({
-  name: "git:init",
+  name: "gitInit",
   input: z
     .object({
       projectName: z

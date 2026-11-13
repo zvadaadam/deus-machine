@@ -167,7 +167,7 @@ export function refreshDiscovery(): Promise<LocalServersSnapshot> {
 
 /**
  * Register a callback fired after each completed refresh.
- * Used by query-engine to invalidate("local_servers") subscribers.
+ * Used by query-engine to invalidate("localServers") subscribers.
  */
 export function setRefreshListener(listener: (() => void) | null): void {
   onRefreshComplete = listener;

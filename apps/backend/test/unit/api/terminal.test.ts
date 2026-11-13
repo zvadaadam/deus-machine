@@ -19,7 +19,7 @@ const run = operations(terminalHandlers);
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("pty:spawn", () => {
+describe("ptySpawn", () => {
   it("opens the terminal the client described and answers with its id", async () => {
     const options = {
       id: "t1",
@@ -67,13 +67,13 @@ describe("pty:spawn", () => {
   it("is refused without an id", async () => {
     await expect(run(api.ptySpawn, {} as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "pty:spawn requires id",
+      message: "ptySpawn requires id",
     });
     expect(ptyRouter.open).not.toHaveBeenCalled();
   });
 });
 
-describe("pty:write", () => {
+describe("ptyWrite", () => {
   it("passes the bytes through as numbers", async () => {
     expect(await run(api.ptyWrite, { id: "t1", data: [108, 115, 13] })).toBeUndefined();
     expect(ptyRouter.write).toHaveBeenCalledExactlyOnceWith("t1", [108, 115, 13]);
@@ -82,7 +82,7 @@ describe("pty:write", () => {
   it("is refused without data", async () => {
     await expect(run(api.ptyWrite, { id: "t1" } as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "pty:write requires data",
+      message: "ptyWrite requires data",
     });
     await expect(run(api.ptyWrite, { id: "t1", data: "ls\r" } as never)).rejects.toMatchObject({
       statusCode: 400,
@@ -101,7 +101,7 @@ describe("pty:write", () => {
   });
 });
 
-describe("pty:resize", () => {
+describe("ptyResize", () => {
   it("resizes the terminal", async () => {
     expect(await run(api.ptyResize, { id: "t1", cols: 100, rows: 30 })).toBeUndefined();
     expect(ptyRouter.resize).toHaveBeenCalledExactlyOnceWith("t1", 100, 30);
@@ -110,7 +110,7 @@ describe("pty:resize", () => {
   it("is refused without a whole, positive size", async () => {
     await expect(run(api.ptyResize, { id: "t1", cols: 100 } as never)).rejects.toMatchObject({
       statusCode: 400,
-      message: "pty:resize requires rows",
+      message: "ptyResize requires rows",
     });
     await expect(run(api.ptyResize, { id: "t1", cols: 0, rows: 30 })).rejects.toMatchObject({
       statusCode: 400,
@@ -119,7 +119,7 @@ describe("pty:resize", () => {
   });
 });
 
-describe("pty:kill", () => {
+describe("ptyKill", () => {
   it("closes the terminal", async () => {
     expect(await run(api.ptyKill, { id: "t1" })).toBeUndefined();
     expect(ptyRouter.kill).toHaveBeenCalledExactlyOnceWith("t1");
