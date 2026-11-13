@@ -99,18 +99,20 @@ const TRANSCRIPT_RESOURCES: LiveName[] = ["session"];
 /**
  * The events the frontend does NOT receive.
  *
- * Everything else is pushed verbatim, because the frontend folds it. These
- * five reach the UI another way or not at all: the context gauge and the
- * session's terminal state are session COLUMNS (q:delta carries them), the
- * "working" flip is written optimistically by the send command before
- * `turn.started` could arrive, the service answers a permission request (a
- * plan goes to the plan card as a request on `toolRequests`, a tool's approval is allowed:
+ * Everything else is published verbatim, because the frontend folds it. These
+ * reach the UI another way or not at all: the context gauge and the session's
+ * terminal state are session COLUMNS (the `session` read carries them), the
+ * service answers a permission request (a plan goes to the plan card as a
+ * request on `toolRequests`, a tool's approval is allowed:
  * shared/agent-permissions.ts), and deus never sets `RunConfig.includeRaw`.
+ *
+ * `turn.started` IS published: it is where a turn's start time and what it
+ * runs on come from, and a client has no other source for them while the turn
+ * is live (the transcript page is read once, then only the stream changes it).
  */
 const NOT_PUSHED = new Set([
   "session.ended",
   "session.usage",
-  "turn.started",
   "permission.requested",
   "permission.resolved",
   "raw",

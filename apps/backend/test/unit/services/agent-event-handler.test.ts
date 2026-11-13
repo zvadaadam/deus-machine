@@ -368,7 +368,6 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
     it("publishes nothing for the events that reach the clients another way, or not at all", () => {
       const quiet: LifecycleEvent[] = [
-        { type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T },
         { type: "session.usage", sessionId: SESSION, turnId: TURN, used: 1, timestamp: T },
         {
           type: "permission.requested",
@@ -401,6 +400,16 @@ describe("agent event handler (canonical lifecycle stream)", () => {
       for (const event of quiet) handler.handle(envelope(event));
 
       expect(mockPublish).not.toHaveBeenCalled();
+    });
+
+    it("publishes a turn's start: a client has no other source for when it began", () => {
+      handler.handle(
+        envelope({ type: "turn.started", sessionId: SESSION, turnId: TURN, timestamp: T })
+      );
+      // Kept, so a client that was away when the turn began still learns its start.
+      expect(pushed().map(({ envelope: e, keep }) => [e.event.type, keep])).toEqual([
+        ["turn.started", true],
+      ]);
     });
   });
 
