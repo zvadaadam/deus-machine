@@ -9,24 +9,14 @@
 // for its own subscribers.
 
 import type { SessionEvent } from "@shared/api/sessions";
-import { findConversationMessage } from "@shared/conversation-rows";
+import { findConversationMessage, isOpenPart as isOpen } from "@shared/conversation-rows";
 import {
   isLiveEnvelope,
   isUnknownEvent,
-  isUnknownPart,
   type ConversationState,
   type DecodedMessagePartEvent,
   type DecodedWireEventEnvelope,
-  type Part,
-  type UnknownPart,
 } from "@shared/protocol-types";
-
-/** Content beyond its last kept snapshot may still arrive for this part. */
-function isOpen(part: Part | UnknownPart): boolean {
-  if (isUnknownPart(part)) return false;
-  if (part.type === "text" || part.type === "reasoning") return part.state === "streaming";
-  return part.type === "tool" && part.state.status === "pending";
-}
 
 interface Chat {
   /** The engine's number of the chat's last kept event: what a live frame carries. */

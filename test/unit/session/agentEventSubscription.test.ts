@@ -356,6 +356,33 @@ function delta(text: string, chat = sessionId, from = host): void {
   );
 }
 
+/** The host sends a part still being typed as it stands: live, under the chat's current number. */
+function typing(text: string, chat = sessionId, from = host): void {
+  const event = {
+    type: "message.part",
+    sessionId: chat,
+    turnId: TURN,
+    messageId: "answer",
+    outputIndex: 1,
+    partIndex: 0,
+    part: {
+      type: "text",
+      id: "part-answer",
+      sessionId: chat,
+      messageId: "answer",
+      text,
+      state: "streaming",
+    },
+    timestamp: T,
+  } as LifecycleEvent;
+  const seq = engineSeq.get(chat) ?? 0;
+  from.publish(
+    chat,
+    { type: "event", envelope: { sessionId: chat, seq, live: true, event } },
+    false
+  );
+}
+
 function started(chat = sessionId): LifecycleEvent {
   return {
     type: "message.started",
@@ -442,6 +469,51 @@ describe("shell agent stream subscription", () => {
       queryClient.setQueryData(messagesKey(""), page());
 
       expect(host.subscriptions()).toEqual([]);
+    });
+
+    it("shows a reply being typed in a chat whose page was read ahead, from the first token on", async () => {
+      // Hovering a chat reads its page ahead: it is followed from the moment its query exists,
+      // so the host's opening arrives before the page does, and before anyone looks at it.
+      let land!: (page: PaginatedMessages) => void;
+      const read = () => new Promise<PaginatedMessages>((resolve) => (land = resolve));
+      const reading = queryClient.prefetchQuery({
+        queryKey: messagesKey(sessionId),
+        queryFn: read,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.subscriptions()).toHaveLength(1);
+      typing("Typed so far");
+      // The database holds the part as it was when it opened.
+      land(page([message("answer", "")]));
+      await reading;
+      expect(text()).toBe("Typed so far");
+
+      // The chat is opened: the tokens that follow extend what was typed before.
+      observe(read);
+      delta(" and on");
+      flushFrame();
+      expect(text()).toBe("Typed so far and on");
+    });
+
+    it("reads again the pages cached before it started: nobody followed them in between", async () => {
+      const read = vi.fn(async () => page([message("answer", "Read again")]));
+      await queryClient.fetchQuery({ queryKey: messagesKey(sessionId), queryFn: read });
+      observe(read);
+      restate("Streaming");
+      delta(" so far");
+      flushFrame();
+      expect(text()).toBe("Streaming so far");
+
+      // The shell leaves and returns on the same runtime, with the page still cached.
+      stopSubscription();
+      stopSubscription = subscribeToAgentEvents(queryClient);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(text()).toBe("Read again");
+      // What was folded before went with it.
+      delta(" late");
+      flushFrame();
+      expect(text()).toBe("Read again");
     });
   });
 
@@ -561,6 +633,26 @@ describe("shell agent stream subscription", () => {
       delta(" continues", other);
       flushFrame();
       expect(text("answer", other)).toBe("Other continues");
+    });
+
+    it("keeps the part the host restates after a reset when the page read lands on it", async () => {
+      // The database holds an open part as it was when it opened, not what was typed since.
+      const read = vi.fn(async () => page([message("answer", "Stored")]));
+      await queryClient.fetchQuery({ queryKey: messagesKey(sessionId), queryFn: read });
+      observe(read);
+
+      host.drop();
+      await host.comeBack();
+      host.reset(sessionId);
+      typing("Stored, and typed since");
+      expect(text()).toBe("Stored, and typed since");
+
+      await vi.advanceTimersByTimeAsync(250);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(text()).toBe("Stored, and typed since");
+      delta(" then");
+      flushFrame();
+      expect(text()).toBe("Stored, and typed since then");
     });
   });
 

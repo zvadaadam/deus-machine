@@ -785,15 +785,17 @@ describe("background sessions", () => {
     expect(h.page(OTHER)!.messages[0].parts!.map((p) => p.id)).toEqual(["bp1"]);
   });
 
-  it("never invents a page — or a fold — for a session that was never opened", () => {
+  it("never invents a page for a chat whose page has not arrived, and folds what it is sent meanwhile", () => {
     const h = harness(SESSION);
 
     h.feed(started({ sessionId: OTHER, messageId: "b1" }), { sessionId: OTHER });
 
+    // A page made from a fragment would claim there is nothing older.
     expect(h.page(OTHER)).toBeUndefined();
-    // Not folding it is what keeps the memory cost bounded by the pages the
-    // cache already holds, rather than by every session on the socket.
-    expect(h.ctx.folds.has(OTHER)).toBe(false);
+    // The fold is kept: a part's tokens only extend a part it has seen open.
+    // Only followed chats are sent events, and a chat is followed while its
+    // page's query exists, so the folds stay bounded by the cache.
+    expect(h.ctx.folds.has(OTHER)).toBe(true);
   });
 
   it("skips deltas for background sessions — the snapshot restates them", () => {

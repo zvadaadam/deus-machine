@@ -218,7 +218,14 @@ export function subscribe(
  */
 export function resetSubscribers<S extends AnyStream>(stream: S, scope: ScopeOf<S>): void {
   const scopeRecord = scope as Record<string, unknown>;
-  const position = logs.get(stream.name)?.get(subscriptionKey(scope))?.latest ?? firstSeq;
+  let position: number | undefined;
+  if (stream.resumable) {
+    // A follower that is away now returns with an earlier number, and nothing kept leads
+    // from there to here: it is told to read again too.
+    const log = logFor(stream.name, subscriptionKey(scope));
+    log.kept = [];
+    position = ++log.latest;
+  }
   for (const sub of subscriptions.values()) {
     if (sub.stream !== stream.name || !scopeMatches(sub.filter, scopeRecord)) continue;
     send(sub.connectionId, {

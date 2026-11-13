@@ -33,6 +33,7 @@ import {
   flushDeltas,
   hydrateConversation,
   messagesKey,
+  projectOpenParts,
   pruneFolds,
   refetchMessages,
   routeEnvelope,
@@ -134,12 +135,21 @@ export function subscribeToAgentEvents(queryClient: QueryClient): () => void {
   }
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ["sessions", "messages"] })) {
     const sessionId = messagePageSession(query.queryKey);
-    if (sessionId) follow(sessionId);
+    if (!sessionId) continue;
+    follow(sessionId);
+    // A page cached before this started (the shell left and came back on the
+    // same runtime) was followed by nobody in between.
+    startOver(sessionId);
   }
   const unsubCache = queryClient.getQueryCache().subscribe((event) => {
     const sessionId = messagePageSession(event.query.queryKey);
     if (!sessionId) return;
     if (event.type === "added") follow(sessionId);
+    // A page was read (not written here): the fold is ahead of it wherever a part is open.
+    if (event.type === "updated" && event.action.type === "success" && !event.action.manual) {
+      const fold = folds.get(sessionId);
+      if (fold && usesBackend(sessionId)) projectOpenParts(queryClient, sessionId, fold);
+    }
     if (event.type === "removed") {
       folds.delete(sessionId);
       following.get(sessionId)?.();

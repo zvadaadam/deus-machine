@@ -251,10 +251,30 @@ describe("streams", () => {
 
     resetSubscribers(events, { sessionId: "a" });
 
-    // With where the scope stands: what follows is delivered from there.
-    expect(heard(watching)).toEqual([{ type: "q:reset", id: "s1", seq: 1 }]);
+    // With where the scope stands now: what follows is delivered from there.
+    expect(heard(watching)).toEqual([{ type: "q:reset", id: "s1", seq: 2 }]);
     // A subscription across scopes hears it too, without a number; another chat's does not.
     expect(heard(elsewhere)).toEqual([{ type: "q:reset", id: "all" }]);
+  });
+
+  it("tells a follower that was away during that change to read again when it returns", () => {
+    connect("away");
+    publish(events, { sessionId: "a" }, { n: 1 });
+    subscribe("away", "s1", events, { sessionId: "a" });
+    dropConnection("away");
+
+    resetSubscribers(events, { sessionId: "a" });
+
+    const back = connect("away");
+    subscribe("away", "s1", events, { sessionId: "a" }, 1);
+    expect(back).toEqual([
+      { type: "q:reset", id: "s1", seq: 2 },
+      { type: "q:subscribed", id: "s1", seq: 2 },
+    ]);
+    // One that returns after it is at the scope's position: nothing to read again.
+    const later = connect("later");
+    subscribe("later", "s1", events, { sessionId: "a" }, 2);
+    expect(heard(later)).toEqual([]);
   });
 
   it("opens a subscription with the state events alone do not restate, after what was missed", () => {

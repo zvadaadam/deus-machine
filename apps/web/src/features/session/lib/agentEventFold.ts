@@ -56,6 +56,7 @@ import {
   compactionRow,
   findConversationCompaction,
   findConversationMessage,
+  isOpenPart,
   turnRecord,
 } from "@shared/conversation-rows";
 import {
@@ -130,11 +131,10 @@ export function refetchMessages(qc: QueryClient, sessionId: string): Promise<voi
 /**
  * Drop folds for sessions the message cache no longer holds a page for.
  *
- * `routeEnvelope` refuses to fold a session with no cached page, so such a fold
- * is unreachable state: the page was garbage-collected out from under it and
- * nothing will project it again. Pruning ties the fold set to the cache it
- * writes into, which is what bounds folds that outlive a panel — see the note
- * in `useAgentEvents`.
+ * Such a fold is unreachable state: the page was garbage-collected out from
+ * under it and nothing will project it again. Pruning ties the fold set to the
+ * cache it writes into, which is what bounds folds that outlive a panel — see
+ * the note in `useAgentEvents`.
  */
 export function pruneFolds(qc: QueryClient, folds: Map<string, SessionFold>): void {
   for (const sessionId of [...folds.keys()]) {
@@ -174,15 +174,30 @@ export function hydrateConversation(
   }
 }
 
-/** Fold one envelope of the host's stream, for a session someone holds a page of. */
+/**
+ * Fold one envelope of the host's stream. A chat is followed from the moment
+ * its page is asked for, so its first events can arrive before the page does:
+ * they are folded all the same (a part's tokens only extend a part the fold
+ * knows), and written once there is a page to write to. Only a chat on screen
+ * seeds one.
+ */
 export function routeEnvelope(ctx: AgentStreamContext, envelope: DecodedWireEventEnvelope): void {
   const { sessionId } = envelope;
-  const live = sessionId === ctx.activeSessionId;
-  // Never fold for a session nobody has opened: seeding a page from a
-  // mid-stream fragment would invent a `has_older: false` transcript.
-  if (!live && !ctx.queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))) return;
+  applyEvent(ctx, sessionId, envelope.event, sessionId === ctx.activeSessionId);
+}
 
-  applyEvent(ctx, sessionId, envelope.event, live);
+/**
+ * A page read from the database holds each part as it was last stored. For a
+ * part still being typed that is behind the fold, which has every token since:
+ * put the fold's row back onto the page just read.
+ */
+export function projectOpenParts(qc: QueryClient, sessionId: string, fold: SessionFold): void {
+  const page = qc.getQueryData<PaginatedMessages>(messagesKey(sessionId));
+  for (const row of page?.messages ?? []) {
+    if (findConversationMessage(fold.state, row.id)?.parts.some(isOpenPart)) {
+      writeMessage(qc, sessionId, fold.state, row.id, { seed: false });
+    }
+  }
 }
 
 function foldFor(ctx: AgentStreamContext, sessionId: string): SessionFold {
