@@ -13,6 +13,7 @@ import { findConversationMessage, isOpenPart as isOpen } from "@shared/conversat
 import {
   isLiveEnvelope,
   isUnknownEvent,
+  type AnyLifecycleEvent,
   type ConversationState,
   type DecodedMessagePartEvent,
   type DecodedWireEventEnvelope,
@@ -47,6 +48,20 @@ export class OpenParts {
         if (opened.turnId === event.turnId) chat.opened.delete(partId);
       }
     }
+  }
+
+  /**
+   * A chat's transcript was restated whole (a cloud chat restored while a
+   * reply is being typed). `events` are the ones it was rebuilt from: the
+   * parts they leave open are the chat's open parts.
+   */
+  restored(sessionId: string, events: readonly AnyLifecycleEvent[]): void {
+    const chat: Chat = { seq: this.chats.get(sessionId)?.seq ?? 0, opened: new Map() };
+    for (const event of events) {
+      if (isUnknownEvent(event) || event.type !== "message.part" || !isOpen(event.part)) continue;
+      chat.opened.set(event.part.id, { ...event, sessionId });
+    }
+    this.chats.set(sessionId, chat);
   }
 
   /**

@@ -21,7 +21,10 @@ import { turnProviderCredentialSource } from "@shared/conversation-rows";
 import { match } from "ts-pattern";
 import type { SessionEventGap } from "@zvada/agent-server/client";
 import type { SessionSnapshotEvent } from "@deus-hq/api";
-import type { RestoredCloudConversation } from "@shared/cloud-session-snapshot";
+import {
+  projectCloudSnapshot,
+  type RestoredCloudConversation,
+} from "@shared/cloud-session-snapshot";
 import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
 import type { ConversationChange, ConversationState } from "@zvada/agent-server/protocol";
 import {
@@ -198,6 +201,8 @@ export function createAgentEventHandler(): AgentEventHandler {
         return;
       }
       state.conversation = result.value.conversation;
+      // A reply being typed when the transcript was restored is open from here on.
+      typing.restored(sessionId, projectCloudSnapshot(snapshot).events);
       if (!pending) {
         state.turnId = snapshot.state.currentTurnId ?? undefined;
         state.errorReported = snapshot.state.status === "error";

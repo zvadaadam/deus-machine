@@ -14,6 +14,9 @@ import type {
   TurnEndedEvent,
   WireEventEnvelope,
 } from "@zvada/agent-server/protocol";
+import { emptyConversation, reduceConversationWithChanges } from "@zvada/agent-server/protocol";
+import { SessionSnapshotEventSchema, type SessionSnapshotEvent } from "@deus-hq/api";
+import { projectCloudSnapshot } from "@shared/cloud-session-snapshot";
 import type { ChangeWrite, TurnOutcomeWrite } from "../../../src/services/agent/persistence";
 
 // ============================================================================
@@ -29,8 +32,10 @@ const {
   mockPublish,
   mockOpenWith,
   mockRefreshPr,
+  mockRestoreCloudSnapshot,
   outcomes,
 } = vi.hoisted(() => ({
+  mockRestoreCloudSnapshot: vi.fn<(...args: any[]) => any>(),
   mockPersistAgentSessionId: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
   mockPersistChanges: vi.fn<(...args: any[]) => any>(),
   mockPersistSessionError: vi.fn<(...args: any[]) => any>(() => ({ ok: true, value: undefined })),
@@ -56,6 +61,9 @@ vi.mock("../../../src/services/streams", () => ({
 }));
 vi.mock("../../../src/services/pr-snapshot.service", () => ({
   refreshPrSnapshotForSession: mockRefreshPr,
+}));
+vi.mock("../../../src/services/agent/cloud/snapshot", () => ({
+  restoreCloudSnapshot: mockRestoreCloudSnapshot,
 }));
 
 /**
@@ -624,6 +632,90 @@ describe("agent event handler (canonical lifecycle stream)", () => {
 
       handler.handle(envelope(partEvent));
       expect(opening({ sessionId: SESSION })).toEqual([]);
+    });
+
+    it("opens it with the part a restored cloud transcript left being typed", () => {
+      // The backend attached to a cloud chat mid-reply: the platform's snapshot holds the
+      // part as typed so far, and its tokens keep arriving on the live stream.
+      const snapshot = SessionSnapshotEventSchema.parse({
+        type: "session.snapshot",
+        state: {
+          sessionId: "agnt-session",
+          organizationId: "org",
+          workspaceId: "workspace",
+          status: "ready",
+          currentTurnId: TURN,
+        },
+        messages: [
+          {
+            id: "msg-1",
+            sessionId: "agnt-session",
+            turnId: TURN,
+            messageIndex: 0,
+            outputIndex: 1,
+            role: "assistant",
+            createdAt: T,
+            parts: [
+              {
+                type: "text",
+                id: "part-1",
+                sessionId: "agnt-session",
+                messageId: "msg-1",
+                text: "Typed so",
+                state: "streaming",
+              },
+            ],
+          },
+        ],
+      });
+      mockRestoreCloudSnapshot.mockImplementation(
+        (sessionId: string, restored: SessionSnapshotEvent) => ({
+          ok: true,
+          value: {
+            conversation: projectCloudSnapshot(restored).events.reduce(
+              (state, event) => reduceConversationWithChanges(state, { ...event, sessionId }).state,
+              emptyConversation()
+            ),
+            messageIds: ["msg-1"],
+            providerCredentialSources: {},
+          },
+        })
+      );
+      handler.hydrateCloudSnapshot(SESSION, snapshot);
+      handler.handle(
+        envelope({
+          type: "message.part.delta",
+          sessionId: SESSION,
+          turnId: TURN,
+          messageId: "msg-1",
+          outputIndex: 1,
+          partIndex: 0,
+          partId: "part-1",
+          delta: { type: "text", text: " far" },
+          timestamp: T,
+        })
+      );
+
+      // A client that opens the chat only now is sent the part as it stands.
+      const [, opening] = mockOpenWith.mock.calls.at(-1)!;
+      expect(opening({ sessionId: SESSION })).toEqual([
+        {
+          type: "event",
+          envelope: expect.objectContaining({
+            sessionId: SESSION,
+            live: true,
+            event: expect.objectContaining({
+              type: "message.part",
+              sessionId: SESSION,
+              part: expect.objectContaining({
+                id: "part-1",
+                text: "Typed so far",
+                state: "streaming",
+              }),
+            }),
+          }),
+        },
+      ]);
     });
   });
 
