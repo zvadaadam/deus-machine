@@ -178,12 +178,15 @@ export function hydrateConversation(
  * Fold one envelope of the host's stream. A chat is followed from the moment
  * its page is asked for, so its first events can arrive before the page does:
  * they are folded all the same (a part's tokens only extend a part the fold
- * knows), and written once there is a page to write to. Only a chat on screen
- * seeds one.
+ * knows), but written nowhere until the page is there. A page made from them
+ * would claim there is nothing older and, fresh forever, would keep the
+ * chat's history from being read. Only a chat on screen may start one.
  */
 export function routeEnvelope(ctx: AgentStreamContext, envelope: DecodedWireEventEnvelope): void {
   const { sessionId } = envelope;
-  applyEvent(ctx, sessionId, envelope.event, sessionId === ctx.activeSessionId);
+  const live = sessionId === ctx.activeSessionId;
+  const paged = ctx.queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId));
+  applyEvent(ctx, sessionId, envelope.event, live, live || paged !== undefined);
 }
 
 /**
@@ -227,9 +230,14 @@ function applyEvent(
   ctx: AgentStreamContext,
   sessionId: string,
   event: AnyLifecycleEvent,
-  live: boolean
+  live: boolean,
+  write = true
 ): void {
   const fold = foldFor(ctx, sessionId);
+  if (!write) {
+    fold.state = reduceConversationWithChanges(fold.state, event).state;
+    return;
+  }
   if (
     !isUnknownEvent(event) &&
     event.type === "error" &&
@@ -490,7 +498,7 @@ function writeCompaction(
   qc.setQueryData<PaginatedMessages>(messagesKey(sessionId), (old) => {
     if (!old) {
       // Only reachable live before the page has loaded (a background session
-      // with no cached page never gets here — see routeEnvelope's guard). The
+      // with no cached page is folded but not written: see routeEnvelope). The
       // real page, once it resolves, supersedes this seed.
       return { messages: [], turns: [], compactions: [row], has_older: false, has_newer: false };
     }

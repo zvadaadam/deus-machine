@@ -495,6 +495,24 @@ describe("shell agent stream subscription", () => {
       expect(text()).toBe("Typed so far and on");
     });
 
+    it("makes no page for a chat whose read failed, so opening it reads its history", async () => {
+      // Pointing at the chat reads ahead, and the read fails.
+      await queryClient.prefetchQuery({
+        queryKey: messagesKey(sessionId),
+        queryFn: () => Promise.reject(new Error("offline")),
+      });
+      expect(host.subscriptions()).toHaveLength(1);
+      envelope({ type: "turn.started", sessionId, turnId: TURN, timestamp: T } as LifecycleEvent);
+      envelope(started());
+      expect(queryClient.getQueryData(messagesKey(sessionId))).toBeUndefined();
+
+      const read = vi.fn(async () => page([message("answer", "History")]));
+      observe(read);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(text()).toBe("History");
+    });
+
     it("reads again the pages cached before it started: nobody followed them in between", async () => {
       const read = vi.fn(async () => page([message("answer", "Read again")]));
       await queryClient.fetchQuery({ queryKey: messagesKey(sessionId), queryFn: read });

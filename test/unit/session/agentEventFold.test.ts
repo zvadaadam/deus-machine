@@ -788,9 +788,12 @@ describe("background sessions", () => {
   it("never invents a page for a chat whose page has not arrived, and folds what it is sent meanwhile", () => {
     const h = harness(SESSION);
 
+    h.feed({ type: "turn.started", sessionId: OTHER, turnId: TURN, timestamp: T });
     h.feed(started({ sessionId: OTHER, messageId: "b1" }), { sessionId: OTHER });
+    h.feed(turnEnded({ sessionId: OTHER }), { sessionId: OTHER });
 
-    // A page made from a fragment would claim there is nothing older.
+    // A page made from a fragment would claim there is nothing older, and
+    // being fresh forever it would keep the chat's history from being read.
     expect(h.page(OTHER)).toBeUndefined();
     // The fold is kept: a part's tokens only extend a part it has seen open.
     // Only followed chats are sent events, and a chat is followed while its
