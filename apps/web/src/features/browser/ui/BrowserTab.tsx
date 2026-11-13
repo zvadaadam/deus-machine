@@ -821,9 +821,3 @@ export const BrowserTab = forwardRef<BrowserTabHandle, BrowserTabProps>(function
     </div>
   );
 });
-
-/** Dispose a tab's webview — called when the tab is closed. */
-export function disposeBrowserTab(tabId: string): void {
-  webviewManager.dispose(tabId);
-  webviewManager.dispose(`${tabId}__devtools`);
-}

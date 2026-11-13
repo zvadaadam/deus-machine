@@ -57,7 +57,6 @@ const TURN = { agentHarness: "claude-code", model: "opus", thinkingLevel: "high"
 
 const TOOLS = api.toolRequests.name;
 const SIMULATOR = api.cloudSimulatorEvents.name;
-const PREVIEW = api.cloudPreviewChanges.name;
 
 function createRuntime(name: string): RuntimeClient {
   return new RuntimeClient(
@@ -79,7 +78,6 @@ function followAll(runtime: RuntimeClient) {
   const events = vi.fn<(stream: string, event: unknown) => void>();
   runtime.follow(api.toolRequests, {}, (event) => events(TOOLS, event));
   runtime.follow(api.cloudSimulatorEvents, {}, (event) => events(SIMULATOR, event));
-  runtime.follow(api.cloudPreviewChanges, {}, (event) => events(PREVIEW, event));
   return events;
 }
 
@@ -184,7 +182,15 @@ describe("direct cloud session published frames", () => {
       expect(getDirectSession("same", a.queryClient)).toBeUndefined();
       expect(hasParkedDirectQuestion("same", a.queryClient)).toBe(false);
       eventsA.mockClear();
-      first.frame({ type: "workspace.state", data: { sandboxUrlTemplate: "https://late-A" } });
+      // A frame that would be published, arriving after its runtime is gone.
+      first.frame({
+        type: "simulator.status",
+        sessionId: "same-provider",
+        status: "ready",
+        platform: "ios",
+        streamUrl: "https://stream.expo.dev/late-A",
+        timestamp: "2026-09-06T18:00:00.000Z",
+      });
       expect(eventsA).not.toHaveBeenCalled();
       expect(eventsB).not.toHaveBeenCalled();
       expect(a.queryClient.getQueryCache().getAll()).toHaveLength(0);
@@ -279,12 +285,10 @@ describe("direct cloud session published frames", () => {
       another = vi.fn();
     runtime.follow(api.toolRequests, { sessionId: "deus-direct-1" }, mine);
     runtime.follow(api.cloudSimulatorEvents, { workspaceId: "deus-direct-1" }, mine);
-    runtime.follow(api.cloudPreviewChanges, { workspaceId: "deus-direct-1" }, mine);
     runtime.follow(api.toolRequests, { sessionId: "another-chat" }, another);
     runtime.follow(api.cloudSimulatorEvents, { workspaceId: "another-chat" }, another);
-    runtime.follow(api.cloudPreviewChanges, { workspaceId: "another-chat" }, another);
 
-    // A device status and a preview address, then a question.
+    // A device status, then a question.
     onFrame(snapshot("ready"));
     onFrame({
       type: "elicitation.requested",
@@ -296,7 +300,6 @@ describe("direct cloud session published frames", () => {
     });
 
     expect(mine.mock.calls.map(([event]) => event)).toEqual([
-      expect.objectContaining({ template: "https://port-{{port}}.sandbox.test" }),
       expect.objectContaining({ kind: "status" }),
       expect.objectContaining({ type: "request" }),
     ]);
@@ -474,11 +477,8 @@ describe("direct cloud session published frames", () => {
         streamUrl: "https://stream.expo.dev/device",
       }),
     });
-    expect(published).toHaveBeenCalledWith(PREVIEW, {
-      workspaceId: "deus-direct-1",
-      sessionId: "deus-direct-1",
-      template: "https://port-{{port}}.sandbox.test",
-    });
+    // The sandbox's public address rides the snapshot too; nothing is done with it.
+    expect(published.mock.calls.map(([stream]) => stream)).toEqual([SIMULATOR]);
 
     published.mockClear();
     onFrame(snapshot("stopped"));

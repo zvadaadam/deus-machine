@@ -13,8 +13,6 @@ import { useLayoutEffect, useState, type ReactNode } from "react";
 import { TerminalPanel } from "@/features/terminal";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
-import { CloudPreviewPanel } from "@/features/browser/ui/CloudPreviewPanel";
-import { useCloudPreviewTemplate } from "@/features/browser/cloud/cloudPreviewStore";
 import { CloudBrowserUnavailable } from "@/features/workspace/ui/CloudBrowserUnavailable";
 import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { FilesView } from "@/features/workspace/ui/FilesView";
@@ -94,10 +92,11 @@ export function ContentView({
   }, [cloudServing, workspace.id]);
   const cloudTerminalId = cloudServing ? workspace.id : lastCloudTerminal;
 
-  // The Browser previews a dev server at localhost:PORT — only reachable for a
-  // LOCAL workspace. Freeze it on the last local workspace (like the terminal)
-  // so a cloud visit doesn't unmount it mid-navigation and orphan the webview;
-  // cloud gets the placeholder overlay instead.
+  // The Browser is this computer's: it previews a dev server at localhost:PORT,
+  // which only a LOCAL workspace has. A cloud workspace's pages are in the
+  // browser on its own computer, so it gets the placeholder overlay. The panel
+  // stays frozen on the last local workspace (like the terminal) so a cloud
+  // visit doesn't unmount it mid-navigation and orphan the webview.
   const [lastLocalBrowser, setLastLocalBrowser] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (workspace.kind !== "cloud") {
@@ -105,10 +104,6 @@ export function ContentView({
     }
   }, [workspace.kind, workspace.id]);
   const browserTarget = workspace.kind !== "cloud" ? workspace.id : lastLocalBrowser;
-  // The computer's host template: in memory, seeded once, live on `cloudPreviewChanges`.
-  const cloudPreviewTemplate = useCloudPreviewTemplate(
-    workspace.kind === "cloud" ? workspace.id : null
-  );
 
   // The local simulator streams a Mac-hosted device — only a LOCAL workspace
   // has one. Same freeze as the Browser: a cloud visit must not unmount the
@@ -171,21 +166,11 @@ export function ContentView({
         {workspace.kind === "cloud" && (
           <div className="absolute inset-0 z-10">
             {cloudStage ? (
-              // Asleep / provisioning: nothing inside the sandbox can answer.
+              // Asleep / provisioning: every tab of the computer says so.
               <CloudSandboxGate
                 toolbarAction={toolbarAction}
                 workspaceId={workspace.id}
                 stage={cloudStage}
-              />
-            ) : cloudPreviewTemplate ? (
-              // Keyed: switching between two cloud computers must not carry
-              // the first one's port (and its draft) onto the second.
-              <CloudPreviewPanel
-                toolbarAction={toolbarAction}
-                key={workspace.id}
-                workspace={workspace}
-                template={cloudPreviewTemplate}
-                visible={panelVisible && activeTab === "browser"}
               />
             ) : (
               <CloudBrowserUnavailable toolbarAction={toolbarAction} />

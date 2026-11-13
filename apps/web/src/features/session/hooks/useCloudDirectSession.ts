@@ -448,20 +448,6 @@ export function useCloudDirectSession(
         );
         return;
       }
-      // The computer's host template rides workspace.state: one store for every
-      // lane (the Mac lane's driver publishes on `cloudPreviewChanges`; here the frame is
-      // re-emitted locally, keyed by the session like every web-direct row).
-      if (frame.type === "workspace.state") {
-        const data = (frame.data ?? {}) as { sandboxUrlTemplate?: string | null };
-        if (data.sandboxUrlTemplate !== undefined) {
-          publishFor(
-            queryClient,
-            api.cloudPreviewChanges,
-            { workspaceId: sessionId },
-            { workspaceId: sessionId, sessionId, template: data.sandboxUrlTemplate || null }
-          );
-        }
-      }
       // Device frames: one store for every lane (see emitSimulatorEvent); the
       // snapshot's device mirror is handled with the snapshot below.
       const simulatorKind =
@@ -485,20 +471,7 @@ export function useCloudDirectSession(
       // disconnected) is stale too: its answer would carry A's request id to
       // an agent already past it.
       if (frame.type === "session.snapshot") {
-        const state = frame.state as
-          | {
-              currentTurnId?: unknown;
-              sandboxUrlTemplate?: string | null;
-            }
-          | undefined;
-        if (typeof state?.sandboxUrlTemplate === "string" || state?.sandboxUrlTemplate === null) {
-          publishFor(
-            queryClient,
-            api.cloudPreviewChanges,
-            { workspaceId: sessionId },
-            { workspaceId: sessionId, sessionId, template: state.sandboxUrlTemplate || null }
-          );
-        }
+        const state = frame.state as { currentTurnId?: unknown } | undefined;
         // A late joiner learns the device's current status here — the platform
         // does not replay the status frame it sent before this socket existed.
         if (Array.isArray(frame.latestSimulatorStatuses)) {

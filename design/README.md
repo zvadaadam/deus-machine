@@ -192,6 +192,9 @@ the board. Mobile boards live in `70`–`79` whatever they show, which is why th
 repository-environments board is `74` and not `56d`. A number means one board: `42`, `43`,
 `62` and `72` were each used twice, so the web-direct district moved to `85`/`85a`–`85e`,
 Grant repository access to `67`, and the web-direct mobile chat to `75`.
+`85e` (Workspace — Browser, cloud preview) no longer has a counterpart in the app: the
+Browser tab on a cloud workspace now says the browser is on the cloud computer, and the
+port preview is gone. Redraw the board as that placeholder (`CloudBrowserUnavailable`).
 
 - `58` is remote access bound to the Deus account: the card reads **Open on another
   device, signed in as …** over `https://deusmachine.ai/connect`, where any device signed
