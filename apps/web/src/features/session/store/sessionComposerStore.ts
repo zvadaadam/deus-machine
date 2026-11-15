@@ -126,9 +126,11 @@ export const sessionComposerActions = {
    * workspace's start page (keyed by the workspace) goes to its first chat.
    * A `to` with no composer takes `from`'s whole state (model, thinking, plan
    * mode, content); one that has a composer keeps its own settings and gains
-   * `from`'s content. `from` is removed either way.
+   * `from`'s content. `settings: false` moves the content only, for a chat
+   * whose history sets its model (it was spoken to elsewhere). `from` is
+   * removed either way.
    */
-  move: (from: string, to: string): void => {
+  move: (from: string, to: string, { settings = true }: { settings?: boolean } = {}): void => {
     if (from === to || !useSessionComposerStore.getState().composers[from]) return;
     useSessionComposerStore.setState(
       (s) => {
@@ -136,6 +138,8 @@ export const sessionComposerActions = {
         const target = s.composers[to];
         if (target) {
           Object.assign(target, withContent(target, source));
+        } else if (!settings) {
+          s.pendingContent[to] = withContent(s.pendingContent[to] ?? emptyContent(), source);
         } else {
           const pending = s.pendingContent[to];
           s.composers[to] = pending ? withContent(source, pending) : source;

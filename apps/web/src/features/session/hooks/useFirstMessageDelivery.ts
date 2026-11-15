@@ -82,7 +82,11 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
     // sent, so a delivery below finds the chat's composer already seeded.
     for (const workspace of workspaces) {
       if (workspace.current_session_id) {
-        sessionComposerActions.move(workspace.id, workspace.current_session_id);
+        sessionComposerActions.move(workspace.id, workspace.current_session_id, {
+          // Spoken to already (from another device, maybe with another agent):
+          // its history sets the model, and only what was typed here moves.
+          settings: workspace.latest_message_sent_at === null,
+        });
       }
     }
 

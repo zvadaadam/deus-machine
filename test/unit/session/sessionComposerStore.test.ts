@@ -147,4 +147,17 @@ describe("move: a workspace's start composer hands over to its first chat", () =
     });
     expect(store.getState().pendingContent).toEqual({});
   });
+
+  it("moves only what was typed to a chat spoken to elsewhere: its history sets the agent", () => {
+    const claude = "claude-code:opus";
+    actions.seedIfAbsent("workspace", emptyComposer(claude, "high"));
+    actions.setDraft("workspace", "Also add tests");
+    actions.move("workspace", "chat", { settings: false });
+
+    expect(store.getState().composers.chat).toBeUndefined();
+    expect(store.getState().composers.workspace).toBeUndefined();
+    // The chat's composer is seeded from its history (a Codex chat), and gets the text.
+    actions.seedIfAbsent("chat", emptyComposer(model, "medium"));
+    expect(store.getState().composers.chat).toMatchObject({ model, draft: "Also add tests" });
+  });
 });
