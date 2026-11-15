@@ -1,7 +1,7 @@
 /**
  * The two ways out of a workspace that failed to start: start it again in
  * place, or delete it. A message that was waiting for the workspace survives
- * both: a retry sends it, and a delete offers it back.
+ * both: a retry sends it, and a delete puts it back in Home's composer.
  */
 import { useCallback } from "react";
 import { toast } from "sonner";
@@ -31,22 +31,26 @@ export function useStartRecovery(workspaceId: string) {
       return;
     }
     const { selectedWorkspaceId, selectWorkspace } = useWorkspaceStore.getState();
-    if (selectedWorkspaceId === workspaceId) selectWorkspace(null);
+    const onScreen = selectedWorkspaceId === workspaceId;
     // What was typed in its start page's composer goes with it.
     sessionComposerActions.discard(workspaceId);
     const pending = pendingFirstMessages.get(workspaceId);
     pendingFirstMessages.clear(workspaceId);
     if (!pending) {
+      if (onScreen) selectWorkspace(null);
       toast("Workspace deleted");
       return;
     }
+    // The message it was waiting to send goes to Home's composer, to start
+    // again from there: not into a toast that expires.
+    if (onScreen) {
+      openNewWorkspace({ draft: pending.message });
+      toast("Workspace deleted", { description: "Your message is back on Home." });
+      return;
+    }
     toast("Workspace deleted", {
-      description: "Your message was kept.",
-      duration: 10_000,
-      action: {
-        label: "Start again",
-        onClick: () => openNewWorkspace({ draft: pending.message }),
-      },
+      description: "Your message was not sent.",
+      action: { label: "Start again", onClick: () => openNewWorkspace({ draft: pending.message }) },
     });
   }, [remove, workspaceId]);
 

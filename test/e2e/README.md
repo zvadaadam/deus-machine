@@ -53,14 +53,15 @@ the same workspaces. It checks, in order:
   that the workspace may be behind.
 - With a remote that hangs, creating a workspace still answers at once and the
   fetch is a stage on screen. A message typed on its page while it starts
-  waits as a bubble, and is sent once when it is ready.
+  waits as a bubble, and is sent once when it is ready. A phone left on the
+  Code tab while a start fails shows the failure.
 - Two workspaces started back to back from Home, with a reload of the window
   while both start: each gets its own message, once. One that is still
   starting opens from the sidebar, where its row names the step. The send
   itself is refused (no agent engine), so the message waits in that chat's
   composer and a toast says so; it is not sent again.
 - A start that fails while nobody is looking at it toasts; Delete removes it
-  and hands its message back to Home's composer.
+  and puts its message in Home's composer.
 - A workspace that cannot be created (its project is gone) says why, and the
   message is still in Home's composer.
 - A message waiting for a workspace whose chat was already spoken to (from

@@ -95,7 +95,10 @@ export function MobileLayout({
   );
   // The layout outlives a workspace switch: a Simulator tab left selected on
   // a cloud computer must not leave a local workspace with no panel showing.
-  const tab: MobileTab = !cloudSimulator && activeTab === "simulator" ? "chat" : activeTab;
+  // Chat-only is the chat, whatever was picked before (a start that failed
+  // while its Code tab was open).
+  const tab: MobileTab =
+    chatOnly || (!cloudSimulator && activeTab === "simulator") ? "chat" : activeTab;
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.

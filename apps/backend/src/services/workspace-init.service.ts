@@ -171,7 +171,13 @@ async function refreshSource(
   let issue: InitFetchIssue | null = null;
   if (await succeeds(runGit(["remote", "get-url", "origin"], { cwd }))) {
     try {
-      await runGit(["fetch", "origin", ctx.sourceBranch], { cwd, timeoutMs: FETCH_TIMEOUT_MS });
+      // Into origin's ref by name: a clone that tracks only some branches (a
+      // `--single-branch` or shallow one) would not update it otherwise.
+      const branch = ctx.sourceBranch;
+      await runGit(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`], {
+        cwd,
+        timeoutMs: FETCH_TIMEOUT_MS,
+      });
     } catch (err) {
       issue = fetchIssue(err);
       console.warn(

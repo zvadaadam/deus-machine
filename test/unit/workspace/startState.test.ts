@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   canRecoverStart,
   failedToStart,
@@ -196,6 +196,29 @@ describe("what a client remembers of a start", () => {
     pendingFirstMessages.clear("a");
     expect(useWorkspaceStartStore.getState()).toBe(before);
     pendingFirstMessages.clear("b");
+  });
+
+  it("keeps no old copy in the window when the newest one does not fit", () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (value.length > 400) throw new Error("QuotaExceededError");
+        stored.set(key, value);
+      },
+      removeItem: (key: string) => stored.delete(key),
+    });
+    try {
+      pendingFirstMessages.set("a", { message: "fix the login page", model: "opus" });
+      expect(stored.get("workspace-start")).toContain("fix the login page");
+      pendingFirstMessages.set("b", { message: "x".repeat(1000), model: "opus" });
+      // A reload must not bring back a copy without "b", where "a" may already be sent.
+      expect(stored.has("workspace-start")).toBe(false);
+    } finally {
+      pendingFirstMessages.clear("a");
+      pendingFirstMessages.clear("b");
+      vi.unstubAllGlobals();
+    }
   });
 
   it("remembers the chat a workspace started with", () => {

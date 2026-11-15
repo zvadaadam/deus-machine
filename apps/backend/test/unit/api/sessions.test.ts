@@ -143,12 +143,14 @@ describeWithDb("createSession", () => {
     vi.clearAllMocks();
   });
 
-  const workspace = (id: string, kind: string, state: string) =>
-    db
-      .prepare(
-        "INSERT INTO workspaces (id, repository_id, slug, kind, state) VALUES (?, 'r1', ?, ?, ?)"
-      )
-      .run(id, id, kind, state);
+  const workspace = (id: string, kind: string, state: string, chat?: string) => {
+    db.prepare(
+      "INSERT INTO workspaces (id, repository_id, slug, kind, state) VALUES (?, 'r1', ?, ?, ?)"
+    ).run(id, id, kind, state);
+    if (!chat) return;
+    db.prepare("INSERT INTO sessions (id, workspace_id) VALUES (?, ?)").run(chat, id);
+    db.prepare("UPDATE workspaces SET current_session_id = ? WHERE id = ?").run(chat, id);
+  };
   const chats = (id: string) =>
     (
       db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?").get(id) as {
@@ -174,9 +176,17 @@ describeWithDb("createSession", () => {
     }
   );
 
-  it("leaves a cloud workspace alone: its chat exists while its computer is provisioned", async () => {
-    workspace("w-cloud", "cloud", "initializing");
+  it("refuses one in a cloud workspace that failed before its computer existed", async () => {
+    workspace("w-cloud", "cloud", "error");
+    await expect(run(api.createSession, { workspaceId: "w-cloud" })).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(chats("w-cloud")).toBe(0);
+  });
+
+  it("opens one in a cloud workspace whose first chat exists while its computer is provisioned", async () => {
+    workspace("w-cloud", "cloud", "initializing", "first-chat");
     await run(api.createSession, { workspaceId: "w-cloud" });
-    expect(chats("w-cloud")).toBe(1);
+    expect(chats("w-cloud")).toBe(2);
   });
 });

@@ -46,7 +46,13 @@ const windowStorage: StateStorage = {
     try {
       sessionStorage.setItem(name, value);
     } catch {
-      /* over quota, or no storage (tests, private windows) */
+      // Over quota, or no storage (tests, private windows). Drop the older copy
+      // too: restoring it would bring back a message that may have been sent.
+      try {
+        sessionStorage.removeItem(name);
+      } catch {
+        /* no storage */
+      }
     }
   },
   removeItem: (name) => {

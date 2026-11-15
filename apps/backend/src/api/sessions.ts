@@ -84,11 +84,12 @@ export default [
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
-    // A local workspace gets its first chat when it has a checkout to work in.
-    // One made before that would hide a failed start behind an empty chat, and
-    // take Retry and Delete with it.
+    // A workspace's first chat is made by its start: a local one's once its
+    // checkout exists, a cloud one's once its computer does. One made before
+    // that would hide a failed start behind an empty chat, and take Retry and
+    // Delete with it.
     if (
-      workspace.kind !== "cloud" &&
+      !workspace.current_session_id &&
       (workspace.state === "initializing" || workspace.state === "error")
     ) {
       throw new ConflictError("This workspace has not started yet, so it has no chats.");

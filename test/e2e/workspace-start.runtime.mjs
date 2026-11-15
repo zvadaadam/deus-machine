@@ -504,8 +504,16 @@ try {
   await until("the message typed there to be sent", () => sends(asked));
   await a.waitForTimeout(1000);
   assert.equal(sends(asked), 1, "sent once");
+  // On a phone, the Code tab picked while a start runs gives way to its failure.
+  const doomedOnPhone = await create({ source_branch: "not-on-the-phone" });
+  await b.goto(url(doomedOnPhone.id));
+  await attach(b);
+  await b.getByRole("tab", { name: "Code" }).click();
+  await panel(b).getByRole("button", { name: "Retry", exact: true }).waitFor();
+  await shot(b, "failed-mobile-from-code", 0);
+  await backend.write("deleteWorkspace", { workspaceId: doomedOnPhone.id });
   check(
-    "Creating a workspace returns before the fetch; the fetch is a visible stage; a message typed while it starts is sent once it is ready",
+    "Creating a workspace returns before the fetch; the fetch is a visible stage; a message typed while it starts is sent once it is ready; a phone on the Code tab sees the failure",
     {
       ackMs: slow.ackMs,
       handover: askedHandover,
@@ -586,16 +594,15 @@ try {
   await panel(a).getByRole("button", { name: "Delete", exact: true }).click();
   const deleted = toast(a, "Workspace deleted");
   await deleted.waitFor();
-  assert((await deleted.innerText()).includes("Your message was kept."));
+  assert((await deleted.innerText()).includes("Your message is back on Home."));
   assert.equal(await refusal(workspace(doomed.id)), "Workspace not found");
   assert.equal(await a.locator(`[data-workspace-id="${doomed.id}"]`).count(), 0);
-  await shot(a, "deleted");
-  await deleted.getByRole("button", { name: "Start again", exact: true }).click();
+  // Not only in a toast that expires: the message is in Home's composer, to send again.
   await until(
     "Home's composer to hold the message",
     async () => (await composer(a).inputValue()) === "Rename the billing page"
   );
-  await shot(a, "start-again");
+  await shot(a, "deleted");
   check("A failure elsewhere toasts; Delete removes it and hands its message back to Home");
 
   // ── 9. A workspace that cannot be created: the message stays where it was typed.

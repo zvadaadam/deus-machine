@@ -149,6 +149,30 @@ describe("starting a workspace", () => {
     expect(gitIn(workspacePath("vega"), "rev-parse", "HEAD")).toBe(latest);
   });
 
+  it("starts from origin's copy of another branch, in a clone that tracks one branch", async () => {
+    const origin = path.join(scratch, "origin.git");
+    gitIn(scratch, "init", "-q", "--bare", "-b", "main", origin);
+    git("remote", "add", "origin", origin);
+    git("push", "-q", "origin", "main");
+    const other = path.join(scratch, "other");
+    gitIn(scratch, "clone", "-q", origin, other);
+    gitIn(other, "config", "user.name", "Someone Else");
+    gitIn(other, "config", "user.email", "else@example.test");
+    gitIn(other, "checkout", "-q", "-b", "release");
+    const latest = commit(other, "tracked.txt", "release");
+    gitIn(other, "push", "-q", "origin", "release");
+    // As `git clone --single-branch` (or `--depth`) leaves it: only main is tracked.
+    git("config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main");
+
+    await initializeWorkspace({
+      ...add("w", "vega", { git_source_branch: "release" }),
+      sourceBranch: "release",
+    });
+
+    expect(row("w")).toMatchObject({ state: "ready", init_fetch_issue: null });
+    expect(gitIn(workspacePath("vega"), "rev-parse", "HEAD")).toBe(latest);
+  });
+
   it("still starts when origin cannot be reached, from the local copy, and says why", async () => {
     git("remote", "add", "origin", "http://127.0.0.1:9/project.git");
 
