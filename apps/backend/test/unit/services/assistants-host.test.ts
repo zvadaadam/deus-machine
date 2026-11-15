@@ -249,6 +249,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** The app announces that `resources` changed, as `invalidate()` does. */
+function announceChange(...resources: string[]) {
+  for (const listener of [...state.listeners]) listener(resources);
+}
+
 /** The agent asks something through the relay, as the agent service does. */
 function ask(method: "askUserQuestion" | "exitPlanMode", params: Record<string, unknown>) {
   const asked = relay({
@@ -579,35 +584,74 @@ describe("sending", () => {
     );
   });
 
-  it("interrupts: stops the running turn, waits for it to end, then sends", async () => {
-    rows.sessions.set("s-voyager", session({ status: "working" }));
-    let looks = 0;
-    calls.stopSession.mockImplementation(() => ({ unconfirmed: true }));
-    state.ops.session = () => {
-      // The turn ends a moment after the stop.
-      if (calls.stopSession.mock.calls.length && ++looks > 2) return session({ status: "idle" });
-      return session({ status: "working" });
-    };
+  it("interrupts: stops the running turn, waits for the change that ends it, then sends", async () => {
     vi.useFakeTimers({ now: NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
+    rows.sessions.set("s-voyager", session({ status: "working" }));
+    let ended = false;
+    calls.stopSession.mockImplementation(() => ({ unconfirmed: true }));
+    state.ops.session = () => session({ status: ended ? "idle" : "working" });
     const sent = send(createDeusHost(), "interrupt");
-    // The host looks again every 250ms until the turn has ended.
-    await vi.advanceTimersByTimeAsync(1_000);
+    // No timer looks again: with nothing announced, nothing is sent.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(calls.sendMessage).not.toHaveBeenCalled();
+    // An unrelated change is looked at, and is not the end.
+    announceChange("stats");
+    announceChange("sessions");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.sendMessage).not.toHaveBeenCalled();
+    // The turn ends, and the app says so.
+    ended = true;
+    announceChange("session");
     await sent;
     expect(calls.stopSession).toHaveBeenCalledExactlyOnceWith({ sessionId: "s-voyager" });
     expect(calls.stopSession.mock.invocationCallOrder[0]).toBeLessThan(
       calls.sendMessage.mock.invocationCallOrder[0]!
     );
+    expect(state.listeners.size).toBe(0);
+  });
+
+  it("refuses an interrupt whose turn has not stopped within 15s, and sends nothing", async () => {
+    vi.useFakeTimers({ now: NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
+    rows.sessions.set("s-voyager", session({ status: "working" }));
+    calls.stopSession.mockImplementation(() => ({ unconfirmed: true }));
+    state.ops.session = () => session({ status: "working" });
+    const refused = expect(send(createDeusHost(), "interrupt")).rejects.toThrow(
+      '"voyager" did not stop within 15s, so nothing was sent.\n  -> wait_for_session(session: "voyager")'
+    );
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(state.listeners.size).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await refused;
+    expect(calls.sendMessage).not.toHaveBeenCalled();
+    expect(state.listeners.size).toBe(0);
   });
 
   it("waits for a turn stopped a moment ago to end before sending", async () => {
     vi.useFakeTimers({ now: NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
     // Idle in the database, still ending in the engine.
-    state.liveTurnId.mockReturnValueOnce("old").mockReturnValueOnce("old");
+    state.live.set("s-voyager", "old");
     const sent = send();
     await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls.sendMessage).not.toHaveBeenCalled();
+    // The engine folds turn.ended, then the session's resources are invalidated.
+    state.live.clear();
+    announceChange("workspaces", "sessions", "session");
     await sent;
-    expect(state.liveTurnId.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(calls.sendMessage).toHaveBeenCalledTimes(1);
+    expect(state.listeners.size).toBe(0);
+  });
+
+  it("sends after 5s when a turn stopped a moment ago never ends", async () => {
+    vi.useFakeTimers({ now: NOW, toFake: ["Date", "setTimeout", "clearTimeout"] });
+    state.live.set("s-voyager", "old");
+    const sent = send();
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(calls.sendMessage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await sent;
+    // The app's own send decides from here (the engine refuses a turn while one runs).
+    expect(calls.sendMessage).toHaveBeenCalledTimes(1);
+    expect(state.listeners.size).toBe(0);
   });
 
   it("stops through the app's own stop", async () => {
@@ -1295,6 +1339,7 @@ describe("access, read again just before every write", () => {
       setTimeout(() => {
         state.stored.claude = "denied";
         rows.sessions.set("s-voyager", session({ status: "idle" }));
+        announceChange("session");
       }, 300);
       return { unconfirmed: true };
     });

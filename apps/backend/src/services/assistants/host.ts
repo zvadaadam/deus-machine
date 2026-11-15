@@ -64,7 +64,6 @@ const STOP_WAIT_MS = 15_000;
 const ENDING_WAIT_MS = 5_000;
 /** Messages read to find the chat's latest turn. */
 const RECENT_MESSAGES = 50;
-const LOOK_MS = 250;
 /** Why a first message was not sent, remembered for this many workspaces. */
 const UNSENT_KEPT = 200;
 /** The longest a held call waits, for any caller (hosted assistants cut a call off after 2 to 4 minutes). */
@@ -72,7 +71,6 @@ const MAX_WAIT_SECONDS = 90;
 /** A held call answers this long before its connection is cut, so the answer still arrives. */
 const CUT_MARGIN_SECONDS = 5;
 
-const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const isActive = (status: string | null | undefined) =>
   status != null && ACTIVE_TURN_STATUSES.includes(status);
 /** A chat's status as the operator reads it. */
@@ -307,14 +305,50 @@ export function createDeusHost(): DeusHost {
     );
   }
 
-  /** Bounded wait until the chat has no turn running, by its status and by the engine. */
+  /**
+   * Resolves at the next change a session may have had (the app invalidates
+   * `workspaces`, `sessions` or `session`), or when `signal` aborts; either way
+   * its listener is gone.
+   */
+  function nextChange(signal: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        stop();
+        signal.removeEventListener("abort", done);
+        resolve();
+      };
+      const stop = onInvalidate((resources) => {
+        if (resources.some((r) => r === "workspaces" || r === "sessions" || r === "session"))
+          done();
+      });
+      if (signal.aborted) done();
+      else signal.addEventListener("abort", done, { once: true });
+    });
+  }
+
+  /**
+   * Bounded wait until the chat has no turn running, by its status and by the
+   * engine: looked at again at each change the app announces (the engine's
+   * `turn.ended` and a stop both invalidate the session), never on a timer.
+   */
   async function untilSettled(sessionId: string, ms: number): Promise<boolean> {
-    const deadline = Date.now() + ms;
-    for (;;) {
-      const { status } = (await run(sessions.session, { sessionId })) ?? {};
-      if (!isActive(status) && liveTurnId(sessionId) === undefined) return true;
-      if (Date.now() >= deadline) return false;
-      await pause(LOOK_MS);
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), ms);
+    let look: AbortController | undefined;
+    try {
+      for (;;) {
+        // Listening before the read, so a change that lands while it reads still wakes us.
+        look = new AbortController();
+        const changed = nextChange(AbortSignal.any([deadline.signal, look.signal]));
+        const { status } = (await run(sessions.session, { sessionId })) ?? {};
+        if (!isActive(status) && liveTurnId(sessionId) === undefined) return true;
+        if (deadline.signal.aborted) return false;
+        await changed;
+        look.abort();
+      }
+    } finally {
+      look?.abort();
+      clearTimeout(timer);
     }
   }
 
@@ -616,21 +650,7 @@ export function createDeusHost(): DeusHost {
       return `${lead}changes: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}`;
     },
 
-    changed(signal) {
-      return new Promise<void>((resolve) => {
-        const done = () => {
-          stop();
-          signal.removeEventListener("abort", done);
-          resolve();
-        };
-        const stop = onInvalidate((resources) => {
-          if (resources.some((r) => r === "workspaces" || r === "sessions" || r === "session"))
-            done();
-        });
-        if (signal.aborted) done();
-        else signal.addEventListener("abort", done, { once: true });
-      });
-    },
+    changed: nextChange,
   };
   return host;
 }
