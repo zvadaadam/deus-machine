@@ -581,6 +581,11 @@ try {
   git("remote", "remove", "origin");
 
   // ── 8. A failure nobody is looking at comes to them; Delete hands the message back to Home.
+  // Home was last left on another project.
+  await a.goto(url(home));
+  await attach(a);
+  await a.getByRole("button", { name: "New workspace in launch", exact: true }).click();
+  await main(a).getByRole("button", { name: "launch", exact: true }).waitFor();
   await a.goto(url(home));
   await attach(a);
   const doomed = await create({ source_branch: "nope" });
@@ -602,8 +607,12 @@ try {
     "Home's composer to hold the message",
     async () => (await composer(a).inputValue()) === "Rename the billing page"
   );
+  // In the project it was typed for, not the one Home was last left on.
+  await main(a).getByRole("button", { name: "project", exact: true }).waitFor({ timeout: 3000 });
   await shot(a, "deleted");
-  check("A failure elsewhere toasts; Delete removes it and hands its message back to Home");
+  check(
+    "A failure elsewhere toasts; Delete removes it and hands its message back to Home, in its project"
+  );
 
   // ── 9. A workspace that cannot be created: the message stays where it was typed.
   const vanishing = crypto.randomUUID();

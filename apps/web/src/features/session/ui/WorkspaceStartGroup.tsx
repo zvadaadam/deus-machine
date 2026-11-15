@@ -15,9 +15,12 @@ import { EnvGroup, EnvNotice, type EnvLine } from "./EnvGroup";
  */
 export function WorkspaceStartGroup({
   workspaceId,
+  repoId,
   start,
 }: {
   workspaceId: string;
+  /** Its project: a deleted workspace's message goes back to Home with it chosen. */
+  repoId?: string;
   start: WorkspaceStart;
 }) {
   const steps: EnvLine[] = start.steps.map((step) => ({
@@ -47,19 +50,23 @@ export function WorkspaceStartGroup({
           {warning}
         </EnvNotice>
       ))}
-      {start.failure && <StartFailure workspaceId={workspaceId} failure={start.failure} />}
+      {start.failure && (
+        <StartFailure workspaceId={workspaceId} repoId={repoId} failure={start.failure} />
+      )}
     </EnvGroup>
   );
 }
 
 function StartFailure({
   workspaceId,
+  repoId,
   failure,
 }: {
   workspaceId: string;
+  repoId?: string;
   failure: NonNullable<WorkspaceStart["failure"]>;
 }) {
-  const { retryStart, deleteWorkspace, retrying, deleting } = useStartRecovery(workspaceId);
+  const { retryStart, deleteWorkspace, retrying, deleting } = useStartRecovery(workspaceId, repoId);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const busy = retrying || deleting;
 

@@ -82,7 +82,11 @@ export function WorkspaceStartState({ workspace, className }: WorkspaceStartStat
             )}
 
             <div className={cn(waiting && "pt-2")}>
-              <WorkspaceStartGroup workspaceId={workspace.id} start={start} />
+              <WorkspaceStartGroup
+                workspaceId={workspace.id}
+                repoId={workspace.repository_id}
+                start={start}
+              />
             </div>
           </div>
         </div>

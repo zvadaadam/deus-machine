@@ -12,7 +12,7 @@ import { useWorkspaceStore } from "../store/workspaceStore";
 import { pendingFirstMessages } from "../store/workspaceStartStore";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 
-export function useStartRecovery(workspaceId: string) {
+export function useStartRecovery(workspaceId: string, repoId?: string) {
   const { mutateAsync: retry, isPending: retrying } = useRetryWorkspaceInit();
   const { mutateAsync: remove, isPending: deleting } = useDeleteFailedWorkspace();
 
@@ -44,15 +44,18 @@ export function useStartRecovery(workspaceId: string) {
     // The message it was waiting to send goes to Home's composer, to start
     // again from there: not into a toast that expires.
     if (onScreen) {
-      openNewWorkspace({ draft: pending.message });
+      openNewWorkspace({ draft: pending.message, repoId });
       toast("Workspace deleted", { description: "Your message is back on Home." });
       return;
     }
     toast("Workspace deleted", {
       description: "Your message was not sent.",
-      action: { label: "Start again", onClick: () => openNewWorkspace({ draft: pending.message }) },
+      action: {
+        label: "Start again",
+        onClick: () => openNewWorkspace({ draft: pending.message, repoId }),
+      },
     });
-  }, [remove, workspaceId]);
+  }, [remove, workspaceId, repoId]);
 
   return { retryStart, deleteWorkspace, retrying, deleting };
 }

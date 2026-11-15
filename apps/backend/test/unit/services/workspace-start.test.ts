@@ -424,6 +424,17 @@ describe("names", () => {
     });
     random.mockRestore();
   });
+
+  it("sees a branch as taken when a tag has the same name", async () => {
+    // Git shortens such a branch to "heads/test-user/<name>": it must not look free.
+    git("branch", `test-user/${CELESTIAL_NAMES[0]}`);
+    git("tag", `test-user/${CELESTIAL_NAMES[0]}`);
+    const random = vi.spyOn(Math, "random");
+    [0, 1].forEach((index) => random.mockReturnValueOnce(index / CELESTIAL_NAMES.length));
+
+    expect((await pickWorkspaceName(root)).slug).toBe(CELESTIAL_NAMES[1]);
+    random.mockRestore();
+  });
 });
 
 describe("why origin's latest was not fetched", () => {

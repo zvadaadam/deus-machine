@@ -86,7 +86,8 @@ export async function pickWorkspaceName(
 ): Promise<{ slug: string; branchName: string }> {
   const prefix = await branchPrefix(repoRootPath);
   const listed = await runGit(
-    ["for-each-ref", "--format=%(refname:short)", `refs/heads/${prefix}/`],
+    // Not `:short`: a branch a tag shares its name with is shortened to `heads/<name>`.
+    ["for-each-ref", "--format=%(refname:lstrip=2)", `refs/heads/${prefix}/`],
     { cwd: repoRootPath }
   ).catch(() => "");
   const branches = new Set(listed.split("\n"));
