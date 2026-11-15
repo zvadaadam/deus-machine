@@ -230,6 +230,70 @@ describe("buildChatTimeline", () => {
   const assistantIds = (item: Turn | { type: "compaction" }): string[] =>
     (item as AssistantTurnData).messages.map((m) => m.id);
 
+  const prompt = withText({
+    id: "u-1",
+    turn_id: "turn-1",
+    role: "user",
+    sent_at: "2026-08-14T10:00:00.000Z",
+  });
+  const reply = withText({ id: "a-1", turn_id: "turn-1", sent_at: "2026-08-14T10:00:05.000Z" });
+
+  it("tells how the workspace started under the message that asked for it", () => {
+    const start = { phase: "ready" as const, summary: "Workspace ready", steps: [], warnings: [] };
+
+    const { items, spacings } = buildChatTimeline([prompt, reply], [], false, [], [], start);
+
+    expect(items.map((item) => item.type)).toEqual(["user", "start", "assistant"]);
+    expect(items[1]).toEqual({ type: "start", start });
+    expect(spacings).toHaveLength(3);
+    // With nothing said yet it is still a transcript: the start line, not the empty state.
+    expect(buildChatTimeline([], [], false, [], [], start).items).toEqual([
+      { type: "start", start },
+    ]);
+    expect(buildChatTimeline([prompt], [], false).items.map((item) => item.type)).toEqual(["user"]);
+  });
+
+  it("puts a cloud computer's provisioning under the first message that was waiting for it", () => {
+    // Provisioned before the message could be sent: older than every turn.
+    const provisioning = {
+      id: 1,
+      status: "running",
+      step: null,
+      reason: null,
+      snapshotRestored: false,
+      at: Date.parse("2026-08-14T09:59:00.000Z"),
+    };
+
+    const { items } = buildChatTimeline([prompt, reply], [], false, [provisioning]);
+
+    expect(items.map((item) => item.type)).toEqual(["user", "cloudEnv", "assistant"]);
+    // In a chat with nothing said yet, it is simply first.
+    expect(buildChatTimeline([], [], false, [provisioning]).items.map((item) => item.type)).toEqual(
+      ["cloudEnv"]
+    );
+  });
+
+  it("keeps a wake where it happened: after the send that caused it", () => {
+    const followUp = withText({
+      id: "u-2",
+      turn_id: "turn-2",
+      role: "user",
+      sent_at: "2026-08-14T11:00:00.000Z",
+    });
+    const wake = {
+      id: 2,
+      status: "resuming",
+      step: null,
+      reason: null,
+      snapshotRestored: false,
+      at: Date.parse("2026-08-14T11:00:01.000Z"),
+    };
+
+    const { items } = buildChatTimeline([prompt, reply, followUp], [], false, [wake]);
+
+    expect(items.map((item) => item.type)).toEqual(["user", "assistant", "user", "cloudEnv"]);
+  });
+
   it("groups consecutive rows into turns, each holding exactly its own messages", () => {
     const { items } = buildChatTimeline(
       [

@@ -13,7 +13,7 @@ import { useQuerySubscription } from "@/shared/hooks/useQuerySubscription";
 import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
-import { createOptimisticWorkspace, mergeWorkspaceDelta } from "../lib/workspace.utils";
+import { mergeWorkspaceDelta } from "../lib/workspace.utils";
 import { track } from "@/platform/analytics";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
@@ -268,15 +268,6 @@ export function useFileDiff(workspaceId: string | null, filePath: string | null)
   });
 }
 
-/**
- * Create workspace mutation with optimistic update.
- *
- * Flow:
- * 1. User clicks "+" → placeholder workspace appears instantly in sidebar
- * 2. Backend creates workspace (state = "initializing"), returns it
- * 3. onSuccess replaces placeholder with real data, triggers refetch
- * 4. Workspace progress events + terminal invalidation catch the ready transition
- */
 /** Params accepted by the create-workspace mutation. */
 type CreateWorkspaceParams =
   | string
@@ -291,9 +282,13 @@ type CreateWorkspaceParams =
       target_branch?: string;
     };
 
+/**
+ * Create a workspace. The backend writes the row and answers at once (the
+ * slow work runs in the background), and pushes the workspace list, so the
+ * real row is in the sidebar within a frame or two: nothing is faked here.
+ */
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
 
   return useMutation({
     mutationFn: async (params: CreateWorkspaceParams) => {
@@ -305,38 +300,6 @@ export function useCreateWorkspace() {
       });
       // The full row arrives on the `workspaces` subscription.
       return { id: workspaceId, repository_id: repositoryId };
-    },
-
-    onMutate: async (params: CreateWorkspaceParams) => {
-      const repositoryId = typeof params === "string" ? params : params.repositoryId;
-      await queryClient.cancelQueries({ queryKey });
-
-      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
-
-      // Inject a placeholder workspace into the matching repo group
-      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
-        if (!old) return old;
-        return produce(old, (draft) => {
-          const repoGroup = draft.find((g) => g.repo_id === repositoryId);
-          if (repoGroup) {
-            repoGroup.workspaces.unshift(
-              createOptimisticWorkspace(
-                repositoryId,
-                repoGroup.repo_name,
-                typeof params === "string" ? undefined : params.location
-              )
-            );
-          }
-        });
-      });
-
-      return { previousData };
-    },
-
-    onError: (_err, _params, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKey, context.previousData);
-      }
     },
 
     onSuccess: (_data, params) => {
@@ -405,6 +368,59 @@ export function useArchiveWorkspace() {
     },
 
     // Always refetch after error or success to ensure consistency
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+    },
+  });
+}
+
+/**
+ * Start a failed workspace again. Nothing optimistic: the backend flips the
+ * row to "initializing" and pushes it, and a refusal leaves the failure shown.
+ */
+export function useRetryWorkspaceInit() {
+  return useMutation({
+    mutationFn: (workspaceId: string) => call(api.retryWorkspaceInit, { workspaceId }),
+    retry: false,
+  });
+}
+
+/**
+ * Delete a workspace that never started. Leaves the list at once, and comes
+ * back if the backend refuses.
+ */
+export function useDeleteFailedWorkspace() {
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.workspaces.byRepo(SIDEBAR_WORKSPACE_STATE);
+
+  return useMutation({
+    mutationFn: (workspaceId: string) => call(api.deleteWorkspace, { workspaceId }),
+    retry: false,
+
+    onMutate: async (workspaceId: string) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previousData = queryClient.getQueryData<RepoGroup[]>(queryKey);
+      queryClient.setQueryData<RepoGroup[]>(queryKey, (old) => {
+        if (!old) return old;
+        return produce(old, (draft) => {
+          for (const repo of draft) {
+            const index = repo.workspaces.findIndex((w) => w.id === workspaceId);
+            if (index !== -1) {
+              repo.workspaces.splice(index, 1);
+              break;
+            }
+          }
+        });
+      });
+      return { previousData };
+    },
+
+    onError: (_err, _workspaceId, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(queryKey, context.previousData);
+      }
+    },
+
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
     },

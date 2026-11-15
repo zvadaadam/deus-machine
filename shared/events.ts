@@ -17,9 +17,6 @@ import { z } from "zod";
 // Event Name Constants
 // ============================================================================
 
-/** Workspace events — backend → main process → frontend */
-export const WORKSPACE_PROGRESS = "workspace:progress" as const;
-
 /** Browser guest-page popup requests — main process → renderer.
  *  Fired when a <webview>'s guest page calls window.open() or navigates a
  *  `target="_blank"` link. The main renderer opens a new browser tab so the
@@ -32,13 +29,6 @@ export const BACKEND_PORT_CHANGED = "backend:port-changed" as const;
 // ============================================================================
 // Payload Schemas
 // ============================================================================
-
-export const WorkspaceProgressSchema = z.object({
-  workspaceId: z.string(),
-  step: z.string(),
-  label: z.string(),
-});
-export type WorkspaceProgressEvent = z.infer<typeof WorkspaceProgressSchema>;
 
 /**
  * Cloud sandbox state, as passed through from the platform's workspace.state
@@ -199,7 +189,6 @@ type BackendPortChangedEvent = z.infer<typeof BackendPortChangedSchema>;
  */
 export const AppEventSchemaMap = {
   [BACKEND_PORT_CHANGED]: BackendPortChangedSchema,
-  [WORKSPACE_PROGRESS]: WorkspaceProgressSchema,
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedSchema,
 } as const satisfies Record<AppEventName, z.ZodTypeAny>;
 
@@ -215,9 +204,6 @@ export const AppEventSchemaMap = {
 export interface AppEventMap {
   // Backend lifecycle
   [BACKEND_PORT_CHANGED]: BackendPortChangedEvent;
-
-  // Workspace
-  [WORKSPACE_PROGRESS]: WorkspaceProgressEvent;
 
   // Browser
   [BROWSER_NEW_TAB_REQUESTED]: BrowserNewTabRequestedEvent;

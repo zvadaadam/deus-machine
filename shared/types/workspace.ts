@@ -7,8 +7,14 @@ import type { SessionStatus } from "./session";
 
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
 // imported here for local use and re-exported for backwards compat.
-import type { WorkspaceKind, WorkspaceState, SetupStatus, WorkspaceStatus } from "../enums";
-export type { WorkspaceKind, WorkspaceState, SetupStatus, WorkspaceStatus };
+import type {
+  InitFetchIssue,
+  WorkspaceKind,
+  WorkspaceState,
+  SetupStatus,
+  WorkspaceStatus,
+} from "../enums";
+export type { InitFetchIssue, WorkspaceKind, WorkspaceState, SetupStatus, WorkspaceStatus };
 
 /**
  * Core workspace entity
@@ -40,7 +46,12 @@ export interface Workspace {
   git_default_branch?: string;
   setup_status: SetupStatus;
   init_stage?: string | null;
+  /** The plain reason starting (state `error`) or setup (`setup_status` failed) did not work. */
   error_message: string | null;
+  /** What the tool printed when starting failed. */
+  error_detail?: string | null;
+  /** Set when the workspace started without origin's latest. */
+  init_fetch_issue?: InitFetchIssue | null;
   pr_url?: string | null;
   pr_number?: number | null;
   /** PR lifecycle snapshot — persisted by the backend from gh, pushed over WS. */

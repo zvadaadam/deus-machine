@@ -13,6 +13,7 @@ import type {
   AutomationRunTrigger,
   AutomationSessionPolicy,
   AutomationStatus,
+  InitFetchIssue,
   MessageRole,
   SessionStatus,
   SetupStatus,
@@ -64,7 +65,9 @@ export interface WorkspaceRow {
   setup_status: SetupStatus;
   init_stage: string | null;
   error_message: string | null;
-  /** Cloud: `https://{{port}}-<sandboxId>.e2b.app`, learned from the running state. */
+  error_detail: string | null;
+  git_source_branch: string | null;
+  init_fetch_issue: InitFetchIssue | null;
   updated_at: string;
 }
 
@@ -102,6 +105,8 @@ export interface WorkspaceWithDetailsRow {
   // Project preparation status
   setup_status: SetupStatus;
   error_message: string | null;
+  error_detail: string | null;
+  init_fetch_issue: InitFetchIssue | null;
 
   // From repositories JOIN
   repo_name: string | null;

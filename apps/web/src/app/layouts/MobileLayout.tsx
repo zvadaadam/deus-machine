@@ -9,7 +9,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { CloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { Dispatch, SetStateAction } from "react";
-import type { SessionPanelRef } from "@/features/session";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { workspaceLayoutActions } from "@/features/workspace/store";
@@ -24,6 +23,7 @@ import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import type { ProjectTask } from "@shared/types/project-environment";
 import { cn } from "@/shared/lib/utils";
+import { failedToStart, hasCheckout } from "@/features/workspace/lib/startState";
 import { ChatArea } from "./ChatArea";
 import { MobileTabBar } from "./MobileTabBar";
 import type { MobileTab } from "./MobileTabBar";
@@ -32,7 +32,6 @@ import { MobilePRHeaderAction, MobilePRStatusBar } from "./MobilePRBar";
 
 interface MobileLayoutProps {
   workspace: Workspace;
-  workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   sendAgentMessageHandler: ((text: string) => Promise<void>) | null;
   handleSendAgentMessage: (text: string) => void;
   /** Pre-gated by caller: only passed when setup_status === "failed" */
@@ -59,7 +58,6 @@ interface MobileLayoutProps {
 
 export function MobileLayout({
   workspace,
-  workspaceChatPanelRef,
   sendAgentMessageHandler,
   handleSendAgentMessage,
   onRetrySetup,
@@ -84,7 +82,8 @@ export function MobileLayout({
   // Web-direct is chat-only on mobile too: the Code tab's diff traffic reads
   // the Mac backend, which the direct lane doesn't have — so the tab bar and
   // Code panel don't mount and the diff query never fires.
-  const chatOnly = isCloudDirectWebMode();
+  // Web-direct has no tools to show; neither has a workspace that failed to start.
+  const chatOnly = isCloudDirectWebMode() || failedToStart(workspace);
 
   // A cloud computer hosts a device in the platform — billable, so a phone
   // must be able to see and stop it. Web-direct has no Mac backend to relay
@@ -96,7 +95,10 @@ export function MobileLayout({
   );
   // The layout outlives a workspace switch: a Simulator tab left selected on
   // a cloud computer must not leave a local workspace with no panel showing.
-  const tab: MobileTab = !cloudSimulator && activeTab === "simulator" ? "chat" : activeTab;
+  // Chat-only is the chat, whatever was picked before (a start that failed
+  // while its Code tab was open).
+  const tab: MobileTab =
+    chatOnly || (!cloudSimulator && activeTab === "simulator") ? "chat" : activeTab;
 
   // File changes -- always queried for the badge count on the code tab,
   // and used by ChangesDiffViewer when the code tab is active.
@@ -132,7 +134,7 @@ export function MobileLayout({
   };
 
   return (
-    <div className="flex h-dvh min-w-0 flex-col overflow-hidden">
+    <div className="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
       {/* Header row -- workspace title on left, compact Create PR pill on right */}
       <div className="flex min-w-0 flex-shrink-0 items-center justify-between pr-2">
         <WorkspaceHeader
@@ -157,11 +159,11 @@ export function MobileLayout({
         />
         {/* PRs are Mac-side (gh + the worktree): web-direct has neither, so the
             Create PR sheet and the status bar don't mount. */}
-        {!chatOnly && <MobilePRHeaderAction {...prBarProps} />}
+        {!chatOnly && hasCheckout(workspace) && <MobilePRHeaderAction {...prBarProps} />}
       </div>
 
       {/* PR status bar -- only shown when a PR exists, 32px */}
-      {!chatOnly && <MobilePRStatusBar {...prBarProps} />}
+      {!chatOnly && hasCheckout(workspace) && <MobilePRStatusBar {...prBarProps} />}
 
       {/* Content area -- both views always mounted, inactive hidden via display:none */}
       <div
@@ -173,7 +175,6 @@ export function MobileLayout({
         <ChatArea
           key={workspace.id}
           workspace={workspace}
-          workspaceChatPanelRef={workspaceChatPanelRef}
           onCreatePRHandlerChange={setCreatePRHandler}
           onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
         />

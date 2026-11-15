@@ -16,7 +16,7 @@ await mkdir(artifacts, { recursive: true });
 await writeFile(
   path.join(artifacts, "entry.tsx"),
   `
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,6 +27,8 @@ import { AssistantTurn } from "@/features/session/ui/AssistantTurn";
 import { SessionComposer } from "@/features/session/ui/SessionComposer";
 import { SessionPanel } from "@/features/session/ui/SessionPanel";
 import { emptyComposer, sessionComposerActions, useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
+import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
+import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
 import { makeCloudFrameHandler } from "@/features/session/cloud/cloudFrameHandler";
 import { SessionProvider } from "@/features/session/context";
 import { FileBrowserPanel } from "@/features/file-browser/ui/FileBrowserPanel";
@@ -37,29 +39,37 @@ import { Toaster } from "@/components/ui/sonner";
 import "@/global.css";
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 window.welcomeCommands = [];
-window.welcomeSendAttempts = 0;
 window.composerForSession = sessionId => useSessionComposerStore.getState().composers[sessionId];
 window.deliverWelcomeHistory = () => client.setQueryData(queryKeys.sessions.messages("history-session"), {
   messages: [{id: "saved-message", session_id: "history-session", turn_id: "saved-turn", role: "user", seq: 1, parts: [{type: "text", id: "saved-text", text: "Earlier recorded prompt", state: "done"}]}],
   compactions: [], has_older: false, has_newer: false,
   turns: [{turnId: "saved-turn", startedAt: 1, execution: {harness: "codex-app-server", model: "gpt-5.6-sol"}}],
 });
-if (location.search === "?welcome-existing") {
-  sessionComposerActions.seedIfAbsent("history-session", {
-    ...emptyComposer("codex-app-server:gpt-5.6-sol", "medium"), planModeEnabled: true,
+// The message typed on Home waits for its workspace, and is sent to the first
+// chat once the workspace is ready (MainLayout mounts the same hook).
+const welcomeWorkspace = {id: "welcome-workspace", state: "ready", current_session_id: "history-session", latest_message_sent_at: null, session_status: "idle"};
+const welcomeGroups = [{repo_id: "repo", repo_name: "repo", sort_order: 0, git_origin_url: null, workspaces: [welcomeWorkspace]}];
+if (location.search.startsWith("?welcome")) {
+  pendingFirstMessages.set("welcome-workspace", {
+    message: "Start from home",
+    model: "codex-app-server:gpt-6-astra",
+    // "?welcome-picked": Home's picker chose a thinking level too. "?welcome-existing":
+    // it was sent from the start page's composer, in plan mode.
+    thinkingLevel: location.search === "?welcome-picked" ? "low" : location.search === "?welcome-existing" ? "medium" : undefined,
+    planMode: location.search === "?welcome-existing" || undefined,
   });
 }
+if (location.search === "?welcome-existing") {
+  // What was typed on the start page after it moves to the chat when it opens.
+  sessionComposerActions.seedIfAbsent("welcome-workspace", {
+    ...emptyComposer("codex-app-server:gpt-6-astra", "medium"), planModeEnabled: true,
+  });
+  sessionComposerActions.setDraft("welcome-workspace", "Then add tests");
+}
+window.firstMessageWaiting = () => !!pendingFirstMessages.get("welcome-workspace");
 function WelcomeSendJourney() {
-  const panel = useRef(null);
-  // Like MainLayout's workspace-selection effect: this runs before history,
-  // and resolving the child queries must not require a second send attempt.
-  useEffect(() => {
-    window.welcomeSendAttempts++;
-    // "?welcome-picked": the home composer's picker chose a thinking level too.
-    void panel.current.sendMessage("Start from home", "codex-app-server:gpt-6-astra", location.search === "?welcome-picked" ? "low" : undefined)
-      .then(sent => { window.welcomeSendResult = sent; });
-  }, []);
-  return <SessionPanel ref={panel} sessionId="history-session" workspacePath="" embedded />;
+  useFirstMessageDelivery(welcomeGroups, true);
+  return <SessionPanel sessionId="history-session" workspacePath="" embedded />;
 }
 window.containsCredential = value => JSON.stringify([client.getQueryCache().getAll().map(q => q.state), client.getMutationCache().getAll().map(m => m.state)]).includes(value);
 window.deliverEmptyCloudSnapshot = () => makeCloudFrameHandler({
@@ -351,8 +361,15 @@ const server = await createServer({
                   projects: [{ name: "test-project", path: "/fixture/project", source: "cursor" }],
                 });
           if (req.url === "/api/mutate/invalidateFileCache") return json({ success: true });
-          if (req.url === "/api/mutate/addRepo")
-            return json({ success: false, error: "not a git repository" });
+          if (req.url === "/api/mutate/addRepo") {
+            // The Deus source, cloned at the end of onboarding, registers; any other folder is not a repository.
+            let body = "";
+            for await (const chunk of req) body += chunk;
+            const { root_path } = JSON.parse(body);
+            return root_path.endsWith("/deus-machine")
+              ? json({ success: true, data: { id: "deus-repo", root_path } })
+              : json({ success: false, error: "not a git repository" });
+          }
           if (req.url === "/api/mutate/saveSetting")
             return json({
               success: !failFinishSetup,
@@ -585,8 +602,8 @@ try {
   failGithub = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByText("Installed for fixture-user").waitFor();
-  // The welcome effect only gets one attempt when the workspace is selected.
-  // Its explicit model must be sufficient before either session or history arrives.
+  // The first message goes to the workspace's first chat once it is ready, with
+  // what it was typed with, before the chat's session or history arrives.
   failHistory = false;
   for (const [query, level] of [
     ["?welcome", "high"],
@@ -596,13 +613,9 @@ try {
     const existing = query === "?welcome-existing";
     delayWelcomeHistory = true;
     await page.goto(server.resolvedUrls.local[0] + query);
-    await page.waitForFunction(() => window.welcomeSendResult !== undefined);
-    assert.equal(
-      await page.evaluate(() => window.welcomeSendResult),
-      true,
-      "An explicit welcome send must succeed before the composer UI mounts"
-    );
-    assert.equal(await page.getByRole("textbox").count(), 0);
+    // Still held: the session and its history cannot have arrived.
+    await page.waitForFunction(() => window.welcomeCommands.length > 0);
+    await page.waitForFunction(() => !window.firstMessageWaiting());
     const commands = await page.evaluate(() => window.welcomeCommands);
     assert.equal(commands.length, 1);
     assert.equal(commands[0].name, "sendMessage");
@@ -620,13 +633,18 @@ try {
     assert.equal(
       await page.evaluate(() => window.welcomeCommands.length),
       1,
-      "Resolving history must not dispatch the accepted welcome prompt again"
+      "Resolving history must not send the first message again"
     );
-    assert.equal(await page.evaluate(() => window.welcomeSendAttempts), 1);
     const composer = await page.evaluate(() => window.composerForSession("history-session"));
     assert.equal(composer.model, "codex-app-server:gpt-6-astra");
     assert.equal(composer.thinkingLevel, level);
     assert.equal(composer.planModeEnabled, existing);
+    assert.equal(composer.draft, existing ? "Then add tests" : "");
+    assert.equal(
+      await page.evaluate(() => window.composerForSession("welcome-workspace")),
+      undefined,
+      "What was typed on the start page lives in the chat's composer now"
+    );
   }
   // Exercise the real query retry: failed history must not seed the default model.
   failHistory = true;
@@ -751,7 +769,17 @@ try {
     .waitFor();
   await page.screenshot({ path: path.join(artifacts, "onboarding-error.png") });
   failFinishSetup = false;
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  // Finishing with the Deus source clones it in the background and registers
+  // it. A workspace starts on Home, so the toast offers that; none is created.
+  await page.getByRole("button", { name: "Clone & Continue", exact: true }).click();
+  const cloned = page.locator("[data-sonner-toast]").filter({ hasText: "Deus cloned and ready" });
+  await cloned.getByRole("button", { name: "Start a workspace", exact: true }).waitFor();
+  const onboardingWrites = await page.evaluate(() =>
+    window.welcomeCommands.map(({ name }) => name)
+  );
+  assert(onboardingWrites.includes("gitClone"), "the Deus source is cloned");
+  assert(!onboardingWrites.includes("createWorkspace"), "no workspace is created behind the user");
+  await cloned.getByRole("button", { name: "Start a workspace", exact: true }).click();
   await page.waitForFunction(() =>
     document.querySelector('[class*="transition-opacity"]')?.classList.contains("opacity-0")
   );

@@ -6,7 +6,6 @@ import {
   workspaceToRestore,
   type FollowState,
 } from "@/features/sidebar/lib/location";
-import { createOptimisticWorkspace } from "@/features/workspace/lib/workspace.utils";
 import type { RepoGroup, Workspace } from "@/shared/types";
 
 const ws = (id: string, kind: Workspace["kind"], state: Workspace["state"] = "ready") =>
@@ -113,26 +112,5 @@ describe("composerLocation (new workspaces default to the window's location)", (
   it("stays local when Deus Cloud is not signed in (or not known yet)", () => {
     expect(composerLocation("cloud", false)).toBe("local");
     expect(composerLocation("local", false)).toBe("local");
-  });
-});
-
-describe("createOptimisticWorkspace", () => {
-  it("gives the placeholder the requested location's kind", () => {
-    expect(createOptimisticWorkspace("repo", "deus").kind).toBe("worktree");
-    expect(createOptimisticWorkspace("repo", "deus", "local").kind).toBe("worktree");
-    expect(createOptimisticWorkspace("repo", "deus", "cloud").kind).toBe("cloud");
-    expect(
-      filterByLocation(
-        [
-          {
-            repo_id: "repo",
-            repo_name: "deus",
-            sort_order: 0,
-            workspaces: [createOptimisticWorkspace("repo", "deus", "cloud")],
-          },
-        ],
-        "local"
-      )[0].workspaces
-    ).toEqual([]);
   });
 });

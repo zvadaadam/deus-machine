@@ -14,6 +14,7 @@ import { SidebarInset, SidebarMobileBar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui";
 import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import type { Automation } from "@/shared/types";
 import { refreshAutomations, useAutomations } from "../api/automations.queries";
 import { AutomationsListView } from "./AutomationsListView";
@@ -63,9 +64,7 @@ export function AutomationsPage() {
   const openNew = (prefill?: EditorPrefill) =>
     setView({ mode: "editor", automationId: null, prefill });
   const createWithAi = () =>
-    useUIStore
-      .getState()
-      .openNewWorkspaceModalWithDraft("Create a scheduled automation for this repo. It should: ");
+    openNewWorkspace({ draft: "Create a scheduled automation for this repo. It should: " });
   const openDetail = (automation: Automation) =>
     setView({ mode: "detail", automationId: automation.id });
   const openEdit = (automationId: string) => setView({ mode: "editor", automationId });

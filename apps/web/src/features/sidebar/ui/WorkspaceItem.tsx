@@ -14,6 +14,7 @@ import { useAutomationForWorkspace } from "@/features/automations";
 import { useUnreadStore } from "@/features/session/store/unreadStore";
 import { useWorkspaceLayoutStore } from "@/features/workspace/store/workspaceLayoutStore";
 import { prefetchWorkspace } from "@/features/workspace/api/prefetch";
+import { workspaceStart } from "@/features/workspace/lib/startState";
 import { getDisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import type { WorkspaceItemProps } from "../model/types";
@@ -156,17 +157,10 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
           .otherwise(() => null);
 
   const metaText = (): string => {
-    if (isInitializing) {
-      return match(workspace.init_stage)
-        .with("worktree", () => "Creating...")
-        .with("dependencies", () => "Installing...")
-        .with("hooks", () => "Setting up...")
-        .with("session", () => "Finalizing...")
-        .otherwise(() => "Setting up...");
-    }
-    if (isFailed) return workspace.kind === "cloud" ? "Computer failed" : "Failed";
-    if (isSetupRunning) return "Installing...";
-    if (isSetupFailed) return "Setup failed";
+    // Starting, failed, or its setup script running or failed: the words the
+    // chat and the header use for the same thing.
+    const start = workspaceStart(workspace).brief;
+    if (start) return start;
     return (
       match(displayStatus)
         // error/unread are unreachable here — the dot branch renders instead —
@@ -201,24 +195,21 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
       variant="workspace"
       isActive={isActive}
       role="button"
-      tabIndex={isInitializing ? -1 : 0}
+      tabIndex={0}
       data-workspace-id={workspace.id}
-      className={cn(isInitializing ? "pointer-events-none" : "cursor-pointer")}
+      className="cursor-pointer"
       aria-current={isActive ? "page" : undefined}
       aria-label={`Workspace ${displayName}`}
       aria-busy={isInitializing || undefined}
       // A failed row's hover should say WHY — the red state without the
       // stored error_message reads as "the agent errored".
       title={(isFailed ? (workspace.error_message ?? secondaryText) : secondaryText) ?? undefined}
-      onClick={isInitializing ? undefined : () => onClick(workspace)}
-      onMouseEnter={
-        isInitializing
-          ? undefined
-          : () =>
-              prefetchWorkspace(queryClient, workspace, {
-                activeSessionId: activeChatTabSessionId,
-                refreshIfCached: shouldRefreshPrefetch,
-              })
+      onClick={() => onClick(workspace)}
+      onMouseEnter={() =>
+        prefetchWorkspace(queryClient, workspace, {
+          activeSessionId: activeChatTabSessionId,
+          refreshIfCached: shouldRefreshPrefetch,
+        })
       }
       onKeyDown={(e) => {
         // Only when the row itself is focused — child buttons (status menu,
@@ -226,11 +217,7 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         if (e.currentTarget === e.target && e.key === " ") e.preventDefault();
       }}
       onKeyUp={(e) => {
-        if (
-          e.currentTarget === e.target &&
-          !isInitializing &&
-          (e.key === "Enter" || e.key === " ")
-        ) {
+        if (e.currentTarget === e.target && (e.key === "Enter" || e.key === " ")) {
           onClick(workspace);
         }
       }}
@@ -266,13 +253,11 @@ export const WorkspaceItem = React.memo(function WorkspaceItem({
         <span
           className={cn(
             "truncate text-base",
-            isInitializing
-              ? "text-text-disabled font-normal"
-              : isActive
-                ? "text-text-primary font-medium"
-                : isAttention
-                  ? "text-text-primary font-normal"
-                  : "text-text-tertiary font-normal"
+            isActive
+              ? "text-text-primary font-medium"
+              : isAttention
+                ? "text-text-primary font-normal"
+                : "text-text-tertiary font-normal"
           )}
         >
           {displayName}

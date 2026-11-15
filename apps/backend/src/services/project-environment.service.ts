@@ -15,6 +15,7 @@ import { getWorkspace } from "@deus-hq/sdk";
 import type { ProjectEnvironmentResponse } from "@shared/types/project-environment";
 import { getDatabase } from "../lib/database";
 import { ValidationError } from "../lib/errors";
+import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { getCloudConfig } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
 import { createBackendChildEnv } from "../runtime/child-env";
@@ -189,6 +190,10 @@ export function runSetupCommand(
   env: NodeJS.ProcessEnv
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (processGroupsStopped()) {
+      reject(new Error("Deus is closing."));
+      return;
+    }
     const log = fs.createWriteStream(path.join(os.tmpdir(), `deus-${workspaceId}-setup.log`));
     const child = spawn("/bin/sh", ["-ec", command], {
       cwd: directory,
@@ -196,6 +201,8 @@ export function runSetupCommand(
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    // Its own group: the backend stops it when it stops (lib/process-groups).
+    const untrack = trackProcessGroup(child.pid);
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
     const killProcessGroup = () => {
@@ -216,6 +223,7 @@ export function runSetupCommand(
     const finish = (error?: Error) => {
       if (finished) return;
       finished = true;
+      untrack();
       clearTimeout(timer);
       if (error) {
         log.end();
@@ -232,9 +240,11 @@ export function runSetupCommand(
         code === 0 && !timedOut
           ? undefined
           : new Error(
-              timedOut
-                ? "Setup timed out after five minutes."
-                : `Setup exited with code ${code}. View the setup log for details.`
+              processGroupsStopped()
+                ? "Setup was stopped when Deus closed. Run it again."
+                : timedOut
+                  ? "Setup timed out after five minutes."
+                  : `Setup exited with code ${code}. View the setup log for details.`
             )
       )
     );

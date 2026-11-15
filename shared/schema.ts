@@ -110,6 +110,12 @@ export const ADDITIVE_COLUMNS = {
     // outcome: a stored inline token past its 1-hour life only shadows the
     // org PAT, so it may be stripped even when the remint result is unknown.
     last_inline_mint_at: "INTEGER",
+    // How a workspace started: the tool's own words for a failure, the branch
+    // it started from (a retry starts there again), and why origin's latest
+    // was skipped.
+    error_detail: "TEXT",
+    git_source_branch: "TEXT",
+    init_fetch_issue: "TEXT",
   },
   sessions: {
     // agnt session id for cloud-workspace sessions (null for local).
@@ -163,6 +169,12 @@ export const SCHEMA_SQL = `
     setup_status TEXT NOT NULL DEFAULT 'none',
     init_stage TEXT,
     error_message TEXT,
+    -- What the tool said when starting failed; error_message is the plain reason.
+    error_detail TEXT,
+    -- The branch the workspace was started from, so a retry starts from it again.
+    git_source_branch TEXT,
+    -- Why origin's latest was not fetched first: offline | auth | failed (NULL = it was, or there is no origin).
+    init_fetch_issue TEXT,
     kind TEXT NOT NULL DEFAULT 'worktree',
     provider_workspace_id TEXT,
     last_inline_mint_at INTEGER,

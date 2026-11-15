@@ -96,6 +96,12 @@ interface MessageInputProps {
   onStop?: () => void;
   onOpenNewTab?: (initialModel?: string) => void;
 
+  /** Replaces the default "Ask a follow-up…" hint. */
+  placeholder?: string;
+  /** Whether `@` lists the workspace's files. Off where there is no checkout
+   *  to list yet (a workspace that is still starting). */
+  fileMentionsEnabled?: boolean;
+
   /** User setting — default thinking level for new sessions / clamp target
    *  when switching to a model that doesn't support the current level. */
   defaultThinking?: ThinkingLevel;
@@ -220,6 +226,8 @@ export function MessageInput({
   onStop,
   onOpenNewTab,
   defaultThinking = DEFAULT_THINKING_LEVEL,
+  placeholder,
+  fileMentionsEnabled = true,
   className,
 }: MessageInputProps) {
   const isMobile = useIsMobile();
@@ -296,7 +304,7 @@ export function MessageInput({
   // selected index). Picked files get pushed into the composer store.
   const fileMention = useFileMention({
     value: draft,
-    workspaceId: workspaceId ?? null,
+    workspaceId: fileMentionsEnabled ? (workspaceId ?? null) : null,
     onChange: composer.setDraft,
     onAddMention: (result) => composer.addFileMention({ path: result.path, name: result.name }),
   });
@@ -467,11 +475,12 @@ export function MessageInput({
           // @ files and / skills read the Mac backend — web-direct has none, so
           // the hint would promise pickers that come back empty.
           placeholder={
-            isCloudDirectWebMode()
+            placeholder ??
+            (isCloudDirectWebMode()
               ? "Ask a follow-up…"
               : isClaudeAgent
                 ? "Ask a follow-up… (@ files, / skills)"
-                : "Ask a follow-up… (@ files)"
+                : "Ask a follow-up… (@ files)")
           }
           disabled={sending}
           onKeyDown={handleKeyDown}

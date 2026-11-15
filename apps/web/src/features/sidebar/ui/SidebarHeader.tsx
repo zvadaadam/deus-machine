@@ -1,12 +1,4 @@
-import {
-  Check,
-  ChevronDown,
-  Cloud,
-  Monitor,
-  PanelLeftClose,
-  Settings,
-  SquarePen,
-} from "lucide-react";
+import { Check, ChevronDown, Cloud, Monitor, PanelLeftClose, Settings } from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -81,7 +73,6 @@ export function SidebarHeader({
   onSwitchLocation,
   onOpenSettings,
   onToggleSidebar,
-  onNewSession,
   isExpanded,
 }: SidebarHeaderProps) {
   const { isMobile } = useSidebar();
@@ -148,32 +139,18 @@ export function SidebarHeader({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <div className="flex items-center gap-0.5">
-        {onNewSession && (
-          <button
-            type="button"
-            onClick={onNewSession}
-            aria-label="New session"
-            title={`New session (${modKey}N)`}
-            className="control-interaction text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-          >
-            <SquarePen className="h-[16px] w-[16px]" />
-          </button>
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+        title={!isMobile ? toggleTitle : undefined}
+        className={cn(
+          "control-interaction text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+          !isExpanded && "opacity-60"
         )}
-
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
-          title={!isMobile ? toggleTitle : undefined}
-          className={cn(
-            "control-interaction text-text-muted hover:text-text-tertiary hover:bg-foreground/[0.04] flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
-            !isExpanded && "opacity-60"
-          )}
-        >
-          <PanelLeftClose className="h-[18px] w-[18px]" />
-        </button>
-      </div>
+      >
+        <PanelLeftClose className="h-[18px] w-[18px]" />
+      </button>
     </SidebarHeaderUI>
   );
 }

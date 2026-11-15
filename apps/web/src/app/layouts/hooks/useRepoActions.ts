@@ -1,5 +1,5 @@
 /**
- * Repository Actions Hook — thin coordinator for repo-related flows.
+ * Repository Actions Hook — thin coordinator for adding a project.
  *
  * Delegates each async flow to its own hook:
  * - useCloneRepo — GitHub clone modal + multi-phase clone
@@ -7,17 +7,20 @@
  *
  * Keeps shared logic here:
  * - addRepoOrUseExisting (409 conflict handling)
- * - createAndSelectWorkspace (core workspace creation)
  * - handleOpenProject (simple native dialog flow)
- * - handleNewWorkspace / handleNewWorkspaceFromGitHub (workspace modal)
+ * - handleNewWorkspaceFromGitHub (a workspace on a pull request or branch)
+ *
+ * Every flow that adds a project ends the same way: Home, with the project
+ * chosen, where the first message creates its first workspace.
  */
 
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { useCreateWorkspace } from "@/features/workspace/api";
 import { useAddRepo } from "@/features/repository/api";
 import { useSidebarStore } from "@/features/sidebar/store";
+import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { native } from "@/platform";
 import { capabilities } from "@/platform/capabilities";
 import { getErrorMessage } from "@shared/lib/errors";
@@ -26,18 +29,12 @@ import { useStartNewProject } from "./useStartNewProject";
 
 interface UseRepoActionsOptions {
   selectWorkspace: (id: string | null) => void;
-  openNewWorkspaceModal: () => void;
 }
 
-export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRepoActionsOptions) {
-  // Shared mutations
+export function useRepoActions({ selectWorkspace }: UseRepoActionsOptions) {
   const createWorkspaceMutation = useCreateWorkspace();
   const addRepoMutation = useAddRepo();
   const expandRepo = useSidebarStore((s) => s.expandRepo);
-
-  // New-workspace modal state (used by NewWorkspaceModal)
-  const [selectedRepoId, setSelectedRepoId] = useState("");
-  const [creating, setCreating] = useState(false);
 
   // ── Shared utilities ─────────────────────────────────────────
 
@@ -55,64 +52,19 @@ export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRe
     }
   }
 
-  /** Create a workspace for the given repo, select it, and expand the sidebar. */
-  async function createWorkspaceAndSelect(
-    repoId: string,
-    location?: "local" | "cloud",
-    branch?: string
-  ) {
-    const workspace = await createWorkspaceMutation.mutateAsync(
-      location === "cloud" || branch
-        ? { repositoryId: repoId, location, source_branch: branch }
-        : repoId
-    );
-    selectWorkspace(workspace.id);
-    expandRepo(workspace.repository_id);
+  /** A project was added: show Home with it chosen. */
+  function startIn(repo: Repository) {
+    expandRepo(repo.id);
+    openNewWorkspace({ repoId: repo.id });
   }
 
   // ── Clone flow ───────────────────────────────────────────────
 
-  const clone = useCloneRepo({
-    addRepoOrUseExisting,
-    createWorkspaceAndSelect,
-  });
+  const clone = useCloneRepo({ addRepoOrUseExisting, onAdded: startIn });
 
   // ── Start new project flow ───────────────────────────────────
 
-  const startNew = useStartNewProject({
-    addRepoOrUseExisting,
-    createWorkspaceAndSelect,
-  });
-
-  // ── Workspace creation ───────────────────────────────────────
-
-  /** Create a workspace with loading state and error handling. */
-  const createAndSelectWorkspace = useCallback(
-    async (repoId: string, location?: "local" | "cloud", branch?: string) => {
-      setCreating(true);
-      try {
-        await createWorkspaceAndSelect(repoId, location, branch);
-      } catch (error) {
-        selectWorkspace(null);
-        console.error("Error creating workspace:", error);
-        toast.error(getErrorMessage(error));
-      } finally {
-        setCreating(false);
-      }
-    },
-    [createWorkspaceAndSelect, selectWorkspace]
-  );
-
-  /** Handle "New Workspace" — open the prompt-first modal (repo preselected
-   *  when opened from a repo row). Same surface as the Home composer: prompt,
-   *  branch, and the cloud toggle, with the prompt riding as turn one. */
-  const handleNewWorkspace = useCallback(
-    async (repoId?: string) => {
-      if (repoId) setSelectedRepoId(repoId);
-      openNewWorkspaceModal();
-    },
-    [openNewWorkspaceModal]
-  );
+  const startNew = useStartNewProject({ addRepoOrUseExisting, onAdded: startIn });
 
   // ── Open local project ───────────────────────────────────────
 
@@ -126,8 +78,8 @@ export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRe
 
     try {
       const repo = await addRepoOrUseExisting(folderPath);
-      await createWorkspaceAndSelect(repo.id);
-      toast.success(`"${repo.name}" ready`, { id: toastId });
+      startIn(repo);
+      toast.success(`"${repo.name}" added`, { id: toastId });
     } catch (error) {
       console.error("Error adding repository:", error);
       toast.error(getErrorMessage(error), { id: toastId });
@@ -136,7 +88,7 @@ export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRe
 
   // ── GitHub workspace creation ────────────────────────────────
 
-  /** Create workspace from a GitHub PR or branch (extended params). */
+  /** Create a workspace on a pull request or branch: it has a subject already, so no prompt. */
   const handleNewWorkspaceFromGitHub = useCallback(
     async (params: {
       repositoryId: string;
@@ -146,7 +98,6 @@ export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRe
       pr_title?: string;
       target_branch?: string;
     }) => {
-      setCreating(true);
       try {
         const workspace = await createWorkspaceMutation.mutateAsync(params);
         selectWorkspace(workspace.id);
@@ -155,20 +106,12 @@ export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRe
         selectWorkspace(null);
         console.error("Failed to create workspace from GitHub:", error);
         toast.error(getErrorMessage(error));
-      } finally {
-        setCreating(false);
       }
     },
     [createWorkspaceMutation, selectWorkspace, expandRepo]
   );
 
   return {
-    // New-workspace modal state
-    selectedRepoId,
-    setSelectedRepoId,
-    creating,
-    createAndSelectWorkspace,
-    handleNewWorkspace,
     handleNewWorkspaceFromGitHub,
 
     // Clone flow (delegated to useCloneRepo)

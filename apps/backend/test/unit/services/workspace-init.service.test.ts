@@ -55,12 +55,10 @@ async function initialize() {
   const directory = path.join(root, ".deus", "workspace");
   await initializeWorkspace({
     workspaceId,
-    repositoryId: "repo",
     repoRootPath: root,
     workspacePath: directory,
     branchName: "test-workspace",
-    worktreeBase: "main",
-    parentBranch: "main",
+    sourceBranch: "main",
     repoOriginUrl: "https://github.com/test/app",
   });
   return directory;
@@ -78,7 +76,7 @@ beforeEach(() => {
   mocks.saved.mockReset();
   mocks.db = new Database(":memory:");
   mocks.db.exec(
-    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, init_stage TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
+    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, slug TEXT, git_branch TEXT, init_stage TEXT, init_fetch_issue TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, error_detail TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
   );
   mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
 });
@@ -218,6 +216,28 @@ describe("local project environment journey", () => {
       stop(childPid);
       stop(shellPid);
     }
+  });
+  it("stops a setup that is still running when the backend stops, and starts none after", async () => {
+    // Modules of their own: once stopped they stay stopped, as the backend does.
+    vi.resetModules();
+    const groups = await import("../../../src/lib/process-groups");
+    const environment = await import("../../../src/services/project-environment.service");
+    const pidFile = path.join(root, "setup-child");
+    const setup = environment
+      .runSetupCommand(workspaceId, `sleep 30 & echo $! > "${pidFile}"; wait`, root, process.env)
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
+    const child = Number(fs.readFileSync(pidFile, "utf8"));
+
+    groups.stopProcessGroups();
+
+    expect(await setup).toMatchObject({
+      message: "Setup was stopped when Deus closed. Run it again.",
+    });
+    await vi.waitFor(() => expect(() => process.kill(child, 0)).toThrow());
+    await expect(
+      environment.runSetupCommand(workspaceId, "true", root, process.env)
+    ).rejects.toThrow("Deus is closing.");
   });
   it("makes a saved recipe publishable while retaining ignored workspace data", () => {
     fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");

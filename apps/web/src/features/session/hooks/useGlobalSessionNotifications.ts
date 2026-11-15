@@ -9,6 +9,13 @@
  * - Agent needs input (→ needs_response)                   → Ping sound
  * - Plan ready for review (→ needs_plan_response)          → Ping sound
  * - Setup failed/completed                                 → Basso/Glass sound
+ * - Workspace didn't start                                 → Basso sound
+ *
+ * A workspace that fails to start is the one event that also toasts in the
+ * foreground: its failure is shown where its chat would be, which nobody is
+ * looking at once they have moved on to another workspace. One that starts
+ * records the chat it started with, which then tells the story of the start
+ * under its first message (workspaceStartStore).
  *
  * All transitions are detected by observing the workspace React Query cache,
  * which is kept fresh by the WS subscription. No IPC event listeners needed.
@@ -20,19 +27,21 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
+import { toast } from "sonner";
 import { capabilities } from "@/platform/capabilities";
 import { sendNotification } from "@/platform/notifications";
 import { isWindowFocused } from "@/shared/hooks/useWindowFocus";
 import { track } from "@/platform/analytics";
 import { unreadActions } from "@/features/session/store/unreadStore";
 import { useWorkspaceStore } from "@/features/workspace/store";
+import { markStartedIn } from "@/features/workspace/store/workspaceStartStore";
 import {
   useWorkspaceLayoutStore,
   workspaceLayoutActions,
 } from "@/features/workspace/store/workspaceLayoutStore";
 import { show as showWindow } from "@/platform/native/window";
 import type { SessionStatus } from "@shared/types/session";
-import type { RepoGroup, SetupStatus, Workspace } from "@shared/types/workspace";
+import type { RepoGroup, SetupStatus, Workspace, WorkspaceState } from "@shared/types/workspace";
 
 /**
  * Batches multiple notifications within a short window into a single one.
@@ -82,6 +91,7 @@ function checkIsViewingSession(workspaceId: string, sessionId: string): boolean 
 export function useGlobalSessionNotifications() {
   const prevStatusMap = useRef(new Map<string, SessionStatus>());
   const prevSetupStatusMap = useRef(new Map<string, SetupStatus>());
+  const prevStateMap = useRef(new Map<string, WorkspaceState>());
   const finishedBatch = useRef<FinishedEntry[]>([]);
   const batchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -224,6 +234,43 @@ export function useGlobalSessionNotifications() {
                   });
                 }
               }
+            }
+          }
+
+          // --- Start transitions ---
+          const prevState = prevStateMap.current.get(ws.id);
+          prevStateMap.current.set(ws.id, ws.state);
+
+          // Local only: a cloud chat already tells its computer's story (cloud:env).
+          if (
+            prevState === "initializing" &&
+            ws.state === "ready" &&
+            ws.kind !== "cloud" &&
+            ws.current_session_id
+          ) {
+            markStartedIn(ws.id, ws.current_session_id);
+          }
+
+          if (prevState === "initializing" && ws.state === "error") {
+            const open = () => {
+              showWindow();
+              useWorkspaceStore.getState().selectWorkspace(ws.id);
+            };
+            if (!isWindowFocused()) {
+              if (canNotify) {
+                sendNotification({
+                  title: "Workspace didn't start",
+                  body: formatBody(group.repo_name, ws),
+                  sound: "Basso",
+                  onClick: open,
+                });
+              }
+            } else if (useWorkspaceStore.getState().selectedWorkspaceId !== ws.id) {
+              toast.error(`${ws.title || ws.slug} didn't start`, {
+                description: ws.error_message ?? undefined,
+                duration: 10_000,
+                action: { label: "View", onClick: open },
+              });
             }
           }
 

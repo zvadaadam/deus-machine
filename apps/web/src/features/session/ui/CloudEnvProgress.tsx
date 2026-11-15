@@ -2,19 +2,17 @@
  * Cloud environment progress — the Cursor-style setup story in the chat.
  *
  * Renders the ephemeral `cloudEnvironment` stream (agnt workspace.state
- * passthrough) as a COLLAPSED one-liner in the transcript, matching the
- * tool-call group pattern: the summary line is the live truth (active step
- * spinning while in flight, "Computer ready" when done, "Sandbox paused"
+ * passthrough) as an environment line in the transcript (EnvGroup, the line a
+ * local workspace's start uses too): the summary is the live truth (active
+ * step spinning while in flight, "Computer ready" when done, "Sandbox paused"
  * when asleep), and the chevron expands the full step list. Groups are
  * spliced into the timeline chronologically (chatTimeline.insertCloudEnv),
  * so a wake reads: your message → setup lines → the reply. Nothing is
  * persisted — a refresh clears the story.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, m } from "framer-motion";
-import { Check, ChevronRight, CloudOff, Loader2, TriangleAlert } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
+import { useEffect, useMemo } from "react";
+import { EnvGroup, type EnvLine } from "./EnvGroup";
 import {
   useCloudEnvStore,
   ensureCloudEnvSubscription,
@@ -54,14 +52,7 @@ function stepLabel(step: string | null): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-interface Line {
-  key: string;
-  label: string;
-  icon: "done" | "active" | "asleep" | "error";
-  tone?: "ready" | "muted" | "error";
-}
-
-function buildLines(entries: CloudEnvEntry[]): Line[] {
+function buildLines(entries: CloudEnvEntry[]): EnvLine[] {
   const latest = entries[entries.length - 1];
   if (!latest) return [];
 
@@ -100,7 +91,7 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
 
   // In-flight (or finished) provisioning: one line per step, the latest
   // still spinning, earlier ones checked off.
-  const lines: Line[] = [];
+  const lines: EnvLine[] = [];
   for (const entry of entries) {
     if (entry.status === "provisioning") {
       lines.push({ key: `step-${entry.id}`, label: stepLabel(entry.step), icon: "done" });
@@ -126,102 +117,10 @@ function buildLines(entries: CloudEnvEntry[]): Line[] {
   return lines;
 }
 
-function LineIcon({ icon }: { icon: Line["icon"] }) {
-  switch (icon) {
-    case "active":
-      return <Loader2 className="text-text-muted h-3 w-3 flex-shrink-0 animate-spin" />;
-    case "done":
-      return <Check className="text-accent-green h-3 w-3 flex-shrink-0" />;
-    case "asleep":
-      return <CloudOff className="text-text-disabled h-3 w-3 flex-shrink-0" />;
-    case "error":
-      return <TriangleAlert className="text-destructive/80 h-3 w-3 flex-shrink-0" />;
-  }
-}
-
-function lineTextClass(tone: Line["tone"]): string {
-  return cn(
-    "font-mono text-xs tracking-tight",
-    tone === "error"
-      ? "text-destructive/80"
-      : tone === "ready"
-        ? "text-text-secondary"
-        : "text-text-muted"
-  );
-}
-
-/** One collapsible environment group — a run of events at one point in the
- *  transcript. Collapsed by default to its latest/live line. */
+/** One environment group — a run of events at one point in the transcript.
+ *  Collapsed by default to its latest/live line. */
 export function CloudEnvGroup({ entries }: { entries: CloudEnvEntry[] }) {
-  const [expanded, setExpanded] = useState(false);
   const lines = useMemo(() => buildLines(entries), [entries]);
   if (lines.length === 0) return null;
-
-  const summary = lines[lines.length - 1];
-  const detail = lines.slice(0, -1);
-  const hasDetail = detail.length > 0;
-
-  return (
-    <div className="flex w-full min-w-0 flex-col" role="status" aria-live="polite">
-      <button
-        type="button"
-        onClick={() => hasDetail && setExpanded(!expanded)}
-        disabled={!hasDetail}
-        aria-expanded={hasDetail ? expanded : undefined}
-        className={cn(
-          "group flex w-full items-center gap-2 px-2 py-1 text-left",
-          hasDetail && "cursor-pointer",
-          "transition-opacity duration-150 ease-out",
-          hasDetail && "opacity-90 hover:opacity-100",
-          "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
-        )}
-      >
-        <div className="relative h-3 w-3 flex-shrink-0">
-          <div
-            className={cn(
-              "absolute top-0 left-0 transition-opacity duration-150 ease-out",
-              hasDetail && (expanded ? "opacity-0" : "opacity-100 group-hover:opacity-0")
-            )}
-          >
-            <LineIcon icon={summary.icon} />
-          </div>
-          {hasDetail && (
-            <ChevronRight
-              className={cn(
-                "text-muted-foreground/50 absolute top-0 left-0 h-3 w-3 transition-[transform,opacity] duration-150 ease-out",
-                expanded && "rotate-90",
-                expanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-              )}
-              aria-hidden="true"
-            />
-          )}
-        </div>
-        <span className={lineTextClass(summary.tone)}>{summary.label}</span>
-        {hasDetail && (
-          <span className="text-muted-foreground/40 font-mono text-xs" aria-hidden="true">
-            · {detail.length + 1} steps
-          </span>
-        )}
-      </button>
-
-      <AnimatePresence>
-        {expanded && hasDetail && (
-          <m.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
-            className="flex flex-col overflow-hidden"
-          >
-            {detail.map((line) => (
-              <div key={line.key} className="flex items-center gap-2 px-2 py-0.5 pl-7">
-                <LineIcon icon={line.icon} />
-                <span className={lineTextClass(line.tone)}>{line.label}</span>
-              </div>
-            ))}
-          </m.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+  return <EnvGroup summary={lines[lines.length - 1]} detail={lines.slice(0, -1)} />;
 }

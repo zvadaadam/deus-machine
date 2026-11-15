@@ -154,6 +154,93 @@ connections (30s interval, 10s timeout). When a relay host is replaced,
 already-authorized viewers reconnect and authorize again before their
 subscriptions resume; a connected tunnel alone is not readiness.
 
+### Starting a workspace (`services/workspace-init.service.ts`)
+
+A workspace is created in one place: Home, whose composer sends the first
+message with it. Everything that wants one goes there through
+`openNewWorkspace({ repoId?, draft? })` (`features/workspace/lib/newWorkspace.ts`):
+the sidebar's "New workspace" row, a project's "+", the command palette, a
+starter prompt, and every way of adding a project (open, clone, new), which
+ends on Home with that project chosen. There is no creation dialog. The one
+exception has its subject already: a workspace on a pull request or branch
+(`GitHubPickerModal`).
+
+Creating a local workspace writes its row and returns. The rest runs in the
+background, in four stages: `fetch` (origin's latest for the branch it starts
+from), `worktree` (`git worktree add` on a new branch), `setup` (the project's
+setup script), `session` (the first chat, and `state = 'ready'`). Each stage
+writes `init_stage` and pushes the `workspaces` resource, which is the only
+progress channel: the desktop, the web app and a phone all follow it.
+
+- Only `worktree` and `session` are fatal. A fetch that fails still starts the
+  workspace, from what is on this computer, and records why
+  (`init_fetch_issue`: `offline`, `auth` or `failed`); a setup script that fails
+  is `setup_status = 'failed'`, with its own retry.
+- A fatal failure removes what the attempt made and leaves `state = 'error'`
+  with a plain reason (`error_message`) and the tool's own words
+  (`error_detail`). `retryWorkspaceInit` starts the same row again, so whatever
+  is keyed by its id survives (the web app keeps the first message waiting for
+  it, `workspaceStartStore`). `deleteFailedWorkspace` removes a workspace
+  that never started and refuses any other: a used one is archived.
+- A backend that stops mid-start leaves `initializing` rows nothing is working
+  on. `failInterruptedWorkspaces` fails them at startup.
+- Git commands that can run long go through `lib/git-process.ts` (`runGit`):
+  no prompts, their own process group, and a timeout that stops the whole
+  group. An `execFile` timeout stops only git itself, and `git worktree add`'s
+  checkout child keeps writing; a worktree cut short stays locked, which only
+  `git worktree remove --force --force` clears (`removeWorktree`).
+- A name is free only if the database, the `.deus` folder and the repository's
+  branches all lack it; a name found taken is never reused or removed.
+- Cloud workspaces provision through `cloud-workspace-init.service.ts`. They
+  share the `error` state, and the same retry and delete while no cloud
+  computer exists for them; once one does, waking it is the way back.
+
+In the app a start is told in the transcript, by the line cloud provisioning
+uses (`session/ui/EnvGroup`): `workspaceStart(workspace)`
+(`features/workspace/lib/startState.ts`) reads the row into steps, warnings
+(started without the remote's latest, setup script failed) and a failure, and
+`WorkspaceStartGroup` renders it, with Retry and Delete on a failure. The
+message always comes first and the line under it: before the workspace has a
+chat, the waiting message and then the line are the page
+(`WorkspaceStartState`); once it is ready, the chat it started with shows the
+line under its first message, as a cloud chat shows its computer's
+provisioning. In a ready chat the line is per client and in memory
+(`workspaceStartStore`), as a cloud chat's provisioning story is.
+
+Home keeps the typed message in its composer until the workspace exists, so
+one that could not be created is still there to send again. From then on the
+message waits in `workspaceStartStore`, keyed by workspace,
+and `useFirstMessageDelivery` (mounted once, in `MainLayout`) sends it to the
+workspace's first chat when that workspace is ready, whichever one is on
+screen; `session/lib/firstMessage.ts` holds the rules. It is kept in
+sessionStorage, so reloading the window does not lose it, and it is sent once:
+a chat that already has a message, or is answering one, is never sent it
+again, and a send the backend refuses goes into that chat's composer with a
+toast rather than being retried. Send it from anywhere else and two workspaces
+started in a row lose one.
+
+`hasCheckout(workspace)` (it has a chat) says whether there is somewhere to
+work. Without one there is no branch to open a pull request from and nothing
+for the tools to show, so a workspace that failed to start (`failedToStart`)
+is the chat column alone. A workspace that is still starting can be opened
+from the sidebar; its row, the header chip and the chat word the step the
+same way (`workspaceStart(workspace).brief`, `SETUP_RUNNING`, `SETUP_FAILED`).
+
+The start page has the chat's composer (`WorkspaceStartComposer`), where the
+chat will have it, keyed by the workspace since there is no chat yet. One
+message waits per workspace: sending there when nothing waits makes it the
+waiting message, and a second is refused in words and stays in the box. What
+was typed there moves to the chat's composer when the chat opens
+(`sessionComposerActions.move`, from `useFirstMessageDelivery`), before the
+waiting message is sent. The waiting message is per client, so another device
+or window can speak to the chat first; this client's message is then never
+sent, and goes into that chat's composer instead (`missedFirstMessages`). A
+failure that cannot be retried has no composer: nothing typed there could be
+sent.
+
+`bun run test:e2e:workspace-start` runs these against the real backend, git and
+web app (see `test/e2e/README.md`).
+
 ### Remote access (relay)
 
 Remote access is bound to the Deus account, like Conductor's and ChatGPT's:

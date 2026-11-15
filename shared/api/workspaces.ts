@@ -116,6 +116,24 @@ export const updateWorkspaceStatus = write({
 /** Run the project's setup again after it failed. */
 export const retrySetup = write({ name: "retrySetup", input: workspaceId, output: out<void>() });
 
+/**
+ * Start a workspace that failed to start again, on the same row: its name, its
+ * branch and whatever a client keeps for it (the first message) stay put.
+ * Progress arrives on `workspaces`.
+ */
+export const retryWorkspaceInit = write({
+  name: "retryWorkspaceInit",
+  input: workspaceId,
+  output: out<void>(),
+});
+
+/** Remove a workspace that never started. One that did is archived instead. */
+export const deleteWorkspace = write({
+  name: "deleteWorkspace",
+  input: workspaceId,
+  output: out<void>(),
+});
+
 /** Resolve one of the project's Run commands into what a terminal should execute. */
 export const runTask = write({
   name: "runTask",

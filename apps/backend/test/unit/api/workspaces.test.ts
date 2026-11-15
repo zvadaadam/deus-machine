@@ -1,54 +1,65 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import * as api from "@shared/api/workspaces";
 import { operations } from "../../helpers";
+import { ConflictError } from "../../../src/lib/errors";
 
 // ─── Hoisted mocks (vi.mock factories run before imports) ─────────
 
-const { mockStmt, mockDb, mockExecFileAsync, mockInitializeWorkspace, mockInvalidate } = vi.hoisted(
-  () => {
-    const mockStmt = {
-      all: vi.fn<(...args: any[]) => any>(() => []),
-      get: vi.fn<(...args: any[]) => any>(),
-      run: vi.fn<(...args: any[]) => any>(() => ({ changes: 1 })),
-    };
-    const mockDb = {
-      prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
-      transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
-    };
-    const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
-      Promise.resolve({ stdout: "", stderr: "" })
-    );
-    const mockInitializeWorkspace = vi.fn<(...args: any[]) => any>(() => Promise.resolve());
-    const mockInvalidate = vi.fn<(...args: any[]) => any>();
-    return {
-      mockStmt,
-      mockDb,
-      mockExecFileAsync,
-      mockInitializeWorkspace,
-      mockInvalidate,
-    };
-  }
-);
+const {
+  mockStmt,
+  mockDb,
+  mockExecFileAsync,
+  mockInitializeWorkspace,
+  mockRetryWorkspaceInit,
+  mockDeleteFailedWorkspace,
+  mockInvalidate,
+} = vi.hoisted(() => {
+  const mockStmt = {
+    all: vi.fn<(...args: any[]) => any>(() => []),
+    get: vi.fn<(...args: any[]) => any>(),
+    run: vi.fn<(...args: any[]) => any>(() => ({ changes: 1 })),
+  };
+  const mockDb = {
+    prepare: vi.fn<(...args: any[]) => any>(() => mockStmt),
+    transaction: vi.fn<(...args: any[]) => any>((fn: Function) => fn),
+  };
+  const mockExecFileAsync = vi.fn<(...args: any[]) => any>(() =>
+    Promise.resolve({ stdout: "", stderr: "" })
+  );
+  const mockInitializeWorkspace = vi.fn<(...args: any[]) => any>(() => Promise.resolve());
+  const mockRetryWorkspaceInit = vi.fn<(...args: any[]) => any>();
+  const mockDeleteFailedWorkspace = vi.fn<(...args: any[]) => any>();
+  const mockInvalidate = vi.fn<(...args: any[]) => any>();
+  return {
+    mockStmt,
+    mockDb,
+    mockExecFileAsync,
+    mockInitializeWorkspace,
+    mockRetryWorkspaceInit,
+    mockDeleteFailedWorkspace,
+    mockInvalidate,
+  };
+});
 
 vi.mock("../../../src/lib/database", () => ({
   getDatabase: vi.fn<(...args: any[]) => any>(() => mockDb),
 }));
 
-vi.mock("../../../src/services/workspace.service", () => ({
-  generateUniqueName: vi.fn<(...args: any[]) => any>(() => "europa"),
-}));
-
 vi.mock("../../../src/services/workspace-init.service", () => ({
   initializeWorkspace: (...args: unknown[]) => mockInitializeWorkspace(...args),
+  pickWorkspaceName: async () => ({ slug: "europa", branchName: "testuser/europa" }),
+  retryWorkspaceInit: (...args: unknown[]) => mockRetryWorkspaceInit(...args),
+  deleteFailedWorkspace: (...args: unknown[]) => mockDeleteFailedWorkspace(...args),
 }));
 
 vi.mock("../../../src/services/query-engine", () => ({
   invalidate: (...args: unknown[]) => mockInvalidate(...args),
 }));
 
-const cloud = vi.hoisted(() => ({ pause: vi.fn(), wake: vi.fn() }));
+const cloud = vi.hoisted(() => ({ pause: vi.fn(), wake: vi.fn(), retry: vi.fn() }));
 vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   createCloudWorkspace: vi.fn(),
+  retryCloudWorkspace: cloud.retry,
   pauseCloudWorkspace: cloud.pause,
   wakeCloudWorkspaceWithFeedback: cloud.wake,
 }));
@@ -189,76 +200,35 @@ describe("createWorkspace", () => {
     expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
   });
 
-  it("creates workspace in initializing state", async () => {
+  it("creates the row in initializing state, with the branch it starts from", async () => {
+    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
+
+    await create({ repository_id: "repo-001", source_branch: "develop" });
+
+    const insert = mockDb.prepare.mock.calls
+      .map(([sql]) => String(sql))
+      .find((sql) => sql.includes("INSERT INTO workspaces"));
+    expect(insert).toContain("'initializing'");
+    // id, repository, slug, title, branch, source branch, target branch, PR url, PR number
+    expect(mockStmt.run).toHaveBeenCalledWith(
+      "ws-test-uuid",
+      "repo-001",
+      "europa",
+      null,
+      "testuser/europa",
+      "develop",
+      "main",
+      null,
+      null
+    );
+  });
+
+  it("does no slow git work itself: fetching and the worktree belong to the pipeline", async () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     await create();
 
-    // Verify INSERT run args include 'initializing'
-    const insertRun = mockStmt.run.mock.calls.find((c: unknown[]) => c.includes("initializing"));
-    expect(insertRun).toBeTruthy();
-  });
-
-  it("fetches origin/<parent_branch> before creating worktree", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
-
-    await create();
-
-    expect(mockExecFileAsync).toHaveBeenCalledWith(
-      "git",
-      ["fetch", "origin", "main"],
-      expect.objectContaining({ cwd: "/repos/my-project" })
-    );
-  });
-
-  it("uses origin/<parent_branch> as worktree base when remote exists", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
-
-    // Both fetch and show-ref succeed
-    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
-
-    await create();
-
-    // Should verify origin/main via show-ref
-    expect(mockExecFileAsync).toHaveBeenCalledWith(
-      "git",
-      ["show-ref", "--verify", "--quiet", "refs/remotes/origin/main"],
-      expect.any(Object)
-    );
-
-    // initializeWorkspace should receive origin/main as worktreeBase
-    expect(mockInitializeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ worktreeBase: "origin/main" })
-    );
-  });
-
-  it("falls back to local branch when origin/<parent> does not exist", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
-
-    // git config answers, fetch succeeds, show-ref fails (no remote branch)
-    mockExecFileAsync
-      .mockResolvedValueOnce({ stdout: "testuser", stderr: "" })
-      .mockResolvedValueOnce({ stdout: "", stderr: "" })
-      .mockRejectedValueOnce(new Error("not a valid ref"));
-
-    await create();
-
-    expect(mockInitializeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ worktreeBase: "main" })
-    );
-  });
-
-  it("continues creation when git fetch fails (offline)", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
-
-    // git config answers, fetch fails, show-ref also fails
-    mockExecFileAsync
-      .mockResolvedValueOnce({ stdout: "testuser", stderr: "" })
-      .mockRejectedValueOnce(new Error("network unreachable"))
-      .mockRejectedValueOnce(new Error("not a valid ref"));
-
-    expect(await create()).toEqual({ workspaceId: "ws-test-uuid" });
-    expect(mockInitializeWorkspace).toHaveBeenCalled();
+    expect(mockExecFileAsync).not.toHaveBeenCalled();
   });
 
   it("fires init pipeline async (returns before pipeline completes)", async () => {
@@ -279,56 +249,85 @@ describe("createWorkspace", () => {
 
     await create();
 
-    expect(mockInitializeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceId: "ws-test-uuid",
-        repositoryId: "repo-001",
-        repoRootPath: "/repos/my-project",
-        workspacePath: "/repos/my-project/.deus/europa",
-        branchName: "testuser/europa",
-        parentBranch: "main",
-      })
-    );
+    expect(mockInitializeWorkspace).toHaveBeenCalledWith({
+      workspaceId: "ws-test-uuid",
+      repoRootPath: "/repos/my-project",
+      workspacePath: "/repos/my-project/.deus/europa",
+      branchName: "testuser/europa",
+      sourceBranch: "main",
+      repoOriginUrl: undefined,
+    });
   });
 
-  it("uses git username as branch prefix", async () => {
-    mockStmt.get.mockReturnValueOnce(MOCK_REPO);
+  it("starts from the repository's default branch when none is chosen", async () => {
+    mockStmt.get.mockReturnValueOnce({ ...MOCK_REPO, git_default_branch: "develop" });
 
     await create();
 
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ branchName: "testuser/europa" })
+      expect.objectContaining({ sourceBranch: "develop" })
     );
   });
 
-  it("uses repo git_default_branch as parent_branch", async () => {
-    const repoWithDev = { ...MOCK_REPO, git_default_branch: "develop" };
-    mockStmt.get.mockReturnValueOnce(repoWithDev);
-
-    mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
-
-    await create();
-
-    // Should fetch origin/develop
-    expect(mockExecFileAsync).toHaveBeenCalledWith(
-      "git",
-      ["fetch", "origin", "develop"],
-      expect.any(Object)
-    );
-
-    expect(mockInitializeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ parentBranch: "develop" })
-    );
-  });
-
-  it("defaults parent_branch to main when repo has no git_default_branch", async () => {
+  it("starts from main when the repository records no default branch", async () => {
     mockStmt.get.mockReturnValueOnce({ ...MOCK_REPO, git_default_branch: null });
 
     await create();
 
     expect(mockInitializeWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ parentBranch: "main" })
+      expect.objectContaining({ sourceBranch: "main" })
     );
+  });
+});
+
+describe("retryWorkspaceInit", () => {
+  const retry = (workspaceId: string) => run(api.retryWorkspaceInit, { workspaceId });
+
+  it("refuses a workspace that does not exist", async () => {
+    mockStmt.get.mockReturnValueOnce(undefined);
+    await expect(retry("missing")).rejects.toMatchObject({ statusCode: 404 });
+    expect(mockRetryWorkspaceInit).not.toHaveBeenCalled();
+  });
+
+  it("starts a local workspace again through the local pipeline", async () => {
+    mockStmt.get.mockReturnValueOnce({ id: "ws-1", kind: "worktree", state: "error" });
+    await retry("ws-1");
+    expect(mockRetryWorkspaceInit).toHaveBeenCalledWith("ws-1");
+    expect(cloud.retry).not.toHaveBeenCalled();
+  });
+
+  it("provisions a cloud workspace again through the cloud lane", async () => {
+    mockStmt.get.mockReturnValueOnce({ id: "ws-2", kind: "cloud", state: "error" });
+    await retry("ws-2");
+    expect(cloud.retry).toHaveBeenCalledWith("ws-2");
+    expect(mockRetryWorkspaceInit).not.toHaveBeenCalled();
+  });
+
+  it("refuses with 409 a workspace that is not waiting for a retry", async () => {
+    mockStmt.get.mockReturnValueOnce({ id: "ws-1", kind: "worktree", state: "ready" });
+    mockRetryWorkspaceInit.mockImplementationOnce(() => {
+      throw new ConflictError("This workspace is not waiting for a retry.");
+    });
+    await expect(retry("ws-1")).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe("deleteWorkspace", () => {
+  const remove = (workspaceId: string) => run(api.deleteWorkspace, { workspaceId });
+
+  it("deletes a workspace that failed to start", async () => {
+    await remove("ws-1");
+    expect(mockDeleteFailedWorkspace).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("refuses with 409 one that started, and says why", async () => {
+    mockDeleteFailedWorkspace.mockImplementationOnce(() => {
+      throw new ConflictError("Only a workspace that failed to start can be deleted.");
+    });
+    await expect(remove("ws-1")).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Only a workspace that failed to start can be deleted.",
+    });
   });
 });
 
@@ -345,8 +344,9 @@ describe("updateWorkspace", () => {
 
     await run(api.updateWorkspace, { workspaceId: "ws-test-uuid", state: "ready" });
 
+    // Ready only if it ever had a chat; one that never started comes back as a failure.
     expect(mockDb.prepare).toHaveBeenCalledWith(
-      "UPDATE workspaces SET state = 'ready' WHERE id = ?"
+      "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
     );
     expect(mockStmt.run).toHaveBeenCalledWith("ws-test-uuid");
     expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions"]);

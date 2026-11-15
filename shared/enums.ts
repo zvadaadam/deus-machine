@@ -46,6 +46,14 @@ export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 /** Workspace initialization progress. */
 export type SetupStatus = "none" | "running" | "completed" | "failed";
 
+/**
+ * Why a new workspace did not get origin's latest first. It still starts, from
+ * the copy of the branch already on this computer: `offline` (origin could not
+ * be reached), `auth` (Git could not sign in to it), `failed` (anything else).
+ */
+export const InitFetchIssueSchema = z.enum(["offline", "auth", "failed"]);
+export type InitFetchIssue = z.infer<typeof InitFetchIssueSchema>;
+
 /** Workflow states for workspaces. */
 export const WorkspaceStatusSchema = z.enum([
   "backlog",

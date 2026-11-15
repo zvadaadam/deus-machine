@@ -19,48 +19,6 @@ export function fileChangePath(fc: FileChange): string {
 }
 
 /**
- * Create an optimistic (placeholder) Workspace object for instant UI feedback
- * while the backend creates the real workspace asynchronously.
- *
- * Used in:
- * - useRepoActions.createAndSelectWorkspace() (quick "+" button flow)
- * - useRepoActions.handleOpenProject() (native folder dialog flow)
- * - useRepoActions.handleCloneRepository() (git clone flow)
- * - useCreateWorkspace() onMutate (React Query optimistic update)
- */
-export function createOptimisticWorkspace(
-  repoId: string,
-  repoName: string,
-  location: "local" | "cloud" = "local"
-): Workspace {
-  return {
-    id: `optimistic-${Date.now()}`,
-    repository_id: repoId,
-    slug: "",
-    title: null,
-    git_branch: null,
-    git_target_branch: null,
-    // The requested location's kind, so a cloud create never flashes in the local list.
-    kind: location === "cloud" ? "cloud" : "worktree",
-    provider_workspace_id: null,
-    state: "initializing",
-    status: "in-progress",
-    current_session_id: null,
-    session_status: null,
-    session_error_category: null,
-    session_error_message: null,
-    latest_message_sent_at: null,
-    init_stage: null,
-    setup_status: "none",
-    error_message: null,
-    updated_at: new Date().toISOString(),
-    repo_name: repoName,
-    root_path: "",
-    workspace_path: "",
-  };
-}
-
-/**
  * Merge a workspace delta (q:delta) into the existing RepoGroup[] cache.
  * Replaces matching workspaces by ID within their repo group, or appends if new.
  * Used by useQuerySubscription's mergeDelta option.

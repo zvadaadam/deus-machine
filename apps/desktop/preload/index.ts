@@ -78,9 +78,6 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   // Backend lifecycle
   "backend:port-changed",
 
-  // Workspace progress
-  "workspace:progress",
-
   // Browser — only popup requests (window.open / target="_blank") need
   // main→renderer forwarding. Everything else about the <webview> (load,
   // title, url, console, keyboard) is received directly as DOM events on

@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Blocks, ClockFading, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
+import { Blocks, ClockFading, Cloud, FolderOpen, SquarePen, type LucideIcon } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Sidebar, SidebarContent, SidebarMenu, useSidebar } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
@@ -32,13 +32,13 @@ export function AppSidebar({
   selectedWorkspaceId,
   onWorkspaceClick,
   onNewWorkspace,
+  newWorkspaceActive,
   onNewWorkspaceFromGitHub,
   onAddRepository,
   onCloneRepository,
   onStartNewProject,
   onArchive,
   onStatusChange,
-  onNewSession,
   onOpenAutomations,
   automationsActive,
   onOpenCustomize,
@@ -121,35 +121,47 @@ export function AppSidebar({
         onSwitchLocation={onSwitchLocation}
         onOpenSettings={openSettings}
         onToggleSidebar={toggleSidebar}
-        onNewSession={onNewSession}
         isExpanded={isExpanded}
       />
 
-      {/* App-level nav — sits under the header, above the repo list */}
-      {!webDirect && (
-        <div className="flex flex-col gap-px px-1.5 pb-1">
-          <AppNavRow
-            icon={ClockFading}
-            label="Automations"
-            active={automationsActive}
-            onClick={() => {
-              onOpenAutomations?.();
-              // Same mobile behavior as workspace selection: the off-canvas
-              // sheet must not stay open over the page it just navigated to.
-              if (isMobile) setOpenMobile(false);
-            }}
-          />
-          <AppNavRow
-            icon={Blocks}
-            label="Customize"
-            active={customizeActive}
-            onClick={() => {
-              onOpenCustomize?.();
-              if (isMobile) setOpenMobile(false);
-            }}
-          />
-        </div>
-      )}
+      {/* App-level nav — sits under the header, above the repo list. The first
+          row is Home: where a workspace starts, or on web-direct (which cannot
+          start one) the list of cloud sessions. */}
+      <div className="flex flex-col gap-px px-1.5 pb-1">
+        <AppNavRow
+          icon={webDirect ? Cloud : SquarePen}
+          label={webDirect ? "Cloud sessions" : "New workspace"}
+          active={newWorkspaceActive}
+          onClick={() => {
+            onNewWorkspace();
+            // Same mobile behavior as workspace selection: the off-canvas
+            // sheet must not stay open over the page it just navigated to.
+            if (isMobile) setOpenMobile(false);
+          }}
+        />
+        {!webDirect && (
+          <>
+            <AppNavRow
+              icon={ClockFading}
+              label="Automations"
+              active={automationsActive}
+              onClick={() => {
+                onOpenAutomations?.();
+                if (isMobile) setOpenMobile(false);
+              }}
+            />
+            <AppNavRow
+              icon={Blocks}
+              label="Customize"
+              active={customizeActive}
+              onClick={() => {
+                onOpenCustomize?.();
+                if (isMobile) setOpenMobile(false);
+              }}
+            />
+          </>
+        )}
+      </div>
 
       {/* Repositories List or Empty State */}
       {repositories.length === 0 ? (
