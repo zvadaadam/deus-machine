@@ -25,7 +25,7 @@ import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
-import { ConflictError } from "../lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
@@ -103,6 +103,49 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
   );
 
   return { workspaceId, slug };
+}
+
+/**
+ * Provision a failed cloud workspace again, on the same row. Only while no
+ * computer exists for it: everything that fails before the platform is asked
+ * for one (GitHub access, project settings, the request itself) is safe to
+ * repeat. Once a computer exists, waking it is the way back.
+ */
+export function retryCloudWorkspace(workspaceId: string): void {
+  const config = getCloudConfig();
+  if (!config) throw new ValidationError("Sign in to Deus Cloud to try this workspace again.");
+  const db = getDatabase();
+  const workspace = db
+    .prepare(
+      "SELECT repository_id, git_branch, git_target_branch FROM workspaces WHERE id = ? AND kind = 'cloud'"
+    )
+    .get(workspaceId) as
+    | { repository_id: string; git_branch: string | null; git_target_branch: string | null }
+    | undefined;
+  const repo = workspace && getRepositoryById(db, workspace.repository_id);
+  if (!workspace?.git_branch || !repo?.git_origin_url)
+    throw new NotFoundError("Workspace not found");
+  // The claim: two clicks, or two devices, provision it once.
+  const claimed = db
+    .prepare(
+      `UPDATE workspaces
+       SET state = 'initializing', init_stage = 'creating cloud workspace',
+           error_message = NULL, error_detail = NULL
+       WHERE id = ? AND state = 'error' AND provider_workspace_id IS NULL`
+    )
+    .run(workspaceId);
+  if (claimed.changes === 0) throw new ConflictError("This workspace is not waiting for a retry.");
+  invalidate([...WORKSPACE_RESOURCES], {});
+  void provisionInBackground(
+    workspaceId,
+    httpsOrigin(repo.git_origin_url),
+    {
+      source: workspace.git_target_branch || repo.git_default_branch || "main",
+      work: workspace.git_branch,
+    },
+    config.baseUrl,
+    config.apiKey
+  );
 }
 
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */

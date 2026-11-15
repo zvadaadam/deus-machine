@@ -2,7 +2,7 @@
  * Start New Project Hook — manages the "create from scratch" flow.
  *
  * Parallel to useCloneRepo: owns modal state, generation counter,
- * and multi-phase orchestration (git init → register → create workspace).
+ * and multi-phase orchestration (git init → register → Home, with the project chosen).
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
@@ -19,13 +19,11 @@ export interface StartNewProjectTemplate {
 
 interface UseStartNewProjectOptions {
   addRepoOrUseExisting: (path: string) => Promise<Repository>;
-  createWorkspaceAndSelect: (repoId: string) => Promise<void>;
+  /** The project is registered: where the user goes next. */
+  onAdded: (repo: Repository) => void;
 }
 
-export function useStartNewProject({
-  addRepoOrUseExisting,
-  createWorkspaceAndSelect,
-}: UseStartNewProjectOptions) {
+export function useStartNewProject({ addRepoOrUseExisting, onAdded }: UseStartNewProjectOptions) {
   const [showStartNewModal, setShowStartNewModal] = useState(false);
   const [startingNew, setStartingNew] = useState(false);
   const [startNewError, setStartNewError] = useState<string | null>(null);
@@ -50,7 +48,7 @@ export function useStartNewProject({
 
   /**
    * Create a new project from scratch with staleness detection.
-   * Flow: gitInit → register repo → create workspace → select it.
+   * Flow: gitInit → register repo → Home, with the project chosen.
    */
   async function handleStartNewProject(
     projectName: string,
@@ -100,13 +98,9 @@ export function useStartNewProject({
       const repo = await addRepoOrUseExisting(targetPath);
       if (isStale()) return;
 
-      // Phase 3: Create worktree workspace (standard flow — same as cloned repos)
-      setStartNewStatus("Setting up workspace...");
-      await createWorkspaceAndSelect(repo.id);
-      if (isStale()) return;
-
       // Close modal
       resetStartNewState();
+      onAdded(repo);
 
       if (githubUrl) {
         toast.success(`"${repo.name}" created`, {

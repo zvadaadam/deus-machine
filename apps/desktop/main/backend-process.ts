@@ -55,22 +55,6 @@ function resolveRuntimeEntries(): ElectronRuntimeEntries {
   };
 }
 
-function relayWorkspaceProgress(line: string): void {
-  if (!line.startsWith("DEUS_WORKSPACE_PROGRESS:")) return;
-
-  const jsonStr = line.slice("DEUS_WORKSPACE_PROGRESS:".length);
-  try {
-    const payload = JSON.parse(jsonStr);
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send("workspace:progress", payload);
-      }
-    }
-  } catch {
-    // Ignore malformed progress lines
-  }
-}
-
 function writeBackendPortFile(port: number): void {
   if (app.isPackaged) return;
 
@@ -257,7 +241,6 @@ export async function spawnBackend(
         // A keep-awake line is protocol, not log output.
         if (handleKeepAwakeLine(trimmed)) continue;
         hooks.onStdoutLine?.("backend", trimmed);
-        relayWorkspaceProgress(trimmed);
         if (!hooks.onStdoutLine && !app.isPackaged) console.log("[backend]", trimmed);
 
         const match = trimmed.match(/^\[BACKEND_PORT\](\d+)$/);

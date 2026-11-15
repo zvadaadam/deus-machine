@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { wakeCloudWorkspace } from "@/features/workspace/api/wakeCloudWorkspace";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
-import type { SessionPanelRef } from "@/features/session";
+import { failedToStart, hasCheckout } from "@/features/workspace/lib/startState";
 import type { ThinkingLevel } from "@/shared/agents";
 import { HomeView, type Repository } from "@/features/repository";
 import { useWorkspaceLayout } from "@/features/workspace";
@@ -42,8 +42,6 @@ interface MainContentProps {
   selectedWorkspace: Workspace | null;
   prStatus: PRStatus | null;
   ghStatus?: GhCliStatus | null;
-  workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
-  onCreateWorkspace: () => void;
   onOpenProject: () => void;
   onCloneRepository: () => void;
   onStartNewProject: () => void;
@@ -56,7 +54,8 @@ interface MainContentProps {
   repoGroupsLoading?: boolean;
   repoGroupsError?: string | null;
   /** Handler for sending the first message from the home screen.
-   *  Creates workspace + selects it + queues the first message. */
+   *  Creates workspace + selects it + queues the first message.
+   *  Resolves false when the workspace could not be created. */
   onStartWorkspace: (
     repoId: string,
     message: string,
@@ -64,7 +63,7 @@ interface MainContentProps {
     branch?: string,
     location?: "local" | "cloud",
     thinkingLevel?: ThinkingLevel
-  ) => void;
+  ) => Promise<boolean>;
   onWorkspaceClick: (workspace: Workspace) => void;
 }
 
@@ -72,8 +71,6 @@ export function MainContent({
   selectedWorkspace,
   prStatus,
   ghStatus,
-  workspaceChatPanelRef,
-  onCreateWorkspace: _onCreateWorkspace,
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
@@ -110,8 +107,13 @@ export function MainContent({
     ? contentTab
     : "changes";
   // No tab can serve (web-direct hides them all) → chat-only layout: the chat
-  // pane renders full-width and the content pane + splitter don't mount.
-  const contentPaneAvailable = anyContentTabVisible(experimentalSettings, tabVisibility);
+  // pane renders full-width and the content pane + splitter don't mount. The
+  // same for a workspace that failed to start: its page is the failure. One
+  // that is still starting keeps the layout it is about to need, so nothing
+  // moves when it becomes ready.
+  const contentPaneAvailable =
+    anyContentTabVisible(experimentalSettings, tabVisibility) &&
+    !(selectedWorkspace && failedToStart(selectedWorkspace));
   const view = contentPaneAvailable ? panelMode : "chat";
 
   const connectionState = useConnectionState().state;
@@ -193,7 +195,8 @@ export function MainContent({
     if (sid) sessionComposerActions.appendDraft(sid, REVIEW_CODE);
   }, [selectedWorkspaceId]);
 
-  const prActions = selectedWorkspace && (
+  // A pull request needs a branch, and a branch needs the checkout.
+  const prActions = selectedWorkspace && hasCheckout(selectedWorkspace) && (
     <PRActions
       prStatus={prStatus}
       ghStatus={ghStatus}
@@ -247,7 +250,6 @@ export function MainContent({
             <MobileLayout
               key={selectedWorkspace.id}
               workspace={selectedWorkspace}
-              workspaceChatPanelRef={workspaceChatPanelRef}
               sendAgentMessageHandler={sendAgentMessageHandler}
               handleSendAgentMessage={handleSendAgentMessage}
               onRetrySetup={
@@ -355,7 +357,6 @@ export function MainContent({
                           <ChatArea
                             key={selectedWorkspace.id}
                             workspace={selectedWorkspace}
-                            workspaceChatPanelRef={workspaceChatPanelRef}
                             onCreatePRHandlerChange={setCreatePRHandler}
                             onSendAgentMessageHandlerChange={setSendAgentMessageHandler}
                           />

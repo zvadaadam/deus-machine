@@ -2,14 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
-import type { SessionPanelRef } from "@/features/session";
 import type { ThinkingLevel } from "@/shared/agents";
-import {
-  NewWorkspaceModal,
-  NewWorkspacePromptModal,
-  CloneRepositoryModal,
-  StartNewProjectModal,
-} from "@/features/repository";
+import { CloneRepositoryModal, StartNewProjectModal } from "@/features/repository";
 import { SettingsSidebar, SettingsPage } from "@/features/settings";
 import {
   useKeyboardShortcuts,
@@ -32,6 +26,9 @@ import { useRepos } from "@/features/repository/api";
 import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
+import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
+import { pendingFirstMessages } from "@/features/workspace/store/workspaceStartStore";
+import { useFirstMessageDelivery } from "@/features/session/hooks/useFirstMessageDelivery";
 import { useSidebarStore } from "@/features/sidebar/store";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
@@ -98,16 +95,11 @@ export function MainLayout() {
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
   const expandRepo = useSidebarStore((s) => s.expandRepo);
 
-  const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
-  const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
-  const newWorkspaceDraft = useUIStore((s) => s.newWorkspaceDraft);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const automationsOpen = useUIStore((s) => s.automationsOpen);
   const openAutomations = useUIStore((s) => s.openAutomations);
   const customizeOpen = useUIStore((s) => s.customizeOpen);
   const openCustomize = useUIStore((s) => s.openCustomize);
-  const openNewWorkspaceModal = useUIStore((s) => s.openNewWorkspaceModal);
-  const closeNewWorkspaceModal = useUIStore((s) => s.closeNewWorkspaceModal);
 
   // TanStack Query
   const workspacesQuery = useWorkspacesByRepo();
@@ -159,9 +151,6 @@ export function MainLayout() {
   // GitHub picker modal state
   const [githubPickerRepoId, setGithubPickerRepoId] = useState<string | null>(null);
 
-  // Ref for inserting text from browser element selector
-  const workspaceChatPanelRef = useRef<SessionPanelRef | null>(null);
-
   // Queries for repos
   const reposQuery = useRepos();
 
@@ -185,27 +174,23 @@ export function MainLayout() {
 
   // --- Extracted hooks ---
 
-  const repoActions = useRepoActions({
-    selectWorkspace,
-    openNewWorkspaceModal,
-    closeNewWorkspaceModal,
-  });
+  const repoActions = useRepoActions({ selectWorkspace });
+
+  // A workspace starts on Home: from the sidebar's row, or a project's "+"
+  // (which hands Home that project).
+  const handleNewWorkspace = useCallback((repoId?: string) => openNewWorkspace({ repoId }), []);
 
   // --- Home screen send flow ---
   // When the user sends a message from the home screen, we:
   // 1. Create a workspace for the selected repo
   // 2. Select it (transitions to two-panel layout)
-  // 3. Queue the message to be sent once the workspace has a session
+  // 3. Queue the message to be sent once the workspace has its first chat
   const welcomeCreateMutation = useCreateWorkspace();
-  // Keyed by workspace: a single slot meant the NEXT started workspace stole
-  // the pending prompt — most damagingly the environment-setup turn, which
-  // then silently never ran. Delivery stays selection-gated (the send rides
-  // the selected panel's ref), so an entry simply waits until its workspace
-  // is selected again.
-  const pendingWelcomeMessagesRef = useRef(
-    new Map<string, { message: string; model: string; thinkingLevel?: ThinkingLevel }>()
-  );
-  const welcomeSendsInFlightRef = useRef(new Set<string>());
+  // The message waits in workspaceStartStore, keyed by workspace, and is sent
+  // by useFirstMessageDelivery when that workspace is ready — whichever one is
+  // on screen. A start that fails keeps it: the workspace's start view shows
+  // it, and a retry sends it.
+  useFirstMessageDelivery(repoGroups, workspacesQuery.isSuccess);
 
   const handleStartWorkspace = useCallback(
     async (
@@ -221,12 +206,14 @@ export function MainLayout() {
           branch || location ? { repositoryId: repoId, source_branch: branch, location } : repoId
         );
         // Store pending message — will be sent when workspace gets a session
-        pendingWelcomeMessagesRef.current.set(workspace.id, { message, model, thinkingLevel });
+        pendingFirstMessages.set(workspace.id, { message, model, thinkingLevel });
         selectWorkspace(workspace.id);
         expandRepo(workspace.repository_id);
+        return true;
       } catch (error) {
         console.error("Failed to create workspace from home:", error);
         toast.error(getErrorMessage(error));
+        return false;
       }
     },
     [welcomeCreateMutation, selectWorkspace, expandRepo]
@@ -245,40 +232,6 @@ export function MainLayout() {
       pendingEnvSetup.location
     );
   }, [pendingEnvSetup, handleStartWorkspace]);
-
-  // Effect: when the pending workspace becomes ready with a session, send the queued message.
-  // Uses the SessionPanel ref so the message goes through useSendMessage() → optimistic UI.
-  // React effect ordering guarantees child useImperativeHandle runs before parent useEffect,
-  // so workspaceChatPanelRef.current is set when this fires.
-  useEffect(() => {
-    if (!selectedWorkspace) return;
-    const pending = pendingWelcomeMessagesRef.current.get(selectedWorkspace.id);
-    if (!pending) return;
-    if (selectedWorkspace.state !== "ready" || !selectedWorkspace.current_session_id) return;
-    if (!workspaceChatPanelRef.current) return;
-
-    // Keep the entry until the send RESOLVES: deleting up front turns a
-    // transient failure (backend hiccup mid-provision) into a silently lost
-    // prompt. The in-flight set stops effect re-runs from double-sending
-    // while the first attempt is still settling.
-    if (welcomeSendsInFlightRef.current.has(selectedWorkspace.id)) return;
-    welcomeSendsInFlightRef.current.add(selectedWorkspace.id);
-    const workspaceId = selectedWorkspace.id;
-    workspaceChatPanelRef.current
-      .sendMessage(pending.message, pending.model, pending.thinkingLevel)
-      .then((sent) => {
-        // sendMessage RESOLVES on failure too (it toasts and reports false) —
-        // only a true delivery may consume the queued prompt.
-        if (sent) pendingWelcomeMessagesRef.current.delete(workspaceId);
-      })
-      .catch((error) => {
-        console.error("Failed to send welcome message:", error);
-        toast.error(getErrorMessage(error));
-      })
-      .finally(() => {
-        welcomeSendsInFlightRef.current.delete(workspaceId);
-      });
-  }, [selectedWorkspace]);
 
   // Derive repo name for GitHub picker modal from repoGroups
   const githubPickerRepoName = useMemo(() => {
@@ -404,12 +357,8 @@ export function MainLayout() {
         prStatusQuery.refetch();
       }
     },
-    onEscape: () => {
-      if (showNewWorkspaceModal) closeNewWorkspaceModal();
-    },
     onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
     selectedWorkspace,
-    modalStates: { showNewWorkspaceModal },
   });
 
   // Archive + workflow status are Mac-backend mutations; web-direct has no
@@ -459,18 +408,14 @@ export function MainLayout() {
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
-          onNewWorkspace={repoActions.handleNewWorkspace}
+          onNewWorkspace={handleNewWorkspace}
+          newWorkspaceActive={!selectedWorkspace && !automationsOpen && !customizeOpen}
           onNewWorkspaceFromGitHub={setGithubPickerRepoId}
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
           onArchive={webDirect ? undefined : archiveWorkspace}
           onStatusChange={webDirect ? undefined : handleStatusChange}
-          onNewSession={() => {
-            uiActions.closeAutomations();
-            uiActions.closeCustomize();
-            selectWorkspace(null);
-          }}
           onOpenAutomations={openAutomations}
           automationsActive={automationsOpen}
           onOpenCustomize={openCustomize}
@@ -494,8 +439,6 @@ export function MainLayout() {
           selectedWorkspace={selectedWorkspace}
           prStatus={prStatusQuery.data ?? null}
           ghStatus={ghStatusQuery.data}
-          workspaceChatPanelRef={workspaceChatPanelRef}
-          onCreateWorkspace={openNewWorkspaceModal}
           onOpenProject={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
@@ -509,42 +452,6 @@ export function MainLayout() {
       )}
 
       {/* Modals */}
-      {newWorkspaceMode === "from-github" ? (
-        <NewWorkspaceModal
-          show={showNewWorkspaceModal}
-          repos={repos}
-          selectedRepoId={repoActions.selectedRepoId}
-          creating={repoActions.creating}
-          onClose={closeNewWorkspaceModal}
-          onRepoChange={repoActions.setSelectedRepoId}
-          onCreate={() => {
-            const repoId = repoActions.selectedRepoId;
-            closeNewWorkspaceModal();
-            if (repoId) setGithubPickerRepoId(repoId);
-          }}
-          mode="from-github"
-        />
-      ) : (
-        <NewWorkspacePromptModal
-          key={newWorkspaceDraft ?? "blank"}
-          initialPrompt={newWorkspaceDraft ?? undefined}
-          show={showNewWorkspaceModal}
-          repos={repos}
-          selectedRepoId={repoActions.selectedRepoId}
-          creating={repoActions.creating}
-          onClose={closeNewWorkspaceModal}
-          onRepoChange={repoActions.setSelectedRepoId}
-          onSubmit={({ repoId, prompt, branch, location, model, thinkingLevel }) => {
-            closeNewWorkspaceModal();
-            if (prompt) {
-              // Composer semantics: create, then the prompt rides as turn one.
-              void handleStartWorkspace(repoId, prompt, model, branch, location, thinkingLevel);
-            } else {
-              void repoActions.createAndSelectWorkspace(repoId, location, branch);
-            }
-          }}
-        />
-      )}
 
       <CloneRepositoryModal
         show={repoActions.showCloneModal}
@@ -580,6 +487,12 @@ export function MainLayout() {
           "open-project": repoActions.handleOpenProject,
           "clone-repository": () => repoActions.setShowCloneModal(true),
           "start-new-project": () => repoActions.setShowStartNewModal(true),
+          // A pull request or branch belongs to a project: the one on screen, else the first.
+          "new-workspace-from": () => {
+            const repoId = selectedWorkspace?.repository_id ?? repos[0]?.id;
+            if (repoId) setGithubPickerRepoId(repoId);
+            else toast("Add a project first");
+          },
           "open-in-app": openInLastApp,
         }}
       />

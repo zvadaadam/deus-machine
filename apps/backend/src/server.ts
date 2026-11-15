@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
+import { stopRunningGit } from "./lib/git-process";
 import {
   closeAll as closeAllWsConnections,
   onDeviceConnectionsChange,
@@ -25,6 +26,7 @@ import {
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
 import { startIntegrations } from "./services/integrations";
+import { failInterruptedWorkspaces } from "./services/workspace-init.service";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -44,6 +46,10 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
+
+// Workspaces the previous process was still starting when it stopped.
+const interrupted = failInterruptedWorkspaces();
+if (interrupted > 0) console.log(`[server] ${interrupted} interrupted workspace start(s) failed`);
 
 // Backfill git_origin_url for repos added before we tracked origin URLs.
 // Runs once at startup (fire-and-forget) so WS subscribers get the data
@@ -167,6 +173,7 @@ injectWebSocket(server);
 process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
+  stopRunningGit();
   Sentry.close(2000).finally(() => {
     destroyAllSimulators();
     destroyAllPtySessions();
@@ -191,6 +198,8 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log("\nShutting down...");
+  // First, so a checkout stops writing while the rest shuts down.
+  stopRunningGit();
   void agentService.shutdown().finally(() => {
     destroyAllSimulators();
     destroyAllPtySessions();

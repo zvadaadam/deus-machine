@@ -73,7 +73,10 @@ export function ModelPicker({
   const shownGroup = groups.find((group) => group.agentHarness === shownAgent) ?? groups[0];
   // A started chat keeps its agent (the engine binds a session to one runtime):
   // another agent's model opens in a new chat.
-  const opensNewChat = hasMessages && shownAgent !== currentAgent;
+  const otherAgent = hasMessages && shownAgent !== currentAgent;
+  const opensNewChat = otherAgent && !!onOpenNewTab;
+  // Nowhere to open one (a workspace with no chat yet): those models are shown, not offered.
+  const keepsAgent = otherAgent && !onOpenNewTab;
   const hasThinking = thinkingLevels.length > 0;
 
   return (
@@ -128,9 +131,9 @@ export function ModelPicker({
 
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1 overflow-y-auto p-1">
-            {opensNewChat && (
+            {otherAgent && (
               <DropdownMenuLabel className="text-text-muted text-xs font-normal">
-                Opens a new chat
+                {keepsAgent ? "This chat keeps its agent" : "Opens a new chat"}
               </DropdownMenuLabel>
             )}
             {shownGroup?.options.map((option) => {
@@ -139,6 +142,7 @@ export function ModelPicker({
                 <DropdownMenuItem
                   key={option.value}
                   title={option.description}
+                  disabled={keepsAgent}
                   onSelect={() =>
                     opensNewChat ? onOpenNewTab?.(option.value) : onModelChange?.(option.value)
                   }

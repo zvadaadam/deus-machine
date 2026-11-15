@@ -292,9 +292,6 @@ app.whenReady().then(async () => {
     // the runtime route immediately below, which is retractable by design.
     const { port: backendPort, authToken } = await spawnBackend({
       onStdoutLine: (source, line) => {
-        if (source === "backend" && line.startsWith("DEUS_WORKSPACE_PROGRESS:")) {
-          return;
-        }
         logMainProcess(`[${source}] ${line}`);
       },
       onStderrLine: (source, line) => {

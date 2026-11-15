@@ -26,32 +26,16 @@ import { useProjectEnvironment } from "@/features/workspace/api/workspace.querie
 import { useDefaultThinkingLevel } from "@/features/settings/api";
 import {
   DEFAULT_MODEL,
-  fitThinkingLevel,
   getAgentHarnessForModel,
-  getModelId,
-  modelThinkingLevels,
   type AgentHarness,
-  type ThinkingLevel,
   getModelForSession,
 } from "@/shared/agents";
-import { useModelLists } from "@/shared/hooks/useModelLists";
-import {
-  emptyComposer,
-  sessionComposerActions,
-  useSessionComposerStore,
-} from "../store/sessionComposerStore";
+import { sessionComposerActions, useSessionComposerStore } from "../store/sessionComposerStore";
 
 export interface SessionComposerRef {
-  /** Send a message bypassing the UI event path. Used by the home-screen
-   *  welcome flow, which dispatches before a composer surface mounts.
-   *  `modelOverride` forces a model for THIS send only and also updates
-   *  the composer store so subsequent sends keep it; `thinkingOverride` is
-   *  the level picked with it, fitted to what the model offers. */
-  sendMessage: (
-    content: string,
-    modelOverride?: string,
-    thinkingOverride?: ThinkingLevel
-  ) => Promise<boolean>;
+  /** Send a message bypassing the UI event path (header actions that ask
+   *  the agent for something: create a PR, fix the setup script). */
+  sendMessage: (content: string) => Promise<boolean>;
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<boolean>;
   createPR: () => Promise<boolean>;
@@ -130,7 +114,6 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     const { session, messages, turns, error, retry, sessionStatus } =
       useSessionWithMessages(sessionId);
     const environment = useProjectEnvironment(workspaceId);
-    const modelLists = useModelLists({ cloud: session?.workspace_kind === "cloud", workspaceId });
     const environmentUnconfigured =
       environment.isSuccess && environment.data.source === "unconfigured";
     const seedModel =
@@ -159,47 +142,23 @@ const ActiveSessionComposer = forwardRef<SessionComposerRef, ActiveProps>(
     useImperativeHandle(
       ref,
       () => ({
-        sendMessage: async (content, modelOverride, thinkingOverride) => {
-          if (modelOverride) {
-            // Welcome sends carry an explicit model before history mounts the input.
-            const levels = modelThinkingLevels(
-              modelLists,
-              getAgentHarnessForModel(modelOverride),
-              getModelId(modelOverride)
-            );
-            sessionComposerActions.seedIfAbsent(
-              sessionId,
-              emptyComposer(modelOverride, defaultThinking)
-            );
-            sessionComposerActions.setModel(sessionId, modelOverride, levels, defaultThinking);
-            if (thinkingOverride) {
-              sessionComposerActions.setThinkingLevel(
-                sessionId,
-                fitThinkingLevel(thinkingOverride, levels, defaultThinking)
-              );
-            }
-          }
-          return sendMessage(content, modelOverride);
-        },
+        sendMessage: (content) => sendMessage(content),
         stopSession,
         compactConversation,
         createPR,
       }),
-      [
-        sendMessage,
-        stopSession,
-        compactConversation,
-        createPR,
-        sessionId,
-        defaultThinking,
-        modelLists,
-      ]
+      [sendMessage, stopSession, compactConversation, createPR]
     );
+
+    // A composer this chat already has (one handed over from the workspace's
+    // start page) needs no seed, so there is nothing to wait for.
+    const seeded = useSessionComposerStore((s) => !!s.composers[sessionId]);
 
     // The composer seeds its model ONCE (seedIfAbsent on first mount), so the
     // seed must be right the first time: an explicit pick for a new tab wins,
     // otherwise wait for history and restore the last recorded model.
-    if ((!session || turns === undefined) && !initialModel) {
+    const loadFailed = !!error || !!historyConnection?.error;
+    if ((!session || turns === undefined) && !initialModel && (loadFailed || !seeded)) {
       return (
         <DisabledComposerPlaceholder className={className}>
           {error || historyConnection?.error ? (

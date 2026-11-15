@@ -35,13 +35,9 @@ interface UseSessionActionsProps {
 interface UseSessionActionsReturn {
   /**
    * @param customContent Override the staged content (defaults to composer store's draft).
-   * @param modelOverride Full model id ("harness:modelId") — for THIS send only.
-   *   Used by the home-screen welcome flow where we dispatch the first
-   *   message before the user has a chance to interact with a composer.
+   * Resolves true only when the send actually reached the backend.
    */
-  /** Resolves true only when the send actually reached the backend — the
-   *  welcome flow keeps its queued prompt on false and retries later. */
-  sendMessage: (customContent?: string, modelOverride?: string) => Promise<boolean>;
+  sendMessage: (customContent?: string) => Promise<boolean>;
   stopSession: () => Promise<void>;
   compactConversation: () => Promise<boolean>;
   createPR: () => Promise<boolean>;
@@ -58,7 +54,7 @@ export function useSessionActions({
   const stopSessionMutation = useStopSession();
 
   const sendMessage = useCallback(
-    async (customContent?: string, modelOverride?: string) => {
+    async (customContent?: string) => {
       if (sendMessageMutation.isPending) return false;
 
       const composer = useSessionComposerStore.getState().composers[sessionId];
@@ -68,15 +64,13 @@ export function useSessionActions({
       if (!content) return false;
 
       try {
-        // modelOverride wins for this send only; otherwise use the composer's
-        // currently-selected model. Splitting the full "harness:modelId" form
-        // into runtime id + harness happens here so callers never think about
-        // it. Kept INSIDE the try/catch because `getModelId` throws for
-        // unknown catalog entries — a stale stored model or bad override
-        // should surface a toast, not an unhandled promise rejection.
-        const effectiveFull = modelOverride ?? composer.model;
-        const effectiveModel = getModelId(effectiveFull);
-        const effectiveHarness = getAgentHarnessForModel(effectiveFull);
+        // The composer's model in its full "harness:modelId" form, split here
+        // into runtime id + harness so callers never think about it. Kept
+        // INSIDE the try/catch because `getModelId` throws for unknown
+        // catalog entries — a stale stored model should surface a toast, not
+        // an unhandled promise rejection.
+        const effectiveModel = getModelId(composer.model);
+        const effectiveHarness = getAgentHarnessForModel(composer.model);
 
         await sendMessageMutation.mutateAsync({
           sessionId,
@@ -92,8 +86,7 @@ export function useSessionActions({
       } catch (error) {
         console.error("Failed to send message:", error);
         toast.error(error instanceof Error ? error.message : "Failed to send message");
-        // The toast is feedback, not delivery — callers that queued this
-        // prompt (welcome flow) must see the failure to keep their entry.
+        // The toast is feedback, not delivery: the caller learns it failed.
         return false;
       }
 

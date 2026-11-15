@@ -6,7 +6,7 @@
  * Owns:
  * - Clone modal state (show, cloning, error, status)
  * - Generation counter for staleness detection
- * - Multi-phase clone orchestration (git clone → register → create workspace)
+ * - Multi-phase clone orchestration (git clone → register → Home, with the project chosen)
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
@@ -20,13 +20,11 @@ import { getRuntimeClient } from "@/platform/ws";
 
 interface UseCloneRepoOptions {
   addRepoOrUseExisting: (path: string) => Promise<Repository>;
-  createWorkspaceAndSelect: (repoId: string) => Promise<void>;
+  /** The project is registered: where the user goes next. */
+  onAdded: (repo: Repository) => void;
 }
 
-export function useCloneRepo({
-  addRepoOrUseExisting,
-  createWorkspaceAndSelect,
-}: UseCloneRepoOptions) {
+export function useCloneRepo({ addRepoOrUseExisting, onAdded }: UseCloneRepoOptions) {
   const [cloning, setCloning] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
@@ -106,13 +104,9 @@ export function useCloneRepo({
       const repo = await addRepoOrUseExisting(cloneTarget);
       if (isStale()) return;
 
-      // Phase 3: Create workspace
-      setCloneStatus("Setting up workspace...");
-      await createWorkspaceAndSelect(repo.id);
-      if (isStale()) return;
-
       // Close modal
       resetCloneState();
+      onAdded(repo);
       toast.success(`"${repo.name}" cloned`);
     } catch (error) {
       if (!isStale()) {

@@ -55,12 +55,10 @@ async function initialize() {
   const directory = path.join(root, ".deus", "workspace");
   await initializeWorkspace({
     workspaceId,
-    repositoryId: "repo",
     repoRootPath: root,
     workspacePath: directory,
     branchName: "test-workspace",
-    worktreeBase: "main",
-    parentBranch: "main",
+    sourceBranch: "main",
     repoOriginUrl: "https://github.com/test/app",
   });
   return directory;
@@ -78,7 +76,7 @@ beforeEach(() => {
   mocks.saved.mockReset();
   mocks.db = new Database(":memory:");
   mocks.db.exec(
-    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, init_stage TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
+    "CREATE TABLE workspaces (id TEXT PRIMARY KEY, slug TEXT, git_branch TEXT, init_stage TEXT, init_fetch_issue TEXT, setup_status TEXT DEFAULT 'none', error_message TEXT, error_detail TEXT, state TEXT DEFAULT 'initializing', current_session_id TEXT); CREATE TABLE sessions (id TEXT, workspace_id TEXT, status TEXT, updated_at TEXT)"
   );
   mocks.db.prepare("INSERT INTO workspaces (id) VALUES (?)").run(workspaceId);
 });

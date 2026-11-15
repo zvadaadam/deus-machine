@@ -129,3 +129,54 @@ describeWithDb("messages", () => {
     });
   });
 });
+
+describeWithDb("createSession", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createTestDb();
+    mockGetDatabase.mockReturnValue(db);
+  });
+
+  afterEach(() => {
+    db.close();
+    vi.clearAllMocks();
+  });
+
+  const workspace = (id: string, kind: string, state: string) =>
+    db
+      .prepare(
+        "INSERT INTO workspaces (id, repository_id, slug, kind, state) VALUES (?, 'r1', ?, ?, ?)"
+      )
+      .run(id, id, kind, state);
+  const chats = (id: string) =>
+    (
+      db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE workspace_id = ?").get(id) as {
+        n: number;
+      }
+    ).n;
+
+  it("opens a new chat in a workspace that has started", async () => {
+    workspace("w-ready", "worktree", "ready");
+    const session = await run(api.createSession, { workspaceId: "w-ready" });
+    expect(session.workspace_id).toBe("w-ready");
+    expect(chats("w-ready")).toBe(1);
+  });
+
+  it.each(["initializing", "error"])(
+    "refuses one in a local workspace that is %s: it has no checkout to chat in",
+    async (state) => {
+      workspace("w-local", "worktree", state);
+      await expect(run(api.createSession, { workspaceId: "w-local" })).rejects.toMatchObject({
+        statusCode: 409,
+      });
+      expect(chats("w-local")).toBe(0);
+    }
+  );
+
+  it("leaves a cloud workspace alone: its chat exists while its computer is provisioned", async () => {
+    workspace("w-cloud", "cloud", "initializing");
+    await run(api.createSession, { workspaceId: "w-cloud" });
+    expect(chats("w-cloud")).toBe(1);
+  });
+});

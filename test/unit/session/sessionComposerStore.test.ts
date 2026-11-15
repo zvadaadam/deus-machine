@@ -94,3 +94,57 @@ describe("cross-panel staged content", () => {
     expect(store.getState().pendingContent).toEqual({});
   });
 });
+
+describe("move: a workspace's start composer hands over to its first chat", () => {
+  it("does nothing when the start page had no composer", () => {
+    const chat = { ...emptyComposer(model, "high"), draft: "Mine" };
+    actions.seedIfAbsent("chat", chat);
+    actions.move("workspace", "chat");
+    expect(store.getState().composers.chat).toEqual(chat);
+    expect(store.getState().composers.workspace).toBeUndefined();
+  });
+
+  it("gives a chat with no composer the start composer's whole state", () => {
+    actions.seedIfAbsent("workspace", emptyComposer(model, "xhigh"));
+    actions.togglePlanMode("workspace");
+    actions.setDraft("workspace", "Also add tests");
+    actions.addImageAttachments("workspace", [screenshot]);
+    actions.move("workspace", "chat");
+    expect(store.getState().composers.chat).toMatchObject({
+      model,
+      thinkingLevel: "xhigh",
+      planModeEnabled: true,
+      draft: "Also add tests",
+      imageAttachments: [screenshot],
+    });
+    expect(store.getState().composers.workspace).toBeUndefined();
+  });
+
+  it("keeps an existing chat composer's settings and adds the start composer's content", () => {
+    actions.seedIfAbsent("chat", { ...emptyComposer(model, "low"), draft: "Mine" });
+    actions.seedIfAbsent("workspace", emptyComposer("claude-code:claude-opus-4-7", "high"));
+    actions.setDraft("workspace", "Also add tests");
+    actions.addInspectedElement("workspace", element);
+    actions.move("workspace", "chat");
+    expect(store.getState().composers.chat).toMatchObject({
+      model,
+      thinkingLevel: "low",
+      planModeEnabled: false,
+      draft: "Mine\n\nAlso add tests",
+      inspectedElements: [{ ...element, id: expect.any(String) }],
+    });
+    expect(store.getState().composers.workspace).toBeUndefined();
+  });
+
+  it("keeps content staged for the chat before it had a composer", () => {
+    actions.appendDraft("chat", "Review these changes");
+    actions.seedIfAbsent("workspace", emptyComposer(model, "high"));
+    actions.setDraft("workspace", "Also add tests");
+    actions.move("workspace", "chat");
+    expect(store.getState().composers.chat).toMatchObject({
+      model,
+      draft: "Also add tests\n\nReview these changes",
+    });
+    expect(store.getState().pendingContent).toEqual({});
+  });
+});

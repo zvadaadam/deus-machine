@@ -23,6 +23,57 @@ bun run test:e2e:runtime-client
 
 The package's faster fault tests run with `bun run test:runtime-client`.
 
+### Starting a workspace, and a start that fails
+
+`workspace-start.runtime.mjs` starts the real backend and Vite app with an
+isolated SQLite database and two scratch Git repositories, with no agent engine
+(no message can start a turn). A desktop browser and a phone-sized one watch
+the same workspaces. It checks, in order:
+
+- A workspace the previous backend was still starting (a row in `initializing`,
+  a worktree Git has registered and locked) fails at startup, and the worktree
+  and branch are gone.
+- A workspace starts on Home and nowhere else: the sidebar's "New workspace"
+  row and a project's "+" both open it, the second with that project chosen,
+  and nothing opens a dialog.
+- A message sent from Home's composer into a project whose branch does not
+  exist: the start fails in the transcript, with the reason, the tool's own
+  output, Retry and Delete, on both devices; the message is kept, shown as the
+  bubble it will be; no folder and no branch are left. The chat's composer is
+  there on both devices, the phone's as wide as the screen. Nothing else is offered: no new chat, no Create PR, no
+  tools pane, no tab bar on the phone.
+- Retry starts the same workspace again: same id and name, each stage reaching
+  both devices over the WebSocket, the kept message sent to the chat it opens,
+  once, and that chat opening with how the workspace started. While it starts,
+  a second message typed on its page is refused with a toast and stays in the
+  composer; when the chat opens it is in the chat's composer, which has the
+  same x, width and bottom. A workspace that started can be neither retried
+  nor deleted.
+- An unreachable remote does not stop a start; the chat opens with a warning
+  that the workspace may be behind.
+- With a remote that hangs, creating a workspace still answers at once and the
+  fetch is a stage on screen. A message typed on its page while it starts
+  waits as a bubble, and is sent once when it is ready.
+- Two workspaces started back to back from Home, with a reload of the window
+  while both start: each gets its own message, once. One that is still
+  starting opens from the sidebar, where its row names the step. The send
+  itself is refused (no agent engine), so the message waits in that chat's
+  composer and a toast says so; it is not sent again.
+- A start that fails while nobody is looking at it toasts; Delete removes it
+  and hands its message back to Home's composer.
+- A workspace that cannot be created (its project is gone) says why, and the
+  message is still in Home's composer.
+- A message waiting for a workspace whose chat was already spoken to (from
+  another window) is not sent: it goes into that chat's composer.
+
+```sh
+bun run native:node
+bunx playwright install chromium
+bun run test:e2e:workspace-start
+```
+
+Screenshots and `results.json` land in `.context/workspace-start/`.
+
 ### Account-bound remote access (`remote-access/`)
 
 `remote-access/run.mjs` runs the whole remote-access stack on loopback: a

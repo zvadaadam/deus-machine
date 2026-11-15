@@ -113,21 +113,39 @@ export const sessionComposerActions = {
     useSessionComposerStore.setState(
       (s) => {
         const pending = s.pendingContent[sessionId];
-        s.composers[sessionId] = pending
-          ? {
-              ...initial,
-              draft: pending.draft ? appendText(initial.draft, pending.draft) : initial.draft,
-              pastedTexts: [...initial.pastedTexts, ...pending.pastedTexts],
-              inspectedElements: [...initial.inspectedElements, ...pending.inspectedElements],
-              fileMentions: [...initial.fileMentions, ...pending.fileMentions],
-              skillMentions: [...initial.skillMentions, ...pending.skillMentions],
-              imageAttachments: [...initial.imageAttachments, ...pending.imageAttachments],
-            }
-          : initial;
+        s.composers[sessionId] = pending ? withContent(initial, pending) : initial;
         delete s.pendingContent[sessionId];
       },
       false,
       "composer/seed"
+    );
+  },
+
+  /**
+   * Hand one composer's state to another key: what was typed on a
+   * workspace's start page (keyed by the workspace) goes to its first chat.
+   * A `to` with no composer takes `from`'s whole state (model, thinking, plan
+   * mode, content); one that has a composer keeps its own settings and gains
+   * `from`'s content. `from` is removed either way.
+   */
+  move: (from: string, to: string): void => {
+    if (from === to || !useSessionComposerStore.getState().composers[from]) return;
+    useSessionComposerStore.setState(
+      (s) => {
+        const source = s.composers[from];
+        const target = s.composers[to];
+        if (target) {
+          Object.assign(target, withContent(target, source));
+        } else {
+          const pending = s.pendingContent[to];
+          s.composers[to] = pending ? withContent(source, pending) : source;
+          delete s.pendingContent[to];
+        }
+        delete s.composers[from];
+        delete s.pendingContent[from];
+      },
+      false,
+      "composer/move"
     );
   },
 
@@ -315,6 +333,19 @@ export const sessionComposerActions = {
       "composer/discard"
     ),
 };
+
+/** `base` with `extra`'s staged content added after its own. */
+function withContent<T extends StagedContent>(base: T, extra: StagedContent): T {
+  return {
+    ...base,
+    draft: extra.draft ? appendText(base.draft, extra.draft) : base.draft,
+    pastedTexts: [...base.pastedTexts, ...extra.pastedTexts],
+    inspectedElements: [...base.inspectedElements, ...extra.inspectedElements],
+    fileMentions: [...base.fileMentions, ...extra.fileMentions],
+    skillMentions: [...base.skillMentions, ...extra.skillMentions],
+    imageAttachments: [...base.imageAttachments, ...extra.imageAttachments],
+  };
+}
 
 function appendText(draft: string, text: string): string {
   return draft + (draft.trim() ? "\n\n" : "") + text;

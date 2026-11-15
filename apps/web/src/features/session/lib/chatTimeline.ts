@@ -24,6 +24,7 @@ import { cn } from "@/shared/lib/utils";
 import { conversationView } from "./conversationView";
 import type { Compaction, Message, MessageRole, SessionTurn } from "../types";
 import type { CloudEnvEntry } from "../store/cloudEnvStore";
+import type { WorkspaceStart } from "@/features/workspace/lib/startState";
 
 export type UserTurn = {
   type: "user";
@@ -57,7 +58,15 @@ export type CloudEnvMarker = {
   entries: CloudEnvEntry[];
 };
 
-export type ChatTimelineItem = Turn | CompactionMarker | CloudEnvMarker;
+/** How the workspace this chat belongs to started: its steps and warnings.
+ *  Under the first message of the chat the workspace started with (the one
+ *  that asked for it), or first when nothing has been said. */
+export type StartMarker = {
+  type: "start";
+  start: WorkspaceStart;
+};
+
+export type ChatTimelineItem = Turn | CompactionMarker | CloudEnvMarker | StartMarker;
 
 /** Everything the chat needs to render one session's transcript. */
 export interface ChatTimeline {
@@ -85,12 +94,18 @@ export function buildChatTimeline(
   compactions: readonly Compaction[],
   working: boolean,
   envEntries: readonly CloudEnvEntry[] = [],
-  records: readonly SessionTurn[] = []
+  records: readonly SessionTurn[] = [],
+  start?: WorkspaceStart
 ): ChatTimeline {
   const rendered = renderableMessages(messages);
   const conversation = conversationView(rendered, working);
   const grouped = groupTurns(conversation, rendered, records);
   const items = insertCloudEnv(insertCompactions(grouped, compactions), envEntries);
+  // The message that asked for the workspace, then how the workspace started.
+  if (start) {
+    const asked = items[0]?.type === "user" ? 1 : 0;
+    items.splice(asked, 0, { type: "start", start });
+  }
 
   return {
     items,
@@ -249,7 +264,7 @@ function turnSpacingClasses(
 
     // Env group: tight under the user send that triggered it, a small gap
     // elsewhere (top of an empty-ish chat, after a finished reply).
-    if (turn.type === "cloudEnv") {
+    if (turn.type === "cloudEnv" || turn.type === "start") {
       if (isFirst) return "pt-2";
       return prevTurn?.type === "user" ? "pt-0" : "pt-2";
     }
@@ -264,13 +279,13 @@ function turnSpacingClasses(
     // Assistant turn
     if (isFirst) return "pt-1";
     if (prevTurn?.type === "compaction") return "pt-2";
-    if (prevTurn?.type === "cloudEnv") return "pt-2";
+    if (prevTurn?.type === "cloudEnv" || prevTurn?.type === "start") return "pt-2";
     return "pt-0";
   })();
 
   const bottomClass = (() => {
     if (turn.type === "compaction") return "pb-0";
-    if (turn.type === "cloudEnv") return "pb-0";
+    if (turn.type === "cloudEnv" || turn.type === "start") return "pb-0";
     if (isUser) return USER_PADDING_CLASS;
     // Assistant turn
     if (nextTurn?.type === "user") return "pb-0";
@@ -341,10 +356,13 @@ export function insertCompactions(
  * Splice cloud environment event runs in by TIME: an entry belongs after the
  * last turn that finished before it arrived — the send that woke the sandbox,
  * not the reply that followed. Entries sharing an anchor render as ONE
- * collapsible group; -1 anchors above the first turn (fresh provisioning in
- * an empty chat). Env timestamps are local arrival clocks and message times
- * are DB clocks — same machine, so ordering holds; an entry older than every
- * turn lands at the top rather than being dropped.
+ * collapsible group. Env timestamps are local arrival clocks and message times
+ * are DB clocks — same machine, so ordering holds.
+ *
+ * An entry older than every turn is the computer being provisioned for a chat
+ * whose first message was still waiting for it. It reads the way a wake does,
+ * the message and then the setup it asked for: under the first message, or
+ * first in a chat with nothing said yet. Never dropped.
  */
 export function insertCloudEnv(
   items: ChatTimelineItem[],
@@ -372,6 +390,12 @@ export function insertCloudEnv(
     if (bucket) timeline.push({ type: "cloudEnv", entries: bucket });
   };
 
+  const beforeAnyTurn = afterItem.get(-1);
+  if (beforeAnyTurn && items[0]?.type === "user") {
+    afterItem.delete(-1);
+    afterItem.set(0, [...beforeAnyTurn, ...(afterItem.get(0) ?? [])]);
+  }
+
   emit(-1);
   items.forEach((item, index) => {
     timeline.push(item);
@@ -384,7 +408,8 @@ export function insertCloudEnv(
  *  markers (they carry no message clock) and for turns with no timestamps —
  *  time-anchoring passes skip NaN slots. */
 function itemEndTime(item: ChatTimelineItem): number {
-  if (item.type === "compaction" || item.type === "cloudEnv") return Number.NaN;
+  if (item.type === "compaction" || item.type === "cloudEnv" || item.type === "start")
+    return Number.NaN;
   let endedAt = item.type === "assistant" ? (item.record?.endedAt ?? Number.NaN) : Number.NaN;
   for (const message of item.type === "user" ? [item.message] : item.messages) {
     const sentAt = message.sent_at ? Date.parse(message.sent_at) : Number.NaN;

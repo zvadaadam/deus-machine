@@ -24,14 +24,16 @@ export interface AppSidebarProps {
   selectedWorkspaceId: string | null;
   diffStatsMap?: Record<string, DiffStats>;
   onWorkspaceClick: (workspace: Workspace) => void;
+  /** Go to Home, where a workspace starts; with a project when one's "+" asked. */
   onNewWorkspace: (repoId?: string) => void;
+  /** Home is what is on screen. */
+  newWorkspaceActive?: boolean;
   onNewWorkspaceFromGitHub?: (repoId: string) => void;
   onAddRepository?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
   onArchive?: (workspaceId: string) => void;
   onStatusChange?: (workspaceId: string, status: WorkspaceStatus) => void;
-  onNewSession?: () => void;
   onOpenAutomations?: () => void;
   automationsActive?: boolean;
   /** Customize: Apps, Recommended Plugins and Skills. */
@@ -77,7 +79,6 @@ export interface SidebarHeaderProps {
   profile?: SidebarProfile;
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
-  onNewSession?: () => void;
   isExpanded: boolean;
 }
 

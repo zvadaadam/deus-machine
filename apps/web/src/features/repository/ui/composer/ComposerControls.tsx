@@ -1,8 +1,6 @@
 /**
- * Shared composer controls — the ONE definition of the cloud toggle and branch
- * button used by both prompt-first surfaces (HomeView's welcome composer and
- * NewWorkspacePromptModal). Extracted so the two can't drift; visual language
- * is the welcome composer's. Their model picker is the chat composer's own
+ * The Home composer's controls for where a new workspace runs: the cloud
+ * toggle and the branch button. Its model picker is the chat composer's own
  * (features/session ModelPicker), fed by useNewChatSelection.
  */
 

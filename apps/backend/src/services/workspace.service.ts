@@ -97,16 +97,27 @@ const CELESTIAL_NAMES = [
   "comet",
 ];
 
-export function generateUniqueName(db: Database.Database): string {
-  const existingNames = db
-    .prepare("SELECT slug FROM workspaces")
-    .all()
-    .map((w: any) => w.slug);
+/**
+ * A name no workspace has. `isTaken` adds what the database cannot know: a
+ * folder or a branch left on disk under a name (the database was reset, or a
+ * cleanup failed), which would make `git worktree add` refuse it.
+ */
+export function generateUniqueName(
+  db: Database.Database,
+  isTaken: (name: string) => boolean = () => false
+): string {
+  const existingNames = new Set(
+    db
+      .prepare("SELECT slug FROM workspaces")
+      .all()
+      .map((w: any) => w.slug as string)
+  );
+  const free = (name: string) => !existingNames.has(name) && !isTaken(name);
 
   // Try random celestial names first (100 attempts)
   for (let i = 0; i < 100; i++) {
     const name = CELESTIAL_NAMES[Math.floor(Math.random() * CELESTIAL_NAMES.length)];
-    if (!existingNames.includes(name)) {
+    if (free(name)) {
       return name;
     }
   }
@@ -115,7 +126,7 @@ export function generateUniqueName(db: Database.Database): string {
   for (let i = 0; i < 100; i++) {
     const name = CELESTIAL_NAMES[Math.floor(Math.random() * CELESTIAL_NAMES.length)];
     const versionedName = `${name}-v${Math.floor(Math.random() * 100)}`;
-    if (!existingNames.includes(versionedName)) {
+    if (free(versionedName)) {
       return versionedName;
     }
   }

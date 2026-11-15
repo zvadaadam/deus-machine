@@ -104,8 +104,8 @@ deferred. The subsequent composer polish updates both the design and the app.
   "Opus 5.5 High" (the level muted, absent for a model with no thinking control), and its menu
   has the agents across the top, the shown agent's models on the left and the chat's model's
   levels on the right, each marked on the right. `16` and `16b` show the trigger and the menu.
-  The home composer and the new-workspace dialog use the same control (`45`), opening downward;
-  the level picked there rides with the first turn.
+  The home composer uses the same control (`45`), opening downward; the level picked there
+  rides with the first turn.
   The canvas's `tw-shadow-color` variable records the 10% black default used by
   Tailwind's small/medium shadow tokens.
 
@@ -233,10 +233,23 @@ Grant repository access to `67`, and the web-direct mobile chat to `75`.
   Board `54` puts cloud accounts before local CLI connections and removes the inert
   local API-key inputs; `55` shows cloud connection state and links to AI Providers, GitHub, and Environment.
   Hosted web exposes Account, AI Providers, and Environment, without desktop CLI controls.
-- `60` ⌘K palette · `61` New workspace · `62` New from PR or branch · `63` Clone repository ·
-  `64` Start new project · `65` System prompt · `66` Pair a device.
+- `60` ⌘K palette · `62` New from PR or branch · `63` Clone repository ·
+  `64` Start new project · `65` System prompt · `66` Pair a device. There is no `61`: a
+  workspace is created on Home (`45`), reached from the sidebar's "New workspace" row or a
+  project's "+", never in a dialog.
   `65` no longer has a counterpart in the app: nothing could open the dialog and
   the backend ignored its save, so the code was removed. Delete the frame.
+- A workspace's start is told in its transcript (`15`, "Chat start — starting / failed /
+  ready, with a warning"), message first: the message that asked for the workspace (before
+  the chat exists, as the bubble it will be, `WorkspaceStartState.tsx`), then one environment
+  line (`EnvGroup.tsx`, shared with cloud provisioning) with a warning or failure box under
+  it (`WorkspaceStartGroup.tsx`). A workspace that never started is the chat column alone:
+  no tools pane, no Create PR, no new-chat "+". Its sidebar row (`30`, "starting") names the
+  step in the words the chat uses ("Updating…", "Copying…", "Running setup…") and opens it.
+  **Not drawn yet:** the start states now end with the chat's composer
+  (`WorkspaceStartComposer.tsx`, a `DS/Composer` at the foot of the column) while the
+  workspace is starting or can be retried; `15`'s three "Chat start" samples still show them
+  without it.
 - `70`…`73` Mobile: Chat · Code · sidebar drawer · PR-bar states
 - `80` Your computers — the `/connect` web route (the account's computers, from Deus Cloud).
   The relay gates in front of a computer's workspace, mobile size: `81` sign in
@@ -561,9 +574,11 @@ in step with it:
   with `px-4 py-8 sm:px-8`; the nav rail reuses the 256px sidebar
 - Mobile is 390×844; the sidebar sheet is `100vw − 3.5rem` = 334px
 - Sidebar header is 48px (`px-1.5 py-1.5` around a 36px account button); footer is 46px (`p-3.5`)
-- The sidebar's app pages (Automations, Customize) are 32px rows directly under the header
-  (`px-1.5 pb-1`, `gap-px`), a 14px icon in a 20px slot. Boards `48a`–`48f` draw them there;
-  `DS/Sidebar` and the older boards do not have them yet
+- The sidebar's app nav (New workspace, Automations, Customize) is three 32px rows directly
+  under the header (`px-1.5 pb-1`, `gap-px`), a 14px icon in a 20px slot. New workspace is
+  Home, and active while Home is on screen; the header's "new session" icon it replaces is
+  gone. `DS/Sidebar` has the rows (so every board that instances it does), board `14` shows
+  them on their own, and boards `48a`–`48f` draw them by hand
 - Customize pages are `max-w-4xl` with `px-8`, an 832px column. The catalog is `pt-12` and
   `gap-5`; its rows are 52px (`py-2` around a 36px tile) in two 408px columns, `gap-x-4` and
   `gap-y-1`. An item's page is `pt-6` and `gap-6`, with a 572px main column beside a 220px

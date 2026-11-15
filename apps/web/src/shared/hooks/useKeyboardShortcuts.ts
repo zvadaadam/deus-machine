@@ -8,7 +8,6 @@ interface UseKeyboardShortcutsOptions {
   onOpenInApp?: () => void;
   selectedWorkspace: Workspace | null;
   modalStates?: {
-    showNewWorkspaceModal?: boolean;
     selectedFile?: string | null;
   };
 }
