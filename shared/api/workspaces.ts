@@ -4,7 +4,6 @@ import { z } from "zod";
 import { WorkspaceStateSchema, WorkspaceStatusSchema } from "../enums";
 import type { GhCliStatus, PRStatus } from "../types/github";
 import type { ProjectEnvironmentResponse, TaskRunResponse } from "../types/project-environment";
-import type { Stats } from "../types/repository";
 import type { DiffStats, FileChange, RepoGroup, Workspace } from "../types/workspace";
 import { live, out, read, write } from "./op";
 import { stream } from "./stream";
@@ -22,12 +21,7 @@ export const workspaces = live({
   output: out<RepoGroup[]>(),
 });
 
-export const stats = live({ name: "stats", output: out<Stats>() });
-
 export const workspace = read({ name: "workspace", input: workspaceId, output: out<Workspace>() });
-
-/** Every workspace, archived ones included. */
-export const allWorkspaces = read({ name: "allWorkspaces", output: out<Workspace[]>() });
 
 /** The project's environment and Run commands, read on the node that owns the workspace. */
 export const workspaceEnvironment = read({

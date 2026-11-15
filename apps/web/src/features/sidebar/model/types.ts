@@ -5,6 +5,7 @@
 
 import type { Workspace, DiffStats, RepoGroup } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
+import type { WorkspaceLocation } from "../lib/location";
 
 /**
  * Sidebar profile chip — derived from `gh api user` via useGhStatus().
@@ -38,6 +39,10 @@ export interface AppSidebarProps {
   onOpenCustomize?: () => void;
   customizeActive?: boolean;
   profile?: SidebarProfile;
+  /** Where this window's workspaces run; `repositories` lists only those. */
+  location: WorkspaceLocation;
+  /** Absent where there is only one location (the hosted web app). */
+  onSwitchLocation?: (location: WorkspaceLocation) => void;
 }
 
 /**
@@ -75,6 +80,8 @@ export interface WorkspaceItemProps {
  */
 export interface SidebarHeaderProps {
   profile?: SidebarProfile;
+  location: WorkspaceLocation;
+  onSwitchLocation?: (location: WorkspaceLocation) => void;
   onOpenSettings: () => void;
   onToggleSidebar: () => void;
   onNewSession?: () => void;

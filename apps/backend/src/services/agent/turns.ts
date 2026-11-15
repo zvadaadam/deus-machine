@@ -169,10 +169,10 @@ export async function sendMessage(
   const sentAt = new Date().toISOString();
   const working = persistSessionWorking(sessionId);
   if (!working.ok) throw new Error(working.error);
-  invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 
-  // 2. Forward to agent-server. The ACK is NOT out yet: handleCommand sends it
-  // from THIS function's outcome, which is what lets the guards below — and
+  // 2. Forward to agent-server. The ACK is NOT out yet: the write's answer is
+  // sent from THIS function's outcome, which is what lets the guards below — and
   // the admission round-trip itself — reject the send instead of
   // half-accepting it.
   const existingAgentSessionId = session?.agent_session_id ?? null;
@@ -185,8 +185,8 @@ export async function sendMessage(
   if (isCloud && cloudSelection) {
     // Cloud lane (its selection was read above, so this is every cloud send).
     // agnt queues overlapping sends instead of rejecting, so the driver
-    // enforces deus's one-live-turn contract itself; every throw here answers
-    // `accepted: false` — the same rejection contract as the wire path
+    // enforces deus's one-live-turn contract itself; every throw here fails
+    // the write — the same rejection contract as the wire path
     // below, for the same lost-prompt reason.
     // Above the try: the catch's honest revert needs to know which stage the
     // optimistic Waking flip replaced.
@@ -214,7 +214,7 @@ export async function sendMessage(
         getDatabase()
           .prepare("UPDATE workspaces SET init_stage = 'resuming' WHERE id = ?")
           .run(workspace.id);
-        invalidate(["workspaces", "stats"], {});
+        invalidate(["workspaces"], {});
         announceCloudEnv(workspace.id, sessionId, {
           status: "resuming",
           step: asleepStage === "stopped" ? "Restarting sandbox" : "Waking sandbox",
@@ -235,7 +235,7 @@ export async function sendMessage(
         getDatabase()
           .prepare("UPDATE workspaces SET init_stage = ? WHERE id = ? AND init_stage = 'resuming'")
           .run(asleepStage, workspace.id);
-        invalidate(["workspaces", "stats"], {});
+        invalidate(["workspaces"], {});
         announceCloudEnv(workspace.id, sessionId, {
           status: asleepStage,
           reason: "wake failed — try again",
@@ -252,14 +252,14 @@ export async function sendMessage(
     // frontend's optimistic bubble — because the backend never writes the user
     // row (the engine's echo is the single persistence path). A false accept
     // therefore strands that bubble on screen forever, durable nowhere. Throw so
-    // handleCommand answers `accepted: false` and the composer's rollback runs.
+    // the write fails and the composer's rollback runs.
     if (!agentService.isConnected()) {
       const err = new Error("Agent server is disconnected");
       handleAgentError(sessionId, err);
       throw err;
     }
     if (!cwd) {
-      const err = new Error("Session has no resolvable workspace");
+      const err = new ConflictError("Session has no resolvable workspace");
       handleAgentError(sessionId, err);
       throw err;
     }
@@ -273,12 +273,12 @@ export async function sendMessage(
     // The guards above only close the SYNCHRONOUS half of the lost-prompt hole.
     // Admission can also fail asynchronously: a turnActive race with a second
     // client, a server shutting down, a harness that will not spawn. Answering
-    // the command before that verdict arrives reports `accepted: true` for a
+    // the write before that verdict arrives reports success for a
     // turn the server then refuses — and the prompt exists in exactly one place
     // right now, the frontend's optimistic bubble, because the backend never
     // writes the user row (the engine's echo is the single persistence path).
-    // So every rejection rethrows: handleCommand turns a throw into
-    // `accepted: false`, which is the only answer that runs the composer's
+    // So every rejection rethrows: a throw fails the write, which is the
+    // only answer that runs the composer's
     // rollback. Nothing can arrive here AFTER admission — the promise settles on
     // the ack — so there is no post-ack failure left to handle in the
     // background.
@@ -387,7 +387,7 @@ export async function stopSession({
       `UPDATE sessions SET status = 'idle', updated_at = datetime('now')
        WHERE id = ? AND status IN (${ACTIVE_TURN_STATUSES.map(() => "?").join(", ")})`
     ).run(sessionId, ...ACTIVE_TURN_STATUSES);
-    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+    invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
     return { unconfirmed: false };
   }
 
@@ -439,7 +439,7 @@ function scheduleUnconfirmedCancelWatchdog(
         .run(live === undefined ? "error" : null, sessionId, ...ACTIVE_TURN_STATUSES);
       if (result.changes > 0) {
         console.warn(`[CommandHandler] unconfirmed cancel never settled: session=${sessionId}`);
-        invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+        invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
       }
     } catch (err) {
       console.error("[CommandHandler] cancel watchdog failed:", err);
@@ -455,12 +455,12 @@ function handleAgentRejection(sessionId: string, reason?: string): void {
   const msg = reason || "Agent rejected the message";
   console.error(`[CommandHandler] Agent rejected sendMessage for session=${sessionId}: ${msg}`);
   persistSessionError(sessionId, msg, "internal");
-  invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }
 
 function handleAgentError(sessionId: string, err: unknown): void {
   const errorMsg = err instanceof Error ? err.message : String(err);
   console.error("[CommandHandler] Failed to forward to agent-server:", errorMsg);
   persistSessionError(sessionId, `Agent server communication failed: ${errorMsg}`, "internal");
-  invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
 }

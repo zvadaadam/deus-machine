@@ -39,11 +39,6 @@ export const queryKeys = {
     branches: (repoId: string) => ["repos", repoId, "branches"] as const,
   },
 
-  // Stats
-  stats: {
-    all: ["stats"] as const,
-  },
-
   // GitHub CLI
   github: {
     ghStatus: ["github", "gh-status"] as const,

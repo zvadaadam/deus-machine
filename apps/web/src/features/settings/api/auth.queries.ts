@@ -60,3 +60,15 @@ export function useRelayStatus(enabled: boolean) {
     staleTime: 3_000,
   });
 }
+
+/** This computer's name as other devices see it, read once (the sidebar header). */
+export function useComputerName(enabled: boolean) {
+  return useQuery({
+    queryKey: authKeys.relayStatus,
+    queryFn: () => call(api.relayStatus),
+    select: (status) => status.serverName,
+    enabled,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}

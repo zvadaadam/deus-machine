@@ -45,6 +45,8 @@ export function AppSidebar({
   customizeActive,
   diffStatsMap,
   profile,
+  location,
+  onSwitchLocation,
 }: AppSidebarProps) {
   const { state, hoverOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const openSettings = useUIStore((s) => s.openSettings);
@@ -115,6 +117,8 @@ export function AppSidebar({
     <Sidebar variant="inset" collapsible="offcanvas" className="p-0">
       <SidebarHeader
         profile={profile}
+        location={location}
+        onSwitchLocation={onSwitchLocation}
         onOpenSettings={openSettings}
         onToggleSidebar={toggleSidebar}
         onNewSession={onNewSession}

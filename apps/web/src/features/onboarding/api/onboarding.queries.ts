@@ -32,7 +32,7 @@ export function useCompleteOnboarding() {
   return useMutation({
     mutationFn: () => OnboardingService.completeOnboarding(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.all, exact: true });
     },
   });
 }

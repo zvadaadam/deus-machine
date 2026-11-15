@@ -28,7 +28,11 @@ export function fileChangePath(fc: FileChange): string {
  * - useRepoActions.handleCloneRepository() (git clone flow)
  * - useCreateWorkspace() onMutate (React Query optimistic update)
  */
-export function createOptimisticWorkspace(repoId: string, repoName: string): Workspace {
+export function createOptimisticWorkspace(
+  repoId: string,
+  repoName: string,
+  location: "local" | "cloud" = "local"
+): Workspace {
   return {
     id: `optimistic-${Date.now()}`,
     repository_id: repoId,
@@ -36,7 +40,8 @@ export function createOptimisticWorkspace(repoId: string, repoName: string): Wor
     title: null,
     git_branch: null,
     git_target_branch: null,
-    kind: "worktree",
+    // The requested location's kind, so a cloud create never flashes in the local list.
+    kind: location === "cloud" ? "cloud" : "worktree",
     provider_workspace_id: null,
     state: "initializing",
     status: "in-progress",

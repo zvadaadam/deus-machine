@@ -89,6 +89,70 @@ state, the run's databases and `results.json` go to `.context/remote-access/`,
 with mobile and desktop screenshots beside them. The relay can still read `q:`
 frames: this verifies account admission, not end-to-end encryption.
 
+### Cloud workspaces against a scripted platform (`cloud/`)
+
+Two journeys run a cloud workspace in the real web app, in Chromium, against
+`cloud/platform.mjs`: a local HTTP + WebSocket server on `127.0.0.1` that stands
+in for the Deus platform. It mints session tokens (checking the Deus Cloud
+bearer), lists an organization's sessions, accepts session metadata, and holds
+each session's socket (a `session.snapshot` on connect, `pong` for `ping`, every
+command recorded). Every frame it sends is validated against `@deus-hq/api`'s
+`WebSocketEventSchema` and throws if invalid, so it can only say what the real
+platform may say. The journeys script the platform's side of a turn: the
+prompt's echo (under the engine's `echo-<turnId>` ids), a streamed reply, a
+question, the end of the turn, and dropped sockets.
+
+- `cloud/mac-lane.browser.mjs`, the desktop's lane: a real backend (isolated
+  SQLite database with two cloud workspaces) holds the platform's socket, and
+  the app follows the backend's streams. It checks the transcript from the
+  snapshot; the sandbox address and simulator status on their streams; one
+  `message.send` per prompt; the reply shown while it is typed; a second client
+  that hovers and then opens the chat mid-reply, and that is reset and reads
+  again, shows the reply typed so far once; the question card and its
+  `elicitation.respond`; one prompt bubble at the end; the page equal to a fresh
+  read of the database; each row once after the platform socket drops; and a
+  client opening a chat the backend restored mid-reply sees the part as it
+  stands, then the tokens after it.
+- `cloud/direct-lane.browser.mjs`, the hosted web's lane (`VITE_CLOUD_DIRECT=1`,
+  no backend): the browser lists the platform's sessions, mints a token from
+  its web session and holds the socket itself. It checks the sidebar, the
+  snapshot, the side streams, `message.send`, streaming, the question, the
+  session list read again when the turn ends, and each row once after a
+  dropped socket.
+
+Each journey also fails on a page error, and on any request the platform does
+not serve beyond the short allow-list at the top of the file (the Mac lane's
+backend reads `GET /models`, `GET /workspaces/:id` and `GET /sessions/:id`,
+which are answered 404).
+
+```sh
+bun run native:node
+bunx playwright install chromium
+bun run test:e2e:cloud
+```
+
+The journeys run under `node --import tsx` (Playwright hangs under Bun); the Mac
+lane's backend needs `better-sqlite3` built for Node (`native:node`). Screenshots, the backend log and
+the run's database go to `.context/cloud-e2e/`. No sandbox, model, Deus Cloud
+or production service is involved, so this does not cover a live sandbox or
+the real platform's behaviour, only the app's side of its contract.
+
+### `workspace-location.browser.mjs`
+
+Runs the sidebar header's "where workspaces run" switcher in the real web app
+against the real backend. An isolated database holds one local and one cloud
+workspace in the same repository; the cloud is the scripted platform from
+`cloud/platform.mjs`, so the backend is signed in to Deus Cloud. It checks the
+filtered list, the menu, ⌃1/⌃2, following a selection opened by URL, restoring
+the last selection per location, persistence across a reload, the Home
+composer's default, and the 390×844 sheet. No sandbox or model call.
+
+```bash
+node --import tsx test/e2e/workspace-location.browser.mjs
+```
+
+Screenshots of the open menu (local, cloud, mobile) go to `.context/workspace-location`.
+
 ### `controls.browser.mjs`
 
 Runs the shared buttons, joined controls, menus, selects and tabs in an isolated

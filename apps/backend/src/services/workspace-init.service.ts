@@ -186,7 +186,7 @@ const STAGES: InitStage[] = [
       })();
 
       // Push state change immediately so frontend picks up session + ready state
-      invalidate(["workspaces", "stats", "sessions"]);
+      invalidate(["workspaces", "sessions"]);
     },
   },
 ];
@@ -230,7 +230,7 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
         emitProgress(ctx.workspaceId, "error", `Failed at: ${stage.name}`);
 
         // Workspace transitioned to 'error' — notify connected clients.
-        invalidate(["workspaces", "stats"]);
+        invalidate(["workspaces"]);
         return;
       }
       // Non-fatal: log and continue to next stage
@@ -248,5 +248,5 @@ export async function initializeWorkspace(ctx: InitContext): Promise<void> {
   emitProgress(ctx.workspaceId, "done", "Ready");
 
   // Background stages finished — push final state to all connected clients.
-  invalidate(["workspaces", "stats"]);
+  invalidate(["workspaces"]);
 }

@@ -6,7 +6,6 @@ import { getDatabase } from "../lib/database";
 import { NotFoundError, ValidationError } from "../lib/errors";
 import {
   attachParts,
-  getAllSessions,
   getCompactions,
   getMessages,
   getSessionById,
@@ -48,7 +47,6 @@ export default [
       has_newer: false,
     };
   }),
-  handle(api.allSessions, () => getAllSessions(getDatabase())),
 
   handle(api.cloudDirectToken, async ({ sessionId }) => {
     const session = getSessionRaw(getDatabase(), sessionId);
@@ -92,7 +90,7 @@ export default [
         "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ?"
       ).run(sessionId, workspaceId);
     })();
-    invalidate(["workspaces", "sessions", "stats"]);
+    invalidate(["workspaces", "sessions"]);
     return getSessionRaw(db, sessionId)!;
   }),
   handle(api.sendMessage, sendMessage),

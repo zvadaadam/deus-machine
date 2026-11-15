@@ -245,19 +245,3 @@ export interface AutomationRunRow {
   cost: number | null;
   summary: string | null;
 }
-
-// ─── stats ───────────────────────────────────────────────────
-
-export interface StatsRow {
-  workspaces: number;
-  workspaces_ready: number;
-  workspaces_archived: number;
-  workspaces_backlog: number;
-  workspaces_in_progress: number;
-  workspaces_in_review: number;
-  repositories: number;
-  sessions: number;
-  sessions_idle: number;
-  sessions_working: number;
-  messages: number;
-}

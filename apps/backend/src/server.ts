@@ -38,7 +38,7 @@ Sentry.init({
 /**
  * Deus Backend Server
  *
- * Handles workspace CRUD, sessions, repos, config, and stats.
+ * Handles workspace CRUD, sessions, repos and config.
  * Runs the agent engine (@zvada/agent-server) in this process.
  */
 

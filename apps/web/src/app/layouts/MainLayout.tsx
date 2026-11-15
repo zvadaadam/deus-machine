@@ -33,6 +33,12 @@ import { SidebarProvider, useSidebar } from "@/components/ui";
 import { AppSidebar, SidebarSkeleton } from "@/features/sidebar";
 import { useWorkspaceStore, workspaceLayoutActions } from "@/features/workspace/store";
 import { useSidebarStore } from "@/features/sidebar/store";
+import {
+  filterByLocation,
+  followSelection,
+  workspaceToRestore,
+  type WorkspaceLocation,
+} from "@/features/sidebar/lib/location";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
@@ -97,6 +103,7 @@ export function MainLayout() {
   const selectedWorkspaceId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
   const expandRepo = useSidebarStore((s) => s.expandRepo);
+  const storedLocation = useSidebarStore((s) => s.location);
 
   const showNewWorkspaceModal = useUIStore((s) => s.showNewWorkspaceModal);
   const newWorkspaceMode = useUIStore((s) => s.newWorkspaceMode);
@@ -129,6 +136,34 @@ export function MainLayout() {
     }
     return null;
   }, [selectedWorkspaceId, repoGroups]);
+
+  // Where this window's workspaces run. The hosted web app has only the cloud;
+  // elsewhere the sidebar lists one location, the rest of the app the full list.
+  const webDirect = isCloudDirectWebMode();
+  const location: WorkspaceLocation = webDirect ? "cloud" : storedLocation;
+  const sidebarRepoGroups = useMemo(
+    () => (webDirect ? repoGroups : filterByLocation(repoGroups, location)),
+    [webDirect, repoGroups, location]
+  );
+
+  // The location follows a newly selected workspace (from anywhere), so the
+  // sidebar always contains it; a refresh of the same selection never undoes
+  // a manual switch.
+  const followedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (webDirect) return;
+    const store = useSidebarStore.getState();
+    const next = followSelection(
+      { followedId: followedIdRef.current, location: store.location },
+      selectedWorkspaceId,
+      selectedWorkspace
+    );
+    if (next.followedId && next.followedId !== followedIdRef.current) {
+      store.rememberSelection(next.location, next.followedId);
+    }
+    followedIdRef.current = next.followedId;
+    if (next.location !== store.location) store.setLocation(next.location);
+  }, [webDirect, selectedWorkspaceId, selectedWorkspace]);
 
   const selectedWorkspaceIdRef = useRef(selectedWorkspaceId);
   useEffect(() => {
@@ -188,7 +223,6 @@ export function MainLayout() {
   const repoActions = useRepoActions({
     selectWorkspace,
     openNewWorkspaceModal,
-    closeNewWorkspaceModal,
   });
 
   // --- Home screen send flow ---
@@ -286,13 +320,6 @@ export function MainLayout() {
     const group = repoGroups.find((g) => g.repo_id === githubPickerRepoId);
     return group?.repo_name ?? "";
   }, [githubPickerRepoId, repoGroups]);
-
-  // Hide native WebContentsViews when any dialog is open — they render above
-  // the DOM so dialogs would appear behind them. BrowserTab's own visible
-  // effect handles re-showing when the dialog closes.
-  const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
-  // Note: <webview> elements stack normally under dialogs/modals — no
-  // hideAll IPC dance needed when dialogs open.
 
   // --- Archive with undo (ref-stable for memoized sidebar items) ---
 
@@ -396,27 +423,6 @@ export function MainLayout() {
     }
   }
 
-  // Keyboard shortcuts
-  useKeyboardShortcuts({
-    onRefresh: async () => {
-      workspacesQuery.refetch();
-      if (selectedWorkspace) {
-        prStatusQuery.refetch();
-      }
-    },
-    onEscape: () => {
-      if (showNewWorkspaceModal) closeNewWorkspaceModal();
-    },
-    onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
-    selectedWorkspace,
-    modalStates: { showNewWorkspaceModal },
-  });
-
-  // Archive + workflow status are Mac-backend mutations; web-direct has no
-  // transport for them, so the sidebar gets no handlers and never renders the
-  // hover archive button or the status menu (the toasts above stay as a net).
-  const webDirect = isCloudDirectWebMode();
-
   const handleWorkspaceClick = useCallback(
     (workspace: Workspace) => {
       // The Automations view overlays MainContent — a workspace click while
@@ -437,6 +443,43 @@ export function MainLayout() {
     [selectWorkspace, expandRepo]
   );
 
+  // A manual switch (header menu, ⌃1 / ⌃2): back to the workspace last selected
+  // there this session, through the row-click path, or Home.
+  const repoGroupsRef = useRef(repoGroups);
+  useEffect(() => {
+    repoGroupsRef.current = repoGroups;
+  });
+  const switchLocation = useCallback(
+    (next: WorkspaceLocation) => {
+      const store = useSidebarStore.getState();
+      if (next === store.location) return;
+      store.setLocation(next);
+      const groups = repoGroupsRef.current;
+      const restoreId = workspaceToRestore(groups, store.lastSelectedByLocation, next);
+      const restore = restoreId
+        ? groups.flatMap((g) => g.workspaces).find((w) => w.id === restoreId)
+        : undefined;
+      if (restore) handleWorkspaceClick(restore);
+      else selectWorkspace(null);
+    },
+    [handleWorkspaceClick, selectWorkspace]
+  );
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onRefresh: async () => {
+      workspacesQuery.refetch();
+      if (selectedWorkspace) {
+        prStatusQuery.refetch();
+      }
+    },
+    onEscape: () => {
+      if (showNewWorkspaceModal) closeNewWorkspaceModal();
+    },
+    onOpenInApp: capabilities.openInExternalApp ? openInLastApp : undefined,
+    onSwitchLocation: webDirect ? undefined : switchLocation,
+  });
+
   return (
     <SidebarProvider
       className="h-full"
@@ -455,7 +498,9 @@ export function MainLayout() {
         <SidebarSkeleton />
       ) : (
         <AppSidebar
-          repositories={repoGroups}
+          repositories={sidebarRepoGroups}
+          location={location}
+          onSwitchLocation={webDirect ? undefined : switchLocation}
           selectedWorkspaceId={selectedWorkspace?.id || null}
           diffStatsMap={bulkDiffStatsQuery.data}
           onWorkspaceClick={handleWorkspaceClick}
@@ -464,6 +509,9 @@ export function MainLayout() {
           onAddRepository={repoActions.handleOpenProject}
           onCloneRepository={() => repoActions.setShowCloneModal(true)}
           onStartNewProject={() => repoActions.setShowStartNewModal(true)}
+          // Archive + workflow status are Mac-backend mutations; web-direct has no
+          // transport for them, so the sidebar gets no handlers and never renders the
+          // hover archive button or the status menu (the toasts above stay as a net).
           onArchive={webDirect ? undefined : archiveWorkspace}
           onStatusChange={webDirect ? undefined : handleStatusChange}
           onNewSession={() => {

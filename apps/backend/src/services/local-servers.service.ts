@@ -29,12 +29,7 @@ import https from "node:https";
 import type { IncomingMessage } from "node:http";
 import { URL } from "node:url";
 
-import type {
-  LocalServer,
-  LocalServerStatus,
-  LocalServerTheme,
-  LocalServersSnapshot,
-} from "@shared/types";
+import type { LocalServer, LocalServerTheme, LocalServersSnapshot } from "@shared/types";
 
 // ---- Tuning constants ----
 

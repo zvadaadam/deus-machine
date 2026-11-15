@@ -24,6 +24,7 @@ import type { AutomationSpecInput } from "@deus-hq/api";
 import type { CloudThinkingLevel } from "@shared/cloud-models";
 import type { AutomationRunStatus } from "@shared/enums";
 import { getCloudConfig } from "../agent/cloud/config";
+import { ValidationError } from "../../lib/errors";
 import type { AutomationRow, AutomationRunRow } from "../../db/types";
 
 /** Org caps mirrored from the platform (soft limits, kept for pagination). */
@@ -53,7 +54,9 @@ export function platformConfigured(): boolean {
 export function requireAutomationPlatform(): PlatformAuth {
   const config = getCloudConfig();
   if (!config?.deusCloudSessionToken || !config.orgId) {
-    throw new Error("Sign in to Deus Cloud under Settings → Account before managing automations.");
+    throw new ValidationError(
+      "Sign in to Deus Cloud under Settings → Account before managing automations."
+    );
   }
   return {
     baseUrl: `${config.baseUrl}/dashboard/orgs/${encodeURIComponent(config.orgId)}`,

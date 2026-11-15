@@ -21,7 +21,7 @@ import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
 // PTY, file watching, and browser server are now handled by the backend
-// via WebSocket commands — no Electron IPC needed for these.
+// over the WebSocket — no Electron IPC needed for these.
 import { registerUpdateHandlers, setupAutoUpdater } from "./auto-updater";
 import { syncShellEnvironment } from "./shell-env";
 import { setupAppMenu } from "./app-menu";
@@ -406,8 +406,3 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   quitAfterStopping(() => app.quit());
 });
-
-// Export for IPC handlers that need window reference
-export function getMainWindow(): BrowserWindow | null {
-  return mainWindow;
-}

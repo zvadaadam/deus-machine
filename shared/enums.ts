@@ -27,8 +27,7 @@ export const ACTIVE_TURN_STATUSES: readonly string[] = [
   "needs_response",
 ] satisfies SessionStatus[];
 
-const MessageRoleSchema = z.enum(["user", "assistant"]);
-export type MessageRole = z.infer<typeof MessageRoleSchema>;
+export type MessageRole = "user" | "assistant";
 
 // ── Workspace ────────────────────────────────────────────────────────────
 
@@ -45,8 +44,7 @@ export const WorkspaceStateSchema = z.enum(["ready", "initializing", "archived",
 export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 
 /** Workspace initialization progress. */
-const SetupStatusSchema = z.enum(["none", "running", "completed", "failed"]);
-export type SetupStatus = z.infer<typeof SetupStatusSchema>;
+export type SetupStatus = "none" | "running" | "completed" | "failed";
 
 /** Workflow states for workspaces. */
 export const WorkspaceStatusSchema = z.enum([
@@ -81,7 +79,7 @@ export const STATUS_RANK: Record<WorkspaceStatus, number> = {
  *
  * Once a session has messages, its harness is fixed — the engine binds the
  * session to a specific runtime and cannot switch mid-session. See the
- * harness-lock guard in apps/backend/src/services/agent/commands.ts.
+ * harness-lock guard in apps/backend/src/services/agent/turns.ts.
  *
  * Display names ("Claude", "Codex") are a frontend concern, never wire values.
  */

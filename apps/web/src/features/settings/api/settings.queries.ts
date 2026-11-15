@@ -122,7 +122,7 @@ export function useUpdateSettings() {
 
     // Optimistic update: Apply settings immediately
     onMutate: async (newSettings: Partial<Settings>) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.settings.all });
+      await queryClient.cancelQueries({ queryKey: queryKeys.settings.all, exact: true });
 
       const previousSettings = queryClient.getQueryData<Settings>(queryKeys.settings.all);
 
@@ -155,7 +155,7 @@ export function useUpdateSettings() {
     },
 
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.all, exact: true });
     },
   });
 }

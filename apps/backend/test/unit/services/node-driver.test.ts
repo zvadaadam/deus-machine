@@ -3,14 +3,14 @@ import { describe, it, expect, vi } from "vitest";
 // Local lane → git.service; Remote lane → the cloud session socket. Mock both so
 // the test exercises the driver's extraction/mapping, not the real transports.
 vi.mock("../../../src/services/git.service", () => ({
-  resolveParentBranch: vi.fn(() => "main"),
-  getDiffStats: vi.fn(() => ({ additions: 3, deletions: 1 })),
-  getDiffFiles: vi.fn(() => [{ file: "a.ts", additions: 3, deletions: 1 }]),
+  resolveParentBranch: vi.fn(async () => "main"),
+  getDiffStats: vi.fn(async () => ({ additions: 3, deletions: 1 })),
+  getDiffFiles: vi.fn(async () => [{ file: "a.ts", additions: 3, deletions: 1 }]),
   resolveWorkspaceRelativePath: vi.fn((_ws: string, f: string) => f),
-  getFileDiff: vi.fn(() => "@@ local diff @@"),
+  getFileDiff: vi.fn(async () => "@@ local diff @@"),
   extractDiffInfo: vi.fn(() => ({ isNew: false, isDeleted: false, oldPath: "", newPath: "" })),
-  getMergeBase: vi.fn(() => "base-sha"),
-  getGitFileContent: vi.fn(() => "old-bytes"),
+  getMergeBase: vi.fn(async () => "base-sha"),
+  getGitFileContent: vi.fn(async () => "old-bytes"),
 }));
 
 vi.mock("../../../src/services/agent/cloud/driver", () => ({

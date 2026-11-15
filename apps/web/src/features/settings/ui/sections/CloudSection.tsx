@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
+import { CLOUD_SETTINGS_QUERY_KEY, useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { queryKeys } from "@/shared/api/queryKeys";
@@ -43,7 +43,7 @@ export function CloudSection() {
       toast.success("Cloud workspaces are ready to use");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.deusCloud.session }),
-        queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] }),
+        queryClient.invalidateQueries({ queryKey: CLOUD_SETTINGS_QUERY_KEY }),
       ]);
     },
     onError: (err) => toast.error(getErrorMessage(err)),

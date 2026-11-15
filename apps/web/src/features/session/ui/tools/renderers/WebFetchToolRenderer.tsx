@@ -5,7 +5,7 @@ import { TOOL_COLORS, TOOL_ICON_CLS } from "../toolColors";
 import type { ToolRendererProps } from "../../chat-types";
 
 export function WebFetchToolRenderer({ toolUse, toolResult, isLoading }: ToolRendererProps) {
-  const { url, prompt } = toolUse.input ?? {};
+  const { url } = toolUse.input ?? {};
   const isError = toolResult?.is_error;
 
   // Parse result content

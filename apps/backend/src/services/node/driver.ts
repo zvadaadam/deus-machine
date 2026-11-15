@@ -89,7 +89,7 @@ class LocalNodeDriver implements NodeDriver {
     private readonly workspacePath: string
   ) {}
 
-  private parentBranch(): string {
+  private parentBranch(): Promise<string> {
     return gitService.resolveParentBranch(
       this.workspacePath,
       this.workspace.git_target_branch,
@@ -98,23 +98,23 @@ class LocalNodeDriver implements NodeDriver {
   }
 
   async diffStats(): Promise<DiffStats> {
-    return gitService.getDiffStats(this.workspacePath, this.parentBranch());
+    return gitService.getDiffStats(this.workspacePath, await this.parentBranch());
   }
 
   async diffFiles(): Promise<DiffFilesResult> {
-    return { files: gitService.getDiffFiles(this.workspacePath, this.parentBranch()) };
+    return { files: await gitService.getDiffFiles(this.workspacePath, await this.parentBranch()) };
   }
 
   async diffFile(file: string): Promise<DiffFileOutcome> {
     const workspacePath = this.workspacePath;
-    const parentBranch = this.parentBranch();
+    const parentBranch = await this.parentBranch();
     const safeFilePath = gitService.resolveWorkspaceRelativePath(workspacePath, file);
     if (!safeFilePath) throw new ValidationError("Invalid file path");
 
     try {
-      const output = gitService.getFileDiff(workspacePath, parentBranch, safeFilePath);
+      const output = await gitService.getFileDiff(workspacePath, parentBranch, safeFilePath);
       const diffInfo = gitService.extractDiffInfo(output);
-      const mergeBase = gitService.getMergeBase(workspacePath, parentBranch);
+      const mergeBase = await gitService.getMergeBase(workspacePath, parentBranch);
       const safeOldPath =
         gitService.resolveWorkspaceRelativePath(workspacePath, diffInfo.oldPath || safeFilePath) ||
         safeFilePath;
@@ -128,7 +128,7 @@ class LocalNodeDriver implements NodeDriver {
       if (diffInfo.isNew) {
         oldContent = "";
       } else {
-        oldContent = gitService.getGitFileContent(workspacePath, mergeBase, safeOldPath);
+        oldContent = await gitService.getGitFileContent(workspacePath, mergeBase, safeOldPath);
       }
 
       if (diffInfo.isDeleted) {
@@ -136,12 +136,12 @@ class LocalNodeDriver implements NodeDriver {
       } else {
         // Read from working directory (not HEAD) since we diff merge-base against workdir
         try {
-          const buf = fs.readFileSync(path.resolve(workspacePath, safeNewPath));
+          const buf = await fs.promises.readFile(path.resolve(workspacePath, safeNewPath));
           // Detect binary files (null bytes in first 8KB)
           const sample = buf.subarray(0, 8192);
           newContent = sample.includes(0) ? null : buf.toString("utf-8");
         } catch {
-          newContent = gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
+          newContent = await gitService.getGitFileContent(workspacePath, "HEAD", safeNewPath);
         }
       }
 

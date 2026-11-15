@@ -4,6 +4,7 @@ import { Cloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
+import { CLOUD_SETTINGS_QUERY_KEY } from "@/shared/hooks/useCloudSettings";
 import { startLogin } from "@/platform/native/deus-cloud";
 
 interface CloudSignInStepProps {
@@ -31,7 +32,7 @@ export function CloudSignInStep({ onNext, onBack }: CloudSignInStepProps) {
         return;
       }
       queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+      await queryClient.invalidateQueries({ queryKey: CLOUD_SETTINGS_QUERY_KEY });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Sign-in failed"),
   });

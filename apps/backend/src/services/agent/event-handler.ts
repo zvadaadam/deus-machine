@@ -95,7 +95,7 @@ interface SessionState extends SessionFacts {
 
 // ---- Resource groups for invalidation ----
 
-const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session", "stats"];
+const SESSION_RESOURCES: LiveName[] = ["workspaces", "sessions", "session"];
 /** A message or a compaction row was written: the session's own row counts them. */
 const TRANSCRIPT_RESOURCES: LiveName[] = ["session"];
 

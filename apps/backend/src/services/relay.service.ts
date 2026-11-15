@@ -72,10 +72,20 @@ const DISPLACED = "New tunnel connection";
 
 // ---- Server Name Detection ----
 
+/** The system's name for this computer, read at most once a minute (`relayStatus` asks on every read). */
+const SYSTEM_NAME_TTL_MS = 60_000;
+let systemName: { value: string; readAt: number } | null = null;
+
 function getServerName(): string {
   const custom = getSetting("server_name") as string | undefined;
   if (custom) return custom;
+  if (!systemName || Date.now() - systemName.readAt >= SYSTEM_NAME_TTL_MS) {
+    systemName = { value: readSystemName(), readAt: Date.now() };
+  }
+  return systemName.value;
+}
 
+function readSystemName(): string {
   if (platform() === "darwin") {
     try {
       const name = execSync("scutil --get ComputerName", {

@@ -9,11 +9,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Cloud } from "lucide-react";
 import { SidebarInset, SidebarMobileBar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui";
-import { apiClient } from "@/shared/api/client";
+import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useUIStore } from "@/shared/stores/uiStore";
 import type { Automation } from "@/shared/types";
 import { refreshAutomations, useAutomations } from "../api/automations.queries";
@@ -47,12 +46,7 @@ export function AutomationsPage() {
   const { data: automations, isLoading } = useAutomations();
 
   // Cloud connection gate — automations live on the platform.
-  const cloudStatus = useQuery({
-    queryKey: ["settings", "cloud-status"],
-    queryFn: () => apiClient.get<{ enabled: boolean }>("/settings/cloud"),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
+  const cloudStatus = useCloudSettings();
   const cloudReady = cloudStatus.data?.enabled === true;
 
   // Mirror the platform on mount and whenever the window regains focus.

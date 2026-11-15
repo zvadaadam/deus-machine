@@ -5,6 +5,7 @@
 // apps that connect through the Deus account are cloud-apps.ts.
 
 import { getErrorMessage } from "@shared/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import {
   CustomAppInputSchema,
   type CatalogApp,
@@ -39,7 +40,7 @@ import {
 
 function requireApp(appId: string): CatalogApp {
   const app = findApp(appId);
-  if (!app) throw new Error(`Unknown app: ${appId}`);
+  if (!app) throw new NotFoundError(`Unknown app: ${appId}`);
   return app;
 }
 
@@ -69,7 +70,7 @@ export function uninstallApp(appId: string): void {
 }
 
 export function setAppEnabled(appId: string, enabled: boolean): void {
-  if (!getInstallation("app", appId)) throw new Error("Install the app first");
+  if (!getInstallation("app", appId)) throw new ConflictError("Install the app first");
   upsertInstallation({ kind: "app", itemId: appId, enabled });
   integrationsChanged();
 }
@@ -87,7 +88,7 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
   const auth = app.auth;
   const route = signInRoute(app);
   if (route.via === "unavailable") {
-    throw new Error(
+    throw new ValidationError(
       route.reason === "account"
         ? `Sign in to your Deus account to connect ${app.name}`
         : `${app.name} sign-in is coming soon`
@@ -104,7 +105,7 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
 
   if (auth.kind === "oauth") {
     if (app.transport.type === "stdio" || app.transport.type === "broker") {
-      throw new Error("OAuth needs a remote server");
+      throw new ValidationError("OAuth needs a remote server");
     }
     // One connection waits for the browser at a time: a second click reuses it.
     const waiting =
@@ -126,14 +127,16 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
   }
 
   // A managed app only ever connects through Deus Cloud (handled above).
-  if (auth.kind === "managed") throw new Error(`${app.name} has no sign-in of its own`);
+  if (auth.kind === "managed") throw new ValidationError(`${app.name} has no sign-in of its own`);
 
   // A signed-in CLI: nothing is stored, the CLI supplies the token at each use.
   const values = input.values ?? {};
   if (auth.kind === "bearer" && values.fromCli === "gh" && auth.cliToken === "gh") {
     const token = await runGh(["auth", "token"], { timeoutMs: 5_000 });
     if (!token.success || !token.stdout) {
-      throw new Error("The GitHub CLI is not signed in. Run `gh auth login`, or paste a token.");
+      throw new ValidationError(
+        "The GitHub CLI is not signed in. Run `gh auth login`, or paste a token."
+      );
     }
     const connection = createConnection({
       appId: app.id,
@@ -150,14 +153,14 @@ export async function connectApp(input: ConnectAppInput): Promise<ConnectAppResu
   let credential: SecretCredential;
   if (auth.kind === "bearer" || auth.kind === "header") {
     const token = values.token?.trim();
-    if (!token) throw new Error(`Paste your ${auth.label.toLowerCase()}`);
+    if (!token) throw new ValidationError(`Paste your ${auth.label.toLowerCase()}`);
     credential = { values: { token } };
   } else {
     const vars = Object.fromEntries(
       auth.vars.map((v) => [v.name, values[v.name]?.trim() ?? ""] as const)
     );
     const missing = auth.vars.find((v) => !v.optional && !vars[v.name]);
-    if (missing) throw new Error(`${missing.label} is required`);
+    if (missing) throw new ValidationError(`${missing.label} is required`);
     credential = { values: vars };
   }
 
@@ -184,7 +187,8 @@ export async function completeOAuthCallback(params: URLSearchParams): Promise<st
   const connectionId = attemptFor(state);
   const connection = connectionId ? getConnection(connectionId) : null;
   const app = connection ? findApp(connection.appId) : null;
-  if (!connection || !app) throw new Error("This sign-in link has expired. Start again from Deus.");
+  if (!connection || !app)
+    throw new ValidationError("This sign-in link has expired. Start again from Deus.");
 
   const error = params.get("error");
   if (error) {
@@ -192,7 +196,7 @@ export async function completeOAuthCallback(params: URLSearchParams): Promise<st
     const reason = (params.get("error_description") ?? error).slice(0, 300);
     updateConnection(connection.id, { lastError: reason });
     integrationsChanged();
-    throw new Error(error === "access_denied" ? "The sign-in was cancelled." : reason);
+    throw new ValidationError(error === "access_denied" ? "The sign-in was cancelled." : reason);
   }
   const code = params.get("code");
   if (!code) throw new Error("The provider did not return a sign-in code");

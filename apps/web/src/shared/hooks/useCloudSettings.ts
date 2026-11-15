@@ -16,11 +16,13 @@ export interface CloudSettings {
 
 export const CLOUD_SETTINGS_QUERY_KEY = ["settings", "cloud"] as const;
 
-export function useCloudSettings() {
+/** `enabled: false` reads the cache only: each fetch asks the platform for its secrets. */
+export function useCloudSettings({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: CLOUD_SETTINGS_QUERY_KEY,
     queryFn: () => apiClient.get<CloudSettings>("/settings/cloud"),
     staleTime: 30_000,
     retry: false,
+    enabled,
   });
 }

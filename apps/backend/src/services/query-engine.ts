@@ -23,7 +23,7 @@ import type { Caller, Registry } from "../api/registry";
 import { getDatabase } from "../lib/database";
 import { AppError } from "../lib/errors";
 import { toWorkspace } from "../lib/workspace-grouping";
-import { getWorkspacesBySessionIds, resetStatsCache } from "../db";
+import { getWorkspacesBySessionIds } from "../db";
 import { rejectToolRelay, resolveToolRelay } from "./agent";
 import * as streamHub from "./streams";
 import { getConnection } from "./ws.service";
@@ -220,7 +220,6 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
   // Shared only within this synchronous pass and one caller's view: no cached
   // read outlives a write or serves another device's view.
   const reads = new Map<string, unknown>();
-  if (resources.includes("stats")) resetStatsCache();
 
   for (const [connectionId, connSubs] of subs) {
     if (!getConnection(connectionId)) {

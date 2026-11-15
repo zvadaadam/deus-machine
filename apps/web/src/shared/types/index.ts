@@ -17,7 +17,6 @@ export type {
   Automation,
   AutomationRun,
   Repository,
-  Stats,
   Settings,
   SettingsSection,
   SkillItem,

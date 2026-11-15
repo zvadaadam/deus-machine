@@ -27,14 +27,9 @@ import { useStartNewProject } from "./useStartNewProject";
 interface UseRepoActionsOptions {
   selectWorkspace: (id: string | null) => void;
   openNewWorkspaceModal: () => void;
-  closeNewWorkspaceModal: () => void;
 }
 
-export function useRepoActions({
-  selectWorkspace,
-  openNewWorkspaceModal,
-  closeNewWorkspaceModal,
-}: UseRepoActionsOptions) {
+export function useRepoActions({ selectWorkspace, openNewWorkspaceModal }: UseRepoActionsOptions) {
   // Shared mutations
   const createWorkspaceMutation = useCreateWorkspace();
   const addRepoMutation = useAddRepo();

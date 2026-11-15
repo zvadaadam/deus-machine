@@ -8,11 +8,11 @@ import {
 import { invalidate } from "./query-engine";
 import { autoProgressStatus } from "./workspace-status.service";
 
-/** Both HTTP and WS archive the same way. Cloud archive preserves its recovery data. */
+/** Every caller archives the same way. Cloud archive preserves its recovery data. */
 async function performArchive(workspaceId: string): Promise<void> {
   const db = getDatabase();
   const workspace = getWorkspaceRaw(db, workspaceId);
-  if (!workspace) throw new Error("Workspace not found");
+  if (!workspace) throw new NotFoundError("Workspace not found");
   if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
     // Confirm suspension before advertising the workspace as closed.
     await pauseCloudWorkspace(workspace.provider_workspace_id);
@@ -63,7 +63,7 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
   return changeWorkspaceState(workspaceId, async () => {
     const db = getDatabase();
     const workspace = getWorkspaceRaw(db, workspaceId);
-    if (!workspace) throw new Error("Workspace not found");
+    if (!workspace) throw new NotFoundError("Workspace not found");
     if (
       workspace.state === "archived" &&
       workspace.kind === "cloud" &&
@@ -83,7 +83,7 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
         }
       } catch (err) {
         db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);
-        invalidate(["workspaces", "stats"], {});
+        invalidate(["workspaces"], {});
         throw err;
       }
       // Wake and its session channel own the current runtime projection.

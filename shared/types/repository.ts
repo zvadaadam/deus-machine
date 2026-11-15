@@ -25,18 +25,3 @@ export interface InspectedRepository {
   git_default_branch: string;
   git_origin_url: string | null;
 }
-
-/**
- * Statistics aggregation
- * System-wide metrics for the Deus application
- */
-export interface Stats {
-  workspaces: number;
-  workspaces_ready: number;
-  workspaces_archived: number;
-  repositories: number;
-  sessions: number;
-  sessions_idle: number;
-  sessions_working: number;
-  messages: number;
-}

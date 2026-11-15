@@ -3,7 +3,7 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { execFile, execSync } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
@@ -14,9 +14,7 @@ import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
   getAllRepositorySummaries,
-  getAllWorkspaces,
   getRepositoryById,
-  getStats,
   getWorkspaceById,
   getWorkspaceRaw,
   getWorkspacesByRepo,
@@ -85,7 +83,12 @@ async function createWorkspace(
 
   let branchPrefix = "workspace";
   try {
-    const gitUser = execSync("git config user.name", { cwd: repo.root_path!, encoding: "utf8" })
+    const { stdout } = await execFileAsync("git", ["config", "user.name"], {
+      cwd: repo.root_path!,
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    const gitUser = stdout
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, "-");
@@ -157,14 +160,14 @@ async function createWorkspace(
       db.prepare(
         "UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'"
       ).run(workspaceId);
-      invalidate(["workspaces", "stats"]);
+      invalidate(["workspaces"]);
     } catch {
       // The database is gone too; nothing left to record.
     }
   });
 
   // Clients see the row in `initializing` at once.
-  invalidate(["workspaces", "stats"]);
+  invalidate(["workspaces"]);
   return { workspaceId };
 }
 
@@ -185,7 +188,7 @@ async function updateWorkspace({
   } else if (state) {
     db.prepare("UPDATE workspaces SET state = ? WHERE id = ?").run(state, workspaceId);
   }
-  invalidate(["workspaces", "sessions", "stats"]);
+  invalidate(["workspaces", "sessions"]);
 }
 
 export default [
@@ -197,9 +200,7 @@ export default [
       getAllRepositorySummaries(db)
     );
   }),
-  handle(api.stats, () => getStats(getDatabase())),
   handle(api.workspace, ({ workspaceId }) => readWorkspace(workspaceId)),
-  handle(api.allWorkspaces, () => getAllWorkspaces(getDatabase()).map(toWorkspace)),
   handle(api.workspaceEnvironment, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);
     return readWorkspaceEnvironment(workspace, workspacePath);
@@ -235,7 +236,7 @@ export default [
   handle(api.updateWorkspace, updateWorkspace),
   handle(api.archiveWorkspace, async ({ workspaceId }) => {
     await archiveWorkspace(workspaceId);
-    invalidate(["workspaces", "stats"]);
+    invalidate(["workspaces"]);
   }),
   handle(api.updateWorkspaceTitle, ({ workspaceId, title }) => {
     const db = getDatabase();
@@ -245,7 +246,7 @@ export default [
   }),
   handle(api.updateWorkspaceStatus, ({ workspaceId, status }) => {
     setWorkspaceStatus(workspaceId, status);
-    invalidate(["workspaces", "stats"]);
+    invalidate(["workspaces"]);
   }),
   handle(api.retrySetup, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);

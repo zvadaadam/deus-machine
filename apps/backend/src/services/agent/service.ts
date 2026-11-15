@@ -337,7 +337,7 @@ async function handleToolRequest(
   const sessionId = requireParam(params, "sessionId", method);
   const requestId = crypto.randomUUID();
   const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
-  const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
+  const sessionResources = ["workspaces", "sessions", "session"] as const;
 
   // User-facing methods: update session status so the sidebar shows
   // "needs input" instead of "working".

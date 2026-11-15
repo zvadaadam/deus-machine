@@ -18,6 +18,7 @@ import { AutomationSessionPolicySchema } from "@shared/enums";
 import type { Automation, AutomationRun } from "@shared/types";
 import { httpsOrigin } from "@shared/git-origin";
 import { getDatabase } from "../../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors";
 import { getRepositoryById } from "../../db";
 import { sessionEvents } from "@shared/api/sessions";
 import { invalidate } from "../query-engine";
@@ -39,7 +40,7 @@ const AUTOMATION_RESOURCES = ["automations", "automationRuns"] as const;
 
 function assertCurrentAccount(identity: string): void {
   if (getCloudConnectionIdentity() !== identity) {
-    throw new Error("Your Deus account changed. Refresh automations and try again.");
+    throw new ConflictError("Your Deus account changed. Refresh automations and try again.");
   }
 }
 
@@ -52,14 +53,14 @@ export function validateSchedule(cron: string, timezone: string | null): void {
     // sampling has to sit inside the try for a bad IANA name to surface here.
     fires = new Cron(cron, { timezone: timezone ?? undefined, paused: true }).nextRuns(25);
   } catch (err) {
-    throw new Error(
+    throw new ValidationError(
       `Invalid schedule: ${err instanceof Error ? err.message : "unparseable cron expression"}`
     );
   }
-  if (fires.length === 0) throw new Error("Invalid schedule: it never fires.");
+  if (fires.length === 0) throw new ValidationError("Invalid schedule: it never fires.");
   for (let i = 1; i < fires.length; i++) {
     if (fires[i].getTime() - fires[i - 1].getTime() < MIN_FIRE_INTERVAL_MS) {
-      throw new Error("Schedules must be at least 5 minutes apart.");
+      throw new ValidationError("Schedules must be at least 5 minutes apart.");
     }
   }
 }
@@ -82,9 +83,9 @@ export function listAutomationRuns(automationId: string): AutomationRun[] {
 
 function repoWithOrigin(repositoryId: string): RepositoryRow & { git_origin_url: string } {
   const repo = getRepositoryById(getDatabase(), repositoryId);
-  if (!repo) throw new Error("Repository not found.");
+  if (!repo) throw new NotFoundError("Repository not found.");
   if (!repo.git_origin_url) {
-    throw new Error(
+    throw new ValidationError(
       "Automations run in cloud sandboxes, so the repository needs a git remote — push it to GitHub first."
     );
   }
@@ -257,13 +258,13 @@ const PROMPT_MAX = 32_768;
 // ever execute in Deus Cloud, so the level is read in the platform's vocabulary.
 function requireModel(value: string | null | undefined): string {
   const model = value?.trim();
-  if (!model) throw new Error("Choose the Claude model its runs use.");
+  if (!model) throw new ValidationError("Choose the Claude model its runs use.");
   return model;
 }
 
 function requireThinkingLevel(value: string | null | undefined): CloudThinkingLevel {
   const level = readCloudThinkingLevel(value);
-  if (!level) throw new Error("Choose the thinking level its runs use.");
+  if (!level) throw new ValidationError("Choose the thinking level its runs use.");
   return level;
 }
 
@@ -289,16 +290,17 @@ async function assertCloudRunsChoice(
     thinkingLevel,
     requireListed,
   });
-  if (problem) throw new Error(problem);
+  if (problem) throw new ValidationError(problem);
 }
 
 function validateInput(input: AutomationInput): ValidatedInput {
   const name = input.name?.trim();
-  if (!name) throw new Error("Automation needs a name.");
-  if (name.length > NAME_MAX) throw new Error(`Name is too long (max ${NAME_MAX} characters).`);
+  if (!name) throw new ValidationError("Automation needs a name.");
+  if (name.length > NAME_MAX)
+    throw new ValidationError(`Name is too long (max ${NAME_MAX} characters).`);
   const prompt = input.prompt?.trim();
-  if (!prompt) throw new Error("Automation needs a prompt.");
-  if (prompt.length > PROMPT_MAX) throw new Error("Prompt is too long.");
+  if (!prompt) throw new ValidationError("Automation needs a prompt.");
+  if (prompt.length > PROMPT_MAX) throw new ValidationError("Prompt is too long.");
   const timezone = input.timezone?.trim() || null;
   validateSchedule(input.cron, timezone);
   return {
@@ -325,7 +327,7 @@ export async function createAutomation(
   // account cannot make that scheduled turn runnable.
   const accounts = await getProviderAccounts();
   if (defaultProviderAccount(accounts, "claude")?.status !== "connected") {
-    throw new Error(
+    throw new ConflictError(
       "Choose a connected Claude account under Settings → AI Providers before creating an automation."
     );
   }
@@ -391,7 +393,7 @@ export async function updateAutomation(
 ): Promise<Automation> {
   const identity = getCloudConnectionIdentity();
   const existing = store.getAutomationRaw(id);
-  if (!existing) throw new Error("Automation not found.");
+  if (!existing) throw new NotFoundError("Automation not found.");
 
   // The platform spec is ONE document (full replacement, not a merge target),
   // and the cache doesn't carry every field (mcpServers, delivery, overlap) —
@@ -403,12 +405,12 @@ export async function updateAutomation(
   const name = input.name?.trim() || (summary.description?.trim() ?? summary.name);
   if (input.prompt !== undefined) {
     const prompt = input.prompt.trim();
-    if (!prompt) throw new Error("Automation needs a prompt.");
+    if (!prompt) throw new ValidationError("Automation needs a prompt.");
     spec.prompt = prompt;
   }
   if (input.cron !== undefined || input.timezone !== undefined) {
     const cron = input.cron?.trim() || existing.cron;
-    if (!cron) throw new Error("Automation needs a schedule.");
+    if (!cron) throw new ValidationError("Automation needs a schedule.");
     const timezone =
       input.timezone !== undefined ? input.timezone?.trim() || null : existing.timezone;
     validateSchedule(cron, timezone);
@@ -427,7 +429,7 @@ export async function updateAutomation(
       : spec.thinkingLevel;
   // One saved before AGNT required them must have both chosen before it saves again.
   if (!model || !thinkingLevel) {
-    throw new Error("Choose the model and thinking level its runs use.");
+    throw new ValidationError("Choose the model and thinking level its runs use.");
   }
   // Only a choice made now is checked: an untouched spec stays as the platform holds it.
   if (input.model !== undefined || input.thinking_level !== undefined) {
@@ -461,7 +463,7 @@ export async function toggleAutomation(
   status: "active" | "paused"
 ): Promise<Automation> {
   const identity = getCloudConnectionIdentity();
-  if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
+  if (!store.getAutomationRaw(id)) throw new NotFoundError("Automation not found.");
   if (status === "paused") await platform.pausePlatformAutomation(id);
   else await platform.resumePlatformAutomation(id);
   assertCurrentAccount(identity);
@@ -474,7 +476,7 @@ export async function toggleAutomation(
 
 export async function deleteAutomation(id: string): Promise<void> {
   const identity = getCloudConnectionIdentity();
-  if (!store.getAutomationRaw(id)) throw new Error("Automation not found.");
+  if (!store.getAutomationRaw(id)) throw new NotFoundError("Automation not found.");
   await platform.deletePlatformAutomation(id);
   assertCurrentAccount(identity);
   store.deleteAutomationRow(id);
@@ -486,7 +488,7 @@ export async function deleteAutomation(id: string): Promise<void> {
 export async function runAutomationNow(id: string): Promise<string> {
   const identity = getCloudConnectionIdentity();
   const automation = store.getAutomationRaw(id);
-  if (!automation) throw new Error("Automation not found.");
+  if (!automation) throw new NotFoundError("Automation not found.");
   const { runId, status } = await platform.triggerPlatformAutomation(id, uuidv7());
   assertCurrentAccount(identity);
   // Seed the ledger row immediately; the detail view's live-run refresh
@@ -526,9 +528,9 @@ export async function openAutomationRun(
 ): Promise<{ workspaceId: string; sessionId: string }> {
   const identity = getCloudConnectionIdentity();
   const run = store.getRun(runId);
-  if (!run) throw new Error("Run not found.");
+  if (!run) throw new NotFoundError("Run not found.");
   const automation = store.getAutomationRaw(run.automation_id);
-  if (!automation) throw new Error("Automation not found.");
+  if (!automation) throw new NotFoundError("Automation not found.");
 
   // Already adopted — reuse the rows, but heal the transcript first: the run
   // may have finished (or continued) while deus was closed, and a PARTIAL
@@ -544,21 +546,21 @@ export async function openAutomationRun(
     // select an id the frontend cannot resolve. Resurface it, like the
     // adoption path does.
     if (store.reviveAdoptedWorkspace(run.workspace_id, run.session_id)) {
-      invalidate(["workspaces", "stats"]);
+      invalidate(["workspaces"]);
     }
     return { workspaceId: run.workspace_id, sessionId: run.session_id };
   }
 
   if (!run.provider_session_id) {
-    throw new Error("This run has no session to open (it was skipped or never started).");
+    throw new ConflictError("This run has no session to open (it was skipped or never started).");
   }
   if (!automation.repository_id) {
-    throw new Error("This automation's repository isn't on this Mac.");
+    throw new NotFoundError("This automation's repository isn't on this Mac.");
   }
 
   const detail = await platform.fetchSessionDetail(run.provider_session_id);
   assertCurrentAccount(identity);
-  if (!detail.workspaceId) throw new Error("The run's sandbox is gone.");
+  if (!detail.workspaceId) throw new NotFoundError("The run's sandbox is gone.");
 
   const { workspaceId, sessionId } = store.adoptRunRows({
     runId,
@@ -580,7 +582,7 @@ export async function openAutomationRun(
     // Rows no event of the chat announced: whoever has its transcript open reads it again.
     resetSubscribers(sessionEvents, { sessionId });
   }
-  invalidate(["workspaces", "sessions", "session", "stats", ...AUTOMATION_RESOURCES], {
+  invalidate(["workspaces", "sessions", "session", ...AUTOMATION_RESOURCES], {
     sessionIds: [sessionId],
   });
 

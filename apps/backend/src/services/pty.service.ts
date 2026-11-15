@@ -9,6 +9,7 @@
 import type * as Pty from "node-pty";
 import { createRequire } from "node:module";
 import { terminalOutput } from "@shared/api/terminal";
+import { ConflictError, NotFoundError } from "../lib/errors";
 import { publish } from "./streams";
 
 // Active PTY sessions, keyed by client-provided ID
@@ -44,7 +45,7 @@ export function spawnPty(args: {
   const { id, command, args: cmdArgs, cols, rows, cwd } = args;
 
   if (sessions.has(id)) {
-    throw new Error(`PTY session already exists: ${id}`);
+    throw new ConflictError(`PTY session already exists: ${id}`);
   }
 
   const ptyProcess = getPtyModule().spawn(command, cmdArgs, {
@@ -68,13 +69,13 @@ export function spawnPty(args: {
 
 export function writeToPty(id: string, data: number[]): void {
   const session = sessions.get(id);
-  if (!session) throw new Error(`PTY instance not found: ${id}`);
+  if (!session) throw new NotFoundError(`PTY instance not found: ${id}`);
   session.write(Buffer.from(data).toString());
 }
 
 export function resizePty(id: string, cols: number, rows: number): void {
   const session = sessions.get(id);
-  if (!session) throw new Error(`PTY instance not found: ${id}`);
+  if (!session) throw new NotFoundError(`PTY instance not found: ${id}`);
   session.resize(cols, rows);
 }
 

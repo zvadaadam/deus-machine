@@ -32,7 +32,6 @@ const IGNORED_DIRS = new Set([
 
 const MAX_ENTRIES = 25_000;
 const GIT_TIMEOUT_MS = 20_000;
-const READDIR_CONCURRENCY = 32;
 
 /**
  * Scan workspace files using git ls-files (preferred) with fallback to readdir.

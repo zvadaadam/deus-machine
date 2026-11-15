@@ -98,7 +98,7 @@ Single WS connection (`/ws`) using `q:` prefixed JSON frames:
 | Frame                                    | Purpose                                                                                                    |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `q:request` / `q:response`               | A read, answered once (`diffStats`, `settings`)                                                            |
-| `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, stats, sessions)                       |
+| `q:subscribe` / `q:snapshot` / `q:delta` | A live read: its value, sent again whenever it changes (workspaces, sessions)                              |
 | `q:subscribe` / `q:event` / `q:reset`    | A stream of events, sent only to the connections following it (a chat's agent events, a terminal's output) |
 | `q:mutate` / `q:mutate_result`           | A write, never sent twice (archiveWorkspace, sendMessage, stopSession)                                     |
 | `q:tool_response`                        | The answer to something an agent asked this client                                                         |
@@ -192,6 +192,20 @@ The production ticket key pair is backed up in the gitignored `.env.relay-ticket
 at the repository root (copied into new worktrees); its private key is Deus Cloud's
 secret and must never be printed or committed. `apps/cloud-relay/.dev.vars` holds the
 local relay's development JWKS.
+
+### Where workspaces run (the sidebar's location)
+
+A window has a **location**, `local` or `cloud`, the words `createWorkspace` takes: the
+workspaces that run on the computer whose backend the window talks to, or that backend's
+cloud workspaces. The sidebar header's menu switches it (⌃1 / ⌃2). The sidebar lists that
+location's workspaces only; everything else (the selected workspace, the command palette,
+Home's recent list) reads the full list. Selecting a workspace from anywhere moves the
+location to where it runs, and a manual switch returns to the workspace last selected
+there. A new workspace starts in the window's location by default; the composer's Cloud
+toggle still decides, behind its repository-access gate (`useCloudAccessGate`). The rules
+are pure functions in `features/sidebar/lib/location.ts` and the choice is kept in the
+sidebar store. The hosted web app has only the cloud, so it has no switch: its menu leads
+to the account's computers (`/connect`), and that page leads back.
 
 ### Customize: Apps, Plugins and Skills (`services/integrations/`)
 
@@ -331,6 +345,7 @@ bun run test:backend          # apps/backend/test/unit/
 bun run test:agent-server     # apps/agent-server/test/
 bun run test:app              # test/unit/ (web app, desktop main, runtime scripts)
 bun run test:runtime-client   # packages/runtime-client/test/ (no app aliases or React)
+bun run test:e2e:cloud        # test/e2e/cloud/ (a cloud workspace in the real app, scripted platform)
 ```
 
 Vitest with `vi.mock()` and `vi.hoisted()`. Tests live outside `src/` — never colocate.

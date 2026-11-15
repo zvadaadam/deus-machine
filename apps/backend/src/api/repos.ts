@@ -79,7 +79,7 @@ function resolveTargetPath(targetPath: string): string {
   return resolvedPath;
 }
 
-function inspectRepository(rootPath: string): InspectedRepository {
+async function inspectRepository(rootPath: string): Promise<InspectedRepository> {
   let root = expandTilde(rootPath);
 
   try {
@@ -112,15 +112,15 @@ function inspectRepository(rootPath: string): InspectedRepository {
   return {
     root_path: root,
     name: path.basename(root),
-    git_default_branch: detectDefaultBranch(root),
+    git_default_branch: await detectDefaultBranch(root),
     git_origin_url: getGitRemoteUrlSync(root),
   };
 }
 
 /** Register a folder as a project. Also what `POST /repos` answers with. */
-export function addRepository(rootPath: string): Repository {
+export async function addRepository(rootPath: string): Promise<Repository> {
   const db = getDatabase();
-  const inspected = inspectRepository(rootPath);
+  const inspected = await inspectRepository(rootPath);
   const repoId = uuidv7();
 
   const insert = db.transaction(() => {
@@ -146,7 +146,7 @@ export function addRepository(rootPath: string): Repository {
   if (!repo) throw new AppError(500, "Repository was not saved");
   // "workspaces" carries every repository summary (the sidebar's project
   // list), so other connected clients only see the new repo through it.
-  invalidate(["workspaces", "stats"]);
+  invalidate(["workspaces"]);
   return repo;
 }
 

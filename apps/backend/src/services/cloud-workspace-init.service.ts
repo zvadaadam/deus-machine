@@ -25,7 +25,7 @@ import type { RepositoryAuth } from "@deus-hq/api";
 import { githubRepoSlug, httpsOrigin } from "@shared/git-origin";
 import type { CloudRepoAccess, CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import { getDatabase } from "../lib/database";
-import { ConflictError } from "../lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getRepositoryById } from "../db";
 import { invalidate } from "./query-engine";
 import { generateUniqueName } from "./workspace.service";
@@ -42,7 +42,7 @@ import {
   enableCloudEnvironmentSimulator,
 } from "./cloud-environment.service";
 
-const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session", "stats"] as const;
+const WORKSPACE_RESOURCES = ["workspaces", "sessions", "session"] as const;
 
 /** Provisioning waits on the mint, so it must fail fast rather than park the row. */
 const MINT_TIMEOUT_MS = 10_000;
@@ -64,16 +64,16 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
 } {
   const config = getCloudConfig();
   if (!config) {
-    throw new Error(
+    throw new ValidationError(
       "Cloud workspaces are not configured — set DEUS_CLOUD_AGNT_API_KEY (and DEUS_CLOUD_AGNT_URL for a non-production backend)."
     );
   }
 
   const db = getDatabase();
   const repo = getRepositoryById(db, params.repositoryId);
-  if (!repo) throw new Error(`Repository not found: ${params.repositoryId}`);
+  if (!repo) throw new NotFoundError(`Repository not found: ${params.repositoryId}`);
   if (!repo.git_origin_url) {
-    throw new Error(
+    throw new ValidationError(
       "Cloud workspaces need a git remote: this repository has no origin URL for the sandbox to clone."
     );
   }
@@ -108,7 +108,7 @@ export function createCloudWorkspace(params: CreateCloudWorkspaceParams): {
 /** Archive suspends the VM and keeps both its filesystem and remote backups. */
 export async function pauseCloudWorkspace(providerWorkspaceId: string): Promise<void> {
   const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
+  if (!config) throw new ValidationError("Cloud workspaces are not configured");
   // Let the lifecycle owner decide: a disconnected VM may report stopped
   // while its processes are still running.
   try {
@@ -398,7 +398,7 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
   };
   const setStage = (stage: string | null) => {
     db.prepare("UPDATE workspaces SET init_stage = ? WHERE id = ?").run(stage, workspace.id);
-    invalidate(["workspaces", "stats"], {});
+    invalidate(["workspaces"], {});
   };
 
   const isServing = () => {
@@ -453,14 +453,14 @@ export async function wakeCloudWorkspaceWithFeedback(workspace: {
       console.warn(`[WORKSPACE] cloud wake reconnect failed (continuing): ${err}`);
     }
   }
-  invalidate(["workspaces", "stats"], {});
+  invalidate(["workspaces"], {});
   return { ok: true, status: status === "running" ? "running" : "resuming" };
 }
 
 /** Release an explicit pause and resume the retained VM. */
 export async function resumeCloudWorkspace(providerWorkspaceId: string): Promise<void> {
   const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
+  if (!config) throw new ValidationError("Cloud workspaces are not configured");
   await agntResumeWorkspace(providerWorkspaceId, {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -497,7 +497,7 @@ export async function getCloudSettingsStatus(): Promise<{
 /** Store the org github_token secret (unlocks private repos in sandboxes). */
 export async function saveCloudGithubToken(token: string): Promise<void> {
   const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured");
+  if (!config) throw new ValidationError("Cloud workspaces are not configured");
   await agntCreateSecret("github_token", token, {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { WorkspaceLocation } from "../lib/location";
 
 interface SidebarState {
   // Sidebar-specific state
@@ -15,6 +16,13 @@ interface SidebarState {
   repositoryOrder: string[];
   setRepositoryOrder: (order: string[]) => void;
   reorderRepositories: <T extends { repo_id: string }>(repos: T[]) => T[];
+
+  // Where this window's workspaces run (persisted), and the workspace last
+  // selected in each location during this app session (memory only).
+  location: WorkspaceLocation;
+  setLocation: (location: WorkspaceLocation) => void;
+  lastSelectedByLocation: Partial<Record<WorkspaceLocation, string>>;
+  rememberSelection: (location: WorkspaceLocation, workspaceId: string) => void;
 }
 
 export const useSidebarStore = create<SidebarState>()(
@@ -53,10 +61,36 @@ export const useSidebarStore = create<SidebarState>()(
           return { expandedOldWorkspaces: next };
         }),
 
+      location: "local",
+      setLocation: (location) => set({ location }),
+      lastSelectedByLocation: {},
+      rememberSelection: (location, workspaceId) =>
+        set((state) =>
+          state.lastSelectedByLocation[location] === workspaceId
+            ? state
+            : {
+                lastSelectedByLocation: {
+                  ...state.lastSelectedByLocation,
+                  [location]: workspaceId,
+                },
+              }
+        ),
+
       // Repository ordering
       repositoryOrder: [],
 
-      setRepositoryOrder: (order) => set({ repositoryOrder: order }),
+      /**
+       * Save the order of the repositories in view. The order is shared by every
+       * computer opened in this browser, so ids not in view keep their places
+       * and the ones in view fill their slots in the new order.
+       */
+      setRepositoryOrder: (order) =>
+        set((state) => {
+          const inView = new Set(order);
+          const placed = [...order];
+          const merged = state.repositoryOrder.map((id) => (inView.has(id) ? placed.shift()! : id));
+          return { repositoryOrder: [...merged, ...placed] };
+        }),
 
       /**
        * Reorder repositories based on user preferences
@@ -85,12 +119,15 @@ export const useSidebarStore = create<SidebarState>()(
         collapsedRepos: Array.from(state.collapsedRepos),
         expandedOldWorkspaces: Array.from(state.expandedOldWorkspaces),
         repositoryOrder: state.repositoryOrder,
+        location: state.location,
       }),
       merge: (persistedState: any, currentState) => ({
         ...currentState,
         collapsedRepos: new Set(persistedState?.collapsedRepos || []),
         expandedOldWorkspaces: new Set(persistedState?.expandedOldWorkspaces || []),
         repositoryOrder: persistedState?.repositoryOrder || [],
+        // Added without a version bump: the merge defaults it for older saves.
+        location: persistedState?.location === "cloud" ? "cloud" : "local",
       }),
     }
   )

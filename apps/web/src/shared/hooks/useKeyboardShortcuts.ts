@@ -1,24 +1,19 @@
 import { useEffect } from "react";
 import { uiActions } from "@/shared/stores/uiStore";
-import type { Workspace } from "@/shared/types";
 
 interface UseKeyboardShortcutsOptions {
   onRefresh: () => Promise<void>;
   onEscape?: () => void;
   onOpenInApp?: () => void;
-  selectedWorkspace: Workspace | null;
-  modalStates?: {
-    showNewWorkspaceModal?: boolean;
-    selectedFile?: string | null;
-  };
+  /** ⌃1 / ⌃2: where this window's workspaces run. */
+  onSwitchLocation?: (location: "local" | "cloud") => void;
 }
 
 export function useKeyboardShortcuts({
   onRefresh,
   onEscape,
   onOpenInApp,
-  selectedWorkspace,
-  modalStates = {},
+  onSwitchLocation,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     async function handleKeyDown(e: KeyboardEvent) {
@@ -36,6 +31,16 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      // ⌃1 / ⌃2 (the physical Control key alone) - This computer / Deus Cloud
+      if (onSwitchLocation && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const location = e.code === "Digit1" ? "local" : e.code === "Digit2" ? "cloud" : undefined;
+        if (location) {
+          e.preventDefault();
+          onSwitchLocation(location);
+          return;
+        }
+      }
+
       // ⌘R or Ctrl+R - Refresh workspace data
       if ((e.metaKey || e.ctrlKey) && e.key === "r") {
         e.preventDefault();
@@ -51,5 +56,5 @@ export function useKeyboardShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onRefresh, onEscape, onOpenInApp, selectedWorkspace, modalStates]);
+  }, [onRefresh, onEscape, onOpenInApp, onSwitchLocation]);
 }

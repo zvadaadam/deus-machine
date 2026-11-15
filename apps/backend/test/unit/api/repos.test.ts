@@ -58,7 +58,7 @@ vi.mock("../../../src/lib/database", () => ({
 }));
 
 vi.mock("../../../src/services/git.service", () => ({
-  detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),
+  detectDefaultBranch: vi.fn<(...args: any[]) => any>(async () => "main"),
 }));
 
 vi.mock("child_process", () => ({
@@ -220,7 +220,7 @@ describe("addRepo", () => {
       1,
       "https://github.com/zvadaadam/deus.git"
     );
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "stats"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
   });
 
   it("refuses a repository that was already added, naming the existing one", async () => {

@@ -561,6 +561,14 @@ in step with it:
   with `px-4 py-8 sm:px-8`; the nav rail reuses the 256px sidebar
 - Mobile is 390×844; the sidebar sheet is `100vw − 3.5rem` = 334px
 - Sidebar header is 48px (`px-1.5 py-1.5` around a 36px account button); footer is 46px (`p-3.5`)
+- The header's button is a menu that says where the window's workspaces run
+  (`features/sidebar/ui/SidebarHeader.tsx`). The trigger is a 24px tile (the avatar for
+  this computer, a cloud glyph for Deus Cloud), the location's name and a 14px chevron.
+  The menu is 256px (`w-64`): the account's email in muted text when signed in, one row per
+  location (20px tile, name, a check on the current one or its `⌃1` / `⌃2` hint),
+  "Your computers" on web builds, a separator, Settings. **Not drawn yet:** `DS/Sidebar` and
+  every board that instances it still show the old button with no chevron, and no board
+  draws the open menu. Draw both when the file is next edited
 - The sidebar's app pages (Automations, Customize) are 32px rows directly under the header
   (`px-1.5 pb-1`, `gap-px`), a 14px icon in a 20px slot. Boards `48a`–`48f` draw them there;
   `DS/Sidebar` and the older boards do not have them yet

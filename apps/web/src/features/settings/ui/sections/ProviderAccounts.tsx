@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uiActions } from "@/shared/stores/uiStore";
+import { CLOUD_SETTINGS_QUERY_KEY } from "@/shared/hooks/useCloudSettings";
 import {
   defaultProviderAccount,
   type ProviderAccount,
@@ -142,7 +143,7 @@ function ProviderAccountPanel({
     await queryClient.invalidateQueries({
       queryKey: [...PROVIDER_ACCOUNTS_QUERY_KEY, ownerAccountId],
     });
-    await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+    await queryClient.invalidateQueries({ queryKey: CLOUD_SETTINGS_QUERY_KEY });
   };
 
   useEffect(() => {

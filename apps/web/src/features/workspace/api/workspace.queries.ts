@@ -20,9 +20,8 @@ import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 /**
  * Fetch workspaces grouped by repository.
  *
- * WS subscription pushes data directly into cache via q:snapshot.
- * HTTP queryFn is fallback for initial load before WS connects.
- * Event-driven invalidation via IPC events also works (both paths coexist).
+ * The subscription pushes each new value into the cache (`q:snapshot`, then
+ * `q:delta`); the query function reads it once for the first paint.
  */
 /**
  * The states the sidebar shows. 'error' is included so a failed cloud
@@ -321,7 +320,11 @@ export function useCreateWorkspace() {
           const repoGroup = draft.find((g) => g.repo_id === repositoryId);
           if (repoGroup) {
             repoGroup.workspaces.unshift(
-              createOptimisticWorkspace(repositoryId, repoGroup.repo_name)
+              createOptimisticWorkspace(
+                repositoryId,
+                repoGroup.repo_name,
+                typeof params === "string" ? undefined : params.location
+              )
             );
           }
         });

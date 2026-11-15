@@ -109,7 +109,7 @@ export function applyPrStatusSideEffects(workspaceId: string, result: PrStatusRe
   }
 
   if (needsInvalidation) {
-    invalidate(["workspaces", "stats"]);
+    invalidate(["workspaces"]);
   }
 }
 

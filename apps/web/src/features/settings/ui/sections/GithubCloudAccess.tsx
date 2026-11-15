@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useRepos } from "@/features/repository";
 import { getGithubAppStatus, installGithubApp } from "@/platform/native/deus-cloud";
 import { apiClient } from "@/shared/api/client";
-import { useCloudSettings } from "@/shared/hooks/useCloudSettings";
+import { CLOUD_SETTINGS_QUERY_KEY, useCloudSettings } from "@/shared/hooks/useCloudSettings";
 import { useDeusCloudSignIn } from "@/shared/hooks/useDeusCloudSignIn";
 import { uiActions } from "@/shared/stores/uiStore";
 import { githubAppBlockedLabel } from "../../lib/github-app-label";
@@ -58,7 +58,7 @@ export function GithubCloudAccess() {
       await apiClient.post("/settings/cloud/github-token", { token: token.trim() });
       setToken("");
       toast.success("GitHub token saved");
-      await queryClient.invalidateQueries({ queryKey: ["settings", "cloud"] });
+      await queryClient.invalidateQueries({ queryKey: CLOUD_SETTINGS_QUERY_KEY });
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {

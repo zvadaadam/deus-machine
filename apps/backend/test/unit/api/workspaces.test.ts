@@ -54,21 +54,19 @@ vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
 }));
 
 vi.mock("../../../src/services/git.service", () => ({
-  detectDefaultBranch: vi.fn<(...args: any[]) => any>(() => "main"),
-  getDiffStats: vi.fn<(...args: any[]) => any>(() => ({ additions: 0, deletions: 0 })),
-  getDiffFiles: vi.fn<(...args: any[]) => any>(() => ({
+  detectDefaultBranch: vi.fn<(...args: any[]) => any>(async () => "main"),
+  getDiffStats: vi.fn<(...args: any[]) => any>(async () => ({ additions: 0, deletions: 0 })),
+  getDiffFiles: vi.fn<(...args: any[]) => any>(async () => ({
     files: [],
     truncated: false,
     total_count: 0,
   })),
-  getMergeBase: vi.fn<(...args: any[]) => any>(() => "abc123"),
-  getGitFileContent: vi.fn<(...args: any[]) => any>(() => null),
+  getMergeBase: vi.fn<(...args: any[]) => any>(async () => "abc123"),
+  getGitFileContent: vi.fn<(...args: any[]) => any>(async () => null),
   resolveWorkspaceRelativePath: vi.fn<(...args: any[]) => any>((p: string) => p),
-  getOpenCommand: vi.fn<(...args: any[]) => any>(() => "open"),
 }));
 
 vi.mock("child_process", () => ({
-  execSync: vi.fn<(...args: any[]) => any>(() => "testuser"),
   execFile: vi.fn<(...args: any[]) => any>(),
   spawn: vi.fn<(...args: any[]) => any>(),
 }));
@@ -157,7 +155,9 @@ beforeEach(() => {
   mockDb.prepare.mockReturnValue(mockStmt);
   mockDb.transaction.mockImplementation((fn: Function) => fn);
   mockInitializeWorkspace.mockResolvedValue(undefined);
-  mockExecFileAsync.mockResolvedValue({ stdout: "", stderr: "" });
+  mockExecFileAsync.mockImplementation((_cmd: string, args: string[]) =>
+    Promise.resolve({ stdout: args[0] === "config" ? "testuser\n" : "", stderr: "" })
+  );
 });
 
 // ─── createWorkspace ──────────────────────────────────────────────
@@ -186,7 +186,7 @@ describe("createWorkspace", () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
     expect(await create()).toEqual({ workspaceId: "ws-test-uuid" });
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "stats"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces"]);
   });
 
   it("creates workspace in initializing state", async () => {
@@ -235,8 +235,9 @@ describe("createWorkspace", () => {
   it("falls back to local branch when origin/<parent> does not exist", async () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    // fetch succeeds, show-ref fails (no remote branch)
+    // git config answers, fetch succeeds, show-ref fails (no remote branch)
     mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: "testuser", stderr: "" })
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
       .mockRejectedValueOnce(new Error("not a valid ref"));
 
@@ -250,8 +251,9 @@ describe("createWorkspace", () => {
   it("continues creation when git fetch fails (offline)", async () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 
-    // fetch fails, show-ref also fails
+    // git config answers, fetch fails, show-ref also fails
     mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: "testuser", stderr: "" })
       .mockRejectedValueOnce(new Error("network unreachable"))
       .mockRejectedValueOnce(new Error("not a valid ref"));
 
@@ -347,7 +349,7 @@ describe("updateWorkspace", () => {
       "UPDATE workspaces SET state = 'ready' WHERE id = ?"
     );
     expect(mockStmt.run).toHaveBeenCalledWith("ws-test-uuid");
-    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions", "stats"]);
+    expect(mockInvalidate).toHaveBeenCalledWith(["workspaces", "sessions"]);
   });
 });
 

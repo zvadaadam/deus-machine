@@ -71,6 +71,7 @@ import { sessionEvents } from "@shared/api/sessions";
 import { cloudEnvironment, cloudIdentity } from "@shared/api/workspaces";
 import { publish } from "../../streams";
 import { getDatabase } from "../../../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../../../lib/errors";
 import { emitPtyData, emitPtyExit } from "../../pty.service";
 import { getSessionRaw } from "../../../db";
 import { clearGithubTokenRefreshFlights } from "../../cloud-workspace-init.service";
@@ -224,7 +225,7 @@ function updateCloudWorkspace(workspaceId: string, data: { status?: string; step
   if (status === "stopped" || status === "paused" || status === "error") {
     parkCloudSimulator(workspaceId);
   }
-  invalidate(["workspaces", "stats"], {});
+  invalidate(["workspaces"], {});
 }
 
 /** Tell the clients following a workspace's environment (`cloudEnvironment`).
@@ -792,8 +793,7 @@ async function relayElicitation(
   const relayId = crypto.randomUUID();
   asked.set(requestId, relayId);
   const needs = persistSessionNeedsResponse(sessionId);
-  if (needs.ok)
-    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+  if (needs.ok) invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   let outcome: ElicitationOutcome;
   try {
     const response = await relay({
@@ -815,8 +815,7 @@ async function relayElicitation(
       ([id, relayed]) => id !== requestId && relayed !== null
     );
     const back = waiting ? null : persistSessionBackToWorking(sessionId);
-    if (back?.ok)
-      invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: [sessionId] });
+    if (back?.ok) invalidate(["workspaces", "sessions", "session"], { sessionIds: [sessionId] });
   }
   // Withdrawn (settled elsewhere, its turn over): nothing is left to answer.
   if (asked.get(requestId) !== relayId) return;
@@ -919,11 +918,12 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
 
   const generationAtStart = identityGeneration;
   const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured (missing agnt API key)");
+  if (!config)
+    throw new ValidationError("Cloud workspaces are not configured (missing agnt API key)");
 
   const db = getDatabase();
   const row = getSessionRaw(db, deusSessionId);
-  if (!row) throw new Error(`Session not found: ${deusSessionId}`);
+  if (!row) throw new NotFoundError(`Session not found: ${deusSessionId}`);
   if (!row.provider_session_id) {
     // New chat tabs create bare deus session rows (the generic session route
     // knows nothing about lanes) — the agnt twin is created lazily on first
@@ -935,7 +935,7 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       | { kind?: string; provider_workspace_id?: string | null }
       | undefined;
     if (workspace?.kind !== "cloud" || !workspace.provider_workspace_id) {
-      throw new Error(`Session ${deusSessionId} has no cloud provider session`);
+      throw new ConflictError(`Session ${deusSessionId} has no cloud provider session`);
     }
     const created = await createSession({
       baseUrl: config.baseUrl,
@@ -952,7 +952,9 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
       // The account changed while createSession was in flight. Persisting the
       // OLD identity's provider id would poison the row: every later connect
       // under the new account would reuse it and fail its token mint forever.
-      throw new Error("Platform identity changed during connect — retry under the new account");
+      throw new ConflictError(
+        "Platform identity changed during connect — retry under the new account"
+      );
     }
     db.prepare("UPDATE sessions SET provider_session_id = ? WHERE id = ?").run(
       created.id,
@@ -982,7 +984,9 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
   }
   const { token } = await mintCloudSessionToken(row.provider_session_id, config, 24 * 60 * 60);
   if (generationAtStart !== identityGeneration) {
-    throw new Error("Platform identity changed during connect — retry under the new account");
+    throw new ConflictError(
+      "Platform identity changed during connect — retry under the new account"
+    );
   }
 
   const session: CloudSession = {
@@ -1024,7 +1028,9 @@ async function connectCloudSession(deusSessionId: string): Promise<CloudSession>
     // The account changed while this connect was in flight: the socket is
     // authenticated as the PREVIOUS identity and must not enter the map.
     session.socket.close();
-    throw new Error("Platform identity changed during connect — retry under the new account");
+    throw new ConflictError(
+      "Platform identity changed during connect — retry under the new account"
+    );
   }
   sessions.set(deusSessionId, session);
   // Registered: the queue now lives on the session (drained by onOpen).
@@ -1127,13 +1133,14 @@ export async function startCloudTurn(
 ): Promise<void> {
   if (!handler) throw new Error("Cloud driver not initialized");
   const config = getCloudConfig();
-  if (!config) throw new Error("Cloud workspaces are not configured (missing agnt API key)");
+  if (!config)
+    throw new ValidationError("Cloud workspaces are not configured (missing agnt API key)");
 
   // agnt QUEUES overlapping sends instead of rejecting them; deus's contract
   // is one live turn per session, so enforce it here (parity with the wire's
   // turnActive rejection on the local path).
   if (handler.liveTurnId(deusSessionId)) {
-    throw new Error("The agent is still working — wait for the current turn to finish.");
+    throw new ConflictError("The agent is still working — wait for the current turn to finish.");
   }
 
   const session = await ensureCloudSession(deusSessionId);
@@ -1146,7 +1153,7 @@ export async function startCloudTurn(
   // so a Stop can never be sent ahead of the turn it stops.
   const extensions = await resolveCloudTurnExtensions();
   if (!handler.beginTurn(deusSessionId, turnId)) {
-    throw new Error("The agent is still working — wait for the current turn to finish.");
+    throw new ConflictError("The agent is still working — wait for the current turn to finish.");
   }
   try {
     // The turn names its selection and no credential: the platform selects the
@@ -1304,7 +1311,7 @@ export async function openCloudPty(
 
 export function writeCloudPty(ptyId: string, bytes: number[]): void {
   const session = sessions.get(cloudPtys.get(ptyId) ?? "");
-  if (!session) throw new Error(`Cloud PTY not found: ${ptyId}`);
+  if (!session) throw new NotFoundError(`Cloud PTY not found: ${ptyId}`);
   session.socket.send({
     type: "pty.input",
     data: { ptyId, data: Buffer.from(bytes).toString("base64") },
@@ -1378,10 +1385,11 @@ function currentCloudSessionRow(workspaceId: string): {
     .get(workspaceId) as
     | { kind?: string; session_id?: string | null; provider_session_id?: string | null }
     | undefined;
-  if (!row) throw new Error(`Workspace not found: ${workspaceId}`);
-  if (row.kind !== "cloud") throw new Error("Hosted simulators run in cloud workspaces only");
+  if (!row) throw new NotFoundError(`Workspace not found: ${workspaceId}`);
+  if (row.kind !== "cloud")
+    throw new ValidationError("Hosted simulators run in cloud workspaces only");
   if (!row.session_id) {
-    throw new Error("This cloud workspace has no session to reach its sandbox through");
+    throw new ConflictError("This cloud workspace has no session to reach its sandbox through");
   }
   let providerSessionId = row.provider_session_id ?? null;
   if (!providerSessionId) {

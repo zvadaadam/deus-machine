@@ -31,6 +31,7 @@ import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
+import { useComposerLocation } from "./composer/useComposerLocation";
 import { ModelPicker } from "@/features/session/ui/ModelPicker";
 import type { ThinkingLevel } from "@/shared/agents";
 
@@ -180,7 +181,10 @@ export function HomeView({
   // Tracks the repo the branch was chosen for — resets when repo changes
   // Where the new workspace runs: local worktree (default) or agnt cloud
   // sandbox. Cloud needs a git remote for the sandbox to clone.
-  const [location, setLocation] = useState<"local" | "cloud">("local");
+  // Starts from the window's location (cloud only when signed in) and follows it.
+  const { location, setLocation } = useComposerLocation({
+    enabled: hasRepos && !isCloudDirectWebMode(),
+  });
   // The model and thinking level the new chat runs on.
   const selection = useNewChatSelection(location);
   const [branchSelection, setBranchSelection] = useState<{ repoId: string; branch: string } | null>(

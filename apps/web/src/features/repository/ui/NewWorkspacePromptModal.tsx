@@ -12,6 +12,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
+import { useComposerLocation } from "./composer/useComposerLocation";
 import { ModelPicker } from "@/features/session/ui/ModelPicker";
 import type { ThinkingLevel } from "@/shared/agents";
 
@@ -54,7 +55,10 @@ export function NewWorkspacePromptModal({
   initialPrompt,
 }: NewWorkspacePromptModalProps) {
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
-  const [location, setLocation] = useState<"local" | "cloud">("local");
+  // Starts from the window's location (cloud only when signed in) and follows it.
+  const { location, setLocation, preferredLocation } = useComposerLocation({
+    enabled: show,
+  });
   const selection = useNewChatSelection(location);
   const [branchSelection, setBranchSelection] = useState<{
     repoId: string;
@@ -77,7 +81,7 @@ export function NewWorkspacePromptModal({
       thinkingLevel: selection.sentThinkingLevel,
     });
     setPrompt("");
-    setLocation("local");
+    setLocation(preferredLocation);
     setBranchSelection(null);
   };
 

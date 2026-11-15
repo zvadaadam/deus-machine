@@ -19,6 +19,7 @@ import { dirname, join } from "path";
 import { createHash } from "crypto";
 import WebSocket from "ws";
 import { getDatabase } from "../lib/database";
+import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getSessionRaw } from "../db/queries";
 import { simulatorEvents, type SimulatorEvent } from "@shared/api/simulator";
 import { publish } from "./streams";
@@ -140,7 +141,13 @@ export function resolveSimulatorCapabilities({
   };
 }
 
+/** Whether simctl resolves, asked at most once a minute (`simulatorCapabilities` asks on every read). */
+const TOOLCHAIN_TTL_MS = 60_000;
+let toolchain: { available: boolean; checkedAt: number } | null = null;
+
 function hasSimulatorToolchain(): boolean {
+  if (toolchain && Date.now() - toolchain.checkedAt < TOOLCHAIN_TTL_MS) return toolchain.available;
+  let available = false;
   try {
     const resolved = execFileSync("xcrun", ["--find", "simctl"], {
       env: SIM_ENV,
@@ -148,10 +155,12 @@ function hasSimulatorToolchain(): boolean {
       encoding: "utf8",
       timeout: 5000,
     }).trim();
-    return resolved.length > 0;
+    available = resolved.length > 0;
   } catch {
-    return false;
+    // No Xcode command-line tools.
   }
+  toolchain = { available, checkedAt: Date.now() };
+  return available;
 }
 
 export function getSimulatorCapabilities(
@@ -213,7 +222,7 @@ function getActiveUdidOwner(udid: string, requesterWorkspaceId: string): string 
 function claimStartingUdid(workspaceId: string, udid: string): void {
   const ownerWorkspaceId = getActiveUdidOwner(udid, workspaceId);
   if (ownerWorkspaceId) {
-    throw new Error("Simulator is already in use by another workspace");
+    throw new ConflictError("Simulator is already in use by another workspace");
   }
   startingUdids.set(udid, workspaceId);
 }
@@ -736,7 +745,7 @@ export function sendTouch(workspaceId: string, x: number, y: number, touchType: 
 
 export function sendKey(workspaceId: string, keycode: number, direction: string): void {
   const session = sessions.get(workspaceId);
-  if (!session) throw new Error("No active simulator session");
+  if (!session) throw new ConflictError("No active simulator session");
 
   const helperPath = findSimBridgePath();
   if (!helperPath) throw new Error("simbridge not found");
@@ -909,7 +918,7 @@ function accessibilityNodeToInspectorNode(
 
 async function accessibilitySnapshot(workspaceId: string): Promise<InspectorSnapshot> {
   const session = sessions.get(workspaceId);
-  if (!session) throw new Error("No active simulator session");
+  if (!session) throw new ConflictError("No active simulator session");
   const data = await callSimBridgeJson<{ elements?: AccessibilityNodeLike[] }>({
     command: "describe-ui",
     udid: session.udid,
@@ -930,7 +939,7 @@ export async function startInspector(
   bundleIdOverride?: string
 ): Promise<InspectorSnapshot> {
   const session = sessions.get(workspaceId);
-  if (!session) throw new Error("No active simulator session");
+  if (!session) throw new ConflictError("No active simulator session");
   const bundleId = bundleIdOverride ?? session.appBundleId;
   if (!bundleId) {
     session.inspectorSocketPath = null;
@@ -983,7 +992,7 @@ export async function inspectorSnapshot(workspaceId: string): Promise<InspectorS
 
 export async function takeScreenshot(workspaceId: string): Promise<number[]> {
   const session = sessions.get(workspaceId);
-  if (!session) throw new Error("No active simulator session");
+  if (!session) throw new ConflictError("No active simulator session");
 
   const outputPath = join(tmpdir(), `deus-sim-screenshot-${Date.now()}.jpeg`);
   await execFileAsync(
@@ -1016,10 +1025,10 @@ export async function buildAndRun(
   scheme?: string
 ): Promise<{ bundle_id: string; name: string; app_path: string }> {
   const session = sessions.get(workspaceId);
-  if (!session) throw new Error("No active simulator session");
+  if (!session) throw new ConflictError("No active simulator session");
 
   const project = await findXcodeProject(workspacePath);
-  if (!project) throw new Error("No Xcode project found in workspace or ios/ subdirectory");
+  if (!project) throw new NotFoundError("No Xcode project found in workspace or ios/ subdirectory");
   const projectArg = project.args;
 
   // Resolve scheme: explicit wins, else use the single shared scheme.
@@ -1039,9 +1048,11 @@ export async function buildAndRun(
     if (schemes.length === 1) {
       schemeName = schemes[0];
     } else if (schemes.length === 0) {
-      throw new Error("No schemes found in Xcode project");
+      throw new ValidationError("No schemes found in Xcode project");
     } else {
-      throw new Error(`Multiple schemes found (${schemes.join(", ")}). Specify one explicitly.`);
+      throw new ValidationError(
+        `Multiple schemes found (${schemes.join(", ")}). Specify one explicitly.`
+      );
     }
   }
 
