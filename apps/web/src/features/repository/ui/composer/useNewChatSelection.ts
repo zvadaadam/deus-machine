@@ -11,7 +11,7 @@ import {
 import { useModelLists } from "@/shared/hooks/useModelLists";
 
 /**
- * What a chat started from a prompt-first composer runs on. The model is the
+ * What a chat started from the Home composer runs on. The model is the
  * one last picked there; the thinking level is the user's default until they
  * pick another for this chat, and always one the model offers. A cloud
  * workspace chooses from the platform's models.

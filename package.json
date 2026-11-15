@@ -83,6 +83,7 @@
     "validate:runtime": "bun scripts/runtime/validate.ts",
     "icons": "node scripts/generate-icons.mjs",
     "test:e2e:runtime-client": "node --import tsx test/e2e/runtime-client-network.runtime.mjs",
+    "test:e2e:workspace-start": "node --import tsx test/e2e/workspace-start.runtime.mjs",
     "test:e2e:remote-access": "node --import tsx test/e2e/remote-access/run.mjs"
   },
   "dependencies": {

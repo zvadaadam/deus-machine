@@ -17,7 +17,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { initNotifications } from "@/platform/notifications";
 import { useGlobalSessionNotifications } from "@/features/session/hooks/useGlobalSessionNotifications";
 import { useAgentEvents } from "@/features/session/hooks/useAgentEvents";
-import { useWorkspaceInitEvents } from "@/features/workspace/hooks/useWorkspaceInitEvents";
 import { useQueryProtocol } from "@/shared/hooks/useQueryProtocol";
 import { useBackendRestart } from "@/shared/hooks/useBackendRestart";
 import { useAnalyticsConsent } from "@/platform/analytics";
@@ -128,7 +127,6 @@ function ServerContent() {
   // Global listeners -- same as DesktopShell
   useGlobalSessionNotifications();
   useAgentEvents();
-  useWorkspaceInitEvents();
 
   useBackendRestart();
   useAnalyticsConsent();

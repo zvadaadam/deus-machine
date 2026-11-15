@@ -7,7 +7,14 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type { SettingsSection } from "@shared/types/settings";
 
-export type NewWorkspaceMode = "default" | "from-github";
+/** What the Home composer should start with: a project, a draft, or neither. */
+export interface NewWorkspaceRequest {
+  /** Never reused, so Home can tell a new request from the one it already took. */
+  id: number;
+  repoId?: string;
+  draft?: string;
+}
+let nextNewWorkspaceRequestId = 1;
 
 export interface EnvironmentSetupRequest {
   repoId: string;
@@ -16,11 +23,12 @@ export interface EnvironmentSetupRequest {
 }
 
 interface UIState {
-  // Modals
-  showNewWorkspaceModal: boolean;
-  newWorkspaceMode: NewWorkspaceMode;
-  /** Prefill for the prompt-first workspace modal (consumed via remount key). */
-  newWorkspaceDraft: string | null;
+  /**
+   * A workspace is only ever created from Home. Anything that wants one
+   * (the sidebar, a project's "+", a starter prompt) asks Home to show up
+   * with this in its composer; Home takes it once and clears it.
+   */
+  newWorkspaceRequest: NewWorkspaceRequest | null;
 
   // Command palette
   commandPaletteOpen: boolean;
@@ -41,11 +49,9 @@ interface UIState {
   /** MainLayout creates a workspace and sends the setup instructions as turn one. */
   pendingEnvSetup: EnvironmentSetupRequest | null;
 
-  // Actions - Modals
-  openNewWorkspaceModal: (mode?: NewWorkspaceMode) => void;
-  /** Open the prompt-first modal with a starter prompt (Create with AI). */
-  openNewWorkspaceModalWithDraft: (draft: string) => void;
-  closeNewWorkspaceModal: () => void;
+  /** Leave whatever full page is open and hand Home what to start with. */
+  requestNewWorkspace: (request?: { repoId?: string; draft?: string }) => void;
+  clearNewWorkspaceRequest: () => void;
 
   // Actions - Command palette
   openCommandPalette: () => void;
@@ -76,9 +82,7 @@ export const useUIStore = create<UIState>()(
   devtools(
     (set) => ({
       // Initial state
-      showNewWorkspaceModal: false,
-      newWorkspaceMode: "default" as NewWorkspaceMode,
-      newWorkspaceDraft: null,
+      newWorkspaceRequest: null,
       commandPaletteOpen: false,
       settingsOpen: false,
       activeSettingsSection: "general" as SettingsSection,
@@ -88,33 +92,21 @@ export const useUIStore = create<UIState>()(
       customizeOpen: false,
       pendingEnvSetup: null,
 
-      // Modal actions
-      openNewWorkspaceModal: (mode: NewWorkspaceMode = "default") =>
-        set(
-          { showNewWorkspaceModal: true, newWorkspaceMode: mode, newWorkspaceDraft: null },
-          false,
-          "ui/openNewWorkspaceModal"
-        ),
-
-      openNewWorkspaceModalWithDraft: (draft: string) =>
+      requestNewWorkspace: (request = {}) =>
         set(
           {
-            showNewWorkspaceModal: true,
-            newWorkspaceMode: "default" as NewWorkspaceMode,
-            newWorkspaceDraft: draft,
+            newWorkspaceRequest: { ...request, id: nextNewWorkspaceRequestId++ },
+            settingsOpen: false,
+            environmentSettingsTarget: null,
             automationsOpen: false,
             customizeOpen: false,
           },
           false,
-          "ui/openNewWorkspaceModalWithDraft"
+          "ui/requestNewWorkspace"
         ),
 
-      closeNewWorkspaceModal: () =>
-        set(
-          { showNewWorkspaceModal: false, newWorkspaceMode: "default", newWorkspaceDraft: null },
-          false,
-          "ui/closeNewWorkspaceModal"
-        ),
+      clearNewWorkspaceRequest: () =>
+        set({ newWorkspaceRequest: null }, false, "ui/clearNewWorkspaceRequest"),
 
       // Command palette actions
       openCommandPalette: () => set({ commandPaletteOpen: true }, false, "ui/openCommandPalette"),
@@ -197,8 +189,6 @@ export const useUIStore = create<UIState>()(
       closeAllModals: () =>
         set(
           {
-            showNewWorkspaceModal: false,
-            newWorkspaceMode: "default" as NewWorkspaceMode,
             commandPaletteOpen: false,
             settingsOpen: false,
             environmentSettingsTarget: null,
@@ -226,11 +216,9 @@ export const useUIStore = create<UIState>()(
  * - You don't need to subscribe to state changes
  */
 export const uiActions = {
-  openNewWorkspaceModal: (mode?: NewWorkspaceMode) =>
-    useUIStore.getState().openNewWorkspaceModal(mode),
-  openNewWorkspaceModalWithDraft: (draft: string) =>
-    useUIStore.getState().openNewWorkspaceModalWithDraft(draft),
-  closeNewWorkspaceModal: () => useUIStore.getState().closeNewWorkspaceModal(),
+  requestNewWorkspace: (request?: { repoId?: string; draft?: string }) =>
+    useUIStore.getState().requestNewWorkspace(request),
+  clearNewWorkspaceRequest: () => useUIStore.getState().clearNewWorkspaceRequest(),
   openSettings: () => useUIStore.getState().openSettings(),
   openEnvironmentSettings: (repoId: string, location: "local" | "cloud") =>
     useUIStore.getState().openEnvironmentSettings(repoId, location),

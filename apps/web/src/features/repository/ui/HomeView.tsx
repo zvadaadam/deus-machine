@@ -2,37 +2,23 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/shared/api/queryKeys";
-import {
-  ArrowUp,
-  ChevronDown,
-  Check,
-  FolderGit2,
-  FolderOpen,
-  GitBranch,
-  Search,
-  Upload,
-} from "lucide-react";
+import { ArrowUp, FolderGit2, FolderOpen, GitBranch, Upload } from "lucide-react";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { cn } from "@/shared/lib/utils";
 import { useImageAttachments } from "@/features/session/hooks/useImageAttachments";
 import { PastedImageCard } from "@/features/session/ui/PastedImageCard";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { RepoGroup, Workspace } from "@/shared/types";
 import type { Repository } from "../types";
 import { EASE_OUT_QUART } from "@/shared/lib/animation";
 import { RecentWorkspaces, buildRecentWorkspaceGroups } from "./RecentWorkspaces";
 import { CloudToggle, BranchPickerButton } from "./composer/ComposerControls";
+import { RepoPicker } from "./composer/RepoPicker";
 import { useNewChatSelection } from "./composer/useNewChatSelection";
 import { ModelPicker } from "@/features/session/ui/ModelPicker";
 import type { ThinkingLevel } from "@/shared/agents";
+import { uiActions, useUIStore } from "@/shared/stores/uiStore";
+import { FIRST_MESSAGE_PLACEHOLDER } from "@/features/workspace/lib/newWorkspace";
 
 // ── Persistence ─────────────────────────────────────────────────────
 const LAST_REPO_KEY = "deus:welcome-last-repo";
@@ -78,18 +64,11 @@ interface HomeViewProps {
     location?: "local" | "cloud",
     /** The thinking level picked here; absent for a model with no thinking control. */
     thinkingLevel?: ThinkingLevel
-  ) => void;
+  ) => Promise<boolean>;
   onWorkspaceClick?: (workspace: Workspace) => void;
   onOpenProject?: () => void;
   onCloneRepository?: () => void;
   onStartNewProject?: () => void;
-}
-
-// ── Path Utility ────────────────────────────────────────────────────
-function abbreviatePath(path: string): string {
-  const home = path.match(/^\/Users\/[^/]+/)?.[0];
-  if (home) return path.replace(home, "~");
-  return path;
 }
 
 /**
@@ -116,10 +95,13 @@ export function HomeView({
   onStartNewProject,
 }: HomeViewProps) {
   const hasRepos = repos.length > 0;
-  const isMobile = useIsMobile();
+
+  // What sent the user here may name a project to start in and a draft to
+  // start from (a project's "+", a starter prompt, a message handed back).
+  const request = useUIStore((s) => s.newWorkspaceRequest);
 
   // ── Input state ─────────────────────────────────────────────────
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => request?.draft ?? "");
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -155,10 +137,29 @@ export function HomeView({
   // ── Repo selection ──────────────────────────────────────────────
   // User-chosen repo ID — null means "use derived default"
   const [userRepoId, setUserRepoId] = useState<string | null>(() => {
+    // Not checked against `repos`: a project added a moment ago is not listed yet.
+    if (request?.repoId) return request.repoId;
     const stored = getStoredRepoId();
     if (stored && repos.some((r) => r.id === stored)) return stored;
     return null;
   });
+
+  // A request that arrives while Home is already showing: take it during
+  // render, so the composer never paints the old project first. Text already
+  // typed stays unless the request brings a draft of its own.
+  const [takenRequestId, setTakenRequestId] = useState(request?.id ?? null);
+  if (request && request.id !== takenRequestId) {
+    setTakenRequestId(request.id);
+    if (request.repoId) setUserRepoId(request.repoId);
+    if (request.draft !== undefined) setMessage(request.draft);
+  }
+  useEffect(() => {
+    if (!request) return;
+    if (request.repoId) setStoredRepoId(request.repoId);
+    // Not cancelled on cleanup: clearing the request runs this effect again.
+    setTimeout(() => textareaRef.current?.focus(), 50);
+    uiActions.clearNewWorkspaceRequest();
+  }, [request]);
 
   // Derive effective repo: user pick > stored > first repo
   const selectedRepoId = useMemo(() => {
@@ -189,40 +190,9 @@ export function HomeView({
   const selectedBranch = branchSelection?.repoId === selectedRepoId ? branchSelection.branch : null;
   const displayBranch = selectedBranch ?? selectedRepo?.git_default_branch ?? "main";
 
-  // ── Repo picker dropdown ────────────────────────────────────────
-  const [repoPickerOpen, setRepoPickerOpen] = useState(false);
-  const [repoFilter, setRepoFilter] = useState("");
-  const repoPickerRef = useRef<HTMLDivElement>(null);
-  const filterInputRef = useRef<HTMLInputElement>(null);
-
-  const filteredRepos = useMemo(() => {
-    if (!repoFilter) return repos;
-    const q = repoFilter.toLowerCase();
-    return repos.filter((r) => r.name.toLowerCase().includes(q));
-  }, [repos, repoFilter]);
-
-  // Close on outside click (desktop only — Sheet handles its own dismissal on mobile)
-  const closeRepoPicker = useCallback(() => {
-    setRepoPickerOpen(false);
-    setRepoFilter("");
-  }, []);
-
-  useEffect(() => {
-    if (isMobile || !repoPickerOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (repoPickerRef.current && !repoPickerRef.current.contains(e.target as Node)) {
-        closeRepoPicker();
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [isMobile, repoPickerOpen, closeRepoPicker]);
-
   const handleSelectRepo = useCallback((repoId: string) => {
     setUserRepoId(repoId);
     setStoredRepoId(repoId);
-    setRepoPickerOpen(false);
-    setRepoFilter("");
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
@@ -236,7 +206,9 @@ export function HomeView({
     if (!content) return;
     setIsSubmitting(true);
     try {
-      onSendMessage(
+      // The message stays in the composer until its workspace exists: one that
+      // could not be created (the reason is toasted) is still here to send again.
+      const started = await onSendMessage(
         selectedRepoId,
         content,
         selection.model,
@@ -244,6 +216,7 @@ export function HomeView({
         location,
         selection.sentThinkingLevel
       );
+      if (!started) return;
       clearAttachments();
       setMessage("");
     } finally {
@@ -259,7 +232,6 @@ export function HomeView({
     location,
     onSendMessage,
     clearAttachments,
-    isSubmitting,
   ]);
 
   const handleKeyDown = useCallback(
@@ -393,262 +365,14 @@ export function HomeView({
             <div className="flex min-w-0 items-center">
               {/* Repo picker trigger */}
               {hasRepos ? (
-                <div ref={repoPickerRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setRepoPickerOpen(!repoPickerOpen)}
-                    className="control-interaction text-text-muted hover:text-text-secondary group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm"
-                  >
-                    {/* Green glow dot — active project indicator */}
-                    <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-                      <span className="bg-accent-green/30 absolute -inset-0.5 rounded-full blur-[2px]" />
-                      <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
-                    </span>
-                    <span className="max-w-[200px] truncate font-medium">
-                      {selectedRepo?.name ?? "Select repo"}
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        "text-text-disabled size-3 transition-transform duration-200",
-                        repoPickerOpen && "rotate-180"
-                      )}
-                    />
-                  </button>
-
-                  {/* Mobile: bottom sheet */}
-                  {isMobile ? (
-                    <Sheet
-                      open={repoPickerOpen}
-                      onOpenChange={(v) => {
-                        setRepoPickerOpen(v);
-                        if (!v) setRepoFilter("");
-                      }}
-                    >
-                      <SheetContent side="bottom" className="rounded-t-xl px-0">
-                        <SheetHeader className="px-4 pb-0">
-                          <SheetTitle className="text-sm">Select repository</SheetTitle>
-                          <SheetDescription className="sr-only">
-                            Choose a repository for your workspace
-                          </SheetDescription>
-                        </SheetHeader>
-
-                        {/* Filter input */}
-                        <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
-                          <Search className="text-text-disabled size-3.5 shrink-0" />
-                          <input
-                            type="text"
-                            value={repoFilter}
-                            onChange={(e) => setRepoFilter(e.target.value)}
-                            placeholder="Search repos..."
-                            className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-sm outline-none"
-                          />
-                        </div>
-
-                        {/* Repo list */}
-                        <div className="max-h-[50vh] overflow-y-auto py-1">
-                          {filteredRepos.length === 0 && (
-                            <div className="text-text-disabled px-3 py-3 text-center text-sm">
-                              No repos match
-                            </div>
-                          )}
-                          {filteredRepos.map((repo) => {
-                            const isSelected = repo.id === selectedRepoId;
-                            return (
-                              <button
-                                key={repo.id}
-                                type="button"
-                                onClick={() => handleSelectRepo(repo.id)}
-                                className={cn(
-                                  "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors duration-100",
-                                  "hover:bg-bg-raised/45",
-                                  isSelected ? "text-text-primary" : "text-text-secondary"
-                                )}
-                              >
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                  {isSelected ? (
-                                    <span
-                                      className="relative flex h-1.5 w-1.5 shrink-0"
-                                      aria-hidden
-                                    >
-                                      <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
-                                      <span className="bg-accent-green relative h-1.5 w-1.5 rounded-full" />
-                                    </span>
-                                  ) : (
-                                    <span className="h-1.5 w-1.5 shrink-0" />
-                                  )}
-                                  <span className="truncate font-medium">{repo.name}</span>
-                                </div>
-                                {isSelected && (
-                                  <Check className="text-text-primary size-3.5 shrink-0" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Add repo actions */}
-                        <div className="border-border-subtle border-t py-1">
-                          {onStartNewProject && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                closeRepoPicker();
-                                onStartNewProject();
-                              }}
-                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
-                            >
-                              <FolderGit2 className="size-4 shrink-0" />
-                              <span>Start new project</span>
-                            </button>
-                          )}
-                          {onCloneRepository && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                closeRepoPicker();
-                                onCloneRepository();
-                              }}
-                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
-                            >
-                              <GitBranch className="size-4 shrink-0" />
-                              <span>Clone from GitHub</span>
-                            </button>
-                          )}
-                          {capabilities.nativeFolderPicker && onOpenProject && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                closeRepoPicker();
-                                onOpenProject();
-                              }}
-                              className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-100"
-                            >
-                              <FolderOpen className="size-4 shrink-0" />
-                              <span>Open local...</span>
-                            </button>
-                          )}
-                        </div>
-                      </SheetContent>
-                    </Sheet>
-                  ) : (
-                    /* Desktop: animated dropdown */
-                    <AnimatePresence>
-                      {repoPickerOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                          transition={{ duration: 0.15, ease: [0.215, 0.61, 0.355, 1] }}
-                          className={cn(
-                            "absolute top-full left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border",
-                            "border-border/55 from-bg-overlay/95 to-bg-elevated/94 bg-linear-to-b backdrop-blur-2xl",
-                            "shadow-[var(--shadow-elevated)]"
-                          )}
-                        >
-                          {/* Filter input */}
-                          <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
-                            <Search className="text-text-disabled size-3.5 shrink-0" />
-                            <input
-                              ref={filterInputRef}
-                              type="text"
-                              value={repoFilter}
-                              onChange={(e) => setRepoFilter(e.target.value)}
-                              placeholder="Search repos..."
-                              className="text-text-primary placeholder:text-text-disabled w-full bg-transparent text-xs outline-none"
-                            />
-                          </div>
-
-                          {/* Repo list */}
-                          <div className="max-h-[224px] overflow-y-auto py-1">
-                            {filteredRepos.length === 0 && (
-                              <div className="text-text-disabled px-3 py-3 text-center text-xs">
-                                No repos match
-                              </div>
-                            )}
-                            {filteredRepos.map((repo) => {
-                              const isSelected = repo.id === selectedRepoId;
-                              return (
-                                <button
-                                  key={repo.id}
-                                  type="button"
-                                  onClick={() => handleSelectRepo(repo.id)}
-                                  className={cn(
-                                    "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition-colors duration-100",
-                                    "hover:bg-bg-raised/45",
-                                    isSelected ? "text-text-primary" : "text-text-secondary"
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2 overflow-hidden">
-                                    {isSelected ? (
-                                      <span className="relative flex h-1 w-1 shrink-0" aria-hidden>
-                                        <span className="bg-accent-green/25 absolute -inset-px rounded-full blur-[1.5px]" />
-                                        <span className="bg-accent-green relative h-1 w-1 rounded-full" />
-                                      </span>
-                                    ) : (
-                                      <span className="h-1.5 w-1.5 shrink-0" />
-                                    )}
-                                    <span className="truncate font-medium">{repo.name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-text-disabled text-2xs max-w-[120px] truncate">
-                                      {abbreviatePath(repo.root_path)}
-                                    </span>
-                                    {isSelected && (
-                                      <Check className="text-text-primary size-3 shrink-0" />
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Add repo actions */}
-                          <div className="border-border-subtle border-t py-1">
-                            {onStartNewProject && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  closeRepoPicker();
-                                  onStartNewProject();
-                                }}
-                                className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
-                              >
-                                <FolderGit2 className="size-3 shrink-0" />
-                                <span>Start new project</span>
-                              </button>
-                            )}
-                            {onCloneRepository && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  closeRepoPicker();
-                                  onCloneRepository();
-                                }}
-                                className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
-                              >
-                                <GitBranch className="size-3 shrink-0" />
-                                <span>Clone from GitHub</span>
-                              </button>
-                            )}
-                            {capabilities.nativeFolderPicker && onOpenProject && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  closeRepoPicker();
-                                  onOpenProject();
-                                }}
-                                className="text-text-muted hover:text-text-secondary hover:bg-bg-raised/45 flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors duration-100"
-                              >
-                                <FolderOpen className="size-3 shrink-0" />
-                                <span>Open local...</span>
-                              </button>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  )}
-                </div>
+                <RepoPicker
+                  repos={repos}
+                  selectedRepo={selectedRepo}
+                  onSelect={handleSelectRepo}
+                  onOpenProject={onOpenProject}
+                  onCloneRepository={onCloneRepository}
+                  onStartNewProject={onStartNewProject}
+                />
               ) : (
                 /* Zero repos — "Add a project" label */
                 <span className="text-text-muted flex items-center gap-1.5 px-2.5 py-1.5 text-xs">
@@ -718,9 +442,7 @@ export function HomeView({
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={
-                hasRepos ? "Describe what you'd like to do..." : "Add a project to get started"
-              }
+              placeholder={hasRepos ? FIRST_MESSAGE_PLACEHOLDER : "Add a project to get started"}
               disabled={!hasRepos || isSubmitting}
               aria-label="Message to start a new workspace"
               autoCorrect="off"

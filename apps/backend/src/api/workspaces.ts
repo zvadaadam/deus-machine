@@ -3,8 +3,6 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { execFile, execSync } from "child_process";
-import { promisify } from "util";
 import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
@@ -23,7 +21,10 @@ import {
 } from "../db";
 import { getCloudConfig } from "../services/agent/cloud/config";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
-import { createCloudWorkspace } from "../services/cloud-workspace-init.service";
+import {
+  createCloudWorkspace,
+  retryCloudWorkspace,
+} from "../services/cloud-workspace-init.service";
 import { getGhIdentity } from "../services/gh-identity.service";
 import { resolveNode } from "../services/node/driver";
 import { fetchAndApplyPrStatus } from "../services/pr-snapshot.service";
@@ -32,17 +33,19 @@ import {
   readWorkspaceEnvironment,
 } from "../services/project-environment.service";
 import { invalidate } from "../services/query-engine";
-import { generateUniqueName } from "../services/workspace.service";
 import {
   archiveWorkspace,
   unarchiveWorkspace,
   wakeWorkspace,
 } from "../services/workspace-archive.service";
-import { initializeWorkspace } from "../services/workspace-init.service";
+import {
+  deleteFailedWorkspace,
+  initializeWorkspace,
+  pickWorkspaceName,
+  retryWorkspaceInit,
+} from "../services/workspace-init.service";
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
-
-const execFileAsync = promisify(execFile);
 
 /** The workspace's files, on whichever node owns them (this computer or its cloud sandbox). */
 function nodeOf(workspaceId: string) {
@@ -79,88 +82,39 @@ async function createWorkspace(
     });
   }
 
-  const name = generateUniqueName(db);
-  const parentBranch = input.source_branch || repo.git_default_branch || "main";
+  // Local: the row now, everything slow in the background. The pipeline
+  // (services/workspace-init) fetches origin, makes the worktree, runs setup
+  // and opens the first chat; each stage and any failure reaches clients on
+  // `workspaces`, and a failure can be retried on this same row.
+  const sourceBranch = input.source_branch || repo.git_default_branch || "main";
   const workspaceId = uuidv7();
-
-  let branchPrefix = "workspace";
-  try {
-    const gitUser = execSync("git config user.name", { cwd: repo.root_path!, encoding: "utf8" })
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, "-");
-    if (gitUser) branchPrefix = gitUser;
-  } catch {
-    // No git identity: the default prefix stands.
-  }
-  const branchName = `${branchPrefix}/${name}`;
-
-  // Worktrees branch from origin/<parent>, never the local branch: diffs are
-  // measured against origin (git.service resolveParentBranch), so a stale local
-  // branch would show every upstream commit since as a change. Fetch first so
-  // the worktree starts at the latest upstream commit and the merge-base
-  // matches. A failed fetch (offline, no remote) falls back to local state:
-  // a workspace with a rough diff beats no workspace.
-  try {
-    await execFileAsync("git", ["fetch", "origin", parentBranch], {
-      cwd: repo.root_path!,
-      timeout: 15000,
-    });
-  } catch (error) {
-    console.warn(
-      `[WORKSPACE] git fetch origin ${parentBranch} failed (continuing with local):`,
-      error
-    );
-  }
+  const { slug, branchName } = await pickWorkspaceName(repo.root_path!);
 
   db.prepare(
     `INSERT INTO workspaces (
-       id, repository_id, slug, title, git_branch,
+       id, repository_id, slug, title, git_branch, git_source_branch,
        git_target_branch, pr_url, pr_number, state, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'initializing', datetime('now'))`
   ).run(
     workspaceId,
     input.repository_id,
-    name,
+    slug,
     input.pr_title || null,
     branchName,
+    sourceBranch,
     input.target_branch || repo.git_default_branch || "main",
     input.pr_url || null,
-    input.pr_number || null,
-    "initializing"
+    input.pr_number || null
   );
 
-  const worktreeBase = await execFileAsync(
-    "git",
-    ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${parentBranch}`],
-    { cwd: repo.root_path!, timeout: 2000 }
-  ).then(
-    () => `origin/${parentBranch}`,
-    () => parentBranch
-  );
-
-  // Not awaited: checkout, env files, setup and the first session run in the
-  // background and report through `workspaces`. The pipeline cleans up after
-  // its own failures; this catch is for one that escapes it.
-  initializeWorkspace({
+  // Not awaited, and it never rejects: the pipeline records its own failure.
+  void initializeWorkspace({
     workspaceId,
-    repositoryId: input.repository_id,
     repoRootPath: repo.root_path!,
-    workspacePath: path.join(repo.root_path!, ".deus", name),
+    workspacePath: path.join(repo.root_path!, ".deus", slug),
     branchName,
-    worktreeBase,
-    parentBranch,
+    sourceBranch,
     repoOriginUrl: repo.git_origin_url,
-  }).catch((error) => {
-    console.error("[WORKSPACE] Unhandled init pipeline error:", error);
-    try {
-      db.prepare(
-        "UPDATE workspaces SET state = 'error', init_stage = 'unhandled', error_message = 'Unhandled init pipeline error' WHERE id = ? AND state = 'initializing'"
-      ).run(workspaceId);
-      invalidate(["workspaces", "stats"]);
-    } catch {
-      // The database is gone too; nothing left to record.
-    }
   });
 
   // Clients see the row in `initializing` at once.
@@ -247,6 +201,14 @@ export default [
     setWorkspaceStatus(workspaceId, status);
     invalidate(["workspaces", "stats"]);
   }),
+  handle(api.retryWorkspaceInit, ({ workspaceId }) => {
+    const workspace = getWorkspaceRaw(getDatabase(), workspaceId);
+    if (!workspace) throw new NotFoundError("Workspace not found");
+    if (workspace.kind === "cloud") retryCloudWorkspace(workspaceId);
+    else retryWorkspaceInit(workspaceId);
+  }),
+  // Only a workspace that never started: see deleteFailedWorkspace.
+  handle(api.deleteWorkspace, ({ workspaceId }) => deleteFailedWorkspace(workspaceId)),
   handle(api.retrySetup, ({ workspaceId }) => {
     const { workspace, workspacePath } = loadWorkspace(workspaceId);
     if (workspace.kind === "cloud") {

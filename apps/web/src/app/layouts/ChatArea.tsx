@@ -13,17 +13,17 @@ import {
   getChatTabSessionId,
   isSessionChatTab,
 } from "@/features/session";
-import type { SessionPanelRef } from "@/features/session";
 import { useWorkingSessionIds } from "@/features/session/api/session.queries";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { useUnreadStore, unreadActions } from "@/features/session/store/unreadStore";
-import { WorkspaceEmptyState } from "@/features/session/ui/WorkspaceEmptyState";
+import { WorkspaceStartState } from "@/features/session/ui/WorkspaceStartState";
+import { workspaceStart } from "@/features/workspace/lib/startState";
+import { useWorkspaceStartStore } from "@/features/workspace/store/workspaceStartStore";
 import type { Workspace } from "@/shared/types";
 import { useChatTabs } from "./useChatTabs";
 
 interface ChatAreaProps {
   workspace: Workspace;
-  workspaceChatPanelRef: React.MutableRefObject<SessionPanelRef | null>;
   onCreatePRHandlerChange: (handler: (() => void) | null) => void;
   onSendAgentMessageHandlerChange: Dispatch<
     SetStateAction<((text: string) => Promise<void>) | null>
@@ -32,7 +32,6 @@ interface ChatAreaProps {
 
 export function ChatArea({
   workspace,
-  workspaceChatPanelRef,
   onCreatePRHandlerChange,
   onSendAgentMessageHandlerChange,
 }: ChatAreaProps) {
@@ -56,6 +55,12 @@ export function ChatArea({
 
   // Resolve sessionId: tab's own session, falling back to workspace's active session
   const tabSessionId = getChatTabSessionId(activeTab) || workspace.current_session_id;
+
+  // The chat this workspace started with (while this client watched) opens
+  // with the story of the start; no other chat does.
+  const startedHere = useWorkspaceStartStore(
+    (state) => !!tabSessionId && state.startedIn[workspace.id] === tabSessionId
+  );
 
   // Per-tab working status: subscribes to each chat tab's session detail cache
   // so each tab's spinner reflects its own session's status (not the workspace's
@@ -117,8 +122,9 @@ export function ChatArea({
         onTabClose={handleTabClose}
         // No + in web-direct — session creation needs the Mac backend, and an
         // affordance that can only toast is clutter (handleTabAdd still guards
-        // the Cmd+T path).
-        onTabAdd={isCloudDirectWebMode() ? undefined : handleTabAdd}
+        // the Cmd+T path). None before the workspace has its first chat
+        // either: it is still starting, or failed to, and the backend refuses.
+        onTabAdd={isCloudDirectWebMode() || !tabSessionId ? undefined : handleTabAdd}
         onTabReorder={handleTabReorder}
         closedTabs={closedTabs}
         onTabRestore={handleTabRestore}
@@ -128,13 +134,13 @@ export function ChatArea({
         {tabSessionId && (
           <SessionPanel
             key={tabSessionId}
-            ref={workspaceChatPanelRef}
             sessionId={tabSessionId}
             workspaceId={workspace.id}
             workspaceKind={workspace.kind}
             workspacePath={workspace.workspace_path}
             workspaceRepoName={workspace.repo_name}
             workspaceParentBranch={workspace.git_target_branch}
+            workspaceStart={startedHere ? workspaceStart(workspace) : undefined}
             workspaceDefaultBranch={workspace.git_default_branch}
             isFirstSession={workspace.latest_message_sent_at === null}
             embedded={true}
@@ -149,18 +155,8 @@ export function ChatArea({
           />
         )}
 
-        {/* Workspace still initializing — show the same empty state with init progress */}
-        {!tabSessionId && (
-          <WorkspaceEmptyState
-            repoName={workspace.repo_name}
-            parentBranch={workspace.git_target_branch}
-            isFirstSession={true}
-            initializing={workspace.state === "initializing"}
-            initStep={workspace.init_stage}
-            failed={workspace.state === "error"}
-            failureMessage={workspace.error_message}
-          />
-        )}
+        {/* No chat yet: the workspace is starting, or it failed to start. */}
+        {!tabSessionId && <WorkspaceStartState workspace={workspace} />}
       </div>
     </div>
   );

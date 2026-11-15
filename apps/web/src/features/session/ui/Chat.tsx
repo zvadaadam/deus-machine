@@ -18,6 +18,8 @@ import { useCallback, useMemo, useRef, useEffect } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { CircularPixelGrid, type CircularPixelGridVariant } from "./CircularPixelGrid";
 import { CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
+import { WorkspaceStartGroup } from "./WorkspaceStartGroup";
+import type { WorkspaceStart } from "@/features/workspace/lib/startState";
 import { buildChatTimeline } from "../lib/chatTimeline";
 
 interface ChatProps {
@@ -43,6 +45,8 @@ interface ChatProps {
   onLoadOlder?: () => void;
   workspaceRepoName?: string | null;
   workspaceParentBranch?: string | null;
+  /** How the workspace started, when this is the chat it started with. */
+  workspaceStart?: WorkspaceStart;
   isFirstSession?: boolean;
   /** The harness answered `resumed: false` — this chat's context was lost. */
   contextLost?: boolean;
@@ -76,6 +80,7 @@ export function Chat({
   onLoadOlder,
   workspaceRepoName,
   workspaceParentBranch,
+  workspaceStart,
   isFirstSession,
   contextLost = false,
   onDismissContextLost,
@@ -128,8 +133,15 @@ export function Chat({
     lastRole,
   } = useMemo(
     () =>
-      buildChatTimeline(messages, compactions, sessionStatus === "working", cloudEnvEntries, turns),
-    [messages, compactions, sessionStatus, cloudEnvEntries, turns]
+      buildChatTimeline(
+        messages,
+        compactions,
+        sessionStatus === "working",
+        cloudEnvEntries,
+        turns,
+        workspaceStart
+      ),
+    [messages, compactions, sessionStatus, cloudEnvEntries, turns, workspaceStart]
   );
 
   /**
@@ -185,7 +197,7 @@ export function Chat({
       const turn = timeline[index];
       if (!turn) return 100;
       if (turn.type === "compaction") return 36;
-      if (turn.type === "cloudEnv") return 32; // collapsed one-liner
+      if (turn.type === "cloudEnv" || turn.type === "start") return 32; // collapsed one-liner
       if (turn.type === "user") return 60;
       // Scale estimate with message count — collapsed turns with many hidden
       // messages show a compact header + summary, while expanded turns (latest)
@@ -204,6 +216,7 @@ export function Chat({
       if (!item) return index;
       if (item.type === "compaction") return `compaction:${item.compaction.compaction_id}`;
       if (item.type === "cloudEnv") return `cloudEnv:${item.entries[0]?.id ?? index}`;
+      if (item.type === "start") return "start";
       if (item.type === "user") return item.message.id;
       return item.turnId ? `turn:${item.turnId}` : item.messages[0].id;
     },
@@ -318,6 +331,7 @@ export function Chat({
                     .with({ type: "assistant" }, (t) => t.messages[0]?.id)
                     .with({ type: "compaction" }, () => undefined)
                     .with({ type: "cloudEnv" }, () => undefined)
+                    .with({ type: "start" }, () => undefined)
                     .exhaustive();
 
                   return (
@@ -358,6 +372,11 @@ export function Chat({
                             <CompactionChip compaction={t.compaction} />
                           ))
                           .with({ type: "cloudEnv" }, (t) => <CloudEnvGroup entries={t.entries} />)
+                          .with({ type: "start" }, (t) =>
+                            workspaceId ? (
+                              <WorkspaceStartGroup workspaceId={workspaceId} start={t.start} />
+                            ) : null
+                          )
                           .exhaustive()}
                       </div>
                     </div>

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/shared/lib/utils";
+import { SETUP_FAILED, SETUP_RUNNING } from "../lib/startState";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { native } from "@/platform";
 import type { InstalledApp } from "@/platform";
@@ -267,14 +268,14 @@ export function WorkspaceHeader({
         {setupStatus === "running" && (
           <span className="text-text-muted flex items-center gap-1 text-sm">
             <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Installing...</span>
+            <span>{SETUP_RUNNING}</span>
           </span>
         )}
         {setupStatus === "failed" && (
           <div className="flex items-center gap-1">
             <span className="text-accent-red-muted flex items-center gap-1 text-sm font-medium">
               <AlertTriangle className="h-3 w-3" />
-              <span>Setup failed</span>
+              <span>{SETUP_FAILED}</span>
             </span>
             {onViewSetupLogs && (
               <Tooltip delayDuration={200}>

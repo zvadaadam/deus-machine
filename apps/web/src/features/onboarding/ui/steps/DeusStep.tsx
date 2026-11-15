@@ -7,6 +7,7 @@ import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import { queryClient } from "@/shared/api/queryClient";
 import { queryKeys } from "@/shared/api/queryKeys";
+import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { useCompleteOnboarding } from "../../api";
 import { classifyCloneConflict, isMatchingGitHubRepo } from "../../lib/deus-import";
 
@@ -45,8 +46,9 @@ async function resolveExistingRepoId(targetPath: string): Promise<string | null>
  *
  * Runs independently of React component lifecycle -- safe to call then unmount.
  * Uses only singletons: the runtime client, queryClient, toast.
- * On success the repo appears in the sidebar via query invalidation.
- * On failure the shared desktop Toaster tells the user what happened.
+ * On success the repo appears in the sidebar via query invalidation, and the
+ * toast offers to start a workspace in it (on Home, where every workspace
+ * starts). On failure the shared desktop Toaster tells the user what happened.
  */
 async function cloneAndRegisterInBackground() {
   try {
@@ -112,18 +114,16 @@ async function cloneAndRegisterInBackground() {
       }
     }
 
-    if (repoId) {
-      try {
-        await call(api.createWorkspace, { repository_id: repoId });
-      } catch {
-        console.warn("[Deus] Workspace creation failed, repo still registered");
-      }
-    }
-
     queryClient.invalidateQueries({ queryKey: queryKeys.repos.all });
     queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 
-    toast.success(alreadyCloned ? "Deus repository added" : "Deus cloned and ready");
+    // This runs in the background, after onboarding: offer Home rather than take the screen.
+    const project = repoId;
+    toast.success(alreadyCloned ? "Deus repository added" : "Deus cloned and ready", {
+      action: project
+        ? { label: "Start a workspace", onClick: () => openNewWorkspace({ repoId: project }) }
+        : undefined,
+    });
   } catch (err) {
     console.error("[Deus] Background clone error:", err);
     toast.error("Something went wrong cloning Deus.");

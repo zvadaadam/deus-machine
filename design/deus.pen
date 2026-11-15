@@ -4074,12 +4074,6 @@
                 "mode": "dark"
               }
             },
-            "XtnSo": {
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg"
-            },
             "wxyab": {
               "theme": {
                 "mode": "dark"
@@ -11255,7 +11249,7 @@
             {
               "type": "frame",
               "id": "NKoUh",
-              "name": "initializing",
+              "name": "starting",
               "width": "fill_container",
               "gap": 12,
               "alignItems": "center",
@@ -11291,13 +11285,13 @@
                           "height": 14,
                           "icon": "git-branch",
                           "library": "lucide",
-                          "fill": "$text-disabled"
+                          "fill": "$text-muted"
                         },
                         {
                           "type": "text",
                           "id": "FXLLI",
                           "name": "Name",
-                          "fill": "$text-disabled",
+                          "fill": "$text-tertiary",
                           "content": "new-idea",
                           "fontFamily": "$font-sans",
                           "fontSize": "$text-base",
@@ -11311,7 +11305,7 @@
                       "id": "c8lEZv",
                       "name": "Meta",
                       "fill": "$text-muted",
-                      "content": "Installing...",
+                      "content": "Running setup…",
                       "fontFamily": "$font-sans",
                       "fontSize": "$text-xs",
                       "fontWeight": "normal"
@@ -11325,7 +11319,7 @@
                   "fill": "$text-disabled",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "initializing",
+                  "content": "starting · names its step · clickable",
                   "fontFamily": "$font-sans",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -11585,7 +11579,7 @@
                   "fill": "$text-disabled",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "state = error · local worktree",
+                  "content": "state = error · local, never started",
                   "fontFamily": "$font-sans",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -18268,16 +18262,6 @@
               "alignItems": "center",
               "children": [
                 {
-                  "id": "AzFFt",
-                  "type": "ref",
-                  "ref": "AovWi",
-                  "name": "New",
-                  "theme": {
-                    "mode": "dark"
-                  },
-                  "cornerRadius": "$radius-lg"
-                },
-                {
                   "id": "NhKBG",
                   "type": "ref",
                   "ref": "AovWi",
@@ -18305,7 +18289,7 @@
           "y": 314,
           "name": "SidebarHeader · px-1.5 py-1.5 · avatar 24 sq",
           "fill": "$text-disabled",
-          "content": "SidebarHeader · px-1.5 py-1.5 · avatar 24 square/radius-md",
+          "content": "SidebarHeader · px-1.5 py-1.5 · avatar 24 square/radius-md · one action: collapse",
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -19574,6 +19558,189 @@
               "fontWeight": "normal"
             }
           ]
+        },
+        {
+          "type": "frame",
+          "id": "NjuTm",
+          "x": 32,
+          "y": 640,
+          "name": "App nav",
+          "width": 256,
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "z1raUP",
+              "name": "App nav",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 1,
+              "padding": [
+                0,
+                6,
+                4,
+                6
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "EoPnq",
+                  "name": "New workspace row",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "y9e8Ex",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "miWhd",
+                          "name": "New workspace icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "rzim6",
+                      "name": "New workspace",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "eGDCF",
+                  "name": "Automations row",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Ns4SW",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "B8foZ",
+                          "name": "Automations icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "clock-fading",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "soBnb",
+                      "name": "Automations",
+                      "fill": "$text-secondary",
+                      "content": "Automations",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DlsWR",
+                  "name": "Customize row",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "g2T1Z",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "Ypxvq",
+                          "name": "Customize icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "blocks",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "ElDEn",
+                      "name": "Customize",
+                      "fill": "$text-secondary",
+                      "content": "Customize",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "wdvH5",
+          "x": 32,
+          "y": 752,
+          "name": "App nav caption",
+          "fill": "$text-disabled",
+          "textGrowth": "fixed-width",
+          "width": 560,
+          "content": "AppSidebar app nav · under the header, above the projects. New workspace opens Home, the only place a workspace is created (a project's + opens the same Home with that project chosen); the row is active while Home is on screen. Web-direct shows one row here, “Cloud sessions”.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-2xs",
+          "fontWeight": "normal"
         }
       ]
     },
@@ -19588,7 +19755,7 @@
       },
       "clip": true,
       "width": 1100,
-      "height": 900,
+      "height": 1198,
       "fill": "$bg-base",
       "cornerRadius": "$radius-2xl",
       "layout": "none",
@@ -20684,170 +20851,95 @@
           "id": "BGeXZ",
           "x": 620,
           "y": 300,
-          "name": "Chat empty state",
+          "name": "Chat start — starting",
           "width": 400,
           "layout": "vertical",
-          "gap": 20,
+          "gap": 8,
           "padding": [
-            40,
+            12,
             0
           ],
-          "alignItems": "center",
           "children": [
             {
               "type": "frame",
-              "id": "x6hR2",
-              "name": "Head",
+              "id": "VbBws",
+              "name": "Waiting message",
               "width": "fill_container",
               "layout": "vertical",
-              "gap": 6,
-              "alignItems": "center",
+              "gap": 4,
+              "padding": [
+                0,
+                0,
+                8,
+                0
+              ],
+              "alignItems": "end",
               "children": [
                 {
-                  "type": "text",
-                  "id": "QQqo7",
-                  "name": "SETTING UP WORKSPACE",
-                  "fill": "$text-muted",
-                  "content": "SETTING UP WORKSPACE",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
-                  "fontWeight": "600",
-                  "letterSpacing": 0.66
+                  "id": "xeQKj",
+                  "type": "ref",
+                  "ref": "Ntvyq",
+                  "name": "Message bubble",
+                  "width": 300,
+                  "opacity": 0.7,
+                  "descendants": {
+                    "Ajwsx": {
+                      "content": "Add a dark mode toggle to the settings page"
+                    }
+                  }
                 },
                 {
                   "type": "text",
-                  "id": "spTEn",
-                  "name": "What would you like to work on?",
-                  "fill": "$text-disabled",
-                  "content": "What would you like to work on?",
+                  "id": "O9ZKss",
+                  "name": "Caption",
+                  "fill": "$text-muted",
+                  "content": "Sends when the workspace is ready.",
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-sm",
+                  "fontSize": "$text-xs",
                   "fontWeight": "normal"
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "H4tQ3Q",
-              "name": "Steps",
-              "gap": 24,
+              "id": "qHCdS",
+              "name": "Environment line",
+              "gap": 8,
+              "padding": [
+                4,
+                8
+              ],
               "alignItems": "center",
               "children": [
                 {
-                  "type": "frame",
-                  "id": "ceeYo",
-                  "name": "Worktree",
-                  "gap": 6,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "s32NEC",
-                      "name": "1",
-                      "fill": "$text-disabled",
-                      "content": "01",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "ticGu",
-                      "name": "Worktree",
-                      "fill": "$text-muted",
-                      "content": "Worktree",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "normal"
-                    }
-                  ]
+                  "type": "icon",
+                  "id": "M1TBu",
+                  "name": "loader-circle",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "loader-circle",
+                  "library": "lucide",
+                  "fill": "$text-muted"
                 },
                 {
-                  "type": "frame",
-                  "id": "oUnYx",
-                  "name": "Dependencies",
-                  "gap": 6,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "XxhN1",
-                      "name": "2",
-                      "fill": "$text-disabled",
-                      "content": "02",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "eQktj",
-                      "name": "Dependencies",
-                      "fill": "$text-muted",
-                      "content": "Dependencies",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "normal"
-                    }
-                  ]
+                  "type": "text",
+                  "id": "riNW2",
+                  "name": "Running setup…",
+                  "fill": "$text-muted",
+                  "content": "Running setup…",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
                 },
                 {
-                  "type": "frame",
-                  "id": "Euht3",
-                  "name": "Hooks",
-                  "gap": 6,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "PzG0i",
-                      "name": "3",
-                      "fill": "$text-disabled",
-                      "content": "03",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "nmFeY",
-                      "name": "Hooks",
-                      "fill": "$text-muted",
-                      "content": "Hooks",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "DuJ7m",
-                  "name": "Session",
-                  "gap": 6,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "O7DCES",
-                      "name": "4",
-                      "fill": "$text-disabled",
-                      "content": "04",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "MfRKQ",
-                      "name": "Session",
-                      "fill": "$text-muted",
-                      "content": "Session",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "normal"
-                    }
-                  ]
+                  "type": "text",
+                  "id": "g7hvHR",
+                  "name": "2 steps",
+                  "fill": "$text-disabled",
+                  "content": "· 2 steps",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -20857,10 +20949,13 @@
           "type": "text",
           "id": "LPmay",
           "x": 620,
-          "y": 470,
-          "name": "WorkspaceEmptyState · init steps while the w",
+          "y": 426,
+          "name": "WorkspaceStartState starting",
           "fill": "$text-disabled",
-          "content": "WorkspaceEmptyState · init steps while the worktree is created",
+          "textGrowth": "fixed-width",
+          "width": 440,
+          "content": "WorkspaceStartState · starting — where the chat will be, message first: the message that asked for the workspace as the bubble it will be, then the start's own line (EnvGroup, the line cloud provisioning uses) naming the step the backend is on. The message is sent when the workspace is ready, whichever workspace is on screen, and survives a reload of the window.",
+          "lineHeight": 1.5,
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
           "fontWeight": "normal"
@@ -20869,7 +20964,7 @@
           "type": "frame",
           "id": "zXw7A",
           "x": 620,
-          "y": 510,
+          "y": 492,
           "name": "SubagentGroupBlock",
           "width": 420,
           "layout": "vertical",
@@ -21020,7 +21115,7 @@
           "type": "text",
           "id": "lQXej",
           "x": 620,
-          "y": 610,
+          "y": 586,
           "name": "SubagentGroupBlock · nested tool rows indent",
           "fill": "$text-disabled",
           "content": "SubagentGroupBlock · nested tool rows indent by 24",
@@ -21032,168 +21127,229 @@
           "type": "frame",
           "id": "SHKyc",
           "x": 620,
-          "y": 650,
-          "name": "Chat empty state — failed",
+          "y": 625,
+          "name": "Chat start — failed",
           "width": 400,
           "layout": "vertical",
-          "gap": 20,
+          "gap": 8,
           "padding": [
-            40,
+            12,
             0
           ],
-          "alignItems": "center",
           "children": [
             {
               "type": "frame",
-              "id": "Rxwrd",
-              "name": "Head",
+              "id": "U3qaDx",
+              "name": "Waiting message",
               "width": "fill_container",
               "layout": "vertical",
-              "gap": 6,
-              "alignItems": "center",
+              "gap": 4,
+              "padding": [
+                0,
+                0,
+                8,
+                0
+              ],
+              "alignItems": "end",
               "children": [
                 {
-                  "type": "text",
-                  "id": "O66pj",
-                  "name": "WORKSPACE SETUP FAILED",
-                  "fill": "$text-muted",
-                  "content": "WORKSPACE SETUP FAILED",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-xs",
-                  "fontWeight": "600",
-                  "letterSpacing": 0.66
+                  "id": "K3rsh",
+                  "type": "ref",
+                  "ref": "Ntvyq",
+                  "name": "Message bubble",
+                  "width": 300,
+                  "opacity": 0.7,
+                  "descendants": {
+                    "Ajwsx": {
+                      "content": "Add a dark mode toggle to the settings page"
+                    }
+                  }
                 },
                 {
                   "type": "text",
-                  "id": "d6DA1",
-                  "name": "failure message",
-                  "fill": "$accent-red-muted",
-                  "content": "Sandbox provisioning timed out after 180s",
+                  "id": "UF62R",
+                  "name": "Caption",
+                  "fill": "$text-muted",
+                  "content": "Kept. It sends after a retry.",
                   "fontFamily": "$font-sans",
-                  "fontSize": "$text-sm",
+                  "fontSize": "$text-xs",
                   "fontWeight": "normal"
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "oOAcX",
-              "name": "Steps",
-              "gap": 24,
+              "id": "e1AAJ",
+              "name": "Environment line",
+              "gap": 8,
+              "padding": [
+                4,
+                8
+              ],
               "alignItems": "center",
               "children": [
                 {
+                  "type": "icon",
+                  "id": "Z0VFSn",
+                  "name": "triangle-alert",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "triangle-alert",
+                  "library": "lucide",
+                  "fill": "$destructive"
+                },
+                {
+                  "type": "text",
+                  "id": "PWZEt",
+                  "name": "Workspace didn't start",
+                  "fill": "$destructive",
+                  "content": "Workspace didn't start",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "Aqjv3",
+                  "name": "1 step",
+                  "fill": "$text-disabled",
+                  "content": "· 1 step",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "XaPrJ",
+              "name": "Failure",
+              "width": "fill_container",
+              "fill": "#D36C6E0D",
+              "cornerRadius": "$radius-lg",
+              "stroke": "#D36C6E33",
+              "strokeWidth": {
+                "top": 1,
+                "right": 1,
+                "bottom": 1,
+                "left": 2
+              },
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "d6BxI",
+                  "name": "Reason",
+                  "fill": "$text-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "The branch \"develop\" does not exist in this project.",
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                },
+                {
                   "type": "frame",
-                  "id": "MrKeD",
-                  "name": "Worktree",
-                  "gap": 6,
+                  "id": "IIHJS",
+                  "name": "Actions",
+                  "gap": 8,
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "xEitK",
-                      "name": "1",
-                      "fill": "$text-disabled",
-                      "content": "01",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
+                      "id": "t7vn3",
+                      "type": "ref",
+                      "ref": "rg2x2",
+                      "name": "Retry",
+                      "height": 28,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "descendants": {
+                        "z4bI4": {
+                          "content": "Retry"
+                        }
+                      }
+                    },
+                    {
+                      "id": "fZhQW",
+                      "type": "ref",
+                      "ref": "WNY4N",
+                      "name": "Delete",
+                      "height": 28,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "descendants": {
+                        "XQbnF": {
+                          "content": "Delete"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MNSQg",
+                  "name": "Details toggle",
+                  "gap": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "jpehY",
+                      "name": "chevron-down",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$text-muted"
                     },
                     {
                       "type": "text",
-                      "id": "Ga5lX",
-                      "name": "Worktree",
+                      "id": "YVKU5",
+                      "name": "Details label",
                       "fill": "$text-muted",
-                      "content": "Worktree",
+                      "content": "Details",
                       "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
+                      "fontSize": "$text-xs",
                       "fontWeight": "normal"
                     }
                   ]
                 },
                 {
                   "type": "frame",
-                  "id": "rxGEL",
-                  "name": "Dependencies",
-                  "gap": 6,
-                  "alignItems": "center",
+                  "id": "w1Tcno",
+                  "name": "Tool output",
+                  "width": "fill_container",
+                  "fill": "$bg-elevated",
+                  "cornerRadius": "$radius-lg",
+                  "stroke": "$border-subtle",
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "padding": [
+                    8,
+                    12
+                  ],
                   "children": [
                     {
                       "type": "text",
-                      "id": "ChW14",
-                      "name": "2",
-                      "fill": "$text-disabled",
-                      "content": "02",
+                      "id": "vFXyO",
+                      "name": "error_detail",
+                      "fill": "$text-tertiary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "git worktree add -b zvada/nova /Users/zvada/app/.deus/nova develop\nfatal: invalid reference: develop",
+                      "lineHeight": 1.45,
                       "fontFamily": "$font-mono",
                       "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "Tz4Mc",
-                      "name": "Dependencies",
-                      "fill": "$text-muted",
-                      "content": "Dependencies",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "fflNE",
-                  "name": "Hooks",
-                  "gap": 6,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "lf8Rk",
-                      "name": "3",
-                      "fill": "$text-disabled",
-                      "content": "03",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "tv2V0",
-                      "name": "Hooks",
-                      "fill": "$text-muted",
-                      "content": "Hooks",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "v6xUsC",
-                  "name": "Session",
-                  "gap": 6,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "IME1w",
-                      "name": "4",
-                      "fill": "$text-disabled",
-                      "content": "04",
-                      "fontFamily": "$font-mono",
-                      "fontSize": "$text-xs",
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "JansQ",
-                      "name": "Session",
-                      "fill": "$text-muted",
-                      "content": "Session",
-                      "fontFamily": "$font-sans",
-                      "fontSize": "$text-sm",
                       "fontWeight": "normal"
                     }
                   ]
@@ -21206,12 +21362,131 @@
           "type": "text",
           "id": "obtlM",
           "x": 620,
-          "y": 760,
-          "name": "WorkspaceEmptyState failed",
+          "y": 919,
+          "name": "WorkspaceStartState failed",
           "fill": "$text-disabled",
           "textGrowth": "fixed-width",
           "width": 440,
-          "content": "WorkspaceEmptyState failed=true · the panel must agree with the red sidebar row — error_message, or a fallback",
+          "content": "WorkspaceStartGroup · failed — error_message is the plain reason, error_detail the tool's own words (folded). Retry starts the same workspace again; Delete removes it. Both show only while the workspace never started (no chat, no cloud computer); otherwise the box reads “Archive this workspace and start a new one.” A workspace that never started shows the chat column alone: no tools pane, no Create PR, no new-chat “+”.",
+          "lineHeight": 1.5,
+          "fontFamily": "$font-sans",
+          "fontSize": "$text-2xs",
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "qW5JG",
+          "x": 620,
+          "y": 1003,
+          "name": "Chat start — ready, with a warning",
+          "width": 400,
+          "layout": "vertical",
+          "gap": 6,
+          "padding": [
+            12,
+            0
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "KJX6O",
+              "name": "Environment line",
+              "gap": 8,
+              "padding": [
+                4,
+                8
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "MIW9p",
+                  "name": "check",
+                  "width": 12,
+                  "height": 12,
+                  "icon": "check",
+                  "library": "lucide",
+                  "fill": "$accent-green"
+                },
+                {
+                  "type": "text",
+                  "id": "W6Go6",
+                  "name": "Workspace ready",
+                  "fill": "$text-secondary",
+                  "content": "Workspace ready",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "f6TLBi",
+                  "name": "1 warning",
+                  "fill": "$warning",
+                  "content": "· 1 warning",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "WxkiT",
+                  "name": "3 steps",
+                  "fill": "$text-disabled",
+                  "content": "· 3 steps",
+                  "fontFamily": "$font-mono",
+                  "fontSize": "$text-xs",
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "c9IHQ",
+              "name": "Warning",
+              "width": "fill_container",
+              "fill": "#C78B280D",
+              "cornerRadius": "$radius-lg",
+              "stroke": "#C78B2833",
+              "strokeWidth": {
+                "top": 1,
+                "right": 1,
+                "bottom": 1,
+                "left": 2
+              },
+              "strokeAlignment": "inner",
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "RfZPf",
+                  "name": "Warning text",
+                  "fill": "$warning",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Couldn't reach the remote repository, so this starts from what is already on this computer. It may be behind.",
+                  "lineHeight": 1.45,
+                  "fontFamily": "$font-sans",
+                  "fontSize": "$text-sm",
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "jrS8v",
+          "x": 620,
+          "y": 1116,
+          "name": "WorkspaceEmptyState behind",
+          "fill": "$text-disabled",
+          "textGrowth": "fixed-width",
+          "width": 440,
+          "content": "WorkspaceStartGroup · ready — under the first message of the chat the workspace started with (this client, until reload), or first when nothing is said yet. Steps fold under the line; a warning (started without the remote's latest, setup script failed) stays in view.",
           "lineHeight": 1.5,
           "fontFamily": "$font-sans",
           "fontSize": "$text-2xs",
@@ -37827,12 +38102,6 @@
                 "mode": "dark"
               }
             },
-            "XtnSo": {
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg"
-            },
             "wxyab": {
               "theme": {
                 "mode": "dark"
@@ -40070,12 +40339,6 @@
                 "mode": "dark"
               }
             },
-            "XtnSo": {
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg"
-            },
             "wxyab": {
               "theme": {
                 "mode": "dark"
@@ -40875,12 +41138,6 @@
               "theme": {
                 "mode": "dark"
               }
-            },
-            "XtnSo": {
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg"
             },
             "wxyab": {
               "theme": {
@@ -41798,12 +42055,6 @@
               "theme": {
                 "mode": "dark"
               }
-            },
-            "XtnSo": {
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg"
             },
             "wxyab": {
               "theme": {
@@ -42739,189 +42990,6 @@
                   ]
                 }
               ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
-      "id": "Um99b",
-      "x": 620,
-      "y": 7500,
-      "name": "61 · Dialog — New workspace",
-      "theme": {
-        "mode": "dark"
-      },
-      "width": 500,
-      "fill": "$bg-base",
-      "cornerRadius": "$radius-2xl",
-      "stroke": "$border-default",
-      "strokeWidth": 1,
-      "strokeAlignment": "inner",
-      "effect": {
-        "type": "shadow",
-        "shadowType": "outer",
-        "color": "#00000075",
-        "offset": {
-          "x": 0,
-          "y": 24
-        },
-        "blur": 64
-      },
-      "layout": "vertical",
-      "gap": 16,
-      "padding": 24,
-      "children": [
-        {
-          "type": "frame",
-          "id": "xJKog",
-          "name": "Header",
-          "width": "fill_container",
-          "layout": "vertical",
-          "gap": 6,
-          "children": [
-            {
-              "type": "text",
-              "id": "T7SZEq",
-              "name": "New Workspace from…",
-              "fill": "$text-primary",
-              "content": "New Workspace from…",
-              "fontFamily": "$font-sans",
-              "fontSize": "$text-lg",
-              "fontWeight": "600",
-              "letterSpacing": -0.21
-            },
-            {
-              "type": "text",
-              "id": "Xtxqa",
-              "name": "Pick a repository. Deus creates a git worktr",
-              "fill": "$text-muted",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Select a repository, then choose a pull request or branch.",
-              "lineHeight": 1.5,
-              "fontFamily": "$font-sans",
-              "fontSize": "$text-xs",
-              "fontWeight": "normal"
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "h0zxNF",
-          "name": "Repository",
-          "width": "fill_container",
-          "layout": "vertical",
-          "gap": 8,
-          "children": [
-            {
-              "type": "text",
-              "id": "u3YCnr",
-              "name": "Repository",
-              "fill": "$text-secondary",
-              "content": "Select Repository",
-              "fontFamily": "$font-sans",
-              "fontSize": "$text-sm",
-              "fontWeight": "500"
-            },
-            {
-              "type": "frame",
-              "id": "Pxz3x",
-              "name": "Select",
-              "width": "fill_container",
-              "height": 36,
-              "fill": "$bg-elevated",
-              "cornerRadius": "$radius-lg",
-              "stroke": "$border-default",
-              "strokeWidth": 1,
-              "strokeAlignment": "inner",
-              "gap": 8,
-              "padding": [
-                0,
-                12
-              ],
-              "justifyContent": "space_between",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "XxGj8",
-                  "name": "deus-machine",
-                  "fill": "$text-disabled",
-                  "content": "Choose a repository...",
-                  "fontFamily": "$font-sans",
-                  "fontSize": "$text-sm",
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "icon",
-                  "id": "u83Jv",
-                  "name": "c",
-                  "width": 16,
-                  "height": 16,
-                  "icon": "chevron-down",
-                  "library": "lucide",
-                  "fill": "$text-muted"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "id": "F4P99",
-          "name": "A new branch is cut from main. The workspace",
-          "fill": "$text-muted",
-          "textGrowth": "fixed-width",
-          "width": "fill_container",
-          "content": "The workspace will be created in this repository",
-          "lineHeight": 1.5,
-          "fontFamily": "$font-sans",
-          "fontSize": "$text-sm",
-          "fontWeight": "normal"
-        },
-        {
-          "type": "frame",
-          "id": "nEKI0",
-          "name": "Footer",
-          "width": "fill_container",
-          "gap": 8,
-          "justifyContent": "end",
-          "children": [
-            {
-              "id": "t9Cb3",
-              "type": "ref",
-              "ref": "Rcfnv",
-              "name": "Cancel",
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg",
-              "descendants": {
-                "kB8v8": {
-                  "content": "Cancel",
-                  "fontSize": "$text-sm",
-                  "fontWeight": "400"
-                }
-              }
-            },
-            {
-              "id": "yW5m8",
-              "type": "ref",
-              "ref": "rg2x2",
-              "name": "Confirm",
-              "theme": {
-                "mode": "dark"
-              },
-              "cornerRadius": "$radius-lg",
-              "descendants": {
-                "z4bI4": {
-                  "content": "Continue",
-                  "fontSize": "$text-sm",
-                  "fontWeight": "500"
-                }
-              }
             }
           ]
         }
@@ -52177,16 +52245,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "XtnSo",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "wxyab",
                       "type": "ref",
                       "ref": "AovWi",
@@ -52202,6 +52260,163 @@
                           "height": 18
                         }
                       }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "W9ygas",
+              "name": "App nav",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 1,
+              "padding": [
+                0,
+                6,
+                4,
+                6
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "X54wMp",
+                  "name": "New workspace row",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "EQZZN",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "LhrHe",
+                          "name": "New workspace icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "bkFwO",
+                      "name": "New workspace",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "J42PDO",
+                  "name": "Automations row",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "b1SD1C",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "C03el",
+                          "name": "Automations icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "clock-fading",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "yLJAP",
+                      "name": "Automations",
+                      "fill": "$text-secondary",
+                      "content": "Automations",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "dhmjk",
+                  "name": "Customize row",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "gbyZs",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "I0D59H",
+                          "name": "Customize icon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "blocks",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "I5OZr",
+                      "name": "Customize",
+                      "fill": "$text-secondary",
+                      "content": "Customize",
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -75831,11 +76046,6 @@
                 "mode": "dark"
               }
             },
-            "XtnSo": {
-              "theme": {
-                "mode": "dark"
-              }
-            },
             "wxyab": {
               "theme": {
                 "mode": "dark"
@@ -76559,11 +76769,6 @@
           "height": "fill_container",
           "descendants": {
             "KQIuE": {
-              "theme": {
-                "mode": "dark"
-              }
-            },
-            "XtnSo": {
               "theme": {
                 "mode": "dark"
               }
@@ -188225,16 +188430,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "LmAne",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "z6Lje",
                       "type": "ref",
                       "ref": "AovWi",
@@ -188269,6 +188464,55 @@
                 6
               ],
               "children": [
+                {
+                  "type": "frame",
+                  "id": "EtIkq",
+                  "name": "Nav row · New workspace",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "lrrug",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "FCVWV",
+                          "name": "clock-fading",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "VpbF8",
+                      "name": "Label",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "jWQL5",
@@ -190599,16 +190843,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "CnMtu",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "ZqRFe",
                       "type": "ref",
                       "ref": "AovWi",
@@ -190643,6 +190877,55 @@
                 6
               ],
               "children": [
+                {
+                  "type": "frame",
+                  "id": "C9HerO",
+                  "name": "Nav row · New workspace",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "aZ362",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "YsV0M",
+                          "name": "clock-fading",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "K9WpNm",
+                      "name": "Label",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "em28j",
@@ -191647,16 +191930,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "TEvj1",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "QnuU9",
                       "type": "ref",
                       "ref": "AovWi",
@@ -191691,6 +191964,55 @@
                 6
               ],
               "children": [
+                {
+                  "type": "frame",
+                  "id": "b3H135",
+                  "name": "Nav row · New workspace",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "LrMnH",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "T22zL",
+                          "name": "clock-fading",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "b7hRa",
+                      "name": "Label",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "v39Es",
@@ -193182,16 +193504,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "JfQqJ",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "eFLzo",
                       "type": "ref",
                       "ref": "AovWi",
@@ -193226,6 +193538,55 @@
                 6
               ],
               "children": [
+                {
+                  "type": "frame",
+                  "id": "G3M2i",
+                  "name": "Nav row · New workspace",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "q5Z9D",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "d2fdH",
+                          "name": "clock-fading",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "pbHDN",
+                      "name": "Label",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "nkmWz",
@@ -194390,16 +194751,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "SObaY",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "c3dcKK",
                       "type": "ref",
                       "ref": "AovWi",
@@ -194434,6 +194785,55 @@
                 6
               ],
               "children": [
+                {
+                  "type": "frame",
+                  "id": "KFlnD",
+                  "name": "Nav row · New workspace",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "cLgAj",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "E8KpY",
+                          "name": "clock-fading",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "jQTK9",
+                      "name": "Label",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "a8R3SM",
@@ -196139,16 +196539,6 @@
                   "alignItems": "center",
                   "children": [
                     {
-                      "id": "RxKBL",
-                      "type": "ref",
-                      "ref": "AovWi",
-                      "name": "New session",
-                      "theme": {
-                        "mode": "dark"
-                      },
-                      "cornerRadius": "$radius-lg"
-                    },
-                    {
                       "id": "a6OSL",
                       "type": "ref",
                       "ref": "AovWi",
@@ -196183,6 +196573,55 @@
                 6
               ],
               "children": [
+                {
+                  "type": "frame",
+                  "id": "aNTmg",
+                  "name": "Nav row · New workspace",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": "$radius-lg",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "CGMqy",
+                      "name": "Icon slot",
+                      "width": 20,
+                      "height": 20,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "FYMGz",
+                          "name": "clock-fading",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "square-pen",
+                          "library": "lucide",
+                          "fill": "$text-muted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "t4iTsd",
+                      "name": "Label",
+                      "fill": "$text-secondary",
+                      "content": "New workspace",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font-sans",
+                      "fontSize": "$text-sm",
+                      "fontWeight": "normal",
+                      "letterSpacing": -0.13
+                    }
+                  ]
+                },
                 {
                   "type": "frame",
                   "id": "kB8lG",

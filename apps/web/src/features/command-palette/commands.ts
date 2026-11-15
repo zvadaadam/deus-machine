@@ -11,6 +11,7 @@ import {
   Blocks,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
+import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import {
@@ -60,7 +61,7 @@ export const staticCommands: CommandDefinition[] = [
     group: "workspace",
     keywords: ["create", "add", "workspace", "agent"],
     when: macBackendAvailable,
-    action: () => uiActions.openNewWorkspaceModal(),
+    action: () => openNewWorkspace(),
   },
   {
     id: "new-workspace-from",
@@ -69,7 +70,8 @@ export const staticCommands: CommandDefinition[] = [
     group: "workspace",
     keywords: ["create", "pr", "pull request", "branch", "github", "from"],
     when: macBackendAvailable,
-    action: () => uiActions.openNewWorkspaceModal("from-github"),
+    // Needs a project: the palette's host supplies the one on screen.
+    action: () => {},
   },
 
   {

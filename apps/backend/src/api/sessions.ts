@@ -3,7 +3,7 @@
 import * as api from "@shared/api/sessions";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
-import { NotFoundError, ValidationError } from "../lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import {
   attachParts,
   getAllSessions,
@@ -82,7 +82,18 @@ export default [
 
   handle(api.createSession, ({ workspaceId }) => {
     const db = getDatabase();
-    if (!getWorkspaceRaw(db, workspaceId)) throw new NotFoundError("Workspace not found");
+    const workspace = getWorkspaceRaw(db, workspaceId);
+    if (!workspace) throw new NotFoundError("Workspace not found");
+    // A workspace's first chat is made by its start: a local one's once its
+    // checkout exists, a cloud one's once its computer does. One made before
+    // that would hide a failed start behind an empty chat, and take Retry and
+    // Delete with it.
+    if (
+      !workspace.current_session_id &&
+      (workspace.state === "initializing" || workspace.state === "error")
+    ) {
+      throw new ConflictError("This workspace has not started yet, so it has no chats.");
+    }
     const sessionId = uuidv7();
     db.transaction(() => {
       db.prepare(

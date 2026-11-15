@@ -45,7 +45,7 @@ export async function invoke<T = unknown>(
  * When called with a known event name from AppEventMap, the payload type
  * is inferred automatically:
  *
- *   listen(WORKSPACE_PROGRESS, (e) => e.payload.workspaceId)
+ *   listen(FS_CHANGED, (e) => e.payload.workspace_path)
  *
  * Also accepts arbitrary event names with an explicit generic for backwards
  * compat during incremental migration.

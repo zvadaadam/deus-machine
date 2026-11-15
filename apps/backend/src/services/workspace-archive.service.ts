@@ -89,6 +89,10 @@ export function unarchiveWorkspace(workspaceId: string): Promise<void> {
       // Wake and its session channel own the current runtime projection.
       return;
     }
-    db.prepare("UPDATE workspaces SET state = 'ready' WHERE id = ?").run(workspaceId);
+    // A workspace with no chat never finished starting: it was archived as a
+    // failure, and comes back as one (to be retried or deleted), not as ready.
+    db.prepare(
+      "UPDATE workspaces SET state = CASE WHEN current_session_id IS NULL THEN 'error' ELSE 'ready' END WHERE id = ?"
+    ).run(workspaceId);
   });
 }
