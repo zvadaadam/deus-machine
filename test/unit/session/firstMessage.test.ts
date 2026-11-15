@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  dueFirstMessages,
-  missedFirstMessages,
-  staleFirstMessages,
-} from "@/features/session/lib/firstMessage";
+import { dueFirstMessages, missedFirstMessages } from "@/features/session/lib/firstMessage";
 
 const first = { message: "fix the login page", model: "opus" };
 const starting = {
@@ -44,18 +40,12 @@ describe("the message typed before its workspace existed", () => {
   });
 });
 
-describe("a message kept across a reload", () => {
-  it("is still due when its workspace became ready meanwhile", () => {
-    expect(staleFirstMessages([ready], { a: first })).toEqual([]);
-    expect(dueFirstMessages([ready], { a: first })).toHaveLength(1);
-  });
-
-  it("is dropped only when its workspace is gone", () => {
-    const spoken = { ...ready, latest_message_sent_at: "2026-11-12T10:00:00Z" };
-    expect(staleFirstMessages([spoken], { a: first, gone: first })).toEqual(["gone"]);
-    // Still starting, or failed and waiting for a retry: kept.
-    expect(staleFirstMessages([starting], { a: first })).toEqual([]);
-    expect(staleFirstMessages([{ ...starting, state: "error" }], { a: first })).toEqual([]);
+describe("a message for a workspace this host does not list", () => {
+  it("is left alone: it may be another computer's, and due when the window switches back", () => {
+    const elsewhere = { another: first };
+    expect(dueFirstMessages([ready], elsewhere)).toEqual([]);
+    expect(missedFirstMessages([ready], elsewhere)).toEqual([]);
+    expect(dueFirstMessages([{ ...ready, id: "another" }], elsewhere)).toHaveLength(1);
   });
 });
 

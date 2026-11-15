@@ -28,7 +28,8 @@ import { uuidv7 } from "@shared/lib/uuid";
 import type { InitFetchIssue } from "@shared/enums";
 import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError } from "../lib/errors";
-import { GitError, isGitStopped, runGit } from "../lib/git-process";
+import { GitError, runGit } from "../lib/git-process";
+import { processGroupsStopped } from "../lib/process-groups";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { prepareLocalEnvironment } from "./project-environment.service";
 import { invalidate } from "./query-engine";
@@ -362,15 +363,18 @@ export async function initializeWorkspace(initial: InitContext): Promise<void> {
     await prepareLocalEnvironment(ctx.workspaceId, ctx.workspacePath, ctx.repoOriginUrl).catch(
       (err) => console.warn(`[WORKSPACE] Setup for ${ctx.workspaceId} failed:`, err)
     );
+    // Deus is closing and stopped the setup (which records that, not throws):
+    // open no chat now. The next start fails the row as interrupted.
+    if (processGroupsStopped()) return;
 
     stage = "session";
     setStage(ctx.workspaceId, stage);
     openFirstSession(ctx.workspaceId);
     setStage(ctx.workspaceId, "done");
   } catch (err) {
-    // Deus is closing and stopped its git: the row stays as it is, and the
-    // next start fails it as interrupted (failInterruptedWorkspaces).
-    if (isGitStopped()) return;
+    // Deus is closing and stopped what this was running: the row stays as it
+    // is, and the next start fails it as interrupted (failInterruptedWorkspaces).
+    if (processGroupsStopped()) return;
     console.error(
       `[WORKSPACE] Stage "${stage}" failed for ${ctx.workspaceId}: ${err instanceof Error ? err.message : err}`
     );

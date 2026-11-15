@@ -259,6 +259,7 @@ describe("a start that fails", () => {
     // A module of its own: once stopped it stays stopped, as the backend does.
     vi.resetModules();
     const git = await import("../../../src/lib/git-process");
+    const groups = await import("../../../src/lib/process-groups");
     const pidFile = path.join(scratch, "pid");
     const running = git
       .runGit(["-c", `alias.wait=!sh -c 'sleep 30 & echo $! > "${pidFile}"; wait'`, "wait"], {
@@ -270,7 +271,7 @@ describe("a start that fails", () => {
     const grandchild = Number(fs.readFileSync(pidFile, "utf8"));
     const stopped = Date.now();
 
-    git.stopRunningGit();
+    groups.stopProcessGroups();
 
     expect(await running).toBeInstanceOf(git.GitError);
     expect(Date.now() - stopped).toBeLessThan(5000);
@@ -281,6 +282,28 @@ describe("a start that fails", () => {
       git.runGit(["-c", `alias.mark=!touch "${later}"`, "mark"], { cwd: root })
     ).rejects.toBeInstanceOf(git.GitError);
     expect(fs.existsSync(later)).toBe(false);
+  });
+});
+
+describe("a start Deus closed in the middle of", () => {
+  it("is left for the next start during its setup, without opening its chat", async () => {
+    fs.mkdirSync(path.join(root, ".deus"));
+    commit(root, ".deus/environment.json", JSON.stringify({ version: 1, setup: "sleep 30" }));
+    // Modules of their own: once stopped they stay stopped, as the backend does.
+    vi.resetModules();
+    const groups = await import("../../../src/lib/process-groups");
+    const init = await import("../../../src/services/workspace-init.service");
+    const started = init.initializeWorkspace(add("w", "vega"));
+    await vi.waitFor(() => expect(row("w").setup_status).toBe("running"), { timeout: 5000 });
+
+    groups.stopProcessGroups();
+    await started;
+
+    expect(row("w")).toMatchObject({
+      state: "initializing",
+      init_stage: "setup",
+      current_session_id: null,
+    });
   });
 });
 

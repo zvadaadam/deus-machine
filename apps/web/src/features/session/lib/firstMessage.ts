@@ -1,7 +1,7 @@
 /**
  * The rules for the message typed before its workspace existed: when it may
- * be sent, and when it is nobody's to send any more. Pure, so the hook that
- * acts on them (hooks/useFirstMessageDelivery) only does the sending.
+ * be sent, and when its chat was spoken to first. Pure, so the hook that acts
+ * on them (hooks/useFirstMessageDelivery) only does the sending.
  */
 import type { Workspace } from "@shared/types/workspace";
 import type { PendingFirstMessage } from "@/features/workspace/store/workspaceStartStore";
@@ -58,18 +58,4 @@ export function missedFirstMessages(
       ? [{ workspaceId: workspace.id, sessionId: workspace.current_session_id, first }]
       : [];
   });
-}
-
-/**
- * Messages kept across a reload that are nobody's to send: the workspace is
- * gone. Only meaningful against a loaded list and for messages that were
- * restored: a workspace created a moment ago may not be in the list yet, and
- * its message is not stale. One whose chat was spoken to meanwhile is not
- * stale either: it is missed (missedFirstMessages).
- */
-export function staleFirstMessages(
-  workspaces: FirstMessageFields[],
-  pending: Record<string, PendingFirstMessage>
-): string[] {
-  return Object.keys(pending).filter((id) => !workspaces.some((candidate) => candidate.id === id));
 }

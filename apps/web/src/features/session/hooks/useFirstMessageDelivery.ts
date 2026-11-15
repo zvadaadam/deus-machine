@@ -32,7 +32,6 @@ import { newTurnId, useSendMessage } from "../api/session.queries";
 import {
   dueFirstMessages,
   missedFirstMessages,
-  staleFirstMessages,
   type FirstMessageDelivery,
 } from "../lib/firstMessage";
 import { processImageFiles } from "../lib/imageAttachments";
@@ -71,19 +70,14 @@ export function useFirstMessageDelivery(repoGroups: RepoGroup[], loaded: boolean
   const { mutateAsync: send } = useSendMessage();
   const defaultThinking = useDefaultThinkingLevel();
   const sending = useRef(new Set<string>());
-  const pruned = useRef(false);
 
   useEffect(() => {
     if (!loaded) return;
     const workspaces = repoGroups.flatMap((group) => group.workspaces);
 
-    // Once, against the first loaded list: drop what a reload restored for a
-    // workspace that is gone. Nothing stale is ever due, so this only tidies.
-    if (!pruned.current) {
-      pruned.current = true;
-      staleFirstMessages(workspaces, pending).forEach(pendingFirstMessages.clear);
-    }
-
+    // A message is only ever matched to its own workspace in this list, so one
+    // for a workspace this host does not have (another computer's, one deleted
+    // elsewhere) waits untouched: the window may switch back to its host.
     // What was typed on the start page moves to the chat before anything is
     // sent, so a delivery below finds the chat's composer already seeded.
     for (const workspace of workspaces) {

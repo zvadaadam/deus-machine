@@ -217,6 +217,28 @@ describe("local project environment journey", () => {
       stop(shellPid);
     }
   });
+  it("stops a setup that is still running when the backend stops, and starts none after", async () => {
+    // Modules of their own: once stopped they stay stopped, as the backend does.
+    vi.resetModules();
+    const groups = await import("../../../src/lib/process-groups");
+    const environment = await import("../../../src/services/project-environment.service");
+    const pidFile = path.join(root, "setup-child");
+    const setup = environment
+      .runSetupCommand(workspaceId, `sleep 30 & echo $! > "${pidFile}"; wait`, root, process.env)
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(fs.existsSync(pidFile)).toBe(true));
+    const child = Number(fs.readFileSync(pidFile, "utf8"));
+
+    groups.stopProcessGroups();
+
+    expect(await setup).toMatchObject({
+      message: "Setup was stopped when Deus closed. Run it again.",
+    });
+    await vi.waitFor(() => expect(() => process.kill(child, 0)).toThrow());
+    await expect(
+      environment.runSetupCommand(workspaceId, "true", root, process.env)
+    ).rejects.toThrow("Deus is closing.");
+  });
   it("makes a saved recipe publishable while retaining ignored workspace data", () => {
     fs.writeFileSync(path.join(root, ".gitignore"), ".deus/\n");
     project({ version: 1, setup: "echo setup" });

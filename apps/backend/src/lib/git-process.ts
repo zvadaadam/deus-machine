@@ -1,39 +1,9 @@
 import { spawn } from "node:child_process";
 import { createBackendChildEnv } from "../runtime/child-env";
+import { processGroupsStopped, trackProcessGroup } from "./process-groups";
 
 /** How long a stopped command gets to tidy up after itself before it is killed. */
 const STOP_GRACE_MS = 2_000;
-
-/**
- * The commands still running, by process group. Each is its own group, so it
- * outlives the backend unless the backend stops it: a checkout left writing
- * would race the next start's cleanup of the workspace it was making.
- */
-const running = new Set<number>();
-let stopped = false;
-
-/**
- * Stop every command still running, with everything it started, and start no
- * more: for the backend's shutdown. Each is asked, as a timeout asks first, so
- * a checkout stops writing and git removes what it had half made. A command
- * asked for after this is refused without running, so a start that carries on
- * past a stopped fetch cannot begin a checkout.
- */
-export function stopRunningGit(): void {
-  stopped = true;
-  for (const pid of running) {
-    try {
-      process.kill(-pid, "SIGTERM");
-    } catch {
-      // Already gone.
-    }
-  }
-}
-
-/** The backend is shutting down: git was stopped, and runs no more. */
-export function isGitStopped(): boolean {
-  return stopped;
-}
 
 export class GitError extends Error {
   constructor(
@@ -73,7 +43,7 @@ export function runGit(
 ): Promise<string> {
   const { cwd, timeoutMs = 10_000 } = options;
   return new Promise((resolve, reject) => {
-    if (stopped) {
+    if (processGroupsStopped()) {
       reject(new GitError(args, "", false, new Error("Deus is closing.")));
       return;
     }
@@ -84,7 +54,7 @@ export function runGit(
       stdio: ["ignore", "pipe", "pipe"],
       env: createBackendChildEnv({ GIT_TERMINAL_PROMPT: "0" }),
     });
-    if (child.pid) running.add(child.pid);
+    const untrack = trackProcessGroup(child.pid);
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
@@ -111,7 +81,7 @@ export function runGit(
     const settle = (error?: unknown, code?: number | null) => {
       if (settled) return;
       settled = true;
-      if (child.pid) running.delete(child.pid);
+      untrack();
       clearTimeout(stop);
       clearTimeout(kill);
       if (error === undefined && code === 0 && !timedOut) resolve(stdout);

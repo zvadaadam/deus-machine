@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { initDatabase, closeDatabase, DB_PATH } from "./lib/database";
-import { stopRunningGit } from "./lib/git-process";
+import { stopProcessGroups } from "./lib/process-groups";
 import {
   closeAll as closeAllWsConnections,
   onDeviceConnectionsChange,
@@ -173,7 +173,7 @@ injectWebSocket(server);
 process.on("uncaughtException", (error, origin) => {
   console.error("[FATAL] Uncaught Exception:", origin, error);
   Sentry.captureException(error);
-  stopRunningGit();
+  stopProcessGroups();
   Sentry.close(2000).finally(() => {
     destroyAllSimulators();
     destroyAllPtySessions();
@@ -198,8 +198,8 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log("\nShutting down...");
-  // First, so a checkout stops writing while the rest shuts down.
-  stopRunningGit();
+  // First, so a checkout or a setup script stops while the rest shuts down.
+  stopProcessGroups();
   void agentService.shutdown().finally(() => {
     destroyAllSimulators();
     destroyAllPtySessions();
