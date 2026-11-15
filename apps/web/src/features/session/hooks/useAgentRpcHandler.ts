@@ -207,6 +207,8 @@ export function useAgentRpcHandler(
       }
 
       setPendingAndNotify((prev) => {
+        // Sent again to a window that follows the chat anew: already shown.
+        if (prev.get(sessionId)?.wsRequestId === wsRequestId) return prev;
         const next = new Map(prev);
         next.set(sessionId, {
           type: "exitPlanMode",
@@ -253,6 +255,8 @@ export function useAgentRpcHandler(
       }
 
       setPendingAndNotify((prev) => {
+        // Sent again to a window that follows the chat anew: already shown.
+        if (prev.get(sessionId)?.wsRequestId === wsRequestId) return prev;
         const next = new Map(prev);
         next.set(sessionId, {
           type: "askUserQuestion",

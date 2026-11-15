@@ -178,8 +178,11 @@ export function createStack({ root, agnt, directory }) {
     return { ...owned, base };
   }
 
-  /** Deus Cloud from the AGNT worktree, with only what remote access needs configured. */
-  async function cloud({ port, databaseUrl, jwtSecret, signingKey, persist }) {
+  /**
+   * Deus Cloud from the AGNT worktree, with only what remote access needs
+   * configured; `vars` adds more (the assistants test's issuer and relay).
+   */
+  async function cloud({ port, databaseUrl, jwtSecret, signingKey, persist, vars = {} }) {
     return worker({
       name: `cloud-${port}`,
       port,
@@ -197,6 +200,7 @@ export function createStack({ root, agnt, directory }) {
           JWT_SECRET: jwtSecret,
           RELAY_TICKET_SIGNING_KEY: signingKey,
           ENCRYPTION_KEY: "a".repeat(64),
+          ...vars,
         },
         hyperdrive: [{ binding: "HYPERDRIVE", id: "remote-access-e2e" }],
         durable_objects: {
@@ -261,7 +265,8 @@ export function createStack({ root, agnt, directory }) {
     return { dir, database, workspace };
   }
 
-  async function host({ name, database, dir, relayUrl, authToken }) {
+  /** `env` adds to the backend's environment (the assistants test's issuer). */
+  async function host({ name, database, dir, relayUrl, authToken, env = {} }) {
     const owned = run(process.execPath, ["--import", "tsx", "apps/backend/src/server.ts"], name, {
       env: {
         PORT: "0",
@@ -273,6 +278,8 @@ export function createStack({ root, agnt, directory }) {
         DEUS_CLOUD_URL: "",
         // As the desktop app spawns it: credentials must carry this token.
         AUTH_TOKEN: authToken ?? "",
+        DEUS_SKILLS_HOME: path.join(dir, "skills-home"),
+        ...env,
       },
     });
     const port = await new Promise((resolve, reject) => {

@@ -38,14 +38,17 @@ import { LocalAgents } from "./local-agents";
 import { initCloudDriver, shutdownCloudDriver } from "./cloud/driver";
 import { createAgentEventHandler, type AgentEventHandler } from "./event-handler";
 import { buildTurnStartParams, engineHarness, type DeusTurnOptions } from "./run-config";
-import { relay } from "./tool-relay";
+import { toolRequests } from "@shared/api/sessions";
+import { isPrompt, pendingFor, relay } from "./tool-relay";
 import { codexTurnHome, resolveTurnApps } from "../integrations";
 import {
   persistSessionNeedsPlanResponse,
   persistSessionNeedsResponse,
   persistSessionBackToWorking,
+  settleInterruptedSessions,
 } from "./persistence";
 import { invalidate } from "../query-engine";
+import { openWith } from "../streams";
 import { getContextForSession } from "../simulator-context";
 import { handleAutomationToolRequest } from "../automations";
 import { requireParam } from "../../lib/query-params";
@@ -62,8 +65,25 @@ export async function init(): Promise<void> {
     console.warn("[AgentService] Already initialized, skipping");
     return;
   }
+  // Before the engine can admit a turn: none of the turns the database still
+  // shows as running survived the last process (see settleInterruptedSessions).
+  const settled = settleInterruptedSessions();
+  if (settled.ok && settled.value.length > 0) {
+    console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
+    invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: settled.value });
+  }
   const handler = createAgentEventHandler();
   events = handler;
+  // A client that starts following a chat while its agent waits on a question
+  // or a plan (a window opened late, a phone) is shown it at once; one that
+  // follows every chat (a window's card host) is shown every chat's.
+  // Prompts only: a request a client answers by itself (a diff, a terminal's
+  // output) was sent to the clients following then, and would run twice.
+  openWith(toolRequests, ({ sessionId }) =>
+    pendingFor(sessionId)
+      .filter((request) => isPrompt(request.method))
+      .map((request) => ({ type: "request" as const, request }))
+  );
   // Cloud sessions feed the SAME handler — one fold, one persistence path,
   // two transports.
   initCloudDriver(handler);
@@ -270,8 +290,9 @@ async function askPlan(event: PermissionRequestedEvent): Promise<PermissionOutco
     const answer = (await handleToolRequest("exitPlanMode", {
       sessionId: event.sessionId,
       toolInput: event.toolCall?.rawInput ?? {},
-    })) as { approved?: unknown } | undefined;
-    return planAnswer(answer?.approved === true);
+    })) as { approved?: unknown; feedback?: unknown } | undefined;
+    const feedback = typeof answer?.feedback === "string" ? answer.feedback.trim() : "";
+    return planAnswer(answer?.approved === true, feedback || undefined);
   } catch {
     // The card went away unanswered (the turn stopped, the relay was cleared).
     return { outcome: "cancelled" };
@@ -336,7 +357,7 @@ async function handleToolRequest(
 
   const sessionId = requireParam(params, "sessionId", method);
   const requestId = crypto.randomUUID();
-  const isUserFacing = method === "exitPlanMode" || method === "askUserQuestion";
+  const isUserFacing = isPrompt(method);
   const sessionResources = ["workspaces", "sessions", "session", "stats"] as const;
 
   // User-facing methods: update session status so the sidebar shows

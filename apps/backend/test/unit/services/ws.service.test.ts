@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addConnection,
   closeAll,
+  closeAssistantConnections,
   connectedDeviceIds,
+  getConnection,
   handleProtocolMessage,
 } from "../../../src/services/ws.service";
+import { ASSISTANT_HOST } from "../../helpers";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -42,5 +45,69 @@ describe("relayed viewers", () => {
     }
     expect(close).not.toHaveBeenCalled();
     expect(connectedDeviceIds().has("tablet")).toBe(true);
+  });
+});
+
+describe("assistant connections", () => {
+  const admitted = (clientId: string, signInEndsAt = Infinity) => ({
+    assistant: { clientId, access: "operate" as const, host: ASSISTANT_HOST },
+    signInEndsAt,
+  });
+  const claude = admitted("claude");
+
+  it("are not paired devices, and outlast a held request but not 200 seconds, pings or not", () => {
+    const close = vi.fn();
+    const id = addConnection({ send: vi.fn(), close }, null, true, claude);
+    expect(connectedDeviceIds().size).toBe(0);
+    // Deus Cloud holds one call up to about 150s; the connection may say nothing meanwhile.
+    vi.advanceTimersByTime(150_000);
+    expect(getConnection(id)).toBeDefined();
+    for (let i = 0; i < 5; i++) {
+      handleProtocolMessage(id, { type: "ping", id: `p${i}` });
+      vi.advanceTimersByTime(10_000);
+    }
+    expect(getConnection(id)).toBeUndefined();
+    expect(close).toHaveBeenCalledWith(4001, "Assistant connection ended");
+  });
+
+  it("end when their sign-in does, however much they ping", () => {
+    const close = vi.fn();
+    const id = addConnection(
+      { send: vi.fn(), close },
+      null,
+      true,
+      admitted("claude", Date.now() + 40_000)
+    );
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(13_000);
+      handleProtocolMessage(id, { type: "ping", id: `p${i}` });
+    }
+    expect(getConnection(id)).toBeDefined();
+    vi.advanceTimersByTime(1_000);
+    expect(getConnection(id)).toBeUndefined();
+    expect(close).toHaveBeenCalledWith(4001, "Assistant sign-in expired");
+  });
+
+  it("end at once when admitted with a sign-in already past its end", () => {
+    const id = addConnection(
+      { send: vi.fn(), close: vi.fn() },
+      null,
+      true,
+      admitted("claude", Date.now() - 1)
+    );
+    vi.advanceTimersByTime(0);
+    expect(getConnection(id)).toBeUndefined();
+  });
+
+  it("close by client id, leaving every other connection", () => {
+    const close = vi.fn();
+    const id = addConnection({ send: vi.fn(), close }, null, true, claude);
+    const other = addConnection({ send: vi.fn(), close: vi.fn() }, null, true, admitted("grok"));
+    const phone = addConnection({ send: vi.fn(), close: vi.fn() }, "phone", true);
+    closeAssistantConnections("claude");
+    expect(getConnection(id)).toBeUndefined();
+    expect(close).toHaveBeenCalledWith(4001, "Assistant access changed");
+    expect(getConnection(other)).toBeDefined();
+    expect(getConnection(phone)).toBeDefined();
   });
 });

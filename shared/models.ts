@@ -21,6 +21,7 @@ import {
 } from "@zvada/agent-server/protocol";
 import { LOCAL_HARNESSES, type LocalHarness } from "./agent-auth";
 import { AgentHarnessSchema, type AgentHarness } from "./enums";
+import type { SessionTurn } from "./types/session";
 
 export type { ModelDescriptor, ModelList };
 
@@ -212,3 +213,21 @@ export function defaultModelValue(harness: AgentHarness): string {
 
 /** The model a new chat starts on. */
 export const DEFAULT_MODEL = defaultModelValue(DEFAULT_AGENT_HARNESS);
+
+/**
+ * The model a chat continues on: the one its latest turn on `harness` ran
+ * (latest by start, else by end), as that turn recorded it. Undefined when no
+ * turn on that harness recorded a model: the chat starts on the default.
+ */
+export function latestTurnModel(
+  harness: AgentHarness,
+  turns: readonly Pick<SessionTurn, "execution" | "startedAt" | "endedAt">[]
+): string | undefined {
+  let latest: (typeof turns)[number] | undefined;
+  const at = (turn: (typeof turns)[number]) => turn.startedAt ?? turn.endedAt ?? 0;
+  for (const turn of turns) {
+    if (turn.execution?.harness !== harness || !turn.execution.model) continue;
+    if (!latest || at(turn) > at(latest)) latest = turn;
+  }
+  return latest?.execution?.model;
+}

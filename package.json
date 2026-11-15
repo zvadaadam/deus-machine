@@ -84,7 +84,8 @@
     "icons": "node scripts/generate-icons.mjs",
     "test:e2e:runtime-client": "node --import tsx test/e2e/runtime-client-network.runtime.mjs",
     "test:e2e:workspace-start": "node --import tsx test/e2e/workspace-start.runtime.mjs",
-    "test:e2e:remote-access": "node --import tsx test/e2e/remote-access/run.mjs"
+    "test:e2e:remote-access": "node --import tsx test/e2e/remote-access/run.mjs",
+    "test:e2e:assistants": "node --import tsx test/e2e/assistants/run.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.3.0",

@@ -33,6 +33,7 @@ import { getTurn, saveTurn } from "../../db/turns";
 import { isUnknownPart } from "@shared/protocol-types";
 import { getDatabase } from "../../lib/database";
 import { getErrorMessage } from "@shared/lib/errors";
+import { ACTIVE_TURN_STATUSES } from "@shared/enums";
 import {
   findConversationCompaction,
   findConversationMessage,
@@ -382,6 +383,52 @@ export function persistSessionUsage(
     return { ok: true, value: undefined };
   } catch (error) {
     return failed("session.usage", error);
+  }
+}
+
+/**
+ * Settle the local chats a previous process left mid-turn. Called once, as the
+ * engine starts.
+ *
+ * The engine runs in this process and keeps its turns in memory (Deus opens it
+ * with no journal), so a backend that was killed or crashed took its turns and
+ * the agent CLIs it ran with it. Nothing will ever end them: no `turn.ended`
+ * arrives, the new engine answers a cancel with `no_active_turn`, and until
+ * someone pressed Stop every send, wait and answer was refused against a
+ * status that claimed a turn. A fresh engine has no turn at all, so every
+ * local chat still marked working or waiting is settled as an error that says
+ * what happened (the agent may have changed files before it stopped).
+ *
+ * Cloud chats are left alone: their turn runs in a sandbox and may really
+ * still be running. What the platform says decides them (the cloud lane), not
+ * a restart of this process.
+ */
+export function settleInterruptedSessions(): WriteResult<string[]> {
+  const db = getDatabase();
+  const active = ACTIVE_TURN_STATUSES.map(() => "?").join(", ");
+  try {
+    const ids = (
+      db
+        .prepare(
+          `SELECT s.id FROM sessions s JOIN workspaces w ON w.id = s.workspace_id
+           WHERE s.status IN (${active}) AND w.kind != 'cloud'`
+        )
+        .all(...ACTIVE_TURN_STATUSES) as { id: string }[]
+    ).map((row) => row.id);
+    if (ids.length > 0) {
+      db.prepare(
+        `UPDATE sessions
+           SET status = 'error', error_message = ?, error_category = 'internal',
+               updated_at = datetime('now')
+         WHERE id IN (SELECT value FROM json_each(?))`
+      ).run(
+        "Deus quit while the agent was working, so this turn did not finish. Check what it changed, then send again.",
+        JSON.stringify(ids)
+      );
+    }
+    return { ok: true, value: ids };
+  } catch (error) {
+    return failed("interrupted sessions", error);
   }
 }
 

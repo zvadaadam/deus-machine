@@ -7,20 +7,26 @@
 // tunnel opens with a Deus Cloud host ticket for this computer's machine in
 // that account; the relay admits only the same account's devices and names
 // each one's account, and a pairing made here is bound to it.
+//
+// A hosted assistant arrives the same way, as a relay client, but with the
+// account's access token instead of a device grant. This computer verifies
+// the token itself (services/assistants); the relay and Deus Cloud only carry it.
 
-import { execSync } from "child_process";
-import { hostname, userInfo, platform } from "os";
 import { WebSocket } from "ws";
 import { match } from "ts-pattern";
 import type { RelayState, RelayStatus } from "@shared/types/devices";
 import { RELAY_PROTOCOL, type ServerFrame, type RelayFrame } from "@shared/types/relay";
 import { getSetting } from "./settings.service";
+import { getServerName } from "./server-name";
 import {
   validateDeviceToken,
   authorizePairing,
   createDeviceToken,
   updateLastSeen,
 } from "./remote-auth.service";
+import { admitAssistant } from "./assistants";
+import { SIGN_IN_UNCHECKED } from "./assistants/sentences";
+import { assistantAddress, AssistantRefusedError, isAssistantToken } from "./assistants/token";
 import {
   currentAccountSession,
   forgetRemovedMachine,
@@ -36,6 +42,7 @@ import {
   getConnection,
   setProtocolHandlers,
   handleProtocolMessage,
+  type AssistantAdmission,
   type WsSendable,
 } from "./ws.service";
 import { handleFrame as handleQueryFrame, removeSubs as removeQuerySubs } from "./query-engine";
@@ -55,6 +62,8 @@ let lastError: string | null = null;
 // ---- Relay clients ----
 
 const clientToConn = new Map<string, string>();
+/** Relay clients whose assistant sign-in is being checked (the latest check each); gone once they disconnect. */
+const admitting = new Map<string, symbol>();
 
 function unlinkClient(clientId: string): string | undefined {
   const connectionId = clientToConn.get(clientId);
@@ -69,34 +78,6 @@ const STABLE_TUNNEL_MS = 60_000;
 const HANDSHAKE_TIMEOUT_MS = 15_000;
 /** The relay's close reason when another tunnel for this machine replaced ours. */
 const DISPLACED = "New tunnel connection";
-
-// ---- Server Name Detection ----
-
-function getServerName(): string {
-  const custom = getSetting("server_name") as string | undefined;
-  if (custom) return custom;
-
-  if (platform() === "darwin") {
-    try {
-      const name = execSync("scutil --get ComputerName", {
-        encoding: "utf-8",
-        timeout: 2000,
-      }).trim();
-      if (name) return name;
-    } catch {
-      /* fall through */
-    }
-  }
-
-  const host = hostname().replace(/\.local$/, "");
-  if (host && host !== "localhost") return host;
-
-  try {
-    return `${userInfo().username}'s computer`;
-  } catch {
-    return "Deus Server";
-  }
-}
 
 // ---- Protocol Handler ----
 // Registered once at module load. Routes q:* frames to the query engine.
@@ -152,6 +133,14 @@ export function disconnectFromRelay(): void {
   dropClients();
 }
 
+/** This computer's address for assistants: it reaches the computer only through the tunnel it hosts. */
+function assistantUrlOf(enabled: boolean): string | null {
+  const session = enabled && hostAccount && machineId ? currentAccountSession() : null;
+  return session?.accountId === hostAccount && machineId
+    ? assistantAddress(session.cloudUrl, machineId)
+    : null;
+}
+
 /** What Settings shows about the tunnel (`relayStatus`, and `GET /api/relay/status`). */
 export function getRelayStatus(): RelayStatus {
   const enabled = getSetting("remote_access_enabled") === true;
@@ -184,6 +173,7 @@ export function getRelayStatus(): RelayStatus {
           : null,
     // For a viewer on another device ("Keep this Mac awake").
     platform: process.platform,
+    assistantUrl: assistantUrlOf(enabled),
   };
 }
 
@@ -289,6 +279,86 @@ function dropClients(): void {
     removeConnection(connId);
   }
   clientToConn.clear();
+  admitting.clear();
+}
+
+/** Admit a relay client: a virtual connection whose data goes back through the tunnel. */
+function attachClient(
+  clientId: string,
+  deviceId: string | null,
+  admission: AssistantAdmission | null = null
+): void {
+  // Clean up existing connection (idempotent on tunnel reconnect)
+  const existingConnId = clientToConn.get(clientId);
+  if (existingConnId) {
+    removeConnection(existingConnId);
+  }
+
+  // Virtual WsSendable routes data back through the relay tunnel
+  const virtualWs: WsSendable = {
+    send(data: string | ArrayBuffer) {
+      const payload =
+        typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);
+      sendToRelay({ type: "data", clientId, payload });
+    },
+    close(_code, reason) {
+      unlinkClient(clientId);
+      sendToRelay({ type: "auth_response", clientId, allowed: false, reason });
+    },
+  };
+  clientToConn.set(clientId, addConnection(virtualWs, deviceId, true, admission));
+  sendToRelay({ type: "auth_response", clientId, allowed: true });
+}
+
+/**
+ * A relay client that offered an access token: an assistant. Verified here,
+ * asynchronously; the tunnel, its account or the client may change meanwhile,
+ * and then nothing is admitted.
+ */
+async function admitAssistantClient(
+  f: Extract<RelayFrame, { type: "client_connected" }>
+): Promise<void> {
+  const refuse = (reason: string) =>
+    sendToRelay({ type: "auth_response", clientId: f.clientId, allowed: false, reason });
+  const socket = tunnelWs;
+  const account = hostAccount;
+  const machine = machineId;
+  const session = currentAccountSession();
+  if (
+    !socket ||
+    !account ||
+    !machine ||
+    f.accountId !== account ||
+    session?.accountId !== account
+  ) {
+    refuse("This computer is signed in to another Deus account");
+    return;
+  }
+  const check = Symbol(f.clientId);
+  admitting.set(f.clientId, check);
+  const current = () => admitting.get(f.clientId) === check && tunnelWs === socket;
+  try {
+    const admission = await admitAssistant(f.deviceToken, {
+      accountId: account,
+      machineId: machine,
+      cloudUrl: session.cloudUrl,
+    });
+    if (!current() || hostAccount !== account) return;
+    attachClient(f.clientId, null, admission);
+    const { assistant } = admission;
+    console.log(
+      `[Relay] Client ${f.clientId} admitted as assistant ${assistant.clientId} (${assistant.access})`
+    );
+  } catch (error) {
+    if (!current()) return;
+    if (!(error instanceof AssistantRefusedError)) {
+      console.error("[Relay] Assistant admission failed:", error);
+    }
+    refuse(error instanceof AssistantRefusedError ? error.message : SIGN_IN_UNCHECKED);
+    console.log(`[Relay] Client ${f.clientId} assistant sign-in refused`);
+  } finally {
+    if (admitting.get(f.clientId) === check) admitting.delete(f.clientId);
+  }
 }
 
 function handleRelayFrame(frame: RelayFrame): void {
@@ -297,6 +367,10 @@ function handleRelayFrame(frame: RelayFrame): void {
       console.log("[Relay] Registered with relay successfully");
     })
     .with({ type: "client_connected" }, (f) => {
+      if (isAssistantToken(f.deviceToken)) {
+        void admitAssistantClient(f);
+        return;
+      }
       const device = validateDeviceToken(f.deviceToken);
       // A pairing works only for the account and machine it was made for, on this
       // account's tunnel: removing the computer from the account retires its grants.
@@ -307,33 +381,8 @@ function handleRelayFrame(frame: RelayFrame): void {
         device.machine_id === machineId &&
         f.accountId === hostAccount
       ) {
-        // Clean up existing connection (idempotent on tunnel reconnect)
-        const existingConnId = clientToConn.get(f.clientId);
-        if (existingConnId) {
-          removeConnection(existingConnId);
-        }
-
-        // Virtual WsSendable routes data back through the relay tunnel
-        const virtualWs: WsSendable = {
-          send(data: string | ArrayBuffer) {
-            const payload =
-              typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer);
-            sendToRelay({ type: "data", clientId: f.clientId, payload });
-          },
-          close(_code, reason) {
-            unlinkClient(f.clientId);
-            sendToRelay({
-              type: "auth_response",
-              clientId: f.clientId,
-              allowed: false,
-              reason,
-            });
-          },
-        };
-        const connId = addConnection(virtualWs, device.id, true);
-        clientToConn.set(f.clientId, connId);
+        attachClient(f.clientId, device.id);
         updateLastSeen(device.token_hash);
-        sendToRelay({ type: "auth_response", clientId: f.clientId, allowed: true });
         console.log(`[Relay] Client ${f.clientId} authenticated as device ${device.name}`);
       } else {
         sendToRelay({
@@ -346,6 +395,7 @@ function handleRelayFrame(frame: RelayFrame): void {
       }
     })
     .with({ type: "client_disconnected" }, (f) => {
+      admitting.delete(f.clientId);
       const connId = unlinkClient(f.clientId);
       if (connId) {
         removeConnection(connId);

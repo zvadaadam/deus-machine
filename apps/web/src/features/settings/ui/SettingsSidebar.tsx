@@ -15,12 +15,18 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useUIStore } from "@/shared/stores/uiStore";
+import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
+import { useAssistants } from "../api/assistants.queries";
+import { waitingCount } from "../lib/assistants";
+
 export function SettingsSidebar() {
   const closeSettings = useUIStore((s) => s.closeSettings);
   const storedSection = useUIStore((s) => s.activeSettingsSection);
   const activeSection = resolveSettingsSection(storedSection).id;
   const visibleItems = settingsNavigation.filter(isSettingsSectionAvailable);
   const setActiveSection = useUIStore((s) => s.setActiveSettingsSection);
+  // Assistants waiting for approval mark Remote access, quietly.
+  const waiting = waitingCount(useAssistants(!isCloudDirectWebMode()).data);
 
   // Settings sidebar must always be visible — force open if the app sidebar was collapsed.
   // Capture prior state so we can restore it when settings closes.
@@ -74,6 +80,13 @@ export function SettingsSidebar() {
                   <span className="text-base font-medium">{item.label}</span>
                   {item.badge && (
                     <span className="text-text-muted text-xs font-medium">{item.badge}</span>
+                  )}
+                  {item.id === "access" && waiting > 0 && (
+                    <span
+                      role="img"
+                      className="bg-warning ml-auto size-[7px] shrink-0 rounded-full"
+                      aria-label={`${waiting} ${waiting === 1 ? "assistant" : "assistants"} waiting`}
+                    />
                   )}
                 </SidebarMenuButton>
               </SidebarMenuItem>

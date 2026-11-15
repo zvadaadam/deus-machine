@@ -49,7 +49,7 @@ const subscriptions = new Map<string, Subscription>();
 const logs = new Map<string, Map<string, Log>>();
 /** stream name → the scopes that still hold kept events, least recently published first. */
 const holding = new Map<string, Set<string>>();
-/** stream name → what a subscriber to one scope is sent first (see `openWith`). */
+/** stream name → what a new subscriber is sent first (see `openWith`). */
 const openings = new Map<string, (scope: Record<string, unknown>) => unknown[]>();
 
 /**
@@ -138,13 +138,23 @@ export function publish<S extends AnyStream>(
 }
 
 /**
- * Say what a resumable stream sends a subscriber to one scope first, after
- * anything it missed: the state its kept events do not restate yet (a reply
- * still being typed). Delivered under the scope's current number, never kept.
+ * What `openWith` is asked for: one whole scope on a resumable stream (its
+ * openings go under that scope's number); on any other stream, the keys the
+ * subscriber named, none for all of them.
+ */
+type OpeningScope<S extends AnyStream> = S extends { resumable: true }
+  ? ScopeOf<S>
+  : Partial<ScopeOf<S>>;
+
+/**
+ * Say what a stream sends a new subscriber first, after anything it missed:
+ * the state its events do not restate yet (a reply still being typed, a
+ * question still waiting). On a resumable stream it is delivered under the
+ * scope's current number; it is never kept.
  */
 export function openWith<S extends AnyStream>(
   stream: S,
-  current: (scope: ScopeOf<S>) => EventOf<S>[]
+  current: (scope: OpeningScope<S>) => EventOf<S>[]
 ): void {
   openings.set(stream.name, current as (scope: Record<string, unknown>) => unknown[]);
 }
@@ -170,6 +180,8 @@ export function subscribe(
   // A number only means something within one scope.
   const whole = stream.resumable ? stream.scope.safeParse(filter) : undefined;
   const scope = whole?.success ? (whole.data as Record<string, unknown>) : undefined;
+  // What it opens with: for one whole scope on a resumable stream, else for what it named.
+  const opening = stream.resumable ? scope : filter;
   subscriptions.set(subscriptionId(connectionId, id), {
     id,
     connectionId,
@@ -204,9 +216,15 @@ export function subscribe(
       send(connectionId, { type: "q:reset", id, ...(scope ? { seq: position } : {}) });
     }
   }
-  if (scope) {
-    for (const data of openings.get(stream.name)?.(scope) ?? []) {
-      send(connectionId, { type: "q:event", id, event: stream.name, data, seq: position });
+  if (opening) {
+    for (const data of openings.get(stream.name)?.(opening) ?? []) {
+      send(connectionId, {
+        type: "q:event",
+        id,
+        event: stream.name,
+        data,
+        ...(scope ? { seq: position } : {}),
+      });
     }
   }
   send(connectionId, { type: "q:subscribed", id, ...(scope ? { seq: position } : {}) });

@@ -4,7 +4,7 @@ import { api } from "@shared/api";
 import { call } from "@/platform/ws";
 import type { ThinkingLevel } from "@/shared/agents";
 import { CloneRepositoryModal, StartNewProjectModal } from "@/features/repository";
-import { SettingsSidebar, SettingsPage } from "@/features/settings";
+import { SettingsSidebar, SettingsPage, useAssistantArrivals } from "@/features/settings";
 import {
   useKeyboardShortcuts,
   useZoom,
@@ -106,6 +106,8 @@ export function MainLayout() {
   // Keep the automations cache warm app-wide: the sidebar zap and the header
   // chip derive provenance from it, not just the Automations view.
   useAutomations();
+  // An assistant asking to connect is announced wherever the person is.
+  useAssistantArrivals();
 
   const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
   const loading = workspacesQuery.isLoading;

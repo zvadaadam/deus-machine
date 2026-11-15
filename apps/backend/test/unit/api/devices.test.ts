@@ -17,7 +17,7 @@ import handlers from "../../../src/api/devices";
 
 const run = operations(handlers);
 // A device that reached this computer through the relay asks the same operations.
-const runRelayed = operations(handlers, { deviceId: "dev2", relayed: true });
+const runRelayed = operations(handlers, { deviceId: "dev2", relayed: true, assistant: null });
 
 const PHONE = {
   id: "dev1",
