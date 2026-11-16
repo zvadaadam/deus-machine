@@ -68,7 +68,13 @@ export async function init(): Promise<void> {
   // Before the engine can admit a turn: none of the turns the database still
   // shows as running survived the last process (see settleInterruptedSessions).
   const settled = settleInterruptedSessions();
-  if (settled.ok && settled.value.length > 0) {
+  if (!settled.ok) {
+    // Startup goes on: those chats stay as they were until someone stops them.
+    console.error(
+      "[AgentService] Could not settle the chats a restart interrupted:",
+      settled.error
+    );
+  } else if (settled.value.length > 0) {
     console.log(`[AgentService] Settled ${settled.value.length} chat(s) a restart interrupted`);
     invalidate(["workspaces", "sessions", "session", "stats"], { sessionIds: settled.value });
   }

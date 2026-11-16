@@ -100,9 +100,13 @@ function cardAnswer(given: unknown, options: readonly string[], multiSelect: boo
       ? []
       : [String(given)];
   if (!multiSelect) return words.join(", ");
-  // "a, b" names two options only when each piece is one of them.
-  const pieces = words.flatMap((word) => word.split(/\s*,\s*/));
-  return pieces.every((piece) => options.includes(piece)) ? pieces : words;
+  // A word that is an option stays one, commas and all ("A, B" when it is one);
+  // otherwise "a, b" names two options only when each piece is one of them.
+  return words.flatMap((word) => {
+    if (options.includes(word)) return [word];
+    const pieces = word.split(/\s*,\s*/);
+    return pieces.every((piece) => options.includes(piece)) ? pieces : [word];
+  });
 }
 
 /** What the app's card would have answered for `answer`. */

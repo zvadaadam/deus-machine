@@ -26,8 +26,16 @@ export async function localWindow(backendUrl) {
       waiter.reject(new Error(frame.error));
     else waiter.resolve(frame.data);
   });
+  // A backend that dies must fail the run, not leave a request waiting forever.
+  let closed = null;
+  ws.on("close", (code) => {
+    closed = new Error(`The backend closed the connection (code ${code}) before answering.`);
+    for (const waiter of pending.values()) waiter.reject(closed);
+    pending.clear();
+  });
   const ask = (frame) =>
     new Promise((resolve, reject) => {
+      if (closed) return reject(closed);
       const id = `w${++next}`;
       pending.set(id, { resolve, reject });
       ws.send(JSON.stringify({ ...frame, id }));

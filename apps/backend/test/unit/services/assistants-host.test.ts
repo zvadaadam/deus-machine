@@ -474,6 +474,30 @@ describe("answering", () => {
     await answered;
   });
 
+  it("keeps a multi-select answer that is itself an option with a comma as that option", async () => {
+    const { replyFor } = await import("../../../src/services/assistants/waiting");
+    const request = {
+      requestId: "q",
+      sessionId: "s-voyager",
+      method: "askUserQuestion",
+      params: {
+        questions: [{ question: "Which?", options: ["A", "B", "A, B"], multiSelect: true }],
+      },
+      timeoutMs: 60_000,
+    };
+    const answer = (given: unknown) =>
+      replyFor(request, {
+        kind: "question",
+        requestId: "q",
+        outcome: { action: "accept", content: { "0": given as string } },
+      });
+    expect(answer("A, B")).toEqual({ result: { answers: [["A, B"]] } });
+    expect(answer(["A, B"])).toEqual({ result: { answers: [["A, B"]] } });
+    // Two options named in one word are still two.
+    expect(answer("A, B, B")).toEqual({ result: { answers: [["A", "B", "B"]] } });
+    expect(answer(["A", "B"])).toEqual({ result: { answers: [["A", "B"]] } });
+  });
+
   it("approves a plan, or sends it back with what to change", async () => {
     const host = createDeusHost();
     const approved = ask("exitPlanMode", { toolInput: {} });

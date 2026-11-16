@@ -85,6 +85,23 @@ describe("starting the engine", () => {
     );
   });
 
+  it("says so and still starts the engine when the chats cannot be settled", async () => {
+    await agentService.shutdown();
+    state.open.mockClear();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken = new Database(":memory:"); // no tables: the settle's query fails
+    state.db = broken;
+    await agentService.init();
+    expect(error).toHaveBeenCalledWith(
+      "[AgentService] Could not settle the chats a restart interrupted:",
+      expect.stringContaining("no such table")
+    );
+    expect(state.open).toHaveBeenCalledTimes(1);
+    state.db = db;
+    broken.close();
+    error.mockRestore();
+  });
+
   it("shows a client that starts following a chat what its agent still waits on", () => {
     const sent: Array<Record<string, unknown>> = [];
     const window = addConnection(

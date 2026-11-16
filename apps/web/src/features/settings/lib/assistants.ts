@@ -128,3 +128,31 @@ export function addAssistantState({
   if (!remoteAccessOn) return "turn_on";
   return "retry";
 }
+
+/**
+ * Watches who waits while the Add assistant dialog is open, to tell when the
+ * assistant the person is connecting has arrived. Give it the waiting ids at
+ * each change, or `undefined` while the list has not loaded. The first loaded
+ * list is the baseline (those were waiting already); it answers true once an
+ * id outside the baseline waits. A dialog opened before the list loaded takes
+ * its baseline from the first list, so one already waiting does not close it.
+ */
+export function createDialogArrivalWatch() {
+  let baseline: Set<string> | null = null;
+  return (waiting: readonly string[] | undefined): boolean => {
+    if (!waiting) return false;
+    if (!baseline) {
+      baseline = new Set(waiting);
+      return false;
+    }
+    return waiting.some((id) => !baseline!.has(id));
+  };
+}
+
+/** What a screen reader is told about the assistants waiting for approval. */
+export function waitingAnnouncement(count: number): string {
+  if (count === 0) return "";
+  return count === 1
+    ? "1 assistant is waiting for your approval."
+    : `${count} assistants are waiting for your approval.`;
+}

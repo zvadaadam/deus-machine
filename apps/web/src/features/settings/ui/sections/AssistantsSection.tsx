@@ -35,6 +35,8 @@ import {
   accessLabel,
   addAssistantState,
   assistantOrigin,
+  createDialogArrivalWatch,
+  waitingAnnouncement,
   sortAssistants,
   type AllowedAccess as Access,
 } from "../../lib/assistants";
@@ -455,22 +457,21 @@ export function AssistantsSection(props: AssistantsSectionProps) {
   const assistants = sortAssistants(assistantsQuery.data ?? []);
 
   // The assistant the person just connected shows up waiting: close the dialog
-  // so its row, at the top of the list, is what they see.
-  const waitingAtOpen = useRef<Set<string> | null>(null);
+  // so its row, at the top of the list, is what they see. The baseline is the
+  // first loaded list after it opens (`createDialogArrivalWatch`).
+  const arrivalWatch = useRef<ReturnType<typeof createDialogArrivalWatch> | null>(null);
   const waitingIds = assistants.filter((a) => a.access === "pending").map((a) => a.clientId);
   const waitingKey = waitingIds.join(",");
+  const loaded = assistantsQuery.isSuccess;
   useEffect(() => {
     if (!dialogOpen) {
-      waitingAtOpen.current = null;
+      arrivalWatch.current = null;
       return;
     }
-    if (!waitingAtOpen.current) {
-      waitingAtOpen.current = new Set(waitingIds);
-      return;
-    }
-    if (waitingIds.some((id) => !waitingAtOpen.current!.has(id))) setDialogOpen(false);
+    arrivalWatch.current ??= createDialogArrivalWatch();
+    if (arrivalWatch.current(loaded ? waitingIds : undefined)) setDialogOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- waitingKey stands for waitingIds
-  }, [dialogOpen, waitingKey]);
+  }, [dialogOpen, waitingKey, loaded]);
 
   async function changeAccess(assistant: Assistant, access: Access) {
     setBusyId(assistant.clientId);
@@ -528,6 +529,11 @@ export function AssistantsSection(props: AssistantsSectionProps) {
         </Button>
       </div>
 
+      {/* Arrival toasts are not shown on this page: a new request is announced here. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {waitingAnnouncement(waitingIds.length)}
+      </p>
+
       {assistantsQuery.isError ? (
         <p className="text-muted-foreground py-0.5 text-sm">Couldn&apos;t load assistants.</p>
       ) : assistantsQuery.isSuccess && assistants.length === 0 ? (
@@ -535,7 +541,8 @@ export function AssistantsSection(props: AssistantsSectionProps) {
       ) : (
         <div className="space-y-1.5">
           {assistants.map((assistant) => {
-            const busy = busyId === assistant.clientId;
+            // One change at a time: while any is pending, every row's controls wait.
+            const busy = busyId !== null;
             const allow = (access: Access) => void changeAccess(assistant, access);
             const askRemove = () => {
               setRemoving(assistant);

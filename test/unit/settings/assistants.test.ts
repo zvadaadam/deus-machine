@@ -17,6 +17,8 @@ import {
   accessLabel,
   addAssistantState,
   arrivalDescription,
+  createDialogArrivalWatch,
+  waitingAnnouncement,
   assistantOrigin,
   createArrivalTracker,
   requestKey,
@@ -175,6 +177,25 @@ describe("the Add assistant dialog", () => {
   });
 });
 
+describe("the Add assistant dialog closing when the assistant arrives", () => {
+  it("takes its baseline from the first loaded list, so one already waiting does not close it", () => {
+    const arrived = createDialogArrivalWatch();
+    // Opened while the list loads.
+    expect(arrived(undefined)).toBe(false);
+    // The first answer has one already waiting: the baseline, not an arrival.
+    expect(arrived(["grok"])).toBe(false);
+    expect(arrived(["grok"])).toBe(false);
+    // The one being connected arrives.
+    expect(arrived(["chatgpt", "grok"])).toBe(true);
+  });
+
+  it("tells a screen reader how many wait", () => {
+    expect(waitingAnnouncement(0)).toBe("");
+    expect(waitingAnnouncement(1)).toBe("1 assistant is waiting for your approval.");
+    expect(waitingAnnouncement(2)).toBe("2 assistants are waiting for your approval.");
+  });
+});
+
 describe("labels", () => {
   it("names the access levels and counts who waits", () => {
     expect(accessLabel("read")).toBe("Read only");
@@ -235,6 +256,9 @@ describe("AssistantsSection", () => {
     expect(html.indexOf("ChatGPT wants to connect")).toBeGreaterThan(-1);
     expect(html.indexOf("ChatGPT wants to connect")).toBeLessThan(html.indexOf(">Claude<"));
     expect(html).toContain("Signs in through chatgpt.com · Asked just now");
+    expect(html).toContain(
+      '<p class="sr-only" role="status" aria-live="polite">1 assistant is waiting for your approval.</p>'
+    );
     expect(html).toContain("Deny");
     expect(html).toContain('aria-label="Allow ChatGPT"');
     expect(html).toContain('aria-label="Access for Claude: Operate"');

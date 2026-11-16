@@ -64,12 +64,32 @@ createRoot(document.getElementById("root")!).render(
 
 // -- The fake host --------------------------------------------------------
 const ADDRESS = "https://cloud.deusmachine.ai/mcp/mac-7f3a9c21";
-const host = { remote: true, signedIn: true, assistants: [], writes: [], failNext: null };
+/** Resolves when the fake host has first answered `assistants` since `resetHost`. */
+const listAnswered = () => {
+  let answered;
+  const promise = new Promise((resolve) => (answered = resolve));
+  return { promise, answered };
+};
+const host = {
+  remote: true,
+  signedIn: true,
+  assistants: [],
+  writes: [],
+  failNext: null,
+  firstList: listAnswered(),
+};
 const resetHost = (fields = {}) =>
-  Object.assign(host, { remote: true, signedIn: true, assistants: [], writes: [] }, fields);
+  Object.assign(
+    host,
+    { remote: true, signedIn: true, assistants: [], writes: [], firstList: listAnswered() },
+    fields
+  );
 const subscriptions = new Map(); // id -> { socket, resource }
 const answer = (resource) => {
-  if (resource === "assistants") return host.assistants;
+  if (resource === "assistants") {
+    host.firstList.answered();
+    return host.assistants;
+  }
   if (resource === "pairedDevices") return { devices: [] };
   if (resource === "relayStatus")
     return {
@@ -327,7 +347,9 @@ try {
   resetHost();
   page = await visit("view=app");
   await page.getByText("A workspace, somewhere else in the app.").waitFor();
-  await page.waitForTimeout(500);
+  // The first list a page sees is its baseline and never announced: add the
+  // assistant only once that (empty) list has been sent, so it arrives after it.
+  await host.firstList.promise;
   host.assistants = [chatgpt];
   pushAssistants();
   const toastOf = (name) =>
