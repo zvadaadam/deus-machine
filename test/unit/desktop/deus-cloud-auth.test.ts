@@ -9,6 +9,28 @@ const electronMocks = vi.hoisted(() => ({
   sentEvents: [] as Array<{ channel: string; payload: unknown }>,
 }));
 
+/**
+ * A seam on file reads: `holdNextSessionRead` makes the next read of the session
+ * file read it at once and then wait to return it until released.
+ */
+const fileReads = vi.hoisted(() => ({
+  holdNextSessionRead: false,
+  held: null as null | (() => void),
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  const readFile = (async (...args: Parameters<typeof actual.readFile>) => {
+    const content = await actual.readFile(...args);
+    if (fileReads.holdNextSessionRead && String(args[0]).endsWith("deus-cloud-session.json")) {
+      fileReads.holdNextSessionRead = false;
+      await new Promise<void>((resolve) => (fileReads.held = resolve));
+    }
+    return content;
+  }) as typeof actual.readFile;
+  return { ...actual, default: { ...actual, readFile }, readFile };
+});
+
 vi.mock("electron", () => ({
   app: {
     getPath: (name: string) => {
@@ -427,6 +449,7 @@ describe("device keys of a session that ended", () => {
       exchanges: 0,
       holdFor: new Set<string>(),
       release: new Map<string, () => void>(),
+      mintedKeyIds: [] as string[],
       revokedKeyIds: [] as string[],
       pushes: [] as Array<{ orgKeys: Record<string, string> }>,
     };
@@ -470,11 +493,13 @@ describe("device keys of a session that ended", () => {
         return Response.json({ ok: true });
       }
       if (url.pathname.endsWith("/api-keys") && init?.method === "POST") {
-        const minted = () =>
-          Response.json(
+        const minted = () => {
+          script.mintedKeyIds.push(`key_${bearer}`);
+          return Response.json(
             { id: `key_${bearer}`, key: `agnt_sk_${bearer}`, label: "deus-desktop mac" },
             { status: 201 }
           );
+        };
         if (!script.holdFor.has(bearer)) return minted();
         return new Promise<Response>((resolve) =>
           script.release.set(bearer, () => resolve(minted()))
@@ -519,6 +544,24 @@ describe("device keys of a session that ended", () => {
     expect(await listOrgKeys()).toMatchObject([{ orgId: "org_1", keyId: "key_session-2" }]);
     expect(script.revokedKeyIds).not.toContain("key_session-2");
     expect(script.pushes.at(-1)?.orgKeys).toEqual({ org_1: "agnt_sk_session-2" });
+  });
+
+  it("a sign-out while sign-in's provisioning reads the session token leaves no key", async () => {
+    const script = scriptedCloud();
+    fileReads.holdNextSessionRead = true;
+
+    await signIn();
+    // Provisioning has read the session file and is held before it returns the token.
+    await vi.waitFor(() => expect(fileReads.held).not.toBeNull());
+    await signOutDeusCloud();
+
+    fileReads.held?.();
+    fileReads.held = null;
+    await settle();
+
+    expect(await listOrgKeys()).toEqual([]);
+    expect(script.pushes.every((push) => Object.keys(push.orgKeys).length === 0)).toBe(true);
+    for (const keyId of script.mintedKeyIds) expect(script.revokedKeyIds).toContain(keyId);
   });
 
   it("a session the server revokes ends a mint in flight: nothing stored, nothing pushed", async () => {

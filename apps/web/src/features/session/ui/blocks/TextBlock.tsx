@@ -26,8 +26,8 @@ import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownR
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
 import { isBrowserPreviewPath, normalizeResourcePath } from "../../lib/chatResources";
-import { chatPlaceNow, openFromChat } from "../../lib/openFromChat";
-import { openAddress, openFile } from "@/features/workspace/lib/reach";
+import { openAddressFromChat, openFromChat } from "../../lib/openFromChat";
+import { openFile } from "@/features/workspace/lib/reach";
 import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences";
 import { InspectElementPill } from "../InspectElementPill";
 import { DiffCommentPill } from "../DiffCommentPill";
@@ -64,8 +64,7 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
       if (!workspaceId) return;
       const url = resolveBrowserLinkUrl(href);
       if (!url) return;
-      const place = await chatPlaceNow(workspaceId, { cloud, folder: workspacePath });
-      await openFromChat(workspaceId, openAddress(url, place));
+      await openAddressFromChat(workspaceId, url, { cloud, folder: workspacePath });
     },
     [workspaceId, cloud, workspacePath]
   );

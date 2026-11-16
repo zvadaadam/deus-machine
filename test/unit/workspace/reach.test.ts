@@ -4,6 +4,7 @@ import {
   CLOUD_FILE_UNSHOWN,
   CLOUD_LOCALHOST,
   localFolder,
+  needsPreviewAddress,
   openableFolder,
   openAddress,
   openFile,
@@ -114,21 +115,21 @@ describe("openAddress", () => {
       "http://localhost:5173/dash?a=1",
       cloud,
       false,
-      { to: "cloud-preview", port: 5173, url: "https://5173-sbx.e2b.app/dash?a=1" },
+      { to: "cloud-preview", port: 5173, rest: "/dash?a=1" },
     ],
     [
       "cloud, 127.0.0.1",
       "http://127.0.0.1:8080/",
       cloud,
       false,
-      { to: "cloud-preview", port: 8080, url: "https://8080-sbx.e2b.app/" },
+      { to: "cloud-preview", port: 8080, rest: "/" },
     ],
     [
       "cloud, 0.0.0.0",
       "http://0.0.0.0:3000",
       cloud,
       false,
-      { to: "cloud-preview", port: 3000, url: "https://3000-sbx.e2b.app/" },
+      { to: "cloud-preview", port: 3000, rest: "/" },
     ],
     [
       "cloud, localhost, external: the preview's address in the person's browser",
@@ -169,6 +170,15 @@ describe("openAddress", () => {
         expect(JSON.stringify(opening)).not.toContain("localhost");
       }
     }
+  });
+});
+
+describe("needsPreviewAddress", () => {
+  it("is only a cloud chat's address on localhost: everything else is decided in the click", () => {
+    expect(needsPreviewAddress("http://localhost:3000/a", { cloud: true })).toBe(true);
+    expect(needsPreviewAddress("http://127.0.0.1:8080", { cloud: true })).toBe(true);
+    expect(needsPreviewAddress("https://example.com/x", { cloud: true })).toBe(false);
+    expect(needsPreviewAddress("http://localhost:3000/a", { cloud: false })).toBe(false);
   });
 });
 

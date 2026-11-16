@@ -20,12 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/features/session/context";
 import type { ChatResource, ResourceAction } from "@/features/session/lib/chatResources";
-import {
-  chatPlaceNow,
-  offeredActions,
-  openFromChat,
-  openingOf,
-} from "@/features/session/lib/openFromChat";
+import { offeredActions, runChatAction } from "@/features/session/lib/openFromChat";
 import { cn } from "@/shared/lib/utils";
 
 interface ChatResourceCardsProps {
@@ -38,8 +33,7 @@ export function ChatResourceCards({ resources }: ChatResourceCardsProps) {
   const runAction = useCallback(
     async (action: ResourceAction) => {
       if (!workspaceId) return;
-      const place = await chatPlaceNow(workspaceId, { cloud, folder: workspacePath });
-      await openFromChat(workspaceId, openingOf(action, place));
+      await runChatAction(workspaceId, action, { cloud, folder: workspacePath });
     },
     [workspaceId, cloud, workspacePath]
   );

@@ -57,7 +57,7 @@ describe("a resource card's actions, by where the chat is", () => {
     expect(openingOf(card.primaryAction, place)).toEqual({
       to: "cloud-preview",
       port: 5173,
-      url: "https://5173-sbx.e2b.app/",
+      rest: "/",
     });
     expect(openingOf(card.secondaryActions[0], place)).toEqual({
       to: "external",

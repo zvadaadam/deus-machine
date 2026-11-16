@@ -56,9 +56,11 @@ let listedDefaultOrgId: string | null = null;
 
 /** Re-run provisioning for the current session (the Settings "Retry" action). */
 export async function retryDeviceKeyProvisioning(): Promise<{ ok: boolean; error?: string }> {
+  // The session this run is for is the one current when Retry was pressed, before the token read.
+  const generation = currentLoginGeneration();
   const sessionToken = await getStoredDeusCloudSessionToken().catch(() => null);
   if (!sessionToken) return { ok: false, error: "Not signed in to Deus Cloud" };
-  await provisionAfterLogin(sessionToken, resolveDeusCloudUrl());
+  await provisionAfterLogin(sessionToken, resolveDeusCloudUrl(), generation);
   const error = getPlatformKeyError();
   return error ? { ok: false, error } : { ok: true };
 }
@@ -328,9 +330,16 @@ export async function ensureDeviceKeys(
  * sign-in, at startup and on Retry. A sign-out while it runs ends it: a key minted
  * meanwhile is revoked instead of stored, and nothing is pushed (sign-out pushed
  * the cleared credentials itself).
+ *
+ * `generation` is the session's (`currentLoginGeneration()`) as the caller read it
+ * when it decided to run, before it awaited the session token: a sign-out during
+ * that read must end this run too, though the read may return the old token.
  */
-export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
-  const generation = currentLoginGeneration();
+export async function provisionAfterLogin(
+  sessionToken: string,
+  cloudUrl: string,
+  generation: number
+): Promise<void> {
   const isCurrent = () => currentLoginGeneration() === generation;
   try {
     const error = await ensureDeviceKeys(sessionToken, cloudUrl, isCurrent);
@@ -406,9 +415,10 @@ export function provisionAtStartup(
   });
   void (async () => {
     await waitForSafeStorage();
+    const generation = currentLoginGeneration();
     const token = await getSessionToken().catch(() => null);
     if (token) {
-      await provisionAfterLogin(token, cloudUrl);
+      await provisionAfterLogin(token, cloudUrl, generation);
     } else {
       await pushCloudCredentialsToBackend();
     }

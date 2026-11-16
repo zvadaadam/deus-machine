@@ -20,6 +20,7 @@ import {
 } from "@/features/browser/cloud/cloudPreviewStore";
 import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
 import {
+  needsPreviewAddress,
   openAddress,
   openFile,
   type ChatOpening,
@@ -60,15 +61,15 @@ export function offeredActions(resource: ChatResource, place: ChatPlace): Resour
 }
 
 /**
- * Where the chat is, as rule 2 reads it at the moment of a click: for a local
- * workspace, whether this client has a Browser tab; for a cloud workspace, the
- * computer's preview address (asked once if this window has not heard it) and
- * whether this window shows the preview.
+ * Where the chat is, as rule 2 reads it at the moment of a click, with no
+ * request: for a local workspace, whether this client has a Browser tab; for a
+ * cloud workspace, the computer's preview address as this window last heard it
+ * (`undefined` when it has not) and whether this window shows the preview.
  */
-export async function chatPlaceNow(
+export function chatPlaceNow(
   workspaceId: string,
   place: Pick<ChatPlace, "cloud" | "folder">
-): Promise<ChatPlace> {
+): ChatPlace {
   if (!place.cloud) {
     // This client's Browser tab, as the tab bar decides it (`tabsFor`).
     const settings = getRuntimeClient().queryClient.getQueryData<Settings>(queryKeys.settings.all);
@@ -76,13 +77,57 @@ export async function chatPlaceNow(
       !isMobileViewport() && isTabVisible("browser", settings, tabsFor({ kind: "worktree" }));
     return { ...place, browserTab };
   }
-  let template = useCloudPreviewStore.getState().byWorkspace[workspaceId];
-  if (template === undefined) {
-    template = (await call(api.cloudPreview, { workspaceId }).catch(() => null)) ?? null;
-  }
   const previewTab =
     !isMobileViewport() && isTabVisible("browser", undefined, tabsFor({ kind: "cloud" }));
-  return { ...place, previewTemplate: template, previewTab };
+  return {
+    ...place,
+    previewTemplate: useCloudPreviewStore.getState().byWorkspace[workspaceId],
+    previewTab,
+  };
+}
+
+/**
+ * An address clicked in the chat (a link, or a card's "Open" / "Open in External
+ * Browser"), carried out from the click. Rule 2 decides it at once unless it needs
+ * the cloud computer's preview address and this window has not heard it
+ * (`needsPreviewAddress`): only then is the address asked first. A browser lets a
+ * click open a tab only while it handles the click, so a decision that may end in
+ * the person's browser after that request (`external`) reserves the tab now and
+ * sends it there, or closes it when nothing opens.
+ */
+export async function openAddressFromChat(
+  workspaceId: string,
+  url: string,
+  base: Pick<ChatPlace, "cloud" | "folder">,
+  external = false
+): Promise<void> {
+  const place = chatPlaceNow(workspaceId, base);
+  if (place.previewTemplate !== undefined || !needsPreviewAddress(url, place)) {
+    await openFromChat(workspaceId, openAddress(url, place, external));
+    return;
+  }
+  const tab = external ? native.window.openExternalPending() : null;
+  const previewTemplate = (await call(api.cloudPreview, { workspaceId }).catch(() => null)) ?? null;
+  const opening = openAddress(url, { ...place, previewTemplate }, external);
+  if (tab && opening.to === "external") {
+    await tab.open(opening.url);
+    return;
+  }
+  tab?.cancel();
+  await openFromChat(workspaceId, opening);
+}
+
+/** A resource card's action, carried out from the click (addresses as `openAddressFromChat`). */
+export async function runChatAction(
+  workspaceId: string,
+  action: ResourceAction,
+  base: Pick<ChatPlace, "cloud" | "folder">
+): Promise<void> {
+  if (action.kind === "deus-browser" || action.kind === "system-browser") {
+    await openAddressFromChat(workspaceId, action.url, base, action.kind === "system-browser");
+    return;
+  }
+  await openFromChat(workspaceId, openingOf(action, chatPlaceNow(workspaceId, base)));
 }
 
 function showInBrowserTab(workspaceId: string, url: string): void {
@@ -93,8 +138,8 @@ function showInBrowserTab(workspaceId: string, url: string): void {
 export async function openFromChat(workspaceId: string, opening: ChatOpening): Promise<void> {
   await match(opening)
     .with({ to: "browser-tab" }, ({ url }) => showInBrowserTab(workspaceId, url))
-    .with({ to: "cloud-preview" }, ({ port, url }) => {
-      cloudPreviewActions.show(workspaceId, port, url);
+    .with({ to: "cloud-preview" }, ({ port, rest }) => {
+      cloudPreviewActions.show(workspaceId, port, rest);
       workspaceLayoutActions.openContentTab(workspaceId, "browser");
     })
     .with({ to: "external" }, ({ url }) => native.window.openExternal(url))

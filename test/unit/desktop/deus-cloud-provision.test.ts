@@ -34,7 +34,10 @@ import {
   resolveAgntBaseUrl,
   revokeDeviceKeys,
 } from "../../../apps/desktop/main/deus-cloud-provision";
-import { signOutDeusCloud } from "../../../apps/desktop/main/deus-cloud-auth";
+import {
+  currentLoginGeneration,
+  signOutDeusCloud,
+} from "../../../apps/desktop/main/deus-cloud-auth";
 
 const fetchMock = vi.fn();
 
@@ -319,7 +322,7 @@ describe("pushCloudCredentialsToBackend", () => {
         orgId === "org_a" ? jsonResponse({ error: "FORBIDDEN" }, 403) : minted(orgId),
     });
 
-    await provisionAfterLogin("session-jwt", "https://cloud.test");
+    await provisionAfterLogin("session-jwt", "https://cloud.test", currentLoginGeneration());
 
     expect(pushedBodies().at(-1)).toMatchObject({
       orgKeys: { org_b: "agnt_sk_org_b" },
@@ -334,7 +337,7 @@ describe("pushCloudCredentialsToBackend", () => {
     await setOrgKey("org_a", "agnt_sk_a", { keyId: "key_a" });
     platformMock({ orgs: () => Promise.reject(new Error("ENOTFOUND")) });
 
-    await provisionAfterLogin("session-jwt", "https://cloud.test");
+    await provisionAfterLogin("session-jwt", "https://cloud.test", currentLoginGeneration());
 
     expect(pushedBodies().at(-1)).toMatchObject({ orgId: "org_b" });
   });
@@ -353,7 +356,11 @@ describe("pushCloudCredentialsToBackend", () => {
         }),
     });
 
-    const provisioning = provisionAfterLogin("session-jwt", "https://cloud.test");
+    const provisioning = provisionAfterLogin(
+      "session-jwt",
+      "https://cloud.test",
+      currentLoginGeneration()
+    );
     await started;
     await signOutDeusCloud();
     finishMint(minted("org_1"));
@@ -402,7 +409,7 @@ describe("revokeDeviceKeys", () => {
 
   it("sign-out clears the provisioning error the account left behind", async () => {
     platformMock({ mint: () => jsonResponse({ error: "FORBIDDEN" }, 403) });
-    await provisionAfterLogin("session-jwt", "https://cloud.test");
+    await provisionAfterLogin("session-jwt", "https://cloud.test", currentLoginGeneration());
     expect(getPlatformKeyError()).toContain("403");
 
     await revokeDeviceKeys("session-jwt");

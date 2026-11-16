@@ -15,6 +15,7 @@
 import { match } from "ts-pattern";
 import type { Workspace } from "@shared/types/workspace";
 import { capabilities } from "@/platform/capabilities";
+import { resolveCloudPreviewUrl } from "@/features/browser/lib/cloudPreview";
 import { hasCheckout } from "./startState";
 
 export function localFolder(
@@ -56,7 +57,8 @@ export interface ChatPlace {
   cloud: boolean;
   /** Rule 1's answer for the chat's workspace. */
   folder: string | null;
-  /** Cloud only: the computer's preview address (`{{port}}` placeholder), when it reported one. */
+  /** Cloud only: the computer's preview address (`{{port}}` placeholder), when it reported
+   *  one; null when it reported none, undefined when this window has not heard it. */
   previewTemplate?: string | null;
   /** Cloud only: this window shows the cloud preview (the Browser tab). */
   previewTab?: boolean;
@@ -68,8 +70,9 @@ export interface ChatPlace {
 export type ChatOpening =
   /** This computer's Browser tab. */
   | { to: "browser-tab"; url: string }
-  /** The cloud preview (the Browser tab of a cloud workspace), at this port and path. */
-  | { to: "cloud-preview"; port: number; url: string }
+  /** The cloud preview (the Browser tab of a cloud workspace), at this port, with the
+   *  address's path, query and fragment (`rest`): never a host, which is the computer's. */
+  | { to: "cloud-preview"; port: number; rest: string }
   /** The person's own browser. */
   | { to: "external"; url: string }
   /** This computer's file, previewed in the Browser tab (`/workspaces/:id/file-preview`). */
@@ -101,15 +104,13 @@ function onLocalhost(url: string): { port: number; rest: string } | null {
   return { port, rest: `${parsed.pathname}${parsed.search}${parsed.hash}` };
 }
 
-/** The preview address of a port on the cloud computer, with the original path. */
-function cloudPreviewUrl(template: string, port: number, rest: string): string | null {
-  if (!template.includes("{{port}}")) return null;
-  const base = template.split("{{port}}").join(String(port));
-  try {
-    return new URL(rest || "/", base).href;
-  } catch {
-    return null;
-  }
+/**
+ * Whether rule 2 needs the cloud computer's preview address to decide this
+ * address: only a cloud chat's address on localhost does. Anything else is
+ * decided, and opened, in the click itself.
+ */
+export function needsPreviewAddress(url: string, place: Pick<ChatPlace, "cloud">): boolean {
+  return place.cloud && onLocalhost(url) !== null;
 }
 
 /**
@@ -125,13 +126,11 @@ export function openAddress(url: string, place: ChatPlace, external = false): Ch
   }
   const local = onLocalhost(url);
   if (!local) return { to: "external", url };
-  const preview = place.previewTemplate
-    ? cloudPreviewUrl(place.previewTemplate, local.port, local.rest)
-    : null;
+  const preview = resolveCloudPreviewUrl(place.previewTemplate, local.port, local.rest);
   if (!preview) return { to: "say", message: CLOUD_LOCALHOST };
   if (external) return { to: "external", url: preview };
   return place.previewTab
-    ? { to: "cloud-preview", port: local.port, url: preview }
+    ? { to: "cloud-preview", port: local.port, rest: local.rest }
     : { to: "say", message: CLOUD_LOCALHOST };
 }
 

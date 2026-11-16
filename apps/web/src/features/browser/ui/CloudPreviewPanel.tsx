@@ -26,10 +26,11 @@ import { createBrowserTab, type BrowserTabState } from "../types";
 import { webviewManager } from "../webview-manager";
 import {
   CLOUD_PREVIEW_QUICK_PORTS,
+  cloudPreviewAddress,
   normalizePreviewPort,
   readStoredPreviewPort,
-  resolveCloudPreviewUrl,
   storePreviewPort,
+  type CloudPreviewChatAddress,
 } from "../lib/cloudPreview";
 import { cloudPreviewActions, useCloudPreviewStore } from "../cloud/cloudPreviewStore";
 
@@ -58,9 +59,10 @@ export function CloudPreviewPanel({
   const [generation, setGeneration] = useState(0);
 
   // An address opened from the chat names a path too; choosing a port drops it.
-  const [address, setAddress] = useState<{ port: number; url: string } | null>(null);
+  // Only the path is kept: the host is always the current template's.
+  const [address, setAddress] = useState<CloudPreviewChatAddress | null>(null);
   const url = useMemo(
-    () => (address?.port === port ? address.url : resolveCloudPreviewUrl(template, port)),
+    () => cloudPreviewAddress(template, port, address),
     [address, template, port]
   );
 
@@ -74,7 +76,7 @@ export function CloudPreviewPanel({
     storePreviewPort(workspace.id, pending.port);
     setPort(pending.port);
     setDraft(String(pending.port));
-    setAddress({ port: pending.port, url: pending.url });
+    setAddress({ port: pending.port, rest: pending.rest });
     setGeneration((g) => g + 1);
   }, [pending, workspace.id]);
 

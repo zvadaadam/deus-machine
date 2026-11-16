@@ -15,12 +15,16 @@ import { create } from "zustand";
 import { api } from "@shared/api";
 import { call, follow, isConnected, onConnectionChange } from "@/platform/ws";
 
-/** An address from the chat to show in a cloud workspace's preview: its port and full URL. */
+/**
+ * An address from the chat to show in a cloud workspace's preview: its port and
+ * its path, query and fragment (`rest`). Never its host: the panel puts the rest
+ * on the computer's current template, so a replaced computer gets the same page.
+ */
 export interface CloudPreviewRequest {
   requestId: string;
   workspaceId: string;
   port: number;
-  url: string;
+  rest: string;
 }
 
 interface CloudPreviewStore {
@@ -39,10 +43,10 @@ export const useCloudPreviewStore = create<CloudPreviewStore>()(() => ({
 }));
 
 export const cloudPreviewActions = {
-  /** Show this port and address in the workspace's preview (the Browser tab). */
-  show(workspaceId: string, port: number, url: string): void {
+  /** Show this port, at this path, in the workspace's preview (the Browser tab). */
+  show(workspaceId: string, port: number, rest: string): void {
     useCloudPreviewStore.setState({
-      pending: { requestId: crypto.randomUUID(), workspaceId, port, url },
+      pending: { requestId: crypto.randomUUID(), workspaceId, port, rest },
     });
   },
   /** The preview took the request. */

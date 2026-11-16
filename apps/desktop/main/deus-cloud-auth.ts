@@ -880,6 +880,8 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
 
     // The D1 handshake: mint this device's platform key and hand credentials
     // to the backend, then re-broadcast so Settings flips to "key active".
+    // Captured before the token read: a sign-out during that read ends this run,
+    // even when the read still returns this session's token.
     const provisionGeneration = loginGeneration;
     void (async () => {
       const token = await getStoredDeusCloudSessionToken();
@@ -887,7 +889,7 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
       // A session that ended meanwhile is handled inside: its minted key is
       // revoked, never stored or pushed. Revoking here as well would delete the
       // keys of a sign-in that came after it.
-      await provisionAfterLogin(token, stored.cloudUrl);
+      await provisionAfterLogin(token, stored.cloudUrl, provisionGeneration);
       if (provisionGeneration !== loginGeneration) return;
       broadcastAuthChanged(await getDeusCloudSessionStatus());
     })();
