@@ -45,9 +45,25 @@ the workflow identity for short-lived publishing access. No `NPM_TOKEN` secret o
 local publishing token is needed. This follows
 [npm's trusted publishing setup](https://docs.npmjs.com/trusted-publishers/).
 
-Apple signing and notarization still use the Apple secrets documented at the top
-of the workflow. npm authentication applies to the CLI package, while GitHub
-hosts the desktop installers and update feeds.
+npm authentication applies to the CLI package, while GitHub hosts the desktop
+installers and update feeds.
+
+## Apple signing
+
+Deus is signed and notarized as **Cognitic s.r.o.** (Apple team `V3MA6M9H6Q`),
+with the same Developer ID Application certificate and notarization account as
+the Rafina app: `APPLE_CERT_P12` (the base64 `.p12` of the identity) and
+`APPLE_CERT_PASSWORD` sign; `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and
+`APPLE_TEAM_ID` notarize. The values live in the release owner's private
+signing folder, never in this repository. The certificate expires on 18
+November 2027. Notarization stops if the team's membership lapses or an Apple
+agreement is left unaccepted (`HTTP 403 … agreement is missing or has expired`).
+
+Keep the team. An installed copy updates itself only to a build signed by the
+team that signed it, and macOS asks once more for the app's Keychain item when
+the signer changes. Releases up to 0.3.11 were signed by another team
+(`98Y9HY82MU`): those copies cannot update to a Cognitic build and are replaced
+once by hand from a DMG.
 
 ## macOS artifacts
 
