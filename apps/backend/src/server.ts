@@ -25,6 +25,7 @@ import {
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
+import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
 
@@ -46,6 +47,8 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
+// Assistants unused for a month are forgotten (also whenever the list is read).
+forgetUnusedAssistants();
 
 // Workspaces the previous process was still starting when it stopped.
 const interrupted = failInterruptedWorkspaces();

@@ -9,6 +9,7 @@
 
 import { isOp, type AnyOp } from "./op";
 import { isStream, type AnyStream } from "./stream";
+import * as assistants from "./assistants";
 import * as automations from "./automations";
 import * as browser from "./browser";
 import * as devices from "./devices";
@@ -22,6 +23,7 @@ import * as terminal from "./terminal";
 import * as workspaces from "./workspaces";
 
 export const api = {
+  ...assistants,
   ...automations,
   ...browser,
   ...devices,

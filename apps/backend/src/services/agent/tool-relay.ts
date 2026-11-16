@@ -7,11 +7,17 @@
 //   → Backend publishes it on `toolRequests` to the clients following that chat
 //   → Frontend handles the request (browser automation, diff, terminal, plan, question)
 //   → Frontend sends q:tool_response { requestId, result/error } back via WS
-//   → Backend calls toolRelay.resolve/reject
+//   → Backend calls toolRelay.answer
 //   → relay() promise resolves → agent-event-handler sends result back to agent-server
 //
 // Timeout handling: each tool request has a timeout (set by the agent-server).
 // If the frontend doesn't respond within the timeout, the pending promise is rejected.
+//
+// A request is answered once, by whoever answers first (a window's card, a
+// phone, an assistant), through `answer`; when it showed a person a prompt (a
+// question, a plan), the others are told to withdraw theirs. One that starts
+// following a chat later is sent the prompts it still waits on (`pendingFor`,
+// `isPrompt`).
 
 import type { ToolRequestEventData } from "@shared/types/query-protocol";
 import { toolRequests } from "@shared/api/sessions";
@@ -23,8 +29,8 @@ interface PendingRelay {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
-  sessionId: string;
-  method: string;
+  /** The request as clients are sent it. */
+  request: ToolRequestEventData;
 }
 
 // ---- Singleton State ----
@@ -62,43 +68,54 @@ export function relay(event: ToolRequestEventData & { type?: string }): Promise<
       );
     }, timeoutMs);
 
-    // Store the pending relay
-    pending.set(requestId, { resolve, reject, timer, sessionId, method });
-
-    publish(
-      toolRequests,
-      { sessionId },
-      { type: "request", request: { requestId, sessionId, method, params, timeoutMs } }
-    );
+    const request = { requestId, sessionId, method, params, timeoutMs };
+    pending.set(requestId, { resolve, reject, timer, request });
+    publish(toolRequests, { sessionId }, { type: "request", request });
   });
 }
 
 /**
- * Resolve a pending tool relay with the frontend's response.
- * Called when the query engine receives a q:tool_response frame with a result.
+ * What a chat's agent still waits on (every chat's without one), oldest first:
+ * for a client that arrives after it asked.
  */
-export function resolve(requestId: string, result: unknown): boolean {
+export function pendingFor(sessionId?: string): ToolRequestEventData[] {
+  const waiting: ToolRequestEventData[] = [];
+  for (const { request } of pending.values()) {
+    if (sessionId === undefined || request.sessionId === sessionId) waiting.push(request);
+  }
+  return waiting;
+}
+
+/** A client's reply to a request: what it asked for, or why it could not. */
+export type ToolReply = { result: unknown } | { error: string };
+
+/**
+ * Answer a pending request, from whichever client answers first (a window's
+ * card through `q:tool_response`, an assistant through the operator tools).
+ * The other clients drop their prompt for it. Returns whether it was pending.
+ */
+export function answer(requestId: string, reply: ToolReply): boolean {
   const entry = pending.get(requestId);
   if (!entry) return false;
 
   clearTimeout(entry.timer);
   pending.delete(requestId);
-  entry.resolve(result);
+  if ("error" in reply) entry.reject(new Error(reply.error));
+  else entry.resolve(reply.result);
+  if (isPrompt(entry.request.method)) {
+    const { sessionId } = entry.request;
+    publish(toolRequests, { sessionId }, { type: "cancel", sessionId, requestId });
+  }
   return true;
 }
 
 /**
- * Reject a pending tool relay with an error from the frontend.
- * Called when the query engine receives a q:tool_response frame with an error.
+ * Whether `method` is a request a person answers on a card (a question, a
+ * plan). The rest (a diff, a terminal's output) a client answers by itself:
+ * it shows nothing to withdraw, and is never sent again to a late follower.
  */
-export function reject(requestId: string, error: string): boolean {
-  const entry = pending.get(requestId);
-  if (!entry) return false;
-
-  clearTimeout(entry.timer);
-  pending.delete(requestId);
-  entry.reject(new Error(error));
-  return true;
+export function isPrompt(method: string): boolean {
+  return method === "askUserQuestion" || method === "exitPlanMode";
 }
 
 /**
@@ -111,7 +128,7 @@ export function cancelRelay(requestId: string, reason: string): boolean {
   clearTimeout(entry.timer);
   pending.delete(requestId);
   entry.reject(new Error(`Tool relay cancelled: ${reason} (requestId=${requestId})`));
-  const { sessionId } = entry;
+  const { sessionId } = entry.request;
   publish(toolRequests, { sessionId }, { type: "cancel", sessionId, requestId });
   return true;
 }
@@ -126,7 +143,8 @@ export function cancelRelay(requestId: string, reason: string): boolean {
 export function cancelSessionRelays(sessionId: string, reason: string): string[] {
   const cancelled: string[] = [];
   for (const [requestId, entry] of [...pending]) {
-    if (entry.sessionId === sessionId && cancelRelay(requestId, reason)) cancelled.push(requestId);
+    if (entry.request.sessionId === sessionId && cancelRelay(requestId, reason))
+      cancelled.push(requestId);
   }
   return cancelled;
 }

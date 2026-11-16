@@ -33,4 +33,9 @@ export interface RelayStatus {
   error: string | null;
   /** This computer's OS (Node's `process.platform`), for a viewer on another device. */
   platform: string;
+  /**
+   * The URL a person pastes into an assistant (ChatGPT, Claude) to reach this
+   * computer; null while remote access is off or no account is hosted.
+   */
+  assistantUrl: string | null;
 }

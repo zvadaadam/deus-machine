@@ -41,6 +41,8 @@ const transport = vi.hoisted(() => ({
   remoteAccess: true,
   obtainHostTicket: vi.fn(),
   removed: new Set<string>(),
+  /** What the assistants service decides for an access token (verified there, see assistants.test.ts). */
+  admitAssistant: vi.fn(),
 }));
 
 vi.mock("ws", () => ({
@@ -100,6 +102,8 @@ vi.mock("../../../src/services/remote-machine.service", () => ({
     }
   },
 }));
+// Only admission is stood in for: which credential is an assistant's is the real check.
+vi.mock("../../../src/services/assistants", () => ({ admitAssistant: transport.admitAssistant }));
 vi.mock("../../../src/services/query-engine", () => ({
   handleFrame: transport.query,
   removeSubs: transport.unsubscribe,
@@ -120,6 +124,8 @@ import {
 } from "../../../src/services/ws.service";
 import authRoutes from "../../../src/routes/remote-auth";
 import { MachineRemovedError } from "../../../src/services/remote-machine.service";
+import { AssistantRefusedError } from "../../../src/services/assistants/token";
+import { connectedDeviceIds } from "../../../src/services/ws.service";
 
 const MACHINE = "0123456789abcdef";
 const tunnel = () => transport.sockets.at(-1)!;
@@ -182,6 +188,8 @@ describe("account-bound tunnel", () => {
       state: "connected",
       serverId: MACHINE,
       accountId: "user_a",
+      // What a person pastes into an assistant: this computer in the account's Deus Cloud.
+      assistantUrl: `https://cloud.test/mcp/${MACHINE}`,
     });
   });
 
@@ -189,7 +197,11 @@ describe("account-bound tunnel", () => {
     transport.session = null;
     reconcileRelay();
     expect(tunnel().close).toHaveBeenCalled();
-    expect(getRelayStatus()).toMatchObject({ state: "signed_out", serverId: null });
+    expect(getRelayStatus()).toMatchObject({
+      state: "signed_out",
+      serverId: null,
+      assistantUrl: null,
+    });
 
     transport.sockets.length = 0;
     reconcileRelay();
@@ -379,6 +391,103 @@ describe("account-bound device grants", () => {
     expect(transport.run).not.toHaveBeenCalled();
     // No device was added, so no list is read again.
     expect(transport.invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe("assistants through the relay", () => {
+  const JWT = "header.payload.signature";
+  const connect = (clientId = "a1", accountId = "user_a") =>
+    receive({ type: "client_connected", clientId, deviceToken: JWT, accountId });
+  /** The connection the relay client's frames reach, as the query engine sees it. */
+  function connectionOf(clientId: string) {
+    receive({ type: "data", clientId, payload: JSON.stringify({ type: "q:request", id: "r" }) });
+    const [connectionId] = transport.query.mock.calls.at(-1) as [string];
+    return getConnection(connectionId);
+  }
+
+  it("verifies the token for this computer and account, then admits an assistant, not a device", async () => {
+    transport.admitAssistant.mockResolvedValue({
+      assistant: { clientId: "claude", access: "read" },
+      signInEndsAt: Date.now() + 600_000,
+    });
+    connect();
+    await vi.waitFor(() =>
+      expect(frames().at(-1)).toEqual({ type: "auth_response", clientId: "a1", allowed: true })
+    );
+    expect(transport.admitAssistant).toHaveBeenCalledWith(JWT, {
+      accountId: "user_a",
+      machineId: MACHINE,
+      cloudUrl: "https://cloud.test",
+    });
+    const connection = connectionOf("a1");
+    expect(connection).toMatchObject({
+      deviceId: null,
+      isVirtual: true,
+      assistant: { clientId: "claude", access: "read" },
+    });
+    // Not a paired device: it keeps no Mac awake and is not in the device list.
+    expect(connectedDeviceIds().size).toBe(0);
+    // A device grant never reaches the assistants service.
+    expect(transport.run).not.toHaveBeenCalled();
+  });
+
+  it("closes the assistant's relay client when its sign-in ends", async () => {
+    transport.admitAssistant.mockResolvedValue({
+      assistant: { clientId: "claude", access: "operate" },
+      signInEndsAt: Date.now() + 50,
+    });
+    connect();
+    await vi.waitFor(() =>
+      expect(frames().at(-1)).toEqual({
+        type: "auth_response",
+        clientId: "a1",
+        allowed: false,
+        reason: "Assistant sign-in expired",
+      })
+    );
+    expect(frames().at(-2)).toEqual({ type: "auth_response", clientId: "a1", allowed: true });
+  });
+
+  it("refuses with the reason the check gave", async () => {
+    transport.admitAssistant.mockRejectedValue(
+      new AssistantRefusedError("The assistant's sign-in has expired.")
+    );
+    connect();
+    await vi.waitFor(() =>
+      expect(frames().at(-1)).toEqual({
+        type: "auth_response",
+        clientId: "a1",
+        allowed: false,
+        reason: "The assistant's sign-in has expired.",
+      })
+    );
+  });
+
+  it("refuses an assistant the relay names under another account without checking its token", () => {
+    connect("a1", "user_b");
+    expect(frames().at(-1)).toMatchObject({ type: "auth_response", allowed: false });
+    expect(transport.admitAssistant).not.toHaveBeenCalled();
+  });
+
+  it("admits nothing for a client that left while its sign-in was checked", async () => {
+    let finish!: (value: unknown) => void;
+    transport.admitAssistant.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    connect();
+    receive({ type: "client_disconnected", clientId: "a1" });
+    finish({
+      assistant: { clientId: "claude", access: "operate" },
+      signInEndsAt: Date.now() + 600_000,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(frames().some((f) => f.type === "auth_response")).toBe(false);
+  });
+
+  it("keeps admitting device grants exactly as before", () => {
+    receive({ type: "client_connected", clientId: "c1", deviceToken: "t", accountId: "user_a" });
+    expect(frames().at(-1)).toEqual({ type: "auth_response", clientId: "c1", allowed: true });
+    expect(connectionOf("c1")).toMatchObject({ deviceId: "phone", assistant: null });
+    expect(transport.admitAssistant).not.toHaveBeenCalled();
   });
 });
 

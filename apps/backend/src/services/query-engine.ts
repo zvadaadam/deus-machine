@@ -19,12 +19,14 @@ import { match } from "ts-pattern";
 import { subscriptionKey } from "@deus/runtime-client";
 import { streams, type LiveName } from "@shared/api";
 import type { QServerFrame } from "@shared/types/query-protocol";
-import type { Caller, Registry } from "../api/registry";
+import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
+import { LOCAL_CALLER, type Caller, type Registry } from "../api/registry";
 import { getDatabase } from "../lib/database";
 import { AppError } from "../lib/errors";
 import { toWorkspace } from "../lib/workspace-grouping";
 import { getWorkspacesBySessionIds, resetStatsCache } from "../db";
-import { rejectToolRelay, resolveToolRelay } from "./agent";
+import { answerToolRequest } from "./agent";
+import { ASSISTANT_FAILURE, ASSISTANT_TOOLS_ONLY } from "./assistants/sentences";
 import * as streamHub from "./streams";
 import { getConnection } from "./ws.service";
 
@@ -48,27 +50,48 @@ function registry(): Registry {
   return operations;
 }
 
+/**
+ * Run an operation as this computer itself, validated like a frame. For code
+ * that acts on someone's behalf after deciding itself what they may do (the
+ * operator tools an assistant calls), not for answering a frame.
+ */
+export function runAsThisComputer<O extends AnyOp>(op: O, input: InputOf<O>): Promise<OutputOf<O>> {
+  return registry().run(op.name, op.kind, input, { caller: LOCAL_CALLER }) as Promise<OutputOf<O>>;
+}
+
 const streamsByName = new Map(streams.map((stream) => [stream.name, stream]));
 
-/** Who a connection speaks for: this computer's own window, or a paired device. */
+/** Who a connection speaks for: this computer's own window, a paired device, or an assistant. */
 function callerOf(connectionId: string): Caller {
   const connection = getConnection(connectionId);
-  return { deviceId: connection?.deviceId ?? null, relayed: connection?.isVirtual === true };
+  return {
+    deviceId: connection?.deviceId ?? null,
+    relayed: connection?.isVirtual === true,
+    assistant: connection?.assistant ?? null,
+    ...(connection?.endsAt !== undefined ? { endsAt: connection.endsAt } : {}),
+  };
 }
 
 /**
  * What to tell a client about a failure. A refusal (`AppError`) is the
  * operation saying no, with a reason the client shows. Anything else is a bug
  * in a handler: reported, and still answered with its own words, which on a
- * person's own computer are more use to them than "internal error".
+ * person's own computer are more use to them than "internal error". An
+ * assistant is not the person: it gets one sentence, never internal text.
  */
-function describeFailure(error: unknown, fallback: string) {
-  if (!(error instanceof AppError)) {
+function describeFailure(error: unknown, fallback: string, caller?: Caller) {
+  const refusal = error instanceof AppError;
+  if (!refusal) {
     Sentry.captureException(error);
     console.error("[QueryEngine] Unhandled error:", error);
   }
   return {
-    message: error instanceof Error ? error.message : fallback,
+    message:
+      !refusal && caller?.assistant
+        ? ASSISTANT_FAILURE
+        : error instanceof Error
+          ? error.message
+          : fallback,
     status: error instanceof AppError ? error.statusCode : undefined,
     details: error instanceof AppError ? error.details : undefined,
   };
@@ -91,6 +114,18 @@ const subs = new Map<string, Map<string, Sub>>();
 export function handleFrame(connectionId: string, msg: Params): void {
   const type = typeof msg.type === "string" ? msg.type : "unknown";
   const id = typeof msg.id === "string" ? msg.id : "unknown";
+  // An assistant asks and is answered (q:request, q:mutate, checked by the
+  // registry). It follows no live read or stream, and answers no agent's
+  // question directly: the operator tools do that on its behalf.
+  if ((type === "q:subscribe" || type === "q:tool_response") && callerOf(connectionId).assistant) {
+    sendFrame(connectionId, {
+      type: "q:error",
+      id,
+      code: "FORBIDDEN",
+      message: ASSISTANT_TOOLS_ONLY,
+    });
+    return;
+  }
   try {
     match(type)
       .with("q:request", () => void handleRequest(connectionId, parseCall(msg, "resource")))
@@ -129,21 +164,23 @@ interface Call {
 }
 
 async function handleRequest(connectionId: string, { id, name, params }: Call): Promise<void> {
+  const caller = callerOf(connectionId);
   try {
-    const data = await registry().run(name, "read", params, { caller: callerOf(connectionId) });
+    const data = await registry().run(name, "read", params, { caller });
     sendFrame(connectionId, { type: "q:response", id, data });
   } catch (error) {
-    const { message } = describeFailure(error, "Query failed");
+    const { message } = describeFailure(error, "Query failed", caller);
     sendFrame(connectionId, { type: "q:error", id, code: "QUERY_ERROR", message });
   }
 }
 
 async function handleMutate(connectionId: string, { id, name, params }: Call): Promise<void> {
+  const caller = callerOf(connectionId);
   try {
-    const data = await registry().run(name, "write", params, { caller: callerOf(connectionId) });
+    const data = await registry().run(name, "write", params, { caller });
     sendFrame(connectionId, { type: "q:mutate_result", id, success: true, data });
   } catch (error) {
-    const { message, status, details } = describeFailure(error, "Mutation failed");
+    const { message, status, details } = describeFailure(error, "Mutation failed", caller);
     sendFrame(connectionId, {
       type: "q:mutate_result",
       id,
@@ -192,13 +229,12 @@ function handleToolResponse(msg: Params): void {
     console.error("[QueryEngine] q:tool_response missing requestId");
     return;
   }
-  const settled =
+  const settled = answerToolRequest(
+    requestId,
     "error" in msg && msg.error !== undefined
-      ? rejectToolRelay(
-          requestId,
-          typeof msg.error === "string" ? msg.error : JSON.stringify(msg.error)
-        )
-      : resolveToolRelay(requestId, msg.result);
+      ? { error: typeof msg.error === "string" ? msg.error : JSON.stringify(msg.error) }
+      : { result: msg.result }
+  );
   if (!settled) console.warn(`[QueryEngine] q:tool_response for unknown requestId=${requestId}`);
 }
 
@@ -221,6 +257,7 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
   // read outlives a write or serves another device's view.
   const reads = new Map<string, unknown>();
   if (resources.includes("stats")) resetStatsCache();
+  for (const listener of [...invalidationListeners]) listener(resources);
 
   for (const [connectionId, connSubs] of subs) {
     if (!getConnection(connectionId)) {
@@ -244,6 +281,17 @@ export function invalidate(resources: LiveName[], ctx?: InvalidateContext): void
       pushSnapshot(connectionId, subId, sub, reads);
     }
   }
+}
+
+const invalidationListeners = new Set<(resources: readonly LiveName[]) => void>();
+
+/**
+ * Hear of every invalidation, whoever subscribed to what (an operator tool
+ * waiting for a chat to change). Returns the function that stops it.
+ */
+export function onInvalidate(listener: (resources: readonly LiveName[]) => void): () => void {
+  invalidationListeners.add(listener);
+  return () => invalidationListeners.delete(listener);
 }
 
 const liveCtx = (connectionId: string) => ({ caller: callerOf(connectionId) });

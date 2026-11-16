@@ -30,6 +30,7 @@ import {
 } from "../../api/auth.queries";
 import type { PairedDevice } from "@shared/types/devices";
 import type { SettingsSectionProps } from "./types";
+import { AssistantsSection } from "./AssistantsSection";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,10 +59,10 @@ function appOriginFor(relayUrl: string): string | null {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** Remote access belongs to a Deus account: the relay serves this computer to it only. */
-function SignInCard() {
+/** Sign this computer in to its Deus account (the desktop's login flow). */
+function useHostSignIn() {
   const queryClient = useQueryClient();
-  const signIn = useMutation({
+  return useMutation({
     mutationFn: () => native.deusCloud.startLogin(),
     onSuccess: (result) => {
       queryClient.setQueryData(queryKeys.deusCloud.session, result.session);
@@ -69,6 +70,11 @@ function SignInCard() {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Sign-in failed"),
   });
+}
+
+/** Remote access belongs to a Deus account: the relay serves this computer to it only. */
+function SignInCard() {
+  const signIn = useHostSignIn();
   return (
     <div className="border-border/60 bg-muted/30 flex items-center justify-between gap-4 rounded-xl border px-4 py-4">
       <div className="space-y-1">
@@ -493,6 +499,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
     relayStatus?.platform ??
     (capabilities.isDesktop && /Mac/.test(navigator.userAgent) ? "darwin" : undefined);
   const thisComputer = hostPlatform === "darwin" ? "this Mac" : "this computer";
+  const signIn = useHostSignIn();
 
   // -- Render --
 
@@ -614,6 +621,20 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
           />
         </>
       )}
+
+      {/* Assistants reach this computer through the same tunnel; their section
+          shows even when it is off, and its dialog offers to turn it on. */}
+      <AssistantsSection
+        remoteAccessOn={enabled}
+        onTurnOnRemoteAccess={() => void handleToggle(true)}
+        signIn={() => signIn.mutate()}
+        signingIn={signIn.isPending}
+        signedOut={signedOut || session?.signedIn === false}
+        address={
+          !enabled ? null : relayQuery.isPending ? undefined : (relayStatus?.assistantUrl ?? null)
+        }
+        onRetryAddress={() => void relayQuery.refetch()}
+      />
     </div>
   );
 }

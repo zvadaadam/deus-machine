@@ -1,5 +1,6 @@
 /** Every handler, collected. `registry` is what the query engine dispatches through. */
 
+import assistants from "./assistants";
 import automations from "./automations";
 import browser from "./browser";
 import devices from "./devices";
@@ -14,6 +15,7 @@ import workspaces from "./workspaces";
 import { Registry } from "./registry";
 
 export const registry = new Registry([
+  ...assistants,
   ...automations,
   ...browser,
   ...devices,

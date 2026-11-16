@@ -6,7 +6,13 @@
 // binds a session to one runtime on its first turn). Models within the harness
 // can change; another harness needs a new chat.
 
-import { HARNESS_LABELS, defaultModelValue, modelValue, parseModelValue } from "@shared/models";
+import {
+  HARNESS_LABELS,
+  defaultModelValue,
+  latestTurnModel,
+  modelValue,
+  parseModelValue,
+} from "@shared/models";
 import type { AgentHarness } from "@shared/enums";
 import type { SessionTurn } from "@shared/types/session";
 
@@ -55,14 +61,7 @@ export function getModelForSession(
   agentHarness: AgentHarness,
   turns: readonly SessionTurn[]
 ): string {
-  const latest = turns.reduce<SessionTurn | undefined>((previous, turn) => {
-    if (turn.execution?.harness !== agentHarness || !turn.execution.model) return previous;
-    return !previous ||
-      (turn.startedAt ?? turn.endedAt ?? 0) > (previous.startedAt ?? previous.endedAt ?? 0)
-      ? turn
-      : previous;
-  }, undefined);
-  const model = latest?.execution?.model;
+  const model = latestTurnModel(agentHarness, turns);
   return (
     (model && resolveModelSelection(modelValue(agentHarness, model))) ||
     getDefaultModelForHarness(agentHarness)
