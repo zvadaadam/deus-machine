@@ -14,11 +14,9 @@ const { mockGetCloudConfig, mockGetRepositoryById } = vi.hoisted(() => ({
 vi.mock("../../../src/lib/database", () => ({ getDatabase: vi.fn(() => ({})) }));
 vi.mock("../../../src/db", () => ({ getRepositoryById: mockGetRepositoryById }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: vi.fn() }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({
-  // The workspace-init service registers its pre-connect refresh at import.
-  setCloudConnectHook: () => {},
-  getCloudConfig: mockGetCloudConfig,
-}));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(mockGetCloudConfig)
+);
 vi.mock("../../../src/services/workspace.service", () => ({ generateUniqueName: vi.fn() }));
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   ensureCloudSession: vi.fn(),
@@ -43,6 +41,7 @@ vi.mock("@deus-hq/sdk", () => ({
 }));
 
 import { resolveCloudRepoAccess } from "../../../src/services/cloud-workspace-init.service";
+import { forgetGithubAnswers } from "../../../src/services/github-remote";
 
 const FULL_CONFIG = {
   deusCloudUrl: "https://deus-cloud.test",
@@ -79,6 +78,7 @@ const mintNoInstallation = () =>
 describe("resolveCloudRepoAccess", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    forgetGithubAnswers();
     mockGetCloudConfig.mockReturnValue(FULL_CONFIG);
     mockGetRepositoryById.mockReturnValue({ git_origin_url: PRIVATE_ORIGIN });
   });
@@ -137,5 +137,20 @@ describe("resolveCloudRepoAccess", () => {
     // for "no access" and interrupt the user, even for a private repo.
     stubFetch({ mint: () => new Response(null, { status: 502 }), ghApi: () => jsonRes(404, {}) });
     expect(await resolveCloudRepoAccess("r1")).toEqual({ status: "unknown", slug: SLUG });
+  });
+
+  it("asks the mint for the organization it is given, the default otherwise", async () => {
+    mockGetCloudConfig.mockReturnValue({
+      ...FULL_CONFIG,
+      orgKeys: { "org-1": "key-a", "org-b": "key-b" },
+    });
+    stubFetch({ mint: () => jsonRes(200, { token: "ghs_installation_x" }) });
+    await resolveCloudRepoAccess("r1", "org-b");
+    await resolveCloudRepoAccess("r1");
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(urls).toEqual([
+      "https://deus-cloud.test/orgs/org-b/github/installation-token",
+      "https://deus-cloud.test/orgs/org-1/github/installation-token",
+    ]);
   });
 });

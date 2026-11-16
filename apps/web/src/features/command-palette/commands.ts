@@ -11,6 +11,7 @@ import {
   Blocks,
 } from "lucide-react";
 import { uiActions } from "@/shared/stores/uiStore";
+import { GitHubIcon } from "@/shared/components/icons/GitHubIcon";
 import { openNewWorkspace } from "@/features/workspace/lib/newWorkspace";
 import { capabilities } from "@/platform/capabilities";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
@@ -101,6 +102,15 @@ export const staticCommands: CommandDefinition[] = [
     icon: GitBranch,
     group: "project",
     keywords: ["git", "clone", "github", "repo"],
+    when: macBackendAvailable,
+    action: () => {},
+  },
+  {
+    id: "add-from-github",
+    label: "Add from GitHub",
+    icon: GitHubIcon,
+    group: "project",
+    keywords: ["add", "repository", "github", "cloud", "repo", "project"],
     when: macBackendAvailable,
     action: () => {},
   },

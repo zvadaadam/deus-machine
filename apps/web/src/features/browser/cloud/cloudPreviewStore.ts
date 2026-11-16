@@ -15,8 +15,18 @@ import { create } from "zustand";
 import { api } from "@shared/api";
 import { call, follow, isConnected, onConnectionChange } from "@/platform/ws";
 
+/** An address from the chat to show in a cloud workspace's preview: its port and full URL. */
+export interface CloudPreviewRequest {
+  requestId: string;
+  workspaceId: string;
+  port: number;
+  url: string;
+}
+
 interface CloudPreviewStore {
   byWorkspace: Record<string, string | null>;
+  /** The latest address to show, until that workspace's preview takes it. */
+  pending: CloudPreviewRequest | null;
   /** Bumped on every `cloudIdentity` event. A one-shot read that started under an
    *  earlier generation answers for the previous account and is dropped. */
   generation: number;
@@ -24,10 +34,23 @@ interface CloudPreviewStore {
 
 export const useCloudPreviewStore = create<CloudPreviewStore>()(() => ({
   byWorkspace: {},
+  pending: null,
   generation: 0,
 }));
 
 export const cloudPreviewActions = {
+  /** Show this port and address in the workspace's preview (the Browser tab). */
+  show(workspaceId: string, port: number, url: string): void {
+    useCloudPreviewStore.setState({
+      pending: { requestId: crypto.randomUUID(), workspaceId, port, url },
+    });
+  },
+  /** The preview took the request. */
+  taken(requestId: string): void {
+    useCloudPreviewStore.setState((state) =>
+      state.pending?.requestId === requestId ? { pending: null } : state
+    );
+  },
   /** A live announcement (or the one-shot read) — the value REPLACES. */
   set(workspaceId: string, template: string | null): void {
     useCloudPreviewStore.setState((state) =>

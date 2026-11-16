@@ -38,11 +38,11 @@ const UPSERT_AUTOMATION_SQL = `
   INSERT INTO automations (
     id, name, prompt, cron, timezone, environment, repository_id, status,
     paused_reason, session_policy, model, thinking_level, next_run_at, last_run_at,
-    consecutive_failures, created_by, workspace_id, synced_at, updated_at
+    consecutive_failures, created_by, workspace_id, organization_id, synced_at, updated_at
   ) VALUES (
     @id, @name, @prompt, @cron, @timezone, @environment, @repository_id, @status,
     @paused_reason, @session_policy, @model, @thinking_level, @next_run_at, @last_run_at,
-    @consecutive_failures, @created_by, @workspace_id, @synced_at, @updated_at
+    @consecutive_failures, @created_by, @workspace_id, @organization_id, @synced_at, @updated_at
   )
   ON CONFLICT(id) DO UPDATE SET
     name = excluded.name, prompt = excluded.prompt, cron = excluded.cron,
@@ -53,6 +53,7 @@ const UPSERT_AUTOMATION_SQL = `
     next_run_at = excluded.next_run_at,
     last_run_at = excluded.last_run_at,
     consecutive_failures = excluded.consecutive_failures,
+    organization_id = COALESCE(excluded.organization_id, automations.organization_id),
     synced_at = excluded.synced_at, updated_at = excluded.updated_at`;
 
 export function upsertAutomation(row: Omit<AutomationRow, "synced_at">): void {
@@ -66,18 +67,35 @@ export function upsertAutomation(row: Omit<AutomationRow, "synced_at">): void {
  * platform no longer has (deleted elsewhere — another device, the SDK).
  * The deus-local columns (created_by, adopted workspace_id) survive upserts
  * by exclusion from the UPDATE set above.
+ *
+ * `scope` is the organization the list is of: only its rows are replaced
+ * (`includeUnknown`: and the rows from before organizations were kept, which
+ * belong to the default one). Without a scope, every row is (an account change).
  */
-export function replaceAutomationsCache(rows: Array<Omit<AutomationRow, "synced_at">>): void {
+export function replaceAutomationsCache(
+  rows: Array<Omit<AutomationRow, "synced_at">>,
+  scope?: { organizationId: string | null; includeUnknown: boolean }
+): void {
   const db = getDatabase();
   const replace = db.transaction(() => {
     const keep = rows.map((r) => r.id);
-    if (keep.length === 0) {
-      db.prepare("DELETE FROM automations").run();
-    } else {
-      db.prepare(`DELETE FROM automations WHERE id NOT IN (${keep.map(() => "?").join(", ")})`).run(
-        ...keep
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    if (scope) {
+      conditions.push(
+        scope.includeUnknown
+          ? "(organization_id IS ? OR organization_id IS NULL)"
+          : "organization_id IS ?"
       );
+      values.push(scope.organizationId);
     }
+    if (keep.length > 0) {
+      conditions.push(`id NOT IN (${keep.map(() => "?").join(", ")})`);
+      values.push(...keep);
+    }
+    db.prepare(
+      `DELETE FROM automations${conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : ""}`
+    ).run(...values);
     const synced_at = new Date().toISOString();
     const upsert = db.prepare(UPSERT_AUTOMATION_SQL);
     for (const row of rows) upsert.run({ ...row, synced_at });
@@ -213,6 +231,8 @@ export function adoptRunRows(input: {
   automationName: string;
   providerSessionId: string;
   providerWorkspaceId: string;
+  /** The automation's organization: the run's workspace is in it. */
+  organizationId: string | null;
   newWorkspaceSlug: () => string;
 }): { workspaceId: string; sessionId: string } {
   const db = getDatabase();
@@ -238,14 +258,15 @@ export function adoptRunRows(input: {
       } else {
         workspaceId = uuidv7();
         db.prepare(
-          `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id)
-           VALUES (?, ?, ?, ?, 'ready', 'cloud', ?)`
+          `INSERT INTO workspaces (id, repository_id, slug, title, state, kind, provider_workspace_id, organization_id)
+           VALUES (?, ?, ?, ?, 'ready', 'cloud', ?, ?)`
         ).run(
           workspaceId,
           input.repositoryId,
           input.newWorkspaceSlug(),
           input.automationName,
-          input.providerWorkspaceId
+          input.providerWorkspaceId,
+          input.organizationId
         );
       }
       const sessionId = uuidv7();
@@ -257,8 +278,8 @@ export function adoptRunRows(input: {
     }
 
     db.prepare(
-      "UPDATE workspaces SET current_session_id = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(session.id, workspaceId);
+      "UPDATE workspaces SET current_session_id = ?, organization_id = COALESCE(organization_id, ?), updated_at = datetime('now') WHERE id = ?"
+    ).run(session.id, input.organizationId, workspaceId);
     db.prepare("UPDATE automation_runs SET session_id = ?, workspace_id = ? WHERE id = ?").run(
       session.id,
       workspaceId,

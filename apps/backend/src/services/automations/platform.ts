@@ -23,7 +23,7 @@ import {
 import type { AutomationSpecInput } from "@deus-hq/api";
 import type { CloudThinkingLevel } from "@shared/cloud-models";
 import type { AutomationRunStatus } from "@shared/enums";
-import { getCloudConfig } from "../agent/cloud/config";
+import { cloudAccount, defaultCloudOrgId, requireCloudOrg } from "../agent/cloud/config";
 import { ValidationError } from "../../lib/errors";
 import type { AutomationRow, AutomationRunRow } from "../../db/types";
 
@@ -36,31 +36,34 @@ interface PlatformAuth {
   apiKey: string;
 }
 
-/** The cloud lane's gate. Every automation call goes through this. */
-export function requirePlatform(): PlatformAuth {
-  const config = getCloudConfig();
-  if (!config) {
+/** The organization's key: the calls an automation makes as its organization. No id = the default. */
+export function requirePlatform(orgId: string | null): PlatformAuth {
+  if (!cloudAccount()) {
     throw new Error("Automations run in Deus Cloud — sign in under Settings → Cloud to use them.");
   }
+  const config = requireCloudOrg(orgId);
   return { baseUrl: config.baseUrl, apiKey: config.apiKey };
 }
 
 export function platformConfigured(): boolean {
-  const config = getCloudConfig();
-  return Boolean(config?.deusCloudSessionToken && config.orgId);
+  return Boolean(cloudAccount()?.sessionToken && defaultCloudOrgId());
 }
 
-/** Scheduled runs need the verified human owner, independently of the org's device key. */
-export function requireAutomationPlatform(): PlatformAuth {
-  const config = getCloudConfig();
-  if (!config?.deusCloudSessionToken || !config.orgId) {
+/**
+ * Scheduled runs need the verified human owner, independently of the org's
+ * device key: the session, with the organization in the path. No id = the default.
+ */
+export function requireAutomationPlatform(orgId: string | null): PlatformAuth {
+  const config = cloudAccount();
+  const id = orgId ?? defaultCloudOrgId();
+  if (!config?.sessionToken || !id) {
     throw new ValidationError(
       "Sign in to Deus Cloud under Settings → Account before managing automations."
     );
   }
   return {
-    baseUrl: `${config.baseUrl}/dashboard/orgs/${encodeURIComponent(config.orgId)}`,
-    apiKey: config.deusCloudSessionToken,
+    baseUrl: `${config.baseUrl}/dashboard/orgs/${encodeURIComponent(id)}`,
+    apiKey: config.sessionToken,
   };
 }
 
@@ -80,7 +83,9 @@ function cronTriggerOf(spec: AutomationSpec): { cron: string; timezone?: string 
 export function summaryToRow(
   summary: AutomationSummary,
   repoIdByEnvName: Map<string, string>,
-  previous?: Pick<AutomationRow, "created_by" | "workspace_id">
+  previous: Pick<AutomationRow, "created_by" | "workspace_id"> | undefined,
+  /** The organization it was listed under. */
+  organizationId: string | null
 ): Omit<AutomationRow, "synced_at"> {
   const cron = cronTriggerOf(summary.spec);
   return {
@@ -101,6 +106,7 @@ export function summaryToRow(
     consecutive_failures: summary.consecutiveFailures,
     created_by: previous?.created_by ?? "user",
     workspace_id: previous?.workspace_id ?? null,
+    organization_id: organizationId,
     updated_at: summary.updatedAt,
   };
 }
@@ -130,8 +136,8 @@ export function runSummaryToRow(
 
 // ─── Platform calls ──────────────────────────────────────────
 
-export async function fetchAutomations(): Promise<AutomationSummary[]> {
-  const auth = requireAutomationPlatform();
+export async function fetchAutomations(orgId: string | null): Promise<AutomationSummary[]> {
+  const auth = requireAutomationPlatform(orgId);
   const out: AutomationSummary[] = [];
   for await (const summary of sdkListAutomations(auth)) {
     out.push(summary);
@@ -140,12 +146,18 @@ export async function fetchAutomations(): Promise<AutomationSummary[]> {
   return out;
 }
 
-export async function fetchAutomation(id: string): Promise<AutomationSummary> {
-  return sdkGetAutomation(id, requireAutomationPlatform());
+export async function fetchAutomation(
+  id: string,
+  orgId: string | null
+): Promise<AutomationSummary> {
+  return sdkGetAutomation(id, requireAutomationPlatform(orgId));
 }
 
-export async function fetchRuns(automationId: string): Promise<AutomationRunSummary[]> {
-  const auth = requireAutomationPlatform();
+export async function fetchRuns(
+  automationId: string,
+  orgId: string | null
+): Promise<AutomationRunSummary[]> {
+  const auth = requireAutomationPlatform(orgId);
   const out: AutomationRunSummary[] = [];
   for await (const run of sdkListAutomationRuns(automationId, auth)) {
     out.push(run);
@@ -186,9 +198,10 @@ function slugName(displayName: string): string {
 }
 
 export async function createPlatformAutomation(
-  input: CreatePlatformAutomationInput
+  input: CreatePlatformAutomationInput,
+  orgId: string | null
 ): Promise<string> {
-  const auth = requireAutomationPlatform();
+  const auth = requireAutomationPlatform(orgId);
   const base = {
     ...auth,
     description: input.displayName,
@@ -221,29 +234,31 @@ export async function createPlatformAutomation(
  *  one (`AutomationSpec`) may predate that rule and name neither. */
 export async function updatePlatformAutomation(
   id: string,
-  update: { description?: string; spec?: AutomationSpecInput; status?: "active" | "paused" }
+  update: { description?: string; spec?: AutomationSpecInput; status?: "active" | "paused" },
+  orgId: string | null
 ): Promise<void> {
-  await sdkUpdateAutomation(id, { ...requireAutomationPlatform(), ...update });
+  await sdkUpdateAutomation(id, { ...requireAutomationPlatform(orgId), ...update });
 }
 
-export async function deletePlatformAutomation(id: string): Promise<void> {
-  await sdkDeleteAutomation(id, requireAutomationPlatform());
+export async function deletePlatformAutomation(id: string, orgId: string | null): Promise<void> {
+  await sdkDeleteAutomation(id, requireAutomationPlatform(orgId));
 }
 
-export async function pausePlatformAutomation(id: string): Promise<void> {
-  await sdkPauseAutomation(id, requireAutomationPlatform());
+export async function pausePlatformAutomation(id: string, orgId: string | null): Promise<void> {
+  await sdkPauseAutomation(id, requireAutomationPlatform(orgId));
 }
 
-export async function resumePlatformAutomation(id: string): Promise<void> {
-  await sdkResumeAutomation(id, requireAutomationPlatform());
+export async function resumePlatformAutomation(id: string, orgId: string | null): Promise<void> {
+  await sdkResumeAutomation(id, requireAutomationPlatform(orgId));
 }
 
 export async function triggerPlatformAutomation(
   id: string,
-  idempotencyKey: string
+  idempotencyKey: string,
+  orgId: string | null
 ): Promise<{ runId: string; status: AutomationRunStatus }> {
   const response = await sdkTriggerAutomation(id, {
-    ...requireAutomationPlatform(),
+    ...requireAutomationPlatform(orgId),
     idempotencyKey,
   });
   return { runId: response.runId, status: response.status };
@@ -257,8 +272,11 @@ export interface PlatformSessionDetail {
 }
 
 /** The run's sandbox workspace + transcript, resolved through its agnt session. */
-export async function fetchSessionDetail(sessionId: string): Promise<PlatformSessionDetail> {
-  const detail = await sdkGetSession(sessionId, requirePlatform());
+export async function fetchSessionDetail(
+  sessionId: string,
+  orgId: string | null
+): Promise<PlatformSessionDetail> {
+  const detail = await sdkGetSession(sessionId, requirePlatform(orgId));
   return {
     workspaceId: detail.workspaceId,
     messages: (detail.messages ?? []) as unknown as Array<Record<string, unknown>>,
@@ -275,10 +293,11 @@ export async function fetchSessionDetail(sessionId: string): Promise<PlatformSes
 export async function ensurePlatformEnvironment(
   name: string,
   httpsOriginUrl: string,
-  alreadyConfigured: boolean
+  alreadyConfigured: boolean,
+  orgId: string | null
 ): Promise<void> {
   if (alreadyConfigured) return;
-  const auth = requirePlatform();
+  const auth = requirePlatform(orgId);
   await sdkCreateEnvironment({
     ...auth,
     name,

@@ -357,6 +357,8 @@ export interface SkillView {
   updateAvailable: boolean;
   readiness: SkillReadiness;
   error: string | null;
+  /** Cloud turns place it in the sandbox too (the backend's `resolveTurnSkills`). */
+  cloud: boolean;
 }
 
 export interface PluginView {

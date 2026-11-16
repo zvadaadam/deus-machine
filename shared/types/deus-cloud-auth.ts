@@ -7,8 +7,10 @@ export interface DeusCloudSessionStatus {
   /** Human identity from deus-cloud /me; absent when that lookup failed. */
   accountName?: string | null;
   accountEmail?: string | null;
-  /** This device holds a minted agnt platform key (D1 handshake complete). */
+  /** This device holds a minted agnt platform key in at least one organization (D1 handshake). */
   hasPlatformKey: boolean;
+  /** The organizations this device holds a usable key for, the default one first. */
+  platformOrgIds?: string[];
   /**
    * Credentials exist on disk but the OS keyring cannot decrypt them right
    * now. Without this the UI shows a bare "not connected" for a transient

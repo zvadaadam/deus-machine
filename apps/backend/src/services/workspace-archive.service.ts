@@ -15,7 +15,10 @@ async function performArchive(workspaceId: string): Promise<void> {
   if (!workspace) throw new NotFoundError("Workspace not found");
   if (workspace.kind === "cloud" && workspace.provider_workspace_id) {
     // Confirm suspension before advertising the workspace as closed.
-    await pauseCloudWorkspace(workspace.provider_workspace_id);
+    await pauseCloudWorkspace({
+      ...workspace,
+      provider_workspace_id: workspace.provider_workspace_id,
+    });
   }
 
   db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(workspaceId);

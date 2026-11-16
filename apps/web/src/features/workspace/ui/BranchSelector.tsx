@@ -10,11 +10,14 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useRepoBranches } from "../api/workspace.queries";
+import { branchLabel } from "../lib/branchLabel";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { cn } from "@/shared/lib/utils";
 
 interface BranchSelectorProps {
   repoId: string | null;
+  /** The organization whose GitHub access lists a project with no folder here. */
+  organizationId?: string | null;
   currentBranch: string;
   onBranchSelect: (branch: string) => void;
   children: React.ReactNode;
@@ -27,6 +30,7 @@ interface BranchSelectorProps {
  */
 export function BranchSelector({
   repoId,
+  organizationId,
   currentBranch,
   onBranchSelect,
   children,
@@ -35,7 +39,10 @@ export function BranchSelector({
   const [search, setSearch] = useState("");
   const isMobile = useIsMobile();
   // Only fetch when open — avoids unnecessary WS requests on mount
-  const { data, isLoading, isError, error, refetch } = useRepoBranches(open ? repoId : null);
+  const { data, isLoading, isError, error, refetch } = useRepoBranches(
+    open ? repoId : null,
+    organizationId
+  );
 
   const branches = useMemo(() => {
     const raw = data?.branches ?? [];
@@ -99,7 +106,7 @@ export function BranchSelector({
           </p>
         ) : (
           filtered.map((branch) => {
-            const isLocalOnly = branch.is_local === true && branch.is_remote !== true;
+            const { prefix, localOnly: isLocalOnly } = branchLabel(branch);
             return (
               <button
                 key={branch.name}
@@ -114,14 +121,8 @@ export function BranchSelector({
                 )}
               >
                 <span className="truncate">
-                  {isLocalOnly ? (
-                    branch.name
-                  ) : (
-                    <>
-                      <span className="text-text-disabled">origin/</span>
-                      {branch.name}
-                    </>
-                  )}
+                  {prefix && <span className="text-text-disabled">{prefix}</span>}
+                  {branch.name}
                 </span>
                 {isLocalOnly && (
                   <span className="text-text-disabled text-2xs flex-shrink-0">local</span>

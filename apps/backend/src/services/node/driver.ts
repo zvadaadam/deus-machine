@@ -25,7 +25,12 @@ import type { FileMatch, FileTreeResponse } from "@shared/types/files";
 import { ValidationError } from "../../lib/errors";
 import * as gitService from "../git.service";
 import * as filesService from "../files.service";
-import { getCloudDiffSummary, getCloudDiffFile, requestCloudFs } from "../agent/cloud/driver";
+import {
+  getCloudDiffSummary,
+  getCloudDiffFile,
+  hasLiveCloudSession,
+  requestCloudFs,
+} from "../agent/cloud/driver";
 import {
   listCloudTree,
   invalidateCloudTree,
@@ -250,7 +255,22 @@ class RemoteNodeDriver implements NodeDriver {
     }
   }
 
+  /**
+   * The sidebar's numbers ask every ready workspace on mount and on focus. A
+   * `diff.request` to a computer whose agent is not connected makes the platform
+   * connect it, which resumes an idle-paused sandbox (AGNT `client-handler.ts`
+   * `sidecarConnected` → `WorkspaceDO.requestConnection` → `recoverSandbox`). So
+   * the numbers ask only a computer this backend already holds a channel to and
+   * that is not asleep; any other answers the empty shape without connecting.
+   */
   async diffStats(): Promise<DiffStats> {
+    const sessionId = this.workspace.current_session_id;
+    const asleep = ["paused", "stopped", "resuming", "error"].includes(
+      this.workspace.init_stage ?? ""
+    );
+    if (!sessionId || asleep || !hasLiveCloudSession(sessionId)) {
+      return { additions: 0, deletions: 0 };
+    }
     const summary = await this.summary();
     return (summary?.files ?? []).reduce(
       (acc, f) => ({

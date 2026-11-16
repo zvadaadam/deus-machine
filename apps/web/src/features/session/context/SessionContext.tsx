@@ -11,7 +11,10 @@ import type { Message, SessionStatus } from "../types";
 interface SessionContextValue {
   sessionStatus: SessionStatus;
   workspaceId: string | null;
+  /** The workspace's folder on this computer (rule 1, `localFolder`); null in a cloud chat. */
   workspacePath: string | null;
+  /** The chat's workspace runs in the cloud: its addresses and files are there (rule 2). */
+  cloud: boolean;
   /** Subagent child messages grouped by parent tool_use_id */
   subagentMessages: Map<string, Message[]>;
   /** True when rendering inside a subagent — prevents recursive nesting */
@@ -24,6 +27,7 @@ interface SessionProviderProps {
   sessionStatus: SessionStatus;
   workspaceId?: string | null;
   workspacePath?: string | null;
+  cloud?: boolean;
   subagentMessages: Map<string, Message[]>;
   insideSubagent?: boolean;
   children: ReactNode;
@@ -33,13 +37,21 @@ export function SessionProvider({
   sessionStatus,
   workspaceId = null,
   workspacePath = null,
+  cloud = false,
   subagentMessages,
   insideSubagent = false,
   children,
 }: SessionProviderProps) {
   const value = useMemo(
-    () => ({ sessionStatus, workspaceId, workspacePath, subagentMessages, insideSubagent }),
-    [sessionStatus, workspaceId, workspacePath, subagentMessages, insideSubagent]
+    () => ({
+      sessionStatus,
+      workspaceId,
+      workspacePath: workspacePath || null,
+      cloud,
+      subagentMessages,
+      insideSubagent,
+    }),
+    [sessionStatus, workspaceId, workspacePath, cloud, subagentMessages, insideSubagent]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

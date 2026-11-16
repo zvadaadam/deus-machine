@@ -1,7 +1,8 @@
 // The D1 provisioning handshake: after a Deus Cloud sign-in, turn the session
-// into a working platform credential — look up the org (auto-created at first
-// login), mint a per-device agnt API key (label = hostname, revocable), store
-// it in safeStorage, and hand it to the backend child process at runtime.
+// into working platform credentials — list the account's organizations (one is
+// auto-created at first login), keep or mint one per-device agnt API key in
+// each (label = hostname, revocable), store them in safeStorage, and hand them
+// to the backend child process at runtime.
 //
 // The mint call goes straight from Electron main to the agnt backend (no CORS
 // concerns outside a renderer); the deus-cloud session JWT is the credential.
@@ -9,11 +10,14 @@
 import { hostname } from "node:os";
 import { isSafeStorageAvailable } from "./safe-storage-file";
 import {
-  deleteCloudCredential,
+  deleteAllOrgKeys,
+  deleteOrgKey,
+  getOrgKey,
+  getOrgKeys,
   hasStoredCredentials,
-  getCloudCredential,
-  getCloudCredentialMeta,
-  setCloudCredential,
+  listOrgKeys,
+  orderOrgKeys,
+  setOrgKey,
 } from "./cloud-credentials";
 import {
   announceDeusCloudAuthChanged,
@@ -26,9 +30,10 @@ import { AGNT_LOCAL_URL, isLocalCloudEnv, resolveDeusCloudUrl } from "./deus-clo
 import { logMainProcess } from "./startup-diagnostics";
 
 /**
- * Last device-key provisioning failure for the signed-in account (main-process
- * memory only — it is a transient condition, cleared by a successful mint or
- * sign-out). Surfaced in Settings so the failure is recoverable in-app.
+ * The first device-key provisioning failure of the last run for the signed-in
+ * account (main-process memory only — it is a transient condition, cleared by a
+ * run in which every organization has its key, and by sign-out). Surfaced in
+ * Settings so the failure is recoverable in-app.
  */
 let platformKeyError: string | null = null;
 
@@ -90,7 +95,8 @@ export function parseOrgList(body: unknown): OrgRef[] {
   });
 }
 
-async function fetchFirstOrg(sessionToken: string, cloudUrl: string): Promise<OrgRef> {
+/** The account's organizations, in the platform's order. */
+async function fetchOrgs(sessionToken: string, cloudUrl: string): Promise<OrgRef[]> {
   const response = await fetch(`${cloudUrl}/orgs`, {
     headers: { authorization: `Bearer ${sessionToken}` },
     signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
@@ -99,11 +105,10 @@ async function fetchFirstOrg(sessionToken: string, cloudUrl: string): Promise<Or
     throw new Error(`org lookup failed (${response.status})`);
   }
   const orgs = parseOrgList(await response.json());
-  const first = orgs[0];
-  if (!first) {
+  if (orgs.length === 0) {
     throw new Error("no organization on this account — sign in again to auto-create one");
   }
-  return first;
+  return orgs;
 }
 
 interface MintedKey {
@@ -153,12 +158,10 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
     return false;
   }
 
-  const [apiKey, sessionToken, keyMeta] = await Promise.all([
-    getCloudCredential("agntApiKey"),
+  const [orgKeys, sessionToken] = await Promise.all([
+    getOrgKeys(),
     getStoredDeusCloudSessionToken().catch(() => null),
-    getCloudCredentialMeta("agntApiKey").catch(() => null),
   ]);
-  const orgId = keyMeta?.orgId ?? null;
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
@@ -169,13 +172,14 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
       },
       signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
       body: JSON.stringify({
-        apiKey: apiKey ?? null,
         // deus-cloud mint context: lets the backend request per-repo GitHub
         // App installation tokens at workspace-provision time. Session-token
         // auth — expiry just disables the mint until the next push.
         deusCloudUrl: resolveDeusCloudUrl(),
         deusCloudSessionToken: sessionToken,
-        orgId,
+        // One key per organization, in the platform's order: the first is
+        // the default organization.
+        orgKeys,
       }),
     });
     return response.ok;
@@ -201,57 +205,96 @@ async function deviceKeyStillValid(apiKey: string): Promise<boolean> {
   }
 }
 
-/**
- * Ensure this device holds a platform key for the signed-in account. Idempotent:
- */
-export async function ensureDeviceKey(sessionToken: string, cloudUrl: string): Promise<boolean> {
-  const existing = await getCloudCredential("agntApiKey");
-  if (existing) {
-    // A key can outlive its ACCOUNT, not just its validity: a 401-expired
-    // session clears only the session file, so signing into a different
-    // account would silently reuse the previous account's org key — B's
-    // workspaces running (and billing) in A's org. Ownership and validity
-    // are probed together; offline keeps the key (offline ≠ revoked), a
-    // foreign org drops the local copy (the platform copy needs the OTHER
-    // account's session to revoke — its dashboard can).
-    const [meta, org, valid] = await Promise.all([
-      getCloudCredentialMeta("agntApiKey").catch(() => null),
-      fetchFirstOrg(sessionToken, cloudUrl).catch(() => null),
-      deviceKeyStillValid(existing),
-    ]);
-    const foreign = Boolean(meta?.orgId && org?.id && meta.orgId !== org.id);
-    if (valid && !foreign) {
-      // Unknown ownership (org lookup failed) deliberately reuses: treating
-      // it as foreign would delete a good key on every same-account hiccup,
-      // and the probe re-runs at every startup, so a wrong reuse self-heals.
-      if (!org) logMainProcess("[deus-cloud] key ownership unverifiable (offline?) — reusing");
-      return true;
-    }
-    logMainProcess(
-      foreign
-        ? `[deus-cloud] stored device key belongs to org ${meta?.orgId} — re-minting for ${org?.id}`
-        : "[deus-cloud] stored device key rejected by platform — re-minting"
+/** Best-effort server-side revoke of one stored key (offline is fine). */
+async function revokeOnPlatform(
+  sessionToken: string,
+  key: { orgId: string; keyId?: string }
+): Promise<void> {
+  if (!key.keyId) return;
+  try {
+    await fetch(
+      `${resolveAgntBaseUrl()}/dashboard/orgs/${encodeURIComponent(key.orgId)}/api-keys/${encodeURIComponent(key.keyId)}`,
+      {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${sessionToken}` },
+        signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
+      }
     );
-    await deleteCloudCredential("agntApiKey");
+  } catch {
+    // Offline is fine — the key can be revoked from any signed-in device
+    // later; the local deletion still locks this device out.
   }
-
-  const org = await fetchFirstOrg(sessionToken, cloudUrl);
-  const agntBaseUrl = resolveAgntBaseUrl();
-  const minted = await mintDeviceKey(sessionToken, org.id, agntBaseUrl);
-  await setCloudCredential("agntApiKey", minted.key, {
-    keyId: minted.id,
-    orgId: org.id,
-    label: minted.label,
-  });
-  logMainProcess(`[deus-cloud] device key minted (org ${org.id}, label "${minted.label}")`);
-  return true;
 }
 
-/** Post-login hook: mint if needed, then hand credentials to the backend. */
+/** Keep this organization's stored key if it still works; otherwise mint one. */
+async function ensureOrgKey(sessionToken: string, orgId: string): Promise<void> {
+  const existing = await getOrgKey(orgId);
+  // ONLY an explicit 401/403 counts as revoked: offline keeps the key.
+  if (existing && (await deviceKeyStillValid(existing))) return;
+  if (existing) {
+    logMainProcess(`[deus-cloud] device key for org ${orgId} rejected by platform — re-minting`);
+    await deleteOrgKey(orgId);
+  }
+  const minted = await mintDeviceKey(sessionToken, orgId, resolveAgntBaseUrl());
+  await setOrgKey(orgId, minted.key, { keyId: minted.id, label: minted.label });
+  logMainProcess(`[deus-cloud] device key minted (org ${orgId}, label "${minted.label}")`);
+}
+
+/**
+ * Ensure this device holds a platform key in every organization of the
+ * signed-in account. Idempotent: a stored key that still works is kept, a
+ * missing or revoked one is minted. One organization failing does not stop the
+ * others. A key for an organization the account no longer lists (it left, or
+ * this is a different account than the one that minted it) is revoked if
+ * possible and deleted locally. The list's ORDER decides only which
+ * organization is the default; no key is dropped or minted because it changed.
+ *
+ * Returns the first failure, or null when every organization has its key.
+ * Throws only when the organization list itself cannot be read and nothing is
+ * stored: with stored keys, an unreadable list keeps them (offline ≠ revoked;
+ * the probe re-runs at every startup, so a wrong reuse self-heals).
+ */
+export async function ensureDeviceKeys(
+  sessionToken: string,
+  cloudUrl: string
+): Promise<string | null> {
+  let orgs: OrgRef[];
+  try {
+    orgs = await fetchOrgs(sessionToken, cloudUrl);
+  } catch (error) {
+    if ((await listOrgKeys()).length === 0) throw error;
+    logMainProcess("[deus-cloud] organization list unavailable (offline?) — reusing stored keys");
+    return null;
+  }
+  const listed = new Set(orgs.map((org) => org.id));
+  for (const stored of await listOrgKeys()) {
+    if (listed.has(stored.orgId)) continue;
+    logMainProcess(
+      `[deus-cloud] org ${stored.orgId} is no longer on this account — retiring its key`
+    );
+    await revokeOnPlatform(sessionToken, stored);
+    await deleteOrgKey(stored.orgId);
+  }
+  const failures = await Promise.all(
+    orgs.map(async (org) => {
+      try {
+        await ensureOrgKey(sessionToken, org.id);
+        return null;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logMainProcess(`[deus-cloud] device key provisioning failed for org ${org.id}: ${message}`);
+        return orgs.length > 1 ? `${org.name ?? org.id}: ${message}` : message;
+      }
+    })
+  );
+  await orderOrgKeys(orgs.map((org) => org.id));
+  return failures.find((failure) => failure !== null) ?? null;
+}
+
+/** Post-login hook: keep or mint each organization's key, then hand credentials to the backend. */
 export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
   try {
-    await ensureDeviceKey(sessionToken, cloudUrl);
-    setPlatformKeyError(null);
+    setPlatformKeyError(await ensureDeviceKeys(sessionToken, cloudUrl));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Remembered, not just logged: this runs after login already reported
@@ -311,7 +354,7 @@ export function provisionAtStartup(
   // locally and push the cleared credentials (no session left to revoke the
   // platform copy — the dashboard can, and the next sign-in re-mints).
   setSessionRevokedHandler(async () => {
-    await revokeDeviceKey(null).catch(() => {});
+    await revokeDeviceKeys(null).catch(() => {});
     // The 401 can fire from ANY session read (a github-app status poll, a
     // credentials push) — announce, or renderers keep "signed in" until a
     // remount while the cloud lane is already gone.
@@ -333,24 +376,17 @@ export function provisionAtStartup(
 }
 
 /**
- * Sign-out: best-effort revoke of THIS device's key server-side, then local
- * deletion + backend clear. Called with the session token BEFORE the session
- * file is cleared.
+ * Sign-out: best-effort revoke of THIS device's keys server-side (every
+ * organization), then local deletion + backend clear. Called with the session
+ * token BEFORE the session file is cleared. The provisioning error belongs to
+ * the account that left, so it goes too.
  */
-export async function revokeDeviceKey(sessionToken: string | null): Promise<void> {
-  const meta = await getCloudCredentialMeta("agntApiKey");
-  if (sessionToken && meta?.keyId && meta.orgId) {
-    try {
-      await fetch(`${resolveAgntBaseUrl()}/dashboard/orgs/${meta.orgId}/api-keys/${meta.keyId}`, {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${sessionToken}` },
-        signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
-      });
-    } catch {
-      // Offline sign-out is fine — the key can be revoked from any signed-in
-      // device later; local deletion below still locks this device out.
-    }
+export async function revokeDeviceKeys(sessionToken: string | null): Promise<void> {
+  const keys = await listOrgKeys().catch(() => []);
+  if (sessionToken) {
+    await Promise.all(keys.map((key) => revokeOnPlatform(sessionToken, key)));
   }
-  await deleteCloudCredential("agntApiKey");
+  await deleteAllOrgKeys();
+  setPlatformKeyError(null);
   await pushCloudCredentialsToBackend();
 }

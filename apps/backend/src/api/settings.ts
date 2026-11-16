@@ -13,6 +13,7 @@ import { invalidateRemoteGateCache } from "../middleware/remote-gate";
 import { computeWorkspacePath } from "../middleware/workspace-loader";
 import { getLocalAgents } from "../services/agent";
 import { getCloudModelLists } from "../services/agent/cloud/models";
+import { getCloudOrganizations } from "../services/cloud-settings.service";
 import {
   deleteAgent,
   deleteCommand,
@@ -135,6 +136,8 @@ export default [
     });
     return lists ? { configured: true, lists } : { configured: false, lists: [] };
   }),
+
+  handle(api.cloudOrganizations, () => getCloudOrganizations()),
 
   handle(api.agentPrepareClis, () => getLocalAgents().prepareClis()),
   handle(api.agentSignIn, ({ harness, method, apiKey }) =>

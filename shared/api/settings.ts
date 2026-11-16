@@ -9,6 +9,7 @@ import {
   type HarnessAuth,
 } from "../agent-auth";
 import type { CloudModelCatalog } from "../cloud-models";
+import type { CloudOrganizations } from "../types/environment-secrets";
 import type { AgentModelsAnswer } from "../models";
 import {
   HooksMapSchema,
@@ -16,7 +17,7 @@ import {
   type AgentConfigSection,
 } from "../types/agent-config";
 import type { Settings } from "../types/settings";
-import { out, read, write } from "./op";
+import { live, out, read, write } from "./op";
 import { stream } from "./stream";
 import type { HarnessCliProgress } from "@zvada/agent-server/protocol";
 
@@ -129,6 +130,16 @@ export const agentModels = read({
 
 /** The models Deus Cloud runs, as the platform lists them; none without a cloud account. */
 export const cloudModels = read({ name: "cloudModels", output: out<CloudModelCatalog>() });
+
+/**
+ * This backend's cloud: whether it can act there, the account's organizations
+ * (each marked `ready` when this computer can act in it) and the default one.
+ * Signed out, none. Sent again whenever it changes.
+ */
+export const cloudOrganizations = live({
+  name: "cloudOrganizations",
+  output: out<CloudOrganizations>(),
+});
 
 /** Install the agents' CLIs now. Answers at once; progress arrives on `agentCliProgress`. */
 export const agentPrepareClis = write({ name: "agentPrepareClis", output: out<void>() });

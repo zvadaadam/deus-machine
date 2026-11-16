@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   announce: vi.fn(),
   connect: vi.fn(),
   live: vi.fn(),
+  secret: vi.fn(),
   workspace: { state: "ready", init_stage: null as string | null },
 }));
 vi.mock("@deus-hq/sdk", async (original) => ({
@@ -18,12 +19,12 @@ vi.mock("@deus-hq/sdk", async (original) => ({
   getWorkspace: mocks.get,
   resumeWorkspace: mocks.resume,
   createWorkspace: mocks.create,
+  createSecret: mocks.secret,
   listSecrets: async function* () {},
 }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({
-  getCloudConfig: mocks.config,
-  setCloudConnectHook: vi.fn(),
-}));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(mocks.config)
+);
 vi.mock("../../../src/services/agent/cloud/driver", () => ({
   announceCloudEnv: mocks.announce,
   ensureCloudSession: mocks.connect,
@@ -55,9 +56,11 @@ import {
   refreshWorkspaceGithubToken,
   wakeCloudWorkspaceWithFeedback,
 } from "../../../src/services/cloud-workspace-init.service";
+import { forgetGithubAnswers } from "../../../src/services/github-remote";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  forgetGithubAnswers();
   mocks.workspace = { state: "ready", init_stage: null };
   clearGithubTokenRefreshFlights();
   mocks.config.mockReturnValue({ apiKey: "test", baseUrl: "https://cloud.test" });
@@ -188,4 +191,96 @@ describe("cloud credential provenance", () => {
       expect(mocks.create.mock.calls[0][0].repositoryAuth).toBeUndefined();
     }
   );
+});
+
+describe("organizations", () => {
+  const ORGS = {
+    baseUrl: "https://cloud.test",
+    deusCloudUrl: "https://deus.test",
+    deusCloudSessionToken: "session",
+    orgKeys: { org_a: "key_a", org_b: "key_b" },
+  };
+
+  it("wakes a workspace with its own organization's key, and a row with none with the default's", async () => {
+    mocks.config.mockReturnValue(ORGS);
+    mocks.get.mockResolvedValue({ status: "paused" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 }))
+    );
+    try {
+      await wakeCloudWorkspaceWithFeedback({
+        id: "ws",
+        provider_workspace_id: "vm_b",
+        current_session_id: "session",
+        organization_id: "org_b",
+      });
+      await wakeCloudWorkspaceWithFeedback({
+        id: "ws",
+        provider_workspace_id: "vm_old",
+        current_session_id: "session",
+        organization_id: null,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(mocks.get.mock.calls.map(([id, auth]) => [id, auth.apiKey])).toEqual([
+      ["vm_b", "key_b"],
+      ["vm_old", "key_a"],
+    ]);
+    expect(mocks.resume.mock.calls.map(([id, auth]) => [id, auth.apiKey])).toEqual([
+      ["vm_b", "key_b"],
+      ["vm_old", "key_a"],
+    ]);
+  });
+
+  it("asks the GitHub mint for each workspace's organization, never sharing a flight across them", async () => {
+    mocks.config.mockReturnValue(ORGS);
+    mocks.environment.mockResolvedValue({
+      configured: true,
+      environmentId: "env",
+      name: "repo-env",
+    });
+    const minted: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        minted.push(String(url));
+        await gate;
+        return Response.json({ token: `ghs_${minted.length}` });
+      })
+    );
+    try {
+      const a = refreshWorkspaceGithubToken({
+        repository_id: "repo",
+        provider_workspace_id: "vm_a",
+        organization_id: "org_a",
+      });
+      const b = refreshWorkspaceGithubToken({
+        repository_id: "repo",
+        provider_workspace_id: "vm_b",
+        organization_id: "org_b",
+      });
+      await vi.waitFor(() => expect(minted).toHaveLength(2));
+      release();
+      await Promise.all([a, b]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(minted.sort()).toEqual([
+      "https://deus.test/orgs/org_a/github/installation-token",
+      "https://deus.test/orgs/org_b/github/installation-token",
+    ]);
+    // Each organization's environment secret is written with its own key.
+    expect(mocks.secret.mock.calls.map(([, , auth]) => auth.apiKey).sort()).toEqual([
+      "key_a",
+      "key_b",
+    ]);
+    expect(mocks.environment.mock.calls.map(([, orgId]) => orgId).sort()).toEqual([
+      "org_a",
+      "org_b",
+    ]);
+  });
 });

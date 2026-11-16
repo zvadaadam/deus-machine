@@ -14,7 +14,7 @@ const { mockListModels, mockGetCloudConfig, mockIdentity } = vi.hoisted(() => ({
 
 vi.mock("@deus-hq/sdk", () => ({ listModels: mockListModels }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
-  getCloudConfig: mockGetCloudConfig,
+  cloudOrg: mockGetCloudConfig,
   getCloudConnectionIdentity: mockIdentity,
 }));
 
@@ -79,6 +79,15 @@ describe("getCloudModelLists", () => {
     vi.advanceTimersByTime(2 * MINUTE);
     await expect(getCloudModelLists()).resolves.toEqual(lists("Opus 6"));
     expect(mockListModels).toHaveBeenCalledTimes(2);
+  });
+
+  it("is the same list in every organization: kept per account, not per organization key", async () => {
+    mockListModels.mockResolvedValue(lists("Opus 5.5"));
+    mockGetCloudConfig.mockReturnValue({ ...CONFIG, orgId: "org_a", apiKey: "key_a" });
+    await getCloudModelLists();
+    mockGetCloudConfig.mockReturnValue({ ...CONFIG, orgId: "org_b", apiKey: "key_b" });
+    await getCloudModelLists();
+    expect(mockListModels).toHaveBeenCalledTimes(1);
   });
 
   it("shares one read between callers that ask at once", async () => {

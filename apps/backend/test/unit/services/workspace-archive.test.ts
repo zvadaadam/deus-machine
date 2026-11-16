@@ -44,7 +44,11 @@ describe("workspace archive", () => {
       })
     );
     const archiving = archiveWorkspace("workspace");
-    await vi.waitFor(() => expect(mocks.pause).toHaveBeenCalledWith("cloud-vm"));
+    await vi.waitFor(() =>
+      expect(mocks.pause).toHaveBeenCalledWith(
+        expect.objectContaining({ provider_workspace_id: "cloud-vm" })
+      )
+    );
     expect(mocks.run).not.toHaveBeenCalled();
     resume();
     await archiving;

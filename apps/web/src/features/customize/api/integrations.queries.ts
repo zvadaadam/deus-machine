@@ -34,13 +34,13 @@ export const integrationKeys = {
 
 const ON_DEMAND = { staleTime: Infinity, refetchOnWindowFocus: false } as const;
 
-export function useIntegrations(): {
+export function useIntegrations({ enabled: wanted = true }: { enabled?: boolean } = {}): {
   data: IntegrationsSnapshot | undefined;
   isLoading: boolean;
   error: Error | null;
 } {
   // Installs live on the Mac backend; web-direct has none to read.
-  const enabled = !isCloudDirectWebMode();
+  const enabled = wanted && !isCloudDirectWebMode();
   useQuerySubscription(api.integrations, { queryKey: integrationKeys.state, params: {}, enabled });
   const state = useQuery({
     queryKey: integrationKeys.state,

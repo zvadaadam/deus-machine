@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import routes from "../../../src/routes/environment-secrets";
 import { errorHandler } from "../../../src/middleware/error-handler";
-import { getCloudWorkspaceUserId } from "../../../src/services/cloud-settings.service";
+import {
+  getCloudWorkspaceUserId,
+  resetCloudOrganizationsForTests,
+} from "../../../src/services/cloud-settings.service";
 import {
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
@@ -12,6 +15,7 @@ const fetchMock = vi.fn();
 const metadata = { account_id: "alice", items: [{ id: "org", name: "Org" }] };
 beforeEach(() => {
   resetCloudConfigForTests();
+  resetCloudOrganizationsForTests();
   setCloudRuntimeCredentials({
     baseUrl: "https://platform.test",
     deusCloudUrl: "https://product.test",
@@ -36,7 +40,6 @@ describe("application secret forwarding", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       accountId: "alice",
-      currentOrganizationId: "org",
       items: [{ id: "org", name: "Org" }],
     });
     expect(fetchMock.mock.calls[0][0]).toBe("https://platform.test/dashboard/orgs");
@@ -46,10 +49,18 @@ describe("application secret forwarding", () => {
     });
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
-  it("derives workspace personal scope from the verified account and checks the active org", async () => {
-    expect(await getCloudWorkspaceUserId()).toBe("alice");
-    setCloudRuntimeCredentials({ orgId: "foreign" });
-    await expect(getCloudWorkspaceUserId()).rejects.toThrow("organization changed");
+  it("derives workspace personal scope from the verified account and checks the org it is given", async () => {
+    expect(await getCloudWorkspaceUserId("org")).toBe("alice");
+    await expect(getCloudWorkspaceUserId("foreign")).rejects.toThrow("organization changed");
+    await expect(getCloudWorkspaceUserId(null)).rejects.toThrow("organization changed");
+  });
+  it("passes the platform's list through, marking no organization current", async () => {
+    setCloudRuntimeCredentials({ orgKeys: { second: "key_2", org: "key_1" } });
+    const response = await app.request("/api/settings/environment-secrets/orgs");
+    expect(await response.json()).toEqual({
+      accountId: "alice",
+      items: [{ id: "org", name: "Org" }],
+    });
   });
   it("requires a human session to manage secrets", async () => {
     setCloudRuntimeCredentials({ deusCloudSessionToken: null });

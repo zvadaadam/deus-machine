@@ -14,6 +14,7 @@
 
 import type { RepoGroup, Workspace } from "@shared/types/workspace";
 import type { Session } from "@shared/types/session";
+import type { CloudOrganizations } from "@shared/types/environment-secrets";
 import type { SessionStatus, WorkspaceState } from "@shared/enums";
 import { toast } from "sonner";
 import { setQueryRequestInterceptor } from "@/platform/ws";
@@ -45,6 +46,8 @@ interface AgntSession {
   harness?: string | null;
   created_at: string;
   updated_at: string;
+  /** The organization it was listed under (set here, not on the wire). */
+  organization_id?: string;
 }
 
 const KNOWN_HARNESSES = new Set(["claude-code", "codex-sdk", "codex-app-server"]);
@@ -110,7 +113,7 @@ async function fetchAllCloudSessions(): Promise<AgntSession[]> {
           `[cloudDataAdapter] org ${org.id} has more sessions than the server cap (has_more) — older ones are not listed`
         );
       }
-      return page.items ?? [];
+      return (page.items ?? []).map((item) => ({ ...item, organization_id: org.id }));
     })
   );
   // One org failing must not blank the others. An auth failure is not "one
@@ -138,6 +141,31 @@ async function fetchAllCloudSessions(): Promise<AgntSession[]> {
     toast.error("Couldn't load sessions for one of your organizations");
   }
   return sessions;
+}
+
+/**
+ * The account's organizations, as the hosted web has them: the platform's own list,
+ * each ready (this browser acts in each with the person's session), the first the
+ * default. The same value a backend pushes (`cloudOrganizations`).
+ */
+async function fetchCloudOrganizations(): Promise<CloudOrganizations> {
+  const bearer = await readWebCloudSessionBearer();
+  if (!bearer) throw new CloudSessionExpiredError();
+  const orgs = await dashboardGet<
+    DashboardList<{ id: string; name?: string; role?: string }> & { account_id?: string }
+  >("/dashboard/orgs", bearer);
+  const items = (orgs.items ?? []).map((org) => ({
+    id: org.id,
+    name: org.name ?? "",
+    role: org.role ?? "member",
+    ready: true,
+  }));
+  return {
+    available: true,
+    accountId: orgs.account_id ?? null,
+    defaultOrganizationId: items[0]?.id ?? null,
+    items,
+  };
 }
 
 // A short in-flight cache so the near-simultaneous "workspaces" (sidebar) and
@@ -224,6 +252,7 @@ function toWorkspace(s: AgntSession, owner: QueryClient): Workspace {
     git_target_branch: null,
     kind: "cloud",
     provider_workspace_id: s.workspace_id,
+    organization_id: s.organization_id ?? null,
     state: mapWorkspaceState(s.workspace_status),
     status: "in-progress",
     current_session_id: s.id,
@@ -334,6 +363,8 @@ export function cloudDataRequestInterceptor(
         owner
       );
     }
+    case "cloudOrganizations":
+      return withAuthGuard(fetchCloudOrganizations(), owner);
     case "settings":
       // The shell gates on this q: read; there is no local settings store in
       // web-direct, and the user already onboarded (they signed into Deus Cloud).
@@ -376,6 +407,7 @@ function startDiscoveryRefresh(runtime: RuntimeClient): void {
   const refreshDiscovery = () => {
     void runtime.queryClient.invalidateQueries({ queryKey: ["workspaces"] });
     void runtime.queryClient.invalidateQueries({ queryKey: ["sessions", "by-workspace"] });
+    void runtime.queryClient.invalidateQueries({ queryKey: ["cloudOrganizations"] });
   };
   // Hidden tabs skip the tick (a backgrounded tab shouldn't poll agnt all
   // day); regaining visibility refreshes immediately, so returning to the tab

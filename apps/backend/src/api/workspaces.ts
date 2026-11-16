@@ -7,7 +7,7 @@ import * as api from "@shared/api/workspaces";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
 import { getDatabase } from "../lib/database";
-import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { groupWorkspacesByRepo, toWorkspace } from "../lib/workspace-grouping";
 import { loadWorkspace } from "../middleware/workspace-loader";
 import {
@@ -17,7 +17,7 @@ import {
   getWorkspaceRaw,
   getWorkspacesByRepo,
 } from "../db";
-import { getCloudConfig } from "../services/agent/cloud/config";
+import { cloudAccount } from "../services/agent/cloud/config";
 import { ensureCloudSession } from "../services/agent/cloud/driver";
 import {
   createCloudWorkspace,
@@ -69,7 +69,7 @@ async function createWorkspace(
   // workspace.state events through the cloud driver.
   if (input.location === "cloud") {
     // Signed out is a state the person can fix, not a server fault.
-    if (!getCloudConfig()) {
+    if (!cloudAccount()) {
       throw new ValidationError(
         "Sign in to Deus Cloud to create cloud workspaces (Settings → Cloud)."
       );
@@ -77,6 +77,7 @@ async function createWorkspace(
     return createCloudWorkspace({
       repositoryId: input.repository_id,
       sourceBranch: input.source_branch,
+      organizationId: input.organization_id,
     });
   }
 
@@ -84,9 +85,15 @@ async function createWorkspace(
   // (services/workspace-init) fetches origin, makes the worktree, runs setup
   // and opens the first chat; each stage and any failure reaches clients on
   // `workspaces`, and a failure can be retried on this same row.
+  const rootPath = repo.root_path;
+  if (!rootPath) {
+    throw new ConflictError(
+      `${repo.name} is not on this computer, so it can only run in the cloud. Turn on Cloud, or open its folder on this Mac first.`
+    );
+  }
   const sourceBranch = input.source_branch || repo.git_default_branch || "main";
   const workspaceId = uuidv7();
-  const { slug, branchName } = await pickWorkspaceName(repo.root_path!);
+  const { slug, branchName } = await pickWorkspaceName(rootPath);
 
   db.prepare(
     `INSERT INTO workspaces (
@@ -108,8 +115,8 @@ async function createWorkspace(
   // Not awaited, and it never rejects: the pipeline records its own failure.
   void initializeWorkspace({
     workspaceId,
-    repoRootPath: repo.root_path!,
-    workspacePath: path.join(repo.root_path!, ".deus", slug),
+    repoRootPath: rootPath,
+    workspacePath: path.join(rootPath, ".deus", slug),
     branchName,
     sourceBranch,
     repoOriginUrl: repo.git_origin_url,

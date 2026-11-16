@@ -8,7 +8,7 @@ vi.mock("@deus-hq/sdk", () => ({
   updateEnvironment: (...args: unknown[]) => mockUpdateEnvironment(...args),
 }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
-  getCloudConfig: () => ({ baseUrl: "http://agnt.test", apiKey: "agnt_sk_test_x" }),
+  cloudOrg: () => ({ orgId: "org", baseUrl: "http://agnt.test", apiKey: "agnt_sk_test_x" }),
 }));
 
 import {
@@ -69,7 +69,7 @@ describe("getCloudEnvironmentInfo — saved project validation", () => {
 
 describe("enableCloudEnvironmentSimulator", () => {
   it("merges `simulator: true` into the saved environment's config on the platform", async () => {
-    await enableCloudEnvironmentSimulator("env-1");
+    await enableCloudEnvironmentSimulator("env-1", "org");
     expect(mockUpdateEnvironment).toHaveBeenCalledWith("env-1", {
       config: { simulator: true },
       baseUrl: "http://agnt.test",

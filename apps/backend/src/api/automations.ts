@@ -32,6 +32,8 @@ export default [
   handle(api.runAutomationNow, async ({ automationId }) => ({
     runId: await runAutomationNow(automationId),
   })),
-  handle(api.refreshAutomations, ({ automationId }) => refreshAutomations(automationId)),
+  handle(api.refreshAutomations, ({ automationId, organizationId }) =>
+    refreshAutomations(automationId, organizationId)
+  ),
   handle(api.openAutomationRun, ({ runId }) => openAutomationRun(runId)),
 ];

@@ -193,6 +193,20 @@ describe("createWorkspace", () => {
     });
   });
 
+  it("refuses a local workspace for a project that is not on this computer", async () => {
+    mockStmt.get.mockReturnValueOnce({ ...MOCK_REPO, name: "cloudy", root_path: null });
+
+    await expect(create()).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("cloudy is not on this computer"),
+    });
+    expect(mockInitializeWorkspace).not.toHaveBeenCalled();
+    expect(mockExecFileAsync).not.toHaveBeenCalled();
+    expect(
+      mockDb.prepare.mock.calls.some(([sql]) => String(sql).includes("INSERT INTO workspaces"))
+    ).toBe(false);
+  });
+
   it("answers with the new workspace's id and tells subscribers", async () => {
     mockStmt.get.mockReturnValueOnce(MOCK_REPO);
 

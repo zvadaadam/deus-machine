@@ -2,7 +2,8 @@
 // real web app against the real backend. An isolated database holds one local and
 // one cloud workspace in the same repository; the cloud is the scripted platform
 // (./cloud/platform.mjs), so the backend is signed in to Deus Cloud and opening the
-// cloud workspace attaches its session. No sandbox, no model call.
+// cloud workspace attaches its session. Then the backend is signed out, as the desktop
+// app signs it out, and in again. No sandbox, no model call.
 // Run: node --import tsx test/e2e/workspace-location.browser.mjs
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
@@ -13,7 +14,7 @@ import Database from "better-sqlite3";
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { SCHEMA_SQL } from "../../shared/schema.ts";
-import { startPlatform, until } from "./cloud/platform.mjs";
+import { pause, startPlatform, until } from "./cloud/platform.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const screenshots = path.join(root, ".context/workspace-location");
@@ -30,16 +31,21 @@ const PROVIDER = "ses_location_smoke";
 const PROVIDER_WORKSPACE = "wsp_location_smoke";
 const LOCAL_TITLE = "Local location smoke";
 const CLOUD_TITLE = "Cloud location smoke";
+const ORG = "org_smoke";
+// The header names the cloud by its organization.
+const ORG_NAME = "Smoke Labs";
 
 // ---- The scripted platform: the cloud workspace's session -----------------------
 const platform = await startPlatform({
   bearer: "bearer-smoke",
   sessions: [PROVIDER],
+  org: ORG,
+  orgName: ORG_NAME,
   snapshot: (id) => ({
     type: "session.snapshot",
     state: {
       sessionId: id,
-      organizationId: "org_smoke",
+      organizationId: ORG,
       workspaceId: PROVIDER_WORKSPACE,
       status: "ready",
       sandboxUrlTemplate: "https://{{port}}-smoke.sandbox.test",
@@ -91,6 +97,9 @@ await writeFile(
 const env = { ...process.env };
 delete env.DEUS_CLOUD_URL;
 delete env.DEUS_CLOUD_ENV;
+// The platform key arrives the way the desktop app hands it over, so it can be taken away.
+delete env.AGNT_API_KEY;
+delete env.DEUS_CLOUD_AGNT_API_KEY;
 const log = createWriteStream(path.join(directory, "backend.log"));
 const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/server.ts"], {
   cwd: root,
@@ -102,8 +111,6 @@ const child = spawn(process.execPath, ["--import", "tsx", "apps/backend/src/serv
     TSX_TSCONFIG_PATH: path.join(root, "apps/backend/tsconfig.json"),
     AGNT_BASE_URL: platform.url,
     DEUS_CLOUD_AGNT_URL: platform.url,
-    AGNT_API_KEY: "agnt_sk_smoke",
-    DEUS_CLOUD_AGNT_API_KEY: "agnt_sk_smoke",
     AUTH_TOKEN: "desktop-smoke-token",
   },
 });
@@ -126,13 +133,18 @@ try {
       }
     });
   });
-  // What the desktop app does after sign-in: hand the backend the account's session.
-  const handed = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
-    method: "POST",
-    headers: { authorization: "Bearer desktop-smoke-token", "content-type": "application/json" },
-    body: JSON.stringify({ deusCloudSessionToken: "bearer-smoke" }),
-  });
-  assert.equal(handed.status, 200, await handed.text());
+  // What the desktop app hands the backend after sign-in (this computer's platform key and
+  // the account's session), and after sign-out (nothing).
+  const handCredentials = async (credentials) => {
+    const handed = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
+      method: "POST",
+      headers: { authorization: "Bearer desktop-smoke-token", "content-type": "application/json" },
+      body: JSON.stringify(credentials),
+    });
+    assert.equal(handed.status, 200, await handed.text());
+  };
+  const SIGNED_IN = { apiKey: "agnt_sk_smoke", deusCloudSessionToken: "bearer-smoke" };
+  await handCredentials(SIGNED_IN);
 
   vite = await createServer({
     configFile: path.join(root, "apps/web/vite.config.ts"),
@@ -156,17 +168,25 @@ try {
   const settled = () =>
     menu.evaluate((e) => Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished)));
   const lists = async (title) => (await sidebar.getByText(title, { exact: true }).count()) > 0;
+  const headerLabel = async () => (await header.innerText()).trim().split("\n").at(-1);
   const showing = async (location) => {
     const [shown, hidden] =
       location === "cloud" ? [CLOUD_TITLE, LOCAL_TITLE] : [LOCAL_TITLE, CLOUD_TITLE];
     await sidebar.getByText(shown, { exact: true }).waitFor();
     await sidebar.getByText(hidden, { exact: true }).waitFor({ state: "detached" });
     assert.equal(await lists(hidden), false, `${hidden} is not listed in ${location}`);
-    const label = (await header.innerText()).trim().split("\n").at(-1);
-    if (location === "cloud") assert.equal(label, "Deus Cloud");
-    else assert.notEqual(label, "Deus Cloud");
+    // In the cloud the header reads the organization's name once its list arrives.
+    if (location === "cloud") {
+      await until("the organization's name in the header", async () => {
+        return (await headerLabel()) === ORG_NAME;
+      });
+    }
+    const label = await headerLabel();
+    if (location === "local") assert.ok(![ORG_NAME, "Deus Cloud"].includes(label), label);
     return label;
   };
+  const storedLocation = () =>
+    page.evaluate(() => JSON.parse(localStorage.getItem("sidebar-storage")).state.location);
   const selected = () =>
     page.evaluate(async () => {
       const { useWorkspaceStore } = await import("/src/features/workspace/store/workspaceStore.ts");
@@ -184,10 +204,10 @@ try {
   const computer = await showing("local");
   check("the default view lists the local workspace and not the cloud one", { header: computer });
 
-  // 2. The menu: both locations, the check on the current one.
+  // 2. The menu: both locations, the check on the current one, the cloud by its name.
   await header.click();
   await menu.waitFor();
-  await row("Deus Cloud").waitFor();
+  await row(ORG_NAME).waitFor();
   const items = await menu
     .getByRole("menuitem")
     .evaluateAll((es) =>
@@ -196,7 +216,10 @@ try {
   const current = items.filter(([, mark]) => mark === "true").map(([lines]) => lines);
   assert.equal(current.length, 1, "one row is checked");
   assert.ok(current[0].includes(computer), "the check is on this computer");
-  assert.ok(items.some(([lines]) => lines.includes("Deus Cloud")));
+  assert.ok(
+    items.some(([lines]) => lines.includes(ORG_NAME)),
+    "the cloud row names the org"
+  );
   assert.ok(items.some(([lines]) => lines.includes("Your computers")));
   assert.ok(items.some(([lines]) => lines.includes("Settings")));
   assert.equal(await menu.getByText("Not signed in").count(), 0, "signed in to Deus Cloud");
@@ -206,18 +229,19 @@ try {
     rows: items.map(([lines]) => lines.join(" ")),
   });
 
-  // 3. Choosing Deus Cloud.
-  await row("Deus Cloud").click();
+  // 3. Choosing the cloud.
+  await row(ORG_NAME).click();
   await showing("cloud");
   await header.click();
   await menu.waitFor();
-  assert.equal(await row("Deus Cloud").getAttribute("aria-current"), "true");
+  assert.equal(await row(ORG_NAME).getAttribute("aria-current"), "true");
   await settled();
   await page.screenshot({ path: path.join(screenshots, "menu-cloud.png") });
   await page.keyboard.press("Escape");
   await menu.waitFor({ state: "detached" });
   check(
-    "choosing Deus Cloud lists the cloud workspace, not the local one, and the header reads it"
+    "choosing the cloud lists the cloud workspace, not the local one, and the header and the row name its organization",
+    { header: ORG_NAME }
   );
 
   // 4. The shortcuts.
@@ -287,7 +311,7 @@ try {
     .getByRole("button", { name: /switch where workspaces run/ });
   await mobileHeader.click();
   await menu.waitFor();
-  await row("Deus Cloud").waitFor();
+  await row(ORG_NAME).waitFor();
   await settled();
   await page.screenshot({ path: path.join(screenshots, "menu-mobile.png") });
   await row(computer).click();
@@ -298,6 +322,50 @@ try {
     async () => (await toggle.getAttribute("aria-checked")) === "false"
   );
   check("the Home composer follows the window back to local");
+
+  // 10. Signed out: a cloud this computer cannot reach is not where a window sits. The
+  //     choice stays the cloud; the window shows this computer. This browser cannot sign
+  //     the computer in (only its desktop app can), so the cloud row cannot be chosen.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base}s/local/`);
+  await header.waitFor();
+  await page.keyboard.press("Control+2");
+  await showing("cloud");
+  await handCredentials({ apiKey: null, deusCloudSessionToken: null });
+  await page.reload();
+  await header.waitFor();
+  await showing("local");
+  await until("the computer's name", async () => (await headerLabel()) === computer);
+  assert.equal(await storedLocation(), "cloud", "the stored choice is kept");
+  await header.click();
+  await menu.waitFor();
+  const cloudRow = row("Deus Cloud");
+  await cloudRow.getByText("Not signed in").waitFor();
+  assert.equal(await cloudRow.getAttribute("aria-disabled"), "true", "the cloud row is disabled");
+  assert.equal(await cloudRow.getAttribute("aria-current"), null, "the cloud row is not checked");
+  assert.equal(await row(computer).getAttribute("aria-current"), "true");
+  assert.equal(await menu.getByText(ORG_NAME).count(), 0, "no organization is named");
+  await settled();
+  await page.screenshot({ path: path.join(screenshots, "menu-signed-out.png") });
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "detached" });
+  // Ctrl+2 does what the row does: here, nothing.
+  await page.keyboard.press("Control+2");
+  await pause(500);
+  await showing("local");
+  assert.equal(await storedLocation(), "cloud");
+  assert.equal(await toggle.getAttribute("aria-checked"), "false", "the composer is local");
+  check(
+    "signed out, a window stored in the cloud opens on this computer; the cloud row reads Not signed in, disabled, and Ctrl+2 does nothing",
+    { header: computer }
+  );
+
+  // 11. Signed in again, the window returns to the cloud by itself.
+  await handCredentials(SIGNED_IN);
+  await page.reload();
+  await header.waitFor();
+  await showing("cloud");
+  check("signed in again, a reload shows the cloud it was left in");
 
   assert.deepEqual(errors, [], "no page error");
   check("no page error");

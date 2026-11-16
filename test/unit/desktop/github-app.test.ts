@@ -6,7 +6,8 @@ const { openExternal, fetchMock } = vi.hoisted(() => ({
 }));
 vi.mock("electron", () => ({ shell: { openExternal }, ipcMain: {} }));
 vi.mock("../../../apps/desktop/main/cloud-credentials", () => ({
-  getCloudCredentialMeta: async () => ({ orgId: "personal-org" }),
+  // The default organization first.
+  listOrgKeys: async () => [{ orgId: "personal-org" }, { orgId: "team-org" }],
 }));
 vi.mock("../../../apps/desktop/main/deus-cloud-auth", () => ({
   getStoredDeusCloudSessionToken: async () => "desktop-session",
@@ -16,7 +17,7 @@ vi.mock("../../../apps/desktop/main/deus-cloud-auth-contract", () => ({
   resolveDeusCloudUrl: () => "https://cloud.test",
 }));
 
-import { startGithubAppInstall } from "../../../apps/desktop/main/github-app";
+import { getGithubAppState, startGithubAppInstall } from "../../../apps/desktop/main/github-app";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -55,5 +56,29 @@ describe("GitHub App install handoff", () => {
     fetchMock.mockResolvedValueOnce(Response.json({ url }));
     expect(await startGithubAppInstall()).toEqual({ ok: true });
     expect(openExternal).toHaveBeenCalledWith(url);
+  });
+});
+
+describe("organizations", () => {
+  it("asks about the default organization when none is named, and the named one otherwise", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({ installations: [], app_slug: "deus" })
+    );
+    await getGithubAppState();
+    await getGithubAppState("team-org");
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://cloud.test/orgs/personal-org/github/installation",
+      "https://cloud.test/orgs/team-org/github/installation",
+    ]);
+  });
+
+  it("installs into the organization it is given", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ url: "https://github.com/apps/deus-test/installations/new" })
+    );
+    expect(await startGithubAppInstall("team-org")).toEqual({ ok: true });
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "https://cloud.test/orgs/team-org/github/install-url"
+    );
   });
 });

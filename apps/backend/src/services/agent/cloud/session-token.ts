@@ -1,27 +1,25 @@
 import { exchangeCloudSessionToken, SessionTokenExchangeError } from "@shared/cloud-session-token";
 import { AppError } from "../../../lib/errors";
-import { getCloudConnectionIdentity, type CloudConfig } from "./config";
+import { getCloudConnectionIdentity, type CloudAccount } from "./config";
 
-/** An org API key cannot identify the person whose private subscription should run. */
+/**
+ * An org API key cannot identify the person whose private subscription should
+ * run: the token is exchanged with the person's session, so it needs no
+ * organization key (a session in an organization not set up here still connects).
+ */
 export async function mintCloudSessionToken(
   providerSessionId: string,
-  config: CloudConfig,
+  account: CloudAccount,
   expiresIn: number
 ): Promise<{ token: string; expiresIn: number }> {
-  if (!config.deusCloudSessionToken) {
+  if (!account.sessionToken) {
     throw new AppError(401, "Sign in to Deus Cloud to run cloud agents.");
   }
-  const identity = getCloudConnectionIdentity(config);
-  if (identity !== getCloudConnectionIdentity()) {
-    throw new AppError(
-      409,
-      "Platform identity changed before token exchange — retry under the new account"
-    );
-  }
+  const identity = getCloudConnectionIdentity();
   const result = await exchangeCloudSessionToken({
-    baseUrl: config.baseUrl,
+    baseUrl: account.baseUrl,
     sessionId: providerSessionId,
-    bearer: config.deusCloudSessionToken,
+    bearer: account.sessionToken,
     expiresIn,
   }).catch((error) => {
     if (error instanceof SessionTokenExchangeError) throw new AppError(error.status, error.message);

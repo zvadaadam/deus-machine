@@ -43,6 +43,8 @@ const cloud = vi.hoisted(() => ({
   getCloudDiffFile: vi.fn(async () => ({ path: "x.ts", diff: "@@ cloud diff @@" })),
   requestCloudFs: vi.fn(async () => ({ content: "cloud-bytes" })),
   getCloudIdentityGeneration: vi.fn(() => 0),
+  // The row numbers ask only a computer with an open channel (node/driver.ts).
+  hasLiveCloudSession: vi.fn(() => true),
 }));
 vi.mock("../../../src/services/agent/cloud/driver", () => cloud);
 

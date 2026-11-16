@@ -7,7 +7,7 @@ import { CompactionChip } from "./CompactionChip";
 import { WorkspaceEmptyState } from "./WorkspaceEmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, TerminalSquare, MessageSquarePlus, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
@@ -21,6 +21,7 @@ import { CloudEnvGroup, useCloudEnvEntries } from "./CloudEnvProgress";
 import { WorkspaceStartGroup } from "./WorkspaceStartGroup";
 import type { WorkspaceStart } from "@/features/workspace/lib/startState";
 import { buildChatTimeline } from "../lib/chatTimeline";
+import { SessionErrorCard } from "./SessionErrorCard";
 
 interface ChatProps {
   messages: Message[];
@@ -429,88 +430,17 @@ export function Chat({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-                    className={cn("mr-auto", "mt-1 w-fit max-w-[60%]")}
+                    className={cn("mr-auto", "mt-1 w-fit max-w-[min(100%,36rem)]")}
                     role="alert"
                     aria-live="assertive"
                   >
-                    <div className="border-destructive/20 border-l-destructive bg-destructive/5 flex items-center gap-4 rounded-lg border border-l-2 px-3 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-destructive/80 text-xs font-medium">
-                          {match(errorCategory)
-                            .with("auth", () => "Authentication Error")
-                            .with("rate_limit", () => "Rate Limited")
-                            .with("context_limit", () => "Limit Reached")
-                            .with("network", () => "Connection Error")
-                            .with("db_write", () => "Database Error")
-                            .with("process_exit", () => "Process Crashed")
-                            .otherwise(() =>
-                              agentHarness
-                                ? `${agentHarness.charAt(0).toUpperCase() + agentHarness.slice(1)} Error`
-                                : "Error"
-                            )}
-                        </p>
-                        <p className="text-foreground/80 mt-0.5 text-sm break-words">
-                          {errorMessage}
-                        </p>
-                        {errorCategory === "rate_limit" && (
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            Start a new chat to try again.
-                          </p>
-                        )}
-                        {errorCategory === "process_exit" && (
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            The agent process exited unexpectedly. Try sending your message again.
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {match(errorCategory)
-                          .with("auth", () =>
-                            onOpenLoginTerminal ? (
-                              <Button variant="outline" size="xs" onClick={onOpenLoginTerminal}>
-                                <TerminalSquare className="mr-1.5 h-3.5 w-3.5" />
-                                Log in
-                              </Button>
-                            ) : null
-                          )
-                          .with("context_limit", () =>
-                            retryInNewChat ? (
-                              <Button variant="outline" size="xs" onClick={retryInNewChat}>
-                                <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
-                                New session
-                              </Button>
-                            ) : null
-                          )
-                          .with("rate_limit", () =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )
-                          .with("network", () =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )
-                          .with("process_exit", () =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )
-                          .otherwise(() =>
-                            retryInNewChat ? (
-                              <Button variant="ghost" size="xs" onClick={retryInNewChat}>
-                                Retry in new chat
-                              </Button>
-                            ) : null
-                          )}
-                      </div>
-                    </div>
+                    <SessionErrorCard
+                      message={errorMessage}
+                      category={errorCategory}
+                      agentHarness={agentHarness}
+                      onOpenLoginTerminal={onOpenLoginTerminal}
+                      onRetryInNewChat={retryInNewChat}
+                    />
                   </m.div>
                 )}
               </AnimatePresence>

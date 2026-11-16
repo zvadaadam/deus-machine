@@ -146,3 +146,51 @@ it("asks for sign-in instead of retrying while signed out", () => {
   expect(() => retryCloudWorkspace("workspace")).toThrow("Sign in to Deus Cloud");
   expect(mocks.run).not.toHaveBeenCalled();
 });
+
+it("creates in the organization it is given: that organization's key, membership and row", async () => {
+  setCloudRuntimeCredentials({
+    apiKey: null,
+    orgId: null,
+    orgKeys: { org_a: "key_a", org_b: "key_b" },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({ account_id: "alice", items: [{ id: "org_a" }, { id: "org_b" }] })
+    )
+  );
+  createCloudWorkspace({ repositoryId: "repo", organizationId: "org_b" });
+  // The row is stamped with the organization it runs in.
+  expect(mocks.run).toHaveBeenCalledWith(
+    expect.any(String),
+    "repo",
+    "test-branch",
+    "test-branch",
+    "main",
+    "org_b"
+  );
+  await vi.waitFor(() => expect(mocks.connect).toHaveBeenCalledOnce());
+  expect(mocks.environment).toHaveBeenCalledWith(expect.any(String), "org_b");
+  expect(mocks.createWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({ apiKey: "key_b", userId: "alice" })
+  );
+  expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "key_b" }));
+});
+
+it("creates in the default organization when none is named, and refuses one not set up here", () => {
+  setCloudRuntimeCredentials({ apiKey: null, orgId: null, orgKeys: { org_a: "key_a" } });
+  createCloudWorkspace({ repositoryId: "repo" });
+  expect(mocks.run).toHaveBeenCalledWith(
+    expect.any(String),
+    "repo",
+    "test-branch",
+    "test-branch",
+    "main",
+    "org_a"
+  );
+  mocks.run.mockClear();
+  expect(() => createCloudWorkspace({ repositoryId: "repo", organizationId: "org_z" })).toThrow(
+    /not set up on this computer/
+  );
+  expect(mocks.run).not.toHaveBeenCalled();
+});

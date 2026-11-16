@@ -17,7 +17,12 @@ const directory = await mkdtemp(path.join(output, "run-"));
 const check = (name, details) => console.log(`PASS: ${name}`, details ?? "");
 
 const ORG = "org_smoke";
+const ORG_NAME = "Smoke Labs";
+// A second organization of the same account, with a session of its own.
+const ORG2 = "org_second";
+const ORG2_NAME = "Second Lab";
 const SESSION = "ses_direct_smoke";
+const SESSION2 = "ses_direct_second";
 const WORKSPACE = "wsp_direct_smoke";
 // What the hosted app asks the platform (or Deus Cloud) for that this journey does
 // not serve. None today; a request that appears fails the run until it is listed here.
@@ -66,8 +71,30 @@ const platform = await startPlatform({
     messages: history,
     events: [],
   }),
-  org: ORG,
-  listSessions: () => [
+  orgs: [
+    { id: ORG, name: ORG_NAME, sessions: [SESSION], listSessions: () => sessionsIn(ORG) },
+    { id: ORG2, name: ORG2_NAME, sessions: [SESSION2], listSessions: () => sessionsIn(ORG2) },
+  ],
+});
+function sessionsIn(org) {
+  if (org === ORG2) {
+    return [
+      {
+        id: SESSION2,
+        status: "idle",
+        workspace_id: "wsp_direct_second",
+        workspace_status: "running",
+        sandbox_id: "sbx_second",
+        title: "Second smoke",
+        repo: "deus/second",
+        branch: "second",
+        harness: "claude-code",
+        created_at: new Date(T).toISOString(),
+        updated_at: new Date(T + 1000).toISOString(),
+      },
+    ];
+  }
+  return [
     {
       id: SESSION,
       status: running ? "running" : "idle",
@@ -81,8 +108,8 @@ const platform = await startPlatform({
       created_at: new Date(T).toISOString(),
       updated_at: new Date(T + 1000).toISOString(),
     },
-  ],
-});
+  ];
+}
 const send = (frame) => platform.send(SESSION, frame);
 const lists = () => platform.requests.filter((r) => r === `GET /dashboard/orgs/${ORG}/sessions`);
 
@@ -121,24 +148,56 @@ try {
   await page.goto(vite.resolvedUrls.local[0], { timeout: 120_000 });
   await page.getByText("Direct smoke", { exact: true }).first().waitFor();
   check("the sidebar lists the session the platform reports");
-  // The header's location menu has one location here: Deus Cloud.
+  // The header's location menu lists the account's organizations (no "this computer"
+  // here); the window is in the first, and the sidebar lists that organization's sessions.
   const header = page.getByRole("button", { name: /switch where workspaces run/ });
-  assert.equal((await header.innerText()).trim(), "Deus Cloud");
-  await header.click();
+  const sidebar = page.locator('[data-slot="sidebar"]').first();
+  // The trigger reads the organization's initial tile, then its name.
+  const headerLabel = async () => (await header.innerText()).trim().split("\n").at(-1);
+  const inOrganization = async (name, shown, hidden) => {
+    await until(
+      "the organization's name in the header",
+      async () => (await headerLabel()) === name
+    );
+    await sidebar.getByText(shown, { exact: true }).waitFor();
+    await sidebar.getByText(hidden, { exact: true }).waitFor({ state: "detached" });
+  };
+  await inOrganization(ORG_NAME, "Direct smoke", "Second smoke");
   const menu = page.getByRole("menu");
-  await menu.waitFor();
+  const openMenu = async () => {
+    await header.click();
+    await menu.waitFor();
+    await menu.getByRole("menuitem", { name: new RegExp(ORG2_NAME) }).waitFor();
+  };
+  await openMenu();
   const rows = await menu
     .getByRole("menuitem")
     .evaluateAll((es) => es.map((e) => e.innerText.trim().replace(/\s+/g, " ")));
-  assert.deepEqual(rows, ["Deus Cloud", "Your computers", "Settings"]);
-  assert.equal(
-    await menu.locator(`svg[class*="lucide-check"]`).count(),
-    1,
-    "Deus Cloud is checked"
+  // Each organization row: its initial, its name, and the shortcut (⌃1 is the first here).
+  assert.deepEqual(rows, [`S ${ORG_NAME}`, `S ${ORG2_NAME} ⌃2`, "Your computers", "Settings"]);
+  assert.equal(await menu.locator(`svg[class*="lucide-check"]`).count(), 1, "one place is checked");
+  await menu.evaluate((e) =>
+    Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished))
+  );
+  await page.screenshot({ path: path.join(directory, "0-menu.png") });
+  await mkdir(path.join(root, ".context/shots/org-menu"), { recursive: true });
+  await page.screenshot({ path: path.join(root, ".context/shots/org-menu/hosted-web.png") });
+  await menu.getByRole("menuitem", { name: new RegExp(ORG2_NAME) }).click();
+  await menu.waitFor({ state: "detached" });
+  await inOrganization(ORG2_NAME, "Second smoke", "Direct smoke");
+  await page.keyboard.press("Control+1");
+  await inOrganization(ORG_NAME, "Direct smoke", "Second smoke");
+  await openMenu();
+  assert.ok(
+    await menu.getByRole("menuitem", { name: /Your computers/ }).isVisible(),
+    "the menu leads to the account's computers"
   );
   await page.keyboard.press("Escape");
   await menu.waitFor({ state: "detached" });
-  check("the header reads Deus Cloud; its menu has that one location, checked, and no shortcuts");
+  check(
+    "the menu lists both organizations (no computer row), the sidebar lists the chosen one's sessions, Ctrl+1 and a row switch",
+    { rows }
+  );
   await page.getByText("Direct smoke", { exact: true }).first().click();
   await page.getByText("It checks the hosted web against a scripted platform.").waitFor();
   await page.getByText("What does the smoke check?").waitFor();

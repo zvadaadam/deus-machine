@@ -7,6 +7,7 @@ import { hasParkedDirectQuestion } from "@/features/session/cloud/directQuestion
 import { RuntimeClient } from "@/platform/ws/runtime-client";
 import { messagesKey } from "@/features/session/lib/agentEventFold";
 import { createOptimisticUserMessage } from "@/features/session/lib/optimisticMessage";
+import { useSessionComposerStore } from "@/features/session/store/sessionComposerStore";
 import { toast } from "sonner";
 import { queryKeys } from "@/shared/api/queryKeys";
 import type { PaginatedMessages } from "@shared/types/session";
@@ -317,7 +318,7 @@ describe("direct cloud session published frames", () => {
     });
   });
 
-  it("removes only the rejected optimistic send and leaves unrelated errors alone", () => {
+  it("returns only the rejected send to the composer and leaves unrelated errors alone", async () => {
     const sessionId = "deus-direct-1";
     queryClient.setQueryData<PaginatedMessages>(messagesKey(sessionId), {
       messages: [createOptimisticUserMessage({ sessionId, turnId: "pending", content: "Hello" })],
@@ -347,7 +348,11 @@ describe("direct cloud session published frames", () => {
     expect(queryClient.getQueryData<PaginatedMessages>(messagesKey(sessionId))!.messages).toEqual(
       []
     );
-    expect(setState).toHaveBeenCalledWith("MESSAGE_SEND_FAILED: Account unavailable");
+    expect(setState).toHaveBeenCalledWith({ message: "Account unavailable", category: "internal" });
+    // Not lost: what was sent is back in the chat's composer.
+    await vi.waitFor(() =>
+      expect(useSessionComposerStore.getState().pendingContent[sessionId]?.draft).toBe("Hello")
+    );
     getDirectSession(sessionId, queryClient)!.sendMessage("Retry", "retry", TURN);
     setState.mockClear();
     onFrame({
@@ -629,7 +634,10 @@ describe("direct cloud session published frames", () => {
       })
     );
     expect(setState).toHaveBeenCalledWith("error");
-    expect(setState).toHaveBeenCalledWith("Reconnect your provider account");
+    expect(setState).toHaveBeenCalledWith({
+      message: "Reconnect your provider account",
+      category: null,
+    });
   });
 
   it.each([
@@ -664,7 +672,10 @@ describe("direct cloud session published frames", () => {
       recoverable: false,
       error: { code: "provider_auth", message: "Reconnect your provider account" },
     });
-    expect(setState).toHaveBeenCalledWith("Reconnect your provider account");
+    expect(setState).toHaveBeenCalledWith({
+      message: "Reconnect your provider account",
+      category: null,
+    });
     setState.mockClear();
     onFrame({ type: "turn.started", turnId: "turn-next", timestamp: 3 });
     expect(setState).toHaveBeenCalledWith(null);

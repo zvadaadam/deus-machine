@@ -139,6 +139,28 @@ describe("cloudDataRequestInterceptor", () => {
     });
   });
 
+  it("answers 'cloudOrganizations' from the platform's list, every organization ready", async () => {
+    routeFetch({
+      "/dashboard/orgs": () =>
+        ok({
+          account_id: "acc_1",
+          items: [
+            { id: "org_a", name: "Acme", role: "owner" },
+            { id: "org_b", name: "Beta", role: "member" },
+          ],
+        }),
+    });
+    await expect(cloudDataRequestInterceptor("cloudOrganizations")).resolves.toEqual({
+      available: true,
+      accountId: "acc_1",
+      defaultOrganizationId: "org_a",
+      items: [
+        { id: "org_a", name: "Acme", role: "owner", ready: true },
+        { id: "org_b", name: "Beta", role: "member", ready: true },
+      ],
+    });
+  });
+
   it("routes 'workspaces' to agnt and maps the result to RepoGroup[]", async () => {
     const fetchMock = vi
       .fn()

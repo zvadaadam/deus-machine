@@ -8,6 +8,8 @@ import type { EnvironmentRepository } from "@/features/settings/lib/environment-
 
 const ui = vi.hoisted(() => ({
   target: null as { repoId: string; location: "local" | "cloud" } | null,
+  /** The window's organization (the sidebar header menu's choice). */
+  windowOrganization: null as string | null,
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -17,6 +19,9 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("@/shared/hooks/useDeusCloudSession", () => ({
   useDeusCloudSession: () => ({ data: { signedIn: true, accountId: "account" }, isPending: false }),
 }));
+vi.mock("@/features/sidebar/hooks/useWindowOrganization", () => ({
+  useWindowOrganization: () => ({ id: ui.windowOrganization }),
+}));
 vi.mock("@/shared/hooks/useDeusCloudSignIn", () => ({ useDeusCloudSignIn: () => ({}) }));
 vi.mock("@/shared/config/webDirectMode", () => ({ isCloudDirectWebMode: () => false }));
 vi.mock("@/shared/stores/uiStore", async (importOriginal) => ({
@@ -25,8 +30,17 @@ vi.mock("@/shared/stores/uiStore", async (importOriginal) => ({
     select({ environmentSettingsTarget: ui.target }),
 }));
 vi.mock("@/features/settings/ui/sections/RepositoryEnvironmentSettings", () => ({
-  RepositoryEnvironmentSettings: ({ repository }: { repository: EnvironmentRepository }) =>
-    createElement("div", { "data-selected-repository": repository.local?.id ?? repository.key }),
+  RepositoryEnvironmentSettings: ({
+    repository,
+    orgId,
+  }: {
+    repository: EnvironmentRepository;
+    orgId: string | null;
+  }) =>
+    createElement("div", {
+      "data-selected-repository": repository.local?.id ?? repository.key,
+      "data-organization": orgId,
+    }),
 }));
 vi.mock("@/features/settings/ui/sections/ConnectEnvironmentRepositories", () => ({
   ConnectEnvironmentRepositories: () => null,
@@ -39,7 +53,6 @@ let client: QueryClient;
 beforeEach(() => {
   client = new QueryClient();
   client.setQueryData(queryKeys.settings.environments.organizations("account"), {
-    currentOrganizationId: "org",
     items: [{ id: "org", name: "Organization" }],
   });
   client.setQueryData(queryKeys.settings.environments.detail("account", "org", null), {
@@ -47,6 +60,7 @@ beforeEach(() => {
   });
   client.setQueryData(queryKeys.repos.all, []);
   ui.target = null;
+  ui.windowOrganization = null;
 });
 afterEach(() => {
   client.clear();
@@ -85,4 +99,21 @@ it("shows the empty state after every repository source has loaded", () => {
     repos: [],
   });
   expect(render()).toContain("Connect GitHub or add a local project to get started.");
+});
+
+it("shows the window's organization when its list names it, else its first", () => {
+  client.setQueryData(queryKeys.settings.environments.organizations("account"), {
+    items: [
+      { id: "org", name: "Organization" },
+      { id: "second", name: "Second" },
+    ],
+  });
+  client.setQueryData(queryKeys.repos.all, [
+    { id: "repo", name: "App", root_path: "/projects/app", git_default_branch: "main" },
+  ]);
+  ui.target = { repoId: "repo", location: "local" };
+  ui.windowOrganization = "second";
+  expect(render()).toContain('data-organization="second"');
+  ui.windowOrganization = "elsewhere";
+  expect(render()).toContain('data-organization="org"');
 });

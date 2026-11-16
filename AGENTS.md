@@ -156,6 +156,20 @@ subscriptions resume; a connected tunnel alone is not readiness.
 
 ### Starting a workspace (`services/workspace-init.service.ts`)
 
+A **project** is a row in `repositories`. It has a folder on this computer
+(`root_path`), or none: then it is a GitHub repository (`git_origin_url`) that runs
+only in the cloud. There are two ways to add one. On this computer: open, clone or
+create a folder (`addRepo`, `gitClone`, `gitInit`). In the cloud: "Add from GitHub"
+(`AddRepositoryDialog`), which lists what the organization's GitHub App reaches
+(`cloudRepositories`) or takes a public address, and adds the repository with no
+clone (`addCloudRepo`, its default branch asked of GitHub). One project per
+repository: adding a repository that is already a project returns it, and opening a
+folder whose origin is a project with no folder gives that project the folder. A
+project with no folder never reaches git or the filesystem: its branches come from
+GitHub (`repoBranches`, through `services/github-remote.ts`, whose API base
+`DEUS_GITHUB_API_URL` overrides), a local workspace on it is refused in words, and in
+the composer its Cloud switch is on and locked ("<name> is not on this Mac").
+
 A workspace is created in one place: Home, whose composer sends the first
 message with it. Everything that wants one goes there through
 `openNewWorkspace({ repoId?, draft? })` (`features/workspace/lib/newWorkspace.ts`):
@@ -218,6 +232,15 @@ a chat that already has a message, or is answering one, is never sent it
 again, and a send the backend refuses goes into that chat's composer with a
 toast rather than being retried. Send it from anywhere else and two workspaces
 started in a row lose one.
+
+A message the cloud platform refuses after the backend took it (a channel `error`,
+`MESSAGE_SEND_FAILED`) is never lost either, first message or not: its bubble goes and
+its text and images go back into that chat's composer, ahead of anything typed there
+since (`session/lib/returnToComposer.ts`, from the fold on both lanes). Nothing is
+resent. The card shows the platform's sentence, not its codes (`shared/lib/send-refusal.ts`);
+a refused AI provider account (reconnect, none, the company's unusable) is category
+`_provider_account`, not an internal error, and its card offers "Open AI Providers"
+instead of "Retry in new chat".
 
 `hasCheckout(workspace)` (it has a chat) says whether there is somewhere to
 work. Without one there is no branch to open a pull request from and nothing
@@ -282,17 +305,99 @@ local relay's development JWKS.
 
 ### Where workspaces run (the sidebar's location)
 
-A window has a **location**, `local` or `cloud`, the words `createWorkspace` takes: the
-workspaces that run on the computer whose backend the window talks to, or that backend's
-cloud workspaces. The sidebar header's menu switches it (⌃1 / ⌃2). The sidebar lists that
-location's workspaces only; everything else (the selected workspace, the command palette,
-Home's recent list) reads the full list. Selecting a workspace from anywhere moves the
-location to where it runs, and a manual switch returns to the workspace last selected
-there. A new workspace starts in the window's location by default; the composer's Cloud
-toggle still decides, behind its repository-access gate (`useCloudAccessGate`). The rules
-are pure functions in `features/sidebar/lib/location.ts` and the choice is kept in the
-sidebar store. The hosted web app has only the cloud, so it has no switch: its menu leads
-to the account's computers (`/connect`), and that page leads back.
+A window has a **place**: this computer, or the cloud. `local` and `cloud` are the words
+`createWorkspace` takes; in the cloud the window is also in one **organization** of the
+account. The sidebar lists that place's workspaces only (a cloud workspace's organization
+is its `organization_id`, else the default one); everything else (the selected
+workspace, the command palette, Home's recent list) reads the full list. Selecting a
+workspace from anywhere moves the window to where it runs, organization included, and a
+manual switch returns to the workspace last selected in that place. Switching is a view
+filter: it tears nothing down, and agents elsewhere keep running. The rules are pure
+functions in `features/sidebar/lib/location.ts`; the choice (`location`,
+`cloudOrganizationId`) is kept in the sidebar store; one hook, `useWindowPlace`, wires
+them for `MainLayout`.
+
+What the window knows of the cloud is one live read, `cloudOrganizations`
+(`useCloudOrganizations()`): whether this backend can act there (`available`), the
+account's organizations, each `ready` when this computer holds its key, and the default
+one. The backend keeps it in memory (`cloud-settings.service.ts`), reads it from the
+platform when credentials are pushed, at startup and when a read finds it a minute old,
+and pushes it only when it changed; signing out or switching accounts empties it at once.
+On the hosted web the direct lane answers it from the platform's own list, every
+organization ready.
+
+The header's menu has this computer first (⌃1), then a row per organization (⌃2…⌃9);
+the hosted web has no computer row (its first organization is ⌃1) and keeps "Your
+computers". An organization not set up here says "Set up" on the desktop (the cloud setup
+again, "Setting up…" while it runs, then the window moves there) and "Not set up",
+disabled, elsewhere. With no list (signed out, not read yet, a developer key) there is one
+cloud row, as before: `cloudRowState` signs in, waits ("Signing in…", "Setting up…"),
+offers Retry, or reads "Not signed in" where only the desktop can sign in. A cloud the
+backend cannot reach is not where a window sits: it shows this computer and keeps the
+cloud as its choice (`visiblePlace`).
+
+A new workspace starts in the window's place by default (`composerPlace`: the cloud only
+when the window's organization is ready, or with no list when the cloud is available).
+In the cloud it is created in the composer's organization (`organization_id`), which
+starts as the window's and follows it; the repository-access gate and the GitHub App
+install it leads to ask for that organization. With one organization the composer's
+Cloud control is "Cloud" and a switch; with several it reads "Cloud ⌄" while off and the
+organization's name while on, and its label is a menu of the organizations (the header
+menu's tiles and words): choosing one turns the cloud on there, through the same gate.
+That choice stays in the composer and never moves the sidebar.
+
+A place lists the projects that can run there (`filterByPlace`, from `RepoGroup.has_folder`
+and the origin): this computer, those with a folder; the cloud, those on GitHub; and
+any project with a workspace in the place. Adding a project follows the place too
+(`features/repository/lib/addProject.ts`): the sidebar's "Add project", the command
+palette and Home's zero state and footer offer this computer's three actions or, in the
+cloud, "Add from GitHub" for the window's organization (the sidebar's "Add project"
+then opens the dialog directly: no menu of one); the project picker in Home's
+composer follows the composer's Cloud switch and organization. The composer lists and
+preselects only the projects that can run where its switch points, by the same rule
+(`projectRunsIn`, through `composerProjects`); with none it shows that place's add
+action. A project chosen deliberately stays chosen wherever the switch points (one with
+no folder locks it on).
+
+Settings and automations follow the window's organization too (`useWindowOrganization`,
+whatever the window's location). A Settings section with its own organization select
+(Environments, Slack, cloud usage) opens on it when its list names it, else its first
+(`sectionOrganization`); a choice made there stays the section's. Settings → GitHub's
+cloud access and Settings → Cloud show the window's organization, and "Set up with
+agent" starts a cloud workspace in the section's organization when it is ready here. The
+backend mirrors the automations of every organization it holds a key for; the page lists
+the window's organization's (a row with none is the default one's), refreshes that
+organization's list on mount and focus, and creates there. With several organizations
+these pages name the one they show.
+
+A Deus account can be in several cloud organizations. The desktop keeps one device key
+per organization (`apps/desktop/main/deus-cloud-provision.ts`: kept, minted or retired at
+sign-in, startup and Retry) and hands the backend all of them, the default organization
+(the platform's first) first. In the backend, `services/agent/cloud/config.ts` is the one
+seam: `cloudAccount()` is the person and the connection identity (a key changing closes
+nothing), `cloudOrg(orgId?)` one organization's key, and `cloudOrgOf(row)` the key for a
+cloud workspace or automation, which records its organization (`organization_id`, chosen
+at creation or learned from the platform's snapshot; none = the default one). Every
+platform call for a row uses its organization's key, and the GitHub installation token is
+always minted for the workspace's own organization.
+
+**Where a workspace's things are** is two rules in `features/workspace/lib/reach.ts`;
+nothing else decides it. Rule 1, `localFolder(workspace)`: its folder on this computer, or
+null (a cloud workspace, or no checkout yet). The header's Open, ⌘O, the palette's "Open
+in Last Editor", a chat card's Open and Reveal in Finder, and the agent configuration
+(`agentConfigOf`: the Agent tab and the `/` menu read the workspace's own folder; a cloud
+agent gets none of this computer's) offer nothing without one. Rule 2, `openAddress` /
+`openFile`: what a link or file in the chat does. Local is unchanged; in the cloud an
+internet address opens in the person's browser, a localhost one in the cloud preview at
+its port (or says "That address is on the cloud computer"), and a file in the Files tab
+(text) or says it cannot be shown. `session/lib/openFromChat.ts` carries the rule out; the
+`file-preview` route refuses a cloud workspace. Which tabs a workspace has is
+`app/layouts/content-tabs.ts` (`tabsFor`): a cloud workspace's Browser and Simulator are
+its computer's and ignore this computer's settings. "New workspace from a pull request or
+branch" is local (`offersNewFromBranch`). The header menu marks a place with a working or
+unread workspace (`placeActivity`). The sidebar's diff numbers never connect to a cloud
+computer: a `diff.request` to a sandbox whose agent is not connected makes the platform
+resume it, so `diffStats` asks only a session with an open channel that is not asleep.
 
 ### Customize: Apps, Plugins and Skills (`services/integrations/`)
 
@@ -417,6 +522,7 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 12 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
+- `repositories.root_path` is nullable (a project not on this computer). A database from before is rebuilt once at startup (`db/migrate-project-folder.ts`): it runs only while the column is still `NOT NULL`, first writes a copy next to the database (`<db>.before-optional-project-folder.bak`; no copy, no rebuild), then rebuilds the table in one transaction with foreign keys off and checked, and rolls back on any failure without the reset hint.
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only. `db/migrate-turns.ts` moves existing message accounting once at startup without deleting history.
 - Only the backend writes to DB
 - All indexes/triggers defined in `shared/schema.ts`

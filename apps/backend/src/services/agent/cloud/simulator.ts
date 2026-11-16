@@ -29,7 +29,7 @@ import {
   type CloudSimulatorStatus,
 } from "@shared/events";
 import type { CloudSimulatorExecResult } from "@shared/types/simulator";
-import { getCloudConfig } from "./config";
+import { cloudOrg } from "./config";
 import { cloudSimulatorEvents } from "@shared/api/simulator";
 import { publish } from "../../streams";
 
@@ -340,6 +340,8 @@ export interface CloudSimulatorReadContext {
   sessionId: string | null;
   /** That session's platform id — the REST read's key. */
   providerSessionId: string | null;
+  /** The workspace's organization (null = the default one): whose key reads it. */
+  organizationId?: string | null;
   /** Whether that session's socket is open right now: while it is, every
    *  change reaches the cache as a frame and the cache IS the platform's
    *  state; while it isn't, the cache is only as fresh as the last frame. */
@@ -360,7 +362,7 @@ export async function readCloudSimulatorStatus(
 ): Promise<CloudSimulatorStatus | null> {
   const cachedPrimary = primaryOf(cloudSimulators.get(workspaceId));
   if (cachedPrimary && context.liveSocket) return cachedPrimary.status;
-  const config = getCloudConfig();
+  const config = cloudOrg(context.organizationId ?? null);
   if (!config || !context.sessionId || !context.providerSessionId) {
     return cachedPrimary?.status ?? null;
   }

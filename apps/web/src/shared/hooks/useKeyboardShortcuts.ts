@@ -5,15 +5,15 @@ interface UseKeyboardShortcutsOptions {
   onRefresh: () => Promise<void>;
   onEscape?: () => void;
   onOpenInApp?: () => void;
-  /** ⌃1 / ⌃2: where this window's workspaces run. */
-  onSwitchLocation?: (location: "local" | "cloud") => void;
+  /** ⌃1…⌃9: the location menu's row at that index (0 for ⌃1). */
+  onSwitchPlace?: (index: number) => void;
 }
 
 export function useKeyboardShortcuts({
   onRefresh,
   onEscape,
   onOpenInApp,
-  onSwitchLocation,
+  onSwitchPlace,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     async function handleKeyDown(e: KeyboardEvent) {
@@ -31,12 +31,12 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      // ⌃1 / ⌃2 (the physical Control key alone) - This computer / Deus Cloud
-      if (onSwitchLocation && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-        const location = e.code === "Digit1" ? "local" : e.code === "Digit2" ? "cloud" : undefined;
-        if (location) {
+      // ⌃1…⌃9 (the physical Control key alone) - This computer, then each organization
+      if (onSwitchPlace && e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+        if (digit) {
           e.preventDefault();
-          onSwitchLocation(location);
+          onSwitchPlace(Number(digit) - 1);
           return;
         }
       }
@@ -56,5 +56,5 @@ export function useKeyboardShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onRefresh, onEscape, onOpenInApp, onSwitchLocation]);
+  }, [onRefresh, onEscape, onOpenInApp, onSwitchPlace]);
 }

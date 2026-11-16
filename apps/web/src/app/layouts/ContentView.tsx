@@ -25,6 +25,23 @@ import { CloudSimulatorPanel } from "@/features/simulator/cloud";
 import { cn } from "@/shared/lib/utils";
 import type { ContentTab } from "@/features/workspace/store";
 import type { Workspace } from "@/shared/types";
+import type { ContentTabVisibility } from "./content-tabs";
+
+/**
+ * The value while `active`; otherwise the last value seen while it was, frozen
+ * (null before it ever was). Committed in a layout effect, not during render:
+ * a discarded render must not leak an uncommitted value into a later frozen
+ * mount. `key` names the value, so an equal one keeps the frozen object.
+ */
+function useLastWhile<T>(active: boolean, value: T, key: string): T | null {
+  const [last, setLast] = useState<{ key: string; value: T } | null>(null);
+  useLayoutEffect(() => {
+    if (active) setLast((prev) => (prev?.key === key ? prev : { key, value }));
+    // `key` stands for `value`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, key]);
+  return active ? value : (last?.value ?? null);
+}
 
 interface ContentViewProps {
   workspace: Workspace;
@@ -35,9 +52,8 @@ interface ContentViewProps {
   isWatched?: boolean;
   /** Insert a code review prompt into the chat input */
   onReview?: () => void;
-  simulatorAvailable: boolean;
-  /** The workspace is a cloud computer: its device lives in the platform. */
-  cloudSimulator: boolean;
+  /** The workspace's tab gates (`tabsFor`). */
+  visibility: ContentTabVisibility;
 }
 
 export function ContentView({
@@ -47,38 +63,29 @@ export function ContentView({
   toolbarAction,
   isWatched = false,
   onReview,
-  simulatorAvailable,
-  cloudSimulator,
+  visibility,
 }: ContentViewProps) {
-  // The terminal mounts for the LAST LOCAL workspace even while a cloud one
-  // is selected — see the comment at the render site. A LOCAL selection uses
-  // the live prop directly (no first-frame gap); the committed state only
-  // serves CLOUD renders, so it may lag by an effect tick without being
-  // user-visible. Updated in a layout effect, not during render — a discarded
-  // render must not leak an uncommitted workspace into a later cloud mount.
-  const [lastLocalTerminal, setLastLocalTerminal] = useState<{ id: string; path: string } | null>(
-    null
+  const cloud = workspace.kind === "cloud";
+  const simulatorAvailable = visibility.simulatorAvailable === true;
+  // This computer's Terminal, Browser and Simulator panels stay mounted on the
+  // LAST LOCAL workspace while a cloud one is selected (hidden, not unmounted):
+  // they keep every visited workspace's xterm buffers, webviews and device
+  // claim in component state, so unmounting on a cloud visit lost scrollback
+  // and orphaned a webview mid-navigation. A cloud id never enters them — a
+  // local PTY or simulator at a cloud row's path would be a masquerade. The
+  // cloud panels are overlaid instead.
+  const lastLocal = useLastWhile(
+    !cloud,
+    { id: workspace.id, path: workspace.workspace_path },
+    `${workspace.id}\n${workspace.workspace_path}`
   );
-  useLayoutEffect(() => {
-    if (workspace.kind !== "cloud") {
-      setLastLocalTerminal((prev) =>
-        prev?.id === workspace.id && prev.path === workspace.workspace_path
-          ? prev
-          : { id: workspace.id, path: workspace.workspace_path }
-      );
-    }
-  }, [workspace.kind, workspace.id, workspace.workspace_path]);
-  const terminalTarget =
-    workspace.kind !== "cloud"
-      ? { id: workspace.id, path: workspace.workspace_path }
-      : lastLocalTerminal;
 
   // null when the cloud sidecar can serve (or the workspace is local); else the
   // stage the gate should show (provisioning / asleep / waking).
   const cloudStage = cloudGateStage(workspace);
-  const cloudServing = workspace.kind === "cloud" && cloudStage === null;
+  const cloudServing = cloud && cloudStage === null;
 
-  // Same freeze rule for the CLOUD panel, but keyed to the last SERVICEABLE
+  // Same freeze rule for the CLOUD terminal, but keyed to the last SERVICEABLE
   // cloud workspace. Unmounting the shared cloud panel disposed live xterms
   // mid-frame (xterm's un-cancelable rAF work — the "reading 'dimensions'"
   // crash) and, on a visit to a paused/provisioning computer, would kill the
@@ -86,51 +93,10 @@ export function ContentView({
   // "serving" means a non-serving computer never becomes the mounted id: its
   // shell never spawns against a down sidecar — the gate overlays instead — and
   // awake workspaces stay live underneath.
-  const [lastCloudTerminal, setLastCloudTerminal] = useState<string | null>(null);
-  useLayoutEffect(() => {
-    if (cloudServing) {
-      setLastCloudTerminal((prev) => (prev === workspace.id ? prev : workspace.id));
-    }
-  }, [cloudServing, workspace.id]);
-  const cloudTerminalId = cloudServing ? workspace.id : lastCloudTerminal;
+  const cloudTerminalId = useLastWhile(cloudServing, workspace.id, workspace.id);
 
-  // The Browser previews a dev server at localhost:PORT — only reachable for a
-  // LOCAL workspace. Freeze it on the last local workspace (like the terminal)
-  // so a cloud visit doesn't unmount it mid-navigation and orphan the webview;
-  // cloud gets the placeholder overlay instead.
-  const [lastLocalBrowser, setLastLocalBrowser] = useState<string | null>(null);
-  useLayoutEffect(() => {
-    if (workspace.kind !== "cloud") {
-      setLastLocalBrowser((prev) => (prev === workspace.id ? prev : workspace.id));
-    }
-  }, [workspace.kind, workspace.id]);
-  const browserTarget = workspace.kind !== "cloud" ? workspace.id : lastLocalBrowser;
   // The computer's host template: in memory, seeded once, live on `cloudPreviewChanges`.
-  const cloudPreviewTemplate = useCloudPreviewTemplate(
-    workspace.kind === "cloud" ? workspace.id : null
-  );
-
-  // The local simulator streams a Mac-hosted device — only a LOCAL workspace
-  // has one. Same freeze as the Browser: a cloud visit must not unmount the
-  // panel (its device claim and stream live in component state) and a cloud
-  // id must never enter it. Cloud gets its own panel overlaid.
-  const [lastLocalSimulator, setLastLocalSimulator] = useState<{
-    id: string;
-    path: string;
-  } | null>(null);
-  useLayoutEffect(() => {
-    if (workspace.kind !== "cloud") {
-      setLastLocalSimulator((prev) =>
-        prev?.id === workspace.id && prev.path === workspace.workspace_path
-          ? prev
-          : { id: workspace.id, path: workspace.workspace_path }
-      );
-    }
-  }, [workspace.kind, workspace.id, workspace.workspace_path]);
-  const simulatorTarget =
-    workspace.kind !== "cloud"
-      ? { id: workspace.id, path: workspace.workspace_path }
-      : lastLocalSimulator;
+  const cloudPreviewTemplate = useCloudPreviewTemplate(cloud ? workspace.id : null);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -159,16 +125,16 @@ export function ContentView({
           activeTab !== "browser" && "pointer-events-none invisible absolute"
         )}
       >
-        {browserTarget && (
-          <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+        {lastLocal && (
+          <div className={cn("h-full w-full", cloud && "hidden")}>
             <BrowserPanel
               toolbarAction={toolbarAction}
-              workspaceId={browserTarget}
-              panelVisible={panelVisible && activeTab === "browser" && workspace.kind !== "cloud"}
+              workspaceId={lastLocal.id}
+              panelVisible={panelVisible && activeTab === "browser" && !cloud}
             />
           </div>
         )}
-        {workspace.kind === "cloud" && (
+        {cloud && (
           <div className="absolute inset-0 z-10">
             {cloudStage ? (
               // Asleep / provisioning: nothing inside the sandbox can answer.
@@ -217,7 +183,7 @@ export function ContentView({
             />
           </div>
         )}
-        {terminalTarget && (
+        {lastLocal && (
           // Mounted through cloud selections too (frozen on the last LOCAL
           // workspace): TerminalPanel keeps every visited workspace's xterm
           // buffers in component state, so unmounting it on a cloud visit
@@ -225,12 +191,12 @@ export function ContentView({
           // switch. Cloud ids never enter the panel — a local PTY at a cloud
           // row's path would be the masquerade the placeholder exists to
           // avoid.
-          <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+          <div className={cn("h-full w-full", cloud && "hidden")}>
             <TerminalPanel
               toolbarAction={toolbarAction}
-              workspaceId={terminalTarget.id}
-              workspacePath={terminalTarget.path}
-              panelVisible={panelVisible && activeTab === "terminal" && workspace.kind !== "cloud"}
+              workspaceId={lastLocal.id}
+              workspacePath={lastLocal.path}
+              panelVisible={panelVisible && activeTab === "terminal" && !cloud}
             />
           </div>
         )}
@@ -250,25 +216,25 @@ export function ContentView({
         )}
       </div>
 
-      {(simulatorAvailable || cloudSimulator) && (
+      {(simulatorAvailable || cloud) && (
         <div
           className={cn(
             "relative h-full w-full",
             activeTab !== "simulator" && "pointer-events-none invisible absolute"
           )}
         >
-          {simulatorAvailable && simulatorTarget && (
+          {simulatorAvailable && lastLocal && (
             // Frozen on the last LOCAL workspace (see above); hidden, not
             // unmounted, under a cloud selection.
-            <div className={cn("h-full w-full", workspace.kind === "cloud" && "hidden")}>
+            <div className={cn("h-full w-full", cloud && "hidden")}>
               <SimulatorPanel
                 toolbarAction={toolbarAction}
-                workspaceId={simulatorTarget.id}
-                workspacePath={simulatorTarget.path}
+                workspaceId={lastLocal.id}
+                workspacePath={lastLocal.path}
               />
             </div>
           )}
-          {workspace.kind === "cloud" && (
+          {cloud && (
             <div className="absolute inset-0 z-10">
               {cloudStage ? (
                 // Asleep / provisioning: the platform's device is reached

@@ -4,13 +4,14 @@ import * as api from "@shared/api/settings";
 import { readAgentAuth, writeSetting } from "../api/settings";
 import { getAllSettings } from "../services/settings.service";
 import { CloudCredentialsBody, parseBody } from "../lib/schemas";
-import { getCloudConfig, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
+import { cloudOrg, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { reconcileRelay } from "../services/relay.service";
 import {
   getCloudSettingsStatus,
   saveCloudGithubToken,
 } from "../services/cloud-workspace-init.service";
 import { initAutomations } from "../services/automations";
+import { refreshCloudOrganizations } from "../services/cloud-settings.service";
 import { reconcileCloudAccounts } from "../services/integrations";
 import { AppError, ValidationError } from "../lib/errors";
 
@@ -34,17 +35,20 @@ app.get("/settings/agent-auth", async (c) => c.json(await readAgentAuth()));
 
 // ── Cloud workspaces ────────────────────────────────────────────────
 
-// The web app asks whether this computer is signed in to Deus Cloud (useCloudSettings).
+// The web app asks whether this computer is signed in to Deus Cloud (useCloudSettings),
+// in one organization (`?organizationId=`, the default when omitted).
 app.get("/settings/cloud", async (c) => {
-  return c.json(await getCloudSettingsStatus());
+  return c.json(await getCloudSettingsStatus(c.req.query("organizationId") || null));
 });
 
 // The web app's Settings → GitHub saves the token cloud sandboxes use (GithubCloudAccess).
 app.post("/settings/cloud/github-token", async (c) => {
-  const body = (await c.req.json()) as { token?: string };
+  const body = (await c.req.json()) as { token?: string; organizationId?: unknown };
   const token = body.token?.trim();
   if (!token) throw new ValidationError("token is required");
-  await saveCloudGithubToken(token);
+  const organizationId =
+    typeof body.organizationId === "string" && body.organizationId ? body.organizationId : null;
+  await saveCloudGithubToken(token, organizationId);
   return c.json({ ok: true });
 });
 
@@ -79,7 +83,9 @@ app.post("/settings/cloud/credentials", async (c) => {
   // Credentials arriving is the moment the automations cache can first (or
   // freshly) mirror the platform — kick a background sync.
   initAutomations();
-  return c.json({ ok: true, configured: getCloudConfig() !== null });
+  // Every client is told what this backend's cloud is now, and the list is read again.
+  refreshCloudOrganizations();
+  return c.json({ ok: true, configured: cloudOrg() !== null });
 });
 
 export default app;

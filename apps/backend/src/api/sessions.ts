@@ -15,7 +15,7 @@ import {
   getWorkspaceRaw,
   hasOlderMessages,
 } from "../db";
-import { getCloudConfig } from "../services/agent/cloud/config";
+import { cloudAccount } from "../services/agent/cloud/config";
 import { mintCloudSessionToken } from "../services/agent/cloud/session-token";
 import { sendMessage, stopSession } from "../services/agent/turns";
 import { refreshWorkspaceGithubTokenIfStale } from "../services/cloud-workspace-init.service";
@@ -52,8 +52,8 @@ export default [
     const session = getSessionRaw(getDatabase(), sessionId);
     if (!session) throw new NotFoundError("Session not found");
     if (!session.provider_session_id) throw new ValidationError("Not a cloud session");
-    const config = getCloudConfig();
-    if (!config) throw new ValidationError("Cloud is not configured on this device");
+    // The token is exchanged with the person's session: no organization key is needed.
+    if (!cloudAccount()) throw new ValidationError("Cloud is not configured on this device");
 
     // The client's own socket registers the session with its workspace, which
     // wakes a paused sandbox: the sandbox needs a GitHub credential that will
@@ -65,14 +65,16 @@ export default [
         console.warn(`[Sessions] pre-connect token refresh failed: ${String(error)}`);
       }
     }
+    const account = cloudAccount();
+    if (!account) throw new ValidationError("Cloud is not configured on this device");
     const { token, expiresIn } = await mintCloudSessionToken(
       session.provider_session_id,
-      config,
+      account,
       DIRECT_TOKEN_SECONDS
     );
     return {
       token,
-      base_url: config.baseUrl,
+      base_url: account.baseUrl,
       provider_session_id: session.provider_session_id,
       expires_in: expiresIn,
     };

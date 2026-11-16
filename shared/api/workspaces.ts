@@ -80,6 +80,8 @@ export const createWorkspace = write({
     pr_title: z.string().optional(),
     /** The pull request's base branch: what the diff is measured against. */
     target_branch: branchName.optional(),
+    /** A cloud workspace's organization; the default organization when omitted. */
+    organization_id: z.string().min(1).optional(),
   }),
   /** The row exists at once in `initializing`; the rest arrives on `workspaces`. */
   output: out<{ workspaceId: string }>(),

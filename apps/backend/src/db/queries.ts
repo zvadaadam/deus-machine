@@ -29,7 +29,7 @@ import type {
  */
 const WORKSPACE_ROW_COLUMNS = `
     w.id, w.repository_id, w.slug, w.title, w.git_branch,
-    w.git_target_branch, w.kind, w.provider_workspace_id,
+    w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
     w.state, w.status, w.current_session_id,
     w.pr_url, w.pr_number,
     w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
@@ -128,7 +128,7 @@ export function getWorkspacesBySessionIds(
       `
     SELECT
       w.id, w.repository_id, w.slug, w.title, w.git_branch,
-      w.git_target_branch, w.kind, w.provider_workspace_id,
+      w.git_target_branch, w.kind, w.provider_workspace_id, w.organization_id,
       w.state, w.status, w.current_session_id,
       w.pr_url, w.pr_number,
       w.pr_state, w.pr_is_draft, w.pr_review_status, w.pr_has_conflicts, w.pr_ci_status, w.pr_checked_at,
@@ -375,14 +375,20 @@ export function getAllRepositories(db: Database.Database): RepositoryWithCountsR
 }
 
 /** Lightweight repo list for backfilling empty groups in by-repo queries. */
-export function getAllRepositorySummaries(
-  db: Database.Database
-): { id: string; name: string; sort_order: number; git_origin_url: string | null }[] {
+export interface RepositorySummaryRow {
+  id: string;
+  name: string;
+  sort_order: number;
+  git_origin_url: string | null;
+  root_path: string | null;
+}
+
+export function getAllRepositorySummaries(db: Database.Database): RepositorySummaryRow[] {
   return db
     .prepare(
-      "SELECT id, name, sort_order, git_origin_url FROM repositories ORDER BY sort_order, name"
+      "SELECT id, name, sort_order, git_origin_url, root_path FROM repositories ORDER BY sort_order, name"
     )
-    .all() as { id: string; name: string; sort_order: number; git_origin_url: string | null }[];
+    .all() as RepositorySummaryRow[];
 }
 
 export function getRepositoryById(db: Database.Database, id: string): RepositoryRow | undefined {

@@ -17,7 +17,7 @@ import {
   getPlatformKeyError,
   provisionAfterLogin,
   retryDeviceKeyProvisioning,
-  revokeDeviceKey,
+  revokeDeviceKeys,
 } from "./deus-cloud-provision";
 import {
   buildDesktopLoginUrl,
@@ -120,6 +120,7 @@ function toPublicStatus(
       tokenType: null,
       cloudUrl,
       hasPlatformKey: false,
+      platformOrgIds: [],
     };
   }
 
@@ -132,6 +133,7 @@ function toPublicStatus(
     tokenType: stored.tokenType,
     cloudUrl: stored.cloudUrl,
     hasPlatformKey: false,
+    platformOrgIds: [],
     platformKeyError: getPlatformKeyError(),
   };
 }
@@ -144,6 +146,7 @@ async function enrichWithCredentialStatus(
   return {
     ...status,
     hasPlatformKey: creds?.hasPlatformKey ?? false,
+    platformOrgIds: creds?.platformOrgIds ?? [],
     ...(creds?.vaultLocked ? { vaultLocked: true } : {}),
   };
 }
@@ -740,13 +743,13 @@ async function performSignOut(sessionToken: string | null): Promise<DeusCloudAut
     finishPendingLogin(new Error("Deus Cloud sign-in was cancelled"), undefined, pending);
   }
 
-  // Session file first: revokeDeviceKey ends with a credentials push to the
+  // Session file first: revokeDeviceKeys ends with a credentials push to the
   // backend, and that push must read an EMPTY session — not hand the backend
   // a live token for the account the user just left.
   await clearStoredSession();
-  // Revoke THIS device's platform key with the token captured above; local
+  // Revoke THIS device's platform keys with the token captured above; local
   // deletion inside also locks the device out even when offline.
-  await revokeDeviceKey(sessionToken).catch(() => {});
+  await revokeDeviceKeys(sessionToken).catch(() => {});
 
   const session = await getDeusCloudSessionStatus();
   broadcastAuthChanged(session);
@@ -869,14 +872,14 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
       if (!token) return;
       await provisionAfterLogin(token, stored.cloudUrl);
       // Signing out mid-mint used to leave a freshly minted key in the vault
-      // of a signed-out user: revokeDeviceKey ran BEFORE the key existed, so
+      // of a signed-out user: revokeDeviceKeys ran BEFORE the key existed, so
       // nothing ever revoked it and the backend cloud lane stayed live.
       if (provisionGeneration !== loginGeneration) {
         // Use the CAPTURED token, not a re-read: sign-out has already cleared
-        // the stored session by now, and revokeDeviceKey skips the server-side
+        // the stored session by now, and revokeDeviceKeys skips the server-side
         // DELETE when handed null — which would delete the local copy and
         // leave the just-minted key alive on the platform forever.
-        await revokeDeviceKey(token).catch(() => {});
+        await revokeDeviceKeys(token).catch(() => {});
         return;
       }
       broadcastAuthChanged(await getDeusCloudSessionStatus());

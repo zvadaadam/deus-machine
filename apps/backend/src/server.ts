@@ -25,6 +25,7 @@ import {
   stopBackgroundRefresh as stopLocalServerDiscovery,
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
+import { refreshCloudOrganizations } from "./services/cloud-settings.service";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
 
@@ -59,7 +60,10 @@ async function backfillGitOriginUrls(): Promise<void> {
 
   try {
     const nullUrlRepos = db
-      .prepare("SELECT id, root_path FROM repositories WHERE git_origin_url IS NULL")
+      // A project with no folder here has nothing for git to read.
+      .prepare(
+        "SELECT id, root_path FROM repositories WHERE git_origin_url IS NULL AND root_path IS NOT NULL"
+      )
       .all() as { id: string; root_path: string }[];
     if (nullUrlRepos.length === 0) return;
 
@@ -148,6 +152,8 @@ async function onListening(port: number): Promise<void> {
   // Automations are cloud-only (agnt schedules + executes) — just mirror the
   // platform into the local cache when credentials are already present.
   initAutomations();
+  // This backend's cloud, read from the platform when an account is already here.
+  refreshCloudOrganizations();
 }
 
 // Bind 0.0.0.0 to accept connections from all interfaces.

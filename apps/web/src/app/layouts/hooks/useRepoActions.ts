@@ -4,6 +4,7 @@
  * Delegates each async flow to its own hook:
  * - useCloneRepo — GitHub clone modal + multi-phase clone
  * - useStartNewProject — create-from-scratch modal + git init
+ * - the "Add repository" dialog (in the cloud: a GitHub repository, no clone)
  *
  * Keeps shared logic here:
  * - addRepoOrUseExisting (409 conflict handling)
@@ -14,7 +15,7 @@
  * chosen, where the first message creates its first workspace.
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { Repository } from "@/features/repository/types";
 import { useCreateWorkspace } from "@/features/workspace/api";
@@ -65,6 +66,23 @@ export function useRepoActions({ selectWorkspace }: UseRepoActionsOptions) {
   // ── Start new project flow ───────────────────────────────────
 
   const startNew = useStartNewProject({ addRepoOrUseExisting, onAdded: startIn });
+
+  // ── Add from GitHub (the cloud) ──────────────────────────────
+
+  /** The add dialog's organization while it is open; null when closed. */
+  const [addFromGitHub, setAddFromGitHub] = useState<{ organizationId: string | null } | null>(
+    null
+  );
+  const openAddFromGitHub = useCallback(
+    (organizationId: string | null) => setAddFromGitHub({ organizationId }),
+    []
+  );
+  const closeAddFromGitHub = useCallback(() => setAddFromGitHub(null), []);
+  /** Added, or chosen as the project it already is: Home with it chosen. */
+  function handleCloudRepoAdded(repoId: string) {
+    expandRepo(repoId);
+    openNewWorkspace({ repoId });
+  }
 
   // ── Open local project ───────────────────────────────────────
 
@@ -122,5 +140,11 @@ export function useRepoActions({ selectWorkspace }: UseRepoActionsOptions) {
 
     // Open project (native dialog)
     handleOpenProject,
+
+    // Add from GitHub (the cloud's add dialog)
+    addFromGitHub,
+    openAddFromGitHub,
+    closeAddFromGitHub,
+    handleCloudRepoAdded,
   };
 }

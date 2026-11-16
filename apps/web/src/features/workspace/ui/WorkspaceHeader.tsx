@@ -1,4 +1,5 @@
 import type { CloudPresence } from "../lib/cloudPresence";
+import { locationOf } from "@/features/sidebar/lib/location";
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -47,6 +48,7 @@ interface WorkspaceHeaderProps {
   title?: string;
   repositoryName?: string;
   branch?: string;
+  /** The workspace's folder on this computer (`localFolder`): the Open button opens it. */
   workspacePath?: string;
   setupStatus?: SetupStatus;
   setupError?: string | null;
@@ -338,10 +340,7 @@ export function WorkspaceHeader({
               disabled={setupStatus === "running"}
               onRunTask={onRunTask}
               onOpenSettings={() =>
-                uiActions.openEnvironmentSettings(
-                  repositoryId,
-                  kind === "cloud" ? "cloud" : "local"
-                )
+                uiActions.openEnvironmentSettings(repositoryId, locationOf({ kind }))
               }
             />
           )}

@@ -57,3 +57,26 @@ export function githubRepoSlug(originUrl: string): string | null {
   if (parts.length !== 2) return null;
   return `${parts[0]}/${parts[1]}`;
 }
+
+/**
+ * `owner/name` from what a person types for a GitHub repository: `owner/name`,
+ * or a github.com address (https or ssh). Null for anything else. The add
+ * dialog enables Add on it and the backend refuses on it: one rule.
+ */
+export function parseGithubRepository(input: string): string | null {
+  const value = input.trim();
+  if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) return value.replace(/\.git$/, "");
+  return githubRepoSlug(value);
+}
+
+/** The project that already is this repository (`owner/name`), if one is. */
+export function projectForRepository<T extends { git_origin_url?: string | null }>(
+  slug: string,
+  projects: readonly T[]
+): T | undefined {
+  const key = normalizeRepoRef(`https://github.com/${slug}`);
+  return projects.find(
+    (project) =>
+      !!project.git_origin_url && normalizeRepoRef(httpsOrigin(project.git_origin_url)) === key
+  );
+}

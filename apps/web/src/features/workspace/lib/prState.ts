@@ -7,7 +7,7 @@
  * Pure function. No React. Trivially testable.
  */
 
-import type { PRStatus, GhCliStatus, CheckDetail } from "@/shared/types";
+import type { PRStatus, GhCliStatus, CheckDetail, Workspace } from "@/shared/types";
 
 /**
  * Discriminated union of all possible PR action states.
@@ -128,4 +128,15 @@ export function derivePRActionState(
 
   // Fallback: unknown CI, draft PRs, or any other open PR state
   return { type: "awaiting_review", prNumber, prUrl };
+}
+
+/**
+ * The branch a workspace's pull request goes into: its own target (the branch
+ * it started from), else its project's default branch. The one rule for the
+ * header's PR target and the sidebar's hover card.
+ */
+export function prTargetBranch(
+  workspace: Pick<Workspace, "git_target_branch" | "git_default_branch"> | null | undefined
+): string {
+  return workspace?.git_target_branch || workspace?.git_default_branch || "main";
 }

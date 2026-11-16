@@ -620,12 +620,15 @@ describe("repoPrs", () => {
 });
 
 describe("repoBranches", () => {
-  it("lists origin's branches by name", async () => {
+  it("lists origin's branches by name, marked as the clone's remote-tracking refs", async () => {
     mockStmt.get.mockReturnValueOnce(REPO);
     git(() => "origin/main\norigin/HEAD\norigin/feature/login\n\n");
 
     await expect(run(api.repoBranches, { repoId: REPO.id })).resolves.toEqual({
-      branches: [{ name: "main" }, { name: "feature/login" }],
+      branches: [
+        { name: "main", is_remote: true },
+        { name: "feature/login", is_remote: true },
+      ],
     });
     expect(mockExecFile).toHaveBeenCalledWith(
       "git",
@@ -658,7 +661,16 @@ describe("cloudRepoAccess", () => {
       status: "needs_grant",
       slug: "acme/app",
     });
-    expect(mockResolveCloudRepoAccess).toHaveBeenCalledWith(REPO.id);
+    expect(mockResolveCloudRepoAccess).toHaveBeenCalledWith(REPO.id, undefined, {
+      fresh: undefined,
+    });
+  });
+
+  it("asks afresh when the gate is waiting for a grant", async () => {
+    mockResolveCloudRepoAccess.mockResolvedValue({ status: "ok", slug: "acme/app" });
+
+    await run(api.cloudRepoAccess, { repoId: REPO.id, organizationId: "org-2", fresh: true });
+    expect(mockResolveCloudRepoAccess).toHaveBeenCalledWith(REPO.id, "org-2", { fresh: true });
   });
 });
 

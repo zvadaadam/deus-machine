@@ -8,8 +8,15 @@ import { promisify } from "util";
 import * as api from "@shared/api/repos";
 import type { ParsedInputOf } from "@shared/api/op";
 import { uuidv7 } from "@shared/lib/uuid";
+import {
+  githubRepoSlug,
+  httpsOrigin,
+  normalizeRepoRef,
+  parseGithubRepository,
+} from "@shared/git-origin";
 import type { BranchSummary, PRSummary } from "@shared/types/github";
 import type { InspectedRepository, Repository } from "@shared/types/repository";
+import type { RepositoryRow } from "../db/types";
 import { getDatabase } from "../lib/database";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { getGitRemoteUrlSync } from "../lib/git-remotes";
@@ -20,6 +27,9 @@ import {
   getRepositoryByRootPath,
 } from "../db";
 import { resolveCloudRepoAccess } from "../services/cloud-workspace-init.service";
+import { defaultCloudOrgId } from "../services/agent/cloud/config";
+import { listAccessibleRepos } from "../services/cloud-settings.service";
+import * as githubRemote from "../services/github-remote";
 import { detectDefaultBranch } from "../services/git.service";
 import { parseGitHubRepo, runGh } from "../services/gh.service";
 import { readProjectFile, writeProjectFile } from "../services/project-environment.service";
@@ -46,6 +56,96 @@ function requireRepo(id: string) {
   const repo = getRepositoryById(getDatabase(), id);
   if (!repo) throw new NotFoundError("Repository not found");
   return repo;
+}
+
+/** The project's folder; refused in words for a project that is not on this computer. */
+function requireFolder(repo: RepositoryRow): string {
+  if (!repo.root_path) {
+    throw new ConflictError(`${repo.name} is not on this computer: it has no folder here.`);
+  }
+  return repo.root_path;
+}
+
+/** One GitHub repository's identity, whatever form its address was written in. */
+function originKey(origin: string): string {
+  return normalizeRepoRef(httpsOrigin(origin));
+}
+
+/** The projects for one GitHub repository, in sidebar order. */
+function projectsWithOrigin(db: ReturnType<typeof getDatabase>, origin: string): RepositoryRow[] {
+  const key = originKey(origin);
+  return (
+    db
+      .prepare(
+        "SELECT * FROM repositories WHERE git_origin_url IS NOT NULL ORDER BY sort_order, name"
+      )
+      .all() as RepositoryRow[]
+  ).filter((repo) => originKey(repo.git_origin_url!) === key);
+}
+
+/** The organization a cloud read acts in: the one named, else the default one. */
+function organizationFor(organizationId: string | null | undefined): string | null {
+  return organizationId ?? defaultCloudOrgId();
+}
+
+/**
+ * Add a GitHub repository as a project with no folder here, or return the
+ * project that already exists for it. Its default branch is asked of GitHub;
+ * when GitHub will not say (private, no access yet) it is `main` until the next
+ * branch read corrects it.
+ */
+export async function addCloudRepository(
+  repository: string,
+  organizationId?: string | null
+): Promise<Repository> {
+  const db = getDatabase();
+  const slug = parseGithubRepository(repository);
+  if (!slug) {
+    throw new ValidationError(
+      "Only GitHub repositories can be added here. Use owner/name or a github.com address."
+    );
+  }
+  const origin = `https://github.com/${slug}`;
+  const existing = projectsWithOrigin(db, origin)[0];
+  if (existing) return existing;
+
+  const branch =
+    (await githubRemote.defaultBranch(slug, organizationFor(organizationId))) ?? "main";
+  const repoId = uuidv7();
+  const repo = db.transaction(() => {
+    // Asked of GitHub meanwhile: another add may have won.
+    const raced = projectsWithOrigin(db, origin)[0];
+    if (raced) return raced;
+    db.prepare(
+      `INSERT INTO repositories (id, name, root_path, git_default_branch, sort_order, git_origin_url)
+       VALUES (?, ?, NULL, ?, ?, ?)`
+    ).run(repoId, slug.split("/")[1], branch, getMaxRepositorySortOrder(db) + 1, origin);
+    return getRepositoryById(db, repoId);
+  })();
+  if (!repo) throw new AppError(500, "Repository was not saved");
+  invalidate(["workspaces"]);
+  return repo;
+}
+
+/** The organization's reachable repositories, each with the project that exists for it here. */
+async function listCloudRepositories(organizationId?: string | null) {
+  const orgId = organizationFor(organizationId);
+  if (!orgId) {
+    throw new ConflictError("Sign in to Deus Cloud to see your organization's repositories.");
+  }
+  const { repos } = await listAccessibleRepos(orgId);
+  const byOrigin = new Map<string, string>();
+  for (const repo of getAllRepositories(getDatabase())) {
+    if (!repo.git_origin_url) continue;
+    const key = originKey(repo.git_origin_url);
+    if (!byOrigin.has(key)) byOrigin.set(key, repo.id);
+  }
+  return {
+    repositories: repos.map((slug) => ({
+      slug,
+      repoId: byOrigin.get(originKey(`https://github.com/${slug}`)) ?? null,
+    })),
+  };
 }
 
 /** Expand a leading `~` to the home directory: Node's path functions treat it as a literal. */
@@ -126,6 +226,20 @@ export async function addRepository(rootPath: string): Promise<Repository> {
   const insert = db.transaction(() => {
     const existing = getRepositoryByRootPath(db, inspected.root_path);
     if (existing) throw new ConflictError("Repository already exists", existing);
+
+    // The repository is already a project with no folder here: this folder
+    // becomes its folder. Two folders of one repository stay two projects.
+    const waiting = inspected.git_origin_url
+      ? projectsWithOrigin(db, inspected.git_origin_url).find((repo) => !repo.root_path)
+      : undefined;
+    if (waiting) {
+      db.prepare("UPDATE repositories SET root_path = ?, git_default_branch = ? WHERE id = ?").run(
+        inspected.root_path,
+        inspected.git_default_branch,
+        waiting.id
+      );
+      return getRepositoryById(db, waiting.id);
+    }
 
     const sortOrder = getMaxRepositorySortOrder(db) + 1;
     db.prepare(
@@ -308,8 +422,9 @@ async function initProject({
 
 async function listOpenPrs(repoId: string): Promise<PRSummary[]> {
   const repo = requireRepo(repoId);
-  // The stored origin, else what git says now.
-  const originUrl = repo.git_origin_url ?? getGitRemoteUrlSync(repo.root_path);
+  // The stored origin, else what git says now (a project with no folder always has one).
+  const originUrl =
+    repo.git_origin_url ?? (repo.root_path ? getGitRemoteUrlSync(repo.root_path) : null);
   const nwo = originUrl ? parseGitHubRepo(originUrl) : null;
   if (!nwo) return [];
 
@@ -326,7 +441,7 @@ async function listOpenPrs(repoId: string): Promise<PRSummary[]> {
       "--limit",
       "50",
     ],
-    { cwd: repo.root_path, timeoutMs: 10000 }
+    { cwd: repo.root_path ?? undefined, timeoutMs: 10000 }
   );
   if (!result.success) return [];
 
@@ -348,8 +463,33 @@ async function listOpenPrs(repoId: string): Promise<PRSummary[]> {
   }));
 }
 
-async function listRemoteBranches(repoId: string): Promise<{ branches: BranchSummary[] }> {
+/**
+ * A project with no folder here: GitHub's branches, default first. GitHub's
+ * default branch replaces the row's when they differ (a project added while
+ * GitHub would not say is `main` until now).
+ */
+async function listGithubBranches(
+  repo: RepositoryRow,
+  organizationId?: string | null
+): Promise<{ branches: BranchSummary[] }> {
+  const slug = repo.git_origin_url ? githubRepoSlug(repo.git_origin_url) : null;
+  if (!slug) return { branches: [] };
+  const found = await githubRemote.branches(slug, organizationFor(organizationId));
+  if (found.defaultBranch && found.defaultBranch !== repo.git_default_branch) {
+    getDatabase()
+      .prepare("UPDATE repositories SET git_default_branch = ? WHERE id = ? AND root_path IS NULL")
+      .run(found.defaultBranch, repo.id);
+    invalidate(["workspaces"]);
+  }
+  return { branches: found.branches.map((name) => ({ name })) };
+}
+
+async function listRemoteBranches(
+  repoId: string,
+  organizationId?: string | null
+): Promise<{ branches: BranchSummary[] }> {
   const repo = requireRepo(repoId);
+  if (!repo.root_path) return listGithubBranches(repo, organizationId);
   let output: string;
   try {
     const { stdout } = await execFileAsync(
@@ -374,31 +514,38 @@ async function listRemoteBranches(repoId: string): Promise<{ branches: BranchSum
     .filter(Boolean)
     .map((ref) => ref.replace(/^origin\//, ""))
     .filter((name) => name !== "HEAD");
-  return { branches: names.map((name) => ({ name })) };
+  // The clone's remote-tracking refs: `origin/<name>` where they show.
+  return { branches: names.map((name) => ({ name, is_remote: true })) };
 }
 
 export default [
   handle(api.repos, () => getAllRepositories(getDatabase())),
   handle(api.repoEnvironmentFile, async ({ repoId }) => {
     // The local checkout is the only source: never another branch's file.
-    const repo = requireRepo(repoId);
-    const project = readProjectFile(repo.root_path);
-    const { stdout } = await execFileAsync("git", ["branch", "--show-current"], {
-      cwd: repo.root_path,
-    });
+    const root = requireFolder(requireRepo(repoId));
+    const project = readProjectFile(root);
+    const { stdout } = await execFileAsync("git", ["branch", "--show-current"], { cwd: root });
     return { project, branch: stdout.trim() || "detached HEAD" };
   }),
   handle(api.repoPrs, ({ repoId }) => listOpenPrs(repoId)),
-  handle(api.repoBranches, ({ repoId }) => listRemoteBranches(repoId)),
+  handle(api.repoBranches, ({ repoId, organizationId }) =>
+    listRemoteBranches(repoId, organizationId)
+  ),
+  handle(api.cloudRepositories, ({ organizationId }) => listCloudRepositories(organizationId)),
   // An unknown repository or one without an origin is a status the composer
   // ignores, never a 404: it only acts on "needs_grant".
-  handle(api.cloudRepoAccess, ({ repoId }) => resolveCloudRepoAccess(repoId)),
+  handle(api.cloudRepoAccess, ({ repoId, organizationId, fresh }) =>
+    resolveCloudRepoAccess(repoId, organizationId, { fresh })
+  ),
   handle(api.recentProjects, () => ({ projects: listRecentProjects() })),
   handle(api.inspectRepo, ({ root_path }) => inspectRepository(root_path)),
 
   handle(api.addRepo, ({ root_path }) => addRepository(root_path)),
+  handle(api.addCloudRepo, ({ repository, organizationId }) =>
+    addCloudRepository(repository, organizationId)
+  ),
   handle(api.saveRepoEnvironmentFile, ({ repoId, project }) => {
-    writeProjectFile(requireRepo(repoId).root_path, project);
+    writeProjectFile(requireFolder(requireRepo(repoId)), project);
   }),
   handle(api.gitClone, cloneRepository),
   handle(api.gitInit, initProject),

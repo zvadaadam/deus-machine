@@ -576,12 +576,72 @@ in step with it:
 - Sidebar header is 48px (`px-1.5 py-1.5` around a 36px account button); footer is 46px (`p-3.5`)
 - The header's button is a menu that says where the window's workspaces run
   (`features/sidebar/ui/SidebarHeader.tsx`). The trigger is a 24px tile (the avatar for
-  this computer, a cloud glyph for Deus Cloud), the location's name and a 14px chevron.
-  The menu is 256px (`w-64`): the account's email in muted text when signed in, one row per
-  location (20px tile, name, a check on the current one or its `⌃1` / `⌃2` hint),
-  "Your computers" on web builds, a separator, Settings. **Not drawn yet:** `DS/Sidebar` and
-  every board that instances it still show the old button with no chevron, and no board
-  draws the open menu. Draw both when the file is next edited
+  this computer, an organization's initial on a `bg-muted` tile, or the cloud glyph when no
+  organization is named), the place's name and a 14px chevron.
+  The menu is 256px (`w-64`): the account's email in muted text when signed in, this
+  computer's row, then one row per organization of the account (20px tile with its
+  initial, name, a check on the current one or its `⌃1`…`⌃9` hint), "Your computers" on
+  web builds, a separator, Settings. The hosted web has no computer row. An organization
+  not set up on this computer has a muted `text-xs` hint in the check's place: "Set up"
+  (or "Setting up…") in the desktop app, "Not set up" on a disabled row elsewhere. With no
+  list there is one "Deus Cloud" row whose hint says what choosing it does: in the desktop
+  app "Sign in", "Signing in…", "Setting up…" or "Retry"; elsewhere "Not signed in",
+  disabled. The Home composer's Cloud control
+  (`features/repository/ui/composer/ComposerControls.tsx`) is "☁ Cloud" and a switch
+  with one organization; with several, the glyph, label and a 10px chevron are a menu
+  trigger beside the switch, reading "Cloud" while off and the organization's name while
+  on (truncating, one line). Its menu (224px, `w-56`) lists the organizations with the
+  header's 20px tiles and hints, and a check on the one in use while the cloud is on.
+  **Not drawn yet:** `DS/Sidebar` and every board that instances it still show the old
+  button with no chevron; no board draws the open menu, its organization rows and their
+  states, the organization tile in the trigger, or the composer's control with several
+  organizations (off, on, its menu open). Draw them when the file is next edited
+- Settings → GitHub (cloud repositories), Settings → Cloud and the Automations list name
+  the organization they show when the account has several: one muted `text-xs` line,
+  "In <organization>", under the section's description. Environments, Slack and cloud
+  usage open their organization select on the window's organization. **Not drawn yet:**
+  no settings or automations board shows that line
+- Adding a project follows the place. In the cloud, the sidebar's "Add project" opens
+  the dialog directly (one way to add, so no menu), and the command palette, Home's
+  zero-state card and footer link say "Add from GitHub" (the GitHub mark, "A repository
+  to work on in the cloud").
+  It opens `AddRepositoryDialog` (`features/repository/ui/AddRepositoryDialog.tsx`,
+  440px, the dialog of `CloneRepositoryModal`): title "Add repository", one muted
+  `text-xs` line naming whose GitHub access it is, a bordered list (`rounded-lg`) with a
+  search row and 36px rows of the GitHub mark and `owner/name`, a project already added
+  marked "✓ Added" in `text-text-disabled`; loading, an error with Retry, and an empty
+  state ("<organization>'s GitHub access reaches no repositories yet." with Connect
+  GitHub where the desktop can install the App, a sentence elsewhere); under it "Use a
+  public repository" (reveals a URL field and Add; Add is off until the text names a
+  GitHub repository, and reads "Open" with a muted "✓ <owner/name> is already a
+  project." under the field for one that is; anything else gets the muted line "Use
+  owner/name or a github.com address.") and a quiet "Manage GitHub access".
+  The composer's project picker shows `owner/name` where it shows a path for a project
+  with no folder, and its Cloud switch is on, disabled, with the tooltip "<name> is not
+  on this Mac". The composer lists only the projects that can run where its switch
+  points; with none, its picker reads "Add a project" and offers the place's add action.
+  A project with no folder lists its branches as plain names (no `origin/`, which only a
+  clone's remote-tracking refs carry). **Not drawn yet:** no board draws the dialog
+  (list, public address with its Open and hint states, empty), the cloud zero state, the
+  composer's "Add a project" picker, or the locked switch
+- A chat's session error card (`features/session/ui/SessionErrorCard.tsx`) keeps its
+  sentence's width: the action wraps under the text instead of squeezing it into a
+  column (`flex-wrap`, the text at least 16rem). A send the cloud refused for an AI
+  provider account reads "AI account needed", the platform's sentence without codes,
+  and an outline "Open AI Providers" button in place of "Retry in new chat". A cloud
+  chat's placeholder names "/ skills" only when its `/` menu has something. **Not drawn
+  yet:** no board draws the account refusal card or the wrapped layout
+- A cloud workspace's things live on its computer. The header menu's rows carry a 6px dot
+  (`size-1.5`, before the shortcut) for a place with activity: `bg-accent-gold` for an
+  unread reply (the sidebar row's unread dot), `bg-muted-foreground` for a working agent
+  (the working pixel grid's colour); the trigger's glyph carries the same dot at its
+  top-right, ringed in `sidebar`, when a place other than the window's has one. A cloud
+  workspace's Agent tab is one centred state (`CloudBrowserUnavailable`'s layout: a 40px
+  muted tile with the cloud glyph and one `text-sm` line, "This workspace's agent runs in
+  the cloud, so this computer's configuration does not apply to it."). In a browser the
+  cloud preview is a frame under the same port bar. **Not drawn yet:** no board draws the
+  activity dots, the cloud Agent tab, the cloud preview in a browser, or a cloud chat's
+  file card without "Reveal in Finder"
 - The sidebar's app nav (New workspace, Automations, Customize) is three 32px rows directly
   under the header (`px-1.5 pb-1`, `gap-px`), a 14px icon in a 20px slot. New workspace is
   Home, and active while Home is on screen; the header's "new session" icon it replaces is

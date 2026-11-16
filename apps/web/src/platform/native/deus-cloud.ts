@@ -156,7 +156,8 @@ export interface GithubAppState {
   error?: string;
 }
 
-export async function getGithubAppStatus(): Promise<GithubAppState> {
+/** The Deus GitHub App for an organization (the default one when none is named). */
+export async function getGithubAppStatus(orgId?: string | null): Promise<GithubAppState> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.getGithubAppStatus) {
     return {
       configured: false,
@@ -166,12 +167,20 @@ export async function getGithubAppStatus(): Promise<GithubAppState> {
       accessibleRepos: [],
     };
   }
-  return window.electronAPI.getGithubAppStatus();
+  return window.electronAPI.getGithubAppStatus(orgId ?? undefined);
 }
 
-export async function installGithubApp(): Promise<{ ok: boolean; error?: string }> {
+/** Whether this client can open the GitHub App install (the desktop app can; a browser cannot). */
+export function canInstallGithubApp(): boolean {
+  return capabilities.ipcInvoke && !!window.electronAPI?.installGithubApp;
+}
+
+/** Install the Deus GitHub App for an organization (the default one when none is named). */
+export async function installGithubApp(
+  orgId?: string | null
+): Promise<{ ok: boolean; error?: string }> {
   if (!capabilities.ipcInvoke || !window.electronAPI?.installGithubApp) {
     return { ok: false, error: "Installing the GitHub App requires the desktop app" };
   }
-  return window.electronAPI.installGithubApp();
+  return window.electronAPI.installGithubApp(orgId ?? undefined);
 }

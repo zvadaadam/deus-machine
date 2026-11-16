@@ -20,12 +20,15 @@
  */
 
 import type { SessionStatus } from "@/shared/types";
+import { agentConfigOf } from "@/features/workspace/lib/reach";
+import { locationOf } from "@/features/sidebar/lib/location";
 import { ACTIVE_TURN_STATUSES, type WorkspaceKind } from "@shared/enums";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { AnimatePresence, motion } from "framer-motion";
 import { Minimize2, ArrowUp, Square, Wrench } from "lucide-react";
 import { useFileMention } from "../hooks/useFileMention";
+import { useCloudSlashItems } from "../hooks/useCloudSlashItems";
 import { useSlashCommand } from "../hooks/useSlashCommand";
 import { useSessionComposer } from "../hooks/useSessionComposer";
 import { FileMentionPopover } from "./FileMentionPopover";
@@ -309,10 +312,18 @@ export function MessageInput({
     onAddMention: (result) => composer.addFileMention({ path: result.path, name: result.name }),
   });
 
-  // / slash command popover — same pattern. Picked skills → store.
+  // / slash command popover — same pattern. Picked skills → store. Rule 1: the
+  // configuration where the agent runs; in the cloud, what reaches it from here.
+  const agentConfig = agentConfigOf({
+    kind: workspaceKind ?? "worktree",
+    workspace_path: workspacePath ?? "",
+    current_session_id: sessionId ?? null,
+  });
+  const cloudSlashItems = useCloudSlashItems(agentConfig.where === "cloud" && isClaudeAgent);
   const slashCommand = useSlashCommand({
     value: draft,
-    workspacePath,
+    config: agentConfig,
+    cloudItems: cloudSlashItems,
     onChange: composer.setDraft,
     enabled: isClaudeAgent,
     onAddSkill: (skill) =>
@@ -365,8 +376,7 @@ export function MessageInput({
   const modelThinkingLevels = levelsFor(model);
 
   // Suggest setup only in an empty, idle chat with a known missing recipe.
-  const setupLocation =
-    workspaceKind === "cloud" ? "cloud" : workspaceKind === "worktree" ? "local" : null;
+  const setupLocation = workspaceKind ? locationOf({ kind: workspaceKind }) : null;
   const showSetupNudge =
     setupLocation !== null &&
     environmentUnconfigured &&
@@ -473,12 +483,13 @@ export function MessageInput({
           }}
           onPaste={handlePaste}
           // @ files and / skills read the Mac backend — web-direct has none, so
-          // the hint would promise pickers that come back empty.
+          // the hint would promise pickers that come back empty. A cloud chat's
+          // `/` menu lists only what reaches a cloud turn: named when it has any.
           placeholder={
             placeholder ??
             (isCloudDirectWebMode()
               ? "Ask a follow-up…"
-              : isClaudeAgent
+              : isClaudeAgent && (agentConfig.where !== "cloud" || cloudSlashItems.length > 0)
                 ? "Ask a follow-up… (@ files, / skills)"
                 : "Ask a follow-up… (@ files)")
           }

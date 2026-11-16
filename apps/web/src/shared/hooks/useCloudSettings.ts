@@ -16,11 +16,25 @@ export interface CloudSettings {
 
 export const CLOUD_SETTINGS_QUERY_KEY = ["settings", "cloud"] as const;
 
-/** `enabled: false` reads the cache only: each fetch asks the platform for its secrets. */
-export function useCloudSettings({ enabled = true }: { enabled?: boolean } = {}) {
+/**
+ * `enabled: false` reads the cache only: each fetch asks the platform for its secrets.
+ * `organizationId` asks about one organization (the default one when omitted or null);
+ * invalidating `CLOUD_SETTINGS_QUERY_KEY` reaches every organization's answer.
+ */
+export function useCloudSettings({
+  enabled = true,
+  organizationId = null,
+}: { enabled?: boolean; organizationId?: string | null } = {}) {
   return useQuery({
-    queryKey: CLOUD_SETTINGS_QUERY_KEY,
-    queryFn: () => apiClient.get<CloudSettings>("/settings/cloud"),
+    queryKey: organizationId
+      ? ([...CLOUD_SETTINGS_QUERY_KEY, organizationId] as const)
+      : CLOUD_SETTINGS_QUERY_KEY,
+    queryFn: () =>
+      apiClient.get<CloudSettings>(
+        organizationId
+          ? `/settings/cloud?organizationId=${encodeURIComponent(organizationId)}`
+          : "/settings/cloud"
+      ),
     staleTime: 30_000,
     retry: false,
     enabled,

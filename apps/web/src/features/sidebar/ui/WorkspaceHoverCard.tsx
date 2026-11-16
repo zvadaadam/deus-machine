@@ -13,6 +13,7 @@ import { call } from "@/platform/ws";
 import type { Workspace, DiffStats } from "@/shared/types";
 import { useAutomationForWorkspace } from "@/features/automations";
 import { uiActions } from "@/shared/stores/uiStore";
+import { prTargetBranch } from "@/features/workspace/lib/prState";
 import type { DisplayStatus } from "../lib/status";
 import { getWorkspaceDisplayName, getWorkspaceSecondaryText } from "../lib/utils";
 import { WorkspaceGitIcon, derivePrLifecycle } from "./WorkspaceGitIcon";
@@ -161,7 +162,7 @@ export function WorkspaceHoverCard({
   const hasChanges = additions > 0 || deletions > 0;
 
   const branch = workspace.git_branch;
-  const targetBranch = workspace.git_target_branch || workspace.git_default_branch || "main";
+  const targetBranch = prTargetBranch(workspace);
   const timeText =
     isWorking && workingDuration ? workingDuration : formatTimeAgo(workspace.updated_at);
 

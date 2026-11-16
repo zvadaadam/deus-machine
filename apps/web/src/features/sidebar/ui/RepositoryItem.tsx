@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { offersNewFromBranch } from "../lib/location";
 import { Plus, ChevronRight, ChevronDown, GitPullRequest } from "lucide-react";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
@@ -19,11 +20,6 @@ import { WorkspaceItem } from "./WorkspaceItem";
 import { SidebarRow, SidebarRowMain, SidebarRowIconSlot, SidebarRowRight } from "./SidebarRow";
 import { DeusRepositoryBanner } from "./DeusRepositoryBanner";
 
-/** Check if a git remote URL points to GitHub */
-function isGitHubUrl(url: string | null | undefined): boolean {
-  return !!url && url.includes("github.com");
-}
-
 /**
  * RepositoryItem — collapsible repo section header.
  *
@@ -39,6 +35,7 @@ export function RepositoryItem({
   onWorkspaceClick,
   onNewWorkspace,
   onNewWorkspaceFromGitHub,
+  windowLocation,
   onArchive,
   onStatusChange,
   diffStatsMap,
@@ -105,7 +102,8 @@ export function RepositoryItem({
             </SidebarRowMain>
             {sidebarExpanded && canCreate && (
               <SidebarRowRight className="gap-2 opacity-0 transition-opacity duration-150 group-focus-within/repository-item:opacity-100 group-hover/repository-item:opacity-100">
-                {isGitHubUrl(repository.git_origin_url) && onNewWorkspaceFromGitHub && (
+                {/* A workspace on a pull request or branch is a local one. */}
+                {offersNewFromBranch(windowLocation, repository) && onNewWorkspaceFromGitHub && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button

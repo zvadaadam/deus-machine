@@ -19,6 +19,7 @@ vi.mock("../../../src/services/agent/cloud/driver", () => ({
   })),
   getCloudDiffFile: vi.fn(async () => ({ path: "x.ts", diff: "@@ cloud diff @@" })),
   requestCloudFs: vi.fn(async () => ({ content: "cloud-bytes" })),
+  hasLiveCloudSession: vi.fn(() => true),
 }));
 
 import { resolveNode } from "../../../src/services/node/driver";
@@ -68,6 +69,28 @@ describe("NodeDriver — diff dispatch", () => {
       diff: "",
       old_content: null,
       new_content: null,
+    });
+  });
+
+  it("row numbers never connect to a computer with no open channel, or one asleep", async () => {
+    const { getCloudDiffSummary, hasLiveCloudSession } =
+      await import("../../../src/services/agent/cloud/driver");
+    const summary = getCloudDiffSummary as ReturnType<typeof vi.fn>;
+    const live = hasLiveCloudSession as ReturnType<typeof vi.fn>;
+    summary.mockClear();
+
+    live.mockReturnValueOnce(false);
+    expect(await resolveNode(cloud, "").diffStats()).toEqual({ additions: 0, deletions: 0 });
+    for (const init_stage of ["paused", "stopped", "resuming", "error"]) {
+      const sleeping = asWs({ ...cloud, init_stage });
+      expect(await resolveNode(sleeping, "").diffStats()).toEqual({ additions: 0, deletions: 0 });
+    }
+    expect(summary).not.toHaveBeenCalled();
+
+    // The Changes panel's list still asks: it is shown only for an awake computer.
+    live.mockReturnValueOnce(false);
+    expect(await resolveNode(cloud, "").diffFiles()).toEqual({
+      files: [{ file: "x.ts", additions: 2, deletions: 5 }],
     });
   });
 

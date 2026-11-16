@@ -12,7 +12,7 @@ import {
   getEnvironment as agntGetEnvironment,
   updateEnvironment as agntUpdateEnvironment,
 } from "@deus-hq/sdk";
-import { getCloudConfig } from "./agent/cloud/config";
+import { cloudOrg } from "./agent/cloud/config";
 import { httpsOrigin, normalizeRepoRef } from "@shared/git-origin";
 
 /**
@@ -55,12 +55,16 @@ export interface CloudEnvironmentInfo {
   lookupFailed?: true;
 }
 
-/** Platform lookup of the repo's specialized environment (by derived name). */
+/**
+ * Platform lookup of the repo's specialized environment (by derived name), in
+ * one organization: environments belong to an organization. No id = the default one.
+ */
 export async function getCloudEnvironmentInfo(
-  repoOriginUrl: string
+  repoOriginUrl: string,
+  orgId?: string | null
 ): Promise<CloudEnvironmentInfo> {
   const name = await environmentNameForRepo(httpsOrigin(repoOriginUrl));
-  const config = getCloudConfig();
+  const config = cloudOrg(orgId);
   if (!config) return { configured: false, name };
   try {
     const env = await agntGetEnvironment(name, { baseUrl: config.baseUrl, apiKey: config.apiKey });
@@ -107,8 +111,11 @@ export async function getCloudEnvironmentInfo(
  * devices existed cannot honour the tab, and a workspace's recipe is
  * captured when it is created: the upgrade has to precede the create.
  */
-export async function enableCloudEnvironmentSimulator(environmentId: string): Promise<void> {
-  const config = getCloudConfig();
+export async function enableCloudEnvironmentSimulator(
+  environmentId: string,
+  orgId: string | null
+): Promise<void> {
+  const config = cloudOrg(orgId);
   if (!config) throw new Error("Cloud workspaces are not configured");
   await agntUpdateEnvironment(environmentId, {
     config: { simulator: true },

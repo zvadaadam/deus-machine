@@ -76,6 +76,9 @@ vi.mock("@/shared/hooks/useDeusCloudSignIn", () => ({
 vi.mock("@/platform", () => ({
   native: { window: { openExternal: vi.fn(), onFocus: () => () => {} } },
 }));
+vi.mock("@/features/sidebar/hooks/useWindowOrganization", () => ({
+  useWindowOrganization: () => ({ id: null }),
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/features/settings/api/provider-accounts.queries", () => ({
   PROVIDER_ACCOUNTS_QUERY_KEY: ["settings", "provider-accounts"],
@@ -95,7 +98,6 @@ let client: QueryClient;
 function seedBase() {
   client.setQueryData(queryKeys.settings.environments.organizations("account"), {
     accountId: "account",
-    currentOrganizationId: "org",
     items: [{ id: "org", name: "Organization", role: "owner" }],
   });
   client.setQueryData(queryKeys.settings.slack.organization("account", "org"), {

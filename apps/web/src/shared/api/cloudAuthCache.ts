@@ -29,7 +29,8 @@ export function applyDeusCloudAuthChange(
   //    these are A's repo names and TRANSCRIPTS, cached with staleTime
   //    Infinity; on desktop the mixed list carries A's cloud rows (the local
   //    rows refetch from the Mac backend in the same beat).
-  //  - cloudRepoAccess GATES the create action (B must not reuse A's "ok").
+  //  - cloudRepoAccess GATES the create action (B must not reuse A's "ok");
+  //    cloudRepositories is A's organization's GitHub repositories.
   //  - cloudDirectToken is an account-scoped JWT driving a live agnt socket —
   //    dropping the data tears the socket down (useCloudDirect passes null
   //    params once it's gone).
@@ -43,6 +44,7 @@ export function applyDeusCloudAuthChange(
     ["workspaces"],
     ["sessions"],
     ["cloudRepoAccess"],
+    ["cloudRepositories"],
     ["cloudDirectToken"],
   ]) {
     void queryClient.resetQueries({ queryKey: key });

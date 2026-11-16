@@ -35,6 +35,8 @@ const ELSE_WORKSPACE = "wsp_mac_else";
 // answered 404 and the backend carries on; a request not listed here fails the run.
 const UNSERVED = {
   "GET /models": "the platform's model lists, for the composer's picker",
+  "GET /dashboard/orgs":
+    "the account's organizations (cloudOrganizations), read when credentials arrive",
   [`GET /workspaces/${PROVIDER_WORKSPACE}`]: "the workspace summary, opening the workspace",
   [`GET /workspaces/${ELSE_WORKSPACE}`]: "the same, for the second workspace",
   [`GET /sessions/${PROVIDER}`]: "the session, for the simulator's context",

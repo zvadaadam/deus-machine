@@ -20,6 +20,8 @@ export interface EnvironmentSetupRequest {
   repoId: string;
   location: "local" | "cloud";
   model: string;
+  /** A cloud setup workspace starts in this organization; null names none. */
+  organizationId: string | null;
 }
 
 interface UIState {

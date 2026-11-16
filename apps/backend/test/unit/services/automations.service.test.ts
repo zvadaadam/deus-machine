@@ -53,12 +53,9 @@ const {
 vi.mock("../../../src/lib/database", () => ({ getDatabase: mockGetDatabase }));
 vi.mock("../../../src/services/query-engine", () => ({ invalidate: mockInvalidate }));
 vi.mock("../../../src/services/streams", () => ({ resetSubscribers: mockResetSubscribers }));
-vi.mock("../../../src/services/agent/cloud/config", () => ({
-  // The workspace-init service registers its pre-connect refresh at import.
-  setCloudConnectHook: () => {},
-  getCloudConfig: mockGetCloudConfig,
-  getCloudConnectionIdentity: () => JSON.stringify(mockGetCloudConfig()),
-}));
+vi.mock("../../../src/services/agent/cloud/config", async () =>
+  (await import("../../cloud-config-mock")).cloudConfigMock(mockGetCloudConfig)
+);
 vi.mock("../../../src/services/cloud-environment.service", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getCloudEnvironmentInfo: mockGetCloudEnvironmentInfo,
@@ -262,9 +259,12 @@ describeWithDb("summaryToRow", () => {
   it("maps the platform summary: display name, cron trigger, repo link", () => {
     const row = summaryToRow(
       summaryFixture() as never,
-      new Map([["repo-acme-widgets-abc12345", "r1"]])
+      new Map([["repo-acme-widgets-abc12345", "r1"]]),
+      undefined,
+      "org-1"
     );
     expect(row.id).toBe("auto-1");
+    expect(row.organization_id).toBe("org-1");
     expect(row.name).toBe("Morning PR review");
     expect(row.cron).toBe(WEEKDAYS_9);
     expect(row.timezone).toBe("Europe/Prague");
@@ -274,16 +274,23 @@ describeWithDb("summaryToRow", () => {
   });
 
   it("falls back to the slug name and null repo off this machine", () => {
-    const row = summaryToRow(summaryFixture({ description: null }) as never, new Map());
+    const row = summaryToRow(
+      summaryFixture({ description: null }) as never,
+      new Map(),
+      undefined,
+      "org-1"
+    );
     expect(row.name).toBe("morning-pr-review");
     expect(row.repository_id).toBeNull();
   });
 
   it("preserves the deus-local columns from the previous row", () => {
-    const row = summaryToRow(summaryFixture() as never, new Map(), {
-      created_by: "agent",
-      workspace_id: "w-held",
-    });
+    const row = summaryToRow(
+      summaryFixture() as never,
+      new Map(),
+      { created_by: "agent", workspace_id: "w-held" },
+      "org-1"
+    );
     expect(row.created_by).toBe("agent");
     expect(row.workspace_id).toBe("w-held");
   });
@@ -358,7 +365,9 @@ describeWithDb("refreshAutomations", () => {
   });
 
   it("mirrors the full list and drops rows the platform no longer has", async () => {
-    store.upsertAutomation(summaryToRow(localSummary({ id: "gone" }) as never, new Map()));
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "gone" }) as never, new Map(), undefined, "org-1")
+    );
     sdk.listAutomations.mockReturnValue(gen([localSummary()]));
 
     await refreshAutomations();
@@ -367,6 +376,82 @@ describeWithDb("refreshAutomations", () => {
     expect(list.map((a) => a.id)).toEqual(["auto-1"]);
     expect(list[0].repo_name).toBe("widgets");
     expect(mockInvalidate).toHaveBeenCalledWith(["automations"]);
+  });
+
+  it("a refresh of one organization replaces that organization's rows and leaves the other's", async () => {
+    mockGetCloudConfig.mockReturnValue({
+      ...CLOUD_CONFIG,
+      orgKeys: { "org-1": "key-a", "org-b": "key-b" },
+    });
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "a-kept" }) as never, new Map(), undefined, "org-1")
+    );
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "b-gone" }) as never, new Map(), undefined, "org-b")
+    );
+    sdk.listAutomations.mockReturnValue(gen([localSummary({ id: "b-new" })]));
+
+    await refreshAutomations(undefined, "org-b");
+
+    // B's list, asked with the session in B's path, replaced only B's rows.
+    expect(sdk.listAutomations).toHaveBeenCalledWith({
+      baseUrl: "https://api.test/dashboard/orgs/org-b",
+      apiKey: "workos-bearer",
+    });
+    const rows = db
+      .prepare("SELECT id, organization_id FROM automations ORDER BY id")
+      .all() as Array<{ id: string; organization_id: string | null }>;
+    expect(rows).toEqual([
+      { id: "a-kept", organization_id: "org-1" },
+      { id: "b-new", organization_id: "org-b" },
+    ]);
+  });
+
+  it("the default organization's refresh also replaces the rows from before organizations were kept", async () => {
+    // A fresh account: the full refresh is throttled per account and organization.
+    mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "owner-legacy" });
+    await refreshAutomations("missing").catch(() => {});
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "legacy" }) as never, new Map(), undefined, null)
+    );
+    sdk.listAutomations.mockReturnValue(gen([localSummary()]));
+
+    await refreshAutomations();
+
+    expect(listAutomations().map((a) => [a.id, a.organization_id])).toEqual([["auto-1", "org-1"]]);
+  });
+
+  it("creates in the organization it is given, and later calls follow the row", async () => {
+    mockGetCloudConfig.mockReturnValue({
+      ...CLOUD_CONFIG,
+      orgKeys: { "org-1": "key-a", "org-b": "key-b" },
+    });
+    sdk.createAutomation.mockResolvedValue({ id: "auto-b" });
+    sdk.getAutomation.mockResolvedValue(localSummary({ id: "auto-b" }));
+    await createAutomation(
+      {
+        repository_id: "r1",
+        name: "B's schedule",
+        prompt: "Review",
+        cron: WEEKDAYS_9,
+        organization_id: "org-b",
+        ...RUN,
+      },
+      "user"
+    );
+    expect(sdk.createAutomation).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: "https://api.test/dashboard/orgs/org-b" })
+    );
+    expect(mockGetCloudEnvironmentInfo).toHaveBeenCalledWith(expect.any(String), "org-b");
+    expect(store.getAutomationRaw("auto-b")?.organization_id).toBe("org-b");
+
+    sdk.pauseAutomation.mockResolvedValue(undefined);
+    sdk.listAutomationRuns.mockReturnValue(gen([]));
+    await toggleAutomation("auto-b", "paused");
+    expect(sdk.pauseAutomation).toHaveBeenCalledWith("auto-b", {
+      baseUrl: "https://api.test/dashboard/orgs/org-b",
+      apiKey: "workos-bearer",
+    });
   });
 
   it("single-automation refresh pulls the run ledger too", async () => {
@@ -385,6 +470,60 @@ describeWithDb("refreshAutomations", () => {
     mockGetCloudConfig.mockReturnValue(null);
     await refreshAutomations();
     expect(sdk.listAutomations).not.toHaveBeenCalled();
+  });
+
+  it("mirrors every organization it holds a key for at start-up; one failing stops none", async () => {
+    // A fresh account: the full refresh is throttled per account and organization.
+    mockGetCloudConfig.mockReturnValue({
+      ...CLOUD_CONFIG,
+      deusCloudSessionToken: "owner-every-org",
+      orgKeys: { "org-1": "key-a", "org-b": "key-b" },
+    });
+    await refreshAutomations("missing").catch(() => {});
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "a-kept" }) as never, new Map(), undefined, "org-1")
+    );
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "b-gone" }) as never, new Map(), undefined, "org-b")
+    );
+    sdk.listAutomations.mockImplementation(({ baseUrl }: { baseUrl: string }) => {
+      if (baseUrl.endsWith("/org-1")) throw new Error("platform unreachable");
+      return gen([localSummary({ id: "b-new" })]);
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    initAutomations();
+    await vi.waitFor(() => expect(store.getAutomationRaw("b-new")).toBeTruthy());
+
+    expect(sdk.listAutomations.mock.calls.map(([auth]) => auth.baseUrl).sort()).toEqual([
+      "https://api.test/dashboard/orgs/org-1",
+      "https://api.test/dashboard/orgs/org-b",
+    ]);
+    // The failed organization keeps its rows; the other's list replaced only its own.
+    const rows = db
+      .prepare("SELECT id, organization_id FROM automations ORDER BY id")
+      .all() as Array<{ id: string; organization_id: string | null }>;
+    expect(rows).toEqual([
+      { id: "a-kept", organization_id: "org-1" },
+      { id: "b-new", organization_id: "org-b" },
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("org-1"),
+      expect.objectContaining({ message: "platform unreachable" })
+    );
+    warn.mockRestore();
+  });
+
+  it("mirrors the default organization at start-up with only a developer key", async () => {
+    mockGetCloudConfig.mockReturnValue({ ...CLOUD_CONFIG, deusCloudSessionToken: "owner-dev" });
+    sdk.listAutomations.mockReturnValue(gen([localSummary()]));
+    initAutomations();
+    await vi.waitFor(() => expect(store.getAutomationRaw("auto-1")).toBeTruthy());
+    expect(sdk.listAutomations).toHaveBeenCalledOnce();
+    expect(sdk.listAutomations).toHaveBeenCalledWith({
+      baseUrl: "https://api.test/dashboard/orgs/org-1",
+      apiKey: "owner-dev",
+    });
   });
 });
 
@@ -588,7 +727,9 @@ describeWithDb("createAutomation", () => {
 
 describeWithDb("automation model choice", () => {
   beforeEach(() => {
-    store.upsertAutomation(summaryToRow(localSummary() as never, new Map([[envName, "r1"]])));
+    store.upsertAutomation(
+      summaryToRow(localSummary() as never, new Map([[envName, "r1"]]), undefined, "org-1")
+    );
     sdk.getAutomation.mockResolvedValue(localSummary());
     sdk.listAutomationRuns.mockReturnValue(gen([]));
   });
@@ -762,7 +903,9 @@ describeWithDb("automation model choice", () => {
 
 describeWithDb("automation mutation identity", () => {
   it("does not create an environment for a retarget after an account switch during environment lookup", async () => {
-    store.upsertAutomation(summaryToRow(localSummary() as never, new Map([[envName, "r1"]])));
+    store.upsertAutomation(
+      summaryToRow(localSummary() as never, new Map([[envName, "r1"]]), undefined, "org-1")
+    );
     db.prepare(
       "INSERT INTO repositories (id, name, root_path, git_origin_url) VALUES ('r2', 'private', '/tmp/private', ?)"
     ).run("https://github.com/acme/private");
@@ -787,7 +930,7 @@ describeWithDb("automation mutation identity", () => {
   it.each(["update", "pause", "delete", "run now"])(
     "drops a late %s result after sign-out",
     async (operation) => {
-      store.upsertAutomation(summaryToRow(localSummary() as never, new Map()));
+      store.upsertAutomation(summaryToRow(localSummary() as never, new Map(), undefined, "org-1"));
       sdk.getAutomation.mockResolvedValue(localSummary());
       const signOut = async () => {
         mockGetCloudConfig.mockReturnValue(null);
@@ -815,7 +958,7 @@ describeWithDb("automation mutation identity", () => {
 
 describeWithDb("toggleAutomation", () => {
   it("routes pause/resume to the platform and re-mirrors", async () => {
-    store.upsertAutomation(summaryToRow(localSummary() as never, new Map()));
+    store.upsertAutomation(summaryToRow(localSummary() as never, new Map(), undefined, "org-1"));
     sdk.pauseAutomation.mockResolvedValue(undefined);
     sdk.getAutomation.mockResolvedValue(
       localSummary({ status: "paused", pausedReason: "manual", nextRunAt: null })
@@ -835,7 +978,7 @@ describeWithDb("toggleAutomation", () => {
 
 describeWithDb("deleteAutomation", () => {
   it("deletes on the platform and cascades the cache", async () => {
-    store.upsertAutomation(summaryToRow(localSummary() as never, new Map()));
+    store.upsertAutomation(summaryToRow(localSummary() as never, new Map(), undefined, "org-1"));
     store.upsertRuns([runSummaryToRow(runFixture() as never)]);
     sdk.deleteAutomation.mockResolvedValue(undefined);
 
@@ -848,7 +991,7 @@ describeWithDb("deleteAutomation", () => {
 
 describeWithDb("runAutomationNow", () => {
   it("triggers a platform fire and seeds the ledger row", async () => {
-    store.upsertAutomation(summaryToRow(localSummary() as never, new Map()));
+    store.upsertAutomation(summaryToRow(localSummary() as never, new Map(), undefined, "org-1"));
     sdk.triggerAutomation.mockResolvedValue({
       runId: "run-9",
       automationId: "auto-1",
@@ -872,7 +1015,9 @@ describeWithDb("runAutomationNow", () => {
 
 describeWithDb("openAutomationRun", () => {
   beforeEach(() => {
-    store.upsertAutomation(summaryToRow(localSummary() as never, new Map([[envName, "r1"]])));
+    store.upsertAutomation(
+      summaryToRow(localSummary() as never, new Map([[envName, "r1"]]), undefined, "org-1")
+    );
     store.upsertRuns([runSummaryToRow(runFixture() as never)]);
     sdk.getSession.mockResolvedValue({
       workspaceId: "agnt-ws-1",
@@ -928,6 +1073,7 @@ describeWithDb("openAutomationRun", () => {
         ...CLOUD_CONFIG,
         apiKey: "agnt_sk_other",
         orgId: "org-2",
+        deusCloudSessionToken: "other-account-bearer",
       });
       sdk.listAutomations.mockReturnValue(gen([]));
       await refreshAutomations();
@@ -951,6 +1097,7 @@ describeWithDb("openAutomationRun", () => {
       automationName: "Morning PR review",
       providerSessionId: "run-1",
       providerWorkspaceId: "agnt-ws-1",
+      organizationId: "org-1",
       newWorkspaceSlug: () => "adopted-run",
     });
     db.prepare("UPDATE workspaces SET state = 'archived' WHERE id = ?").run(adopted.workspaceId);
@@ -961,6 +1108,7 @@ describeWithDb("openAutomationRun", () => {
         ...CLOUD_CONFIG,
         apiKey: "agnt_sk_other",
         orgId: "org-2",
+        deusCloudSessionToken: "other-account-bearer",
       });
       sdk.listAutomations.mockReturnValue(gen([]));
       await refreshAutomations();

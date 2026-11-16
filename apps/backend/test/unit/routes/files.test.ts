@@ -1,5 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import { Hono } from "hono";
 import { Readable } from "stream";
+import { errorHandler } from "../../../src/middleware/error-handler";
 
 // The preview route, the one workspace file read a browser makes by URL. The
 // tree, text and search operations are tested in ../api/files.test.ts.
@@ -49,7 +51,11 @@ vi.mock("fs", async (importOriginal) => {
   };
 });
 
-import app from "../../../src/routes/files";
+import filesRoutes from "../../../src/routes/files";
+
+const app = new Hono();
+app.route("/", filesRoutes);
+app.onError(errorHandler);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -68,6 +74,19 @@ describe("GET /workspaces/:id/file-preview", () => {
     expect(mockCreateReadStream).toHaveBeenCalledWith(
       "/repos/myrepo/.deus/test-ws/assets/icon.png"
     );
+  });
+
+  it("refuses a cloud workspace in words instead of reading the backend's own folder", async () => {
+    mockWithWorkspace.mockImplementationOnce((c: any, next: any) => {
+      c.set("workspace", { id: "ws-cloud", kind: "cloud", root_path: null, slug: "cloud-ws" });
+      c.set("workspacePath", "");
+      return next();
+    });
+    const res = await app.request("/workspaces/ws-cloud/file-preview?path=index.html");
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("not on this computer");
+    expect(mockExistsSync).not.toHaveBeenCalled();
+    expect(mockCreateReadStream).not.toHaveBeenCalled();
   });
 
   it("rejects markdown files because they should open in Files instead", async () => {

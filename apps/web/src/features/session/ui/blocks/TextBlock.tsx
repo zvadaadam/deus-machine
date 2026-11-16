@@ -25,18 +25,13 @@ import type { MarkdownFileLinkResolution } from "@/components/markdown/MarkdownR
 
 import { ChatMarkdown } from "@/components/markdown";
 import { cn } from "@/shared/lib/utils";
-import {
-  createWorkspacePreviewUrl,
-  isBrowserPreviewPath,
-  normalizeResourcePath,
-} from "../../lib/chatResources";
+import { isBrowserPreviewPath, normalizeResourcePath } from "../../lib/chatResources";
+import { chatPlaceNow, openFromChat } from "../../lib/openFromChat";
+import { openAddress, openFile } from "@/features/workspace/lib/reach";
 import { parseUserMessageReferences } from "../../lib/parseUserMessageReferences";
 import { InspectElementPill } from "../InspectElementPill";
 import { DiffCommentPill } from "../DiffCommentPill";
 import { useSession } from "../../context";
-import { workspaceLayoutActions } from "@/features/workspace/store/workspaceLayoutStore";
-import { browserWindowActions } from "@/features/browser/store/browserWindowStore";
-import { getBaseURL } from "@/shared/config/api.config";
 
 export type TextWeight = "muted" | "normal";
 
@@ -49,7 +44,7 @@ interface TextBlockProps {
 }
 
 export function TextBlock({ block: text, role = "assistant", weight = "normal" }: TextBlockProps) {
-  const { workspaceId, workspacePath } = useSession();
+  const { workspaceId, workspacePath, cloud } = useSession();
 
   const referenceSegments = useMemo(
     () =>
@@ -63,15 +58,16 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
     [role, text]
   );
 
+  // Where a link or a file opens is rule 2 (features/workspace/lib/reach.ts).
   const handleMarkdownLinkOpen = useCallback(
     async (href: string) => {
       if (!workspaceId) return;
       const url = resolveBrowserLinkUrl(href);
       if (!url) return;
-      workspaceLayoutActions.openContentTab(workspaceId, "browser");
-      browserWindowActions.requestNewTab(workspaceId, url);
+      const place = await chatPlaceNow(workspaceId, { cloud, folder: workspacePath });
+      await openFromChat(workspaceId, openAddress(url, place));
     },
-    [workspaceId]
+    [workspaceId, cloud, workspacePath]
   );
 
   const resolveFileLink = useCallback(
@@ -89,31 +85,27 @@ export function TextBlock({ block: text, role = "assistant", weight = "normal" }
         return null;
       }
 
-      const target = isBrowserPreviewPath(path) ? "browser" : "file";
+      // A cloud computer's files open in the Files tab (rule 2), not a preview.
+      const target = !cloud && isBrowserPreviewPath(path) ? "browser" : "file";
       return {
         path,
         target,
         title: target === "browser" ? `Open preview ${path}` : `Open ${path} in Files`,
       };
     },
-    [workspacePath]
+    [workspacePath, cloud]
   );
 
   const handleFileLinkOpen = useCallback(
     async (path: string) => {
       if (!workspaceId) return;
-
-      if (isBrowserPreviewPath(path)) {
-        const baseUrl = await getBaseURL();
-        const url = createWorkspacePreviewUrl(baseUrl, workspaceId, path);
-        workspaceLayoutActions.openContentTab(workspaceId, "browser");
-        browserWindowActions.requestNewTab(workspaceId, url);
-        return;
-      }
-
-      workspaceLayoutActions.openFileInContent(workspaceId, path, "files");
+      const place = { cloud, folder: workspacePath };
+      await openFromChat(
+        workspaceId,
+        openFile(path, place, isBrowserPreviewPath(path) ? "preview" : "files")
+      );
     },
-    [workspaceId]
+    [workspaceId, cloud, workspacePath]
   );
 
   if (!text || text.trim() === "") {

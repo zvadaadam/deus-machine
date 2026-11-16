@@ -10,7 +10,11 @@
 export interface Repository {
   id: string;
   name: string;
-  root_path: string;
+  /**
+   * The repository's folder on this computer. Null for a project that is not
+   * on this computer: it has a GitHub `git_origin_url` and runs only in the cloud.
+   */
+  root_path: string | null;
   git_default_branch: string;
   sort_order?: number;
   git_origin_url?: string | null;

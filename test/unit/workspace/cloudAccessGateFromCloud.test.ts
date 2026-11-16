@@ -6,7 +6,16 @@
  * (useState / useEffect) since the app tests have no DOM renderer.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { composerLocation } from "@/features/sidebar/lib/location";
+import { composerPlace, type Organizations } from "@/features/sidebar/lib/location";
+
+const IN_ACME = { location: "cloud", organizationId: "acme" } as const;
+const acme = (ready: boolean): Organizations => ({
+  available: ready,
+  defaultOrganizationId: "acme",
+  items: [{ id: "acme", name: "Acme", role: "owner", ready }],
+});
+/** Where a composer opened in the window's organization starts. */
+const startIn = (ready: boolean) => composerPlace(IN_ACME, acme(ready)).location;
 
 const runtime = vi.hoisted(() => ({
   states: [] as unknown[],
@@ -45,19 +54,26 @@ vi.mock("react", async (importOriginal) => ({
   },
 }));
 
-const access = vi.hoisted(() => ({ status: undefined as string | undefined }));
+const access = vi.hoisted(() => ({
+  status: undefined as string | undefined,
+  /** A verdict per organization, where one is given; else `status`. */
+  byOrganization: {} as Record<string, string | undefined>,
+}));
 vi.mock("@/features/repository/ui/composer/useCloudRepoAccess", () => ({
-  useCloudRepoAccess: () => ({
-    isError: false,
-    data: access.status ? { status: access.status, slug: "deus/app" } : undefined,
-  }),
+  useCloudRepoAccess: (_repo: string, opts: { organizationId?: string | null }) => {
+    const id = opts.organizationId ?? "";
+    const status = id in access.byOrganization ? access.byOrganization[id] : access.status;
+    const slug = id ? `deus/app@${id}` : "deus/app";
+    return { isError: false, data: status ? { status, slug } : undefined };
+  },
 }));
 
 const { useCloudAccessGate } = await import("@/features/repository/ui/composer/useCloudAccessGate");
 
-/** A composer owning `location`, rendered until it settles. */
-function composer(start: "local" | "cloud") {
+/** A composer owning `location` (and its organization), rendered until it settles. */
+function composer(start: "local" | "cloud", startOrganization: string | null = null) {
   let location = start;
+  let organizationId = startOrganization;
   const changes: string[] = [];
   const onLocationChange = (next: "local" | "cloud") => {
     changes.push(next);
@@ -71,7 +87,13 @@ function composer(start: "local" | "cloud") {
       runtime.stateIndex = 0;
       runtime.effectIndex = 0;
       runtime.queue = [];
-      gate = useCloudAccessGate({ repoId: "repo", signedIn: true, location, onLocationChange });
+      gate = useCloudAccessGate({
+        repoId: "repo",
+        organizationId,
+        signedIn: true,
+        location,
+        onLocationChange,
+      });
       for (const effect of runtime.queue) effect();
       if (!runtime.dirty) return;
     }
@@ -81,6 +103,12 @@ function composer(start: "local" | "cloud") {
   return {
     render,
     changes,
+    /** The composer's menu: make `id` its organization and ask for the cloud there. */
+    choose(id: string) {
+      organizationId = id;
+      gate.requestCloud(id);
+      render();
+    },
     get location() {
       return location;
     },
@@ -94,11 +122,12 @@ beforeEach(() => {
   runtime.states = [];
   runtime.deps = [];
   access.status = undefined;
+  access.byOrganization = {};
 });
 
 describe("a composer that starts in the cloud", () => {
   it("holds local while the verdict loads, then continues into the cloud", () => {
-    const view = composer(composerLocation("cloud", true));
+    const view = composer(startIn(true));
     expect(view.location).toBe("local");
     expect(view.gate.grantOpen).toBe(false);
 
@@ -128,9 +157,43 @@ describe("a composer that starts in the cloud", () => {
     expect(view.gate.slug).toBe("deus/app");
   });
 
-  it("never starts in the cloud when Deus Cloud is not signed in", () => {
-    const view = composer(composerLocation("cloud", false));
+  it("never starts in the cloud when the window's organization is not set up", () => {
+    const view = composer(startIn(false));
     expect(view.location).toBe("local");
     expect(view.changes).toEqual([]);
+  });
+});
+
+describe("choosing an organization in the composer's menu", () => {
+  it("turns the cloud on there once that organization's verdict is a go", () => {
+    access.byOrganization = { acme: "ok", beta: undefined };
+    const view = composer("local", "acme");
+    view.choose("beta");
+    // Held: Beta's verdict is not known yet, so nothing is created in the cloud early.
+    expect(view.location).toBe("local");
+    access.byOrganization.beta = "ok";
+    view.render();
+    expect(view.location).toBe("cloud");
+    expect(view.changes).toEqual(["cloud"]);
+  });
+
+  it("asks for that organization's access when its repo needs a grant", () => {
+    access.byOrganization = { acme: "ok", beta: "needs_grant" };
+    const view = composer("local", "acme");
+    view.choose("beta");
+    expect(view.location).toBe("local");
+    expect(view.gate.grantOpen).toBe(true);
+    expect(view.gate.slug).toBe("deus/app@beta");
+  });
+
+  it("moving from one organization's cloud to another's checks the other again", () => {
+    access.byOrganization = { acme: "ok", beta: undefined };
+    const view = composer("cloud", "acme");
+    expect(view.location).toBe("cloud");
+    view.choose("beta");
+    expect(view.location).toBe("local");
+    access.byOrganization.beta = "unknown";
+    view.render();
+    expect(view.location).toBe("cloud");
   });
 });

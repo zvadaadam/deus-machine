@@ -1,8 +1,10 @@
 // A scripted Deus platform for the cloud journeys: a real HTTP + WebSocket server on
-// loopback. It mints session tokens, lists an organization's sessions, accepts
-// metadata, and holds each session's socket. Every frame it sends is checked
-// against the platform's own contract (`WebSocketEventSchema`), so it can only say
-// what the real platform may say. Requests it does not serve are answered 404 and
+// loopback. It mints session tokens, names the account's organizations and lists their
+// sessions, accepts metadata, and holds each session's socket. With `orgs`, each
+// organization has its own key and sessions, and a key-authenticated request for a
+// session is refused unless it carries that session's organization's key. Every frame it sends is
+// checked against the platform's own contract (`WebSocketEventSchema`), so it can only
+// say what the real platform may say. Requests it does not serve are answered 404 and
 // recorded in `unserved`, for the journey to compare with its allow-list.
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -46,10 +48,29 @@ export function wire(frame) {
  * @param {string} options.bearer        the Deus Cloud session `/dashboard` routes accept
  * @param {string[]} options.sessions    the platform session ids it knows
  * @param {(sessionId: string) => object} options.snapshot  the `session.snapshot` sent on connect
- * @param {string} [options.org]         with `listSessions`, serves the dashboard's org and session list
- * @param {() => object[]} [options.listSessions]
+ * @param {string} [options.org]         the account's organization, served as the dashboard lists it
+ * @param {string} [options.orgName]     its name
+ * @param {() => object[]} [options.listSessions]  with `org`, serves its session list
+ * @param {{ id: string, name: string, key?: string, sessions: string[], listSessions?: () => object[], automations?: object[], accessibleRepos?: string[] }[]} [options.orgs]
+ *   several organizations instead of `org`: each with the API key that belongs to it, the
+ *   platform sessions in it, with `listSessions` the session list the dashboard serves,
+ *   with `automations` its automations (wire summaries), listed on the dashboard, and with
+ *   `accessibleRepos` the `owner/name` of each repository its GitHub App reaches
+ * @param {Record<string, { defaultBranch: string, branches: string[], token?: string }>} [options.github]
+ *   a scripted GitHub REST API under `/github` (point `DEUS_GITHUB_API_URL` at
+ *   `${url}/github`): each repository's default branch and branches, paged as GitHub
+ *   pages them. With `token`, only a request carrying it is answered (a private one).
  */
-export async function startPlatform({ bearer, sessions, snapshot, org, listSessions }) {
+export async function startPlatform({
+  bearer,
+  sessions = [],
+  snapshot,
+  org,
+  orgName = "Smoke",
+  listSessions,
+  orgs,
+  github = {},
+}) {
   const platform = {
     url: "",
     /** Every request but CORS preflights, as `METHOD /path`. */
@@ -60,6 +81,12 @@ export async function startPlatform({ bearer, sessions, snapshot, org, listSessi
     sockets: [],
     /** Every command received: `{ session, command }`. */
     received: [],
+    /** Every key-authenticated request: `{ route, session, key }` (the bearer it carried). */
+    keyed: [],
+    /** Every request outside `/dashboard`, with the bearer it carried: `{ route, key, body }`. */
+    authorized: [],
+    /** Every request to the scripted GitHub: `{ route, query, key }`. */
+    githubRequests: [],
     tokens: 0,
     socketsFor: (session) => platform.sockets.filter((link) => link.session === session),
     commands: (session) =>
@@ -67,11 +94,14 @@ export async function startPlatform({ bearer, sessions, snapshot, org, listSessi
     live: (session) => platform.sockets.findLast((link) => link.session === session && link.open),
     send: (session, frame) => platform.live(session).ws.send(wire(frame)),
   };
-  const known = (id) => sessions.includes(id);
+  const accountOrgs = orgs ?? (org ? [{ id: org, name: orgName }] : []);
+  const orgOfSession = (id) => orgs?.find((o) => o.sessions.includes(id));
+  const known = (id) => sessions.includes(id) || Boolean(orgOfSession(id));
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://platform");
-    for await (const _chunk of request);
+    let body = "";
+    for await (const chunk of request) body += chunk;
     const cors = {
       "access-control-allow-origin": "*",
       "access-control-allow-methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
@@ -88,6 +118,29 @@ export async function startPlatform({ bearer, sessions, snapshot, org, listSessi
       response.end(JSON.stringify(data));
     };
     const parts = url.pathname.split("/").slice(1);
+    if (parts[0] !== "dashboard") {
+      const key = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
+      platform.authorized.push({ route, key, body });
+    }
+    // The scripted GitHub: a repository, and its branches a page at a time.
+    if (parts[0] === "github" && parts[1] === "repos" && request.method === "GET") {
+      const slug = `${parts[2]}/${parts[3]}`;
+      const key = String(request.headers.authorization ?? "").replace(/^Bearer /, "") || null;
+      platform.githubRequests.push({ route, query: url.search, key });
+      const repository = github[slug];
+      if (!repository || (repository.token && key !== repository.token)) {
+        return json({ message: "Not Found" }, 404);
+      }
+      if (parts.length === 4) {
+        return json({ full_name: slug, default_branch: repository.defaultBranch });
+      }
+      if (parts[4] === "branches" && parts.length === 5) {
+        const perPage = Number(url.searchParams.get("per_page") ?? 30);
+        const page = Number(url.searchParams.get("page") ?? 1);
+        const names = repository.branches.slice((page - 1) * perPage, page * perPage);
+        return json(names.map((name) => ({ name, protected: false })));
+      }
+    }
     if (parts[0] === "dashboard" && request.headers.authorization !== `Bearer ${bearer}`) {
       return json({ error: "unauthorized" }, 401);
     }
@@ -102,17 +155,52 @@ export async function startPlatform({ bearer, sessions, snapshot, org, listSessi
       platform.tokens++;
       return json({ token: `session-token-${platform.tokens}`, expires_in: 3600 });
     }
-    if (listSessions && request.method === "GET" && route === "GET /dashboard/orgs") {
-      return json({ items: [{ id: org }] });
+    // The account's organizations, in the shape of AGNT's `routes/dashboard/orgs.ts`.
+    if (accountOrgs.length > 0 && route === "GET /dashboard/orgs") {
+      return json({
+        account_id: "acc_smoke",
+        items: accountOrgs.map((o) => ({
+          id: o.id,
+          name: o.name,
+          role: "owner",
+          status: "active",
+          created_at: "2026-01-01T00:00:00.000Z",
+        })),
+      });
     }
-    if (
-      listSessions &&
-      request.method === "GET" &&
-      route === `GET /dashboard/orgs/${org}/sessions`
-    ) {
+    if (org && listSessions && route === `GET /dashboard/orgs/${org}/sessions`) {
       return json({ items: listSessions() });
     }
+    // Deus Cloud's GitHub App mint, when the journey points DEUS_CLOUD_URL here: a
+    // token for any organization that has `githubToken`, so nothing asks GitHub itself.
+    const minting = orgs?.find(
+      (o) => o.githubToken && route === `POST /orgs/${o.id}/github/installation-token`
+    );
+    if (minting) return json({ token: minting.githubToken, expires_at: null });
+    // The repositories an organization's GitHub App reaches (Deus Cloud, the person's session).
+    const reaching = orgs?.find(
+      (o) => o.accessibleRepos && route === `GET /orgs/${o.id}/github/accessible-repos`
+    );
+    if (reaching) {
+      if (request.headers.authorization !== `Bearer ${bearer}`) {
+        return json({ error: "unauthorized" }, 401);
+      }
+      return json({ repos: reaching.accessibleRepos });
+    }
+    const listed = orgs?.find(
+      (o) => o.listSessions && route === `GET /dashboard/orgs/${o.id}/sessions`
+    );
+    if (listed) return json({ items: listed.listSessions() });
+    // An organization's automations, as the dashboard lists them (one page).
+    const scheduled = orgs?.find(
+      (o) => o.automations && route === `GET /dashboard/orgs/${o.id}/automations`
+    );
+    if (scheduled) return json({ items: scheduled.automations, has_more: false });
     if (request.method === "PATCH" && a === "sessions" && known(b) && c === "metadata") {
+      const key = String(request.headers.authorization ?? "").replace(/^Bearer /, "");
+      platform.keyed.push({ route, session: b, key });
+      // An organization's key acts in that organization only.
+      if (orgs && orgOfSession(b)?.key !== key) return json({ error: "forbidden" }, 403);
       return json({ ok: true });
     }
     platform.unserved.push(route);

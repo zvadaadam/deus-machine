@@ -204,10 +204,11 @@ export function useRepoPrs(repoId: string | null) {
  * during app startup and Vite HMR). We retry with exponential backoff
  * so the query self-heals once the WS is ready (~1-2s after load).
  */
-export function useRepoBranches(repoId: string | null) {
+export function useRepoBranches(repoId: string | null, organizationId?: string | null) {
   return useQuery({
-    queryKey: queryKeys.repos.branches(repoId || ""),
-    queryFn: () => call(api.repoBranches, { repoId: repoId! }),
+    queryKey: queryKeys.repos.branches(repoId || "", organizationId),
+    // A project with no folder here is read from GitHub, with this organization's access.
+    queryFn: () => call(api.repoBranches, { repoId: repoId!, organizationId }),
     enabled: !!repoId,
     staleTime: 30_000,
     retry: 5,
@@ -275,6 +276,8 @@ type CreateWorkspaceParams =
       repositoryId: string;
       /** 'cloud' provisions an agnt sandbox instead of a local worktree. */
       location?: "local" | "cloud";
+      /** With `location: "cloud"`, the organization it starts in (the backend's default when absent). */
+      organization_id?: string;
       source_branch?: string;
       pr_number?: number;
       pr_url?: string;

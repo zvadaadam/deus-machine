@@ -1,6 +1,9 @@
 /** Workspace actions and desktop/mobile composition. Pane geometry lives in WorkspacePanels. */
 
-import { useCallback } from "react";
+import type { AddProjectAction } from "@/features/repository/lib/addProject";
+import { locationOf } from "@/features/sidebar/lib/location";
+import { localFolder, openableFolder } from "@/features/workspace/lib/reach";
+import { useCallback, useMemo } from "react";
 import { wakeCloudWorkspace } from "@/features/workspace/api/wakeCloudWorkspace";
 import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
 import { failedToStart, hasCheckout } from "@/features/workspace/lib/startState";
@@ -14,7 +17,7 @@ import { workspaceLayoutActions } from "@/features/workspace/store";
 import { sessionComposerActions } from "@/features/session/store/sessionComposerStore";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import { ContentTabBar } from "./ContentTabBar";
-import { CONTENT_TABS, isTabVisible, anyContentTabVisible } from "./content-tabs";
+import { CONTENT_TABS, isTabVisible, anyContentTabVisible, tabsFor } from "./content-tabs";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 import { PRActions } from "@/features/workspace/ui/PRActions";
 import { useSettings } from "@/features/settings/api/settings.queries";
@@ -45,6 +48,10 @@ interface MainContentProps {
   onOpenProject: () => void;
   onCloneRepository: () => void;
   onStartNewProject: () => void;
+  /** The cloud's add dialog, for an organization; the window's when none is given. */
+  onAddFromGitHub: (organizationId?: string | null) => void;
+  /** The ways to add a project by the window's place. */
+  addActions: AddProjectAction[];
   /** Repos for the home screen's repo picker */
   repos: Repository[];
   /** Sidebar workspace groups reused by the home screen recent list. */
@@ -62,7 +69,9 @@ interface MainContentProps {
     model: string,
     branch?: string,
     location?: "local" | "cloud",
-    thinkingLevel?: ThinkingLevel
+    thinkingLevel?: ThinkingLevel,
+    /** In the cloud, the organization it starts in; the backend's default when absent. */
+    organizationId?: string | null
   ) => Promise<boolean>;
   onWorkspaceClick: (workspace: Workspace) => void;
 }
@@ -74,6 +83,8 @@ export function MainContent({
   onOpenProject,
   onCloneRepository,
   onStartNewProject,
+  onAddFromGitHub,
+  addActions,
   repos,
   repoGroups,
   repoGroupsLoading,
@@ -99,10 +110,12 @@ export function MainContent({
   const simulatorAvailable =
     experimentalSettings?.experimental_simulator === true &&
     simulatorCapabilities.data.available === true;
-  // A cloud computer hosts its own device in the platform — the Simulator tab
-  // shows for it whether or not this Mac can run a local simulator.
-  const cloudSimulator = selectedWorkspace?.kind === "cloud";
-  const tabVisibility = { simulatorAvailable, cloudSimulator };
+  // A cloud workspace's tabs are its computer's, whatever this one's settings say.
+  const workspaceKind = selectedWorkspace?.kind;
+  const tabVisibility = useMemo(
+    () => tabsFor(workspaceKind ? { kind: workspaceKind } : null, simulatorAvailable),
+    [workspaceKind, simulatorAvailable]
+  );
   const effectiveContentTab = isTabVisible(contentTab, experimentalSettings, tabVisibility)
     ? contentTab
     : "changes";
@@ -153,11 +166,11 @@ export function MainContent({
   // Only start watching and querying diffs once the worktree checkout is complete.
   const isReady = selectedWorkspace?.state === "ready";
 
-  // Watch workspace for file changes (event-driven cache invalidation)
-  const isWatched = useFileWatcher(
-    isReady ? (selectedWorkspace?.workspace_path ?? null) : null,
-    isReady ? selectedWorkspaceId : null
-  );
+  // Watch workspace for file changes (event-driven cache invalidation). Only a
+  // folder on this computer can be watched here (rule 1): a cloud workspace's
+  // files are on its computer.
+  const watchedFolder = isReady && selectedWorkspace ? localFolder(selectedWorkspace) : null;
+  const isWatched = useFileWatcher(watchedFolder, watchedFolder ? selectedWorkspaceId : null);
 
   // --- Content tab change ---
   const handleContentTabChange = useCallback(
@@ -290,7 +303,7 @@ export function MainContent({
                       title={selectedWorkspace.title ?? undefined}
                       repositoryName={selectedWorkspace.repo_name}
                       branch={selectedWorkspace.git_branch ?? undefined}
-                      workspacePath={selectedWorkspace.workspace_path}
+                      workspacePath={openableFolder(selectedWorkspace) ?? undefined}
                       kind={selectedWorkspace.kind}
                       automationName={workspaceAutomation?.name}
                       onOpenAutomation={
@@ -371,7 +384,7 @@ export function MainContent({
                           onEnvironment={() =>
                             uiActions.openEnvironmentSettings(
                               selectedWorkspace.repository_id,
-                              selectedWorkspace.kind === "cloud" ? "cloud" : "local"
+                              locationOf(selectedWorkspace)
                             )
                           }
                         />
@@ -401,8 +414,7 @@ export function MainContent({
                           activeTab={effectiveContentTab}
                           onTabChange={handleContentTabChange}
                           workspaceId={selectedWorkspaceId}
-                          simulatorAvailable={simulatorAvailable}
-                          cloudSimulator={cloudSimulator}
+                          visibility={tabVisibility}
                         />
                         {prActions}
                       </div>
@@ -413,8 +425,7 @@ export function MainContent({
                           panelVisible={view !== "chat"}
                           isWatched={isWatched}
                           onReview={handleInsertReviewPrompt}
-                          simulatorAvailable={simulatorAvailable}
-                          cloudSimulator={cloudSimulator}
+                          visibility={tabVisibility}
                           toolbarAction={
                             <WorkspacePanelButton
                               action={view === "content" ? "restore" : "expand"}
@@ -441,6 +452,8 @@ export function MainContent({
               onOpenProject={onOpenProject}
               onCloneRepository={onCloneRepository}
               onStartNewProject={onStartNewProject}
+              onAddFromGitHub={onAddFromGitHub}
+              addActions={addActions}
             />
           </div>
         )}

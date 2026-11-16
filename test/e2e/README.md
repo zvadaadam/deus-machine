@@ -143,16 +143,16 @@ frames: this verifies account admission, not end-to-end encryption.
 
 ### Cloud workspaces against a scripted platform (`cloud/`)
 
-Two journeys run a cloud workspace in the real web app, in Chromium, against
-`cloud/platform.mjs`: a local HTTP + WebSocket server on `127.0.0.1` that stands
+Five journeys run cloud workspaces in the real web app, in Chromium, and a sixth
+drives the backend alone, against `cloud/platform.mjs`: a local HTTP + WebSocket server on `127.0.0.1` that stands
 in for the Deus platform. It mints session tokens (checking the Deus Cloud
-bearer), lists an organization's sessions, accepts session metadata, and holds
-each session's socket (a `session.snapshot` on connect, `pong` for `ping`, every
-command recorded). Every frame it sends is validated against `@deus-hq/api`'s
-`WebSocketEventSchema` and throws if invalid, so it can only say what the real
-platform may say. The journeys script the platform's side of a turn: the
-prompt's echo (under the engine's `echo-<turnId>` ids), a streamed reply, a
-question, the end of the turn, and dropped sockets.
+bearer), names the account's organizations and lists their sessions, accepts
+session metadata, and holds each session's socket (a `session.snapshot` on
+connect, `pong` for `ping`, every command recorded). Every frame it sends is
+validated against `@deus-hq/api`'s `WebSocketEventSchema` and throws if invalid,
+so it can only say what the real platform may say. The journeys script the
+platform's side of a turn: the prompt's echo (under the engine's `echo-<turnId>`
+ids), a streamed reply, a question, the end of the turn, and dropped sockets.
 
 - `cloud/mac-lane.browser.mjs`, the desktop's lane: a real backend (isolated
   SQLite database with two cloud workspaces) holds the platform's socket, and
@@ -168,9 +168,82 @@ question, the end of the turn, and dropped sockets.
 - `cloud/direct-lane.browser.mjs`, the hosted web's lane (`VITE_CLOUD_DIRECT=1`,
   no backend): the browser lists the platform's sessions, mints a token from
   its web session and holds the socket itself. It checks the sidebar, the
-  snapshot, the side streams, `message.send`, streaming, the question, the
-  session list read again when the turn ends, and each row once after a
-  dropped socket.
+  menu's two organizations (no computer row, "Your computers") and the sidebar
+  filtered by the one chosen (a row and ⌃1), the snapshot, the side streams, `message.send`,
+  streaming, the question, the session list read again when the turn ends,
+  and each row once after a dropped socket.
+- `cloud/organizations.runtime.mjs`, several organizations on one Mac (no
+  browser): the platform holds two organizations, each with its own key and
+  sessions, and refuses an organization-scoped request carrying another one's
+  key. The backend, handed one key per organization, connects a workspace in
+  each (and one whose row names none) at once; it checks that a second
+  organization's key arriving closes nothing, that each session's metadata
+  `PATCH` carries its organization's key, that a row without an organization
+  takes the one its snapshot names, and the `cloudOrganizations` read.
+- `cloud/organizations.browser.mjs`, the location menu with several organizations,
+  in the real web app on the Mac lane: Acme and Beta set up on this computer, Gamma
+  with no key. It checks the menu's rows (this computer, each organization by name,
+  ⌃2/⌃3, Gamma "Not set up" and disabled), that a row and the shortcuts switch the
+  header, the check and the sidebar's list; returning to the workspace last selected
+  in each organization; opening another organization's workspace moving the window;
+  a reply streaming in Acme arriving whole while the window is on Beta (its socket
+  untouched); the Home composer's Cloud control from this computer reading "Cloud",
+  off, its menu listing the organizations (Gamma "Not set up"), and choosing Beta
+  turning it on and naming Beta without moving the sidebar; creating then reaching the
+  platform with Beta's key and Beta's GitHub App token only, the row listed in Beta
+  only and the window following it there; in Beta, Settings →
+  Environments opening on Beta; the automations page listing only the window's
+  organization's automations (the platform serves one per organization), naming it,
+  and asking the platform for that organization's list; a reload keeping the
+  organization; and a sign-out pushed to the open window (one cloud row, "Not signed
+  in"). The platform mints GitHub App tokens here, so nothing asks GitHub. A browser on
+  the Mac lane has no desktop session, so for Settings the page is given the one the
+  desktop app would answer. Creating an automation is covered by the backend and unit
+  tests, not here (it needs the model list, provider accounts and environments
+  scripted). Menu screenshots go to `.context/shots/org-menu/`, the composer's control
+  (off, menu open, on) to `.context/shots/org-composer/`.
+- `cloud/cloud-project.browser.mjs`, a project that is not on this computer, on the Mac
+  lane, with Acme and Beta set up. The platform also lists each organization's
+  reachable GitHub repositories and serves a scripted GitHub API (default branch and
+  paged branches; `DEUS_GITHUB_API_URL` points the backend at it), so nothing reaches
+  the real GitHub. It checks that "Add project" on this computer offers the local
+  actions (a browser has no folder picker, so two of the desktop's three); in Acme the
+  composer neither offers nor preselects a project with no GitHub remote, and "Add
+  project" opens "Add repository" directly (no menu of one), with no destination,
+  Acme's repositories, the one already a project marked "Added", a search, and a
+  public-address field whose Add is off for what is not a GitHub repository and reads
+  "Open" for one that is already a project; choosing one adds a project with no folder
+  (its default branch GitHub's), listed in Acme and not on this computer, and choosing
+  it again adds nothing; the composer's picker shows `owner/name`; the branch picker
+  lists every GitHub branch as a plain name (no `origin/`: there is no clone), the
+  default first, read with Acme's token; the Cloud switch is on and cannot be turned
+  off, its tooltip "rocket is not on this Mac"; creating reaches the platform's
+  `POST /workspaces` with the repository's URL, the chosen branch and Acme's key; a
+  ready cloud workspace's PR target is the branch it started from even while the
+  project's stored default is a stale `main`; and Beta's dialog says its GitHub
+  access reaches nothing. The journey's local
+  repository is `git init`ed by it. Dialog screenshots (list, public URL, empty) go to
+  `.context/shots/cloud-project/`.
+
+- `cloud/reach.browser.mjs`, a cloud workspace that no longer behaves as if it were
+  on this computer, on the Mac lane, beside a local workspace with a real worktree
+  (this computer's experimental browser setting off). In the cloud chat an internet
+  link opens in the person's browser and a localhost link in the cloud computer's
+  preview (the Browser tab, a frame in a browser) at its port and path, as does the
+  card's "Open in External Browser"; this computer's localhost is never opened. ⌘O
+  does nothing, the palette has no "Open in Last Editor" or "New Workspace from…",
+  the `/` menu lists no skill from this computer (the local workspace's lists its
+  worktree's), and the Agent tab says this computer's configuration does not apply.
+  A message the platform refuses (`MESSAGE_SEND_FAILED` with
+  `PROVIDER_ACCOUNT_RECONNECT_REQUIRED`) is back in the composer, and the card reads
+  the platform's sentence without its codes, offers "Open AI Providers" (which opens
+  that Settings section) and no "Retry in new chat".
+  With the window on this computer (⌃1), a turn in the cloud (learnt from the
+  platform's snapshot when the backend attaches again) puts a working dot on the
+  header's trigger, and its end an unread one there and on the cloud's row.
+  Screenshots go to `.context/shots/cloud-reach/`. In a browser the client already
+  hides ⌘O and the palette's editor command, so those two checks are the desktop's
+  rule seen from a browser; the unit tests hold the rule itself.
 
 Each journey also fails on a page error, and on any request the platform does
 not serve beyond the short allow-list at the top of the file (the Mac lane's
@@ -195,15 +268,19 @@ Runs the sidebar header's "where workspaces run" switcher in the real web app
 against the real backend. An isolated database holds one local and one cloud
 workspace in the same repository; the cloud is the scripted platform from
 `cloud/platform.mjs`, so the backend is signed in to Deus Cloud. It checks the
-filtered list, the menu, ⌃1/⌃2, following a selection opened by URL, restoring
-the last selection per location, persistence across a reload, the Home
-composer's default, and the 390×844 sheet. No sandbox or model call.
+filtered list, the menu (the cloud named by its organization), ⌃1/⌃2, following
+a selection opened by URL, restoring the last selection per location, persistence
+across a reload, the Home composer's default, and the 390×844 sheet. Then it signs
+the backend out the way the desktop app does (empty credentials): a window stored in
+the cloud opens on this computer, the cloud row reads "Not signed in" and cannot be
+chosen, and signing in again returns the window to the cloud. No sandbox or model call.
 
 ```bash
 node --import tsx test/e2e/workspace-location.browser.mjs
 ```
 
-Screenshots of the open menu (local, cloud, mobile) go to `.context/workspace-location`.
+Screenshots of the open menu (local, cloud, mobile, signed out) go to
+`.context/workspace-location`.
 
 ### `controls.browser.mjs`
 

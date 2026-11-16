@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback, useMemo } from "react";
+import { localFolder } from "@/features/workspace/lib/reach";
 import type { CloudPresence } from "@/features/workspace/lib/cloudPresence";
 import type { Dispatch, SetStateAction } from "react";
 import { REVIEW_CODE } from "@/features/session/lib/sessionPrompts";
@@ -17,6 +18,7 @@ import { ChangesView } from "@/features/workspace/ui/ChangesView";
 import { CloudSandboxGate } from "@/features/workspace/ui/CloudSandboxGate";
 import { CloudSimulatorPanel } from "@/features/simulator/cloud/CloudSimulatorPanel";
 import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
+import { isTabVisible, tabsFor } from "./content-tabs";
 import { cloudGateStage } from "@/features/workspace/lib/cloudPresence";
 import { WorkspaceHeader } from "@/features/workspace/ui/WorkspaceHeader";
 import type { Workspace, PRStatus, GhCliStatus } from "@/shared/types";
@@ -87,8 +89,9 @@ export function MobileLayout({
 
   // A cloud computer hosts a device in the platform — billable, so a phone
   // must be able to see and stop it. Web-direct has no Mac backend to relay
-  // the device commands through, so it stays chat-only.
-  const cloudSimulator = workspace.kind === "cloud" && !chatOnly;
+  // the device commands through, so it stays chat-only. The phone layout has
+  // no local simulator, so only the cloud's shows (content-tabs decides).
+  const cloudSimulator = !chatOnly && isTabVisible("simulator", undefined, tabsFor(workspace));
   const cloudStage = cloudGateStage(workspace);
   const simulatorLive = useCloudSimulatorStore(
     (s) => s.byWorkspace[workspace.id]?.status === "ready"
@@ -142,7 +145,7 @@ export function MobileLayout({
           title={workspace.title ?? undefined}
           repositoryName={workspace.repo_name}
           branch={workspace.git_branch ?? undefined}
-          workspacePath={workspace.workspace_path}
+          workspacePath={localFolder(workspace) ?? undefined}
           kind={workspace.kind}
           cloudPresence={cloudPresence}
           onCloudWake={onCloudWake}

@@ -5,15 +5,19 @@ import { useSettings } from "@/features/settings/api/settings.queries";
 import { useSimulatorStatusStore } from "@/features/simulator/store";
 import { useCloudSimulatorStore } from "@/features/simulator/cloud/cloudSimulatorStore";
 import type { ContentTab } from "@/features/workspace/store";
-import { CONTENT_TABS, isTabVisible, type ContentTabItem } from "./content-tabs";
+import {
+  CONTENT_TABS,
+  isTabVisible,
+  type ContentTabItem,
+  type ContentTabVisibility,
+} from "./content-tabs";
 
 interface ContentTabBarProps {
   activeTab: ContentTab;
   onTabChange: (tab: ContentTab) => void;
   workspaceId?: string | null;
-  simulatorAvailable: boolean;
-  /** The selected workspace is a cloud computer — its device lives in the platform. */
-  cloudSimulator: boolean;
+  /** The workspace's tab gates (`tabsFor`). */
+  visibility: ContentTabVisibility;
 }
 
 function ContentTabButton({
@@ -64,8 +68,7 @@ export function ContentTabBar({
   activeTab,
   onTabChange,
   workspaceId,
-  simulatorAvailable,
-  cloudSimulator,
+  visibility,
 }: ContentTabBarProps) {
   const settings = useSettings().data;
   const simPhase = useSimulatorStatusStore((s) =>
@@ -79,11 +82,8 @@ export function ContentTabBar({
   const simulatorActive = (simPhase && simPhase !== "idle") || cloudSimStatus === "ready";
 
   const visibleItems = useMemo(
-    () =>
-      CONTENT_TABS.filter((item) =>
-        isTabVisible(item.id, settings, { simulatorAvailable, cloudSimulator })
-      ),
-    [settings, simulatorAvailable, cloudSimulator]
+    () => CONTENT_TABS.filter((item) => isTabVisible(item.id, settings, visibility)),
+    [settings, visibility]
   );
 
   return (

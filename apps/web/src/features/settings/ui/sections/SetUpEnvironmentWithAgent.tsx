@@ -1,6 +1,8 @@
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCloudOrganizations } from "@/shared/hooks/useCloudOrganizations";
+import { cloudNotReady } from "../../lib/section-organization";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { useUIStore } from "@/shared/stores/uiStore";
 import { getStoredModel } from "@/features/session/lib/modelPreference";
@@ -12,15 +14,17 @@ import { useProviderAccounts } from "../../api/provider-accounts.queries";
 export function SetUpEnvironmentWithAgent({
   repoId,
   location,
-  activeOrganization,
+  organizationId,
   onBeforeStart,
 }: {
   repoId?: string;
   location: "local" | "cloud";
-  activeOrganization: boolean;
+  /** The organization the section shows: a cloud setup workspace starts there. */
+  organizationId: string | null;
   onBeforeStart: () => boolean;
 }) {
   const session = useDeusCloudSession();
+  const organizations = useCloudOrganizations();
   const providers = useProviderAccounts();
   const requestEnvSetup = useUIStore((state) => state.requestEnvSetup);
   const model = getStoredModel();
@@ -31,19 +35,16 @@ export function SetUpEnvironmentWithAgent({
     harness,
     getModelId(model)
   );
-  const cloudBlocked = !activeOrganization
-    ? "Select your active organization to start a cloud workspace."
-    : session.data?.vaultLocked
-      ? "Unlock your keyring, then reopen Deus."
-      : !session.data?.hasPlatformKey
-        ? "Finish device setup in Settings → Cloud."
-        : providers.isError
-          ? "Couldn't check your AI accounts. Try again in AI Providers."
-          : providers.isPending
-            ? "Checking your AI accounts…"
-            : defaultProviderAccount(providers.data, provider)?.status !== "connected"
-              ? `Connect a ${provider === "claude" ? "Claude" : "Codex"} account in AI Providers to use ${label}.`
-              : null;
+  const cloudBlocked = session.data?.vaultLocked
+    ? "Unlock your keyring, then reopen Deus."
+    : (cloudNotReady(organizations, organizationId) ??
+      (providers.isError
+        ? "Couldn't check your AI accounts. Try again in AI Providers."
+        : providers.isPending
+          ? "Checking your AI accounts…"
+          : defaultProviderAccount(providers.data, provider)?.status !== "connected"
+            ? `Connect a ${provider === "claude" ? "Claude" : "Codex"} account in AI Providers to use ${label}.`
+            : null));
   const blocked = !repoId
     ? "Add this repository to Deus to start a setup workspace."
     : location === "cloud"
@@ -58,7 +59,13 @@ export function SetUpEnvironmentWithAgent({
             variant="outline"
             disabled={!!blocked}
             onClick={() => {
-              if (repoId && onBeforeStart()) requestEnvSetup({ repoId, location, model });
+              if (repoId && onBeforeStart())
+                requestEnvSetup({
+                  repoId,
+                  location,
+                  model,
+                  organizationId: location === "cloud" ? organizationId : null,
+                });
             }}
           >
             <Bot className="mr-1.5 size-3.5" />

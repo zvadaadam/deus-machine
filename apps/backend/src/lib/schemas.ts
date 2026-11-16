@@ -71,9 +71,12 @@ export const PairBody = z.object({
 
 // Runtime cloud-credential handoff from the desktop main process. Every
 // field optional; `null` clears the value (falls back to env). Values are
-// held in backend memory only — never persisted here.
+// held in backend memory only — never persisted here. `orgKeys` is one device
+// key per organization, in the platform's order, and replaces the whole map;
+// `apiKey` (+ `orgId`) is the legacy single key, kept as the fallback key.
 export const CloudCredentialsBody = z
   .object({
+    orgKeys: z.record(z.string().min(1), z.string().min(1)).nullish(),
     apiKey: z.string().min(1).nullish(),
     baseUrl: z.string().url().nullish(),
     deusCloudUrl: z.string().url().nullish(),

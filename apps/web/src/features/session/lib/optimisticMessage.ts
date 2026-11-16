@@ -75,16 +75,19 @@ export function dropOptimisticMessage(
   queryClient: QueryClient,
   sessionId: string,
   turnId: string
-): void {
+): Message | undefined {
   const id = echoMessageId(turnId);
+  let dropped: Message | undefined;
   queryClient.setQueryData<PaginatedMessages>(
     queryKeys.sessions.messages(sessionId),
     (old): PaginatedMessages | undefined => {
       if (!old) return old;
+      dropped = old.messages.find((m) => m.id === id);
       const messages = old.messages.filter((m) => m.id !== id);
       return messages.length === old.messages.length ? old : { ...old, messages };
     }
   );
+  return dropped;
 }
 
 /**
