@@ -9,7 +9,7 @@ import {
   StartNewProjectModal,
 } from "@/features/repository";
 import { addProjectActions, hiddenAddProjectCommands } from "@/features/repository/lib/addProject";
-import { SettingsSidebar, SettingsPage } from "@/features/settings";
+import { SettingsSidebar, SettingsPage, useAssistantArrivals } from "@/features/settings";
 import {
   useKeyboardShortcuts,
   useZoom,
@@ -114,6 +114,8 @@ export function MainLayout() {
   // Keep the automations cache warm app-wide: the sidebar zap and the header
   // chip derive provenance from it, not just the Automations view.
   useAutomations();
+  // An assistant asking to connect is announced wherever the person is.
+  useAssistantArrivals();
 
   const repoGroups = useMemo(() => workspacesQuery.data ?? [], [workspacesQuery.data]);
   const loading = workspacesQuery.isLoading;

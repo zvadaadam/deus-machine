@@ -9,7 +9,20 @@
 
 import type { AnyOp, OpKind, OutputOf, ParsedInputOf } from "@shared/api/op";
 import { describeInputError } from "@shared/api/op";
-import { NotFoundError, ValidationError } from "../lib/errors";
+import type { AssistantAccess } from "@shared/types/assistants";
+import { AppError, NotFoundError, ValidationError } from "../lib/errors";
+import { ASSISTANT_TOOLS_ONLY } from "../services/assistants/sentences";
+
+/** A hosted assistant admitted to a connection: who it is, and what the person allowed it. */
+export interface AdmittedAssistant {
+  clientId: string;
+  access: AssistantAccess;
+  /**
+   * The account and machine its sign-in was verified for. Its approval is that
+   * account's alone: a write is allowed only while this computer still hosts it.
+   */
+  host: { accountId: string; machineId: string };
+}
 
 /** Who is asking. Filled by the transport once a connection is admitted. */
 export interface Caller {
@@ -17,6 +30,17 @@ export interface Caller {
   deviceId: string | null;
   /** Arrived through the relay rather than a socket on this computer or its network. */
   relayed: boolean;
+  /**
+   * A hosted assistant that signed in with the account, and what the person
+   * allowed it; null for this computer's window and for paired devices.
+   */
+  assistant: AdmittedAssistant | null;
+  /**
+   * Epoch ms when the connection carrying this call is cut: an assistant's
+   * sign-in ends then, or its connection's cap. A held call answers before it
+   * (`services/assistants`). Absent for this computer's window and paired devices.
+   */
+  endsAt?: number;
 }
 
 export interface Ctx {
@@ -24,7 +48,14 @@ export interface Ctx {
 }
 
 /** This computer's own window: what code that is not answering a frame acts as. */
-export const LOCAL_CALLER: Caller = { deviceId: null, relayed: false };
+export const LOCAL_CALLER: Caller = { deviceId: null, relayed: false, assistant: null };
+
+/**
+ * The only operation an assistant may ask for: the operator tools over MCP,
+ * which decide per tool what its access allows. Everything underneath them
+ * (the workspaces, files, terminals, settings) is refused, whatever its access.
+ */
+export const ASSISTANT_OPERATIONS: readonly string[] = ["agentMcp"];
 
 /**
  * A live read answers synchronously: it is re-run for every subscriber inside
@@ -67,18 +98,26 @@ export class Registry {
 
   /** Validate, then run. `kind` is the kind of frame that carried the request. */
   async run(name: string, kind: OpKind, input: unknown, ctx: Ctx): Promise<unknown> {
-    const { handler, data } = this.admit(name, kind, input);
+    const { handler, data } = this.admit(name, kind, input, ctx.caller);
     return handler.run(data, ctx);
   }
 
   /** A live read, answered in this tick (see `Run`). */
   runLive(name: string, input: unknown, ctx: Ctx): unknown {
-    const { handler, data } = this.admit(name, "read", input);
+    const { handler, data } = this.admit(name, "read", input, ctx.caller);
     if (!handler.op.live) throw new ValidationError(`${name} cannot be subscribed to`);
     return handler.run(data, ctx);
   }
 
-  private admit(name: string, kind: OpKind, input: unknown): { handler: Handler; data: unknown } {
+  private admit(
+    name: string,
+    kind: OpKind,
+    input: unknown,
+    caller: Caller
+  ): { handler: Handler; data: unknown } {
+    if (caller.assistant && !ASSISTANT_OPERATIONS.includes(name)) {
+      throw new AppError(403, `${ASSISTANT_TOOLS_ONLY}, not ${name}`);
+    }
     const handler = this.handlers.get(name);
     if (!handler) throw new NotFoundError(`Unknown operation: ${name}`);
     if (handler.op.kind !== kind) {

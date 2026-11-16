@@ -302,4 +302,27 @@ describe("streams", () => {
     subscribe("other", "s2", events, {});
     expect(heard(other)).toEqual([]);
   });
+
+  it("opens a stream that keeps nothing too, for what its subscriber named", () => {
+    // What an agent still waits on: a client that follows the chat later is shown it.
+    const asked: Record<string, unknown>[] = [];
+    openWith(output, (named) => {
+      asked.push(named);
+      return named.id === "t1" || named.id === undefined ? [{ text: "waiting" }] : [];
+    });
+    const late = connect("late");
+    subscribe("late", "s1", output, { workspaceId: "w", id: "t1" });
+    expect(late).toEqual([
+      { type: "q:event", id: "s1", event: "terminalOutput", data: { text: "waiting" } },
+      { type: "q:subscribed", id: "s1" },
+    ]);
+    // A subscription across scopes is asked for by what it named, nothing for all of them.
+    const wide = connect("wide");
+    subscribe("wide", "s1", output, { workspaceId: "w", id: "t2" });
+    subscribe("wide", "s2", output, {});
+    expect(heard(wide)).toEqual([
+      { type: "q:event", id: "s2", event: "terminalOutput", data: { text: "waiting" } },
+    ]);
+    expect(asked).toEqual([{ workspaceId: "w", id: "t1" }, { workspaceId: "w", id: "t2" }, {}]);
+  });
 });

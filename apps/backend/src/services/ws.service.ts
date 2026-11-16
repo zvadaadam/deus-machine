@@ -3,6 +3,7 @@
 // Manages connected clients, heartbeat pings, message routing, and protocol dispatch.
 
 import { match } from "ts-pattern";
+import type { AdmittedAssistant } from "../api/registry";
 
 /** Minimal interface for sending/closing WebSocket-like connections.
  *  WSContext already satisfies this — used to also accept virtual relay connections. */
@@ -19,6 +20,22 @@ export interface WsConnection {
   lastPong: number;
   /** True for relay-tunneled connections (skip direct heartbeat pings) */
   isVirtual?: boolean;
+  /**
+   * A hosted assistant that signed in with the account (never a paired
+   * device: `deviceId` is null). Its access is fixed for the connection's
+   * life: changing it closes the connection (`closeAssistantConnections`).
+   */
+  assistant?: AdmittedAssistant | null;
+  /** An assistant's connection is closed by this timer, whatever its traffic. */
+  endTimer?: ReturnType<typeof setTimeout>;
+  /** Epoch ms the timer closes it: the sooner of its sign-in's end and the cap. */
+  endsAt?: number;
+}
+
+/** An assistant let in: who it is, and when its sign-in ends (epoch ms, with the clock tolerance). */
+export interface AssistantAdmission {
+  assistant: AdmittedAssistant;
+  signInEndsAt: number;
 }
 
 // ---- State ----
@@ -32,19 +49,43 @@ const HEARTBEAT_TIMEOUT_MS = 10_000;
 /** A relayed viewer probes every 30s (its runtime client's ping). Two missed
  *  probes and it is gone, whether or not the relay noticed. */
 const VIRTUAL_SILENCE_MS = 2 * HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS;
+/** The longest an assistant's connection lives, whatever its traffic. It
+ *  carries one request and does not probe: Deus Cloud opens one per request,
+ *  holds a call at most about 150s and closes it when it has the answer; this
+ *  bounds one it never closed. It ends sooner when its sign-in does. */
+const ASSISTANT_CONNECTION_MS = 200_000;
 
 // ---- Public API ----
 
 /** Register a new WebSocket connection. Returns the connection ID. */
-export function addConnection(ws: WsSendable, deviceId: string | null, isVirtual = false): string {
+export function addConnection(
+  ws: WsSendable,
+  deviceId: string | null,
+  isVirtual = false,
+  admission: AssistantAdmission | null = null
+): string {
   const id = crypto.randomUUID();
-  connections.set(id, {
-    id,
-    ws,
-    deviceId,
-    lastPong: Date.now(),
-    isVirtual,
-  });
+  const now = Date.now();
+  const assistant = admission?.assistant ?? null;
+  const conn: WsConnection = { id, ws, deviceId, lastPong: now, isVirtual, assistant };
+  connections.set(id, conn);
+  if (admission) {
+    // Neither a ping nor a request extends it: the end is fixed when it opens.
+    const end = Math.min(admission.signInEndsAt, now + ASSISTANT_CONNECTION_MS);
+    conn.endsAt = end;
+    conn.endTimer = setTimeout(
+      () =>
+        closeConnection(
+          conn,
+          4001,
+          end - now < ASSISTANT_CONNECTION_MS
+            ? "Assistant sign-in expired"
+            : "Assistant connection ended"
+        ),
+      Math.max(0, end - now)
+    );
+    conn.endTimer.unref?.();
+  }
 
   startHeartbeat();
   if (deviceId) deviceListener?.();
@@ -56,6 +97,7 @@ export function removeConnection(id: string): void {
   const conn = connections.get(id);
   if (!conn) return;
   connections.delete(id);
+  if (conn.endTimer) clearTimeout(conn.endTimer);
   if (connections.size === 0) stopHeartbeat();
   extendedHandlers.onDisconnect?.(id);
   if (conn.deviceId) deviceListener?.();
@@ -87,6 +129,14 @@ function closeConnection(conn: WsConnection, code: number, reason: string): void
 export function closeDeviceConnections(deviceId: string): void {
   for (const conn of connections.values()) {
     if (conn.deviceId === deviceId) closeConnection(conn, 4001, "Device access revoked");
+  }
+}
+
+/** An assistant's access changed or it was removed: its connections end now, not at their next request. */
+export function closeAssistantConnections(clientId: string): void {
+  for (const conn of connections.values()) {
+    if (conn.assistant?.clientId === clientId)
+      closeConnection(conn, 4001, "Assistant access changed");
   }
 }
 
@@ -144,6 +194,8 @@ function checkHeartbeats(): void {
     // a denial, which revokes its grant. A viewer that comes back finds its
     // probes unanswered and reconnects with the same grant.
     if (conn.isVirtual) {
+      // An assistant's connection ends by its own timer (`addConnection`).
+      if (conn.assistant) continue;
       if (now - conn.lastPong > VIRTUAL_SILENCE_MS) {
         console.log(`[WS] Forgetting silent relay connection: ${id}`);
         removeConnection(id);

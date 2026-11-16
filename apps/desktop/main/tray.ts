@@ -4,25 +4,29 @@
  * Adds a Deus icon to the macOS menu bar / Windows system tray.
  * Shows backend connectivity status with a colored indicator dot.
  *
- * Status:
- *  - Green dot + "Running"  → backend healthy
- *  - Red dot + "Offline"    → backend unreachable
- *  - Yellow dot + "Starting" → initial state before first health check
+ * Status follows the backend process (backend-process.ts tells index.ts):
+ *  - Green dot + "Running"  → a backend has started (the first or a restart)
+ *  - Red dot + "Offline"    → the backend exited and no other has started yet
+ *  - Yellow dot + "Starting" → before the first backend has started
  */
 
 import { Tray, Menu, nativeImage, app, BrowserWindow } from "electron";
 import { join } from "path";
 
-let tray: Tray | null = null;
-let healthInterval: ReturnType<typeof setInterval> | null = null;
-
 type TrayStatus = "starting" | "running" | "offline";
 
-/**
- * Create the system tray icon and start health polling.
- * Call after backend is spawned and the port is known.
- */
-export function setupTray(backendPort: number): void {
+let tray: Tray | null = null;
+let status: TrayStatus = "starting";
+
+/** Record the backend's state; shown at once if the tray exists, else when it is made. */
+export function setTrayStatus(next: TrayStatus): void {
+  if (next === status) return;
+  status = next;
+  updateTrayMenu(next);
+}
+
+/** Create the system tray icon, showing the backend's current status. */
+export function setupTray(): void {
   // Monochrome alpha glyph — macOS tints template images for light/dark
   // menu bars; on Windows it shows white-on-tray. The full app icon
   // (icon.png) is colored RGBA and isn't suitable as a template.
@@ -35,13 +39,11 @@ export function setupTray(backendPort: number): void {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip("Deus — Starting...");
 
   // Click tray icon → show/focus main window
   tray.on("click", showMainWindow);
 
-  updateTrayMenu("starting");
-  startHealthPolling(backendPort);
+  updateTrayMenu(status);
 }
 
 function showMainWindow(): void {
@@ -85,43 +87,9 @@ function updateTrayMenu(status: TrayStatus): void {
 }
 
 /**
- * Poll the backend health endpoint every 10s. Update the tray
- * status dot based on whether the backend responds.
- */
-function startHealthPolling(port: number): void {
-  let lastStatus: TrayStatus = "starting";
-
-  async function check(): Promise<void> {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      const next: TrayStatus = res.ok ? "running" : "offline";
-      if (next !== lastStatus) {
-        lastStatus = next;
-        updateTrayMenu(next);
-      }
-    } catch {
-      if (lastStatus !== "offline") {
-        lastStatus = "offline";
-        updateTrayMenu("offline");
-      }
-    }
-  }
-
-  // First check after a short delay (give backend time to boot)
-  setTimeout(check, 2000);
-  healthInterval = setInterval(check, 10_000);
-}
-
-/**
- * Clean up tray and stop polling. Call on app quit.
+ * Clean up tray. Call on app quit.
  */
 export function destroyTray(): void {
-  if (healthInterval) {
-    clearInterval(healthInterval);
-    healthInterval = null;
-  }
   if (tray) {
     tray.destroy();
     tray = null;

@@ -5,8 +5,8 @@
  * All statements are idempotent (IF NOT EXISTS).
  *
  * Tables: repositories, workspaces, sessions, messages, turns, parts, compactions,
- *         paired_devices, automations, automation_runs, extension_installations,
- *         integration_connections
+ *         paired_devices, assistants, automations, automation_runs,
+ *         extension_installations, integration_connections
  * Indexes: 18
  * Triggers: 6 (4 auto-update updated_at, 2 denormalized message_count + auto-seq)
  *
@@ -315,6 +315,29 @@ export const SCHEMA_SQL = `
     user_agent TEXT,
     last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Hosted assistants (ChatGPT, Claude, a CLI agent) that signed in with the
+  -- Deus account and reached this computer through Deus Cloud. Not paired
+  -- devices: each request carries the account's own sign-in, which this
+  -- computer verifies itself (services/assistants/). A first contact is
+  -- 'pending' until the person allows it ('read' or 'operate') or denies it
+  -- ('denied': kept, and refused at admission, until it is removed). One row
+  -- per assistant, account and machine id: what a person allowed under one
+  -- account is not allowed under another. name and host are labels only
+  -- (Deus Cloud's name for the client and the host its sign-in returns to;
+  -- else a readable form of its id, and a URL-shaped id's host). Times are
+  -- epoch ms; last_seen_at is written at most once a minute.
+  CREATE TABLE IF NOT EXISTS assistants (
+    client_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    host TEXT,
+    access TEXT NOT NULL DEFAULT 'pending' CHECK (access IN ('pending', 'read', 'operate', 'denied')),
+    created_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL,
+    PRIMARY KEY (client_id, account_id, machine_id)
   );
 
   -- Automations: a prompt the agnt platform runs on a schedule, in a cloud

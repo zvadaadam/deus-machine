@@ -14,12 +14,12 @@ vi.mock("../../../src/services/streams", () => ({ publish: mockPublish }));
 
 import {
   relay,
-  resolve,
-  reject,
+  answer,
   getPendingCount,
   clearAll,
   cancelRelay,
   cancelSessionRelays,
+  pendingFor,
 } from "../../../src/services/agent/tool-relay";
 // The live payload type. `shared/agent-events` was the deus dialect and is
 // deleted; this test kept importing it because the backend tests were not in
@@ -115,21 +115,21 @@ describe("ToolRelay", () => {
       expect(getPendingCount()).toBe(1);
     });
 
-    it("resolves when resolve() is called with the requestId", async () => {
+    it("resolves when answered with a result", async () => {
       const event = makeToolRequestEvent();
       const promise = relay(event);
 
-      resolve("req-1", { diff: "file.ts: +10 -5" });
+      answer("req-1", { result: { diff: "file.ts: +10 -5" } });
 
       await expect(promise).resolves.toEqual({ diff: "file.ts: +10 -5" });
       expect(getPendingCount()).toBe(0);
     });
 
-    it("rejects when reject() is called with the requestId", async () => {
+    it("rejects when answered with an error", async () => {
       const event = makeToolRequestEvent();
       const promise = relay(event);
 
-      reject("req-1", "No workspace context");
+      answer("req-1", { error: "No workspace context" });
 
       await expect(promise).rejects.toThrow("No workspace context");
       expect(getPendingCount()).toBe(0);
@@ -172,7 +172,7 @@ describe("ToolRelay", () => {
       expect(getPendingCount()).toBe(1);
 
       // Resolve the second one
-      resolve("dup-1", { snapshot: "ok" });
+      answer("dup-1", { result: { snapshot: "ok" } });
       await expect(promise2).resolves.toEqual({ snapshot: "ok" });
     });
 
@@ -183,9 +183,9 @@ describe("ToolRelay", () => {
 
       expect(getPendingCount()).toBe(3);
 
-      resolve("r2", { snapshot: "dom-tree" });
-      resolve("r1", { diff: "changes" });
-      reject("r3", "Terminal not available");
+      answer("r2", { result: { snapshot: "dom-tree" } });
+      answer("r1", { result: { diff: "changes" } });
+      answer("r3", { error: "Terminal not available" });
 
       await expect(p1).resolves.toEqual({ diff: "changes" });
       await expect(p2).resolves.toEqual({ snapshot: "dom-tree" });
@@ -195,24 +195,24 @@ describe("ToolRelay", () => {
   });
 
   // ==========================================================================
-  // resolve() / reject()
+  // answer()
   // ==========================================================================
 
-  describe("resolve", () => {
+  describe("answer with a result", () => {
     it("returns true when requestId is found", () => {
       relay(makeToolRequestEvent({ requestId: "found" }));
-      expect(resolve("found", "ok")).toBe(true);
+      expect(answer("found", { result: "ok" })).toBe(true);
     });
 
     it("returns false when requestId is not found", () => {
-      expect(resolve("nonexistent", "ok")).toBe(false);
+      expect(answer("nonexistent", { result: "ok" })).toBe(false);
     });
 
     it("clears the timeout timer on resolve", async () => {
       const event = makeToolRequestEvent({ requestId: "timer-test", timeoutMs: 1000 });
       const promise = relay(event);
 
-      resolve("timer-test", "result");
+      answer("timer-test", { result: "result" });
       await promise;
 
       // Advance past the original timeout — should not throw
@@ -221,16 +221,16 @@ describe("ToolRelay", () => {
     });
   });
 
-  describe("reject", () => {
+  describe("answer with an error", () => {
     it("returns true when requestId is found", async () => {
       const promise = relay(makeToolRequestEvent({ requestId: "found" }));
-      expect(reject("found", "error")).toBe(true);
+      expect(answer("found", { error: "error" })).toBe(true);
       // Must await the rejected promise to avoid unhandled rejection
       await expect(promise).rejects.toThrow("error");
     });
 
     it("returns false when requestId is not found", () => {
-      expect(reject("nonexistent", "error")).toBe(false);
+      expect(answer("nonexistent", { error: "error" })).toBe(false);
     });
   });
 
@@ -287,7 +287,7 @@ describe("cancelSessionRelays", () => {
       },
     ]);
     // The other session's relay is untouched and still resolvable.
-    expect(resolve("q-2", { ok: true })).toBe(true);
+    expect(answer("q-2", { result: { ok: true } })).toBe(true);
     await expect(other).resolves.toEqual({ ok: true });
   });
 });
@@ -318,5 +318,60 @@ describe("cancelRelay", () => {
     // Already gone: nothing is cancelled, and nothing more is published.
     expect(cancelRelay("q-1", "again")).toBe(false);
     expect(mockPublish).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("what a chat still waits on", () => {
+  afterEach(() => clearAll());
+
+  it("is every pending request of that chat, until it is answered", async () => {
+    const question = relay(
+      makeToolRequestEvent({ requestId: "q1", sessionId: "chat", method: "askUserQuestion" })
+    );
+    relay(makeToolRequestEvent({ requestId: "other", sessionId: "elsewhere" })).catch(() => {});
+    expect(pendingFor("chat")).toEqual([
+      {
+        requestId: "q1",
+        sessionId: "chat",
+        method: "askUserQuestion",
+        params: makeToolRequestEvent().params,
+        timeoutMs: makeToolRequestEvent().timeoutMs,
+      },
+    ]);
+    answer("q1", { result: { answers: ["yes"] } });
+    await expect(question).resolves.toEqual({ answers: ["yes"] });
+    expect(pendingFor("chat")).toEqual([]);
+  });
+
+  it("withdraws the prompt from every other client once one answers", async () => {
+    const plan = relay(
+      makeToolRequestEvent({ requestId: "p1", sessionId: "chat", method: "exitPlanMode" })
+    );
+    const asked = relay(
+      makeToolRequestEvent({ requestId: "p2", sessionId: "chat", method: "askUserQuestion" })
+    );
+    mockPublish.mockClear();
+    answer("p1", { result: { approved: true } });
+    answer("p2", { error: "declined" });
+    await plan;
+    await expect(asked).rejects.toThrow("declined");
+    expect(published(mockPublish, toolRequests).map(({ event }) => event)).toEqual([
+      { type: "cancel", sessionId: "chat", requestId: "p1" },
+      { type: "cancel", sessionId: "chat", requestId: "p2" },
+    ]);
+  });
+
+  it("withdraws nothing for a request a client answers by itself", async () => {
+    const diff = relay(makeToolRequestEvent({ requestId: "d1", sessionId: "chat" }));
+    mockPublish.mockClear();
+    answer("d1", { result: { diff: "" } });
+    await diff;
+    expect(mockPublish).not.toHaveBeenCalled();
+  });
+
+  it("is every chat's for a client that names none", () => {
+    relay(makeToolRequestEvent({ requestId: "a", sessionId: "one" })).catch(() => {});
+    relay(makeToolRequestEvent({ requestId: "b", sessionId: "two" })).catch(() => {});
+    expect(pendingFor().map((request) => request.requestId)).toEqual(["a", "b"]);
   });
 });

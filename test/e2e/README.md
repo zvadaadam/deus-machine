@@ -282,6 +282,83 @@ node --import tsx test/e2e/workspace-location.browser.mjs
 Screenshots of the open menu (local, cloud, mobile, signed out) go to
 `.context/workspace-location`.
 
+### Hosted assistants (`assistants/`)
+
+`assistants/run.mjs` runs a hosted assistant's whole path on loopback: the
+remote-access stack (`remote-access/stack.mjs`: Postgres, Deus Cloud from the
+linked AGNT worktree, the relay Worker, a Deus backend on an isolated SQLite
+database) with Deus Cloud's connector configured (`ASSISTANT_ISSUER`,
+`RELAY_URL`) and the backend pinned to the same issuer
+(`DEUS_ASSISTANT_ISSUER`). Deus Cloud is only a carrier: it checks the token
+and that the computer is the account's, then carries each MCP message to the
+computer as one `agentMcp` frame, and the computer answers it. The sign-in
+service is the only stand-in (`assistants/issuer.mjs`: metadata, dynamic client
+registration, PKCE, tokens in AuthKit's shape with `iss`, `aud` = the resource,
+`sub`, `client_id`, `org_id`, `exp`). The assistant is the official MCP SDK
+client given only the computer's assistant address. No model or agent login is
+needed.
+
+```sh
+AGNT_WORKSPACE=/path/to/agnt bun run test:e2e:assistants
+```
+
+Docker must be running, and AGNT's `packages/api` and `packages/sdk` built. It
+checks, in order:
+
+- The computer shows its address; with no token the connector answers 401 with
+  the `resource_metadata` challenge, and the metadata names the sign-in; GET is
+  405 and a web page's `Origin` is 403, with no origins configured.
+- `initialize` is answered by the computer itself ("Deus on <computer>", with
+  instructions), and right after it alone (no `tools/list`) the assistant is
+  listed on the computer as pending.
+- From the URL alone the SDK client meets the 401, reads the metadata,
+  registers, signs in and connects; it is offered exactly the eight session
+  tools and `read_changes`, `archive_workspace` and `send_feedback`, with read-only hints set.
+- A pending assistant's tool call is refused with the not-allowed-yet sentence
+  (the list is read over the computer's local socket, as its own window).
+- The label: Deus Cloud's lookup asks WorkOS at a fixed URL, which cannot be
+  stubbed; with no WorkOS key it answers 503 (403 to a web session), and the
+  computer shows the fallback (name = client id, `host` null).
+- Read only: `list_sessions` shows seeded workspaces with their phases,
+  `read_session` a seeded conversation, `read_changes` the changed file; a tool
+  that changes something is refused with the read-only sentence.
+- `read_changes` on a file that is not on the changed list (a seeded `.env`) is
+  refused, showing none of its content, for a read-only and an operate assistant.
+- Operate: `archive_workspace` archives (checked in the database), and
+  `stop_session` on an idle chat says nothing was running.
+- A cloud workspace seeded in the computer's database (its own window lists it)
+  is not in an assistant's list, is not found by name or id, and cannot be
+  read, sent to, stopped or archived.
+- A second assistant on the same account waits for its own approval.
+- The connector refuses with 401 a token for another computer's address, an
+  expired, a forged and another issuer's token. Another account's token for the
+  right address is stopped at Deus Cloud (the computer is not on that account);
+  carried to the computer anyway with a valid ticket, the computer refuses it
+  itself, as it does a misaddressed or expired one.
+- The computer offline: a call is answered at once with "… is offline or
+  asleep. Nothing was done." as a tool result marked as an error (what a model
+  reads). `initialize` and `tools/list` are answered by Deus Cloud from the
+  computer's last answers, with the request's own id, so a client that never
+  connected before still connects, lists the same tools, and its call reads the
+  offline words. A computer on the account that was never reached has nothing
+  remembered: `initialize` is refused in words that name it (the relay refuses
+  a computer that never hosted) and the SDK's
+  `connect` fails with them. After the computer returns the stored approval
+  still works, a new connection included.
+- Deny: the next calls are refused at admission with "This assistant was denied
+  on this computer." (a tool result marked as an error) and it stays listed as
+  denied; allowed again, it works.
+- Remove: it leaves the list, and its next contact is pending again.
+- Read only and empty: `list_sessions` shows a project with no workspace as
+  `(no sessions)`, and with every workspace archived it answers "no sessions.
+  Projects: …" naming them, with the `start_session` hint.
+- The computer removed from the account: what Deus Cloud remembered goes with
+  it, so with the computer away `initialize` and `tools/list` are refused (not
+  on the account) rather than answered from memory.
+
+Logs, Worker state, the run's database and `results.json` (each check's
+evidence: the tools' own words) go to `.context/assistants-e2e/`.
+
 ### `controls.browser.mjs`
 
 Runs the shared buttons, joined controls, menus, selects and tabs in an isolated
@@ -307,6 +384,27 @@ login or provider call is needed.
 ```bash
 bun test/e2e/provider-accounts.browser.mjs
 ```
+
+### `assistants.browser.mjs`
+
+Runs Settings → Remote access → Assistants in an isolated browser: the real
+section, socket and runtime client against a fake host that answers
+`assistants`, `relayStatus` (which carries the address), `setAssistantAccess`
+and `removeAssistant` over the `q:` wire. Checks the empty state, Add
+assistant with the address and copy, the signed-out and remote-access-off states fixed in place, a request
+arriving live (one toast per request with Review, none for a denied
+assistant, a new one when a removed assistant asks again; the waiting row
+first, the Settings sidebar mark), where each assistant signs in (its host, or
+"Unverified" and its client id), Allow as Read only, a failed change, Operate,
+Deny keeping it listed last as denied, Allow and Remove from its menu, Remove
+with its confirmation, no toast for a request already waiting at load, dark
+mode and a phone's width. No backend, sign-in or assistant is needed.
+
+```bash
+bun test/e2e/assistants.browser.mjs
+```
+
+Light, dark and mobile screenshots are saved under `.context/assistants-ui`.
 
 ### `model-picker.browser.mjs`
 

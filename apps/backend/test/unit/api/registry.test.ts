@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { live, out, read, write } from "@shared/api/op";
+import type { AssistantAccess } from "@shared/types/assistants";
 import { handle, LOCAL_CALLER, Registry } from "../../../src/api/registry";
+import { assistantCaller } from "../../helpers";
 
 const greet = read({
   name: "greet",
@@ -84,7 +86,12 @@ describe("operation registry", () => {
     ]);
     expect(await ops.run("whoami", "read", {}, ctx)).toBe("this computer");
     expect(
-      await ops.run("whoami", "read", {}, { caller: { deviceId: "phone", relayed: true } })
+      await ops.run(
+        "whoami",
+        "read",
+        {},
+        { caller: { deviceId: "phone", relayed: true, assistant: null } }
+      )
     ).toBe("device phone");
   });
 
@@ -92,5 +99,52 @@ describe("operation registry", () => {
     expect(() => new Registry([handle(count, () => 1), handle(count, () => 2)])).toThrow(
       "Two handlers answer count"
     );
+  });
+});
+
+describe("an assistant's reach", () => {
+  // A stand-in for the operator tools over MCP, registered under this name.
+  const agentMcp = write({
+    name: "agentMcp",
+    input: z.object({ message: z.unknown() }),
+    output: out<unknown>(),
+  });
+  const ops = new Registry([
+    handle(greet, ({ name }) => `hello ${name}`),
+    handle(rename, () => {}),
+    handle(count, () => 3),
+    handle(agentMcp, ({ message }) => ({ answered: message })),
+  ]);
+  const assistant = (access: AssistantAccess) => ({ caller: assistantCaller(access) });
+
+  it.each(["pending", "read", "operate"] as const)(
+    "refuses a %s assistant everything but the operator tools, reads, writes and live reads alike",
+    async (access) => {
+      await expect(
+        ops.run("greet", "read", { name: "Ada" }, assistant(access))
+      ).rejects.toMatchObject({
+        statusCode: 403,
+      });
+      await expect(
+        ops.run("rename", "write", { to: "x" }, assistant(access))
+      ).rejects.toMatchObject({
+        statusCode: 403,
+      });
+      expect(() => ops.runLive("count", {}, assistant(access))).toThrow(
+        expect.objectContaining({ statusCode: 403 })
+      );
+      // What it may do there is the operator's to decide per tool, by its access.
+      expect(await ops.run("agentMcp", "write", { message: { id: 1 } }, assistant(access))).toEqual(
+        { answered: { id: 1 } }
+      );
+    }
+  );
+
+  it("leaves this computer's window and paired devices as they were", async () => {
+    expect(await ops.run("greet", "read", { name: "Ada" }, ctx)).toBe("hello Ada");
+    const phone = { caller: { deviceId: "phone", relayed: true, assistant: null } };
+    expect(await ops.run("greet", "read", { name: "Ada" }, phone)).toBe("hello Ada");
+    // They may speak MCP to the operator tools too.
+    expect(await ops.run("agentMcp", "write", { message: [] }, phone)).toEqual({ answered: [] });
   });
 });

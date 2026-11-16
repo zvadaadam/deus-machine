@@ -24,9 +24,15 @@ export function allowOnce(options: readonly PermissionOption[]): PermissionOutco
   return allow ? { outcome: "selected", optionId: allow.optionId } : { outcome: "cancelled" };
 }
 
-/** A plan answered: implement it in default mode, or keep planning (the turn ends; the user says what to change). */
-export function planAnswer(approved: boolean): PermissionOutcome {
-  return { outcome: "selected", optionId: approved ? "default" : "plan" };
+/**
+ * A plan answered: implement it in default mode, or keep planning. Sent back
+ * with `feedback` (what to change), the agent is told it where its harness
+ * takes a rejection's words; without it the turn ends and the user says what
+ * to change.
+ */
+export function planAnswer(approved: boolean, feedback?: string): PermissionOutcome {
+  if (approved) return { outcome: "selected", optionId: "default" };
+  return { outcome: "selected", optionId: "plan", ...(feedback ? { message: feedback } : {}) };
 }
 
 /** A question as the question card shows it (the `askUserQuestion` the UI knows). */

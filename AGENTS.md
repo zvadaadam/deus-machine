@@ -72,11 +72,11 @@ Frontend (React)
 Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire on an in-process channel
 ```
 
-**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic.
+**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept.
 
 **Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process.
 
-**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop.
+**Agent engine** (`apps/agent-server/`) — Stateless. `@zvada/agent-server` with deus's seams: the in-process deus MCP tools, the tool policy, checkpoint hooks and titles. No DB access, no direct frontend communication; the tools reach the backend through `host-link.ts`, which the backend registers (`startEngine`). Keep blocking work off it: it shares the backend's event loop. A turn does not survive the process (the engine keeps turns in memory), so at engine start every local chat the database still shows working or waiting is settled as an error saying Deus quit mid-turn (`settleInterruptedSessions` in `services/agent/persistence.ts`; cloud chats are the platform's to settle).
 
 **Rule of thumb:** Needs native Electron API? → Main process. Everything else → Backend (or the engine's seams, for what a turn runs).
 
@@ -294,6 +294,110 @@ Remote access is bound to the Deus account, like Conductor's and ChatGPT's:
   lacks (404) stops redialing. A relay refusal looks like a network failure to a
   browser, so it redials with backoff. Pairing pages and the Mac's dialog show the
   computer's name and id fingerprint, so a code is typed into the right computer.
+- **Assistants** (ChatGPT, Claude, a CLI agent) reach the Mac with one URL,
+  `<Deus Cloud>/mcp/<machine id>` (remote MCP, OAuth). Deus Cloud only carries
+  the request: it dials the relay as a client, hands over the assistant's own
+  access token, sends the MCP body as one `agentMcp` write and returns the
+  answer (null is a `202`). Of MCP it reads only three method names:
+  `tools/call`, to refuse one in a form a model reads, and `initialize` and
+  `tools/list`, to answer them from what it remembers while the computer is
+  away. The Mac verifies the token itself (`services/assistants/token.ts`, the
+  same check as Deus Cloud's: the pinned issuer's keys, RS256 or ES256 only,
+  exactly one `aud` and that URL, `sub` the account the tunnel hosts, no
+  `sub_profile: ai_agent`, `client_id` the assistant); keys it cannot fetch
+  (no answer, not a 200, not JSON) are "could not check the sign-in right
+  now", never a refusal of the sign-in. A first contact is
+  stored `pending` (`assistants` table); the person allows `read` or
+  `operate`, or denies it, in Settings, Remote access, Assistants. Denied is a
+  state: the row stays and its next contact is refused ("This assistant was
+  denied on this computer."); Remove forgets it, so it comes back as a first
+  contact. One not seen for 30 days is forgotten the same way, unless it was
+  denied (`store.forgetUnused`, run at admission and at startup, never on a
+  timer; the list, a pure read, leaves such rows out until then), so a client
+  that registers itself anew at each sign-in (Codex) leaves no allowed entries
+  behind. A change or removal closes its connections. Its `name` and `host`
+  (where its sign-in returns to, shown because a name can be faked) come from
+  Deus Cloud (`GET /me/assistants/<clientId>`, never blocking admission; a
+  failed lookup is tried again on a later contact, at most every five
+  minutes); a URL-shaped client id's host stands on its own. The `assistants`
+  live read is pushed only when something a person sees changes (a first
+  contact, access, a name or host learned); `last_seen_at` is written at most
+  once a minute. A connection ends at its token's `exp` (plus the 30s clock
+  tolerance) and lives at most 200s whatever its traffic (Deus Cloud opens one
+  per request); pings extend neither. That end is the caller's `endsAt`
+  (`Caller` in `api/registry.ts`, from the connection): the operator's
+  `maxWaitSeconds` is a function of the caller (`maxWaitFor` in `host.ts`),
+  90s or the time left less a 5s margin, whichever is less, so a held call
+  answers "still working" with the wait hint before its connection is cut. The
+  window and paired devices have no `endsAt` and keep the 90s cap. Managing them (`assistants`,
+  `setAssistantAccess`, `removeAssistant` in `shared/api/assistants.ts`) is
+  full access only. The address a person pastes into one is the tunnel's, on
+  `relayStatus` (`assistantUrl`).
+- **What an assistant reaches**: one operation, `agentMcp` (one MCP JSON-RPC
+  message or a batch in, the response, an array or null out). This computer
+  answers MCP itself: the handler is `createMcpHandler` from
+  `@zvada/agent-server/operator`, built once in `services/assistants/operator.ts`
+  (server `deus`, titled "Deus on <computer name>", `services/server-name.ts`).
+  `tools/list` is the same for every caller, since assistants keep it from when
+  they connect. The registry refuses an assistant everything else
+  (`ASSISTANT_OPERATIONS`) and the query engine its `q:subscribe` and
+  `q:tool_response`; this computer's window and paired devices may call
+  `agentMcp` too. A first contact is recorded at admission, so one that has
+  only sent `initialize` is already listed. `pending` and `denied` run no tool,
+  `read` only the tools that read; this computer's window and paired devices
+  run every tool. A refusal reaches the model as an `isError` tool result.
+  Access is read again from the table just before every write a call makes
+  (`services/assistants/access.ts`), since a held call or message (a first
+  message waiting for setup, an interrupt waiting for a stop) can outlive the
+  person's change of mind: run every operation a tool makes through the host's
+  `act`, and call `assertMayWrite` just before each of the host's own writes
+  that is not an operation (holding or dropping a first message, answering a
+  request). A refusal (an `OperatorError` or `AppError`) is a sentence
+  that says what to do; any other failure inside a tool is reported and reaches
+  an assistant as one generic sentence (`ASSISTANT_FAILURE`, applied in the
+  tool source's `call` in `operator.ts`, and by the query engine for an
+  operation that fails), never its internal text.
+- **The tools.** The session tools (`list_sessions`, `read_session`,
+  `start_session`, `send_message`, `wait_for_session`, `watch_sessions`,
+  `answer_request`, `stop_session`) and their words come from
+  `@zvada/agent-server/operator`; Deus is their host
+  (`services/assistants/host.ts`) and adds `read_changes`,
+  `archive_workspace` and `send_feedback` (a report about Deus itself to the
+  Deus team's Hivenet board, `services/assistants/feedback.ts`: the report
+  alone, `consent.telemetry: false`; read access is enough). A session is a workspace's current chat (its slug, under
+  its project). Assistants see this computer's own workspaces only for now: the
+  host leaves cloud workspaces out of the list and every lookup, and
+  `start_session` always makes a local workspace. An archived workspace is not
+  listed; one named (by name or id) is refused as archived, not as unknown
+  (the host's `entry`). Every read, send, stop and
+  answer goes through the app's own operations as this computer
+  (`runAsThisComputer`). A message continues the chat as its composer would
+  (`turn-settings.ts`). The tools take no request ids. An identical request from the same
+  caller (an assistant's client id, a device, or this computer's window)
+  while the first is in flight runs nothing new (`duplicate: true`): for
+  `send_message`, the same chat and trimmed message while its turn is being
+  sent or runs, whatever `interrupt` says; for `start_session`, the same
+  project and message while its workspace is set up or its first
+  turn runs. None of it is stored. A session's id is its workspace's, always.
+  `start_session` returns once the workspace row exists; the host keeps the
+  first message and sends it through `act` when setup ends (30
+  minutes at most). A workspace being set up reads `working`; a send to it is
+  refused unless it is an `interrupt` replacing the first message the host
+  holds, which its reply says (`SendResult.note`); a stop drops that message and says so. Why a first message was not
+  sent (a failed start, a refused send, the 30 minutes) is the error while the
+  chat has no messages, then is said once in the outcome note. `archive_workspace` names the branch it keeps, refuses a workspace being set up and removes
+  one whose start failed. The host's `groups` lists
+  every project, so `list_sessions` names projects with no session. `read_changes(file)` shows only a file in the
+  workspace's changed-files list (normalised paths): git prints a whole file
+  as the diff of an unchanged one, and that may be an ignored secret. What a
+  repository wrote (file names, diffs) and names follow the module's
+  untrusted-text rule: a name is one JSON-quoted line (`quoted()`), a diff a
+  block of quoted lines (`quote()`), so no line of it reads as one of the
+  tool's own.
+  An answer takes the one path a card's does (`tool-relay.ts`
+  `answer`): whoever answers first, the others' question or plan card is
+  withdrawn, and a client that starts following one chat's or every chat's
+  `toolRequests` is first sent what still waits.
 
 Admission is checked when a socket opens (no leases), and the relay can still read
 `q:` frames: end-to-end encryption is separate work. `DEUS_RELAY_URL` points the
@@ -520,7 +624,7 @@ the catalog can move to a package the day Deus Cloud reads it too.
 
 ## Database
 
-Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 12 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
+Own SQLite at `~/Library/Application Support/com.deus.app/deus.db`. Schema in `shared/schema.ts` — 13 tables: `repositories`, `workspaces`, `sessions`, `messages`, `turns`, `parts`, `compactions`, `paired_devices`, `assistants`, `automations`, `automation_runs`, `extension_installations`, `integration_connections`.
 
 - `repositories.root_path` is nullable (a project not on this computer). A database from before is rebuilt once at startup (`db/migrate-project-folder.ts`): it runs only while the column is still `NOT NULL`, first writes a copy next to the database (`<db>.before-optional-project-folder.bak`; no copy, no rebuild), then rebuilds the table in one transaction with foreign keys off and checked, and rolls back on any failure without the reset hint.
 - Turn accounting, execution, provider account snapshots and outcomes belong to `turns`, keyed by `(session_id, turn_id)`. Messages contain transcript content only. `db/migrate-turns.ts` moves existing message accounting once at startup without deleting history.

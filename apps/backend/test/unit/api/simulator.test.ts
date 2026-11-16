@@ -42,7 +42,7 @@ vi.mock("node:child_process", () => ({ execFile }));
 import handlers from "../../../src/api/simulator";
 
 const run = operations(handlers);
-const overRelay = operations(handlers, { deviceId: "phone", relayed: true });
+const overRelay = operations(handlers, { deviceId: "phone", relayed: true, assistant: null });
 
 const WS = { workspaceId: "ws-1" };
 const SNAPSHOT = { bundleId: "com.example.app", pid: 7, timestamp: 1, roots: [] };

@@ -1,6 +1,7 @@
 import { vi, type Mock } from "vitest";
 import type { AnyOp, InputOf, OutputOf } from "@shared/api/op";
 import type { AnyStream, EventOf, ScopeOf } from "@shared/api/stream";
+import type { AssistantAccess } from "@shared/types/assistants";
 import { LOCAL_CALLER, Registry, type Caller, type Handler } from "../src/api/registry";
 import type { PublishOptions } from "../src/services/streams";
 
@@ -20,6 +21,14 @@ export function published<S extends AnyStream>(
   return publish.mock.calls
     .filter(([sent]) => (sent as AnyStream).name === stream.name)
     .map(([, scope, event, options]) => ({ scope, event, options }));
+}
+
+/** The account and machine the tests' assistants are admitted for. */
+export const ASSISTANT_HOST = { accountId: "user_a", machineId: "0123456789abcdef" };
+
+/** A hosted assistant's caller, admitted with `access`, as its relayed connection carries it. */
+export function assistantCaller(access: AssistantAccess = "operate", clientId = "claude"): Caller {
+  return { deviceId: null, relayed: true, assistant: { clientId, access, host: ASSISTANT_HOST } };
 }
 
 /**

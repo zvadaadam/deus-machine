@@ -9,7 +9,7 @@
  * snake_case names here must match the renderer exactly.
  */
 
-import { ipcMain, dialog, nativeTheme, BrowserWindow, shell, Menu, app } from "electron";
+import { ipcMain, dialog, BrowserWindow, shell, app } from "electron";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
@@ -131,17 +131,6 @@ export function registerNativeHandlers(): void {
   // Folder picker
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("show_folder_dialog", async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (!win) return null;
-    const result = await dialog.showOpenDialog(win, {
-      properties: ["openDirectory", "createDirectory"],
-    });
-    return result.canceled ? null : result.filePaths[0];
-  });
-
-  // Keep the native: prefixed name too — the preload's named methods
-  // (pickFolder, confirm, etc.) call "native:pickFolder" directly.
   ipcMain.handle("native:pickFolder", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (!win) return null;
@@ -170,14 +159,6 @@ export function registerNativeHandlers(): void {
       return response === 1;
     }
   );
-
-  // -------------------------------------------------------------------------
-  // Theme
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle("native:setTheme", (_e, { theme }: { theme: "light" | "dark" | "system" }) => {
-    nativeTheme.themeSource = theme;
-  });
 
   // -------------------------------------------------------------------------
   // Open external URL
@@ -221,117 +202,32 @@ export function registerNativeHandlers(): void {
   });
 
   // -------------------------------------------------------------------------
-  // Context menu
-  // -------------------------------------------------------------------------
-
-  ipcMain.handle(
-    "native:contextMenu",
-    (
-      _e,
-      { items }: { items: Array<{ id: string; label: string; type?: string; enabled?: boolean }> }
-    ) => {
-      return new Promise<string | null>((resolve) => {
-        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-        if (!win) {
-          resolve(null);
-          return;
-        }
-        const menu = Menu.buildFromTemplate(
-          items.map((item) => ({
-            label: item.label,
-            click: () => resolve(item.id),
-            type: item.type as "normal" | "separator" | undefined,
-            enabled: item.enabled ?? true,
-          }))
-        );
-        menu.popup({ window: win, callback: () => resolve(null) });
-      });
-    }
-  );
-
-  // -------------------------------------------------------------------------
   // Backend connection info (renderer needs this to connect WebSocket)
-  // Registered under BOTH names:
-  //   - "native:getBackendPort" — preload named method calls this directly
-  //   - "get_backend_port"      — generic invoke() from renderer code
   // -------------------------------------------------------------------------
 
   ipcMain.handle("native:getBackendPort", () => {
     return parseInt(process.env.DEUS_BACKEND_PORT!, 10);
   });
 
-  ipcMain.handle("get_backend_port", () => {
-    return parseInt(process.env.DEUS_BACKEND_PORT!, 10);
-  });
-
-  ipcMain.handle("native:getAuthToken", () => {
-    return process.env.DEUS_AUTH_TOKEN;
-  });
-
   // -------------------------------------------------------------------------
-  // Window controls — keep native: prefix since preload methods call these
+  // Window state
   // -------------------------------------------------------------------------
-
-  ipcMain.handle("native:minimize", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    win?.minimize();
-  });
-
-  ipcMain.handle("native:maximize", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (win) {
-      if (win.isMaximized()) {
-        win.unmaximize();
-      } else {
-        win.maximize();
-      }
-    }
-  });
-
-  ipcMain.handle("native:close", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    win?.close();
-  });
-
-  ipcMain.handle("native:isMaximized", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    return win?.isMaximized() ?? false;
-  });
 
   ipcMain.handle("native:isFullscreen", () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     return win?.isFullScreen() ?? false;
   });
 
-  ipcMain.handle("native:toggleFullscreen", () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.setFullScreen(!win.isFullScreen());
-    }
-  });
-
   // -------------------------------------------------------------------------
   // CLI tool checks
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("native:checkCliTool", async (_e, args: { name?: string; tool?: string }) => {
-    return checkCliTool(args.name || args.tool || "");
-  });
-
-  ipcMain.handle("check_cli_tool", async (_e, args: { name?: string; tool?: string }) => {
-    return checkCliTool(args.name || args.tool || "");
-  });
-
-  ipcMain.handle("native:startGhAuthLogin", async () => {
-    return startGhAuthLogin();
+  ipcMain.handle("check_cli_tool", async (_e, args: { name?: string }) => {
+    return checkCliTool(args?.name || "");
   });
 
   ipcMain.handle("start_gh_auth_login", async () => {
     return startGhAuthLogin();
-  });
-
-  ipcMain.handle("native:logoutGhAuth", async () => {
-    return logoutGhAuth();
   });
 
   ipcMain.handle("logout_gh_auth", async () => {
@@ -342,28 +238,12 @@ export function registerNativeHandlers(): void {
   // App detection
   // -------------------------------------------------------------------------
 
-  ipcMain.handle("native:getInstalledApps", async () => {
-    return getInstalledAppsList();
-  });
-
   ipcMain.handle("get_installed_apps", async () => {
     return getInstalledAppsList();
   });
 
-  // Renderer calls invoke("open_in_app", { appId, workspacePath })
-  // We accept both the old native: shape AND the new snake_case shape.
-  ipcMain.handle(
-    "native:openInApp",
-    async (_e, { appPath, filePath }: { appPath: string; filePath: string }) => {
-      try {
-        await execFileAsync("open", ["-a", appPath, filePath]);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-  );
-
+  // Renderer calls invoke("open_in_app", { appId, workspacePath }); only apps
+  // from the curated list below can be opened.
   ipcMain.handle(
     "open_in_app",
     async (_e, { appId, workspacePath }: { appId: string; workspacePath: string }) => {
@@ -392,10 +272,6 @@ export function registerNativeHandlers(): void {
     return app.getVersion();
   });
 
-  ipcMain.handle("native:getPlatform", () => {
-    return process.platform;
-  });
-
   // -------------------------------------------------------------------------
   // Zoom control — renderer calls invoke("native:setZoom", { level })
   // -------------------------------------------------------------------------
@@ -415,12 +291,6 @@ export function registerNativeHandlers(): void {
   ipcMain.handle("native:homeDir", () => {
     return homedir();
   });
-
-  // Git clone is handled by the backend (the `gitClone` operation).
-
-  // iOS Simulator — all operations moved to backend (simulator-context.ts).
-  // The frontend asks the backend over its WebSocket.
-  // No Electron IPC needed.
 }
 
 // ---- Helpers ----

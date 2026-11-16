@@ -26,8 +26,10 @@ import {
 } from "./services/local-servers.service";
 import { initAutomations } from "./services/automations";
 import { refreshCloudOrganizations } from "./services/cloud-settings.service";
+import { forgetUnusedAssistants } from "./services/assistants";
 import { startIntegrations } from "./services/integrations";
 import { failInterruptedWorkspaces } from "./services/workspace-init.service";
+import { stopWhenStdinEnds } from "./lib/parent-stdin";
 
 // Initialize Sentry before anything else.
 // DSN is a public, write-only ingest token — safe to hardcode.
@@ -47,6 +49,8 @@ Sentry.init({
 
 // Initialize database
 const db = initDatabase();
+// Assistants unused for a month are forgotten (also whenever the list is read).
+forgetUnusedAssistants();
 
 // Workspaces the previous process was still starting when it stopped.
 const interrupted = failInterruptedWorkspaces();
@@ -220,3 +224,5 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+// Started by the desktop: stop when it does, even if it crashed or was killed.
+if (stopWhenStdinEnds(shutdown)) console.log("[server] Stopping when the desktop does");

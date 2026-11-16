@@ -18,6 +18,10 @@ the tag must match `package.json` and `apps/cli/package.json` and point to a com
 on `main`. Only stable `vX.Y.Z` releases are supported. Workflow-created tags use
 `GITHUB_TOKEN`, so they do not trigger a duplicate run.
 
+The workflow runs no tests itself. Before it bumps anything it requires a
+completed, successful run of the Tests workflow (`test.yml`) for the exact commit
+being released, and stops otherwise; a dry run only warns.
+
 If a job fails, rerun failed jobs on the existing release run. Keep its version,
 tag and successful artifacts; do not move the tag or bump again to retry a
 publishing failure.

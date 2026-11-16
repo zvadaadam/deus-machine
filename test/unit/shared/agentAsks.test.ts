@@ -31,6 +31,13 @@ describe("what Deus answers the engine", () => {
   it("implements an approved plan, and keeps planning on a rejected one", () => {
     expect(planAnswer(true)).toEqual({ outcome: "selected", optionId: "default" });
     expect(planAnswer(false)).toEqual({ outcome: "selected", optionId: "plan" });
+    // What to change goes with a plan sent back; an approval carries no words.
+    expect(planAnswer(false, "Use a map")).toEqual({
+      outcome: "selected",
+      optionId: "plan",
+      message: "Use a map",
+    });
+    expect(planAnswer(true, "ignored")).toEqual({ outcome: "selected", optionId: "default" });
   });
 
   it("allows a tool once, and cancels a request it cannot allow", () => {
