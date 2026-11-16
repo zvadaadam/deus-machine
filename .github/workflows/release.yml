@@ -10,12 +10,13 @@
 #          gh workflow run release.yml -f bump=minor
 #          gh workflow run release.yml -f bump=patch -f dry_run=true
 #
-# Required GitHub Secrets:
-#   APPLE_CERTIFICATE                  — Base64-encoded .p12 Developer ID Application certificate
-#   APPLE_CERTIFICATE_PASSWORD         — Password for the .p12 file
-#   APPLE_API_KEY                      — App Store Connect API key (.p8 file contents)
-#   APPLE_API_KEY_ID                   — Key ID from App Store Connect
-#   APPLE_API_ISSUER                   — Issuer ID from App Store Connect
+# Required GitHub Secrets: Cognitic s.r.o.'s Apple team (V3MA6M9H6Q), the same
+# Developer ID and notarization account as the Rafina app (docs/releases.md):
+#   APPLE_CERT_P12                     — Base64-encoded .p12 of the Developer ID Application identity
+#   APPLE_CERT_PASSWORD                — Password for the .p12
+#   APPLE_ID                           — Apple Account that notarizes, a member of the team
+#   APPLE_APP_SPECIFIC_PASSWORD        — App-specific password of that account
+#   APPLE_TEAM_ID                      — The team's id
 #
 # Optional GitHub Secrets:
 #   SENTRY_AUTH_TOKEN                  — Sentry auth token for source map upload
@@ -210,28 +211,31 @@ jobs:
       - name: Smoke test packaged runtime resources
         run: bun run smoke:runtime-resources
 
-      - name: Prepare Apple API key for notarization
+      # electron-builder skips notarization without a word when it has no
+      # credentials, so a missing secret stops the release here instead.
+      - name: Require Apple signing and notarization secrets
         run: |
-          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_ID" || -z "$APPLE_API_ISSUER" ]]; then
-            echo "::error::APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER secrets must be set"
-            exit 1
-          fi
-          key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
-          printf '%s\n' "$APPLE_API_KEY" > "$key_path"
-          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          for name in APPLE_CERT_P12 APPLE_CERT_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::The $name secret must be set"
+              exit 1
+            fi
+          done
         env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Package macOS (arm64 + x64)
         run: bunx electron-builder --mac --publish never
         env:
-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_API_KEY: ${{ env.APPLE_API_KEY_PATH }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CSC_LINK: ${{ secrets.APPLE_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Notarize macOS distribution artifacts
         run: |
@@ -244,9 +248,9 @@ jobs:
             [ -f "$artifact" ] || continue
             echo "Submitting ${artifact} for notarization..."
             xcrun notarytool submit "$artifact" \
-              --key "$APPLE_API_KEY_PATH" \
-              --key-id "$APPLE_API_KEY_ID" \
-              --issuer "$APPLE_API_ISSUER" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
               --wait
           done
 
@@ -258,8 +262,9 @@ jobs:
             xcrun stapler staple "$dmg"
           done
         env:
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Verify macOS artifacts
         run: |
@@ -355,12 +360,6 @@ jobs:
             --home "$copied_home" \
             --launch-in-place \
             --require-gatekeeper
-
-      - name: Clean up Apple API key
-        if: always()
-        run: rm -f "${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
-        env:
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
 
       - uses: actions/upload-artifact@v4
         with:
