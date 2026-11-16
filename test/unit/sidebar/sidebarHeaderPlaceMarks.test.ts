@@ -6,7 +6,12 @@
  */
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// The menu shows its ⌃ shortcut hints on a Mac only; the rows are checked as a Mac draws
+// them, whatever computer runs the test.
+beforeAll(() => vi.stubGlobal("navigator", { platform: "MacIntel" }));
+afterAll(() => vi.unstubAllGlobals());
 
 vi.mock("@/features/settings/api/auth.queries", () => ({
   useComputerName: () => ({ data: "Studio Mac" }),
