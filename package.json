@@ -2,7 +2,7 @@
   "name": "deus",
   "private": true,
   "license": "MIT",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "Agentic engineering platform for managing multiple parallel coding agents",
   "author": {
     "name": "Deus",
