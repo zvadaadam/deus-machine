@@ -26,21 +26,10 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "enter_onboarding_mode",
   "exit_onboarding_mode",
 
-  // Folder dialog (snake_case alias)
-  "show_folder_dialog",
-
-  // Backend connection
-  "get_backend_port",
-
-  // CLI / environment checks (snake_case aliases)
+  // CLI / environment checks
   "check_cli_tool",
   "start_gh_auth_login",
   "logout_gh_auth",
-  "deus_cloud:get_session",
-  "deus_cloud:start_login",
-  "deus_cloud:sign_out",
-  "deus_cloud:github_app_status",
-  "deus_cloud:github_app_install",
   "get_installed_apps",
   "open_in_app",
 
@@ -66,15 +55,9 @@ const ALLOWED_INVOKE_CHANNELS = new Set([
   "native:openExternal",
   "native:openPath",
   "native:revealInFinder",
-
-  // iOS Simulator — every operation is the backend's (asked over its socket).
-  // No IPC channels needed.
 ]);
 
 const ALLOWED_EVENT_CHANNELS = new Set([
-  // Window state
-  "fullscreen-change",
-
   // Backend lifecycle
   "backend:port-changed",
 
@@ -83,12 +66,6 @@ const ALLOWED_EVENT_CHANNELS = new Set([
   // title, url, console, keyboard) is received directly as DOM events on
   // the element in the renderer, with no main-process round-trip.
   "browser:new-tab-requested",
-
-  // Auto-update state
-  "update:state",
-
-  // Deus Cloud account auth
-  "deus_cloud:changed",
 ]);
 
 const electronAPI = {
@@ -97,33 +74,20 @@ const electronAPI = {
   // ---------------------------------------------------------------------------
 
   getBackendPort: (): Promise<number> => ipcRenderer.invoke("native:getBackendPort"),
-  getAuthToken: (): Promise<string> => ipcRenderer.invoke("native:getAuthToken"),
 
   // ---------------------------------------------------------------------------
   // Native OS operations
   // ---------------------------------------------------------------------------
 
-  pickFolder: (): Promise<string | null> => ipcRenderer.invoke("native:pickFolder"),
   confirm: (message: string, detail?: string): Promise<boolean> =>
     ipcRenderer.invoke("native:confirm", { message, detail }),
-  setTheme: (theme: "light" | "dark" | "system"): Promise<void> =>
-    ipcRenderer.invoke("native:setTheme", { theme }),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke("native:openExternal", { url }),
-  contextMenu: (
-    items: Array<{ id: string; label: string; type?: string; enabled?: boolean }>
-  ): Promise<string | null> => ipcRenderer.invoke("native:contextMenu", { items }),
 
   // ---------------------------------------------------------------------------
-  // Window visibility & control
+  // Window state
   // ---------------------------------------------------------------------------
 
-  showMainWindow: (): Promise<void> => ipcRenderer.invoke("show_main_window"),
-  minimize: (): Promise<void> => ipcRenderer.invoke("native:minimize"),
-  maximize: (): Promise<void> => ipcRenderer.invoke("native:maximize"),
-  close: (): Promise<void> => ipcRenderer.invoke("native:close"),
-  isMaximized: (): Promise<boolean> => ipcRenderer.invoke("native:isMaximized"),
   isFullscreen: (): Promise<boolean> => ipcRenderer.invoke("native:isFullscreen"),
-  toggleFullscreen: (): Promise<void> => ipcRenderer.invoke("native:toggleFullscreen"),
 
   // ---------------------------------------------------------------------------
   // Auto-update
@@ -139,15 +103,9 @@ const electronAPI = {
   },
 
   // ---------------------------------------------------------------------------
-  // CLI / Environment checks
+  // Deus Cloud account
   // ---------------------------------------------------------------------------
 
-  checkCliTool: (tool: string): Promise<{ installed: boolean; path: string | null }> =>
-    ipcRenderer.invoke("native:checkCliTool", { tool }),
-  startGhAuthLogin: (): Promise<{ success: boolean; path: string | null; error?: string }> =>
-    ipcRenderer.invoke("native:startGhAuthLogin"),
-  logoutGhAuth: (): Promise<{ success: boolean; path: string | null; error?: string }> =>
-    ipcRenderer.invoke("native:logoutGhAuth"),
   getDeusCloudSession: (): Promise<unknown> => ipcRenderer.invoke("deus_cloud:get_session"),
   mintDeusCloudDirectToken: (providerSessionId: string): Promise<unknown> =>
     ipcRenderer.invoke("deus_cloud:mint_direct_token", providerSessionId),
@@ -161,17 +119,12 @@ const electronAPI = {
     ipcRenderer.on("deus_cloud:changed", listener);
     return () => ipcRenderer.removeListener("deus_cloud:changed", listener);
   },
-  getInstalledApps: (): Promise<Array<{ name: string; path: string }>> =>
-    ipcRenderer.invoke("native:getInstalledApps"),
-  openInApp: (appPath: string, filePath: string): Promise<boolean> =>
-    ipcRenderer.invoke("native:openInApp", { appPath, filePath }),
 
   // ---------------------------------------------------------------------------
   // App info
   // ---------------------------------------------------------------------------
 
   getAppVersion: (): Promise<string> => ipcRenderer.invoke("native:getAppVersion"),
-  getPlatform: (): Promise<string> => ipcRenderer.invoke("native:getPlatform"),
 
   // ---------------------------------------------------------------------------
   // Generic IPC bridge — guarded by allowlist to prevent the renderer from
@@ -193,17 +146,6 @@ const electronAPI = {
     const listener = (_e: Electron.IpcRendererEvent, ...args: unknown[]): void => callback(...args);
     ipcRenderer.on(event, listener);
     return () => ipcRenderer.removeListener(event, listener);
-  },
-
-  // ---------------------------------------------------------------------------
-  // Backend lifecycle (main process sends this after backend crash + restart)
-  // ---------------------------------------------------------------------------
-
-  onBackendPortChanged: (callback: (payload: { port: number }) => void): (() => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, payload: { port: number }): void =>
-      callback(payload);
-    ipcRenderer.on("backend:port-changed", listener);
-    return () => ipcRenderer.removeListener("backend:port-changed", listener);
   },
 
   // ---------------------------------------------------------------------------

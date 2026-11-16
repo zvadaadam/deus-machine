@@ -11,18 +11,27 @@
  *      <webview> guest doesn't own a BrowserWindow to dock into.
  *
  * Both identify the target by `webContentsId`, which the renderer gets from
- * `webview.getWebContentsId()` after the guest page attaches.
+ * `webview.getWebContentsId()` after the guest page attaches. Only a <webview>
+ * guest hosted by the window that asks is accepted: the debugger and DevTools
+ * never reach the app's own window or another window's guests.
  */
 
-import { ipcMain, webContents } from "electron";
+import { ipcMain, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
 
-const emulatedIds = new Set<number>();
+/** The <webview> guest `id` names, if the window asking hosts it; otherwise null. */
+function ownGuest(event: IpcMainInvokeEvent, id: unknown): WebContents | null {
+  if (typeof id !== "number") return null;
+  const wc = webContents.fromId(id);
+  if (!wc || wc.isDestroyed()) return null;
+  if (wc.getType() !== "webview" || wc.hostWebContents?.id !== event.sender.id) return null;
+  return wc;
+}
 
 export function registerBrowserEmulationHandlers(): void {
   ipcMain.handle(
     "browser_webview_emulation_set",
     async (
-      _e,
+      event,
       {
         webContentsId,
         width,
@@ -39,8 +48,8 @@ export function registerBrowserEmulationHandlers(): void {
         scale?: number;
       }
     ): Promise<{ success: boolean; error?: string }> => {
-      const wc = webContents.fromId(webContentsId);
-      if (!wc || wc.isDestroyed()) return { success: false, error: "webContents not found" };
+      const wc = ownGuest(event, webContentsId);
+      if (!wc) return { success: false, error: "webContents not found" };
 
       // Track what we did so a partial failure (attach OK but setDeviceMetrics
       // throws, or zoom set but setTouchEmulation throws) doesn't leave the
@@ -72,7 +81,6 @@ export function registerBrowserEmulationHandlers(): void {
           ...(mobile ? { maxTouchPoints: 5 } : {}),
         });
 
-        emulatedIds.add(webContentsId);
         return { success: true };
       } catch (err) {
         // Rollback: undo whatever partial work succeeded so the caller can
@@ -90,7 +98,6 @@ export function registerBrowserEmulationHandlers(): void {
         } catch (rollbackErr) {
           console.error("[browser-emulation] rollback failed:", rollbackErr);
         }
-        emulatedIds.delete(webContentsId);
         return { success: false, error: String(err) };
       }
     }
@@ -99,11 +106,11 @@ export function registerBrowserEmulationHandlers(): void {
   ipcMain.handle(
     "browser_webview_emulation_clear",
     async (
-      _e,
+      event,
       { webContentsId }: { webContentsId: number }
     ): Promise<{ success: boolean; error?: string }> => {
-      const wc = webContents.fromId(webContentsId);
-      if (!wc || wc.isDestroyed()) return { success: false, error: "webContents not found" };
+      const wc = ownGuest(event, webContentsId);
+      if (!wc) return { success: false, error: "webContents not found" };
 
       try {
         if (wc.debugger.isAttached()) {
@@ -119,7 +126,6 @@ export function registerBrowserEmulationHandlers(): void {
           wc.debugger.detach();
         }
         wc.setZoomFactor(1);
-        emulatedIds.delete(webContentsId);
         return { success: true };
       } catch (err) {
         return { success: false, error: String(err) };
@@ -130,7 +136,7 @@ export function registerBrowserEmulationHandlers(): void {
   ipcMain.handle(
     "browser_webview_devtools_open",
     (
-      _e,
+      event,
       {
         webContentsId,
         devtoolsWebContentsId,
@@ -144,12 +150,12 @@ export function registerBrowserEmulationHandlers(): void {
         mode?: "right" | "bottom" | "undocked" | "detach";
       }
     ): { success: boolean; error?: string } => {
-      const wc = webContents.fromId(webContentsId);
-      if (!wc || wc.isDestroyed()) return { success: false, error: "webContents not found" };
+      const wc = ownGuest(event, webContentsId);
+      if (!wc) return { success: false, error: "webContents not found" };
       try {
         if (devtoolsWebContentsId !== undefined) {
-          const dt = webContents.fromId(devtoolsWebContentsId);
-          if (!dt || dt.isDestroyed()) {
+          const dt = ownGuest(event, devtoolsWebContentsId);
+          if (!dt) {
             return { success: false, error: "devtools webContents not found" };
           }
           // setDevToolsWebContents only takes effect when DevTools aren't
@@ -170,9 +176,9 @@ export function registerBrowserEmulationHandlers(): void {
 
   ipcMain.handle(
     "browser_webview_devtools_close",
-    (_e, { webContentsId }: { webContentsId: number }): { success: boolean; error?: string } => {
-      const wc = webContents.fromId(webContentsId);
-      if (!wc || wc.isDestroyed()) return { success: false, error: "webContents not found" };
+    (event, { webContentsId }: { webContentsId: number }): { success: boolean; error?: string } => {
+      const wc = ownGuest(event, webContentsId);
+      if (!wc) return { success: false, error: "webContents not found" };
       try {
         wc.closeDevTools();
         return { success: true };
