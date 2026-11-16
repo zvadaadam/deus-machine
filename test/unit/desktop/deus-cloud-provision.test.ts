@@ -11,6 +11,7 @@ vi.mock("electron", () => ({
   app: {
     getPath: () => electronMocks.userDataDir,
   },
+  BrowserWindow: { getAllWindows: () => [] },
   safeStorage: {
     isEncryptionAvailable: () => true,
     encryptString: (value: string) => Buffer.from(value, "utf8"),
@@ -33,6 +34,7 @@ import {
   resolveAgntBaseUrl,
   revokeDeviceKeys,
 } from "../../../apps/desktop/main/deus-cloud-provision";
+import { signOutDeusCloud } from "../../../apps/desktop/main/deus-cloud-auth";
 
 const fetchMock = vi.fn();
 
@@ -41,6 +43,9 @@ beforeEach(async () => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("DEUS_CLOUD_AGNT_URL", "https://agnt.test");
+  vi.stubEnv("DEUS_BACKEND_PORT", "");
+  // Forget the previous test's account (its listed default organization).
+  await revokeDeviceKeys(null);
 });
 
 afterEach(async () => {
@@ -295,7 +300,71 @@ describe("pushCloudCredentialsToBackend", () => {
       deusCloudUrl: expect.any(String),
       deusCloudSessionToken: null,
       orgKeys: { org_a: "agnt_sk_live_a", org_b: "agnt_sk_live_b" },
+      // Before the list is read, the first stored key's organization is the default.
+      orgId: "org_a",
     });
+  });
+
+  const pushedBodies = () =>
+    fetchMock.mock.calls
+      .filter((call) => String(call[0]).includes("/api/settings/cloud/credentials"))
+      .map((call) => JSON.parse(call[1].body));
+
+  it("names the platform's first organization the default, also when its key is missing", async () => {
+    vi.stubEnv("DEUS_BACKEND_PORT", "51999");
+    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    platformMock({
+      orgs: () => jsonResponse({ items: [{ id: "org_a" }, { id: "org_b" }] }),
+      mint: (orgId) =>
+        orgId === "org_a" ? jsonResponse({ error: "FORBIDDEN" }, 403) : minted(orgId),
+    });
+
+    await provisionAfterLogin("session-jwt", "https://cloud.test");
+
+    expect(pushedBodies().at(-1)).toMatchObject({
+      orgKeys: { org_b: "agnt_sk_org_b" },
+      orgId: "org_a",
+    });
+  });
+
+  it("names the first stored key's organization when the list cannot be read", async () => {
+    vi.stubEnv("DEUS_BACKEND_PORT", "51999");
+    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    await setOrgKey("org_b", "agnt_sk_b", { keyId: "key_b" });
+    await setOrgKey("org_a", "agnt_sk_a", { keyId: "key_a" });
+    platformMock({ orgs: () => Promise.reject(new Error("ENOTFOUND")) });
+
+    await provisionAfterLogin("session-jwt", "https://cloud.test");
+
+    expect(pushedBodies().at(-1)).toMatchObject({ orgId: "org_b" });
+  });
+
+  it("revokes, never stores or pushes, a key whose mint finishes after a sign-out", async () => {
+    vi.stubEnv("DEUS_BACKEND_PORT", "51999");
+    vi.stubEnv("DEUS_AUTH_TOKEN", "local-token");
+    let finishMint: (response: Response) => void = () => {};
+    let mintStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => (mintStarted = resolve));
+    platformMock({
+      mint: () =>
+        new Promise<Response>((resolve) => {
+          finishMint = resolve;
+          mintStarted();
+        }),
+    });
+
+    const provisioning = provisionAfterLogin("session-jwt", "https://cloud.test");
+    await started;
+    await signOutDeusCloud();
+    finishMint(minted("org_1"));
+    await provisioning;
+
+    expect(await listOrgKeys()).toEqual([]);
+    const revoke = fetchMock.mock.calls.find((call) => call[1]?.method === "DELETE");
+    expect(revoke?.[0]).toBe("https://agnt.test/dashboard/orgs/org_1/api-keys/key_org_1");
+    expect(revoke?.[1].headers.authorization).toBe("Bearer session-jwt");
+    // Only sign-out's own push of the cleared credentials reached the backend.
+    expect(pushedBodies()).toEqual([expect.objectContaining({ orgKeys: {}, orgId: null })]);
   });
 });
 

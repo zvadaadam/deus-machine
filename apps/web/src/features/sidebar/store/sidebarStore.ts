@@ -2,9 +2,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   pendingCloudOutcome,
-  type CloudRowState,
-  type Organizations,
+  type CloudIntent,
   type Place,
+  type WindowWhere,
   type WorkspaceLocation,
 } from "../lib/location";
 
@@ -35,8 +35,9 @@ interface SidebarState {
   rememberSelection: (placeKey: string, workspaceId: string) => void;
 
   // A Deus Cloud sign-in (or a setup) started from the location menu, memory only: once
-  // the cloud (or that organization) is reachable, the window moves there.
-  cloudPending: { organizationId: string | null } | null;
+  // the cloud (or that organization) is reachable, the window moves there, unless the
+  // person went elsewhere first.
+  cloudPending: CloudIntent | null;
   // A setup started from the location menu is running (memory only).
   cloudSetupRetrying: boolean;
 }
@@ -163,12 +164,16 @@ export const useSidebarStore = create<SidebarState>()(
 );
 
 /**
- * Sign in to Deus Cloud from the location menu (or ⌃2). The intent stays until the
- * sign-in fails or is cancelled, the cloud is reachable, or its setup fails
- * (`finishCloudSignIn`): a sign-in that succeeds still waits for this computer's key.
+ * Sign in to Deus Cloud from the location menu (or ⌃2), from where the window is now
+ * (`from`). The intent stays until the sign-in fails or is cancelled, the cloud is
+ * reachable, its setup fails, or the person goes elsewhere (`finishCloudSignIn`): a
+ * sign-in that succeeds still waits for this computer's key.
  */
-export async function startCloudSignIn(signIn: () => Promise<{ success: boolean }>): Promise<void> {
-  useSidebarStore.setState({ cloudPending: { organizationId: null } });
+export async function startCloudSignIn(
+  signIn: () => Promise<{ success: boolean }>,
+  from: WindowWhere
+): Promise<void> {
+  useSidebarStore.setState({ cloudPending: { organizationId: null, from } });
   const signedIn = await signIn().then(
     (result) => result.success,
     () => false
@@ -179,19 +184,20 @@ export async function startCloudSignIn(signIn: () => Promise<{ success: boolean 
 /**
  * Set this computer's cloud up again (the cloud row's Retry, an organization's Set up),
  * with the same intent as a sign-in: the window moves to `organizationId` (or, with
- * none, the cloud) once it is ready. Recorded together with the running setup, so the
- * row never offers it again while one runs; a setup that fails ends the intent.
- * `moveWindow: false` (the composer's Set up) runs the same setup with no intent: the
- * window stays where it is.
+ * none, the cloud) once it is ready, unless it went elsewhere from `from` first.
+ * Recorded together with the running setup, so the row never offers it again while one
+ * runs; a setup that fails ends the intent. With no `from` (the composer's Set up) it
+ * runs the same setup with no intent: the window stays where it is.
  */
 export async function retryCloudSetup(
   retry: () => Promise<{ ok: boolean; error?: string }>,
   organizationId: string | null = null,
-  { moveWindow = true }: { moveWindow?: boolean } = {}
+  { from }: { from?: WindowWhere } = {}
 ): Promise<{ ok: boolean; error?: string }> {
+  const moveWindow = from !== undefined;
   useSidebarStore.setState(
-    moveWindow
-      ? { cloudPending: { organizationId }, cloudSetupRetrying: true }
+    from
+      ? { cloudPending: { organizationId, from }, cloudSetupRetrying: true }
       : { cloudSetupRetrying: true }
   );
   const result = await retry().catch((error: unknown) => ({
@@ -206,17 +212,17 @@ export async function retryCloudSetup(
 }
 
 /**
- * A pending sign-in or setup, each time the backend's pushed value changes: once the
- * place it waits for is reachable, the window moves there, once; once the setup has
- * failed (the cloud row offers Retry), it ends.
+ * A pending sign-in or setup, each time the backend's pushed value or the window
+ * changes: once the place it waits for is reachable, the window moves there, once;
+ * once it no longer applies (`pendingCloudOutcome`), it ends.
  */
 export function finishCloudSignIn(
-  { organizations, cloudRow }: { organizations: Organizations; cloudRow: CloudRowState },
+  now: Parameters<typeof pendingCloudOutcome>[1],
   switchTo: (place: Place) => void
 ): void {
   const pending = useSidebarStore.getState().cloudPending;
   if (!pending) return;
-  const outcome = pendingCloudOutcome(pending, organizations, cloudRow);
+  const outcome = pendingCloudOutcome(pending, now);
   if (outcome === "wait") return;
   useSidebarStore.setState({ cloudPending: null });
   if (outcome !== "end") switchTo(outcome);

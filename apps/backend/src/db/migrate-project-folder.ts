@@ -32,7 +32,8 @@ interface ForeignKeyViolation {
  *
  * Runs only while the column is still NOT NULL, so a fresh database and a
  * second start do nothing. A copy of the database is written next to it first
- * (once); if it cannot be made, nothing is changed and this throws. A failure
+ * (once, under a temporary name renamed when whole); if it cannot be made,
+ * nothing is changed and this throws. A failure
  * inside the transaction rolls back and leaves the database as it was.
  *
  * Returns whether it rebuilt the table. `hooks` exists for tests.
@@ -56,8 +57,13 @@ export function makeProjectFolderOptional(
 
   const backup = projectFolderBackupPath(dbPath);
   if (!fs.existsSync(backup)) {
+    // Written under another name and renamed when whole: a copy cut short (the
+    // process killed mid-VACUUM) is never taken for the copy at the next start.
+    const partial = `${backup}.partial`;
     try {
-      db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
+      fs.rmSync(partial, { force: true });
+      db.exec(`VACUUM INTO '${partial.replace(/'/g, "''")}'`);
+      fs.renameSync(partial, backup);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(

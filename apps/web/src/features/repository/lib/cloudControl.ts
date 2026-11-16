@@ -5,6 +5,7 @@
  * the organization only while the cloud is on.
  */
 import { match } from "ts-pattern";
+import type { CloudRepoAccessStatus } from "@shared/types/cloud-access";
 import type { OrganizationRowState } from "@/features/sidebar/lib/location";
 
 export interface CloudControlWords {
@@ -82,9 +83,11 @@ export function cloudOnlySendBlock({
 
 /**
  * An organization chosen in the composer's menu: a ready one becomes the composer's
- * and the cloud goes on there, through the access gate; one not set up runs the
- * setup (the header menu's Set up); one setting up, or not set up where it cannot be,
- * does nothing.
+ * and the cloud goes on there, through the access gate. One not set up runs the setup
+ * (the header menu's Set up) and becomes the composer's at once, so the switch is off
+ * (this computer) while it is not ready; the cloud is asked for there and goes on once
+ * it is ready and its verdict is a go (`heldCloudIntent`). One setting up, or not set
+ * up where it cannot be, does nothing.
  */
 export function chooseComposerOrganization(
   organization: { id: string; state: OrganizationRowState },
@@ -99,7 +102,40 @@ export function chooseComposerOrganization(
       actions.setOrganization(organization.id);
       actions.requestCloud(organization.id);
     })
-    .with("set-up", () => actions.setUp(organization.id))
+    .with("set-up", () => {
+      // The setup first: it is running by the time the gate looks at the request.
+      actions.setUp(organization.id);
+      actions.setOrganization(organization.id);
+      actions.requestCloud(organization.id);
+    })
     .with("setting-up", "unavailable", () => undefined)
     .exhaustive();
+}
+
+/**
+ * A cloud request the access gate holds, as what it reads changes: `go` turns the
+ * switch on, `end` drops the request, `hold` keeps waiting. It goes only where the
+ * composer's organization is ready, and, with a project chosen, its access verdict is
+ * a go (`ok`, or `unknown`: never block on uncertainty). It ends once the organization
+ * is known not to be ready and no setup is running, so a request never turns the
+ * cloud on by itself later.
+ */
+export function heldCloudIntent({
+  forRepo,
+  status,
+  cloudReady,
+  settingUp,
+}: {
+  /** The request is for a chosen project (else for the organization alone). */
+  forRepo: boolean;
+  /** The project's access verdict; undefined while it loads. */
+  status: CloudRepoAccessStatus | undefined;
+  /** The composer's organization is ready (or, with no list, the cloud available). */
+  cloudReady: boolean | undefined;
+  /** A cloud setup is running on this computer. */
+  settingUp: boolean;
+}): "go" | "hold" | "end" {
+  if (cloudReady !== true) return cloudReady === false && !settingUp ? "end" : "hold";
+  if (!forRepo) return "go";
+  return status === "ok" || status === "unknown" ? "go" : "hold";
 }

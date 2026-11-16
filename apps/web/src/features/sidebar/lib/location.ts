@@ -386,6 +386,19 @@ export function composerPlace(windowPlace: Place, organizations: Organizations):
 }
 
 /**
+ * The composer's switch is on only where a create would be accepted: once its
+ * organization is known not to be ready (or, with no list, the cloud known not
+ * available), it is this computer. Turning it on again is the access gate's, once the
+ * organization is ready and its verdict is a go.
+ */
+export function composerSwitch(
+  location: WorkspaceLocation,
+  cloudReady: boolean | undefined
+): WorkspaceLocation {
+  return location === "cloud" && cloudReady === false ? "local" : location;
+}
+
+/**
  * The composer's organization, its own state: a choice made in the composer, and the
  * window's organization it was made against. The window's changing resets the choice.
  */
@@ -413,20 +426,56 @@ export function composerOrganization(
   return state.windowOrganizationId;
 }
 
+/** Where the window was, by the person's own doing: its place and its selected workspace. */
+export interface WindowWhere {
+  /** `placeKey` of the stored place. */
+  place: string;
+  selectedId: string | null;
+}
+
 /**
- * A sign-in or a setup started from the menu, as the backend's value changes: the
- * place to move the window to once it is reachable (an organization set up, or, with
- * none named, the cloud), `end` once nothing running will reach it (the cloud setup
- * failed: the one cloud row would offer Retry), or `wait`.
+ * A sign-in or a setup started from the menu: take the window to `organizationId`
+ * (or, with none, the cloud) once it is reachable, unless the person went somewhere
+ * else first. `from` is where the window was when it started.
+ */
+export interface CloudIntent {
+  organizationId: string | null;
+  from: WindowWhere;
+}
+
+/**
+ * A sign-in or a setup started from the menu, as the backend's value or the window
+ * changes: the place to move the window to once it is reachable (an organization set
+ * up, or, with none named, the cloud), `end` once it no longer applies, or `wait`. It
+ * ends when the person went elsewhere (switched place, selected another workspace or
+ * none), when its organization is not listed (signed out, or no longer a member), when
+ * that organization is back to "Set up" (its setup is over and did not make it ready),
+ * and when the cloud setup failed (the one cloud row would offer Retry).
  */
 export function pendingCloudOutcome(
-  pending: { organizationId: string | null },
-  organizations: Organizations,
-  cloudRow: CloudRowState
+  pending: CloudIntent,
+  {
+    organizations,
+    cloudRow,
+    organizationRow,
+    here,
+  }: {
+    organizations: Organizations;
+    cloudRow: CloudRowState;
+    /** What an organization's row in the menu says now. */
+    organizationRow: (organization: { id: string; ready: boolean }) => OrganizationRowState;
+    here: WindowWhere;
+  }
 ): Place | "wait" | "end" {
+  if (pending.from.place !== here.place || pending.from.selectedId !== here.selectedId) {
+    return "end";
+  }
   if (pending.organizationId) {
-    const org = organizations?.items.find((o) => o.id === pending.organizationId);
-    return org?.ready ? { location: "cloud", organizationId: org.id } : "wait";
+    if (!organizations) return "wait";
+    const org = organizations.items.find((o) => o.id === pending.organizationId);
+    if (!org) return "end";
+    if (org.ready) return { location: "cloud", organizationId: org.id };
+    return organizationRow(org) === "set-up" ? "end" : "wait";
   }
   if (organizations?.available === true) return { location: "cloud", organizationId: null };
   if (cloudRow === "retry") return "end";

@@ -26,6 +26,7 @@ vi.mock("@/features/agent-config/ui/categories/McpView", () => view("McpView"));
 vi.mock("@/features/agent-config/ui/categories/HooksView", () => view("HooksView"));
 
 import { AgentConfigPanel } from "@/features/agent-config/ui/AgentConfigPanel";
+import { CategoryContentArea } from "@/features/agent-config/ui/CategoryContentArea";
 import { cloudSlashItems, readLocalSlashItems } from "@/features/session/hooks/useSlashCommand";
 import { agentConfigOf } from "@/features/workspace/lib/reach";
 
@@ -59,6 +60,34 @@ describe("the Agent tab", () => {
     expect(html).toContain("runs in the cloud");
     expect(html).toContain("this computer&#x27;s configuration does not");
     expect(html).not.toContain("data-project");
+  });
+});
+
+describe("the Agent tab's project scope", () => {
+  const NOTE =
+    "Project settings are this workspace&#x27;s own. Changes here are part of its branch.";
+  const area = (repoPath?: string) =>
+    renderToStaticMarkup(
+      createElement(CategoryContentArea, {
+        categoryLabel: "Skills",
+        globalItems: [{ id: "g", name: "g", scope: "global", category: "skills", raw: {} }],
+        projectItems: [],
+        repoName: "deus",
+        repoPath,
+      })
+    );
+
+  it("says once that its settings are the workspace's own, part of its branch", () => {
+    const html = area("/repos/deus/.deus/w");
+    expect(html.split(NOTE)).toHaveLength(2);
+    // Under the project's label, before the global scope.
+    expect(html.indexOf(NOTE)).toBeGreaterThan(html.indexOf(">deus<"));
+    expect(html.indexOf(NOTE)).toBeLessThan(html.indexOf(">Global<"));
+  });
+
+  it("says nothing with the global scope alone, or for a cloud workspace", () => {
+    expect(area(undefined)).not.toContain(NOTE);
+    expect(panel(workspace({ kind: "cloud", workspace_path: "" }))).not.toContain(NOTE);
   });
 });
 

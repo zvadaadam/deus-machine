@@ -48,6 +48,8 @@ import {
   signOutDeusCloud,
   startDeusCloudLogin,
 } from "../../../apps/desktop/main/deus-cloud-auth";
+import { listOrgKeys } from "../../../apps/desktop/main/cloud-credentials";
+import { provisionAtStartup } from "../../../apps/desktop/main/deus-cloud-provision";
 
 const originalFetch = global.fetch;
 const originalEnv = { ...process.env };
@@ -411,5 +413,137 @@ describe("desktop Deus Cloud auth flow", () => {
       message: "Deus Cloud returned an invalid desktop session",
     });
     await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({ signedIn: false });
+  });
+});
+
+describe("device keys of a session that ended", () => {
+  /**
+   * One scripted cloud, platform and backend. Each sign-in exchanges for the next
+   * session (`session-1`, `session-2`); a mint answers with a key named after the
+   * session that asked, and is held open for the sessions in `holdFor`.
+   */
+  function scriptedCloud() {
+    const script = {
+      exchanges: 0,
+      holdFor: new Set<string>(),
+      release: new Map<string, () => void>(),
+      revokedKeyIds: [] as string[],
+      pushes: [] as Array<{ orgKeys: Record<string, string> }>,
+    };
+    process.env.DEUS_BACKEND_PORT = "51999";
+    process.env.DEUS_AUTH_TOKEN = "local-token";
+    global.fetch = vi.fn(async (input, init) => {
+      const url = new URL(String(input));
+      const bearer = String(
+        (init?.headers as Record<string, string> | undefined)?.authorization ?? ""
+      ).replace(/^Bearer /, "");
+      if (url.pathname === "/api/settings/cloud/credentials") {
+        script.pushes.push(JSON.parse(String(init?.body)));
+        return Response.json({ ok: true });
+      }
+      if (url.hostname === "127.0.0.1") return originalFetch(input, init);
+      if (url.pathname === "/auth/desktop/config") {
+        return Response.json({
+          authorization_endpoint: "https://api.workos.test/user_management/authorize",
+          client_id: "client_test",
+          provider: "authkit",
+          redirect_uri: "http://127.0.0.1:*/auth/callback",
+        });
+      }
+      if (url.pathname === "/auth/desktop/exchange") {
+        script.exchanges += 1;
+        return Response.json({
+          session_token: `session-${script.exchanges}`,
+          token_type: "Bearer",
+          expires_in_seconds: 24 * 60 * 60,
+          account_id: "user_test",
+          refresh_token: `refresh-${script.exchanges}`,
+        });
+      }
+      if (url.pathname === "/auth/desktop/refresh") return new Response(null, { status: 401 });
+      if (url.pathname === "/me") return Response.json({ account: { name: "Ada" } });
+      if (url.pathname === "/orgs") return Response.json({ items: [{ id: "org_1" }] });
+      if (url.pathname === "/secrets") return Response.json({ items: [] });
+      const revoke = url.pathname.match(/\/api-keys\/([^/]+)$/);
+      if (revoke && init?.method === "DELETE") {
+        script.revokedKeyIds.push(revoke[1]);
+        return Response.json({ ok: true });
+      }
+      if (url.pathname.endsWith("/api-keys") && init?.method === "POST") {
+        const minted = () =>
+          Response.json(
+            { id: `key_${bearer}`, key: `agnt_sk_${bearer}`, label: "deus-desktop mac" },
+            { status: 201 }
+          );
+        if (!script.holdFor.has(bearer)) return minted();
+        return new Promise<Response>((resolve) =>
+          script.release.set(bearer, () => resolve(minted()))
+        );
+      }
+      throw new Error(`unexpected fetch: ${url.toString()}`);
+    }) as typeof fetch;
+    return script;
+  }
+
+  async function signIn(): Promise<void> {
+    const opened = electronMocks.openExternal.mock.calls.length;
+    const login = startDeusCloudLogin();
+    await vi.waitFor(() => expect(electronMocks.openExternal).toHaveBeenCalledTimes(opened + 1));
+    const loginUrl = new URL(electronMocks.openExternal.mock.calls[opened]?.[0] as string);
+    const callbackUrl = new URL(loginUrl.searchParams.get("redirect_uri") ?? "");
+    callbackUrl.searchParams.set("code", "workos-code");
+    callbackUrl.searchParams.set("state", loginUrl.searchParams.get("state") ?? "");
+    await originalFetch(callbackUrl);
+    await expect(login).resolves.toMatchObject({ success: true });
+  }
+
+  /** Let background work that has nothing left to wait on finish. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 200));
+
+  it("a first sign-in's provisioning that ends last leaves the next sign-in's keys alone", async () => {
+    const script = scriptedCloud();
+    script.holdFor.add("session-1");
+
+    await signIn();
+    await vi.waitFor(() => expect(script.release.has("session-1")).toBe(true));
+    await signOutDeusCloud();
+    await signIn();
+    await vi.waitFor(() =>
+      expect(script.pushes.some((push) => push.orgKeys.org_1 === "agnt_sk_session-2")).toBe(true)
+    );
+
+    script.release.get("session-1")?.();
+    await vi.waitFor(() => expect(script.revokedKeyIds).toContain("key_session-1"));
+    await settle();
+
+    expect(await listOrgKeys()).toMatchObject([{ orgId: "org_1", keyId: "key_session-2" }]);
+    expect(script.revokedKeyIds).not.toContain("key_session-2");
+    expect(script.pushes.at(-1)?.orgKeys).toEqual({ org_1: "agnt_sk_session-2" });
+  });
+
+  it("a session the server revokes ends a mint in flight: nothing stored, nothing pushed", async () => {
+    const script = scriptedCloud();
+    // Registers the session-revoked handler, as the app does at startup.
+    provisionAtStartup(async () => null, "https://cloud.test");
+    script.holdFor.add("session-1");
+
+    await signIn();
+    await vi.waitFor(() => expect(script.release.has("session-1")).toBe(true));
+
+    // A day later the refresh is refused: the server revoked the session.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000);
+    try {
+      await expect(getDeusCloudSessionStatus()).resolves.toMatchObject({ signedIn: false });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    script.release.get("session-1")?.();
+    await vi.waitFor(() => expect(script.revokedKeyIds).toContain("key_session-1"));
+    await settle();
+
+    expect(await listOrgKeys()).toEqual([]);
+    expect(script.pushes.every((push) => Object.keys(push.orgKeys).length === 0)).toBe(true);
   });
 });

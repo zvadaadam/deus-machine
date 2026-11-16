@@ -4,6 +4,7 @@ import os from "os";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import * as api from "@shared/api/repos";
 import { isOp } from "@shared/api/op";
+import { GitError } from "../../../src/lib/git-process";
 import { operations, published } from "../../helpers";
 
 const {
@@ -19,6 +20,7 @@ const {
   mockWriteProjectFile,
   mockListRecentProjects,
   mockResolveCloudRepoAccess,
+  mockRunGit,
 } = vi.hoisted(() => {
   const mockStmt = {
     all: vi.fn<(...args: any[]) => any>(() => []),
@@ -50,6 +52,8 @@ const {
     mockWriteProjectFile: vi.fn<(...args: any[]) => any>(),
     mockListRecentProjects: vi.fn<(...args: any[]) => any>(),
     mockResolveCloudRepoAccess: vi.fn<(...args: any[]) => any>(),
+    mockRunGit:
+      vi.fn<(args: string[], options: { onStderr?: (chunk: string) => void }) => Promise<string>>(),
   };
 });
 
@@ -80,6 +84,11 @@ vi.mock("child_process", () => ({
 }));
 
 vi.mock("fs", () => ({ default: mockFs, ...mockFs }));
+
+vi.mock("../../../src/lib/git-process", async (actual) => ({
+  ...(await actual<typeof import("../../../src/lib/git-process")>()),
+  runGit: mockRunGit,
+}));
 
 vi.mock("@shared/lib/uuid", () => ({
   uuidv7: vi.fn<(...args: any[]) => any>(() => "test-uuid-1234"),
@@ -140,6 +149,25 @@ function spawnedGit() {
   const proc = Object.assign(new EventEmitter(), { stderr: new EventEmitter() });
   mockSpawn.mockReturnValue(proc);
   return proc;
+}
+
+/** A clone run through `runGit`, driven by the test: its stderr, then how it ends. */
+function clonedGit() {
+  let onStderr: (chunk: string) => void = () => {};
+  let settle: { resolve: (out: string) => void; reject: (error: unknown) => void };
+  mockRunGit.mockImplementation(
+    (_args: string[], options: { onStderr?: (chunk: string) => void }) =>
+      new Promise((resolve, reject) => {
+        onStderr = options.onStderr ?? (() => {});
+        settle = { resolve, reject };
+      })
+  );
+  return {
+    stderr: (chunk: string) => onStderr(chunk),
+    succeed: () => settle.resolve(""),
+    fail: (stderr: string, timedOut = false, cause?: Error) =>
+      settle.reject(new GitError(mockRunGit.mock.calls[0]![0], stderr, timedOut, cause)),
+  };
 }
 
 /**
@@ -303,14 +331,30 @@ describe("gitClone", () => {
     });
   });
 
-  it("refuses a URL git could read as anything but an http(s) address", async () => {
-    for (const unsafe of ["git@github.com:example/deus.git", "https://github.com/a/b; rm -rf ~"]) {
+  it("refuses an address git could read as anything but an https or ssh repository", async () => {
+    for (const unsafe of [
+      "https://github.com/a/b; rm -rf ~",
+      "http://github.com/a/b",
+      "file:///etc",
+      "ext::sh -c touch% /tmp/pwned",
+      "/Users/someone/repo",
+      "--upload-pack=touch /tmp/pwned",
+    ]) {
       await expect(run(api.gitClone, { url: unsafe, targetPath: TARGET })).rejects.toMatchObject({
         statusCode: 400,
-        message: "Invalid repository URL format",
       });
     }
-    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockRunGit).not.toHaveBeenCalled();
+  });
+
+  it("refuses an address with a credential in it, without repeating it", async () => {
+    const refused = run(api.gitClone, {
+      url: "https://someone:ghp_secret@github.com/a/b",
+      targetPath: TARGET,
+    });
+    await expect(refused).rejects.toMatchObject({ statusCode: 400 });
+    await expect(refused).rejects.not.toThrow(/ghp_secret/);
+    expect(mockRunGit).not.toHaveBeenCalled();
   });
 
   it("refuses a target outside the home directory", async () => {
@@ -318,22 +362,27 @@ describe("gitClone", () => {
       statusCode: 400,
       message: "Target path must be within the home directory",
     });
-    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockRunGit).not.toHaveBeenCalled();
   });
 
   it("publishes git's progress to the clients following a clone and answers with where the clone is", async () => {
-    const proc = spawnedGit();
+    const git = clonedGit();
     const cloning = run(api.gitClone, { url, targetPath: "~/deus" });
+    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
 
-    proc.stderr.emit("data", Buffer.from("Cloning into 'deus'...\nReceiving objects:  50%\r"));
-    proc.stderr.emit("data", Buffer.from("Receiving objects: 100%"));
-    proc.emit("close", 0);
+    git.stderr("Cloning into 'deus'...\nReceiving objects:  50%\r");
+    git.stderr("Receiving objects: 100%");
+    git.succeed();
 
     await expect(cloning).resolves.toEqual({ path: TARGET });
-    expect(mockSpawn).toHaveBeenCalledWith(
-      "git",
-      ["clone", "--progress", url, TARGET],
-      expect.objectContaining({ timeout: 300_000 })
+    // https and ssh only, the address after `--`, in the runner (no prompts, its own group, a timeout).
+    expect(mockRunGit).toHaveBeenCalledWith(
+      [
+        ...["-c", "protocol.allow=never"],
+        ...["-c", "protocol.https.allow=always", "-c", "protocol.ssh.allow=always"],
+        ...["clone", "--progress", "--", url, TARGET],
+      ],
+      expect.objectContaining({ cwd: path.dirname(TARGET), timeoutMs: 300_000 })
     );
     expect(progress("clone")).toEqual([
       "Cloning into 'deus'...",
@@ -349,25 +398,55 @@ describe("gitClone", () => {
     expect(progress("init")).toEqual([]);
   });
 
-  it("fails with git's last words when the clone fails", async () => {
-    const proc = spawnedGit();
-    const cloning = run(api.gitClone, { url, targetPath: TARGET });
+  it("clones an ssh address and GitHub's owner/name", async () => {
+    for (const [given, cloned] of [
+      ["git@github.com:example/deus.git", "git@github.com:example/deus.git"],
+      ["example/deus", "https://github.com/example/deus"],
+    ]) {
+      mockRunGit.mockReset().mockResolvedValue("");
+      await run(api.gitClone, { url: given!, targetPath: TARGET });
+      expect(mockRunGit.mock.calls[0]![0].slice(-3)).toEqual(["--", cloned, TARGET]);
+    }
+  });
 
-    proc.stderr.emit("data", Buffer.from("fatal: repository not found"));
-    proc.emit("close", 128);
+  it("fails with git's words, without its progress, when the clone fails", async () => {
+    const git = clonedGit();
+    const cloning = run(api.gitClone, { url, targetPath: TARGET });
+    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
+
+    const said =
+      "Cloning into 'deus'...\nremote: Repository not found.\nfatal: repository not found\n";
+    git.stderr(said);
+    git.fail(said.trim());
 
     await expect(cloning).rejects.toMatchObject({
       statusCode: 500,
-      message: "fatal: repository not found",
+      message: "remote: Repository not found.\nfatal: repository not found",
     });
-    expect(progress("clone")).toEqual(["fatal: repository not found"]);
+    expect(progress("clone")).toEqual([
+      "Cloning into 'deus'...",
+      "remote: Repository not found.",
+      "fatal: repository not found",
+    ]);
+  });
+
+  it("says a clone was stopped at its timeout", async () => {
+    const git = clonedGit();
+    const cloning = run(api.gitClone, { url, targetPath: TARGET });
+    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
+    git.fail("", true);
+    await expect(cloning).rejects.toMatchObject({
+      statusCode: 500,
+      message: "git clone did not finish within 5 minutes and was stopped.",
+    });
   });
 
   it("fails when git cannot be started", async () => {
-    const proc = spawnedGit();
+    const git = clonedGit();
     const cloning = run(api.gitClone, { url, targetPath: TARGET });
+    await vi.waitFor(() => expect(mockRunGit).toHaveBeenCalled());
 
-    proc.emit("error", new Error("spawn git ENOENT"));
+    git.fail("", false, new Error("spawn git ENOENT"));
 
     await expect(cloning).rejects.toMatchObject({
       statusCode: 500,

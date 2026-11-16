@@ -89,6 +89,20 @@ let pendingLogin: PendingLogin | null = null;
 let loginStartInProgress = false;
 let loginGeneration = 0;
 
+/**
+ * Bumped by every sign-out and by a session the server revoked. Work started for a session (a key mint at startup, at
+ * sign-in, by Retry) compares it before keeping anything: a change means the
+ * session it was started for is gone.
+ */
+export function currentLoginGeneration(): number {
+  return loginGeneration;
+}
+
+/** End the current session's generation without a sign-out (the server revoked it). */
+export function endLoginGeneration(): void {
+  loginGeneration += 1;
+}
+
 function parseTimestamp(value: string): number | null {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : null;
@@ -870,18 +884,11 @@ async function completeDesktopLogin(callback: DesktopAuthCallback): Promise<void
     void (async () => {
       const token = await getStoredDeusCloudSessionToken();
       if (!token) return;
+      // A session that ended meanwhile is handled inside: its minted key is
+      // revoked, never stored or pushed. Revoking here as well would delete the
+      // keys of a sign-in that came after it.
       await provisionAfterLogin(token, stored.cloudUrl);
-      // Signing out mid-mint used to leave a freshly minted key in the vault
-      // of a signed-out user: revokeDeviceKeys ran BEFORE the key existed, so
-      // nothing ever revoked it and the backend cloud lane stayed live.
-      if (provisionGeneration !== loginGeneration) {
-        // Use the CAPTURED token, not a re-read: sign-out has already cleared
-        // the stored session by now, and revokeDeviceKeys skips the server-side
-        // DELETE when handed null — which would delete the local copy and
-        // leave the just-minted key alive on the platform forever.
-        await revokeDeviceKeys(token).catch(() => {});
-        return;
-      }
+      if (provisionGeneration !== loginGeneration) return;
       broadcastAuthChanged(await getDeusCloudSessionStatus());
     })();
   } catch (error) {

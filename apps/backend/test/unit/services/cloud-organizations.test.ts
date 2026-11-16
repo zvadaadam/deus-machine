@@ -100,6 +100,34 @@ describe("cloudOrganizations, the live value", () => {
     expect(value.items.map((org) => org.ready)).toEqual([false, false]);
   });
 
+  it("names the default the desktop pushed, available by another organization's key", async () => {
+    await push({
+      deusCloudSessionToken: session("alice"),
+      orgKeys: { org_b: "key_b" },
+      orgId: "org_a",
+    });
+    expect(getCloudOrganizations()).toMatchObject({
+      available: true,
+      defaultOrganizationId: "org_a",
+      items: [
+        { id: "org_a", ready: false },
+        { id: "org_b", ready: true },
+      ],
+    });
+  });
+
+  it("does not make every organization ready on a developer key once keys are pushed", async () => {
+    await push({
+      apiKey: "agnt_sk_dev",
+      deusCloudSessionToken: session("alice"),
+      orgKeys: { org_b: "key_b" },
+    });
+    expect(getCloudOrganizations().items).toMatchObject([
+      { id: "org_a", ready: false },
+      { id: "org_b", ready: true },
+    ]);
+  });
+
   it("sends subscribers only a value that changed", async () => {
     await push({ deusCloudSessionToken: session("alice"), orgKeys: { org_a: "key_a" } });
     getCloudOrganizations();
@@ -179,6 +207,32 @@ describe("cloudOrganizations, the live value", () => {
     await settle();
     await settle();
     expect(getCloudOrganizations().items.map((org) => org.id)).toEqual(["org_c"]);
+  });
+
+  it("keeps the newer list when an older read answers last", async () => {
+    const answers: Array<(response: Response) => void> = [];
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => answers.push(resolve)));
+    setCloudRuntimeCredentials({
+      deusCloudSessionToken: session("alice"),
+      orgKeys: { org_a: "a" },
+    });
+    refreshCloudOrganizations();
+    // Credentials pushed again (a key minted): a second read starts while the first is out.
+    setCloudRuntimeCredentials({ orgKeys: { org_a: "a", org_c: "c" } });
+    refreshCloudOrganizations();
+    expect(answers).toHaveLength(2);
+    answers[1]!(
+      Response.json({
+        account_id: "alice",
+        items: [...LIST.items, { id: "org_c", name: "Gamma", role: "owner" }],
+      })
+    );
+    await settle();
+    await settle();
+    answers[0]!(Response.json(LIST));
+    await settle();
+    await settle();
+    expect(getCloudOrganizations().items.map((org) => org.id)).toEqual(["org_a", "org_b", "org_c"]);
   });
 
   it("is nothing once signed out, sent at once", async () => {

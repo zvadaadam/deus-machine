@@ -65,8 +65,12 @@ export function githubRepoSlug(originUrl: string): string | null {
  */
 export function parseGithubRepository(input: string): string | null {
   const value = input.trim();
-  if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) return value.replace(/\.git$/, "");
-  return githubRepoSlug(value);
+  const slug = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)
+    ? value.replace(/\.git$/, "")
+    : githubRepoSlug(value);
+  // `.` and `..` (or any run of dots) name no owner and no repository.
+  if (!slug || slug.split("/").some((segment) => /^\.*$/.test(segment))) return null;
+  return slug;
 }
 
 /** The project that already is this repository (`owner/name`), if one is. */

@@ -90,7 +90,7 @@ function composer(start: "local" | "cloud", startOrganization: string | null = n
       gate = useCloudAccessGate({
         repoId: "repo",
         organizationId,
-        signedIn: true,
+        cloudReady: true,
         location,
         onLocationChange,
       });

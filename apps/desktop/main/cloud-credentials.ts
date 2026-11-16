@@ -5,7 +5,9 @@
 // The file keeps the single-key shape of earlier builds, because dev builds and
 // the released app share this folder: the default organization's key sits in
 // `entries.agntApiKey`, where older builds read it, and the other organizations'
-// keys in a top-level `orgKeys` they ignore, so alternating builds rewrite nothing.
+// keys in a top-level `orgKeys` they ignore, so a normal start of either build
+// rewrites nothing. An older build that signs out or mints a key rewrites the file
+// in its own shape: the other organizations' keys are dropped without being revoked.
 
 import {
   decryptSecret,

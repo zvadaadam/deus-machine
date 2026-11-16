@@ -200,6 +200,10 @@ describe("addCloudRepo", () => {
       "git@bitbucket.org:acme/rocket.git",
       "rocket",
       "https://github.com/acme",
+      "../..",
+      "acme/..",
+      "./rocket",
+      "acme/...git",
     ]) {
       await expect(run(api.addCloudRepo, { repository })).rejects.toMatchObject({
         statusCode: 400,

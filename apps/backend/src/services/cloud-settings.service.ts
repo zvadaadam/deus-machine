@@ -3,6 +3,7 @@ import type {
   CloudOrganizations,
   CloudSettingsOrganizations,
 } from "@shared/types/environment-secrets";
+import { getDatabase } from "../lib/database";
 import { AppError } from "../lib/errors";
 import { invalidate } from "./query-engine";
 import {
@@ -89,12 +90,15 @@ export async function getCloudSettingsOrganizations(): Promise<CloudSettingsOrga
 
 const ORGANIZATIONS_TTL_MS = 60_000;
 
-/** The platform's list, as last read under one identity. */
+/** The platform's list, as last read under one identity (`read`: which read gave it). */
 let organizations: {
   identity: string;
   fetchedAt: number;
+  read: number;
   list: CloudSettingsOrganizations;
 } | null = null;
+/** Every read is numbered: two can be in flight, and the older one may answer last. */
+let reads = 0;
 /** The read under way, if any (one per identity: an identity change abandons it). */
 let fetching: { identity: string; list: Promise<CloudSettingsOrganizations> } | null = null;
 /** The value subscribers were last sent, so an unchanged one is not sent again. */
@@ -114,13 +118,16 @@ function fetchOrganizations(): Promise<CloudSettingsOrganizations> {
   if (fetching?.identity === identity) return fetching.list;
   const list = requestCloudSettings("/orgs") as Promise<CloudSettingsOrganizations>;
   const entry = { identity, list };
+  const read = ++reads;
   fetching = entry;
   void list.then(
     (data) => {
       if (fetching === entry) fetching = null;
       // An answer for a previous identity is not this one's.
       if (identity !== getCloudConnectionIdentity()) return;
-      organizations = { identity, fetchedAt: Date.now(), list: data };
+      // An answer older than the list held already says less than it.
+      if (organizations?.identity === identity && organizations.read > read) return;
+      organizations = { identity, fetchedAt: Date.now(), read, list: data };
       publishCloudOrganizations();
     },
     () => {
@@ -175,7 +182,8 @@ function currentCloudOrganizations(): CloudOrganizations {
     ready: keyed.has(org.id) || fallback,
   }));
   return {
-    available: cloudOrg() !== null,
+    // Any organization this backend can act in: the default one's key may be the one missing.
+    available: cloudOrg() !== null || keyed.size > 0,
     accountId: list?.accountId ?? null,
     defaultOrganizationId: defaultCloudOrgId() ?? items[0]?.id ?? null,
     items,
@@ -201,6 +209,28 @@ export function refreshCloudOrganizations(): void {
   if (!cloudAccount()?.sessionToken) return;
   fetching = null;
   fetchOrganizations().catch(() => {});
+}
+
+/**
+ * Give every cloud workspace and automation with no organization the default one,
+ * once. Until then such a row is "the default organization's", whichever that is
+ * now; after, a change in the platform's order moves nothing. A workspace whose
+ * stamp is wrong is corrected by its session's snapshot (the cloud driver).
+ */
+export function stampDefaultOrganization(): void {
+  const orgId = defaultCloudOrgId();
+  if (!orgId) return;
+  const db = getDatabase();
+  const workspaces = db
+    .prepare(
+      "UPDATE workspaces SET organization_id = ? WHERE kind = 'cloud' AND organization_id IS NULL"
+    )
+    .run(orgId);
+  const automations = db
+    .prepare("UPDATE automations SET organization_id = ? WHERE organization_id IS NULL")
+    .run(orgId);
+  if (workspaces.changes > 0) invalidate(["workspaces"]);
+  if (automations.changes > 0) invalidate(["automations"]);
 }
 
 /** Test seam: forget the list. */

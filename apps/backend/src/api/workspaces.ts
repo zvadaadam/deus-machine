@@ -45,6 +45,9 @@ import {
 import { autoProgressStatus, setWorkspaceStatus } from "../services/workspace-status.service";
 import { handle } from "./registry";
 
+/** How long `connectCloudWorkspace` waits for the channel to open before answering. */
+const CONNECT_ANSWER_LIMIT_MS = 5_000;
+
 /** The workspace's files, on whichever node owns them (this computer or its cloud sandbox). */
 function nodeOf(workspaceId: string) {
   const { workspace, workspacePath } = loadWorkspace(workspaceId);
@@ -236,18 +239,31 @@ export default [
   }),
 
   handle(api.wakeCloudWorkspace, ({ workspaceId }) => wakeWorkspace(workspaceId)),
-  handle(api.connectCloudWorkspace, ({ workspaceId }) => {
+  handle(api.connectCloudWorkspace, async ({ workspaceId }) => {
     const workspace = getWorkspaceById(getDatabase(), workspaceId);
     if (!workspace) throw new NotFoundError("Workspace not found");
     if (workspace.kind !== "cloud" || workspace.state === "archived") return { ok: false };
     // The channel ends at the platform, reachable while the sandbox sleeps, and
     // its snapshot carries the session's status: how a restarted backend learns
     // "paused". Attaching wakes nothing; only a send or an explicit wake does.
+    // Answered once the channel is open (what the client reads next needs it), or
+    // at the limit; the connect goes on either way.
     const sessionId = workspace.current_session_id;
     if (sessionId) {
-      void ensureCloudSession(sessionId).catch((error) => {
-        console.warn(`[WORKSPACE] cloud channel connect failed for ${workspace.id}: ${error}`);
-      });
+      const opened = ensureCloudSession(sessionId).then(
+        () => {},
+        (error) => {
+          console.warn(`[WORKSPACE] cloud channel connect failed for ${workspace.id}: ${error}`);
+        }
+      );
+      let limit: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        opened,
+        new Promise<void>((resolve) => {
+          limit = setTimeout(resolve, CONNECT_ANSWER_LIMIT_MS);
+        }),
+      ]);
+      clearTimeout(limit);
     }
     return { ok: true };
   }),

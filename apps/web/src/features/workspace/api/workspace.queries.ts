@@ -14,6 +14,7 @@ import type { RepoGroup, DiffStats } from "../types";
 import type { PRStatus } from "@/shared/types";
 import type { WorkspaceStatus } from "@shared/enums";
 import { mergeWorkspaceDelta } from "../lib/workspace.utils";
+import { diffStatsToAsk } from "../lib/diffStats";
 import { track } from "@/platform/analytics";
 import { isCloudDirectWebMode } from "@/shared/config/webDirectMode";
 
@@ -73,15 +74,14 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
     return Array.from(new Set(ids)).sort();
   }, [repoGroups]);
 
-  // IDs of workspaces with active sessions — only these need polling.
-  const workingIds = useMemo(() => {
-    return repoGroups
-      .flatMap((g) => g.workspaces)
-      .filter((w) => w.state === "ready" && w.session_status === "working")
-      .map((w) => w.id);
-  }, [repoGroups]);
+  // The ready rows themselves: what `diffStatsToAsk` reads.
+  const readyRows = useMemo(
+    () => repoGroups.flatMap((g) => g.workspaces).filter((w) => w.state === "ready"),
+    [repoGroups]
+  );
 
-  const hasWorkingWorkspaces = workingIds.length > 0;
+  // Only workspaces with active sessions need polling.
+  const hasWorkingWorkspaces = readyRows.some((w) => w.session_status === "working");
 
   return useQuery({
     queryKey: ["bulk-diff-stats", workspaceIds],
@@ -100,8 +100,7 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       }
 
       // Fetch: missing workspaces + working workspaces (need fresh data)
-      const missingIds = workspaceIds.filter((id) => !(id in results));
-      const idsToFetch = [...new Set([...missingIds, ...workingIds])];
+      const idsToFetch = diffStatsToAsk(readyRows, (id) => results[id]);
 
       if (idsToFetch.length === 0) return results;
 
@@ -124,6 +123,18 @@ export function useBulkDiffStats(repoGroups: RepoGroup[]) {
       return results;
     },
   });
+}
+
+/**
+ * The open cloud workspace's channel just opened, or its computer woke: its diff
+ * numbers are read again, instead of the zero read before (`lib/diffStats.ts`).
+ */
+export function rereadDiffStats(
+  queryClient: Pick<ReturnType<typeof useQueryClient>, "removeQueries" | "invalidateQueries">,
+  workspaceId: string
+): void {
+  queryClient.removeQueries({ queryKey: queryKeys.workspaces.diffStats(workspaceId), exact: true });
+  void queryClient.invalidateQueries({ queryKey: ["bulk-diff-stats"] });
 }
 
 /**

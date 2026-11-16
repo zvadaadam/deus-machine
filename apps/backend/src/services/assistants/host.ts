@@ -7,7 +7,9 @@
 // A session is a workspace's current chat: named by the workspace's slug and
 // listed under its project. Only this computer's own workspaces are sessions
 // for now: a cloud workspace is never listed, found or acted on, and a start
-// always makes a local one. An archived one is not listed; named, it is
+// always makes a local one. The projects it lists and starts in are those with
+// a folder on this computer; one only in the cloud is refused in words that
+// name `add_project`. An archived one is not listed; named, it is
 // refused as archived (`entry`), not as unknown. Everything goes through the
 // operations the app itself uses (`runAsThisComputer`), so an assistant's
 // send, stop or answer is the app's own. Who may call which tool is decided
@@ -37,6 +39,7 @@ import * as repos from "@shared/api/repos";
 import * as sessions from "@shared/api/sessions";
 import * as workspaces from "@shared/api/workspaces";
 import { ACTIVE_TURN_STATUSES } from "@shared/enums";
+import { githubRepoSlug } from "@shared/git-origin";
 import type { DiffStats, Workspace } from "@shared/types/workspace";
 import type { Caller } from "../../api/registry";
 import { AppError, ConflictError, NotFoundError } from "../../lib/errors";
@@ -478,20 +481,30 @@ export function createDeusHost(): DeusHost {
     }
   }
 
-  /** The project a start names, by its name or its folder's. */
+  /**
+   * The project a start names, by its name or its folder's: one with a folder
+   * on this computer. One that is only in the cloud is refused in words that
+   * say how to put it here.
+   */
   async function projectNamed(group: string) {
     const projects = await run(repos.repos, {});
     const wanted = group.trim().toLowerCase();
-    const project = projects.find(
-      (p) =>
-        p.name.toLowerCase() === wanted ||
-        (p.root_path ?? "").split("/").pop()?.toLowerCase() === wanted
-    );
-    if (!project) {
-      const known = projects.map((p) => quoted(p.name)).join(", ") || "(none)";
-      throw new OperatorError(`No project ${quoted(group)} on this computer. Projects: ${known}`);
+    const named = (p: (typeof projects)[number]) =>
+      p.name.toLowerCase() === wanted ||
+      (p.root_path ?? "").split("/").pop()?.toLowerCase() === wanted;
+    const here = projects.filter((p) => p.root_path);
+    const project = here.find(named);
+    if (project) return project;
+    const elsewhere = projects.find((p) => !p.root_path && named(p));
+    if (elsewhere) {
+      const origin = elsewhere.git_origin_url;
+      const repository = origin ? (githubRepoSlug(origin) ?? origin) : undefined;
+      throw new OperatorError(
+        `${quoted(elsewhere.name)} is a cloud project: it has no folder on this computer, so no session can start here. add_project puts it on this computer.${repository ? `\n  ${callHint("add_project", { repository })}` : ""}`
+      );
     }
-    return project;
+    const known = here.map((p) => quoted(p.name)).join(", ") || "(none)";
+    throw new OperatorError(`No project ${quoted(group)} on this computer. Projects: ${known}`);
   }
 
   const host: DeusHost = {
@@ -620,8 +633,9 @@ export function createDeusHost(): DeusHost {
     },
 
     async groups() {
-      // Every project on this computer, so one with no session yet is still a place to start.
-      return (await run(repos.repos, {})).map((p) => p.name);
+      // Every project with a folder on this computer, so one with no session yet is still a
+      // place to start. One only in the cloud is not: no session can start in it here.
+      return (await run(repos.repos, {})).filter((p) => p.root_path).map((p) => p.name);
     },
 
     // A reference the list does not hold: one archived is refused as archived, not as a typo.

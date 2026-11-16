@@ -12,6 +12,7 @@ import {
   chosenOrganization,
   composerOrganization,
   composerPlace,
+  composerSwitch,
   followWindowOrganization,
   visiblePlace,
   type ComposerOrganization,
@@ -52,9 +53,18 @@ export function useComposerLocation() {
     ? (organizations?.items.find((org) => org.id === organizationId) ?? null)
     : null;
   const setOrganization = (id: string) => setOwn((state) => ({ ...state, choice: id }));
+  const cloudReady = organizations
+    ? organization
+      ? organization.ready
+      : organizations.available
+    : undefined;
+
+  // On only where a create would be accepted: an organization not ready turns it off.
+  const accepted = composerSwitch(location, cloudReady);
+  if (accepted !== location) setLocation(accepted);
 
   return {
-    location,
+    location: accepted,
     setLocation,
     preferredLocation,
     /** The organization a cloud workspace starts in; null with no list. */
@@ -65,10 +75,6 @@ export function useComposerLocation() {
     organizations: organizations?.items ?? [],
     /** The control can choose the cloud: that organization is ready (or, with no list,
      *  the cloud is available); undefined until the backend's value arrives. */
-    cloudReady: organizations
-      ? organization
-        ? organization.ready
-        : organizations.available
-      : undefined,
+    cloudReady,
   };
 }

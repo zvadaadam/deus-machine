@@ -7,6 +7,7 @@ import {
   getCloudConnectionIdentity,
   getCloudIdentitySignal,
   getDeusCloudSessionConfig,
+  hasFallbackCloudKey,
   requireCloudOrg,
   resetCloudConfigForTests,
   setCloudRuntimeCredentials,
@@ -127,15 +128,33 @@ describe("cloud config runtime credentials", () => {
     expect(cloudAccount()).toMatchObject({ accountId: "alice", sessionToken: bearer("alice") });
   });
 
-  it("the fallback key serves any organization without its own", () => {
+  it("the fallback key serves any organization only while no organization keys were pushed", () => {
     process.env.AGNT_API_KEY = "agnt_sk_from_env";
     expect(defaultCloudOrgId()).toBeNull();
     expect(cloudOrg()).toMatchObject({ orgId: null, apiKey: "agnt_sk_from_env" });
     expect(cloudOrg("org_x")).toMatchObject({ orgId: "org_x", apiKey: "agnt_sk_from_env" });
+    expect(hasFallbackCloudKey()).toBe(true);
 
+    // One organization's key is pushed: the developer key no longer stands in for another.
     setCloudRuntimeCredentials({ orgKeys: { org_a: "key_a" } });
     expect(cloudOrg("org_a")?.apiKey).toBe("key_a");
-    expect(cloudOrg("org_x")?.apiKey).toBe("agnt_sk_from_env");
+    expect(cloudOrg("org_x")).toBeNull();
+    expect(() => requireCloudOrg("org_x")).toThrow(/not set up on this computer/);
+    expect(hasFallbackCloudKey()).toBe(false);
+  });
+
+  it("the default is the organization the desktop names, even when its key is missing", () => {
+    setCloudRuntimeCredentials({
+      deusCloudSessionToken: bearer("alice"),
+      orgKeys: { org_b: "key_b" },
+      orgId: "org_a",
+    });
+    expect(defaultCloudOrgId()).toBe("org_a");
+    // A row of the default organization is refused in words, never sent with org_b's key.
+    expect(cloudOrg()).toBeNull();
+    expect(cloudOrgOf({ organization_id: null })).toBeNull();
+    expect(() => requireCloudOrg(null)).toThrow(/not set up on this computer/);
+    expect(cloudOrg("org_b")).toMatchObject({ orgId: "org_b", apiKey: "key_b" });
   });
 
   it("still takes the legacy single key: it is the fallback, its organization the default", () => {

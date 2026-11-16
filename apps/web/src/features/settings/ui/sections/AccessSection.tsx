@@ -633,6 +633,7 @@ export function AccessSection({ settings, saveSetting }: SettingsSectionProps) {
         address={
           !enabled ? null : relayQuery.isPending ? undefined : (relayStatus?.assistantUrl ?? null)
         }
+        computerName={relayStatus?.serverName ?? null}
         onRetryAddress={() => void relayQuery.refetch()}
       />
     </div>

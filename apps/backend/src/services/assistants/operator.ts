@@ -1,7 +1,8 @@
 // backend/src/services/assistants/operator.ts
 // The operator tools this computer offers: the module's session tools over
-// this computer's workspaces (./host.ts), and the three Deus adds (a
-// workspace's changes, archiving it, feedback to the Deus team). What a caller
+// this computer's workspaces (./host.ts), and the four Deus adds (a
+// workspace's changes, archiving it, adding a project by cloning it
+// (./add-project.ts), feedback to the Deus team). What a caller
 // may run is decided here.
 //
 // They are served over MCP (`answerMcp`, the `agentMcp` operation): the
@@ -39,6 +40,7 @@ import { getServerName } from "../server-name";
 import { refusalFor } from "./access";
 import { ASSISTANT_FAILURE } from "./sentences";
 import { FEEDBACK_CATEGORIES, FeedbackNotSent, sendFeedback } from "./feedback";
+import { addProjectTool } from "./add-project";
 import { createDeusHost, maxWaitFor, type DeusHost } from "./host";
 
 /** One file's diff is cut here: enough to review a change, not a whole regenerated file. */
@@ -203,7 +205,7 @@ function deusTools(host: DeusHost, operator: () => Operator<Caller>) {
     },
   });
 
-  return [readChanges, archiveWorkspace, sendFeedbackTool];
+  return [readChanges, archiveWorkspace, addProjectTool(host), sendFeedbackTool];
 }
 
 let operator: Operator<Caller> | null = null;

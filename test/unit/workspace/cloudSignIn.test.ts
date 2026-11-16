@@ -16,7 +16,11 @@ import {
   startCloudSignIn,
   useSidebarStore,
 } from "@/features/sidebar/store/sidebarStore";
-import type { Organizations } from "@/features/sidebar/lib/location";
+import {
+  organizationRowState,
+  type CloudRowState,
+  type Organizations,
+} from "@/features/sidebar/lib/location";
 
 const pending = () => useSidebarStore.getState().cloudPending;
 const retrying = () => useSidebarStore.getState().cloudSetupRetrying;
@@ -38,6 +42,27 @@ const listed = (ready: Record<string, boolean>, available = true): Organizations
     role: "owner",
     ready: isReady,
   })),
+});
+
+/** Where the window was when the intent started: this computer, a local workspace open. */
+const from = { place: "local", selectedId: "w1" };
+
+/** What `finishCloudSignIn` reads: the pushed value, the rows, and where the window is. */
+const now = (
+  organizations: Organizations,
+  cloudRow: CloudRowState,
+  here: { place: string; selectedId: string | null } = from
+) => ({
+  organizations,
+  cloudRow,
+  here,
+  organizationRow: (org: { ready: boolean }) =>
+    organizationRowState({
+      ready: org.ready,
+      session: { signedIn: true, hasPlatformKey: true },
+      retrying: useSidebarStore.getState().cloudSetupRetrying,
+      canSetUp: true,
+    }),
 });
 
 beforeEach(() =>
@@ -101,51 +126,51 @@ describe("the window's place in the store", () => {
 describe("a Deus Cloud sign-in started from the location menu", () => {
   it("is pending from the moment it starts, and still once signed in", async () => {
     const signIn = deferred<{ success: boolean }>();
-    const started = startCloudSignIn(() => signIn.promise);
-    expect(pending()).toEqual({ organizationId: null });
+    const started = startCloudSignIn(() => signIn.promise, from);
+    expect(pending()).toEqual({ organizationId: null, from });
     signIn.resolve({ success: true });
     await started;
     // Signed in, it still waits for this computer's cloud key.
-    expect(pending()).toEqual({ organizationId: null });
+    expect(pending()).toEqual({ organizationId: null, from });
   });
 
   it("is dropped when the sign-in does not complete, or fails", async () => {
-    await startCloudSignIn(async () => ({ success: false }));
+    await startCloudSignIn(async () => ({ success: false }), from);
     expect(pending()).toBeNull();
-    await startCloudSignIn(() => Promise.reject(new Error("Deus Cloud sign-in was cancelled")));
+    await startCloudSignIn(
+      () => Promise.reject(new Error("Deus Cloud sign-in was cancelled")),
+      from
+    );
     expect(pending()).toBeNull();
   });
 
   it("moves the window to the cloud once the pushed value says it is reachable, once", async () => {
-    await startCloudSignIn(async () => ({ success: true }));
+    await startCloudSignIn(async () => ({ success: true }), from);
     const switchTo = vi.fn();
-    finishCloudSignIn({ organizations: signedOut, cloudRow: "setting-up" }, switchTo);
-    finishCloudSignIn(
-      { organizations: listed({ acme: false }, false), cloudRow: "setting-up" },
-      switchTo
-    );
-    finishCloudSignIn({ organizations: undefined, cloudRow: "ready" }, switchTo);
+    finishCloudSignIn(now(signedOut, "setting-up"), switchTo);
+    finishCloudSignIn(now(listed({ acme: false }, false), "setting-up"), switchTo);
+    finishCloudSignIn(now(undefined, "ready"), switchTo);
     expect(switchTo).not.toHaveBeenCalled();
     expect(pending()).not.toBeNull();
 
-    finishCloudSignIn({ organizations: listed({ acme: true }), cloudRow: "ready" }, switchTo);
-    finishCloudSignIn({ organizations: listed({ acme: true }), cloudRow: "ready" }, switchTo);
+    finishCloudSignIn(now(listed({ acme: true }), "ready"), switchTo);
+    finishCloudSignIn(now(listed({ acme: true }), "ready"), switchTo);
     expect(switchTo).toHaveBeenCalledTimes(1);
     expect(switchTo).toHaveBeenCalledWith({ location: "cloud", organizationId: null });
     expect(pending()).toBeNull();
   });
 
   it("ends when the setup failed: nothing running will reach the cloud", async () => {
-    await startCloudSignIn(async () => ({ success: true }));
+    await startCloudSignIn(async () => ({ success: true }), from);
     const switchTo = vi.fn();
-    finishCloudSignIn({ organizations: signedOut, cloudRow: "retry" }, switchTo);
+    finishCloudSignIn(now(signedOut, "retry"), switchTo);
     expect(pending()).toBeNull();
     expect(switchTo).not.toHaveBeenCalled();
   });
 
   it("does not move a window no sign-in was started from", () => {
     const switchTo = vi.fn();
-    finishCloudSignIn({ organizations: listed({ acme: true }), cloudRow: "ready" }, switchTo);
+    finishCloudSignIn(now(listed({ acme: true }), "ready"), switchTo);
     expect(switchTo).not.toHaveBeenCalled();
   });
 });
@@ -153,47 +178,113 @@ describe("a Deus Cloud sign-in started from the location menu", () => {
 describe("Set up (or Retry) from the location menu", () => {
   it("records the same intent, together with the running setup", async () => {
     const retry = deferred<{ ok: boolean }>();
-    const started = retryCloudSetup(() => retry.promise, "beta");
-    expect([pending(), retrying()]).toEqual([{ organizationId: "beta" }, true]);
+    const started = retryCloudSetup(() => retry.promise, "beta", { from });
+    expect([pending(), retrying()]).toEqual([{ organizationId: "beta", from }, true]);
     retry.resolve({ ok: true });
     await started;
     // Made, it waits for the organization to be ready to move the window.
-    expect([pending(), retrying()]).toEqual([{ organizationId: "beta" }, false]);
+    expect([pending(), retrying()]).toEqual([{ organizationId: "beta", from }, false]);
   });
 
-  it("moves the window to that organization once it is ready", async () => {
-    await retryCloudSetup(async () => ({ ok: true }), "beta");
+  it("moves the window to that organization once it is ready, while the person stayed put", async () => {
+    const retry = deferred<{ ok: boolean }>();
+    const started = retryCloudSetup(() => retry.promise, "beta", { from });
     const switchTo = vi.fn();
-    finishCloudSignIn(
-      { organizations: listed({ acme: true, beta: false }), cloudRow: "ready" },
-      switchTo
-    );
+    // Running: Beta is not ready yet.
+    finishCloudSignIn(now(listed({ acme: true, beta: false }), "ready"), switchTo);
     expect(switchTo).not.toHaveBeenCalled();
-    finishCloudSignIn(
-      { organizations: listed({ acme: true, beta: true }), cloudRow: "ready" },
-      switchTo
-    );
+    expect(pending()).not.toBeNull();
+    // Its keys are pushed (and Beta is ready) before the setup's own answer.
+    finishCloudSignIn(now(listed({ acme: true, beta: true }), "ready"), switchTo);
+    retry.resolve({ ok: true });
+    await started;
     expect(switchTo).toHaveBeenCalledWith({ location: "cloud", organizationId: "beta" });
+    expect(pending()).toBeNull();
+  });
+
+  describe("does not move the window later once it no longer applies", () => {
+    /** A setup of Beta that returned ok while Beta is not ready yet. */
+    const setUpBeta = async () => {
+      await retryCloudSetup(async () => ({ ok: true }), "beta", { from });
+      expect(pending()).toEqual({ organizationId: "beta", from });
+    };
+    const betaLater = listed({ acme: true, beta: true });
+
+    it("after a manual switch", async () => {
+      await setUpBeta();
+      const switchTo = vi.fn();
+      finishCloudSignIn(
+        now(listed({ acme: true, beta: false }), "ready", {
+          place: "cloud:acme",
+          selectedId: null,
+        }),
+        switchTo
+      );
+      finishCloudSignIn(now(betaLater, "ready"), switchTo);
+      expect(switchTo).not.toHaveBeenCalled();
+      expect(pending()).toBeNull();
+    });
+
+    it("after another workspace is selected", async () => {
+      await setUpBeta();
+      const switchTo = vi.fn();
+      const elsewhere = { place: "local", selectedId: "w2" };
+      finishCloudSignIn(now(undefined, "ready", elsewhere), switchTo);
+      finishCloudSignIn(now(betaLater, "ready", elsewhere), switchTo);
+      expect(switchTo).not.toHaveBeenCalled();
+      expect(pending()).toBeNull();
+    });
+
+    it("after a sign-out", async () => {
+      await setUpBeta();
+      const switchTo = vi.fn();
+      finishCloudSignIn(now(signedOut, "sign-in"), switchTo);
+      finishCloudSignIn(now(betaLater, "ready"), switchTo);
+      expect(switchTo).not.toHaveBeenCalled();
+      expect(pending()).toBeNull();
+    });
+
+    it("after the organization leaves the list", async () => {
+      await setUpBeta();
+      const switchTo = vi.fn();
+      finishCloudSignIn(now(listed({ acme: true }), "ready"), switchTo);
+      finishCloudSignIn(now(betaLater, "ready"), switchTo);
+      expect(switchTo).not.toHaveBeenCalled();
+      expect(pending()).toBeNull();
+    });
+
+    it("after the setup is over and the organization is back to Set up", async () => {
+      await setUpBeta();
+      const switchTo = vi.fn();
+      finishCloudSignIn(now(listed({ acme: true, beta: false }), "ready"), switchTo);
+      finishCloudSignIn(now(betaLater, "ready"), switchTo);
+      expect(switchTo).not.toHaveBeenCalled();
+      expect(pending()).toBeNull();
+    });
   });
 
   it("from the composer runs the same setup but never moves the window", async () => {
     const retry = deferred<{ ok: boolean }>();
-    const started = retryCloudSetup(() => retry.promise, "beta", { moveWindow: false });
+    const started = retryCloudSetup(() => retry.promise, "beta");
     expect([pending(), retrying()]).toEqual([null, true]);
     retry.resolve({ ok: true });
     await started;
     expect([pending(), retrying()]).toEqual([null, false]);
     // A sign-in pending elsewhere is left alone, even by a setup that fails.
-    useSidebarStore.setState({ cloudPending: { organizationId: null } });
-    await retryCloudSetup(async () => ({ ok: false }), "beta", { moveWindow: false });
-    expect(pending()).toEqual({ organizationId: null });
+    useSidebarStore.setState({ cloudPending: { organizationId: null, from } });
+    await retryCloudSetup(async () => ({ ok: false }), "beta");
+    expect(pending()).toEqual({ organizationId: null, from });
   });
 
   it("ends the intent when the setup fails", async () => {
-    const result = await retryCloudSetup(async () => ({ ok: false, error: "Mint failed" }));
+    const result = await retryCloudSetup(async () => ({ ok: false, error: "Mint failed" }), null, {
+      from,
+    });
     expect(result).toEqual({ ok: false, error: "Mint failed" });
     expect([pending(), retrying()]).toEqual([null, false]);
-    expect((await retryCloudSetup(() => Promise.reject(new Error("IPC closed")))).ok).toBe(false);
+    expect(
+      (await retryCloudSetup(() => Promise.reject(new Error("IPC closed")), null, { from })).ok
+    ).toBe(false);
     expect([pending(), retrying()]).toEqual([null, false]);
   });
 });

@@ -7,6 +7,8 @@ import { formatTimeAgo } from "@/shared/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ASSISTANT_MARKS } from "@/assets/assistants";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +42,7 @@ import {
   sortAssistants,
   type AllowedAccess as Access,
 } from "../../lib/assistants";
+import { assistantPrompt } from "../../lib/assistant-prompt";
 
 const timeAgo = (epochMs: number) => formatTimeAgo(new Date(epochMs).toISOString());
 
@@ -56,6 +59,8 @@ interface AssistantsSectionProps {
    * (`assistantUrl`); null while there is none, undefined while it is read.
    */
   address: string | null | undefined;
+  /** This computer's name as other devices see it, named in the prompt; null while unknown. */
+  computerName?: string | null;
   /** Read the relay status again. */
   onRetryAddress: () => void;
 }
@@ -106,13 +111,47 @@ function FixCard({
   );
 }
 
+/** The first step carries the prompt (and, under it, the address); the other two are words. */
 const STEPS = [
-  "In your assistant, add a custom connector (MCP) and paste this address.",
+  "Give your assistant this prompt",
   "Sign in with your Deus account when it asks.",
   "Come back here and allow it.",
 ];
 
-function AddAssistantDialog({
+/** Under step 2: the sign-in page's organization choice is not ours and reaches nothing. */
+const SIGN_IN_NOTE =
+  "If it asks for an organization, choose any. The assistant only reaches this computer.";
+
+/** A step's number, in the column its text hangs from. */
+function StepNumber({ n }: { n: number }) {
+  return (
+    <span className="bg-muted text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium">
+      {n}
+    </span>
+  );
+}
+
+/** The assistants a person is most likely to connect, so the dialog is known at a glance. */
+function AssistantMarks() {
+  return (
+    <TooltipProvider>
+      <div className="flex items-center justify-center gap-2.5 pt-0.5 sm:justify-start">
+        {ASSISTANT_MARKS.map(({ name, Mark }) => (
+          <Tooltip key={name}>
+            <TooltipTrigger asChild>
+              <span role="img" aria-label={name} className="text-muted-foreground flex">
+                <Mark aria-hidden className="size-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{name}</TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+export function AddAssistantDialog({
   open,
   onOpenChange,
   remoteAccessOn,
@@ -121,14 +160,15 @@ function AddAssistantDialog({
   signingIn,
   signedOut,
   address: url,
+  computerName,
   onRetryAddress,
 }: AssistantsSectionProps & { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"address" | "prompt" | null>(null);
   const state = addAssistantState({ address: url, signedOut, remoteAccessOn });
 
   useEffect(() => {
     if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1500);
+    const timer = setTimeout(() => setCopied(null), 1500);
     return () => clearTimeout(timer);
   }, [copied]);
 
@@ -136,58 +176,98 @@ function AddAssistantDialog({
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
+      setCopied("address");
       toast.success("Address copied");
     } catch {
       toast.error("Couldn't copy the address");
     }
   }
 
+  async function copyPrompt() {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(assistantPrompt(url, computerName));
+      setCopied("prompt");
+      toast.success("Prompt copied");
+    } catch {
+      toast.error("Couldn't copy the prompt");
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      {/* Taller than a phone's screen, it scrolls inside itself. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add an assistant</DialogTitle>
           <DialogDescription>
-            Connect ChatGPT, Claude or another assistant that supports custom connectors.
+            Let ChatGPT, Claude or another assistant work with this computer&apos;s coding sessions.
           </DialogDescription>
+          {state === "address" && <AssistantMarks />}
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          {state === "address" ? (
-            <>
-              <div className="space-y-1.5">
-                <p className="text-muted-foreground text-xs">This computer&apos;s address</p>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={url ?? ""}
-                    aria-label="This computer's address"
-                    className="font-mono text-xs"
-                    onFocus={(event) => event.currentTarget.select()}
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="shrink-0"
-                    aria-label="Copy address"
-                    onClick={() => void copyAddress()}
+          {state === "address" && url ? (
+            <ol className="space-y-5">
+              <li className="flex items-start gap-3">
+                <StepNumber n={1} />
+                <div className="min-w-0 flex-1 space-y-2.5">
+                  <p className="pt-px text-sm font-medium">{STEPS[0]}</p>
+                  {/* The prompt is the way in: shown whole, so the person knows what they hand over. */}
+                  <div
+                    role="region"
+                    aria-label="Prompt for your assistant"
+                    tabIndex={0}
+                    className="border-border/60 bg-muted/30 text-foreground focus-visible:border-ring focus-visible:ring-ring/50 max-h-40 overflow-y-auto rounded-lg border px-3 py-2.5 text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap outline-none select-text focus-visible:ring-[3px]"
                   >
-                    {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    {assistantPrompt(url, computerName)}
+                  </div>
+                  <Button className="w-full" onClick={() => void copyPrompt()}>
+                    {copied === "prompt" ? <Check /> : <Copy />}
+                    Copy prompt
                   </Button>
+                  {/* The manual route, for an assistant that takes only an address. */}
+                  <div className="space-y-1.5 pt-1.5">
+                    <p className="text-muted-foreground text-xs">
+                      Or add a custom connector (MCP) named &quot;Deus Machine&quot; yourself with
+                      this address
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        readOnly
+                        value={url}
+                        aria-label="This computer's address"
+                        className="h-8 font-mono text-xs"
+                        onFocus={(event) => event.currentTarget.select()}
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        className="shrink-0"
+                        aria-label="Copy address"
+                        onClick={() => void copyAddress()}
+                      >
+                        {copied === "address" ? (
+                          <Check className="size-3.5" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <ol className="space-y-2.5">
-                {STEPS.map((step, index) => (
-                  <li key={step} className="flex items-start gap-3 text-sm">
-                    <span className="bg-muted text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium">
-                      {index + 1}
-                    </span>
-                    <span className="pt-px">{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </>
+              </li>
+              {STEPS.slice(1).map((step, index) => (
+                <li key={step} className="flex items-start gap-3">
+                  <StepNumber n={index + 2} />
+                  <div className="min-w-0 flex-1 space-y-1 pt-px">
+                    <p className="text-sm font-medium">{step}</p>
+                    {/* The sign-in page may ask for an organization; nothing reads that choice. */}
+                    {index === 0 && <p className="text-muted-foreground text-xs">{SIGN_IN_NOTE}</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
           ) : state === "loading" ? (
             <div className="bg-muted/40 h-9 w-full animate-pulse rounded-lg" />
           ) : state === "sign_in" ? (
@@ -443,7 +523,8 @@ function RemoveAssistantDialog({
 /**
  * Hosted assistants (ChatGPT, Claude, …) that reach this computer through the
  * Deus account: the ones waiting for approval first, then the allowed ones with
- * their access, then the denied ones. Add shows the address to paste and what to do in the assistant.
+ * their access, then the denied ones. Add shows a prompt to give the assistant (the
+ * address under it, for adding the connector by hand) and what to do after.
  */
 export function AssistantsSection(props: AssistantsSectionProps) {
   const assistantsQuery = useAssistants();

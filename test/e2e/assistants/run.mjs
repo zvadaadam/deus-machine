@@ -330,7 +330,7 @@ try {
   const { tools } = await chatgpt.client.listTools();
   assert.deepEqual(
     tools.map((t) => t.name),
-    [...SESSION_TOOLS, "read_changes", "archive_workspace", "send_feedback"]
+    [...SESSION_TOOLS, "read_changes", "archive_workspace", "add_project", "send_feedback"]
   );
   for (const tool of tools) {
     assert.equal(

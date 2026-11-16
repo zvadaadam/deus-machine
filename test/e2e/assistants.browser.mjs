@@ -303,11 +303,14 @@ try {
   const field = dialog(page).getByRole("textbox", { name: "This computer's address" });
   assert.equal(await field.inputValue(), ADDRESS);
   for (const step of [
-    "In your assistant, add a custom connector (MCP) and paste this address.",
+    "Give your assistant this prompt",
     "Sign in with your Deus account when it asks.",
     "Come back here and allow it.",
   ])
     await dialog(page).getByText(step, { exact: true }).waitFor();
+  const prompt = dialog(page).getByRole("region", { name: "Prompt for your assistant" });
+  assert((await prompt.textContent()).includes(ADDRESS), "the prompt carries the address");
+  await dialog(page).getByRole("button", { name: "Copy prompt" }).waitFor();
   await dialog(page).getByRole("button", { name: "Copy address" }).click();
   await page.getByText("Address copied", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), ADDRESS);

@@ -3,8 +3,9 @@ import { ConflictError } from "../src/lib/errors";
 /**
  * What a test says the cloud credentials are, in one object: the account
  * (`baseUrl`, `deusCloudUrl`, `deusCloudSessionToken`), the default
- * organization (`orgId`), each organization's key (`orgKeys`), and the key for
- * any organization without one (`apiKey`). Null = signed out with no key.
+ * organization (`orgId`, else the first key's), each organization's key
+ * (`orgKeys`), and the developer key (`apiKey`), which serves any organization
+ * only while there are no `orgKeys`. Null = signed out with no key.
  */
 export interface TestCloudConfig {
   baseUrl: string;
@@ -30,13 +31,14 @@ export function cloudConfigMock(read: () => TestCloudConfig | null | undefined) 
   const defaultCloudOrgId = () => {
     const config = current();
     if (!config) return null;
-    return Object.keys(config.orgKeys ?? {})[0] ?? config.orgId ?? null;
+    return config.orgId ?? Object.keys(config.orgKeys ?? {})[0] ?? null;
   };
   const cloudOrg = (orgId?: string | null) => {
     const config = current();
     if (!config) return null;
     const id = orgId ?? defaultCloudOrgId();
-    const apiKey = (id ? config.orgKeys?.[id] : undefined) ?? config.apiKey ?? null;
+    const keyed = Object.keys(config.orgKeys ?? {}).length > 0;
+    const apiKey = keyed ? (id ? config.orgKeys?.[id] : undefined) : (config.apiKey ?? null);
     return apiKey ? { orgId: id, baseUrl: config.baseUrl, apiKey } : null;
   };
   const requireCloudOrg = (orgId?: string | null) => {
@@ -60,7 +62,8 @@ export function cloudConfigMock(read: () => TestCloudConfig | null | undefined) 
     requireCloudOrg,
     defaultCloudOrgId,
     cloudOrgKeyIds: () => Object.keys(current()?.orgKeys ?? {}),
-    hasFallbackCloudKey: () => Boolean(current()?.apiKey),
+    hasFallbackCloudKey: () =>
+      Object.keys(current()?.orgKeys ?? {}).length === 0 && Boolean(current()?.apiKey),
     getDeusCloudSessionConfig: () => ({
       deusCloudUrl: current()?.deusCloudUrl ?? null,
       deusCloudSessionToken: current()?.deusCloudSessionToken ?? null,

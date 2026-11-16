@@ -19,7 +19,9 @@ import type { InspectedRepository, Repository } from "@shared/types/repository";
 import type { RepositoryRow } from "../db/types";
 import { getDatabase } from "../lib/database";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { parseCloneAddress } from "../lib/clone-address";
 import { getGitRemoteUrlSync } from "../lib/git-remotes";
+import { GitError, runGit } from "../lib/git-process";
 import {
   getAllRepositories,
   getMaxRepositorySortOrder,
@@ -39,8 +41,6 @@ import { publish } from "../services/streams";
 import { handle } from "./registry";
 
 const execFileAsync = promisify(execFile);
-
-const SAFE_GIT_URL = /^https?:\/\/[^\s;|&`$()]+$/;
 
 /** One row of `gh pr list --json number,title,headRefName,baseRefName,url,isDraft`. */
 interface GhPullRequest {
@@ -268,24 +268,21 @@ const pushCloneLine = (line: string) => publish(api.gitProgress, { operation: "c
 const pushInitLine = (line: string) => publish(api.gitProgress, { operation: "init" }, { line });
 
 /**
- * Forward git's stderr progress to a callback one line at a time; git rewrites
- * a line in place with `\r`. `flush()` returns whatever was left unterminated.
+ * Git's stderr one line at a time; git rewrites a line in place with `\r`.
+ * `flush()` returns whatever was left unterminated.
  */
-function pipeGitStderr(
-  proc: ChildProcess,
-  onLine: (line: string) => void
-): { flush: () => string } {
+function stderrLines(onLine: (line: string) => void) {
   let buffer = "";
-  proc.stderr?.on("data", (chunk: Buffer) => {
-    buffer += chunk.toString();
-    const lines = buffer.split(/[\r\n]+/);
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed) onLine(trimmed);
-    }
-  });
   return {
+    push(chunk: string) {
+      buffer += chunk;
+      const lines = buffer.split(/[\r\n]+/);
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) onLine(trimmed);
+      }
+    },
     flush() {
       const remaining = buffer.trim();
       buffer = "";
@@ -294,11 +291,36 @@ function pipeGitStderr(
   };
 }
 
+/** Forward a spawned git's stderr progress to a callback one line at a time. */
+function pipeGitStderr(
+  proc: ChildProcess,
+  onLine: (line: string) => void
+): { flush: () => string } {
+  const lines = stderrLines(onLine);
+  proc.stderr?.on("data", (chunk: Buffer) => lines.push(chunk.toString()));
+  return lines;
+}
+
+/** What git said about a failed clone: its words, without the progress it printed on the way. */
+function cloneFailure(stderr: string): string {
+  const PROGRESS =
+    /^(Cloning into |(remote: )?(Enumerating|Counting|Compressing|Total|Receiving|Resolving|Updating files|Filtering content))/;
+  const said = stderr
+    .split(/[\r\n]+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !PROGRESS.test(line));
+  return said.join("\n").slice(-2000);
+}
+
+/** How long a clone may run before it is stopped (git removes what it had half made). */
+const CLONE_TIMEOUT_MS = 300_000;
+
 async function cloneRepository({
   url,
   targetPath,
 }: ParsedInputOf<typeof api.gitClone>): Promise<{ path: string }> {
-  if (!SAFE_GIT_URL.test(url)) throw new ValidationError("Invalid repository URL format");
+  const parsed = parseCloneAddress(url);
+  if (!parsed.ok) throw new ValidationError(parsed.reason);
 
   const resolvedPath = resolveTargetPath(targetPath);
   if (fs.existsSync(resolvedPath)) {
@@ -308,25 +330,42 @@ async function cloneRepository({
     throw new ConflictError("Target directory already exists and is not a git repository");
   }
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["clone", "--progress", url, resolvedPath], {
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 300_000,
-    });
-    const { flush } = pipeGitStderr(proc, pushCloneLine);
-
-    proc.on("close", (code) => {
-      const remaining = flush();
-      if (remaining) pushCloneLine(remaining);
-      if (code === 0) {
-        pushCloneLine("Clone complete.");
-        resolve({ path: resolvedPath });
-      } else {
-        reject(new AppError(500, remaining || `git clone exited with code ${code}`));
+  // No prompts, its own process group, the whole group stopped at the timeout
+  // (`runGit`). Only https and ssh, redirects included; the address after `--`,
+  // so nothing in it reads as an option. No --recurse-submodules: a plain clone
+  // fetches no submodule, and a repository brings no hooks of its own.
+  const lines = stderrLines(pushCloneLine);
+  try {
+    await runGit(
+      [
+        ...["-c", "protocol.allow=never"],
+        ...["-c", "protocol.https.allow=always", "-c", "protocol.ssh.allow=always"],
+        ...["clone", "--progress", "--", parsed.address.url, resolvedPath],
+      ],
+      {
+        cwd: path.dirname(resolvedPath),
+        timeoutMs: CLONE_TIMEOUT_MS,
+        onStderr: (chunk) => lines.push(chunk),
       }
-    });
-    proc.on("error", (err) => reject(new AppError(500, `Failed to start git: ${err.message}`)));
-  });
+    );
+  } catch (error) {
+    const remaining = lines.flush();
+    if (remaining) pushCloneLine(remaining);
+    if (!(error instanceof GitError)) throw error;
+    if (error.timedOut) {
+      throw new AppError(
+        500,
+        `git clone did not finish within ${CLONE_TIMEOUT_MS / 60_000} minutes and was stopped.`
+      );
+    }
+    const said = cloneFailure(error.stderr);
+    const cause = error.cause instanceof Error ? error.cause.message : "";
+    throw new AppError(500, said || (cause ? `Failed to start git: ${cause}` : "git clone failed"));
+  }
+  const remaining = lines.flush();
+  if (remaining) pushCloneLine(remaining);
+  pushCloneLine("Clone complete.");
+  return { path: resolvedPath };
 }
 
 async function initProject({

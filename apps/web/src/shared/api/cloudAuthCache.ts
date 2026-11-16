@@ -34,6 +34,8 @@ export function applyDeusCloudAuthChange(
   //  - cloudDirectToken is an account-scoped JWT driving a live agnt socket —
   //    dropping the data tears the socket down (useCloudDirect passes null
   //    params once it's gone).
+  //  - cloudOrganizations is A's organizations: kept, the sidebar files B's
+  //    workspaces under them until the list is read again.
   for (const key of [
     ["settings", "cloud"],
     ["settings", "github-app"],
@@ -46,7 +48,16 @@ export function applyDeusCloudAuthChange(
     ["cloudRepoAccess"],
     ["cloudRepositories"],
     ["cloudDirectToken"],
+    ["cloudOrganizations"],
   ]) {
     void queryClient.resetQueries({ queryKey: key });
   }
+  // A project's branches (`queryKeys.repos.branches`): for a project with no folder
+  // here, read from GitHub with an organization's token, so A's.
+  void queryClient.resetQueries({ predicate: isRepoBranchesQuery });
+}
+
+/** `["repos", <repoId>, "branches", <organizationId>]`: no shared prefix, so by shape. */
+export function isRepoBranchesQuery(query: { queryKey: readonly unknown[] }): boolean {
+  return query.queryKey[0] === "repos" && query.queryKey[2] === "branches";
 }

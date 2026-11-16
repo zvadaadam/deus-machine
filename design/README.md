@@ -596,6 +596,12 @@ in step with it:
   button with no chevron; no board draws the open menu, its organization rows and their
   states, the organization tile in the trigger, or the composer's control with several
   organizations (off, on, its menu open). Draw them when the file is next edited
+- The header's location menu marks each place's kind after its name, in the cloud
+  workspace row's convention (a 12px `size-3` lucide icon in `text-text-muted`): `Monitor`
+  on this computer's row, `Cloud` on each organization's (the nameless "Deus Cloud" row
+  has none: its glyph is the cloud). The trigger shows the current place's mark between
+  its name and the chevron, hidden with the name when the sidebar is collapsed. **Not
+  drawn yet:** no board draws the marks on the rows or the trigger
 - Settings → GitHub (cloud repositories), Settings → Cloud and the Automations list name
   the organization they show when the account has several: one muted `text-xs` line,
   "In <organization>", under the section's description. Environments, Slack and cloud
@@ -638,10 +644,26 @@ in step with it:
   top-right, ringed in `sidebar`, when a place other than the window's has one. A cloud
   workspace's Agent tab is one centred state (`CloudBrowserUnavailable`'s layout: a 40px
   muted tile with the cloud glyph and one `text-sm` line, "This workspace's agent runs in
-  the cloud, so this computer's configuration does not apply to it."). In a browser the
+  the cloud, so this computer's configuration does not apply to it."). A local workspace's
+  Agent tab has one `text-2xs text-muted-foreground/60` line under its project scope's
+  label (`CategoryContentArea.tsx`): "Project settings are this workspace's own. Changes
+  here are part of its branch." (not drawn). In a browser the
   cloud preview is a frame under the same port bar. **Not drawn yet:** no board draws the
   activity dots, the cloud Agent tab, the cloud preview in a browser, or a cloud chat's
   file card without "Reveal in Finder"
+- Settings → Remote access → Add an assistant (`AssistantsSection.tsx`, `sm:max-w-lg`,
+  scrolling inside itself past `100dvh - 2rem`), with its address, shows a row of 14px
+  `text-muted-foreground` marks under the description (ChatGPT, Claude, Grok, Meta AI;
+  each with a tooltip), then three numbered steps (20px `bg-muted` circles, `text-sm
+font-medium` text). Step 1, "Give your assistant this prompt", holds the prompt in a
+  read-only `bg-muted/30` `border-border/60` block (`text-xs`, wrapped, `max-h-40`
+  scrolling), a full-width primary "Copy prompt" button, and under it the quieter manual
+  route: a `text-xs` muted line "Or add a custom connector (MCP) named "Deus Machine"
+  yourself with this address" over a 32px mono address field and an outline 32px copy
+  icon button. Step 2 is "Sign in with your Deus account when it asks." with a `text-xs`
+  muted note under it, "If it asks for an organization, choose any. The assistant only
+  reaches this computer."; step 3 is "Come back here and allow it." **Not drawn yet:** no board draws this dialog's address state (marks row, prompt
+  step, address under it)
 - The sidebar's app nav (New workspace, Automations, Customize) is three 32px rows directly
   under the header (`px-1.5 pb-1`, `gap-px`), a 14px icon in a 20px slot. New workspace is
   Home, and active while Home is on screen; the header's "new session" icon it replaces is

@@ -21,6 +21,8 @@ import {
 } from "./cloud-credentials";
 import {
   announceDeusCloudAuthChanged,
+  currentLoginGeneration,
+  endLoginGeneration,
   getStoredDeusCloudSessionToken,
   hasStoredSessionFile,
   setSessionRefreshedHandler,
@@ -44,6 +46,13 @@ function setPlatformKeyError(message: string | null): void {
 export function getPlatformKeyError(): string | null {
   return platformKeyError;
 }
+
+/**
+ * The organization the platform lists first for the signed-in account, as last
+ * read (main-process memory; cleared by sign-out). It is the default organization,
+ * told to the backend with the keys whether or not its own key is held.
+ */
+let listedDefaultOrgId: string | null = null;
 
 /** Re-run provisioning for the current session (the Settings "Retry" action). */
 export async function retryDeviceKeyProvisioning(): Promise<{ ok: boolean; error?: string }> {
@@ -162,6 +171,9 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
     getOrgKeys(),
     getStoredDeusCloudSessionToken().catch(() => null),
   ]);
+  // The platform's first organization; before the list is read, the first stored
+  // key's (the order last read).
+  const defaultOrgId = listedDefaultOrgId ?? Object.keys(orgKeys)[0] ?? null;
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/settings/cloud/credentials`, {
@@ -177,9 +189,10 @@ export async function pushCloudCredentialsToBackend(): Promise<boolean> {
         // auth — expiry just disables the mint until the next push.
         deusCloudUrl: resolveDeusCloudUrl(),
         deusCloudSessionToken: sessionToken,
-        // One key per organization, in the platform's order: the first is
-        // the default organization.
+        // One key per organization, in the platform's order, and the default
+        // organization, also when its own key is missing.
         orgKeys,
+        orgId: defaultOrgId,
       }),
     });
     return response.ok;
@@ -226,8 +239,16 @@ async function revokeOnPlatform(
   }
 }
 
-/** Keep this organization's stored key if it still works; otherwise mint one. */
-async function ensureOrgKey(sessionToken: string, orgId: string): Promise<void> {
+/**
+ * Keep this organization's stored key if it still works; otherwise mint one. A key
+ * minted for a session that ended meanwhile (`isCurrent` false: a sign-out) is
+ * revoked, never stored: sign-out already revoked and deleted what was stored.
+ */
+async function ensureOrgKey(
+  sessionToken: string,
+  orgId: string,
+  isCurrent: () => boolean
+): Promise<void> {
   const existing = await getOrgKey(orgId);
   // ONLY an explicit 401/403 counts as revoked: offline keeps the key.
   if (existing && (await deviceKeyStillValid(existing))) return;
@@ -236,6 +257,12 @@ async function ensureOrgKey(sessionToken: string, orgId: string): Promise<void> 
     await deleteOrgKey(orgId);
   }
   const minted = await mintDeviceKey(sessionToken, orgId, resolveAgntBaseUrl());
+  if (!isCurrent()) {
+    logMainProcess(`[deus-cloud] signed out while minting a key for org ${orgId} — revoking it`);
+    await revokeOnPlatform(sessionToken, { orgId, keyId: minted.id });
+    return;
+  }
+  // No await between the check and the store: sign-out's own reads queue behind it.
   await setOrgKey(orgId, minted.key, { keyId: minted.id, label: minted.label });
   logMainProcess(`[deus-cloud] device key minted (org ${orgId}, label "${minted.label}")`);
 }
@@ -256,7 +283,9 @@ async function ensureOrgKey(sessionToken: string, orgId: string): Promise<void> 
  */
 export async function ensureDeviceKeys(
   sessionToken: string,
-  cloudUrl: string
+  cloudUrl: string,
+  /** False once the session this run is for has ended (a sign-out). */
+  isCurrent: () => boolean = () => true
 ): Promise<string | null> {
   let orgs: OrgRef[];
   try {
@@ -266,6 +295,9 @@ export async function ensureDeviceKeys(
     logMainProcess("[deus-cloud] organization list unavailable (offline?) — reusing stored keys");
     return null;
   }
+  // A list read for a session that ended says nothing about what is stored now.
+  if (!isCurrent()) return null;
+  listedDefaultOrgId = orgs[0].id;
   const listed = new Set(orgs.map((org) => org.id));
   for (const stored of await listOrgKeys()) {
     if (listed.has(stored.orgId)) continue;
@@ -278,7 +310,7 @@ export async function ensureDeviceKeys(
   const failures = await Promise.all(
     orgs.map(async (org) => {
       try {
-        await ensureOrgKey(sessionToken, org.id);
+        await ensureOrgKey(sessionToken, org.id, isCurrent);
         return null;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -291,18 +323,27 @@ export async function ensureDeviceKeys(
   return failures.find((failure) => failure !== null) ?? null;
 }
 
-/** Post-login hook: keep or mint each organization's key, then hand credentials to the backend. */
+/**
+ * Keep or mint each organization's key, then hand credentials to the backend: after
+ * sign-in, at startup and on Retry. A sign-out while it runs ends it: a key minted
+ * meanwhile is revoked instead of stored, and nothing is pushed (sign-out pushed
+ * the cleared credentials itself).
+ */
 export async function provisionAfterLogin(sessionToken: string, cloudUrl: string): Promise<void> {
+  const generation = currentLoginGeneration();
+  const isCurrent = () => currentLoginGeneration() === generation;
   try {
-    setPlatformKeyError(await ensureDeviceKeys(sessionToken, cloudUrl));
+    const error = await ensureDeviceKeys(sessionToken, cloudUrl, isCurrent);
+    if (isCurrent()) setPlatformKeyError(error);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    logMainProcess(`[deus-cloud] device key provisioning failed: ${message}`);
     // Remembered, not just logged: this runs after login already reported
     // success, so the log file was the ONLY place the user could learn that
     // their cloud lane is dead.
-    setPlatformKeyError(message);
-    logMainProcess(`[deus-cloud] device key provisioning failed: ${message}`);
+    if (isCurrent()) setPlatformKeyError(message);
   }
+  if (!isCurrent()) return;
   await pushCloudCredentialsToBackend();
 }
 
@@ -354,6 +395,9 @@ export function provisionAtStartup(
   // locally and push the cleared credentials (no session left to revoke the
   // platform copy — the dashboard can, and the next sign-in re-mints).
   setSessionRevokedHandler(async () => {
+    // The session is over, as at a sign-out: a key still being minted for it is
+    // revoked, never stored or pushed.
+    endLoginGeneration();
     await revokeDeviceKeys(null).catch(() => {});
     // The 401 can fire from ANY session read (a github-app status poll, a
     // credentials push) — announce, or renderers keep "signed in" until a
@@ -388,5 +432,6 @@ export async function revokeDeviceKeys(sessionToken: string | null): Promise<voi
   }
   await deleteAllOrgKeys();
   setPlatformKeyError(null);
+  listedDefaultOrgId = null;
   await pushCloudCredentialsToBackend();
 }

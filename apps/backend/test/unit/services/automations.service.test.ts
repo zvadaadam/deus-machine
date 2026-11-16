@@ -421,6 +421,32 @@ describeWithDb("refreshAutomations", () => {
     expect(listAutomations().map((a) => [a.id, a.organization_id])).toEqual([["auto-1", "org-1"]]);
   });
 
+  it("another organization's refresh keeps the rows from before organizations were kept", async () => {
+    // The default organization (the platform's first, as the desktop says) has no key
+    // here; the one key held is another organization's, and its list is not the default's.
+    mockGetCloudConfig.mockReturnValue({
+      ...CLOUD_CONFIG,
+      deusCloudSessionToken: "owner-missing-default",
+      orgKeys: { "org-b": "key-b" },
+    });
+    await refreshAutomations("missing").catch(() => {});
+    store.upsertAutomation(
+      summaryToRow(localSummary({ id: "legacy" }) as never, new Map(), undefined, null)
+    );
+    sdk.listAutomations.mockReturnValue(gen([localSummary({ id: "b-new" })]));
+
+    await refreshAutomations(undefined, "org-b");
+
+    expect(
+      listAutomations()
+        .map((a) => [a.id, a.organization_id])
+        .sort()
+    ).toEqual([
+      ["b-new", "org-b"],
+      ["legacy", null],
+    ]);
+  });
+
   it("creates in the organization it is given, and later calls follow the row", async () => {
     mockGetCloudConfig.mockReturnValue({
       ...CLOUD_CONFIG,
@@ -512,6 +538,26 @@ describeWithDb("refreshAutomations", () => {
       expect.objectContaining({ message: "platform unreachable" })
     );
     warn.mockRestore();
+  });
+
+  it("the agent tool's list reads every organization it holds a key for before answering", async () => {
+    mockGetCloudConfig.mockReturnValue({
+      ...CLOUD_CONFIG,
+      deusCloudSessionToken: "owner-agent-list",
+      orgKeys: { "org-1": "key-a", "org-b": "key-b" },
+    });
+    sdk.listAutomations.mockImplementation(({ baseUrl }: { baseUrl: string }) =>
+      gen([localSummary({ id: baseUrl.endsWith("/org-b") ? "b-1" : "a-1" })])
+    );
+
+    const answer = (await handleAutomationToolRequest({ sessionId: "s1", mode: "list" })) as {
+      automations: Array<{ id: string; organization_id: string | null }>;
+    };
+
+    expect(answer.automations.map((a) => [a.id, a.organization_id]).sort()).toEqual([
+      ["a-1", "org-1"],
+      ["b-1", "org-b"],
+    ]);
   });
 
   it("mirrors the default organization at start-up with only a developer key", async () => {
@@ -986,6 +1032,43 @@ describeWithDb("deleteAutomation", () => {
     expect(sdk.deleteAutomation).toHaveBeenCalledWith("auto-1", AUTOMATION_AUTH);
     expect(listAutomations()).toHaveLength(0);
     expect(db.prepare("SELECT COUNT(*) AS n FROM automation_runs").get()).toEqual({ n: 0 });
+  });
+});
+
+describeWithDb("a write in one organization", () => {
+  it("does not make another organization's full refresh drop its list", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      mockGetCloudConfig.mockReturnValue({
+        ...CLOUD_CONFIG,
+        deusCloudSessionToken: "owner-two-orgs",
+        orgKeys: { "org-1": "key-a", "org-b": "key-b" },
+      });
+      await refreshAutomations("missing").catch(() => {});
+      store.upsertAutomation(
+        summaryToRow(localSummary({ id: "b-1" }) as never, new Map(), undefined, "org-b")
+      );
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      sdk.listAutomations.mockReturnValue(
+        (async function* () {
+          await held;
+          yield localSummary({ id: "a-new" });
+        })()
+      );
+      const refreshing = refreshAutomations(undefined, "org-1");
+
+      // Org B's automation is deleted while org 1's list is being read.
+      vi.setSystemTime(Date.now() + 1_000);
+      sdk.deleteAutomation.mockResolvedValue(undefined);
+      await deleteAutomation("b-1");
+      release();
+      await refreshing;
+
+      expect(store.getAutomationRaw("a-new")?.organization_id).toBe("org-1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

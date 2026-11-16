@@ -152,8 +152,8 @@ export const wakeCloudWorkspace = write({
 
 /**
  * Open a cloud workspace's session channel without waking its sandbox, so the
- * row learns the sandbox's real state. Answers at once; the truth arrives on
- * `workspaces`.
+ * row learns the sandbox's real state. Answers once the channel is open, or after
+ * a few seconds if it does not open; the truth arrives on `workspaces`.
  */
 export const connectCloudWorkspace = write({
   name: "connectCloudWorkspace",

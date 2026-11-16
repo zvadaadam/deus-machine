@@ -11,7 +11,7 @@
 
 import { listModels } from "@deus-hq/sdk";
 import type { CloudModelList } from "@shared/cloud-models";
-import { cloudOrg, getCloudConnectionIdentity } from "./config";
+import { cloudOrg, cloudOrgKeyIds, getCloudConnectionIdentity } from "./config";
 
 const MODEL_LIST_TTL_MS = 5 * 60_000;
 const MODEL_LIST_TIMEOUT_MS = 10_000;
@@ -26,7 +26,8 @@ let inFlight: { identity: string; lists: Promise<CloudModelList[]> } | null = nu
  * fall back on, it throws.
  */
 export async function getCloudModelLists(): Promise<CloudModelList[] | null> {
-  const config = cloudOrg();
+  // The platform's catalog: any organization's key reads it, when the default one's is missing.
+  const config = cloudOrg() ?? cloudOrg(cloudOrgKeyIds()[0]);
   if (!config) return null;
   const identity = getCloudConnectionIdentity();
   const previous = cached?.identity === identity ? cached : null;

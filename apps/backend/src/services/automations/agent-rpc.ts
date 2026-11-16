@@ -17,6 +17,7 @@ import {
   listAutomations,
   listAutomationRuns,
   refreshAutomations,
+  refreshEveryOrganization,
   toggleAutomation,
   updateAutomation,
   type AutomationInput,
@@ -89,9 +90,9 @@ export async function handleAutomationToolRequest(
 
   return match(rawMode as Mode)
     .with("list", async () => {
-      await refreshAutomations().catch(() => {
-        // Stale cache beats a failed list — the platform may be briefly away.
-      });
+      // Every organization's rows are answered, so every organization's list is read.
+      // One that fails keeps its rows: a stale cache beats a failed list.
+      await refreshEveryOrganization();
       return { automations: listAutomations() };
     })
     .with("view", async () => {

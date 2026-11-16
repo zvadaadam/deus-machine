@@ -1,5 +1,13 @@
 import { match } from "ts-pattern";
-import { Check, ChevronDown, Cloud, Monitor, PanelLeftClose, Settings } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Cloud,
+  Monitor,
+  PanelLeftClose,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { SidebarHeader as SidebarHeaderUI, useSidebar } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -94,6 +102,7 @@ export function SidebarHeader({
   const label = here ? rowLabel(here, localLabel) : CLOUD_LABEL;
   // Work the sidebar does not list: a place other than this one has it.
   const elsewhere = activityElsewhere(places.activity, places.current);
+  const hereMark = placeMark(here);
 
   return (
     <SidebarHeaderUI className="drag-region flex-row items-center justify-between gap-1 px-1.5 py-1.5">
@@ -101,7 +110,7 @@ export function SidebarHeader({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label={`${label}, switch where workspaces run`}
+            aria-label={`${spoken(label, hereMark?.words)}, switch where workspaces run`}
             className="control-interaction hover:bg-foreground/[0.04] data-[state=open]:bg-foreground/[0.04] flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 outline-none"
           >
             <span className="relative flex shrink-0">
@@ -116,6 +125,7 @@ export function SidebarHeader({
             {isExpanded && (
               <>
                 <span className="text-text-primary truncate text-sm font-medium">{label}</span>
+                <PlaceMarkIcon mark={hereMark} />
                 <ChevronDown className="text-text-muted size-3.5 shrink-0" />
               </>
             )}
@@ -174,6 +184,41 @@ function rowLabel(row: PlaceRow, localLabel: string): string {
     .exhaustive();
 }
 
+/**
+ * What kind of place a row is, shown after its name in the cloud workspace row's
+ * convention (a small muted icon): this computer, or an organization in the cloud. The
+ * nameless "Deus Cloud" row has none: its glyph is the cloud already.
+ */
+interface PlaceMark {
+  Icon: LucideIcon;
+  /** The mark in words, for the row's accessible name. */
+  words: string;
+}
+
+function placeMark(row: PlaceRow | undefined): PlaceMark | null {
+  if (!row) return null;
+  return match(row)
+    .with({ kind: "local" }, (): PlaceMark => ({ Icon: Monitor, words: "this computer" }))
+    .with({ kind: "cloud" }, () => null)
+    .with({ kind: "organization" }, (): PlaceMark => ({ Icon: Cloud, words: "cloud" }))
+    .exhaustive();
+}
+
+function PlaceMarkIcon({ mark }: { mark: PlaceMark | null }) {
+  if (!mark) return null;
+  return (
+    <mark.Icon data-slot="place-mark" aria-hidden className="text-text-muted size-3 shrink-0" />
+  );
+}
+
+/**
+ * An accessible name of words joined by commas. It is an `aria-label`, not hidden text,
+ * so a row's `innerText` stays the words it shows.
+ */
+function spoken(...words: (string | null | undefined)[]): string {
+  return words.filter(Boolean).join(", ");
+}
+
 function RowGlyph({
   row,
   label,
@@ -226,6 +271,7 @@ function PlaceItem({
   onChoose: (row: PlaceRow) => void;
 }) {
   const hint = rowHint(row);
+  const mark = placeMark(row);
   const disabled =
     (row.kind === "cloud" || row.kind === "organization") && row.state === "unavailable";
   return (
@@ -233,9 +279,13 @@ function PlaceItem({
       disabled={disabled}
       onSelect={() => onChoose(row)}
       aria-current={current ? "true" : undefined}
+      aria-label={spoken(label, mark?.words, activity && activityWords(activity), hint)}
     >
       <RowGlyph row={row} label={label} profile={profile} className="h-5 w-5" />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="min-w-0 truncate">{label}</span>
+        <PlaceMarkIcon mark={mark} />
+      </span>
       {activity && <ActivityDot activity={activity} />}
       {hint ? (
         <span className="text-text-muted shrink-0 text-xs">{hint}</span>
@@ -260,7 +310,7 @@ function ActivityDot({ activity, className }: { activity: PlaceActivity; classNa
     <span
       data-slot="place-activity"
       data-activity={activity}
-      aria-label={activity === "unread" ? "Unread reply" : "Working"}
+      aria-label={activityWords(activity)}
       className={cn(
         "size-1.5 shrink-0 rounded-full",
         activity === "unread" ? "bg-accent-gold" : "bg-muted-foreground",
@@ -268,6 +318,10 @@ function ActivityDot({ activity, className }: { activity: PlaceActivity; classNa
       )}
     />
   );
+}
+
+function activityWords(activity: PlaceActivity): string {
+  return activity === "unread" ? "Unread reply" : "Working";
 }
 
 /** The Deus account's email, read only while the menu is open; nothing when signed out. */

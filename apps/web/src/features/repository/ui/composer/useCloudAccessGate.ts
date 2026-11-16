@@ -14,9 +14,13 @@
  * useCloudRepoAccess) — event-driven, not a poll — and returning from GitHub
  * continues into cloud on its own. The intent is pinned to its repo, so
  * switching the picker mid-flow drops it rather than acting on the wrong repo,
- * and to its organization, so choosing another one asks again for that one.
+ * and to its organization, so choosing another one asks again for that one. It
+ * ends once that organization is known not to be ready and no setup is running
+ * (`heldCloudIntent`), so it never turns the cloud on by itself later.
  */
 import { useEffect, useState } from "react";
+import { match } from "ts-pattern";
+import { heldCloudIntent } from "../../lib/cloudControl";
 import { useCloudRepoAccess } from "./useCloudRepoAccess";
 
 export interface CloudAccessGate {
@@ -42,17 +46,22 @@ export interface CloudAccessGate {
 export function useCloudAccessGate({
   repoId,
   organizationId = null,
-  signedIn,
+  cloudReady,
+  settingUp = false,
   location,
   onLocationChange,
 }: {
   repoId: string | null | undefined;
   /** The organization the workspace would run in; the backend's default when null. */
   organizationId?: string | null;
-  signedIn: boolean;
+  /** That organization is ready (or, with no list, the cloud available); undefined until known. */
+  cloudReady: boolean | undefined;
+  /** A cloud setup is running on this computer. */
+  settingUp?: boolean;
   location: "local" | "cloud";
   onLocationChange: (location: "local" | "cloud") => void;
 }): CloudAccessGate {
+  const signedIn = cloudReady === true;
   // The cloud intent: the repo the user asked to run in the cloud. Non-null =
   // we're resolving it (holding, prompting, or continuing). Pinned to its repo
   // and organization so a mid-flow switch drops it rather than acting on the wrong one.
@@ -72,18 +81,24 @@ export function useCloudAccessGate({
   // "never block on uncertainty" rule. The create-time safety net is the backstop.
   const status = access.isError ? "unknown" : access.data?.status;
 
-  // Resolve the intent as its verdict arrives (or drop it if the repo changed).
+  // Resolve the intent as its verdict and readiness arrive (or drop it if the repo
+  // or organization changed, or the organization is known not to be ready).
   useEffect(() => {
     if (!intent) return;
     if (intent.repoId !== (repoId ?? null) || intent.organizationId !== organizationId) {
       setIntent(null); // composer moved to another repo or organization
-    } else if (intent.repoId ? status === "ok" || status === "unknown" : signedIn) {
-      setIntent(null);
-      onLocationChange("cloud"); // cloneable (App/public) or unknowable — allow
+      return;
     }
-    // status === "needs_grant" → keep intent; grantOpen (below) shows the modal.
-    // status === undefined → keep intent; still loading (pending).
-  }, [intent, repoId, organizationId, status, signedIn, onLocationChange]);
+    match(heldCloudIntent({ forRepo: intent.repoId !== null, status, cloudReady, settingUp }))
+      .with("go", () => {
+        setIntent(null);
+        onLocationChange("cloud"); // cloneable (App/public) or unknowable — allow
+      })
+      .with("end", () => setIntent(null))
+      // needs_grant → grantOpen (below) shows the modal; undefined → still loading.
+      .with("hold", () => undefined)
+      .exhaustive();
+  }, [intent, repoId, organizationId, status, cloudReady, settingUp, onLocationChange]);
 
   // Keep the invariant: location is "cloud" ONLY while the CURRENT repo's verdict
   // is a confirmed go (ok / unknown). Anything else with cloud selected — the

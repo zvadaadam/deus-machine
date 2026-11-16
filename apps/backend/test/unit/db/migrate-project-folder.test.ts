@@ -176,6 +176,40 @@ describe("making a project's folder optional", () => {
     copy.close();
   });
 
+  it("never takes a copy cut short for the copy", () => {
+    const db = createOldDatabase();
+    const before = dump(db);
+    const backup = projectFolderBackupPath(dbPath);
+    // An earlier attempt was killed while writing: its partial file is still there.
+    fs.writeFileSync(`${backup}.partial`, "half a database");
+    makeProjectFolderOptional(db, dbPath);
+    db.close();
+
+    expect(fs.existsSync(`${backup}.partial`)).toBe(false);
+    const copy = new Database(backup, { readonly: true });
+    expect(dump(copy)).toEqual(before);
+    copy.close();
+  });
+
+  it("writes the copy under another name and renames it into place when whole", () => {
+    const db = createOldDatabase();
+    const backup = projectFolderBackupPath(dbPath);
+    const exec = db.exec.bind(db);
+    const written: string[] = [];
+    vi.spyOn(db, "exec").mockImplementation((sql: string) => {
+      if (sql.startsWith("VACUUM INTO")) {
+        written.push(sql);
+        // The copy is not where the next start looks while it is being written.
+        expect(fs.existsSync(backup)).toBe(false);
+      }
+      return exec(sql);
+    });
+    makeProjectFolderOptional(db, dbPath);
+    db.close();
+    expect(written).toEqual([`VACUUM INTO '${backup}.partial'`]);
+    expect(fs.existsSync(backup)).toBe(true);
+  });
+
   it("does nothing on a second start", () => {
     const db = createOldDatabase();
     expect(makeProjectFolderOptional(db, dbPath)).toBe(true);

@@ -64,6 +64,12 @@ vi.mock("../../../src/services/cloud-workspace-init.service", () => ({
   wakeCloudWorkspaceWithFeedback: cloud.wake,
 }));
 
+const driver = vi.hoisted(() => ({ ensureCloudSession: vi.fn() }));
+vi.mock("../../../src/services/agent/cloud/driver", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  ensureCloudSession: (...args: unknown[]) => driver.ensureCloudSession(...args),
+}));
+
 vi.mock("../../../src/services/git.service", () => ({
   detectDefaultBranch: vi.fn<(...args: any[]) => any>(async () => "main"),
   getDiffStats: vi.fn<(...args: any[]) => any>(async () => ({ additions: 0, deletions: 0 })),
@@ -445,5 +451,64 @@ describe("cloud wake and archive ordering", () => {
     expect(woken).toEqual({ answer: { ok: true, status: "resuming" } });
     expect(state()).toBe("archived");
     expect(running).toBe(false);
+  });
+});
+
+describe("connectCloudWorkspace", () => {
+  function cloudWorkspace() {
+    mockStmt.get.mockReturnValue({
+      ...MOCK_CREATED_WORKSPACE,
+      kind: "cloud",
+      state: "ready",
+      current_session_id: "session-1",
+      root_path: null,
+    });
+  }
+  const connect = () => run(api.connectCloudWorkspace, { workspaceId: "ws-test-uuid" });
+
+  it("answers once the channel is open, not before", async () => {
+    cloudWorkspace();
+    let open!: () => void;
+    driver.ensureCloudSession.mockReturnValue(
+      new Promise<void>((resolve) => {
+        open = resolve;
+      })
+    );
+    let answered = false;
+    const answer = connect().then((result) => {
+      answered = true;
+      return result;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(driver.ensureCloudSession).toHaveBeenCalledWith("session-1");
+    expect(answered).toBe(false);
+
+    open();
+    await expect(answer).resolves.toEqual({ ok: true });
+  });
+
+  it("answers at the limit when the channel never opens", async () => {
+    vi.useFakeTimers();
+    try {
+      cloudWorkspace();
+      driver.ensureCloudSession.mockReturnValue(new Promise(() => {}));
+      let answered = false;
+      const answer = connect().then((result) => {
+        answered = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(4_900);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(200);
+      await expect(answer).resolves.toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("answers when the connect fails, without throwing", async () => {
+    cloudWorkspace();
+    driver.ensureCloudSession.mockRejectedValue(new Error("platform unreachable"));
+    await expect(connect()).resolves.toEqual({ ok: true });
   });
 });

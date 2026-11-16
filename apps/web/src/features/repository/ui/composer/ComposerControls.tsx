@@ -76,6 +76,7 @@ export function CloudToggle({
 }: CloudToggleProps) {
   const signIn = useDeusCloudSignIn();
   const signedIn = cloudReady === true;
+  const settingUp = useSidebarStore((s) => s.cloudSetupRetrying);
   const several = organizations.length > 1;
   const words = cloudControlWords({
     several,
@@ -90,7 +91,8 @@ export function CloudToggle({
   const gate = useCloudAccessGate({
     repoId,
     organizationId: organization?.id ?? null,
-    signedIn,
+    cloudReady,
+    settingUp,
     location,
     onLocationChange,
   });
@@ -200,8 +202,9 @@ export function CloudToggle({
 /**
  * The organizations, as the header menu lists them: each one's tile and name, the
  * check on the one in use while the cloud is on, and the same words and setup for one
- * not set up on this computer. Its Set up leaves the window where it is; once that
- * organization is ready the composer chooses it.
+ * not set up on this computer. Its Set up leaves the window where it is and makes the
+ * organization the composer's at once (the switch is off while it is not ready); the
+ * cloud goes on there once it is ready (`chooseComposerOrganization`).
  */
 function OrganizationMenu({
   label,
@@ -228,16 +231,11 @@ function OrganizationMenu({
   const rowState = (org: Organization): OrganizationRowState =>
     organizationRowState({ ready: org.ready, session, retrying, canSetUp });
 
-  // A Set up started here: once it is made, the organization is the composer's and the
-  // cloud is asked for there; the gate holds it until the pushed list says it is ready.
+  // A Set up started here runs the setup with no intent for the window; the gate holds
+  // the composer's request until the pushed list says the organization is ready.
   const setUp = (id: string) => {
-    void retryCloudSetup(retryProvision, id, { moveWindow: false }).then((result) => {
-      if (!result.ok) {
-        toast.error(result.error ?? "Cloud setup failed");
-        return;
-      }
-      setOrganization(id);
-      requestCloud(id);
+    void retryCloudSetup(retryProvision, id).then((result) => {
+      if (!result.ok) toast.error(result.error ?? "Cloud setup failed");
     });
   };
   const actions = { setOrganization, requestCloud, setUp };

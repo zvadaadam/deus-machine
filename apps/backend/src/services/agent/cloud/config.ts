@@ -9,9 +9,11 @@
 // Three questions, one function each:
 //  - cloudAccount(): the signed-in person (base URLs and the session). Null =
 //    the cloud lane is off, with honest errors at the create/send boundaries.
-//  - cloudOrg(orgId?): the credentials for one organization: its own key, else
-//    the fallback key. No id = the default organization.
-//  - defaultCloudOrgId(): the organization a caller that names none means.
+//  - cloudOrg(orgId?): the credentials for one organization: its own key (or,
+//    when no organization keys were pushed at all, the fallback key). No id =
+//    the default organization.
+//  - defaultCloudOrgId(): the organization a caller that names none means: the
+//    platform's first, as the desktop says.
 // The connection identity is the account only: keys come and go per
 // organization without closing a socket.
 
@@ -44,12 +46,15 @@ export interface CloudOrg {
 export interface CloudRuntimeCredentials {
   /** One device key per organization, in the platform's order. Replaces the whole map. */
   orgKeys?: Record<string, string> | null;
-  /** Legacy single key: the fallback key, for any organization without its own. */
+  /** Legacy single key: the fallback key, used only when no organization keys were pushed. */
   apiKey?: string | null;
   baseUrl?: string | null;
   deusCloudUrl?: string | null;
   deusCloudSessionToken?: string | null;
-  /** Legacy: the organization the single key was minted in (the default when no keys are pushed). */
+  /**
+   * The default organization: the one the platform lists first, as the desktop last
+   * read it. Pushed with the keys, also when that organization's own key is missing.
+   */
   orgId?: string | null;
 }
 
@@ -109,7 +114,11 @@ function agntBaseUrl(): string {
   return baseUrl;
 }
 
-/** The key for any organization without one of its own (development, tests, a legacy push). */
+/**
+ * The key for development, tests and a legacy push. It stands in for an organization
+ * only while no organization keys were pushed: it is one organization's key, and
+ * acting in another with it would record work under the wrong organization.
+ */
 function fallbackKey(): string | null {
   return runtime.apiKey ?? process.env.DEUS_CLOUD_AGNT_API_KEY ?? process.env.AGNT_API_KEY ?? null;
 }
@@ -142,19 +151,20 @@ export function cloudAccount(): CloudAccount | null {
 }
 
 /**
- * The organization a caller that names none means: the first organization (in
- * the platform's order, as the desktop pushes them) this backend holds a key
- * for. Without pushed keys, the organization a legacy push named, else null.
+ * The organization a caller that names none means: the one the desktop pushed as
+ * the platform's first, whether or not this backend holds its key (a row of it is
+ * then refused, not sent with another organization's key). Without one, the first
+ * organization a key was pushed for, else null.
  */
 export function defaultCloudOrgId(): string | null {
   const [first] = orgKeys.keys();
-  return first ?? runtime.orgId ?? null;
+  return runtime.orgId ?? first ?? null;
 }
 
 /** The credentials for one organization; no id = the default organization. Null = no usable key. */
 export function cloudOrg(orgId?: string | null): CloudOrg | null {
   const id = orgId ?? defaultCloudOrgId();
-  const apiKey = (id ? orgKeys.get(id) : undefined) ?? fallbackKey();
+  const apiKey = orgKeys.size > 0 ? (id ? orgKeys.get(id) : undefined) : fallbackKey();
   if (!apiKey) return null;
   return { orgId: id, baseUrl: agntBaseUrl(), apiKey };
 }
@@ -180,9 +190,9 @@ export function cloudOrgKeyIds(): string[] {
   return [...orgKeys.keys()];
 }
 
-/** Whether this backend could act in any organization without its own key. */
+/** Whether this backend acts with the fallback key: one is set and no organization keys were pushed. */
 export function hasFallbackCloudKey(): boolean {
-  return fallbackKey() !== null;
+  return orgKeys.size === 0 && fallbackKey() !== null;
 }
 
 /**

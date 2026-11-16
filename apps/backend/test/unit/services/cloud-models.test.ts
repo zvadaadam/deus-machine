@@ -6,15 +6,17 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockListModels, mockGetCloudConfig, mockIdentity } = vi.hoisted(() => ({
+const { mockListModels, mockGetCloudConfig, mockKeyIds, mockIdentity } = vi.hoisted(() => ({
   mockListModels: vi.fn(),
   mockGetCloudConfig: vi.fn(),
+  mockKeyIds: vi.fn(),
   mockIdentity: vi.fn(),
 }));
 
 vi.mock("@deus-hq/sdk", () => ({ listModels: mockListModels }));
 vi.mock("../../../src/services/agent/cloud/config", () => ({
   cloudOrg: mockGetCloudConfig,
+  cloudOrgKeyIds: mockKeyIds,
   getCloudConnectionIdentity: mockIdentity,
 }));
 
@@ -48,6 +50,7 @@ beforeEach(() => {
   resetCloudModelListsForTests();
   mockListModels.mockReset();
   mockGetCloudConfig.mockReset().mockReturnValue(CONFIG);
+  mockKeyIds.mockReset().mockReturnValue([]);
   mockIdentity.mockReset().mockReturnValue("account-a");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-26T09:00:00Z"));
@@ -58,6 +61,16 @@ afterEach(() => {
 });
 
 describe("getCloudModelLists", () => {
+  it("reads the catalog with another organization's key when the default one's is missing", async () => {
+    mockKeyIds.mockReturnValue(["org_b"]);
+    mockGetCloudConfig.mockImplementation((orgId?: string | null) =>
+      orgId === "org_b" ? CONFIG : null
+    );
+    mockListModels.mockResolvedValue(lists("Opus"));
+    expect(await getCloudModelLists()).toEqual(lists("Opus"));
+    expect(mockListModels).toHaveBeenCalledOnce();
+  });
+
   it("asks no one without a cloud account", async () => {
     mockGetCloudConfig.mockReturnValue(null);
     await expect(getCloudModelLists()).resolves.toBeNull();

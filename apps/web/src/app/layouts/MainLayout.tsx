@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeusCloudSession } from "@/shared/hooks/useDeusCloudSession";
 import { api } from "@shared/api";
 import { call } from "@/platform/ws";
@@ -20,6 +21,7 @@ import {
 import {
   useWorkspacesByRepo,
   useBulkDiffStats,
+  rereadDiffStats,
   usePRStatus,
   useGhStatus,
   useArchiveWorkspace,
@@ -38,6 +40,8 @@ import { useSidebarStore } from "@/features/sidebar/store";
 import { useWindowPlace } from "@/features/sidebar/hooks/useWindowPlace";
 import { offersNewFromBranch } from "@/features/sidebar/lib/location";
 import { openableFolder } from "@/features/workspace/lib/reach";
+import { cloudPresence } from "@/features/workspace/lib/cloudPresence";
+import { wokeUp, type OpenCloudWorkspace } from "@/features/workspace/lib/diffStats";
 import { uiActions, useUIStore } from "@/shared/stores/uiStore";
 import { ResizeHandle } from "@/shared/components/ResizeHandle";
 import type { Workspace } from "@/shared/types";
@@ -145,12 +149,31 @@ export function MainLayout() {
   // "Sandbox paused — wakes on your next message". Idempotent server-side.
   const selectedCloudWorkspaceId =
     selectedWorkspace?.kind === "cloud" ? selectedWorkspace.id : null;
+  // Its channel open (the connect answers once it is), its diff numbers are read
+  // again: the sidebar's were read with none open, as zeros.
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!selectedCloudWorkspaceId) return;
-    call(api.connectCloudWorkspace, { workspaceId: selectedCloudWorkspaceId }).catch(() => {
-      // Best-effort — an unreachable platform just means no truth refresh.
-    });
-  }, [selectedCloudWorkspaceId]);
+    call(api.connectCloudWorkspace, { workspaceId: selectedCloudWorkspaceId })
+      .then(() => rereadDiffStats(queryClient, selectedCloudWorkspaceId))
+      .catch(() => {
+        // Best-effort — an unreachable platform just means no truth refresh.
+      });
+  }, [selectedCloudWorkspaceId, queryClient]);
+  // Its computer waking, they are read again too: read while it slept, as zeros.
+  const selectedCloudPresence =
+    selectedWorkspace?.kind === "cloud" ? cloudPresence(selectedWorkspace) : null;
+  const openCloudRef = useRef<OpenCloudWorkspace | null>(null);
+  useEffect(() => {
+    const current =
+      selectedCloudWorkspaceId && selectedCloudPresence
+        ? { workspaceId: selectedCloudWorkspaceId, presence: selectedCloudPresence }
+        : null;
+    if (wokeUp(openCloudRef.current, current) && current) {
+      rereadDiffStats(queryClient, current.workspaceId);
+    }
+    openCloudRef.current = current;
+  }, [selectedCloudWorkspaceId, selectedCloudPresence, queryClient]);
 
   // Bulk-fetch diff stats for all workspaces: one query for the whole sidebar
   const bulkDiffStatsQuery = useBulkDiffStats(repoGroups);

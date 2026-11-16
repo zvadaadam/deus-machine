@@ -9,7 +9,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   chooseComposerOrganization,
   cloudControlWords,
+  heldCloudIntent,
 } from "@/features/repository/lib/cloudControl";
+import { composerSwitch } from "@/features/sidebar/lib/location";
 
 vi.mock("@/shared/hooks/useDeusCloudSignIn", () => ({
   useDeusCloudSignIn: () => ({ mutate: vi.fn(), isPending: false }),
@@ -148,13 +150,136 @@ describe("choosing an organization in the composer's menu", () => {
     expect(a.setUp).not.toHaveBeenCalled();
   });
 
-  it("never chooses one that is not ready: it sets it up, or does nothing", () => {
-    for (const state of ["set-up", "setting-up", "unavailable"] as const) {
+  it("sets up one not set up, makes it the composer's and asks for the cloud there", () => {
+    const calls: string[] = [];
+    chooseComposerOrganization(
+      { id: "gamma", state: "set-up" },
+      {
+        setUp: (id) => calls.push(`setUp:${id}`),
+        setOrganization: (id) => calls.push(`setOrganization:${id}`),
+        requestCloud: (id) => calls.push(`requestCloud:${id}`),
+      }
+    );
+    // The setup first, so the gate sees it running when it reads the request.
+    expect(calls).toEqual(["setUp:gamma", "setOrganization:gamma", "requestCloud:gamma"]);
+  });
+
+  it("does nothing with one setting up, or not set up where it cannot be", () => {
+    for (const state of ["setting-up", "unavailable"] as const) {
       const a = actions();
       chooseComposerOrganization({ id: "gamma", state }, a);
       expect(a.setOrganization).not.toHaveBeenCalled();
       expect(a.requestCloud).not.toHaveBeenCalled();
-      expect(a.setUp).toHaveBeenCalledTimes(state === "set-up" ? 1 : 0);
+      expect(a.setUp).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("the switch is on only where a create would be accepted", () => {
+  it("is off in an organization known not to be ready, and stays as it is otherwise", () => {
+    expect(composerSwitch("cloud", false)).toBe("local");
+    expect(composerSwitch("cloud", true)).toBe("cloud");
+    expect(composerSwitch("cloud", undefined)).toBe("cloud");
+    expect(composerSwitch("local", true)).toBe("local");
+  });
+
+  /**
+   * The composer's state as Home holds it: the switch (`composerSwitch` applied as
+   * useComposerLocation does), the composer's organization, and the gate's request
+   * (`heldCloudIntent` applied as useCloudAccessGate does).
+   */
+  function composer(ready: Record<string, boolean | undefined>) {
+    const state = {
+      location: "cloud" as "local" | "cloud",
+      organization: "acme",
+      request: null as string | null,
+      settingUp: false,
+    };
+    const settle = (status: "ok" | "needs_grant" | undefined = "ok") => {
+      const cloudReady = ready[state.organization];
+      state.location = composerSwitch(state.location, cloudReady);
+      if (state.request === null) return;
+      if (state.request !== state.organization) {
+        state.request = null;
+        return;
+      }
+      const outcome = heldCloudIntent({
+        forRepo: true,
+        status: cloudReady ? status : undefined,
+        cloudReady,
+        settingUp: state.settingUp,
+      });
+      if (outcome === "go") state.location = "cloud";
+      if (outcome !== "hold") state.request = null;
+    };
+    const setUp = (id: string) =>
+      chooseComposerOrganization(
+        { id, state: "set-up" },
+        {
+          setUp: () => (state.settingUp = true),
+          setOrganization: (chosen) => (state.organization = chosen),
+          requestCloud: (chosen) => (state.request = chosen),
+        }
+      );
+    return { state, settle, setUp, ready };
+  }
+
+  it("Set up for Beta while on in Acme: off until Beta is ready, then on in Beta", () => {
+    const c = composer({ acme: true, beta: false });
+    c.settle();
+    expect(c.state).toMatchObject({ location: "cloud", organization: "acme" });
+    c.setUp("beta");
+    c.settle();
+    // A send now creates on this computer, not in a Beta that would refuse it.
+    expect(c.state).toMatchObject({ location: "local", organization: "beta", request: "beta" });
+    // Beta's keys are pushed (ready) before the setup's own answer.
+    c.ready.beta = true;
+    c.settle("needs_grant");
+    expect(c.state.location).toBe("local");
+    c.state.settingUp = false;
+    c.settle("ok");
+    expect(c.state).toMatchObject({ location: "cloud", organization: "beta", request: null });
+  });
+
+  it("Beta never becoming ready leaves it off, and a send creates locally", () => {
+    const c = composer({ acme: true, beta: false });
+    c.setUp("beta");
+    c.settle();
+    c.state.settingUp = false;
+    c.settle();
+    expect(c.state).toMatchObject({ location: "local", organization: "beta", request: null });
+    // Beta made ready much later: the request is gone, so nothing turns the cloud on.
+    c.ready.beta = true;
+    c.settle();
+    expect(c.state.location).toBe("local");
+  });
+
+  it("a request held while readiness was unknown ends when it arrives as not ready", () => {
+    expect(
+      heldCloudIntent({ forRepo: true, status: undefined, cloudReady: undefined, settingUp: false })
+    ).toBe("hold");
+    expect(
+      heldCloudIntent({ forRepo: true, status: undefined, cloudReady: false, settingUp: false })
+    ).toBe("end");
+    expect(
+      heldCloudIntent({ forRepo: false, status: undefined, cloudReady: false, settingUp: false })
+    ).toBe("end");
+    // While a setup runs it waits for it.
+    expect(
+      heldCloudIntent({ forRepo: true, status: undefined, cloudReady: false, settingUp: true })
+    ).toBe("hold");
+  });
+
+  it("goes only once ready, and with a project only on a go verdict", () => {
+    const ready = { cloudReady: true, settingUp: false };
+    expect(heldCloudIntent({ ...ready, forRepo: false, status: undefined })).toBe("go");
+    expect(heldCloudIntent({ ...ready, forRepo: true, status: "ok" })).toBe("go");
+    expect(heldCloudIntent({ ...ready, forRepo: true, status: "unknown" })).toBe("go");
+    expect(heldCloudIntent({ ...ready, forRepo: true, status: "needs_grant" })).toBe("hold");
+    expect(heldCloudIntent({ ...ready, forRepo: true, status: undefined })).toBe("hold");
+    // A verdict cached from before is not enough where the organization is not ready.
+    expect(
+      heldCloudIntent({ forRepo: true, status: "ok", cloudReady: undefined, settingUp: false })
+    ).toBe("hold");
   });
 });

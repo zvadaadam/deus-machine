@@ -138,14 +138,16 @@ function orgOfAutomation(id: string): string | null {
 const refreshInFlight = new Map<string | null, Promise<void>>();
 let cacheIdentity: string | null = null;
 const lastFullRefreshAt = new Map<string | null, number>();
-/** Bumped by every scoped write (create/update/toggle/delete/refresh(id)) —
- *  a full refresh whose platform snapshot predates it must not replace the
- *  cache with stale rows (or resurrect a just-deleted one). */
-let lastScopedWriteAt = 0;
+/** Per organization, bumped by every scoped write in it (create/update/toggle/
+ *  delete/refresh(id)) — a full refresh of that organization whose platform
+ *  snapshot predates it must not replace the cache with stale rows (or
+ *  resurrect a just-deleted one). Another organization's write says nothing
+ *  about this one's list. */
+const lastScopedWriteAt = new Map<string | null, number>();
 const FULL_REFRESH_MIN_INTERVAL_MS = 5_000;
 
-export function markScopedWrite(): void {
-  lastScopedWriteAt = Date.now();
+export function markScopedWrite(orgId: string | null): void {
+  lastScopedWriteAt.set(orgId, Date.now());
 }
 
 /**
@@ -165,7 +167,7 @@ export async function refreshAutomations(
     cacheIdentity = identity;
     refreshInFlight.clear();
     lastFullRefreshAt.clear();
-    lastScopedWriteAt = 0;
+    lastScopedWriteAt.clear();
     store.replaceAutomationsCache([]);
     invalidate([...AUTOMATION_RESOURCES]);
   }
@@ -184,7 +186,7 @@ export async function refreshAutomations(
     const previous = store.getAutomationRaw(automationId);
     store.upsertAutomation(platform.summaryToRow(summary, envMap, previous, orgId));
     store.upsertRuns(runs.map((run) => platform.runSummaryToRow(run, store.getRun(run.id))));
-    markScopedWrite();
+    markScopedWrite(orgId);
     invalidate([...AUTOMATION_RESOURCES]);
     return;
   }
@@ -204,7 +206,7 @@ export async function refreshAutomations(
     // A scoped write landed while this list was in flight — its snapshot
     // is already stale; dropping it beats restoring an old name/status or
     // resurrecting a deleted row. The next mount/focus refresh converges.
-    if (lastScopedWriteAt > snapshotStartedAt) return;
+    if ((lastScopedWriteAt.get(orgId) ?? 0) > snapshotStartedAt) return;
     const locals = store.localColumnsById();
     // Read BEFORE the replace: an automation whose platform last-run moved
     // has a stale run ledger — the list derives last_run_status from it, so
@@ -254,15 +256,23 @@ export function initAutomations(): void {
     invalidate([...AUTOMATION_RESOURCES]);
     return;
   }
-  // Every organization this backend holds a key for (with only a developer key, the
-  // default one). Each is its own refresh: one that fails keeps its rows and stops
-  // nothing else.
+  void refreshEveryOrganization();
+}
+
+/**
+ * A full refresh of every organization this backend holds a key for (with only a
+ * developer key, the default one). Each is its own refresh: one that fails keeps
+ * its rows, is logged and stops nothing else. Settles when all have.
+ */
+export async function refreshEveryOrganization(): Promise<void> {
   const keyed = cloudOrgKeyIds();
-  for (const orgId of keyed.length > 0 ? keyed : [null]) {
-    void refreshAutomations(undefined, orgId).catch((err) => {
-      console.warn(`[Automations] platform sync failed${orgId ? ` for ${orgId}` : ""}:`, err);
-    });
-  }
+  await Promise.all(
+    (keyed.length > 0 ? keyed : [null]).map((orgId) =>
+      refreshAutomations(undefined, orgId).catch((err) => {
+        console.warn(`[Automations] platform sync failed${orgId ? ` for ${orgId}` : ""}:`, err);
+      })
+    )
+  );
 }
 
 // ─── CRUD ────────────────────────────────────────────────────
@@ -429,7 +439,7 @@ export async function createAutomation(
       updated_at: new Date().toISOString(),
     });
   }
-  markScopedWrite();
+  markScopedWrite(orgId);
   invalidate([...AUTOMATION_RESOURCES]);
   const created = getAutomation(id);
   if (!created) throw new Error("Automation not found after creation");
@@ -529,10 +539,11 @@ export async function toggleAutomation(
 export async function deleteAutomation(id: string): Promise<void> {
   const identity = getCloudConnectionIdentity();
   if (!store.getAutomationRaw(id)) throw new NotFoundError("Automation not found.");
-  await platform.deletePlatformAutomation(id, orgOfAutomation(id));
+  const orgId = orgOfAutomation(id);
+  await platform.deletePlatformAutomation(id, orgId);
   assertCurrentAccount(identity);
   store.deleteAutomationRow(id);
-  markScopedWrite();
+  markScopedWrite(orgId);
   invalidate([...AUTOMATION_RESOURCES]);
 }
 

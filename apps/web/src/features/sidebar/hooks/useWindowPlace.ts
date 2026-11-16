@@ -79,6 +79,16 @@ export function useWindowPlace({
   const storedOrganization = useSidebarStore((s) => s.cloudOrganizationId);
   const retrying = useSidebarStore((s) => s.cloudSetupRetrying);
   const pending = useSidebarStore((s) => s.cloudPending);
+  // Where the window is by the person's doing: the stored place and the selection. A
+  // sign-in or setup started from the menu ends once either changes.
+  const storedKey = placeKey({
+    location: storedLocation,
+    organizationId: storedLocation === "cloud" ? storedOrganization : null,
+  });
+  const where = useMemo(
+    () => ({ place: storedKey, selectedId: selectedWorkspaceId }),
+    [storedKey, selectedWorkspaceId]
+  );
 
   const canSetUp = capabilities.deusCloudSignIn;
   const cloudRow = cloudRowState({
@@ -88,16 +98,14 @@ export function useWindowPlace({
     retrying,
     canSignIn: canSetUp,
   });
+  const organizationRow = useCallback(
+    (org: { ready: boolean }) =>
+      organizationRowState({ ready: org.ready, session, retrying, canSetUp }),
+    [session, retrying, canSetUp]
+  );
   const rows = useMemo(
-    () =>
-      placeRows({
-        organizations,
-        withComputer: !webDirect,
-        cloudRow,
-        organizationRow: (org) =>
-          organizationRowState({ ready: org.ready, session, retrying, canSetUp }),
-      }),
-    [organizations, webDirect, cloudRow, session, retrying, canSetUp]
+    () => placeRows({ organizations, withComputer: !webDirect, cloudRow, organizationRow }),
+    [organizations, webDirect, cloudRow, organizationRow]
   );
 
   // A cloud it cannot reach is not where the window sits; the stored choice stays.
@@ -180,10 +188,16 @@ export function useWindowPlace({
     [openWorkspace, selectWorkspace]
   );
 
+  const whereRef = useRef(where);
+  useEffect(() => {
+    whereRef.current = where;
+  });
   const setUp = useCallback((organizationId: string | null) => {
-    void retryCloudSetup(retryProvision, organizationId).then((result) => {
-      if (!result.ok) toast.error(result.error ?? "Cloud setup failed");
-    });
+    void retryCloudSetup(retryProvision, organizationId, { from: whereRef.current }).then(
+      (result) => {
+        if (!result.ok) toast.error(result.error ?? "Cloud setup failed");
+      }
+    );
   }, []);
 
   const choose = useCallback(
@@ -193,7 +207,7 @@ export function useWindowPlace({
         .with({ kind: "cloud" }, (cloud) =>
           match(cloud.state)
             .with("ready", () => switchTo(cloud.place))
-            .with("sign-in", () => void startCloudSignIn(() => startSignIn()))
+            .with("sign-in", () => void startCloudSignIn(() => startSignIn(), whereRef.current))
             .with("retry", () => setUp(null))
             .with("unavailable", "signing-in", "setting-up", () => undefined)
             .exhaustive()
@@ -221,10 +235,10 @@ export function useWindowPlace({
   );
 
   // A sign-in or setup started from the menu: the window moves once the pushed value
-  // says the place it waits for is reachable.
+  // says the place it waits for is reachable; it ends once the person went elsewhere.
   useEffect(() => {
-    finishCloudSignIn({ organizations, cloudRow }, switchTo);
-  }, [pending, organizations, cloudRow, switchTo]);
+    finishCloudSignIn({ organizations, cloudRow, organizationRow, here: where }, switchTo);
+  }, [pending, organizations, cloudRow, organizationRow, where, switchTo]);
 
   return { place, rows, current, activity, repositories, choose, chooseIndex };
 }

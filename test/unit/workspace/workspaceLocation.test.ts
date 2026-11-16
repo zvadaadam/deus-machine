@@ -17,6 +17,7 @@ import {
   THIS_COMPUTER,
   visiblePlace,
   workspaceToRestore,
+  type CloudRowState,
   type ComposerOrganization,
   type FollowState,
   type Organizations,
@@ -498,22 +499,95 @@ describe("pendingCloudOutcome (a sign-in or setup started from the menu)", () =>
     defaultOrganizationId: "acme",
     items: orgs!.items.map((o) => ({ ...o, ready: false })),
   };
+  const betaNotReady = {
+    ...orgs!,
+    items: orgs!.items.map((o) => (o.id === "beta" ? { ...o, ready: false } : o)),
+  };
+  const signedOut = { available: false, defaultOrganizationId: null, items: [] };
+  const from = { place: "local", selectedId: "local-a" };
+  const intent = (organizationId: string | null) => ({ organizationId, from });
+  /** The window as it is now, and the menu's rows: a setup running, or not. */
+  const now = (
+    organizations: Organizations,
+    {
+      cloudRow = "ready",
+      settingUp = false,
+      here = from,
+    }: {
+      cloudRow?: CloudRowState;
+      settingUp?: boolean;
+      here?: { place: string; selectedId: string | null };
+    } = {}
+  ) => ({
+    organizations,
+    cloudRow,
+    here,
+    organizationRow: (org: { ready: boolean }) =>
+      organizationRowState({
+        ready: org.ready,
+        session: { signedIn: true, hasPlatformKey: true },
+        retrying: settingUp,
+        canSetUp: true,
+      }),
+  });
 
   it("moves to the organization it set up once it is ready", () => {
-    expect(pendingCloudOutcome({ organizationId: "beta" }, signedInNoKey, "setting-up")).toBe(
+    expect(pendingCloudOutcome(intent("beta"), now(betaNotReady, { settingUp: true }))).toBe(
       "wait"
     );
-    expect(pendingCloudOutcome({ organizationId: "beta" }, orgs, "ready")).toEqual(inOrg("beta"));
+    expect(pendingCloudOutcome(intent("beta"), now(orgs))).toEqual(inOrg("beta"));
+  });
+
+  it("waits while nothing is known yet, or the keys made after sign-in are on the way", () => {
+    expect(pendingCloudOutcome(intent("beta"), now(undefined))).toBe("wait");
+    const minting = {
+      ...now(signedInNoKey),
+      organizationRow: (org: { ready: boolean }) =>
+        organizationRowState({
+          ready: org.ready,
+          session: { signedIn: true, hasPlatformKey: false },
+          retrying: false,
+          canSetUp: true,
+        }),
+    };
+    expect(pendingCloudOutcome(intent("beta"), minting)).toBe("wait");
+  });
+
+  it("ends when its organization is back to Set up: the setup is over and did not make it ready", () => {
+    expect(pendingCloudOutcome(intent("beta"), now(betaNotReady))).toBe("end");
+  });
+
+  it("ends when its organization is no longer listed: signed out, or no longer a member", () => {
+    expect(pendingCloudOutcome(intent("beta"), now(signedOut))).toBe("end");
+    const acmeOnly = { ...orgs!, items: orgs!.items.filter((o) => o.id === "acme") };
+    expect(pendingCloudOutcome(intent("beta"), now(acmeOnly))).toBe("end");
+  });
+
+  it("ends when the person went elsewhere: another place, another workspace, or Home", () => {
+    for (const here of [
+      { place: "cloud:acme", selectedId: "local-a" },
+      { place: "local", selectedId: "local-b" },
+      { place: "local", selectedId: null },
+    ]) {
+      expect(pendingCloudOutcome(intent("beta"), now(orgs, { here }))).toBe("end");
+      expect(pendingCloudOutcome(intent(null), now(orgs, { here }))).toBe("end");
+    }
   });
 
   it("moves to the cloud once a sign-in reaches it", () => {
-    expect(pendingCloudOutcome({ organizationId: null }, undefined, "signing-in")).toBe("wait");
-    expect(pendingCloudOutcome({ organizationId: null }, signedInNoKey, "setting-up")).toBe("wait");
-    expect(pendingCloudOutcome({ organizationId: null }, orgs, "ready")).toEqual(CLOUD);
+    expect(pendingCloudOutcome(intent(null), now(undefined, { cloudRow: "signing-in" }))).toBe(
+      "wait"
+    );
+    expect(pendingCloudOutcome(intent(null), now(signedInNoKey, { cloudRow: "setting-up" }))).toBe(
+      "wait"
+    );
+    expect(pendingCloudOutcome(intent(null), now(orgs))).toEqual(CLOUD);
   });
 
   it("ends when the setup failed", () => {
-    expect(pendingCloudOutcome({ organizationId: null }, signedInNoKey, "retry")).toBe("end");
+    expect(pendingCloudOutcome(intent(null), now(signedInNoKey, { cloudRow: "retry" }))).toBe(
+      "end"
+    );
   });
 });
 
