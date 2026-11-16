@@ -10,24 +10,18 @@ const { load } = require("js-yaml") as { load: (text: string) => unknown };
 describe("release workflow", () => {
   const workflow = readFileSync(path.join(process.cwd(), ".github/workflows/release.yml"), "utf8");
 
-  it("passes macOS simulator helper paths before lipo -verify_arch flags", () => {
+  it("verifies each simulator helper one architecture a call, the path before the flag", () => {
     const lipoVerifyLines = workflow
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("lipo ") && line.includes("-verify_arch"));
 
-    expect(lipoVerifyLines).toContain(
-      'lipo "$resources_dir/simulator/simbridge" -verify_arch arm64 x86_64'
-    );
-    expect(lipoVerifyLines).toContain(
-      'lipo "$resources_dir/simulator/siminspector.dylib" -verify_arch arm64 x86_64'
-    );
-    expect(lipoVerifyLines).not.toContain(
-      'lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/simbridge"'
-    );
-    expect(lipoVerifyLines).not.toContain(
-      'lipo -verify_arch arm64 x86_64 "$resources_dir/simulator/siminspector.dylib"'
-    );
+    // The lipo of macOS 27 reads a second architecture as an input file.
+    expect(workflow).toContain("for arch in arm64 x86_64; do");
+    expect(lipoVerifyLines).toEqual([
+      'lipo "$resources_dir/simulator/simbridge" -verify_arch "$arch"',
+      'lipo "$resources_dir/simulator/siminspector.dylib" -verify_arch "$arch"',
+    ]);
   });
 
   const parsed = load(workflow) as {

@@ -157,6 +157,97 @@ describe("desktop backend process", () => {
     }
   });
 
+  it("gives the backend a stdin pipe and the flag that stops it when the desktop ends", async () => {
+    const resourcesPath = createTempResourcesRoot();
+    createRuntimeExecutable(resourcesPath);
+    (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+    process.env.DEUS_STOP_ON_STDIN_END = "0";
+    const child = createFakeChild();
+    mockSpawn.mockReturnValue(child);
+    const starting = spawnBackend();
+    child.stdout.write("[BACKEND_PORT]45678\n");
+    await starting;
+
+    const [, , options] = mockSpawn.mock.calls[0];
+    expect(options.stdio).toEqual(["pipe", "pipe", "pipe"]);
+    expect(options.env.DEUS_STOP_ON_STDIN_END).toBe("1");
+  });
+
+  describe("restarts", () => {
+    async function freshBackend() {
+      // A fresh module: stopBackend() in afterEach leaves the shared one quitting.
+      vi.resetModules();
+      const backend = await import("../../../apps/desktop/main/backend-process");
+      const resourcesPath = createTempResourcesRoot();
+      createRuntimeExecutable(resourcesPath);
+      (process as { resourcesPath?: string }).resourcesPath = resourcesPath;
+      const children: ReturnType<typeof createFakeChild>[] = [];
+      mockSpawn.mockImplementation(() => {
+        const child = createFakeChild();
+        children.push(child);
+        return child;
+      });
+      return { backend, children };
+    }
+
+    function crash(child: ReturnType<typeof createFakeChild>) {
+      child.exitCode = 1;
+      child.emit("exit", 1, null);
+    }
+
+    it("stops after five restarts when each backend crashes soon after starting", async () => {
+      const { backend, children } = await freshBackend();
+      vi.useFakeTimers();
+      try {
+        const onReady = vi.fn();
+        const starting = backend.spawnBackend({ onReady, onExit: () => {} });
+        children[0].stdout.write("[BACKEND_PORT]40000\n");
+        await starting;
+
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          await vi.advanceTimersByTimeAsync(5_000); // up a few seconds, then down
+          crash(children[attempt - 1]);
+          await vi.advanceTimersByTimeAsync(1000 * 2 ** (attempt - 1));
+          await vi.waitFor(() => expect(children).toHaveLength(attempt + 1));
+          children[attempt].stdout.write(`[BACKEND_PORT]${40000 + attempt}\n`);
+          await vi.waitFor(() => expect(onReady).toHaveBeenLastCalledWith(40000 + attempt));
+        }
+
+        crash(children[5]);
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(children).toHaveLength(6);
+        expect(onReady.mock.calls.map(([port]) => port)).toEqual([
+          40000, 40001, 40002, 40003, 40004, 40005,
+        ]);
+      } finally {
+        vi.useRealTimers();
+        await backend.stopBackend();
+      }
+    });
+
+    it("keeps restarting a backend that stays up for a minute between crashes", async () => {
+      const { backend, children } = await freshBackend();
+      vi.useFakeTimers();
+      try {
+        const starting = backend.spawnBackend({ onExit: () => {} });
+        children[0].stdout.write("[BACKEND_PORT]40000\n");
+        await starting;
+
+        for (let restart = 1; restart <= 7; restart++) {
+          await vi.advanceTimersByTimeAsync(60_000);
+          crash(children[restart - 1]);
+          await vi.advanceTimersByTimeAsync(1_000);
+          await vi.waitFor(() => expect(children).toHaveLength(restart + 1));
+          children[restart].stdout.write(`[BACKEND_PORT]${40000 + restart}\n`);
+        }
+        expect(children).toHaveLength(8);
+      } finally {
+        vi.useRealTimers();
+        await backend.stopBackend();
+      }
+    });
+  });
+
   it("starts packaged backend through bundled deus-runtime without Electron-as-Node", async () => {
     Object.defineProperty(process, "platform", {
       configurable: true,

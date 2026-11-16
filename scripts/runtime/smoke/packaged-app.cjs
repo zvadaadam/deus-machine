@@ -280,11 +280,14 @@ function verifyMacUniversalBinary(filePath, label, options) {
     output.includes("Mach-O") && output.includes("arm64") && output.includes("x86_64"),
     `${label} is not a universal arm64/x86_64 Mach-O binary: ${output}`
   );
-  execFileSync("lipo", [filePath, "-verify_arch", "arm64", "x86_64"], {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  // One architecture a call: the lipo of macOS 27 reads a second one as a file.
+  for (const arch of ["arm64", "x86_64"]) {
+    execFileSync("lipo", [filePath, "-verify_arch", arch], {
+      encoding: "utf8",
+      timeout: 20_000,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  }
 
   if (!options.skipAppSignature) {
     execFileSync("codesign", ["--verify", "--verbose=2", filePath], {

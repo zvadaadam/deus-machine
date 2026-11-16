@@ -5,7 +5,7 @@
  * standard Edit shortcuts (copy/paste/undo), and app controls.
  */
 
-import { Menu, shell, BrowserWindow } from "electron";
+import { Menu, shell } from "electron";
 
 export function setupAppMenu(): void {
   const isMac = process.platform === "darwin";
@@ -85,15 +85,6 @@ export function setupAppMenu(): void {
         {
           label: "Report Issue",
           click: () => shell.openExternal("https://github.com/zvadaadam/deus-machine/issues"),
-        },
-        { type: "separator" },
-        {
-          label: "Toggle Developer Tools",
-          accelerator: isMac ? "Cmd+Option+I" : "Ctrl+Shift+I",
-          click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            win?.webContents.toggleDevTools();
-          },
         },
       ],
     },

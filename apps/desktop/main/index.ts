@@ -20,12 +20,10 @@ import { spawnBackend, stopBackend, CDP_PORT } from "./backend-process";
 import { registerNativeHandlers } from "./native-handlers";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
-// PTY, file watching, and browser server are now handled by the backend
-// via WebSocket commands — no Electron IPC needed for these.
 import { registerUpdateHandlers, setupAutoUpdater } from "./auto-updater";
 import { syncShellEnvironment } from "./shell-env";
 import { setupAppMenu } from "./app-menu";
-import { setupTray, destroyTray } from "./tray";
+import { setupTray, destroyTray, setTrayStatus } from "./tray";
 import { ensureInstalledInApplications } from "./install-preflight";
 import { configurePackagedMainRuntimeEnv } from "./runtime-env";
 import { getStoredDeusCloudSessionToken, registerDeusCloudAuthHandlers } from "./deus-cloud-auth";
@@ -71,6 +69,7 @@ app.commandLine.appendSwitch("remote-debugging-port", CDP_PORT);
 app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
 
 let mainWindow: BrowserWindow | null = null;
+let quitState: "running" | "stopping" | "stopped" = "running";
 
 // ---------------------------------------------------------------------------
 // Window Creation
@@ -232,6 +231,11 @@ async function createWindow(): Promise<void> {
     }
   });
 
+  // A closed window is gone for good: nothing may act on it afterwards.
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
   // Track fullscreen state for CSS selectors (.fullscreen)
   mainWindow.on("enter-full-screen", () => {
     mainWindow?.webContents.send("fullscreen-change", { isFullscreen: true });
@@ -291,6 +295,8 @@ app.whenReady().then(async () => {
     // inherited it. provisionAtStartup pushes credentials over
     // the runtime route immediately below, which is retractable by design.
     const { port: backendPort, authToken } = await spawnBackend({
+      // The tray follows whichever backend is current (each restart has a new port).
+      onReady: () => setTrayStatus("running"),
       onStdoutLine: (source, line) => {
         logMainProcess(`[${source}] ${line}`);
       },
@@ -299,6 +305,7 @@ app.whenReady().then(async () => {
       },
       onExit: (source, code, signal) => {
         logMainProcess(`[${source}] Exited with code=${code} signal=${signal}`);
+        setTrayStatus("offline");
       },
     });
     logMainProcess("[main] Backend started on port: " + backendPort);
@@ -310,11 +317,13 @@ app.whenReady().then(async () => {
     provisionAtStartup(getStoredDeusCloudSessionToken, resolveDeusCloudUrl());
 
     // System tray icon with backend health status
-    setupTray(backendPort);
+    setupTray();
   } catch (err) {
     logMainProcess(
       "[main] Backend spawn FAILED: " + (err instanceof Error ? err.message : String(err))
     );
+    // A Quit while the backend was starting stopped it; that is not a failure.
+    if (quitState !== "running") return;
     const { dialog } = await import("electron");
     const { response } = await dialog.showMessageBox({
       type: "error",
@@ -332,8 +341,6 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // The backend runs the agent engine; Electron only supervises the packaged runtime entrypoint.
-
   // Register IPC handlers before window creation so they're ready immediately
   registerNativeHandlers();
   registerDeusCloudAuthHandlers();
@@ -344,8 +351,6 @@ app.whenReady().then(async () => {
   registerUpdateHandlers(quitAfterStopping);
 
   logMainProcess("[main] Creating window...");
-  // PTY, FS watching, browser server — all handled by backend now
-
   await createWindow();
   logMainProcess("[main] Window created");
 
@@ -373,10 +378,9 @@ app.whenReady().then(async () => {
 
 // Second instance: focus existing window.
 app.on("second-instance", (_event, _commandLine) => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
 });
 
 // Quit when all windows are closed (all platforms including macOS)
@@ -384,7 +388,6 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
-let quitState: "running" | "stopping" | "stopped" = "running";
 function quitAfterStopping(quit: () => void): void {
   if (quitState !== "running") return;
   quitState = "stopping";
@@ -403,8 +406,3 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   quitAfterStopping(() => app.quit());
 });
-
-// Export for IPC handlers that need window reference
-export function getMainWindow(): BrowserWindow | null {
-  return mainWindow;
-}

@@ -72,7 +72,7 @@ Frontend (React)
 Backend ⊃ Agent engine (apps/agent-server/) — in process, the standard wire on an in-process channel
 ```
 
-**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic.
+**Electron Main** — Thin shell. Window lifecycle, native dialogs, process spawning. No business logic. It starts the backend and restarts one that exits, five times at most unless one stays up a minute (`backend-process.ts`). The backend stops when the desktop does, however that ends: its stdin is a pipe the desktop holds (`apps/backend/src/lib/parent-stdin.ts`). The preload offers the window only what the web app calls, and never the backend's spawn token; `test/unit/desktop/ipc-surface.test.ts` holds the preload, the main handlers and the web app's calls equal, so an unused channel is deleted, not kept.
 
 **Backend (Hono)** — All business logic. DB reads/writes, config, agent event persistence, tool relay, PTY, file watching. Operations in `src/api/`, answered over the socket; the few HTTP routes under `/api`. Runs the agent engine in its own process.
 

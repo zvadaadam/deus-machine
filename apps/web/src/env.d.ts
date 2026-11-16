@@ -26,7 +26,6 @@ declare module "*.js?raw" {
 interface Window {
   electronAPI?: {
     getBackendPort: () => Promise<number>;
-    getAuthToken: () => Promise<string>;
     isFullscreen: () => Promise<boolean>;
     onFullscreenChange: (callback: (payload: { isFullscreen: boolean }) => void) => () => void;
     getAppVersion: () => Promise<string>;
@@ -38,8 +37,6 @@ interface Window {
     ) => () => void;
     openExternal: (url: string) => Promise<void>;
     confirm: (message: string, detail?: string) => Promise<boolean>;
-    startGhAuthLogin: () => Promise<{ success: boolean; path: string | null; error?: string }>;
-    logoutGhAuth: () => Promise<{ success: boolean; path: string | null; error?: string }>;
     getDeusCloudSession: () => Promise<import("@shared/types").DeusCloudSessionStatus>;
     /** Mint a direct-agnt session token from the stored deus_cloud_session bearer
      *  (Path B, WorkOS source). The bearer stays in main; only the token returns. */

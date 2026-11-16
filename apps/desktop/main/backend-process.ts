@@ -15,11 +15,17 @@ let backendProcess: ChildProcess | null = null;
 let isQuitting = false;
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
+// Restarts are counted until a backend has stayed up this long, so one that
+// starts and then keeps crashing stops after MAX_RESTART_ATTEMPTS.
+let stableTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_RESTART_ATTEMPTS = 5;
+const STABLE_UPTIME_MS = 60_000;
 const STARTUP_TIMEOUT_MS = 30_000;
 const WINDOWS_EXECUTABLE_EXTENSIONS = new Set([".exe", ".cmd", ".bat", ".ps1", ".com"]);
 
 export interface BackendSpawnHooks {
+  /** Each backend that starts, the first and every restart, with its port. */
+  onReady?: (port: number) => void;
   onStdoutLine?: (source: "backend", line: string) => void;
   onStderrLine?: (source: "backend", line: string) => void;
   onExit?: (source: "backend", code: number | null, signal: NodeJS.Signals | null) => void;
@@ -112,6 +118,11 @@ function terminateBackend(): Promise<void> {
   });
 }
 
+function clearStableTimer(): void {
+  if (stableTimer) clearTimeout(stableTimer);
+  stableTimer = null;
+}
+
 function scheduleRestart(hooks: BackendSpawnHooks): void {
   if (isQuitting || restartTimer || restartAttempt >= MAX_RESTART_ATTEMPTS) {
     return;
@@ -199,12 +210,15 @@ export async function spawnBackend(
       AUTH_TOKEN: authToken,
       PORT: "0",
       CDP_PORT,
+      // With stdin a pipe this process holds, the backend stops when this
+      // process ends, even by a crash or SIGKILL (apps/backend/src/lib/parent-stdin.ts).
+      DEUS_STOP_ON_STDIN_END: "1",
     });
 
     const child = spawn(backendCommand, backendArgs, {
       cwd: runtime.backendCwd,
       env: childEnv,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     backendProcess = child;
 
@@ -225,8 +239,13 @@ export async function spawnBackend(
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      restartAttempt = 0;
+      clearStableTimer();
+      stableTimer = setTimeout(() => {
+        stableTimer = null;
+        restartAttempt = 0;
+      }, STABLE_UPTIME_MS);
       writeBackendPortFile(port);
+      hooks.onReady?.(port);
       resolve({ port, authToken });
     };
 
@@ -260,6 +279,8 @@ export async function spawnBackend(
     child.on("exit", (code, signal) => {
       if (backendProcess === child) backendProcess = null;
       clearTimeout(timeout);
+      // It did not stay up: the restarts it causes keep counting.
+      clearStableTimer();
       // Its connections went with it; a restarted backend reports them again.
       setKeepAwakeWanted(false);
       hooks.onExit?.("backend", code, signal);
@@ -280,6 +301,7 @@ export async function spawnBackend(
 
 export function stopBackend(): Promise<void> {
   isQuitting = true;
+  clearStableTimer();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;

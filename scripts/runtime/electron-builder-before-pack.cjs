@@ -256,9 +256,10 @@ function assertExecutableFile(filePath, label) {
 
 function assertUniversalMacHelper(filePath, label) {
   assertExecutableFile(filePath, label);
-  execFileSync("lipo", [filePath, "-verify_arch", "arm64", "x86_64"], {
-    stdio: "ignore",
-  });
+  // One architecture a call: the lipo of macOS 27 reads a second one as a file.
+  for (const arch of ["arm64", "x86_64"]) {
+    execFileSync("lipo", [filePath, "-verify_arch", arch], { stdio: "ignore" });
+  }
 }
 
 function assertDeviceUsePayloads(projectRoot) {

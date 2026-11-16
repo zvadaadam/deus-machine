@@ -47,6 +47,7 @@ on:
 
 permissions:
   contents: write
+  actions: read # validate-and-bump reads the Tests workflow's runs
 
 concurrency:
   group: desktop-release
@@ -67,6 +68,24 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+
+      # Nothing here runs the tests: a release ships only a commit the Tests
+      # workflow (test.yml) has already passed. A dry run only warns.
+      - name: Require passing Tests for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          PASSED="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=$SHA&status=success&per_page=1" --jq '.total_count')"
+          if [[ "$PASSED" -ge 1 ]]; then
+            echo "Tests passed for $SHA"
+          elif [[ "$DRY_RUN" == "true" ]]; then
+            echo "::warning::The Tests workflow has no successful run for $SHA; a real release of this commit would stop here."
+          else
+            echo "::error::The Tests workflow (test.yml) has no completed, successful run for $SHA, the commit being released. Wait for it to pass (or re-run it) and start the release again."
+            exit 1
+          fi
 
       - name: Ensure release source is on main
         if: ${{ !inputs.dry_run }}
@@ -252,8 +271,11 @@ jobs:
             echo "Verifying packaged simulator helpers in $resources_dir"
             test -x "$resources_dir/simulator/simbridge"
             test -f "$resources_dir/simulator/siminspector.dylib"
-            lipo "$resources_dir/simulator/simbridge" -verify_arch arm64 x86_64
-            lipo "$resources_dir/simulator/siminspector.dylib" -verify_arch arm64 x86_64
+            # One architecture a call: the lipo of macOS 27 reads a second one as a file.
+            for arch in arm64 x86_64; do
+              lipo "$resources_dir/simulator/simbridge" -verify_arch "$arch"
+              lipo "$resources_dir/simulator/siminspector.dylib" -verify_arch "$arch"
+            done
           done < <(find dist-electron -maxdepth 4 -path '*/Deus.app/Contents/Resources' -type d | sort)
           if [[ "$found_resources" -ne 1 ]]; then
             echo "::error::No packaged Deus.app Resources directory found for simulator helper verification"
