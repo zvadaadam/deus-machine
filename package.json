@@ -9,7 +9,7 @@
     "email": "hello@deusmachine.ai"
   },
   "repository": "github:zvadaadam/deus-machine",
-  "packageManager": "bun@1.2.19",
+  "packageManager": "bun@1.3.6",
   "engines": {
     "node": "22.x"
   },
@@ -59,7 +59,7 @@
     "test:app:watch": "node node_modules/vitest/vitest.mjs --config test/vitest.config.ts",
     "test:e2e": "node test/e2e/e2e-flow.test.cjs",
     "test:backend": "bun run native:node && node node_modules/vitest/vitest.mjs run --config apps/backend/vitest.config.ts",
-    "test:sqlite-bun": "bun test apps/backend/test/unit/lib/sqlite-parity",
+    "test:bun": "bun test apps/backend/test/unit/lib/sqlite-parity apps/backend/test/unit/services/pty-parity",
     "test:backend:watch": "node node_modules/vitest/vitest.mjs --config apps/backend/vitest.config.ts",
     "cli:backend": "bun apps/backend/cli.ts",
     "test:agent-server": "node node_modules/vitest/vitest.mjs run --config apps/agent-server/vitest.config.ts",

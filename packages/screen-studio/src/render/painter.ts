@@ -9,6 +9,8 @@
  * costs 25–30 ms of main-thread time per frame — too much for a host process
  * that also serves an app.
  */
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import type { Camera } from "../direct/shots.js";
 import type { BackgroundStyle, CursorStyle } from "../direct/presets.js";
 import type { CursorFrame, TouchFrame } from "../direct/cursor.js";
@@ -24,7 +26,14 @@ type Context = import("@napi-rs/canvas").SKRSContext2D;
 let canvasModule: Promise<CanvasModule | null> | null = null;
 
 export function loadCanvas(): Promise<CanvasModule | null> {
-  canvasModule ??= import("@napi-rs/canvas").then(
+  // Deus's compiled runtime finds no package by name, so it names the folder.
+  // Without the module: null, and a render without pointer, zoom or chrome.
+  const natives = process.env.DEUS_NATIVE_MODULES;
+  canvasModule ??= (
+    natives
+      ? Promise.resolve().then(() => createRequire(join(natives, "_"))("@napi-rs/canvas"))
+      : import("@napi-rs/canvas")
+  ).then(
     (mod) => ((mod as { default?: CanvasModule }).default ?? mod) as CanvasModule,
     () => null
   );

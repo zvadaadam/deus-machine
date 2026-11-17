@@ -5,7 +5,7 @@
  * deus-runtime executable). This one file runs under both runners:
  *
  *   bun run test:backend        vitest on Node → better-sqlite3
- *   bun run test:sqlite-bun     bun test       → bun:sqlite
+ *   bun run test:bun            bun test       → bun:sqlite
  *
  * `bun test` maps imports from "vitest" to its own runner, so the file needs
  * no second entry. It opens databases only through `openSqliteDatabase` and
