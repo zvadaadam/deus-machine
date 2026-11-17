@@ -9,8 +9,10 @@
 //   backend.close();
 import { WebSocket } from "ws";
 
-export async function connectBackend(url, { timeoutMs = 30_000 } = {}) {
+export async function connectBackend(url, { timeoutMs = 30_000, token } = {}) {
   const socket = new WebSocket(`${url.replace(/^http/, "ws").replace(/\/$/, "")}/ws`);
+  // A paired device on the local network names its grant first.
+  if (token) socket.once("open", () => socket.send(JSON.stringify({ type: "initialize", token })));
   const waiting = new Map();
   let next = 0;
 

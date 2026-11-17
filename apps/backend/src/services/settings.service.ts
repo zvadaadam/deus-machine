@@ -7,7 +7,15 @@ import { PreferencesFile } from "../lib/schemas";
 // Derived from DB_PATH so tests that set DATABASE_PATH get sandboxing for free.
 const PREFS_PATH = path.join(path.dirname(DB_PATH), "preferences.json");
 
+// Read from disk once; every write below clears it. Callers get their own copy.
+let cached: Record<string, any> | null = null;
+
 function readPreferences(): Record<string, any> {
+  cached ??= loadPreferences();
+  return structuredClone(cached);
+}
+
+function loadPreferences(): Record<string, any> {
   if (!fs.existsSync(PREFS_PATH)) {
     return {};
   }
@@ -36,6 +44,7 @@ function writePreferences(settings: Record<string, any>): void {
   const tmpPath = PREFS_PATH + ".tmp";
   fs.writeFileSync(tmpPath, JSON.stringify(settings, null, 2));
   fs.renameSync(tmpPath, PREFS_PATH);
+  cached = null;
 }
 
 /**

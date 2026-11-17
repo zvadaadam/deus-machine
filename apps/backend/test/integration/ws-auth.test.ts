@@ -56,10 +56,10 @@ import { createApp } from "../../src/app";
 import {
   _clearAll as clearAuthState,
   createDeviceToken,
+  revokeDevice,
 } from "../../src/services/remote-auth.service";
-import { invalidateRemoteGateCache } from "../../src/middleware/remote-gate";
 import { closeAll as closeAllWs, getConnection } from "../../src/services/ws.service";
-import { saveSetting, PREFS_PATH } from "../../src/services/settings.service";
+import { saveSetting } from "../../src/services/settings.service";
 
 let server: ReturnType<typeof serve>;
 let port: number;
@@ -68,7 +68,6 @@ let app: ReturnType<typeof createApp>["app"];
 /** Enable remote access in preferences. */
 function enableRemoteAccess() {
   saveSetting("remote_access_enabled", true);
-  invalidateRemoteGateCache();
 }
 
 /** Create a device token directly (bypasses pairing for WS-focused tests). */
@@ -124,12 +123,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   clearAuthState();
-  invalidateRemoteGateCache();
   testDb.exec("DELETE FROM paired_devices");
-  // Settings live in preferences.json now (settings table was removed)
-  try {
-    fs.unlinkSync(PREFS_PATH);
-  } catch {}
   enableRemoteAccess();
 });
 
@@ -195,7 +189,7 @@ describe("WebSocket: token validation via real hash path", () => {
     const token = createTestToken();
 
     // Use non-public path to exercise auth middleware's token validation
-    const res = await app.request("/api/settings", {
+    const res = await app.request("/api/relay/status", {
       headers: {
         "x-forwarded-for": "203.0.113.50",
         authorization: `Bearer ${token}`,
@@ -204,7 +198,7 @@ describe("WebSocket: token validation via real hash path", () => {
     expect(res.status).toBe(200);
 
     // Wrong token fails
-    const res2 = await app.request("/api/settings", {
+    const res2 = await app.request("/api/relay/status", {
       headers: {
         "x-forwarded-for": "203.0.113.50",
         authorization: "Bearer wrong-token",
@@ -287,17 +281,13 @@ describe("WebSocket: connection lifecycle", () => {
       });
 
       const closed = once(remote, "close");
-      const response = await fetch(
-        `http://127.0.0.1:${port}/api/remote-auth/devices/${device.id}`,
-        { method: "DELETE" }
-      );
-      expect(response.status).toBe(200);
+      expect(revokeDevice(device.id)).toBe(true);
       const [code, reason] = await closed;
       expect(code).toBe(4001);
       expect(String(reason)).toBe("Device access revoked");
       expect(getConnection(connected.connectionId)).toBeUndefined();
 
-      const revokedRequest = await app.request("/api/settings", {
+      const revokedRequest = await app.request("/api/relay/status", {
         headers: { "x-test-remote": "1", authorization: `Bearer ${token}` },
       });
       expect(revokedRequest.status).toBe(401);

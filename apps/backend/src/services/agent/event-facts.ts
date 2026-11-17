@@ -23,6 +23,7 @@ import { isUnknownEvent, type AnyLifecycleEvent } from "@shared/protocol-types";
 import {
   persistAgentSessionId,
   persistSessionError,
+  persistSessionWorking,
   type TurnOutcomeWrite,
   type WriteResult,
 } from "./persistence";
@@ -47,7 +48,7 @@ export interface SessionFacts {
 
 /** A session-column write `applySessionFacts` performed. */
 export interface SessionFactWrite {
-  fact: "agent-session-id" | "session-error";
+  fact: "agent-session-id" | "session-error" | "session-working";
   result: WriteResult<void>;
 }
 
@@ -137,15 +138,22 @@ export function applySessionFacts(
       ];
     })
     .with({ type: "turn.started" }, (e): SessionFactWrite[] => {
-      // Nothing to persist: status='working' was written optimistically by the
-      // send command. Keep the admission mirror truthful on the replay path too
-      // (state rebuilt after a backend restart has no turnId).
+      // A turn admitted here is already 'working' (the send wrote it); one
+      // started elsewhere (another device's cloud turn) is not until now. Keep
+      // the admission mirror truthful on the replay path too (state rebuilt
+      // after a backend restart has no turnId). A replayed turn that already
+      // ended leaves the status alone.
+      const startedElsewhere =
+        facts.turnId !== e.turnId &&
+        conversation.turns.find((turn) => turn.turnId === e.turnId)?.status !== "ended";
       facts.turnId = e.turnId;
       // A turn deus did NOT admit via beginTurn (replay, engine-initiated)
       // would otherwise inherit the previous turn's dedupe flag, and its
       // terminal error message would be dropped as "already reported".
       facts.errorReported = false;
-      return [];
+      return startedElsewhere
+        ? [{ fact: "session-working", result: persistSessionWorking(sessionId) }]
+        : [];
     })
     .with({ type: "error" }, (e): SessionFactWrite[] => {
       // A recoverable error means the turn CONTINUES (retry/backoff in

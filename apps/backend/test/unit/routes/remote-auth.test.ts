@@ -28,14 +28,12 @@ const mockListDevices = vi.fn<(...args: any[]) => any>(() => [
     created_at: "2025-01-01",
   },
 ]);
-const mockRevokeDevice = vi.fn<(...args: any[]) => any>(() => true);
 
 vi.mock("../../../src/services/remote-auth.service", () => ({
   generatePairCode: (...args: unknown[]) => mockGeneratePairCode(...args),
   authorizePairing: (...args: unknown[]) => mockAuthorizePairing(...args),
   createDeviceToken: (...args: unknown[]) => mockCreateDeviceToken(...args),
   listDevices: (...args: unknown[]) => mockListDevices(...args),
-  revokeDevice: (...args: unknown[]) => mockRevokeDevice(...args),
 }));
 
 import authRoutes from "../../../src/routes/remote-auth";
@@ -43,7 +41,6 @@ import authRoutes from "../../../src/routes/remote-auth";
 beforeEach(() => {
   vi.clearAllMocks();
   mockAuthorizePairing.mockReturnValue(null);
-  mockRevokeDevice.mockReturnValue(true);
 });
 
 describe("POST /remote-auth/pair", () => {
@@ -126,35 +123,6 @@ describe("GET /remote-auth/devices", () => {
 
   it("rejects from remote IP", async () => {
     const res = await authRoutes.request("/remote-auth/devices", {
-      headers: { "x-forwarded-for": "192.168.1.50" },
-    });
-    expect(res.status).toBe(403);
-  });
-});
-
-describe("DELETE /remote-auth/devices/:id", () => {
-  it("revokes device from localhost", async () => {
-    const res = await authRoutes.request("/remote-auth/devices/dev1", {
-      method: "DELETE",
-      headers: { "x-forwarded-for": "127.0.0.1" },
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.success).toBe(true);
-  });
-
-  it("returns 404 when device not found", async () => {
-    mockRevokeDevice.mockReturnValue(false);
-    const res = await authRoutes.request("/remote-auth/devices/nonexistent", {
-      method: "DELETE",
-      headers: { "x-forwarded-for": "127.0.0.1" },
-    });
-    expect(res.status).toBe(404);
-  });
-
-  it("rejects from remote IP", async () => {
-    const res = await authRoutes.request("/remote-auth/devices/dev1", {
-      method: "DELETE",
       headers: { "x-forwarded-for": "192.168.1.50" },
     });
     expect(res.status).toBe(403);

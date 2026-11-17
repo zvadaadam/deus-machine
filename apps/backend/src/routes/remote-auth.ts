@@ -3,7 +3,6 @@
 // POST /remote-auth/pair — public, rate-limited, exchanges code for token
 // POST /remote-auth/generate-pair-code — localhost-only, creates a new code
 // GET /remote-auth/devices — localhost-only, lists paired devices
-// DELETE /remote-auth/devices/:id — localhost-only, revokes a device
 
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
@@ -13,7 +12,6 @@ import {
   authorizePairing,
   createDeviceToken,
   listDevices,
-  revokeDevice,
 } from "../services/remote-auth.service";
 import { isLocalhost, getClientIp } from "../lib/network";
 
@@ -69,16 +67,6 @@ app.post("/remote-auth/generate-pair-code", localhostOnly, (c) => {
 // GET /remote-auth/devices — localhost-only
 app.get("/remote-auth/devices", localhostOnly, (c) => {
   return c.json({ devices: listDevices() });
-});
-
-// DELETE /remote-auth/devices/:id — localhost-only
-app.delete("/remote-auth/devices/:id", localhostOnly, (c) => {
-  const id = c.req.param("id");
-  const deleted = revokeDevice(id);
-  if (!deleted) {
-    return c.json({ error: "Device not found" }, 404);
-  }
-  return c.json({ success: true });
 });
 
 export default app;

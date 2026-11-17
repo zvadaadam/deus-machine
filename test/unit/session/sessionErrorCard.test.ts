@@ -44,7 +44,7 @@ describe("a send the cloud refused", () => {
     expect(html).not.toContain("PROVIDER_ACCOUNT_RECONNECT_REQUIRED");
     expect(html).not.toContain("MESSAGE_SEND_FAILED");
     expect(html).toContain("Open AI Providers");
-    expect(html).not.toContain("Retry in new chat");
+    expect(html).not.toContain("New chat");
   });
 
   it("keeps the retry for a refusal with no way out, its sentence whole", () => {
@@ -53,7 +53,7 @@ describe("a send the cloud refused", () => {
       "TURN_ID_IN_USE: This turn was admitted concurrently; retry with a new turn ID."
     );
     expect(html).toContain("This turn was admitted concurrently; retry with a new turn ID.");
-    expect(html).toContain("Retry in new chat");
+    expect(html).toContain("New chat");
     expect(html).not.toContain("Open AI Providers");
   });
 
