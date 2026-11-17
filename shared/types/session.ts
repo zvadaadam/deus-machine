@@ -4,7 +4,7 @@
  */
 
 // Canonical enum types — defined as Zod schemas in shared/enums.ts,
-// imported here for local use and re-exported for backwards compat.
+// imported here for local use and re-exported for the session types' importers.
 import type { MessageRole, SessionStatus } from "../enums";
 import type { ConversationTurn, Part, UnknownPart } from "../protocol-types";
 import type { TurnProviderCredentialSource } from "@deus-hq/api";

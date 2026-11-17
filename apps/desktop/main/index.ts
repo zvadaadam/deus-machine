@@ -99,7 +99,7 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // ESM preload requires sandbox: false (package.json "type": "module")
-      webviewTag: true, // Phase 1 of WebContentsView→<webview> migration — enables <webview> for guest pages
+      webviewTag: true, // the Browser tab renders guest pages in <webview>
     },
   });
 
