@@ -141,9 +141,16 @@ function verifyPackagedLayout(context) {
     platform === "linux"
       ? `canvas-linux-${arch}-gnu/skia.linux-${arch}-gnu.node`
       : `canvas-darwin-${arch}/skia.darwin-${arch}.node`;
-  const executables = [...BUNDLED_BINARIES, ...codexHelpers(runtimeKey)].map((name) =>
-    path.join(binDir, name)
-  );
+  // The app's own executable: Contents/MacOS/<productFilename>, or Linux's
+  // <executableName> beside resources/ (electron-builder's LinuxPackager names it).
+  const appExecutable =
+    platform === "darwin"
+      ? path.join(resourcesDir, "..", "MacOS", context.packager?.appInfo?.productFilename ?? "Deus")
+      : path.join(resourcesDir, "..", context.packager?.executableName ?? "deus");
+  const executables = [
+    appExecutable,
+    ...[...BUNDLED_BINARIES, ...codexHelpers(runtimeKey)].map((name) => path.join(binDir, name)),
+  ];
   for (const file of [
     ...executables,
     path.join(resourcesDir, "app.asar.unpacked", "node_modules", "@napi-rs", canvas),

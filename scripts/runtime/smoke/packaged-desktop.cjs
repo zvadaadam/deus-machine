@@ -110,6 +110,8 @@ function requiredLogPatterns(binDir) {
     /\[backend\] \[BACKEND_PORT\]\d+/,
     /\[main\] Backend started on port: \d+/,
     /\[main\] Window created/,
+    // The renderer's HTML loaded, its script ran and the preload bridge answered.
+    /\[main\] Window page ready/,
   ];
 }
 

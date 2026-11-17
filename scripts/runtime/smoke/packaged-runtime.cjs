@@ -1,7 +1,8 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+const { execFile, spawnSync } = require("node:child_process");
+const { promisify } = require("node:util");
 const { BUNDLED_BINARIES } = require("../electron-builder-after-pack.cjs");
 const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
@@ -76,6 +77,11 @@ async function smokeBackendCommands(port) {
     return;
   }
 
+  // The first simctl call on a fresh machine starts CoreSimulator, which can outlast the backend's 30 s.
+  await promisify(execFile)("xcrun", ["simctl", "list", "devices", "-j"], {
+    timeout: 120_000,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   const answer = await readFromBackend(port, "simListDevices", {}, 45_000);
   if (!Array.isArray(answer?.devices)) {
     throw new Error(`simListDevices returned unexpected payload: ${JSON.stringify(answer)}`);
