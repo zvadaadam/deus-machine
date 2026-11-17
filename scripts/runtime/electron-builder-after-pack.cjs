@@ -127,101 +127,6 @@ function pruneCanvasRuntimeBinaries(context) {
   return { removed, kept };
 }
 
-function fileArch(filePath) {
-  const output = execFileSync("file", [filePath], {
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const description = output.includes(":") ? output.slice(output.indexOf(":") + 1) : output;
-  if (/\barm64\b/.test(description)) return "arm64";
-  if (/\bx86[_-]64\b/.test(description)) return "x64";
-  return null;
-}
-
-function bunNodeTargetVersion() {
-  return execFileSync("bun", ["-e", "console.log(process.version.replace(/^v/, ''))"], {
-    cwd: PROJECT_ROOT,
-    encoding: "utf8",
-    timeout: 20_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-}
-
-function installBetterSqlitePrebuild(packageRoot, targetArch) {
-  const prebuildInstall = path.join(PROJECT_ROOT, "node_modules", "prebuild-install", "bin.js");
-  fs.rmSync(path.join(packageRoot, "build"), { recursive: true, force: true });
-  const result = spawnSync(
-    process.execPath,
-    [
-      prebuildInstall,
-      "--runtime",
-      "node",
-      "--target",
-      bunNodeTargetVersion(),
-      "--arch",
-      targetArch,
-      "--platform",
-      process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM || process.platform,
-    ],
-    {
-      cwd: packageRoot,
-      encoding: "utf8",
-      timeout: 20_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
-  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
-  if (result.error) {
-    throw new Error(
-      `Failed to install packaged better-sqlite3 ${process.platform}-${targetArch} prebuild: ${
-        result.error.code || result.error.message
-      }${output ? `\n${output}` : ""}`
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Failed to install packaged better-sqlite3 ${process.platform}-${targetArch} prebuild: ${output}`
-    );
-  }
-}
-
-function prepareBetterSqliteRuntimeBinding(context) {
-  if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
-    return { updated: false };
-  }
-
-  const targetArch = ARCH_BY_BUILDER_VALUE.get(context.arch);
-  if (!targetArch) return { updated: false };
-
-  const resourcesDir = context.resourcesDir ?? resourcesDirForContext(context);
-  const packageRoot = path.join(
-    resourcesDir,
-    "app.asar.unpacked",
-    "node_modules",
-    "better-sqlite3"
-  );
-  const nativeBinding = path.join(packageRoot, "build", "Release", "better_sqlite3.node");
-  if (!fs.existsSync(packageRoot)) return { updated: false };
-  if (fs.existsSync(nativeBinding) && fileArch(nativeBinding) === targetArch) {
-    return { updated: false };
-  }
-
-  console.log(`[runtime] installing better-sqlite3 prebuild for ${context.electronPlatformName}-${targetArch}`);
-  const previousPlatform = process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM;
-  process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM = context.electronPlatformName;
-  try {
-    installBetterSqlitePrebuild(packageRoot, targetArch);
-  } finally {
-    if (previousPlatform === undefined) delete process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM;
-    else process.env.DEUS_BETTER_SQLITE_PREBUILD_PLATFORM = previousPlatform;
-  }
-  if (!fs.existsSync(nativeBinding) || fileArch(nativeBinding) !== targetArch) {
-    throw new Error(`better-sqlite3 prebuild did not produce ${context.electronPlatformName}-${targetArch} binding`);
-  }
-  return { updated: true };
-}
-
 function assertExecutable(filePath, label) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing packaged ${label}: ${filePath}`);
@@ -599,7 +504,6 @@ function verifyPackagedRuntimeManifests(binDir, targetArchOrRuntimeKey, options 
 function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeKey, options = {}) {
   const unpackedNodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
   const requiredFiles = [
-    ["better-sqlite3 package", path.join(unpackedNodeModules, "better-sqlite3", "package.json")],
     ["node-pty package", path.join(unpackedNodeModules, "node-pty", "package.json")],
     [
       "@napi-rs/canvas package",
@@ -617,13 +521,6 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
   const expectedFileFormat = runtimeKey ? FILE_FORMAT_BY_RUNTIME_KEY.get(runtimeKey) : undefined;
 
   if (runtimeKey && targetPlatform && targetArch) {
-    const betterSqliteNative = path.join(
-      unpackedNodeModules,
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node"
-    );
     const nodePtyPackageRoot = path.join(unpackedNodeModules, "node-pty");
     const nodePtyPrebuildFiles = [
       path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "pty.node"),
@@ -633,10 +530,6 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
         path.join(nodePtyPackageRoot, "prebuilds", runtimeKey, "spawn-helper")
       );
     }
-    requiredFiles.push([
-      `better-sqlite3 native binding for ${runtimeKey}`,
-      betterSqliteNative,
-    ]);
     const canvasNativePackage =
       targetPlatform === "linux" ? `canvas-linux-${targetArch}-gnu` : `canvas-darwin-${targetArch}`;
     const canvasNativeFile =
@@ -652,7 +545,6 @@ function verifyPackagedRuntimeExternalModules(resourcesDir, targetArchOrRuntimeK
       path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile),
     ]);
     nativePayloads.push(
-      [`better-sqlite3 native binding for ${runtimeKey}`, betterSqliteNative],
       [`node-pty native binding for ${runtimeKey}`, nodePtyPrebuildFiles[0]],
       [`@napi-rs/canvas native binding for ${runtimeKey}`, path.join(unpackedNodeModules, "@napi-rs", canvasNativePackage, canvasNativeFile)]
     );
@@ -970,7 +862,6 @@ module.exports = async function afterPack(context) {
   ensureLinuxNodePtyRuntimePrebuild(context);
   pruneNodePtyRuntimeBinaries(context);
   pruneCanvasRuntimeBinaries(context);
-  prepareBetterSqliteRuntimeBinding(context);
   await verifyPackagedAgentClis(context, {
     runVersionChecks: false,
     verifyManifestHashes: true,
@@ -983,7 +874,6 @@ module.exports.ensureCanvasRuntimePackage = ensureCanvasRuntimePackage;
 module.exports.ensureLinuxNodePtyRuntimePrebuild = ensureLinuxNodePtyRuntimePrebuild;
 module.exports.pruneNodePtyRuntimeBinaries = pruneNodePtyRuntimeBinaries;
 module.exports.pruneCanvasRuntimeBinaries = pruneCanvasRuntimeBinaries;
-module.exports.prepareBetterSqliteRuntimeBinding = prepareBetterSqliteRuntimeBinding;
 module.exports.verifyPackagedRuntimeManifests = verifyPackagedRuntimeManifests;
 module.exports.verifyPackagedRuntimeExternalModules = verifyPackagedRuntimeExternalModules;
 module.exports.verifyPackagedAgentClis = verifyPackagedAgentClis;
