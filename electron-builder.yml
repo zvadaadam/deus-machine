@@ -18,6 +18,17 @@ files:
   # (DEUS_NATIVE_MODULES). electron-builder applies only the exclusions here
   # to node_modules, so the allowlist is one.
   - "!node_modules/!(@napi-rs)/**"
+# The installed app runs only its own app.asar, as checked against the hash in
+# its signed Info.plist, and nothing can run it as Node, pass Node flags or open
+# an inspector. The packaged backend is deus-runtime, never Electron as Node.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+  # The window is served from app://deus, never file://.
+  grantFileProtocolExtraPrivileges: false
 asarUnpack:
   - "resources/**"
   - "node_modules/@napi-rs/canvas/**"
