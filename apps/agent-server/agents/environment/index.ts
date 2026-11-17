@@ -29,6 +29,11 @@ export function applyShellEnvironment(): void {
       if (process.env[key] === undefined) process.env[key] = value;
     }
   } catch (error) {
-    console.error("Failed to load shell environment, continuing without it:", error);
+    // Never the error itself: a shell killed at its timeout leaves what `env`
+    // had already printed on it.
+    const { code, signal } = error as { code?: string; signal?: string };
+    console.error(
+      `Failed to load shell environment (${code ?? signal ?? "error"}), continuing without it`
+    );
   }
 }
