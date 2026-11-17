@@ -30,8 +30,6 @@ import {
   Terminal,
   MousePointer2,
   Cookie,
-  Check,
-  Loader2,
   Trash2,
   Camera,
   Monitor,
@@ -117,13 +115,6 @@ function areBoundsEqual(a: Bounds | null, b: Bounds | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
-}
-
-interface InstalledBrowser {
-  name: string;
-  keychain_service: string;
-  cookie_db_path: string;
-  available: boolean;
 }
 
 interface BrowserPanelProps {
@@ -820,28 +811,7 @@ export function BrowserPanel({
       .catch((err) => handleAddLog(activeTab.id, "error", `DevTools toggle failed: ${err}`));
   }, [activeTab, handleUpdateTab, handleAddLog]);
 
-  // --- Cookie Sync ---
-
-  const [cookieBrowsers, setCookieBrowsers] = useState<InstalledBrowser[]>([]);
-  const [cookieSyncing, setCookieSyncing] = useState<string | null>(null); // browser name being synced
-  const [lastSyncResult, setLastSyncResult] = useState<{ browser: string; count: number } | null>(
-    null
-  );
-
-  // Cookie import requires macOS Keychain handlers (not yet implemented).
-  // The dropdown degrades gracefully to "No browsers detected" until wired up.
-  const handleCookieDropdownOpen = useCallback(() => {
-    setCookieBrowsers([]);
-  }, []);
-
-  // Cookie sync requires macOS Keychain handlers (not yet implemented).
-  const handleCookieSync = useCallback(
-    (_browserName: string) => {
-      if (!activeTab?.currentUrl) return;
-      handleAddLog(activeTab.id, "warn", "Cookie sync not yet available");
-    },
-    [activeTab, handleAddLog]
-  );
+  // --- Site data ---
 
   /** Clear cookies by navigating to about:blank and back (resets WKHTTPCookieStore) */
   const handleClearCookies = useCallback(() => {
@@ -851,7 +821,6 @@ export function BrowserPanel({
     if (!handle) return;
 
     handleAddLog(activeTab.id, "info", "Clearing site data...");
-    setLastSyncResult(null);
 
     // Navigate to blank page (clears cookie association), then back
     handle.navigateToUrl("about:blank");
@@ -1045,21 +1014,17 @@ export function BrowserPanel({
             </Button>
           </IconTooltip>
 
-          <DropdownMenu onOpenChange={(open) => open && handleCookieDropdownOpen()}>
-            <IconTooltip label="Import cookies from browser">
+          <DropdownMenu>
+            <IconTooltip label="Site data">
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon-xs"
                   className="text-text-muted hover:text-text-secondary aria-pressed:bg-primary/10 aria-pressed:text-primary aria-pressed:hover:text-primary"
-                  disabled={!activeTab?.currentUrl || !!cookieSyncing}
-                  aria-label="Import cookies from browser"
+                  disabled={!activeTab?.currentUrl}
+                  aria-label="Site data"
                 >
-                  {cookieSyncing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Cookie className="h-3.5 w-3.5" />
-                  )}
+                  <Cookie className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
             </IconTooltip>
@@ -1071,37 +1036,6 @@ export function BrowserPanel({
                 </DropdownMenuLabel>
               )}
 
-              <DropdownMenuLabel className="text-xs">Import Cookies</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {cookieBrowsers.length === 0 ? (
-                <DropdownMenuItem disabled className="text-xs">
-                  No browsers detected
-                </DropdownMenuItem>
-              ) : (
-                cookieBrowsers.map((b) => (
-                  <DropdownMenuItem
-                    key={b.name}
-                    disabled={!b.available || !!cookieSyncing}
-                    className="text-xs"
-                    onClick={() => handleCookieSync(b.name)}
-                  >
-                    <span className="flex-1">{b.name}</span>
-                    {!b.available && (
-                      <span className="text-muted-foreground text-2xs">Not installed</span>
-                    )}
-                    {b.available && cookieSyncing === b.name && (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    )}
-                    {b.available && !cookieSyncing && lastSyncResult?.browser === b.name && (
-                      <span className="text-success text-2xs">{lastSyncResult.count} synced</span>
-                    )}
-                    {b.available && !cookieSyncing && lastSyncResult?.browser !== b.name && (
-                      <Check className="text-muted-foreground/40 h-3 w-3" />
-                    )}
-                  </DropdownMenuItem>
-                ))
-              )}
-
               {/* Clear cookies option */}
               {activeTab?.currentUrl && (
                 <>
@@ -1109,7 +1043,6 @@ export function BrowserPanel({
                   <DropdownMenuItem
                     className="text-destructive text-xs"
                     onClick={handleClearCookies}
-                    disabled={!!cookieSyncing}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     <span>Clear Site Data</span>

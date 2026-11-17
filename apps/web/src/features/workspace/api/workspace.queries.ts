@@ -205,11 +205,8 @@ export function useRepoPrs(repoId: string | null) {
 }
 
 /**
- * Fetch remote branches for a repository.
+ * Fetch a repository's branches: origin's, or its own when it has no origin.
  * Used by BranchSelector (welcome screen + Create PR).
- *
- * Currently remote-only (refs/remotes/origin/*). Local-only branches
- * are not included yet — backend endpoint needs to be updated.
  *
  * The request rejects immediately if the WS isn't connected yet (common
  * during app startup and Vite HMR). We retry with exponential backoff

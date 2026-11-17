@@ -175,8 +175,10 @@ export function SkillDetail({
           </AsideGroup>
           <AsideGroup title="Used by">
             <span className="text-text-tertiary leading-relaxed">
-              Claude and Codex, in every project. The agent loads it when a task fits its
-              description.
+              {view.cloud
+                ? "Claude and Codex, on this computer and in the cloud."
+                : "Claude and Codex on this computer, in every project."}{" "}
+              The agent loads it when a task fits its description.
             </span>
           </AsideGroup>
           {content.data?.files && content.data.files.length > 1 && (

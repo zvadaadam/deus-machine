@@ -115,14 +115,17 @@ import {
   getRelayStatus,
   reconcileRelay,
 } from "../../../src/services/relay.service";
-import { _clearAll, generatePairCode } from "../../../src/services/remote-auth.service";
+import {
+  _clearAll,
+  generatePairCode,
+  revokeDevice,
+} from "../../../src/services/remote-auth.service";
 import {
   addConnection,
   closeAll,
   getConnection,
   handleProtocolMessage,
 } from "../../../src/services/ws.service";
-import authRoutes from "../../../src/routes/remote-auth";
 import { MachineRemovedError } from "../../../src/services/remote-machine.service";
 import { AssistantRefusedError } from "../../../src/services/assistants/token";
 import { connectedDeviceIds } from "../../../src/services/ws.service";
@@ -566,11 +569,7 @@ describe("device revocation", () => {
     // No grant has been added or removed yet.
     expect(transport.invalidate).not.toHaveBeenCalled();
 
-    const response = await authRoutes.request("/remote-auth/devices/phone", {
-      method: "DELETE",
-      headers: { "x-forwarded-for": "127.0.0.1" },
-    });
-    expect(response.status).toBe(200);
+    expect(revokeDevice("phone")).toBe(true);
     // The device left the list: the clients showing it are sent it again, once.
     expect(transport.invalidate.mock.calls).toEqual([[["pairedDevices"]]]);
     expect(getConnection(directId)).toBeUndefined();

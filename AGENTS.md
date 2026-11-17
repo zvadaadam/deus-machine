@@ -150,7 +150,9 @@ share one cache projection. Agent folds and cloud-direct channels belong to that
 same cache and survive reconnects (only disposal drops them). Reconnect restores
 reads and streams; it never resends writes. A lost acknowledgment is an
 `unknown-outcome`, not permission to retry a write. Correlated ping/pong probes detect silent
-connections (30s interval, 10s timeout). When a relay host is replaced,
+connections (30s interval, 10s timeout). The server pings each socket every 30s
+(`{ "type": "ping" }`) and closes one that has sent nothing (a `pong` or any frame)
+for 40s. When a relay host is replaced,
 already-authorized viewers reconnect and authorize again before their
 subscriptions resume; a connected tunnel alone is not readiness.
 
@@ -743,8 +745,9 @@ Buttons reuse `radius-lg` (10px circular fallback, 12.5px continuous corners);
 circular controls retain `radius-full`. See `design/controls.md`.
 
 Working notes for the Pencil editor: set variables before nodes; the canvas has no
-autosave, so save with `osascript -e 'tell application "Pen" to activate' -e 'tell
-application "System Events" to keystroke "s" using command down'`; layout/render goes
+autosave, so save with the Pencil MCP's `save` tool, and always before switching
+branches (Pen keeps the open document in memory and writes it back over the
+checked-out one); layout/render goes
 stale after long editing sessions — save and relaunch Pen to get accurate screenshots. A
 component instance resolves its theme once per document, so light-mode sheets are built
 from primitives rather than instances.

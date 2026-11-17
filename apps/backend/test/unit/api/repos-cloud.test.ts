@@ -294,7 +294,7 @@ describe("repoBranches for a project with no folder", () => {
   it("still reads local git for a project with a folder", async () => {
     insert("local", "/Users/me/rocket", "https://github.com/acme/rocket");
     m.execFile.mockImplementation((_cmd, _args, _opts, cb) =>
-      cb(null, { stdout: "origin/main\norigin/feat\n", stderr: "" })
+      cb(null, { stdout: "main\nfeat\n", stderr: "" })
     );
 
     const answer = await run(api.repoBranches, { repoId: "local" });

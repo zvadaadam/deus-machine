@@ -1,8 +1,6 @@
 import { timingSafeEqual } from "crypto";
 import { Hono } from "hono";
-import * as api from "@shared/api/settings";
-import { readAgentAuth, writeSetting } from "../api/settings";
-import { getAllSettings } from "../services/settings.service";
+import { readAgentAuth } from "../api/settings";
 import { CloudCredentialsBody, parseBody } from "../lib/schemas";
 import { cloudOrg, setCloudRuntimeCredentials } from "../services/agent/cloud/config";
 import { reconcileRelay } from "../services/relay.service";
@@ -22,16 +20,6 @@ const app = new Hono();
 
 // Preferences, agent configuration and the local agents are operations: see
 // api/settings.ts. What stays here is still fetched over HTTP, by whom each says.
-
-// The remote-access test stack (test/e2e/remote-access) checks who may read the
-// preferences and turns remote access on and off over HTTP.
-app.get("/settings", (c) => c.json(getAllSettings()));
-
-app.post("/settings", async (c) => {
-  const { key, value } = parseBody(api.saveSetting.input, await c.req.json());
-  writeSetting(key, value);
-  return c.json({ success: true, key, value });
-});
 
 // `deus status` (apps/cli) lists each local agent's CLI and login.
 app.get("/settings/agent-auth", async (c) => c.json(await readAgentAuth()));
