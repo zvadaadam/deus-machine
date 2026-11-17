@@ -131,13 +131,19 @@ export function registerNativeHandlers(): void {
   // Folder picker
   // -------------------------------------------------------------------------
 
+  // Since Electron 43 a dialog with no defaultPath opens in Downloads rather
+  // than where the person last was, so this remembers that place itself.
+  let lastPickedParent: string | undefined;
   ipcMain.handle("native:pickFolder", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (!win) return null;
     const result = await dialog.showOpenDialog(win, {
+      defaultPath: lastPickedParent ?? app.getPath("home"),
       properties: ["openDirectory", "createDirectory"],
     });
-    return result.canceled ? null : result.filePaths[0];
+    if (result.canceled || !result.filePaths[0]) return null;
+    lastPickedParent = path.dirname(result.filePaths[0]);
+    return result.filePaths[0];
   });
 
   // -------------------------------------------------------------------------

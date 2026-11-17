@@ -92,10 +92,11 @@ check(
   "bun run setup"
 );
 
-// Electron's postinstall downloads the binary and writes path.txt last. An
-// install interrupted mid-download leaves a partial dist/ that Bun treats as
-// done, and `bun run dev` then fails with "Electron uninstall". Optional:
-// web-only and cloud setups (`bun run dev:web`) never need the binary.
+// Electron (42 and later) has no postinstall: `bun run dev` downloads the
+// binary through its install.js, which writes path.txt last. A download cut
+// short leaves no path.txt, and electron-vite then fails with "Electron
+// uninstall". Optional: web-only and cloud setups (`bun run dev:web`) never
+// need the binary.
 check(
   "optional",
   "Electron binary downloaded (bun run dev)",

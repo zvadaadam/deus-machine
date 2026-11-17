@@ -309,6 +309,45 @@ describe("desktop backend process", () => {
     expect(options.env.CDP_PORT).toBe(CDP_PORT);
   });
 
+  it("starts the dev backend on the system Node, not Electron", async () => {
+    mockApp.isPackaged = false;
+    const root = mkdtempSync(path.join(os.tmpdir(), "deus-desktop-dev-node-"));
+    tempRoots.push(root);
+    const emptyDir = path.join(root, "empty");
+    const nodeDir = path.join(root, "node-bin");
+    mkdirSync(emptyDir);
+    mkdirSync(nodeDir);
+    const nodePath = path.join(nodeDir, "node");
+    writeFileSync(nodePath, "#!/bin/sh\n");
+    chmodSync(nodePath, 0o755);
+    process.env.DEUS_BUNDLED_BIN_DIR = emptyDir;
+    process.env.PATH = [emptyDir, nodeDir].join(path.delimiter);
+    delete process.env.ELECTRON_RUN_AS_NODE;
+    const child = createFakeChild();
+    mockSpawn.mockReturnValue(child);
+
+    const starting = spawnBackend();
+    child.stdout.write("[BACKEND_PORT]45678\n");
+    await starting;
+
+    const [command, args, options] = mockSpawn.mock.calls[0];
+    expect(command).toBe(nodePath);
+    expect(args).toHaveLength(1);
+    expect(args[0]).toMatch(/apps[\\/]backend[\\/]server\.cjs$/);
+    expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+  });
+
+  it("says what to install when the dev backend finds no node", async () => {
+    mockApp.isPackaged = false;
+    const root = mkdtempSync(path.join(os.tmpdir(), "deus-desktop-dev-node-"));
+    tempRoots.push(root);
+    process.env.DEUS_BUNDLED_BIN_DIR = root;
+    process.env.PATH = root;
+
+    await expect(spawnBackend()).rejects.toThrow(/no `node` is on the PATH\. Install Node 22/);
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
   it("starts packaged Linux backend through bundled deus-runtime", async () => {
     Object.defineProperty(process, "platform", {
       configurable: true,
