@@ -29,15 +29,17 @@ describe("getShellEnvironment", () => {
     expect(env.HOME).toBe("/home/test");
   });
 
-  it("strips ANTHROPIC_API_KEY from environment", async () => {
+  it("strips sign-ins that would replace the accounts Deus manages", async () => {
     mockExecFileSync.mockReturnValue(
-      "_SHELL_ENV_DELIMITER_ANTHROPIC_API_KEY=sk-123\nPATH=/usr/bin\n_SHELL_ENV_DELIMITER_"
+      "_SHELL_ENV_DELIMITER_ANTHROPIC_API_KEY=sk-123\nANTHROPIC_AUTH_TOKEN=t\nGH_TOKEN=ghp_1\nPATH=/usr/bin\n_SHELL_ENV_DELIMITER_"
     );
 
     const { getShellEnvironment } = await importFresh();
     const env = getShellEnvironment();
 
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(env.GH_TOKEN).toBeUndefined();
     expect(env.PATH).toBe("/usr/bin");
   });
 
