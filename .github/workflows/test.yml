@@ -113,8 +113,6 @@ jobs:
 
       - name: Package macOS app directory
         run: bun run package:mac:dir -- --arch "$MAC_BUILDER_ARCH"
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Smoke packaged runtime executable
         run: bun run smoke:packaged-runtime -- --app "$MAC_APP_PATH"

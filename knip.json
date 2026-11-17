@@ -19,7 +19,7 @@
         "scripts/generate-integration-icons.ts",
         "scripts/dev/*.ts",
         "scripts/runtime/electron-builder-before-pack.cjs",
-        "scripts/verify-packaged-agent-clis.cjs",
+        "scripts/runtime/electron-builder-after-sign.cjs",
         "apps/**/test/**/*.ts",
         "test/**/*.ts"
       ],

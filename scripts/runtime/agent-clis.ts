@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   constants,
@@ -8,7 +7,6 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -19,6 +17,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInstall } from "@zvada/agent-server/server";
 import { resolveRuntimeStagePaths } from "../../shared/runtime";
+import { readLockedPackage, verifyIntegrity } from "./lib/locked-package.cjs";
+
+type LockedPackage = ReturnType<typeof readLockedPackage>;
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectRoot = path.resolve(runtimeDir, "../..");
@@ -29,13 +30,6 @@ interface AgentCliTarget {
     | "bin/agent-browser-darwin-arm64"
     | "bin/agent-browser-darwin-x64"
     | "bin/agent-browser-linux-x64";
-}
-
-interface LockedPackage {
-  lockKey: string;
-  packageName: string;
-  version: string;
-  integrity: string;
 }
 
 export interface PrepareAgentCliOptions {
@@ -62,66 +56,12 @@ export function resolveStagedAgentCliPath(
   return path.join(resolveRuntimeStagePaths(projectRoot).electron.root, "bin", runtimeKey, tool);
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parsePackageSpec(spec: string): { packageName: string; version: string } {
-  const separator = spec.lastIndexOf("@");
-  if (separator <= 0) {
-    throw new Error(`Unexpected package spec in bun.lock: ${spec}`);
-  }
-  return {
-    packageName: spec.slice(0, separator),
-    version: spec.slice(separator + 1),
-  };
-}
-
-function readLockedPackage(projectRoot: string, lockKey: string): LockedPackage {
-  const lockPath = path.join(projectRoot, "bun.lock");
-  const lockText = readFileSync(lockPath, "utf8");
-  const entryPattern = new RegExp(
-    `^\\s+"${escapeRegExp(lockKey)}": \\["([^"]+)".*"((?:sha\\d+-)[^"]+)"\\],?$`,
-    "m"
-  );
-  const match = lockText.match(entryPattern);
-  if (!match) {
-    throw new Error(`Missing ${lockKey} in ${lockPath}`);
-  }
-
-  const parsed = parsePackageSpec(match[1]);
-  return {
-    lockKey,
-    packageName: parsed.packageName,
-    version: parsed.version,
-    integrity: match[2],
-  };
-}
-
 function nodeModulesPackagePath(projectRoot: string, packageName: string): string {
   const [scope, name] = packageName.split("/");
   if (!scope || !name) {
     return path.join(projectRoot, "node_modules", packageName);
   }
   return path.join(projectRoot, "node_modules", scope, name);
-}
-
-function packageTarballUrl(packageName: string, version: string): string {
-  const packageBase = packageName.split("/").pop();
-  if (!packageBase) throw new Error(`Invalid package name: ${packageName}`);
-  return `https://registry.npmjs.org/${packageName}/-/${packageBase}-${version}.tgz`;
-}
-
-function verifyIntegrity(buffer: Buffer, integrity: string, url: string): void {
-  const [algorithm, expected] = integrity.split("-");
-  if (!algorithm || !expected) {
-    throw new Error(`Unsupported integrity string for ${url}: ${integrity}`);
-  }
-
-  const actual = createHash(algorithm).update(buffer).digest("base64");
-  if (actual !== expected) {
-    throw new Error(`Integrity mismatch for ${url}: expected ${integrity}`);
-  }
 }
 
 function fetchBuffer(url: string): Promise<Buffer> {
@@ -155,10 +95,9 @@ async function extractPackageArtifact(
   lockedPackage: LockedPackage,
   log: (line: string) => void
 ): Promise<{ packageRoot: string; cleanup: () => void; sourceDescription: string }> {
-  const url = packageTarballUrl(lockedPackage.packageName, lockedPackage.version);
   log(`Downloading ${lockedPackage.packageName}@${lockedPackage.version}`);
-  const tarball = await fetchBuffer(url);
-  verifyIntegrity(tarball, lockedPackage.integrity, url);
+  const tarball = await fetchBuffer(lockedPackage.url);
+  verifyIntegrity(tarball, lockedPackage);
 
   const tempRoot = mkdtempSync(path.join(tmpdir(), "deus-agent-cli-"));
   const tarballPath = path.join(tempRoot, "package.tgz");
@@ -168,7 +107,7 @@ async function extractPackageArtifact(
   return {
     packageRoot: path.join(tempRoot, "package"),
     cleanup: () => rmSync(tempRoot, { recursive: true, force: true }),
-    sourceDescription: url,
+    sourceDescription: lockedPackage.url,
   };
 }
 

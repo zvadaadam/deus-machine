@@ -1,5 +1,4 @@
 const fs = require("node:fs");
-const crypto = require("node:crypto");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const {
@@ -7,6 +6,7 @@ const {
   assertNoBuildLocalInstallName,
   packagedSimulatorDir,
 } = require("./lib/device-use-payloads.cjs");
+const { readLockedPackage, verifyIntegrity } = require("./lib/locked-package.cjs");
 
 const ARCH_BY_BUILDER_VALUE = new Map([
   [1, "x64"],
@@ -80,48 +80,6 @@ function pruneCanvasRuntimeBinaries(context) {
   return { removed, kept };
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parsePackageSpec(spec) {
-  const separator = spec.lastIndexOf("@");
-  if (separator <= 0) throw new Error(`Unexpected package spec in bun.lock: ${spec}`);
-  return {
-    packageName: spec.slice(0, separator),
-    version: spec.slice(separator + 1),
-  };
-}
-
-function readLockedPackage(lockKey) {
-  const lockPath = path.join(PROJECT_ROOT, "bun.lock");
-  const lockText = fs.readFileSync(lockPath, "utf8");
-  const entryPattern = new RegExp(
-    `^\\s+"${escapeRegExp(lockKey)}": \\["([^"]+)".*"((?:sha\\d+-)[^"]+)"\\],?$`,
-    "m"
-  );
-  const match = lockText.match(entryPattern);
-  if (!match) throw new Error(`Missing ${lockKey} in ${lockPath}`);
-  return {
-    ...parsePackageSpec(match[1]),
-    integrity: match[2],
-  };
-}
-
-function packageTarballUrl(packageName, version) {
-  const packageBase = packageName.split("/").pop();
-  if (!packageBase) throw new Error(`Invalid package name: ${packageName}`);
-  return `https://registry.npmjs.org/${packageName}/-/${packageBase}-${version}.tgz`;
-}
-
-function verifyIntegrity(filePath, integrity, url) {
-  const [algorithm, expected] = integrity.split("-");
-  if (!algorithm || !expected)
-    throw new Error(`Unsupported integrity string for ${url}: ${integrity}`);
-  const actual = crypto.createHash(algorithm).update(fs.readFileSync(filePath)).digest("base64");
-  if (actual !== expected) throw new Error(`Integrity mismatch for ${url}: expected ${integrity}`);
-}
-
 function ensureCanvasRuntimePackage(context) {
   if (context.electronPlatformName !== "darwin" && context.electronPlatformName !== "linux") {
     return { installed: false };
@@ -141,17 +99,16 @@ function ensureCanvasRuntimePackage(context) {
   );
   if (fs.existsSync(path.join(packageRoot, "package.json"))) return { installed: false };
 
-  const lockedPackage = readLockedPackage(packageName);
-  const url = packageTarballUrl(lockedPackage.packageName, lockedPackage.version);
+  const lockedPackage = readLockedPackage(PROJECT_ROOT, packageName);
   const tempRoot = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "deus-canvas-"));
   const tarballPath = path.join(tempRoot, "package.tgz");
   try {
     console.log(`[runtime] installing missing ${packageName} from lockfile`);
-    execFileSync("curl", ["-fsSL", url, "-o", tarballPath], {
+    execFileSync("curl", ["-fsSL", lockedPackage.url, "-o", tarballPath], {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: PACKAGE_RECOVERY_TIMEOUT_MS,
     });
-    verifyIntegrity(tarballPath, lockedPackage.integrity, url);
+    verifyIntegrity(fs.readFileSync(tarballPath), lockedPackage);
     execFileSync("tar", ["-xzf", tarballPath, "-C", tempRoot], {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: PACKAGE_RECOVERY_TIMEOUT_MS,

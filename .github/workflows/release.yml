@@ -348,11 +348,13 @@ jobs:
           bunx electron-builder --linux --publish never
 
       - name: Verify Linux artifacts
-        # afterPack checked every bundled executable in linux-unpacked.
+        # afterPack checked every bundled executable in linux-unpacked; the
+        # smoke runs each, then the runtime's self-test and backend.
         run: |
           set -euo pipefail
           test -f dist-electron/Deus-*.AppImage
           test -f dist-electron/deus_*_amd64.deb
+          bun run smoke:packaged-runtime -- --app dist-electron/linux-unpacked/resources
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
