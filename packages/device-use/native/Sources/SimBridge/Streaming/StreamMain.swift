@@ -81,11 +81,15 @@ enum StreamMain {
 
         // Wire touch input: WebSocket → ObjC HID bridge
         streamServer.clientManager.onTouch = { touch in
-            // Touch coordinates arrive normalized [0, 1] — the ObjC bridge expects them this way
+            // Touch coordinates arrive normalized [0, 1] — the ObjC bridge expects them this way.
+            // A move is a mouse-down at the new point, as the one-shot swipe sends it:
+            // IndigoHIDMessageForMouseNSEvent returns NULL for a dragged event (6) that
+            // comes less than 16 ms after the message before it, so moves sent at 60 Hz
+            // with any jitter were dropped (41 to 131 of 300 in a 5 s drag on Xcode 27.2).
+            // Down and up are never throttled.
             let eventType: Int32
             switch touch.type {
-            case "begin": eventType = 1   // NSEventTypeLeftMouseDown
-            case "move":  eventType = 6   // NSEventTypeLeftMouseDragged
+            case "begin", "move": eventType = 1   // NSEventTypeLeftMouseDown
             case "end":   eventType = 2   // NSEventTypeLeftMouseUp
             default: return
             }
