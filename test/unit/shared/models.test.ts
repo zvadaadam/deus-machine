@@ -153,12 +153,7 @@ describe("a picker value", () => {
     });
   });
 
-  it("reads the harness spellings older builds stored", () => {
-    expect(parseModelValue("claude:sonnet")).toEqual({ harness: "claude-code", model: "sonnet" });
-    expect(parseModelValue("codex-server:gpt-5.5")).toEqual({
-      harness: "codex-app-server",
-      model: "gpt-5.5",
-    });
+  it("reads a retired Codex harness as Codex's default", () => {
     // The retired Codex harnesses named models the engine no longer lists.
     for (const value of ["codex:gpt-5.3-codex", "codex-sdk:gpt-5.2-codex"]) {
       expect(parseModelValue(value)).toEqual({
@@ -169,7 +164,7 @@ describe("a picker value", () => {
   });
 
   it("is refused when it names no harness Deus runs", () => {
-    for (const value of ["", "sonnet", "claude-code:", ":sonnet", "gemini:pro"]) {
+    for (const value of ["", "sonnet", "claude-code:", ":sonnet", "gemini:pro", "claude:sonnet"]) {
       expect(parseModelValue(value)).toBeUndefined();
     }
   });

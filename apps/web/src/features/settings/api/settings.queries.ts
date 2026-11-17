@@ -63,8 +63,7 @@ function withProgress(answer: AgentAuthAnswer, progress: HarnessCliProgress): Ag
 
 /**
  * The thinking level a new chat starts on: the user's (Settings → AI), else
- * Deus's. Settings written by older builds hold retired UPPERCASE spellings,
- * which are read as what they became.
+ * Deus's.
  */
 export function useDefaultThinkingLevel(): ThinkingLevel {
   const { data: settings } = useSettings();

@@ -175,15 +175,8 @@ export function modelValue(harness: AgentHarness, model: string): string {
   return `${harness}:${model}`;
 }
 
-/** Harness spellings older builds stored, and the harness each became. */
-const RETIRED_HARNESS_PREFIXES: Readonly<Record<string, AgentHarness>> = {
-  claude: "claude-code",
-  "codex-server": "codex-app-server",
-};
-
 /**
- * Read a picker value, as stored or typed. A retired harness spelling is read
- * as the harness it became. A value from the Codex harnesses the engine no
+ * Read a picker value, as stored or typed. A value from the Codex harnesses the engine no
  * longer runs (`codex:`, `codex-sdk:`) named models it no longer lists, so it
  * reads as Codex's default. `undefined` when it names no harness Deus knows.
  */
@@ -199,7 +192,7 @@ export function parseModelValue(
     const fallback = defaultModelId(CATALOG_MODEL_LISTS, "codex-app-server");
     return fallback ? { harness: "codex-app-server", model: fallback } : undefined;
   }
-  const harness = AgentHarnessSchema.safeParse(RETIRED_HARNESS_PREFIXES[prefix] ?? prefix);
+  const harness = AgentHarnessSchema.safeParse(prefix);
   return harness.success ? { harness: harness.data, model } : undefined;
 }
 

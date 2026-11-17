@@ -563,7 +563,6 @@ describe("continuing a chat: the model, thinking and permissions", () => {
 
   it("thinks at the person's default level, read as the settings store it", () => {
     expect(turnSettings("claude-code", [], "low").thinkingLevel).toBe("low");
-    expect(turnSettings("claude-code", [], "MEDIUM").thinkingLevel).toBe("medium");
     expect(turnSettings("claude-code", [], "nonsense").thinkingLevel).toBe("high");
   });
 
