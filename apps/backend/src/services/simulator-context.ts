@@ -1,7 +1,8 @@
 // backend/src/services/simulator-context.ts
 //
 // Simulator service — the Simulator tab's operations (api/simulator.ts).
-// Agents drive simulators themselves, with the agent-device CLI.
+// Agents drive simulators themselves, with the agent-device CLI; a turn names
+// the tab's device to its agent (getContextForSession).
 //
 // Requests answer at once; what happens later is published on `simulatorEvents`.
 // Works identically in desktop (WS to localhost) and relay/web mode.
@@ -18,7 +19,9 @@ import { join } from "path";
 import { createHash, randomBytes } from "crypto";
 import WebSocket from "ws";
 import { createBackendChildEnv } from "@shared/lib/child-env";
+import { getDatabase } from "../lib/database";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors";
+import { getSessionRaw } from "../db/queries";
 import { simulatorEvents, type SimulatorEvent } from "@shared/api/simulator";
 import { publish } from "./streams";
 import type {
@@ -56,6 +59,7 @@ export async function simctl(
 
 export interface SimulatorContext {
   udid: string;
+  name: string;
   streaming: boolean;
 }
 
@@ -412,8 +416,15 @@ export function getContextForWorkspace(workspaceId: string): SimulatorContext | 
   if (!session) return null;
   return {
     udid: session.udid,
+    name: session.deviceName,
     streaming: session.streaming,
   };
+}
+
+/** The device a chat's workspace shows in its Simulator tab, which its turns name to the agent. */
+export function getContextForSession(sessionId: string): SimulatorContext | null {
+  const session = getSessionRaw(getDatabase(), sessionId);
+  return session?.workspace_id ? getContextForWorkspace(session.workspace_id) : null;
 }
 
 // ---------------------------------------------------------------------------

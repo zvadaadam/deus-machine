@@ -49,6 +49,7 @@ import {
 } from "./persistence";
 import { invalidate } from "../query-engine";
 import { openWith } from "../streams";
+import { getContextForSession } from "../simulator-context";
 import { handleAutomationToolRequest } from "../automations";
 import { requireParam } from "../../lib/query-params";
 
@@ -161,6 +162,7 @@ export async function startTurn(
   const params = buildTurnStartParams(sessionId, turnId, agentHarness, prompt, {
     ...options,
     ...apps,
+    simulator: getContextForSession(sessionId),
     // Negotiated at the handshake, not guessed from a harness list.
     supportsImages:
       link.getAgents().find((a) => a.type === engineHarness(agentHarness))?.capabilities.images ??

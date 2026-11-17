@@ -6,7 +6,7 @@
 // got workspace context only (they run without the deus tool suite).
 
 import type { AgentHarness } from "@shared/enums";
-import { buildWorkspaceContext } from "./workspace-context";
+import { buildWorkspaceContext, type Simulator } from "./workspace-context";
 
 const FALLBACK_CONTEXT =
   "You are working inside Deus, a desktop app that orchestrates multiple AI coding agents in parallel.";
@@ -29,8 +29,12 @@ The recording stops itself after maxDurationSeconds (default 300). If recording_
 `;
 
 /** The per-harness append: claude gets the recording briefing, codex does not. */
-export function buildSystemPromptAppend(harness: AgentHarness, cwd?: string): string {
-  const workspaceContext = buildWorkspaceContext(cwd) || FALLBACK_CONTEXT;
+export function buildSystemPromptAppend(
+  harness: AgentHarness,
+  cwd?: string,
+  simulator?: Simulator | null
+): string {
+  const workspaceContext = buildWorkspaceContext(cwd, simulator) || FALLBACK_CONTEXT;
   if (harness !== "claude-code") return workspaceContext;
   return `${workspaceContext}\n${SCREEN_RECORDING}`.trim();
 }

@@ -82,6 +82,8 @@ export interface DeusTurnOptions {
   mcpServers?: Record<string, McpServerConfig>;
   /** Extra env for the agent process (a Codex session's own CODEX_HOME). */
   env?: Record<string, string>;
+  /** The device the workspace's Simulator tab shows, named to the agent. */
+  simulator?: { name: string; udid: string } | null;
 }
 
 /**
@@ -111,7 +113,7 @@ export function buildTurnStartParams(
       cwd: options.cwd,
       model: options.model,
       thinkingLevel: options.thinkingLevel,
-      systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd),
+      systemPromptAppend: buildSystemPromptAppend(agentHarness, options.cwd, options.simulator),
       // Deus runs with full access by default, like its cloud runtime.
       // Explicit modes (including the composer's plan mode) stay unchanged.
       permissionMode: options.permissionMode ?? "bypass_permissions",
