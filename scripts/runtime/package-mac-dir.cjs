@@ -58,6 +58,15 @@ function fileOutput(filePath) {
   }).trim();
 }
 
+// Electron 42 and later download their binary only when asked, not at install:
+// fetch it as `bun run dev` does (at once when it is already there).
+function installElectronDist() {
+  execFileSync("bun", ["run", "electron:install"], {
+    cwd: PROJECT_ROOT,
+    stdio: "inherit",
+  });
+}
+
 function assertElectronDistArch(arch) {
   if (!fs.existsSync(ELECTRON_EXECUTABLE)) {
     throw new Error(`Missing installed Electron runtime: ${ELECTRON_EXECUTABLE}`);
@@ -138,6 +147,7 @@ function prepareDeviceUsePayloads() {
 async function main() {
   assertHostPlatform();
   const options = parseArgs(process.argv.slice(2));
+  installElectronDist();
   assertElectronDistArch(options.arch);
   prepareDeviceUsePayloads();
   installIconResolver();

@@ -10,6 +10,26 @@ import type { Plugin } from "vite";
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8"));
 
 /**
+ * Build targets for the installed Electron. electron-vite derives them from a
+ * table that ends at Electron 35 and quietly uses 35's for any newer major, so
+ * they are named here, and an Electron this table lacks stops the build.
+ * `ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/.../Electron -p process.versions`
+ * prints the node and chrome versions of a new one.
+ */
+const ELECTRON_TARGETS: Record<string, { node: string; chrome: string }> = {
+  "45": { node: "node24.22", chrome: "chrome156" },
+};
+const electronMajor = JSON.parse(
+  readFileSync(resolve(__dirname, "node_modules/electron/package.json"), "utf-8")
+).version.split(".")[0];
+const targets = ELECTRON_TARGETS[electronMajor];
+if (!targets) {
+  throw new Error(
+    `electron.vite.config.ts has no build targets for Electron ${electronMajor}; add them to ELECTRON_TARGETS.`
+  );
+}
+
+/**
  * Vite plugin: serves the backend port file so Chrome tabs (without electronAPI)
  * can discover the backend port during Electron dev mode.
  *
@@ -50,6 +70,7 @@ export default defineConfig({
   // ---------------------------------------------------------------------------
   main: {
     build: {
+      target: targets.node,
       rollupOptions: {
         input: {
           index: resolve(__dirname, "apps/desktop/main/index.ts"),
@@ -64,6 +85,7 @@ export default defineConfig({
   // ---------------------------------------------------------------------------
   preload: {
     build: {
+      target: targets.node,
       rollupOptions: {
         input: {
           index: resolve(__dirname, "apps/desktop/preload/index.ts"),
@@ -98,6 +120,7 @@ export default defineConfig({
       },
     },
     build: {
+      target: targets.chrome,
       chunkSizeWarningLimit: 2000,
       sourcemap: "hidden",
       outDir: resolve(__dirname, "out/renderer"),

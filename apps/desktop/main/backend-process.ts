@@ -8,6 +8,7 @@ import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
 import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
+import { getLaunchPath } from "./shell-env";
 
 export const CDP_PORT = "19222";
 
@@ -87,6 +88,23 @@ function isExecutableFile(filePath: string): boolean {
     return WINDOWS_EXECUTABLE_EXTENSIONS.has(extname(filePath).toLowerCase());
   }
   return (stat.mode & 0o111) !== 0;
+}
+
+/** The `node` the dev backend runs on: the first found on these PATHs, in order. */
+function findDevNode(...searchPaths: string[]): string {
+  for (const searchPath of searchPaths) {
+    for (const dir of searchPath.split(delimiter)) {
+      if (!dir) continue;
+      const candidate = join(dir, process.platform === "win32" ? "node.exe" : "node");
+      if (isExecutableFile(candidate)) return candidate;
+    }
+  }
+  throw new Error(
+    "The dev backend runs on Node.js, and no `node` is on the PATH. " +
+      "Install Node 22 (brew install node@22 && brew link --overwrite --force node@22, " +
+      "or a version manager that reads .node-version), then run `bun run dev` again. " +
+      "`bun run doctor` checks the rest."
+  );
 }
 
 function terminateBackend(): Promise<void> {
@@ -190,12 +208,18 @@ export async function spawnBackend(
   if (runtime.runtimeExecutable) {
     sharedEnv.NODE_ENV = "production";
   }
+  // Packaged: the bundled deus-runtime. Dev: the backend runs on the system
+  // Node, as `bun run dev:web` and the tests do, so the native modules are
+  // built once, for that Node (`bun run native:node`), never for Electron.
+  // That is the terminal's `node`, so the PATH the app started with is
+  // searched first: the login shell's PATH (shell sync) may put another Node
+  // ahead. An app started from Finder has none there and uses the synced PATH.
+  const backendCommand = runtime.runtimeExecutable ?? findDevNode(getLaunchPath(), sharedEnv.PATH!);
 
   return new Promise((resolve, reject) => {
     let settled = false;
     let stdoutBuffer = "";
 
-    const backendCommand = runtime.runtimeExecutable ?? process.execPath;
     const backendArgs = runtime.runtimeExecutable ? ["backend"] : [runtime.backendEntry!];
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env };
@@ -203,8 +227,6 @@ export async function spawnBackend(
       for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
         delete childEnv[key];
       }
-    } else {
-      childEnv.ELECTRON_RUN_AS_NODE = "1";
     }
     Object.assign(childEnv, sharedEnv, {
       AUTH_TOKEN: authToken,

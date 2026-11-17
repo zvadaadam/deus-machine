@@ -55,8 +55,8 @@ if (selectedPython) {
 
 // node-pty 1.1's published prebuilds ship spawn-helper without its executable
 // bit, so every terminal fails with "posix_spawnp failed" until something
-// rebuilds node-pty. `bun run dev` does (install-app-deps); `dev:web` and the
-// backend tests only come through here.
+// rebuilds node-pty. Every backend that runs from source (`bun run dev`,
+// `dev:web`, the backend tests) runs on the system Node and comes through here.
 const ptyPrebuilds = path.join(PROJECT_ROOT, "node_modules", "node-pty", "prebuilds");
 for (const target of fs.existsSync(ptyPrebuilds) ? fs.readdirSync(ptyPrebuilds) : []) {
   const helper = path.join(ptyPrebuilds, target, "spawn-helper");
