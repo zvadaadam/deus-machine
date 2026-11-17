@@ -36,10 +36,10 @@ export const simListDevices = read({
   output: out<{ devices: SimulatorInfo[] }>(),
 });
 
-/** Whether the folder holds an Xcode project that Build & Run could build. */
+/** Whether the workspace's folder holds an Xcode project that Build & Run could build. */
 export const simHasXcodeProject = read({
   name: "simHasXcodeProject",
-  input: z.object({ workspacePath: z.string().min(1) }),
+  input: workspaceId,
   output: out<{ hasProject: boolean }>(),
 });
 
@@ -116,14 +116,13 @@ export const simInspectSnapshot = read({
 });
 
 /**
- * Build the folder's Xcode project and run it on the streaming simulator.
+ * Build the workspace's Xcode project and run it on the streaming simulator.
  * Answers at once; the build's output arrives as `buildLog` events on `simulatorEvents`, its result as
  * `buildComplete` or `buildFailed`.
  */
 export const simBuildAndRun = write({
   name: "simBuildAndRun",
   input: workspaceId.extend({
-    workspacePath: z.string().min(1),
     /** Required only when the project has more than one scheme. */
     scheme: z.string().optional(),
   }),
@@ -186,7 +185,8 @@ export const cloudSimExec = write({
 });
 
 export type SimulatorEvent =
-  | { type: "streamReady"; url: string; port: number; hidAvailable: boolean }
+  /** `url` is the MJPEG stream on this computer's loopback, with its token. */
+  | { type: "streamReady"; url: string; hidAvailable: boolean }
   | { type: "streamFailed"; error: string }
   | { type: "buildLog"; line: string }
   | { type: "buildComplete"; bundleId: string; appName: string; appPath: string }

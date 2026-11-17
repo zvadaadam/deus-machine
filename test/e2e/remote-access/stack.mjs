@@ -13,6 +13,7 @@ import Database from "better-sqlite3";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { SCHEMA_SQL } from "../../../shared/schema.ts";
 import { LOOPBACK_WEB_ORIGINS } from "../../../shared/web-origins.ts";
+import { connectBackend } from "../lib/operations.mjs";
 
 export const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -313,7 +314,12 @@ export function createStack({ root, agnt, directory }) {
       assert(response.ok, `${route}: ${response.status} ${JSON.stringify(data)}`);
       return data;
     };
-    return { ...owned, url, api };
+    /** An operation, as this computer's window sends it. */
+    const write = async (name, params) => {
+      const backend = await connectBackend(url);
+      return backend.write(name, params).finally(backend.close);
+    };
+    return { ...owned, url, api, write };
   }
 
   /** A Deus Cloud session exactly as `session-issuer.ts` signs it. */

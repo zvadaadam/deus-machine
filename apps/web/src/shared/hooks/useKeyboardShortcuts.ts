@@ -24,6 +24,13 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      // ⌘, or Ctrl+, - Settings
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        uiActions.openSettings();
+        return;
+      }
+
       // ⌘O or Ctrl+O - Open in last-used app
       if ((e.metaKey || e.ctrlKey) && e.key === "o" && onOpenInApp) {
         e.preventDefault();

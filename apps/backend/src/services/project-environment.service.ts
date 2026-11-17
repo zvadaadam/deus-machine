@@ -18,7 +18,7 @@ import { ValidationError } from "../lib/errors";
 import { processGroupsStopped, trackProcessGroup } from "../lib/process-groups";
 import { cloudAccount, cloudOrg, requireCloudOrg } from "./agent/cloud/config";
 import { getCloudEnvironmentInfo } from "./cloud-environment.service";
-import { createBackendChildEnv } from "../runtime/child-env";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { invalidate } from "./query-engine";
 import type { WorkspaceWithDetailsRow } from "../db";
 

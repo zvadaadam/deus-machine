@@ -6,7 +6,7 @@
 #include <malloc/malloc.h>
 
 // =============================================================================
-// Indigo HID function types (loaded from Simulator.app)
+// Indigo HID function types (in SimulatorKit, which FrameworkLoader loads)
 // =============================================================================
 
 // IndigoHIDMessageForMouseNSEvent(CGPoint*, uint32, uint32, int32, uint32) -> void*
@@ -54,7 +54,6 @@ static void loadIndigoFunctions(void) {
     if (sFuncsLoaded) return;
     sFuncsLoaded = YES;
 
-    // IndigoHID functions live in Simulator.app's binary
     void *h = RTLD_DEFAULT;
 
     sMouseFunc = (IndigoMouseFunc)dlsym(h, "IndigoHIDMessageForMouseNSEvent");
@@ -302,43 +301,10 @@ static NSDictionary *serializeAccessibilityElement(id element, NSString *token, 
 
 @implementation SimAccessibilityBridge
 
-+ (void)ensureSimulatorKitLoaded {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSTask *task = [[NSTask alloc] init];
-        task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/xcode-select"];
-        task.arguments = @[@"-p"];
-        NSPipe *pipe = [NSPipe pipe];
-        task.standardOutput = pipe;
-        task.standardError = [NSFileHandle fileHandleWithNullDevice];
-        @try {
-            [task launch];
-            [task waitUntilExit];
-        } @catch (NSException *e) {
-            return;
-        }
-        NSData *data = [pipe.fileHandleForReading readDataToEndOfFile];
-        NSString *devDir = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        devDir = [devDir stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (!devDir.length) return;
-
-        dlopen("/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator", RTLD_NOW);
-
-        NSString *simKitPath = [NSString stringWithFormat:@"%@/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit", devDir];
-        dlopen(simKitPath.UTF8String, RTLD_NOW);
-
-        // Also try loading from Simulator.app for Indigo functions
-        NSString *simAppPath = [NSString stringWithFormat:@"%@/../Applications/Simulator.app/Contents/MacOS/Simulator", devDir];
-        dlopen(simAppPath.UTF8String, RTLD_NOW);
-
-        loadIndigoFunctions();
-    });
-}
-
 #pragma mark - HID Client Creation
 
 + (nullable id)createHIDClientForDevice:(id)device error:(NSError **)error {
-    [self ensureSimulatorKitLoaded];
+    loadIndigoFunctions();
 
     // Try the Swift-mangled name first (Xcode 15+), then plain name
     Class hidClass = NSClassFromString(@"_TtC12SimulatorKit24SimDeviceLegacyHIDClient")
@@ -507,7 +473,7 @@ static NSDictionary *serializeAccessibilityElement(id element, NSString *token, 
                         y:(double)y
                 eventType:(int32_t)eventType
                     error:(NSError **)error {
-    [self ensureSimulatorKitLoaded];
+    loadIndigoFunctions();
 
     NSError *clientErr = nil;
     id client = [self createHIDClientForDevice:device error:&clientErr];
@@ -612,7 +578,7 @@ static NSDictionary *serializeAccessibilityElement(id element, NSString *token, 
                        y:(double)y
             holdDuration:(double)holdDuration
                    error:(NSError **)error {
-    [self ensureSimulatorKitLoaded];
+    loadIndigoFunctions();
 
     if (!sMouseFunc) {
         if (error) {
@@ -719,7 +685,7 @@ static NSDictionary *serializeAccessibilityElement(id element, NSString *token, 
 + (BOOL)sendButtonToDevice:(id)device
                     button:(NSString *)button
                      error:(NSError **)error {
-    [self ensureSimulatorKitLoaded];
+    loadIndigoFunctions();
 
     if (!sButtonFunc) {
         if (error) {
@@ -794,7 +760,7 @@ static NSDictionary *serializeAccessibilityElement(id element, NSString *token, 
                 keyCode:(NSInteger)keyCode
                  isDown:(BOOL)isDown
                   error:(NSError **)error {
-    [self ensureSimulatorKitLoaded];
+    loadIndigoFunctions();
 
     NSError *clientErr = nil;
     id client = [self createHIDClientForDevice:device error:&clientErr];

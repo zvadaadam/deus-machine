@@ -58,10 +58,9 @@ import fs from "fs";
 import type Database from "better-sqlite3";
 import { SCHEMA_SQL } from "@shared/schema";
 import { createApp } from "../../src/app";
-import { _clearAll as clearAuthState } from "../../src/services/remote-auth.service";
-import { invalidateRemoteGateCache } from "../../src/middleware/remote-gate";
+import { _clearAll as clearAuthState, revokeDevice } from "../../src/services/remote-auth.service";
 import { closeAll as closeAllWs } from "../../src/services/ws.service";
-import { saveSetting, PREFS_PATH } from "../../src/services/settings.service";
+import { removeSettings, saveSetting } from "../../src/services/settings.service";
 
 // Headers that simulate a remote client (non-localhost IP)
 const REMOTE_HEADERS = { "x-forwarded-for": "203.0.113.50" };
@@ -77,14 +76,10 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  // Clean slate for each test: clear in-memory auth state + DB rows + preferences + caches
+  // Clean slate for each test: clear in-memory auth state + DB rows + preferences
   clearAuthState();
-  invalidateRemoteGateCache();
   testDb.exec("DELETE FROM paired_devices");
-  // Settings live in preferences.json now (settings table was removed)
-  try {
-    fs.unlinkSync(PREFS_PATH);
-  } catch {}
+  removeSettings(["remote_access_enabled"]);
 });
 
 afterAll(() => {
@@ -101,13 +96,11 @@ afterAll(() => {
 /** Enable remote access in settings (writes preferences.json). */
 function enableRemoteAccess() {
   saveSetting("remote_access_enabled", true);
-  invalidateRemoteGateCache();
 }
 
 /** Disable remote access in settings. */
 function disableRemoteAccess() {
   saveSetting("remote_access_enabled", false);
-  invalidateRemoteGateCache();
 }
 
 /** Generate a pairing code from localhost. Returns the code string. */
@@ -200,8 +193,8 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
     const code = await generateCode();
     const { token } = await pairDevice(code);
 
-    // Use /api/settings (not in PUBLIC_PATHS) to prove token auth works end-to-end
-    const res = await app.request("/api/settings", {
+    // Use /api/relay/status (not in PUBLIC_PATHS) to prove token auth works end-to-end
+    const res = await app.request("/api/relay/status", {
       headers: {
         ...REMOTE_HEADERS,
         authorization: `Bearer ${token}`,
@@ -219,7 +212,7 @@ describe("Full pairing flow: generate code -> pair -> use token", () => {
       body: JSON.stringify({ code, deviceName: "Tablet" }),
     });
     expect(replay.status).toBe(401);
-    const authorized = await app.request("/api/settings", {
+    const authorized = await app.request("/api/relay/status", {
       headers: { ...REMOTE_HEADERS, authorization: `Bearer ${token}` },
     });
     expect(authorized.status).toBe(200);
@@ -277,26 +270,13 @@ describe("Device management: list, revoke, verify revocation", () => {
     // May be 200 or 500 depending on DB state, but NOT 401
     expect(before.status).not.toBe(401);
 
-    // Revoke the device
-    const revokeRes = await app.request(`/api/remote-auth/devices/${device.id}`, {
-      method: "DELETE",
-      headers: LOCAL_HEADERS,
-    });
-    expect(revokeRes.status).toBe(200);
+    expect(revokeDevice(device.id)).toBe(true);
 
     // Token should no longer work
     const after = await app.request("/api/workspaces", {
       headers: { ...REMOTE_HEADERS, authorization: `Bearer ${token}` },
     });
     expect(after.status).toBe(401);
-  });
-
-  it("returns 404 when revoking a nonexistent device", async () => {
-    const res = await app.request("/api/remote-auth/devices/does-not-exist", {
-      method: "DELETE",
-      headers: LOCAL_HEADERS,
-    });
-    expect(res.status).toBe(404);
   });
 
   it("rejects device management from remote IPs", async () => {
@@ -421,10 +401,10 @@ describe("Multiple devices: independent tokens", () => {
     const { token: token2 } = await pairDevice(code2, "Tablet");
 
     // Both tokens should pass auth (use non-public path to exercise auth middleware)
-    const res1 = await app.request("/api/settings", {
+    const res1 = await app.request("/api/relay/status", {
       headers: { ...REMOTE_HEADERS, authorization: `Bearer ${token1}` },
     });
-    const res2 = await app.request("/api/settings", {
+    const res2 = await app.request("/api/relay/status", {
       headers: { ...REMOTE_HEADERS, authorization: `Bearer ${token2}` },
     });
     expect(res1.status).toBe(200);
@@ -444,10 +424,7 @@ describe("Multiple devices: independent tokens", () => {
     const { token: token2 } = await pairDevice(code2, "Tablet");
 
     // Revoke Phone
-    await app.request(`/api/remote-auth/devices/${device1.id}`, {
-      method: "DELETE",
-      headers: LOCAL_HEADERS,
-    });
+    revokeDevice(device1.id);
 
     // Phone token dead (use non-public path to exercise auth middleware)
     const res1 = await app.request("/api/workspaces", {

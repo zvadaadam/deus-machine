@@ -29,7 +29,17 @@ declare module "device-use/engine" {
     outputPath: string,
     options?: { format?: "png" | "jpeg" }
   ) => Promise<void>;
-  export const fetchAccessibilityTree: (udid: string) => Promise<AccessibilityNode[]>;
+  export const fetchAccessibilityTree: (
+    udid: string,
+    options?: { env?: NodeJS.ProcessEnv }
+  ) => Promise<AccessibilityNode[]>;
+  export const callSimBridge: (
+    request: { command: string; [key: string]: unknown },
+    options?: { env?: NodeJS.ProcessEnv }
+  ) => Promise<{ success: boolean; data?: unknown }>;
+  export const simulatorEnv: (base?: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
+  export const findBridgePath: () => string | null;
+  export const findInspectorPath: () => string | null;
   export const buildSnapshot: (
     tree: AccessibilityNode[],
     options?: BuildSnapshotOptions

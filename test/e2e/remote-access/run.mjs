@@ -12,6 +12,7 @@ import { RuntimeError } from "@deus/runtime-client";
 import { SignJWT, importJWK } from "jose";
 import { WebSocket as NodeSocket } from "ws";
 import { RELAY_PROTOCOL } from "../../../shared/types/relay.ts";
+import { connectBackend } from "../lib/operations.mjs";
 import { createStack, freePort, pause, until } from "./stack.mjs";
 import { testBrowser } from "./browser.mjs";
 
@@ -468,8 +469,8 @@ try {
 
     // ---- 12. Revocation ----
     const listed = (await host.api("/remote-auth/devices")).devices;
-    await host.api(`/remote-auth/devices/${listed.find((d) => d.name === "Device A").id}`, {
-      method: "DELETE",
+    await host.write("revokeDevice", {
+      deviceId: listed.find((d) => d.name === "Device A").id,
     });
     await until(() => a.runtime.getState() === "revoked");
     assert.equal(a.cache.getQueryCache().getAll().length, 0);
@@ -545,18 +546,16 @@ try {
     if (address) {
       const remote = new URL(host.url);
       remote.hostname = address;
-      assert.equal((await fetch(`${remote.origin}/api/settings`)).status, 401);
+      assert.equal((await fetch(`${remote.origin}/api/relay/status`)).status, 401);
       const response = await fetch(`${remote.origin}/api/remote-auth/pair`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code: await code(), deviceName: "LAN tablet" }),
       });
       const { token } = await response.json();
-      const settings = await fetch(`${remote.origin}/api/settings`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      assert.equal(settings.status, 200);
-      assert(!("relay_machines" in (await settings.json())), "machine secrets must not be served");
+      const tablet = await connectBackend(remote.origin, { token });
+      const settings = await tablet.read("settings").finally(tablet.close);
+      assert(!("relay_machines" in settings), "machine secrets must not be served");
       check("Direct LAN access still needs a pairing, and settings never expose the Mac's secrets");
     } else {
       report.skipped = "Direct LAN access: no non-loopback IPv4 interface";
@@ -586,10 +585,7 @@ try {
         machineId: machineA,
       });
       await assert.rejects(afterRemoval.runtime.connect(), (error) => error.kind === "disposed");
-      await host.api("/settings", {
-        method: "POST",
-        body: { key: "remote_access_enabled", value: true },
-      });
+      await host.write("saveSetting", { key: "remote_access_enabled", value: true });
       const machineAgain = (await connectedAs("user_alice")).serverId;
       assert.notEqual(machineAgain, machineA);
       const stale = viewer("Grant for the removed machine", {
@@ -616,6 +612,7 @@ try {
     sessions,
     pairCode: code,
     hostApi: host.api,
+    hostWrite: host.write,
     hostUrl: host.url,
   });
 

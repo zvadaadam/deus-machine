@@ -14,13 +14,11 @@ vi.mock("../../../src/services/settings.service", () => ({
 vi.mock("../../../src/services/automations", () => ({ initAutomations: vi.fn() }));
 vi.mock("../../../src/services/relay.service", () => ({ reconcileRelay: vi.fn() }));
 vi.mock("../../../src/services/keep-awake.service", () => ({ syncKeepAwake: vi.fn() }));
-// POST /settings runs the saveSetting operation's function, whose module also
-// answers for the local agents: keep the engine out of this test.
+// The agent-auth route's module also answers for the local agents: keep the
+// engine out of this test.
 vi.mock("../../../src/services/agent", () => ({ getLocalAgents: vi.fn() }));
 
 import settingsRoutes from "../../../src/routes/settings";
-import { getAllSettings, saveSetting } from "../../../src/services/settings.service";
-import { reconcileRelay } from "../../../src/services/relay.service";
 import { getLocalAgents } from "../../../src/services/agent";
 
 // Wrap the sub-app with error handler like the real app does
@@ -30,81 +28,6 @@ app.onError(errorHandler);
 
 beforeEach(() => {
   vi.clearAllMocks();
-});
-
-describe("GET /settings", () => {
-  it("returns 200 with settings object", async () => {
-    const res = await app.request("/settings");
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toEqual({ theme: "dark", lang: "en" });
-  });
-
-  it("calls getAllSettings", async () => {
-    await app.request("/settings");
-    expect(getAllSettings).toHaveBeenCalled();
-  });
-});
-
-describe("POST /settings", () => {
-  it("returns 200 with success when given key and value", async () => {
-    const res = await app.request("/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "theme", value: "light" }),
-    });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body).toEqual({ success: true, key: "theme", value: "light" });
-  });
-
-  it("refuses to write this computer's machine secrets", async () => {
-    const res = await app.request("/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "relay_machines", value: {} }),
-    });
-    expect(res.status).toBe(400);
-    expect(saveSetting).not.toHaveBeenCalled();
-  });
-
-  it("calls saveSetting with correct arguments", async () => {
-    await app.request("/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "theme", value: "light" }),
-    });
-    expect(saveSetting).toHaveBeenCalledWith("theme", "light");
-  });
-
-  it("returns 400 when key is missing", async () => {
-    const res = await app.request("/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: "light" }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 400 when key is empty string", async () => {
-    const res = await app.request("/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "", value: "light" }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("turns remote access on as the operation does: the tunnel follows", async () => {
-    const res = await app.request("/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "remote_access_enabled", value: true }),
-    });
-    expect(res.status).toBe(200);
-    expect(saveSetting).toHaveBeenCalledWith("remote_access_enabled", true);
-    expect(reconcileRelay).toHaveBeenCalledExactlyOnceWith({ restart: true });
-  });
 });
 
 describe("GET /settings/agent-auth", () => {

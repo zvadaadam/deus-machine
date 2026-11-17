@@ -15,6 +15,7 @@ final class StreamClientManager {
 
     var onTouch: ((TouchEventPayload) -> Void)?
     var onButton: ((String) -> Void)?
+    var onKey: ((KeyEventPayload) -> Void)?
 
     // MARK: - Configuration
 
@@ -84,6 +85,9 @@ final class StreamClientManager {
         } else if type == WSMessageType.button.rawValue {
             guard let json = try? JSONDecoder().decode(ButtonEventPayload.self, from: data[1...]) else { return }
             onButton?(json.button)
+        } else if type == WSMessageType.key.rawValue {
+            guard let json = try? JSONDecoder().decode(KeyEventPayload.self, from: data[1...]) else { return }
+            onKey?(json)
         }
     }
 
