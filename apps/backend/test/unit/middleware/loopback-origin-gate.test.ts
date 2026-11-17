@@ -116,6 +116,25 @@ describe("refuseLoopbackRequest", () => {
     expect(refuseLoopbackRequest({ host, origin, ownPort: OWN_PORT }, listed)).toBe(refusal);
   });
 
+  it("refuses its own origin on a default port, which a browser leaves out", () => {
+    for (const [origin, ownPort] of [
+      ["http://localhost", 80],
+      ["http://127.0.0.1", 80],
+      ["https://localhost", 443],
+    ] as const) {
+      expect(refuseLoopbackRequest({ host: "localhost", origin, ownPort }, listed)).toBe(
+        FOREIGN_PAGE
+      );
+    }
+    // The same origin is another server's when this backend is on another port.
+    expect(
+      refuseLoopbackRequest(
+        { host: "localhost:51000", origin: "http://localhost", ownPort: 51000 },
+        listed
+      )
+    ).toBeNull();
+  });
+
   it("trusts no origin when the launcher listed none", () => {
     expect(refuseLoopbackRequest({ host: "localhost:1", origin: "app://deus" }, [])).toBe(
       FOREIGN_PAGE

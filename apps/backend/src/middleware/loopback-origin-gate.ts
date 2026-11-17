@@ -39,10 +39,13 @@ function hostname(value: string | undefined): string | null {
  */
 function isOwnOrigin(origin: string, ownPort: number | undefined): boolean {
   if (!ownPort) return false;
-  const match = /^https?:\/\/([^/]+)$/.exec(origin.trim().toLowerCase());
+  const match = /^(https?):\/\/([^/]+)$/.exec(origin.trim().toLowerCase());
   if (!match) return false;
-  const host = HOST.exec(match[1]);
-  return !!host && LOOPBACK_HOSTNAMES.has(host[1]) && Number(host[2]) === ownPort;
+  const host = HOST.exec(match[2]);
+  if (!host || !LOOPBACK_HOSTNAMES.has(host[1])) return false;
+  // A browser leaves the scheme's default port out of an Origin.
+  const port = host[2] ? Number(host[2]) : match[1] === "https" ? 443 : 80;
+  return port === ownPort;
 }
 
 /** Why a loopback request is refused, or null when it may go on. */

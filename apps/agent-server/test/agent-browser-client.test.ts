@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockExecFile, mockSpawn } = vi.hoisted(() => ({
-  mockExecFile: vi.fn(),
-  mockSpawn: vi.fn(),
-}));
+const { mockExecFile, mockSpawn } = vi.hoisted(() => {
+  // Before the client loads (imports are hoisted above plain statements), as an
+  // older desktop app set it: it must not matter.
+  process.env.CDP_PORT = "19222";
+  return { mockExecFile: vi.fn(), mockSpawn: vi.fn() };
+});
 
 vi.mock("child_process", () => ({
   execFile: mockExecFile,
@@ -16,9 +18,6 @@ vi.mock("@shared/lib/cli-path", () => ({
   ),
   resolveCliExecutable: vi.fn((tool: string) => `/__deus_missing_bundled_bin__/${tool}`),
 }));
-
-// Set before the client loads, as an older desktop app set it: it must not matter.
-process.env.CDP_PORT = "19222";
 
 import { execAgentBrowser, getRecordingTarget } from "../agents/deus-tools/agent-browser-client";
 
