@@ -7,7 +7,7 @@ electronLanguages: [en]
 npmRebuild: false
 beforePack: "scripts/runtime/electron-builder-before-pack.cjs"
 afterPack: "scripts/runtime/electron-builder-after-pack.cjs"
-afterSign: "scripts/verify-packaged-agent-clis.cjs"
+afterSign: "scripts/runtime/electron-builder-after-sign.cjs"
 files:
   - "out/**/*"
   # Renderer/main source maps are "hidden" (unreferenced); shipping them only adds size.
@@ -18,6 +18,17 @@ files:
   # (DEUS_NATIVE_MODULES). electron-builder applies only the exclusions here
   # to node_modules, so the allowlist is one.
   - "!node_modules/!(@napi-rs)/**"
+# The installed app runs only its own app.asar, as checked against the hash in
+# its signed Info.plist, and nothing can run it as Node, pass Node flags or open
+# an inspector. The packaged backend is deus-runtime, never Electron as Node.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+  # The window is served from app://deus, never file://.
+  grantFileProtocolExtraPrivileges: false
 asarUnpack:
   - "resources/**"
   - "node_modules/@napi-rs/canvas/**"
@@ -36,12 +47,6 @@ mac:
     - "Contents/Resources/simulator/simbridge"
     - "Contents/Resources/simulator/siminspector.dylib"
   extraResources:
-    - from: "dist/runtime/electron/bin/deus-runtime.json"
-      to: "bin/deus-runtime.json"
-    - from: "dist/runtime/electron/bin/agent-clis.json"
-      to: "bin/agent-clis.json"
-    - from: "dist/runtime/electron/bin/gh-cli.json"
-      to: "bin/gh-cli.json"
     - from: "dist/runtime/electron/bin/darwin-${arch}"
       to: "bin"
       filter: ["gh", "deus-runtime", "codex", "codex-runtime/**/*", "claude", "rg", "agent-browser"]
@@ -75,12 +80,6 @@ linux:
   category: Development
   icon: resources/icons/icon.png
   extraResources:
-    - from: "dist/runtime/electron/bin/deus-runtime.json"
-      to: "bin/deus-runtime.json"
-    - from: "dist/runtime/electron/bin/agent-clis.json"
-      to: "bin/agent-clis.json"
-    - from: "dist/runtime/electron/bin/gh-cli.json"
-      to: "bin/gh-cli.json"
     - from: "dist/runtime/electron/bin/linux-${arch}"
       to: "bin"
       filter: ["gh", "deus-runtime", "codex", "codex-runtime/**/*", "claude", "rg", "agent-browser"]

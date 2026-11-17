@@ -15,6 +15,7 @@ import { promisify } from "util";
 import { homedir } from "os";
 import path from "path";
 import { existsSync, realpathSync } from "fs";
+import { logMainProcess } from "./startup-diagnostics";
 
 const execFileAsync = promisify(execFile);
 const WORKSPACE_LOOKUP_TIMEOUT_MS = 2_000;
@@ -86,6 +87,8 @@ export function registerNativeHandlers(): void {
   // -------------------------------------------------------------------------
 
   ipcMain.handle("show_main_window", () => {
+    // The page booted and its preload bridge answered (the packaged desktop smoke waits for this).
+    logMainProcess("[main] Window page ready");
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (win) {
       // Transition to app mode. On macOS vibrancy IS the window background;
@@ -102,6 +105,7 @@ export function registerNativeHandlers(): void {
   });
 
   ipcMain.handle("enter_onboarding_mode", () => {
+    logMainProcess("[main] Window page ready");
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
       win.setBackgroundColor("#0e0e10");

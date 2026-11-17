@@ -22,6 +22,7 @@ vi.mock("electron", () => ({
     on: (event: string, handler: (...args: unknown[]) => void) => mocks.events.set(event, handler),
     quit: mocks.quit,
     relaunch: mocks.relaunch,
+    enableSandbox: vi.fn(),
   },
   autoUpdater: new EventEmitter(),
   BrowserWindow: class {
@@ -37,8 +38,19 @@ vi.mock("electron", () => ({
     isDestroyed = () => false;
   },
   ipcMain: {
-    handle: (channel: string, handler: () => unknown) => mocks.handlers.set(channel, handler),
+    // Handlers are called directly here; the window-only check is main-lifecycle's.
+    get handle() {
+      return (channel: string, handler: () => unknown) => mocks.handlers.set(channel, handler);
+    },
+    set handle(_wrapped) {},
     on: vi.fn(),
+  },
+  session: {
+    defaultSession: { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() },
+    fromPartition: () => ({
+      setPermissionRequestHandler: vi.fn(),
+      setPermissionCheckHandler: vi.fn(),
+    }),
   },
   shell: {},
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },

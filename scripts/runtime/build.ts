@@ -17,13 +17,10 @@ function prepareGhCli(): void {
 
 try {
   console.log("Staging shared runtime...\n");
-  const manifest = stageRuntime();
-  await Promise.resolve(buildDeusRuntime());
-  await prepareAgentClis({
-    verifyRunnable: process.env.DEUS_VERIFY_AGENT_CLI_RUNNABLE === "1",
-  });
+  stageRuntime();
+  buildDeusRuntime();
+  await prepareAgentClis();
   prepareGhCli();
-  console.log(`\n✓ Runtime manifest written (${manifest.version})`);
 } catch (error) {
   console.error("Runtime staging failed:", error);
   process.exit(1);

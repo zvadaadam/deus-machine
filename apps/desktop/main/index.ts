@@ -12,7 +12,7 @@
  * process is purely a desktop shell that spawns it and bridges native OS features.
  */
 
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
@@ -25,6 +25,8 @@ import {
   serveRenderer,
 } from "./app-protocol";
 import { registerNativeHandlers } from "./native-handlers";
+import { limitPermissions } from "./permissions";
+import { WEBVIEW_PARTITION } from "../../../shared/browser";
 import { registerBrowserEmulationHandlers } from "./browser-emulation";
 import { registerBrowserCookieHandlers } from "./browser-cookies";
 import { registerUpdateHandlers, setupAutoUpdater } from "./auto-updater";
@@ -71,7 +73,37 @@ if (!app.requestSingleInstanceLock()) {
 // their own browser.
 registerAppScheme();
 
+// Every renderer runs in Chromium's sandbox: the window, and each Browser tab
+// guest. Their preloads are single CommonJS files that require only `electron`.
+app.enableSandbox();
+
 let mainWindow: BrowserWindow | null = null;
+
+// The window's origin: Vite's in dev, app://deus otherwise (the one the
+// backend was told to trust, backend-process.ts).
+const windowOrigin = rendererOrigin({
+  isDev: is.dev,
+  rendererUrl: process.env.ELECTRON_RENDERER_URL,
+});
+
+/** The window's own page: not a Browser-tab guest, nor a frame inside the window. */
+function fromWindow(event: IpcMainInvokeEvent): boolean {
+  const frame = event.senderFrame;
+  return (
+    event.sender === mainWindow?.webContents &&
+    frame?.parent === null &&
+    originOf(frame.url) === windowOrigin
+  );
+}
+
+// Every handler answers only the window's page, whichever file registers it.
+const handle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, listener) =>
+  handle(channel, (event, ...args) => {
+    if (!fromWindow(event)) throw new Error(`"${channel}" answers only the app's window`);
+    return listener(event, ...args);
+  });
+
 let quitState: "running" | "stopping" | "stopped" = "running";
 
 // ---------------------------------------------------------------------------
@@ -95,10 +127,9 @@ async function createWindow(): Promise<void> {
       ? { icon: join(__dirname, "../../resources/icons/icon.png") }
       : {}),
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false, // ESM preload requires sandbox: false (package.json "type": "module")
       webviewTag: true, // the Browser tab renders guest pages in <webview>
     },
   });
@@ -117,7 +148,7 @@ async function createWindow(): Promise<void> {
   //   3. Strip disallowed guest-supplied webview attributes from params.
   const ALLOWED_WEBVIEW_PARAM_KEYS = new Set(["src", "partition", "useragent"]);
   mainWindow.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
-    webPreferences.preload = join(__dirname, "../preload/browser-preload.mjs");
+    webPreferences.preload = join(__dirname, "../preload/browser-preload.cjs");
     webPreferences.contextIsolation = true;
     webPreferences.nodeIntegration = false;
 
@@ -219,13 +250,6 @@ async function createWindow(): Promise<void> {
       // Ignore malformed URLs
     }
     return { action: "deny" };
-  });
-
-  // The window's origin: Vite's in dev, app://deus otherwise (the one the
-  // backend was told to trust, backend-process.ts).
-  const windowOrigin = rendererOrigin({
-    isDev: is.dev,
-    rendererUrl: process.env.ELECTRON_RENDERER_URL,
   });
 
   // Block top-level navigation to external URLs (security: prevent redirect hijacks)
@@ -359,6 +383,9 @@ app.whenReady().then(async () => {
   registerBrowserEmulationHandlers();
   registerBrowserCookieHandlers();
   registerUpdateHandlers(quitAfterStopping);
+
+  limitPermissions(session.defaultSession, windowOrigin);
+  limitPermissions(session.fromPartition(WEBVIEW_PARTITION));
 
   logMainProcess("[main] Creating window...");
   await createWindow();

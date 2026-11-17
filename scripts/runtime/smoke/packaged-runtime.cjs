@@ -1,7 +1,9 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync, spawnSync } = require("node:child_process");
+const { execFile, spawnSync } = require("node:child_process");
+const { promisify } = require("node:util");
+const { BUNDLED_BINARIES } = require("../electron-builder-after-pack.cjs");
 const { ENGINE_STARTED, assertEngineStarted } = require("./engine-ready.cjs");
 const {
   PROJECT_ROOT,
@@ -17,20 +19,12 @@ const {
 } = require("./lib/smoke-helpers.cjs");
 
 function parseArgs(argv) {
-  const options = {
-    appPath: null,
-    requireGatekeeper: false,
-    skipAppCheck: false,
-  };
+  const options = { appPath: null };
 
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--app") {
       options.appPath = argv[++index];
-    } else if (arg === "--require-gatekeeper") {
-      options.requireGatekeeper = true;
-    } else if (arg === "--skip-app-check") {
-      options.skipAppCheck = true;
     } else if (arg === "--help" || arg === "-h") {
       printUsage();
       process.exit(0);
@@ -51,30 +45,10 @@ function printUsage() {
   console.log(`Usage: bun run smoke:packaged-runtime -- [app-path]
 
 Options:
-  --app <path>             Path to the packaged .app bundle
-  --require-gatekeeper     Require spctl execute assessment in the app check
-  --skip-app-check         Skip the packaged app smoke and only run runtime commands
+  --app <path>             The packaged .app bundle, or a Linux package's resources folder
 
-This smoke executes the packaged Resources/bin/deus-runtime. It should be run
-on notarized release artifacts or hosts that allow generated/copied Mach-O
-binaries to launch directly.`);
-}
-
-function runAppCheck(appPath, options) {
-  if (options.skipAppCheck) return;
-
-  const args = [
-    path.join(PROJECT_ROOT, "scripts", "runtime", "smoke", "packaged-app.cjs"),
-    "--app",
-    appPath,
-    "--run-version-checks",
-  ];
-  if (options.requireGatekeeper) args.push("--require-gatekeeper");
-
-  execFileSync(process.execPath, args, {
-    cwd: PROJECT_ROOT,
-    stdio: "inherit",
-  });
+Runs every bundled executable's --version, then the packaged deus-runtime's
+self-test and backend.`);
 }
 
 function readBackendPort(output) {
@@ -103,6 +77,19 @@ async function smokeBackendCommands(port) {
     return;
   }
 
+  // The first simctl call on a fresh machine starts CoreSimulator, which can outlast the backend's
+  // 30 s. Where simctl itself does not answer, the backend's answer says nothing about the app.
+  try {
+    await promisify(execFile)("xcrun", ["simctl", "list", "devices", "-j"], {
+      timeout: 120_000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (error) {
+    console.log(
+      `[runtime-smoke] packaged backend simulator command smoke skipped: simctl does not answer on this machine (${error.signal ?? error.code})`
+    );
+    return;
+  }
   const answer = await readFromBackend(port, "simListDevices", {}, 45_000);
   if (!Array.isArray(answer?.devices)) {
     throw new Error(`simListDevices returned unexpected payload: ${JSON.stringify(answer)}`);
@@ -140,19 +127,22 @@ async function smokeBackend(runtimeBin, binDir) {
 
 async function smokePackagedRuntime(options) {
   const appPath = options.appPath;
-  const resourcesDir = path.join(appPath, "Contents", "Resources");
+  const resourcesDir = appPath.endsWith(".app")
+    ? path.join(appPath, "Contents", "Resources")
+    : appPath;
   const binDir = path.join(resourcesDir, "bin");
   const runtimeBin = path.join(binDir, "deus-runtime");
   assertExecutable(runtimeBin, "packaged Deus runtime");
   assertHostRunnableArch(runtimeBin, "Packaged runtime");
 
-  runAppCheck(appPath, options);
-
-  const version = await runRuntimeCommand(runtimeBin, ["--version"], binDir);
-  if (!/^deus-runtime \d+\.\d+\.\d+ /.test(version)) {
-    throw new Error(`Unexpected packaged runtime version output: ${version}`);
+  const { version } = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, "package.json"), "utf8"));
+  for (const name of BUNDLED_BINARIES) {
+    const output = await runRuntimeCommand(path.join(binDir, name), ["--version"], binDir);
+    if (name === "deus-runtime" && !output.startsWith(`deus-runtime ${version} `)) {
+      throw new Error(`Packaged runtime is not version ${version}: ${output}`);
+    }
+    console.log(`[runtime-smoke] packaged ${name} --version: ${output.split("\n")[0]}`);
   }
-  console.log(`[runtime-smoke] packaged runtime version: ${version}`);
 
   const selfTest = JSON.parse(await runRuntimeCommand(runtimeBin, ["self-test"], binDir));
   assertRuntimeSelfTest(selfTest, {

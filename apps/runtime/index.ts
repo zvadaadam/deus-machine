@@ -9,8 +9,6 @@ import { PACKAGED_SYSTEM_PATHS } from "../../shared/runtime";
 
 const VERSION = packageJson.version;
 const RUNTIME_NAME = "deus-runtime";
-const STAGED_RUNTIME_KEYS = new Set(["darwin-arm64", "darwin-x64", "linux-x64"]);
-const REQUIRED_BINARIES = ["deus-runtime", "codex", "claude", "gh", "rg", "agent-browser"] as const;
 const REQUIRED_SIMULATOR_HELPERS = ["simbridge", "siminspector.dylib"] as const;
 
 type RuntimeCommand = "backend" | "self-test";
@@ -59,120 +57,21 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-function unique(values: Array<string | undefined>): string[] {
-  return [...new Set(values.filter((value): value is string => Boolean(value)))];
-}
-
 function getRuntimeKey(): string {
   return `${process.platform}-${process.arch}`;
 }
 
-function findProjectRoot(start: string): string | null {
-  let current = resolve(start);
-  while (true) {
-    if (existsSync(join(current, "package.json")) && existsSync(join(current, "apps"))) {
-      return current;
-    }
-    const next = dirname(current);
-    if (next === current) return null;
-    current = next;
-  }
-}
-
-function isSourceRuntimeInvocation(): boolean {
-  return process.argv.some((candidate) => candidate.endsWith(join("apps", "runtime", "index.ts")));
-}
-
-function isExecutableFile(filePath: string): boolean {
-  if (!existsSync(filePath)) return false;
-  const stat = statSync(filePath);
-  if (!stat.isFile()) return false;
-  return (stat.mode & 0o111) !== 0;
-}
-
-function runtimeExecutableInDirectory(dir: string | undefined): string | null {
-  if (!dir) return null;
-  const candidate = join(dir, RUNTIME_NAME);
-  return isExecutableFile(candidate) ? candidate : null;
-}
-
-function resolveRuntimeExecutablePath(): string {
-  const explicitRuntimeExecutable = process.env.DEUS_RUNTIME_EXECUTABLE;
-  if (
-    explicitRuntimeExecutable &&
-    basename(explicitRuntimeExecutable) === RUNTIME_NAME &&
-    isExecutableFile(explicitRuntimeExecutable)
-  ) {
-    return resolve(explicitRuntimeExecutable);
-  }
-
-  for (const candidate of [process.execPath, process.argv[0], process.argv[1]]) {
-    if (candidate && basename(candidate) === RUNTIME_NAME) {
-      return resolve(candidate);
-    }
-  }
-
-  if (!isSourceRuntimeInvocation()) {
-    const cwdExecutable = runtimeExecutableInDirectory(process.cwd());
-    if (cwdExecutable) return resolve(cwdExecutable);
-
-    const firstPathEntry = process.env.PATH?.split(delimiter).find(Boolean);
-    const pathExecutable = runtimeExecutableInDirectory(firstPathEntry);
-    if (pathExecutable) return resolve(pathExecutable);
-  }
-
-  return process.execPath;
-}
-
+/** The packaged app's Resources/bin/deus-runtime: its folder is the bundled
+ * executables', the one above it the app's resources. The desktop names the
+ * path it started (DEUS_RUNTIME_EXECUTABLE), which may differ from execPath by a symlink. */
 function resolveRuntimeLayout() {
-  const executablePath = resolveRuntimeExecutablePath();
-  const executableDir = dirname(executablePath);
-  const runtimeKey = getRuntimeKey();
-  const isNativeRuntimeExecutable = basename(executablePath) === RUNTIME_NAME;
-  const isStagedRuntime =
-    STAGED_RUNTIME_KEYS.has(basename(executableDir)) && basename(dirname(executableDir)) === "bin";
-  const projectRoot = isNativeRuntimeExecutable
-    ? isStagedRuntime
-      ? findProjectRoot(executableDir)
-      : null
-    : (findProjectRoot(process.cwd()) ?? findProjectRoot(resolve(executableDir, "../../..")));
-  const stagedBinDir =
-    projectRoot && STAGED_RUNTIME_KEYS.has(runtimeKey)
-      ? join(projectRoot, "dist", "runtime", "electron", "bin", runtimeKey)
-      : null;
-  const bundledBinDir = isStagedRuntime
-    ? executableDir
-    : stagedBinDir && existsSync(stagedBinDir)
-      ? stagedBinDir
-      : executableDir;
-  const resourcesPath = isStagedRuntime
-    ? resolve(executableDir, "../..")
-    : stagedBinDir && existsSync(stagedBinDir)
-      ? join(projectRoot!, "dist", "runtime", "electron")
-      : dirname(executableDir);
-
-  return {
-    executablePath,
-    executableDir,
-    bundledBinDir,
-    resourcesPath,
-    projectRoot,
-  };
-}
-
-function prependPath(pathValue: string | undefined, entries: string[]): string {
-  return unique([...entries, ...(pathValue ?? "").split(delimiter)]).join(delimiter);
-}
-
-function deterministicPackagedPath(bundledBinDir: string): string {
-  return unique([bundledBinDir, ...PACKAGED_SYSTEM_PATHS]).join(delimiter);
-}
-
-function inspectBundledBinary(binDir: string, name: (typeof REQUIRED_BINARIES)[number]) {
-  const filePath = join(binDir, name);
-  const exists = existsSync(filePath);
-  const executable = exists ? (statSync(filePath).mode & 0o111) !== 0 : false;
-  return { path: filePath, exists, executable };
+  const named = process.env.DEUS_RUNTIME_EXECUTABLE;
+  const executablePath =
+    named && basename(named) === RUNTIME_NAME && existsSync(named)
+      ? resolve(named)
+      : process.execPath;
+  const bundledBinDir = dirname(executablePath);
+  return { executablePath, bundledBinDir, resourcesPath: dirname(bundledBinDir) };
 }
 
 function inspectSimulatorHelper(
@@ -284,31 +183,14 @@ async function inspectSqliteContract() {
 
 function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   const layout = resolveRuntimeLayout();
-  const isNativeRuntimeExecutable = basename(layout.executablePath) === RUNTIME_NAME;
   process.env.DEUS_RUNTIME = "1";
-  process.env.DEUS_RUNTIME_COMMAND = command;
-  if (isNativeRuntimeExecutable) {
-    process.env.DEUS_RUNTIME_EXECUTABLE = layout.executablePath;
-  }
-  if (isNativeRuntimeExecutable) {
-    process.env.DEUS_BUNDLED_BIN_DIR = layout.bundledBinDir;
-    process.env.DEUS_RESOURCES_PATH = layout.resourcesPath;
-    // A compiled Bun finds no package by name: where its native ones are.
-    process.env.DEUS_NATIVE_MODULES = layout.projectRoot
-      ? join(layout.projectRoot, "node_modules")
-      : join(layout.resourcesPath, "app.asar.unpacked", "node_modules");
-  } else {
-    process.env.DEUS_BUNDLED_BIN_DIR ??= layout.bundledBinDir;
-    process.env.DEUS_RESOURCES_PATH ??= layout.resourcesPath;
-  }
-  if (isNativeRuntimeExecutable) {
-    process.env.NODE_ENV = "production";
-  } else {
-    process.env.NODE_ENV ??= "production";
-  }
-  process.env.PATH = isNativeRuntimeExecutable
-    ? deterministicPackagedPath(layout.bundledBinDir)
-    : prependPath(process.env.PATH, [layout.bundledBinDir]);
+  process.env.DEUS_RUNTIME_EXECUTABLE = layout.executablePath;
+  process.env.DEUS_BUNDLED_BIN_DIR = layout.bundledBinDir;
+  process.env.DEUS_RESOURCES_PATH = layout.resourcesPath;
+  // A compiled Bun finds no package by name: where its native ones are.
+  process.env.DEUS_NATIVE_MODULES = join(layout.resourcesPath, "app.asar.unpacked", "node_modules");
+  process.env.NODE_ENV = "production";
+  process.env.PATH = [layout.bundledBinDir, ...PACKAGED_SYSTEM_PATHS].join(delimiter);
 
   if (command === "backend") {
     process.env.AUTH_TOKEN ??= randomBytes(24).toString("hex");
@@ -320,7 +202,7 @@ function configureRuntimeEnv(command: RuntimeCommand, dataDir?: string): void {
   }
 }
 
-/** A macOS app bundle ships the simulator helpers; staged and source runtimes have none. */
+/** A macOS app bundle ships the simulator helpers; a Linux package has none. */
 function isMacAppBundle(resourcesPath: string): boolean {
   return (
     process.platform === "darwin" &&
@@ -334,9 +216,6 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
 
   if (command === "self-test") {
     const layout = resolveRuntimeLayout();
-    const binaries = Object.fromEntries(
-      REQUIRED_BINARIES.map((name) => [name, inspectBundledBinary(layout.bundledBinDir, name)])
-    );
     const simulatorHelpers = Object.fromEntries(
       REQUIRED_SIMULATOR_HELPERS.map((name) => [
         name,
@@ -346,9 +225,6 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
     const requireSimulatorHelpers = isMacAppBundle(layout.resourcesPath);
     const checks = await inspectRuntimeChecks();
     const sqlite = await inspectSqliteContract();
-    const missing = Object.entries(binaries)
-      .filter(([, result]) => !result.exists || !result.executable)
-      .map(([name]) => name);
     const missingSimulatorHelpers = Object.entries(simulatorHelpers)
       .filter(([, result]) => requireSimulatorHelpers && (!result.exists || !result.executable))
       .map(([name]) => name);
@@ -357,11 +233,7 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
       .map(([name]) => name);
     console.log(
       JSON.stringify({
-        ok:
-          missing.length === 0 &&
-          missingSimulatorHelpers.length === 0 &&
-          failedChecks.length === 0 &&
-          sqlite.ok,
+        ok: missingSimulatorHelpers.length === 0 && failedChecks.length === 0 && sqlite.ok,
         version: VERSION,
         executable: layout.executablePath,
         execPath: process.execPath,
@@ -372,22 +244,15 @@ async function run(command: RuntimeCommand, dataDir?: string): Promise<void> {
         nodeEnv: process.env["NODE_ENV"] ?? "",
         pathEnv: process.env.PATH ?? "",
         runtimeKey: getRuntimeKey(),
-        binaries,
         simulatorHelpers,
         checks,
         sqlite,
         requireSimulatorHelpers,
-        missing,
         missingSimulatorHelpers,
         failedChecks,
       })
     );
-    if (
-      missing.length > 0 ||
-      missingSimulatorHelpers.length > 0 ||
-      failedChecks.length > 0 ||
-      !sqlite.ok
-    ) {
+    if (missingSimulatorHelpers.length > 0 || failedChecks.length > 0 || !sqlite.ok) {
       process.exit(1);
     }
     return;

@@ -2,8 +2,6 @@ import path from "node:path";
 
 export const DEUS_APP_ID = "com.deus.app";
 export const DEUS_DB_FILENAME = "deus.db";
-export const DEUS_PREFERENCES_FILENAME = "preferences.json";
-export const RUNTIME_MANIFEST_VERSION = 1;
 export const PACKAGED_SYSTEM_PATHS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] as const;
 
 export interface RuntimePathOptions {
@@ -14,7 +12,6 @@ export interface RuntimePathOptions {
 
 export interface RuntimeStagePaths {
   root: string;
-  manifest: string;
   common: {
     root: string;
     backendBundle: string;
@@ -46,7 +43,6 @@ export function resolveRuntimeStagePaths(projectRoot: string): RuntimeStagePaths
 
   return {
     root: runtimeRoot,
-    manifest: path.join(runtimeRoot, "manifest.json"),
     common: {
       root: commonRoot,
       backendBundle: path.join(commonRoot, "server.bundled.cjs"),

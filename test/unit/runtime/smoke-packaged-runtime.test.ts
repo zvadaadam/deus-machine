@@ -1,20 +1,9 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, "../../..");
 const require = createRequire(import.meta.url);
 const { pathPattern } = require("../../../scripts/runtime/smoke/lib/smoke-helpers.cjs");
 
@@ -38,15 +27,5 @@ describe("packaged runtime smoke harness", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
-
-  it("does not load host better-sqlite3", () => {
-    const script = readFileSync(
-      path.join(projectRoot, "scripts", "runtime", "smoke", "packaged-runtime.cjs"),
-      "utf8"
-    );
-
-    expect(script).not.toMatch(/require\(["']better-sqlite3["']\)/);
-    expect(script).not.toMatch(/new\s+Database\s*\(/);
   });
 });

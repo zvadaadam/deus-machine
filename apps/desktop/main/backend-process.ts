@@ -6,7 +6,7 @@ import { app, BrowserWindow } from "electron";
 import crypto from "crypto";
 import { DEUS_DB_FILENAME, PACKAGED_SYSTEM_PATHS } from "../../../shared/runtime";
 import { extendCliPath, getDevStagedCliDirectory } from "../../../shared/lib/cli-path";
-import { PACKAGED_RUNTIME_ENV_DENYLIST } from "./runtime-env";
+import { BACKEND_CHILD_ENV_DENYLIST } from "../../../shared/lib/child-env";
 import { handleKeepAwakeLine, setKeepAwakeWanted } from "./keep-awake";
 import { getLaunchPath } from "./shell-env";
 import { rendererOrigin } from "./app-protocol";
@@ -187,7 +187,7 @@ export async function spawnBackend(
   // already honors, so a worktree dev run can point at a scratch database
   // instead of the real userData one (whose schema may not match the branch).
   // A PACKAGED app never honors it: stray shell env must not redirect the
-  // real database (same doctrine as PACKAGED_RUNTIME_ENV_DENYLIST).
+  // real database (same doctrine as BACKEND_CHILD_ENV_DENYLIST).
   const dbPath =
     (!app.isPackaged && process.env.DATABASE_PATH) ||
     join(app.getPath("userData"), DEUS_DB_FILENAME);
@@ -220,7 +220,7 @@ export async function spawnBackend(
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env };
     if (runtime.runtimeExecutable) {
-      for (const key of PACKAGED_RUNTIME_ENV_DENYLIST) {
+      for (const key of BACKEND_CHILD_ENV_DENYLIST) {
         delete childEnv[key];
       }
     }
