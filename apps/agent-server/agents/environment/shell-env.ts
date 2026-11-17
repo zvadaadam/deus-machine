@@ -54,6 +54,9 @@ export function getShellEnvironment(): Record<string, string> {
   const output = execFileSync(shell, ["-ilc", command], {
     encoding: "utf8",
     timeout: 5_000,
+    // An interactive shell ignores SIGTERM, so a profile that hangs would hold
+    // the backend's start for as long as it hangs: kill it outright.
+    killSignal: "SIGKILL",
     env: {
       // Prevent Oh My Zsh from blocking with auto-update prompts
       DISABLE_AUTO_UPDATE: "true",

@@ -6,7 +6,8 @@
  * developer tools may not be found.
  *
  * This module runs the user's login shell to capture the full PATH for dev
- * only. Packaged runtime uses bundled binaries plus deterministic system paths.
+ * only. Packaged, the backend's engine adds the login shell's PATH itself
+ * (apps/agent-server/agents/environment), after the bundled bin folder.
  *
  * Ensures dev child processes get the user's full shell environment.
  */

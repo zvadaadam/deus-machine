@@ -27,7 +27,10 @@ filters copy the same names.
   `bun run dev` and `dev:web`.
 - `apps/runtime/index.ts` is `deus-runtime`: `backend`, `self-test` and
   `--version`. Its folder is the bundled bin folder, the one above it the app's
-  resources.
+  resources. Its `PATH` is that folder, then the system folders; the engine
+  adds the login shell's entries after them
+  (`apps/agent-server/agents/environment`), so agents and terminals reach the
+  person's own tools (`node`, Homebrew) while the bundled CLIs come first.
 
 ## What proves it
 

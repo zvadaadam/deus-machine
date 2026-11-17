@@ -126,4 +126,22 @@ describe("getShellEnvironment", () => {
       process.env.SHELL = originalShell;
     }
   });
+
+  it("gives the installed app the login shell's PATH after its own", async () => {
+    const saved = { PATH: process.env.PATH, DEUS_PACKAGED: process.env.DEUS_PACKAGED };
+    process.env.DEUS_PACKAGED = "1";
+    process.env.PATH = "/App/Resources/bin:/usr/bin:/bin";
+    mockExecFileSync.mockReturnValue(
+      "_SHELL_ENV_DELIMITER_PATH=/opt/homebrew/bin:/usr/bin\n_SHELL_ENV_DELIMITER_"
+    );
+    try {
+      const { applyShellEnvironment } = await import("../agents/environment");
+      applyShellEnvironment();
+      expect(process.env.PATH).toBe("/App/Resources/bin:/usr/bin:/bin:/opt/homebrew/bin");
+    } finally {
+      process.env.PATH = saved.PATH;
+      if (saved.DEUS_PACKAGED === undefined) delete process.env.DEUS_PACKAGED;
+      else process.env.DEUS_PACKAGED = saved.DEUS_PACKAGED;
+    }
+  });
 });

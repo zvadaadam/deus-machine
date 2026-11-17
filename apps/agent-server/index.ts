@@ -32,7 +32,7 @@ function engineRuntime() {
 /**
  * Start the engine for `host`, the backend, and return the client's end of
  * its wire. Packaged and staged runtimes adopt the bundled CLIs before the
- * registry exists; a source run folds the login shell's environment in.
+ * registry exists; every run folds the login shell's environment in after them.
  * `runtime` is for tests.
  */
 export function startEngine(
