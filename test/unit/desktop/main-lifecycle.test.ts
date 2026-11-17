@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   registerSchemes: vi.fn(),
   handleProtocol: vi.fn(),
   openExternal: vi.fn(),
+  enableSandbox: vi.fn(),
+  handle: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -28,13 +30,18 @@ vi.mock("electron", () => ({
     whenReady: () => Promise.resolve(),
     on: (event: string, handler: (...args: unknown[]) => void) => mocks.events.set(event, handler),
     quit: mocks.quit,
-    enableSandbox: vi.fn(),
+    enableSandbox: mocks.enableSandbox,
   },
   autoUpdater: new EventEmitter(),
   BrowserWindow: class {
     handlers = new Map<string, () => void>();
     destroyed = false;
-    webContents = { on: vi.fn(), setWindowOpenHandler: vi.fn(), send: vi.fn() };
+    webContents = {
+      on: vi.fn(),
+      setWindowOpenHandler: vi.fn(),
+      send: vi.fn(),
+      mainFrame: { parent: null, url: "app://deus/" },
+    };
     constructor() {
       mocks.windows.push(this);
     }
@@ -51,7 +58,7 @@ vi.mock("electron", () => ({
     focus = vi.fn(() => this.live());
   },
   dialog: { showMessageBox: mocks.showMessageBox },
-  ipcMain: { handle: vi.fn(), on: vi.fn() },
+  ipcMain: { handle: mocks.handle, on: vi.fn() },
   session: {
     defaultSession: { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() },
     fromPartition: () => ({
@@ -108,8 +115,10 @@ vi.mock("../../../apps/desktop/main/startup-diagnostics", () => ({
   logMainProcess: vi.fn(),
 }));
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
+  // The mocked module outlives resetModules: undo the last import's wrapping.
+  (await import("electron")).ipcMain.handle = mocks.handle;
   vi.clearAllMocks();
   vi.stubEnv("DEUS_USER_DATA_DIR", "/fixture/deus-user-data");
   vi.stubEnv("DEUS_BACKEND_PORT", "");
@@ -232,4 +241,30 @@ it("loads the packaged window from app://deus and opens no debugging port", asyn
   ).toBe(false);
   expect(navigate("https://example.com/")).toBe(false);
   expect(mocks.openExternal).toHaveBeenCalledWith("https://example.com/");
+});
+
+it("sandboxes every renderer and answers IPC from the window's own page only", async () => {
+  mocks.spawn.mockResolvedValue({ port: 12345, authToken: "fixture" });
+  const { ipcMain } = await import("electron");
+  await import("../../../apps/desktop/main/index");
+  await vi.waitFor(() => expect(mocks.windows).toHaveLength(1));
+  expect(mocks.enableSandbox).toHaveBeenCalledOnce();
+
+  const listener = vi.fn(() => "answer");
+  ipcMain.handle("fixture:channel", listener);
+  const wrapped = mocks.handle.mock.calls.find(([channel]) => channel === "fixture:channel")![1];
+  const contents = (mocks.windows[0] as unknown as { webContents: { mainFrame: object } })
+    .webContents;
+  const call = (sender: object, senderFrame: object | null) => () =>
+    wrapped({ sender, senderFrame }, "argument");
+
+  expect(call(contents, contents.mainFrame)()).toBe("answer");
+  expect(listener).toHaveBeenCalledWith(expect.anything(), "argument");
+  // A frame inside the window, a page of another origin, a Browser-tab guest.
+  const frame = { parent: contents.mainFrame, url: "app://deus/" };
+  expect(call(contents, frame)).toThrow(/answers only the app's window/);
+  expect(call(contents, { parent: null, url: "https://example.com/" })).toThrow();
+  expect(call({}, { parent: null, url: "app://deus/" })).toThrow();
+  expect(call(contents, null)).toThrow();
+  expect(listener).toHaveBeenCalledOnce();
 });

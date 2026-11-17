@@ -38,7 +38,11 @@ vi.mock("electron", () => ({
     isDestroyed = () => false;
   },
   ipcMain: {
-    handle: (channel: string, handler: () => unknown) => mocks.handlers.set(channel, handler),
+    // Handlers are called directly here; the window-only check is main-lifecycle's.
+    get handle() {
+      return (channel: string, handler: () => unknown) => mocks.handlers.set(channel, handler);
+    },
+    set handle(_wrapped) {},
     on: vi.fn(),
   },
   session: {

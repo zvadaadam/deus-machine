@@ -12,7 +12,7 @@
  * process is purely a desktop shell that spawns it and bridges native OS features.
  */
 
-import { app, BrowserWindow, session, shell } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from "electron";
 import { join } from "path";
 import { homedir } from "os";
 import { is } from "@electron-toolkit/utils";
@@ -86,6 +86,25 @@ const windowOrigin = rendererOrigin({
   isDev: is.dev,
   rendererUrl: process.env.ELECTRON_RENDERER_URL,
 });
+
+/** The window's own page: not a Browser-tab guest, nor a frame inside the window. */
+function fromWindow(event: IpcMainInvokeEvent): boolean {
+  const frame = event.senderFrame;
+  return (
+    event.sender === mainWindow?.webContents &&
+    frame?.parent === null &&
+    originOf(frame.url) === windowOrigin
+  );
+}
+
+// Every handler answers only the window's page, whichever file registers it.
+const handle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = (channel, listener) =>
+  handle(channel, (event, ...args) => {
+    if (!fromWindow(event)) throw new Error(`"${channel}" answers only the app's window`);
+    return listener(event, ...args);
+  });
+
 let quitState: "running" | "stopping" | "stopped" = "running";
 
 // ---------------------------------------------------------------------------
