@@ -11,6 +11,7 @@
 import type * as Pty from "node-pty";
 import { createRequire } from "node:module";
 import { terminalOutput } from "@shared/api/terminal";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { ConflictError, NotFoundError } from "../lib/errors";
 import { publish } from "./streams";
 
@@ -108,8 +109,7 @@ export function spawnPty(args: {
     cols,
     rows,
     cwd: cwd || process.env.HOME || "/",
-    env:
-      (args.env as Record<string, string> | undefined) ?? (process.env as Record<string, string>),
+    env: (args.env ?? createBackendChildEnv()) as Record<string, string>,
     onData: (bytes) => emitPtyData(id, Array.from(bytes)),
     onExit: () => {
       sessions.delete(id);

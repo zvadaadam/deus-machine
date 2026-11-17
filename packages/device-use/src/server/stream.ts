@@ -9,6 +9,7 @@
 // server shuts down or the sim changes.
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { findBridgePath } from "../engine/simbridge.js";
 
@@ -49,8 +50,10 @@ export class StreamManager {
   private child: ChildProcess | undefined;
   private info: StreamInfo | undefined;
   private readonly bridgePath: string;
+  /** What simbridge's stream server requires of every request, as `?t=`. */
+  readonly token = randomBytes(32).toString("base64url");
 
-  constructor(bridgePath = findBridgePath()) {
+  constructor(bridgePath = findBridgePath() ?? "simbridge") {
     this.bridgePath = bridgePath;
   }
 
@@ -67,8 +70,9 @@ export class StreamManager {
 
     const port = await pickFreePort();
     const child = spawn(this.bridgePath, ["--stream", "--udid", udid, "--port", String(port)], {
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: false,
+      // A stdin we hold open: simbridge exits when it ends.
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, SIMBRIDGE_STREAM_TOKEN: this.token },
     });
 
     // Wait for the upstream to begin listening — a very short readiness probe.
@@ -79,7 +83,7 @@ export class StreamManager {
       }, 5000);
       const tryProbe = async () => {
         try {
-          const res = await fetch(`http://127.0.0.1:${port}/config`);
+          const res = await fetch(`http://127.0.0.1:${port}/config?t=${this.token}`);
           if (res.ok) {
             clearTimeout(timer);
             try {
@@ -142,7 +146,7 @@ export class StreamManager {
     if (!this.info) {
       return new Response("stream not started", { status: 404 });
     }
-    const upstream = await fetch(`${this.info.url}/stream.mjpeg`);
+    const upstream = await fetch(`${this.info.url}/stream.mjpeg?t=${this.token}`);
     return new Response(upstream.body, {
       status: upstream.status,
       headers: upstream.headers,

@@ -227,11 +227,7 @@ export function ContentView({
             // Frozen on the last LOCAL workspace (see above); hidden, not
             // unmounted, under a cloud selection.
             <div className={cn("h-full w-full", cloud && "hidden")}>
-              <SimulatorPanel
-                toolbarAction={toolbarAction}
-                workspaceId={lastLocal.id}
-                workspacePath={lastLocal.path}
-              />
+              <SimulatorPanel toolbarAction={toolbarAction} workspaceId={lastLocal.id} />
             </div>
           )}
           {cloud && (

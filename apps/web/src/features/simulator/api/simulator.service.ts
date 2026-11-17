@@ -61,7 +61,7 @@ export const simulatorService = {
       () => call(api.simStart, { workspaceId, udid, skipBootCheck }),
       (event) => {
         if (event.type === "streamReady") {
-          return { url: event.url, port: event.port, hid_available: event.hidAvailable };
+          return { url: event.url, hid_available: event.hidAvailable };
         }
         if (event.type === "streamFailed") return new Error(event.error);
         return undefined;
@@ -70,10 +70,10 @@ export const simulatorService = {
     ),
 
   /** Build the workspace's app and run it on its simulator, and wait for the build. */
-  buildAndRun: (workspaceId: string, workspacePath: string): Promise<InstalledApp> =>
+  buildAndRun: (workspaceId: string): Promise<InstalledApp> =>
     outcome(
       workspaceId,
-      () => call(api.simBuildAndRun, { workspaceId, workspacePath }),
+      () => call(api.simBuildAndRun, { workspaceId }),
       (event) => {
         if (event.type === "buildComplete") {
           return { bundle_id: event.bundleId, name: event.appName, app_path: event.appPath };

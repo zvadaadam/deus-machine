@@ -11,6 +11,7 @@
 
 import { execFile, spawn } from "child_process";
 import { dirname, join } from "path";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { resolveBundledCliPath, resolveCliExecutable } from "@shared/lib/cli-path";
 
 export interface AgentBrowserResult {
@@ -48,35 +49,9 @@ const BINARY = (() => {
 
 const DEFAULT_TIMEOUT_MS = 35_000;
 
-const AGENT_BROWSER_CHILD_ENV_DENYLIST = [
-  "AUTH_TOKEN",
-  "DATABASE_PATH",
-  "DEUS_AUTH_TOKEN",
-  "DEUS_BACKEND_PORT",
-  "DEUS_BUNDLED_BIN_DIR",
-  "DEUS_DATA_DIR",
-  "DEUS_PACKAGED",
-  "DEUS_RESOURCES_PATH",
-  "DEUS_RUNTIME",
-  "DEUS_RUNTIME_COMMAND",
-  "DEUS_RUNTIME_EXECUTABLE",
-  "ELECTRON_RUN_AS_NODE",
-  "NODE_PATH",
-  "PORT",
-] as const;
-
 /** Build env for agent-browser subprocess */
 function buildEnv(sessionId: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const key of AGENT_BROWSER_CHILD_ENV_DENYLIST) {
-    delete env[key];
-  }
-
-  return {
-    ...env,
-    AGENT_BROWSER_SESSION: sessionId,
-    AGENT_BROWSER_HEADED: "1",
-  };
+  return createBackendChildEnv({ AGENT_BROWSER_SESSION: sessionId, AGENT_BROWSER_HEADED: "1" });
 }
 
 /** Parse the last JSON object from stdout (agent-browser may print status lines before JSON) */

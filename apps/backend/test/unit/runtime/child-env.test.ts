@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createBackendChildEnv } from "../../../src/runtime/child-env";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 
 const originalEnv = { ...process.env };
 

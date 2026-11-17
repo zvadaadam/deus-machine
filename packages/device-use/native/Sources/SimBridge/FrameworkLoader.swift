@@ -55,7 +55,7 @@ final class FrameworkLoader {
 
         // SimulatorKit
         if let dir = try? findDeveloperDir() {
-            let simKitPath = "\(dir)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
+            let simKitPath = Self.simulatorKitPath(developerDir: dir)
             if FileManager.default.fileExists(atPath: simKitPath) {
                 result["simulatorKitPath"] = simKitPath
                 result["simulatorKitExists"] = true
@@ -116,8 +116,15 @@ final class FrameworkLoader {
         log("CoreSimulator loaded")
     }
 
+    /// Xcode 27.1 and later keep SimulatorKit in `Contents/SharedFrameworks`; earlier ones in the developer directory.
+    private static func simulatorKitPath(developerDir: String) -> String {
+        let paths = ["\(developerDir)/../SharedFrameworks", "\(developerDir)/Library/PrivateFrameworks"]
+            .map { "\($0)/SimulatorKit.framework/SimulatorKit" }
+        return paths.first { FileManager.default.fileExists(atPath: $0) } ?? paths[0]
+    }
+
     private func loadSimulatorKit() throws {
-        let path = "\(developerDir)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit"
+        let path = Self.simulatorKitPath(developerDir: developerDir)
         guard FileManager.default.fileExists(atPath: path) else {
             throw SimError.frameworkNotFound("SimulatorKit not found at \(path)")
         }

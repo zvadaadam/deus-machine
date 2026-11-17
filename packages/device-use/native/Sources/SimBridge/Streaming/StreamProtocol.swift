@@ -4,6 +4,7 @@ import Foundation
 enum WSMessageType: UInt8 {
     case touch = 0x03
     case button = 0x04
+    case key = 0x05
 }
 
 struct TouchEventPayload: Codable {
@@ -14,4 +15,9 @@ struct TouchEventPayload: Codable {
 
 struct ButtonEventPayload: Codable {
     let button: String  // "home", "lock"
+}
+
+struct KeyEventPayload: Codable {
+    let keyCode: Int      // USB HID usage
+    let direction: String // "down", "up"
 }

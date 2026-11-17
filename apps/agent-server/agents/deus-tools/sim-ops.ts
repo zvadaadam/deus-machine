@@ -10,15 +10,13 @@
 //
 // Used by: MCP tool definitions (simulator.ts) for agent headless control.
 // NOT used by: Simulator Panel (that goes through the backend service).
-//
-// TODO(build-log-streaming): pipe xcodebuild stdout line-by-line via
-// the side channel so the panel can show real-time build progress.
 
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { readdir } from "fs/promises";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { join } from "path";
+import { createBackendChildEnv } from "@shared/lib/child-env";
 import { HostRpc } from "../../host-link";
 
 const execFileAsync = promisify(execFile);
@@ -30,98 +28,21 @@ const execFileAsync = promisify(execFile);
 
 let _engine: Awaited<typeof import("device-use/engine")> | null = null;
 let _executor: any = null;
-
-const SIM_ENV: Record<string, string | undefined> = {
-  ...process.env,
-  DEVELOPER_DIR: process.env["DEVELOPER_DIR"] ?? "/Applications/Xcode.app/Contents/Developer",
-};
+/** What the helpers and Xcode's tools run with: the backend's environment without its internals. */
+let _env: NodeJS.ProcessEnv = {};
 
 async function getEngine() {
   if (!_engine) {
     _engine = await import("device-use/engine");
-    _executor = _engine.createExecutor({ env: SIM_ENV });
+    _env = _engine.simulatorEnv(createBackendChildEnv());
+    _executor = _engine.createExecutor({ env: _env });
   }
-  return { engine: _engine, executor: _executor };
+  return { engine: _engine, executor: _executor, env: _env };
 }
 
-// ---------------------------------------------------------------------------
-// Direct simbridge invocation — bypasses the engine's findBridgePath()
-// which uses import.meta.url (fails in CJS bundles). We resolve the binary
-// ourselves and call it with the same JSON command protocol.
-// ---------------------------------------------------------------------------
-
-import { existsSync } from "fs";
-
-let _simBridgePath: string | null | undefined; // undefined = not yet resolved
-
-function findUpwards(startDir: string, rel: string): string | null {
-  let dir = startDir;
-  while (true) {
-    const candidate = join(dir, rel);
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-function resolveSimBridgePath(): string | null {
-  if (_simBridgePath !== undefined) return _simBridgePath;
-
-  // 1. Explicit override — set by Electron main when packaged, or by devs.
-  const envOverride = process.env["DEVICE_USE_SIMBRIDGE"];
-  if (envOverride && existsSync(envOverride)) {
-    _simBridgePath = envOverride;
-    return envOverride;
-  }
-
-  // 2. Packaged app — extraResources drops simbridge here. Compiled
-  // deus-runtime processes do not have Electron's process.resourcesPath, so
-  // prefer the explicit runtime env that desktop main passes down.
-  const resourcesPath =
-    process.env["DEUS_RESOURCES_PATH"] ?? (process as { resourcesPath?: string }).resourcesPath;
-  if (resourcesPath) {
-    const packaged = join(resourcesPath, "simulator", "simbridge");
-    if (existsSync(packaged)) {
-      _simBridgePath = packaged;
-      return packaged;
-    }
-  }
-
-  // 3. Dev mode — walk up from cwd. Agent-server runs with cwd=apps/agent-server,
-  //    so plain cwd-relative paths miss the workspace copy.
-  const devCandidates = [
-    "packages/device-use/bin/simbridge",
-    "node_modules/device-use/bin/simbridge",
-    "packages/device-use/native/.build/release/simbridge",
-    "packages/device-use/native/.build/arm64-apple-macosx/release/simbridge",
-  ];
-
-  for (const rel of devCandidates) {
-    const found = findUpwards(process.cwd(), rel);
-    if (found) {
-      _simBridgePath = found;
-      return found;
-    }
-  }
-
-  _simBridgePath = null;
-  return null;
-}
-
-async function callSimBridge(request: Record<string, unknown>): Promise<void> {
-  const bridgePath = resolveSimBridgePath();
-  if (!bridgePath) {
-    throw new Error(
-      "simbridge binary not found. Run `bun install` or `bun run prepare:device-use` in repo root."
-    );
-  }
-
-  await execFileAsync(bridgePath, [JSON.stringify(request)], {
-    timeout: 30_000,
-    env: SIM_ENV,
-    maxBuffer: 10 * 1024 * 1024,
-  });
+async function callSimBridge(request: { command: string; [key: string]: unknown }): Promise<void> {
+  const { engine, env } = await getEngine();
+  await engine.callSimBridge(request, { env });
 }
 
 // ---------------------------------------------------------------------------
@@ -299,8 +220,8 @@ async function fetchScreenBounds(udid: string): Promise<{ width: number; height:
   const cached = screenBoundsCache.get(udid);
   if (cached) return cached;
   try {
-    const { engine } = await getEngine();
-    const tree = await engine.fetchAccessibilityTree(udid);
+    const { engine, env } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid, { env });
     const app = tree.find((n: any) => n.type === "Application") ?? tree[0];
     if (app?.frame?.width && app?.frame?.height) {
       const bounds = { width: app.frame.width, height: app.frame.height };
@@ -326,8 +247,8 @@ export async function readScreen(
   let formatted = "[accessibility tree unavailable]";
 
   try {
-    const { engine } = await getEngine();
-    const tree = await engine.fetchAccessibilityTree(udid);
+    const { engine, env } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid, { env });
     const snapshot = engine.buildSnapshot(tree, {
       interactiveOnly: opts.filter !== "all",
     });
@@ -385,8 +306,8 @@ export async function tap(
   }
 
   if (opts.identifier) {
-    const { engine } = await getEngine();
-    const tree = await engine.fetchAccessibilityTree(udid);
+    const { engine, env } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid, { env });
     const el = findInTreeBy(tree, (n) => n.identifier === opts.identifier);
     if (!el) {
       throw new Error(
@@ -398,8 +319,8 @@ export async function tap(
   }
 
   if (opts.label) {
-    const { engine } = await getEngine();
-    const tree = await engine.fetchAccessibilityTree(udid);
+    const { engine, env } = await getEngine();
+    const tree = await engine.fetchAccessibilityTree(udid, { env });
     const el = findInTreeBy(tree, (n) => n.label === opts.label);
     if (!el) {
       const available = collectLabels(tree).slice(0, 15);
@@ -579,7 +500,7 @@ async function resolveScheme(
   const { stdout } = await execFileAsync("xcodebuild", [...projectArg, "-list", "-json"], {
     cwd,
     timeout: 30_000,
-    env: SIM_ENV,
+    env: (await getEngine()).env,
   });
   const parsed = JSON.parse(stdout) as {
     workspace?: { schemes?: string[] };
@@ -617,7 +538,7 @@ async function resolveBuiltAppPath(
       "-showBuildSettings",
       "-json",
     ],
-    { cwd, timeout: 60_000, env: SIM_ENV, maxBuffer: 20 * 1024 * 1024 }
+    { cwd, timeout: 60_000, env: (await getEngine()).env, maxBuffer: 20 * 1024 * 1024 }
   );
 
   const settings = JSON.parse(stdout) as Array<{
@@ -659,8 +580,6 @@ export async function build(
   const destination = `platform=iOS Simulator,id=${udid}`;
   const derivedData = join(cwd, "build");
 
-  // TODO(build-log-streaming): pipe stdout/stderr line-by-line via
-  // the side channel so the frontend panel can show real-time build progress.
   await execFileAsync(
     "xcodebuild",
     [
@@ -677,7 +596,7 @@ export async function build(
       timeout: 600_000,
       cwd,
       maxBuffer: 50 * 1024 * 1024,
-      env: SIM_ENV,
+      env: (await getEngine()).env,
     }
   );
 
@@ -804,7 +723,7 @@ export async function getProjectInfo(
   const { stdout } = await execFileAsync("xcodebuild", [...projectArg, "-list", "-json"], {
     cwd: workingDirectory,
     timeout: 30_000,
-    env: SIM_ENV,
+    env: (await getEngine()).env,
   });
   const parsed = JSON.parse(stdout);
   const schemes: string[] = parsed.workspace?.schemes ?? parsed.project?.schemes ?? [];

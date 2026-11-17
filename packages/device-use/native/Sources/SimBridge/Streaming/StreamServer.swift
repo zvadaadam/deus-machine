@@ -1,19 +1,26 @@
 import Foundation
 import Swifter
 
-/// HTTP + WebSocket server for simulator screen streaming.
-/// Transport-only: MJPEG on /stream.mjpeg, WebSocket on /ws, config on /config.
-/// The HTML viewer lives in the TS CLI layer (src/cli/stream/viewer-html.ts).
+/// HTTP + WebSocket server for simulator screen streaming: MJPEG on
+/// /stream.mjpeg, input on /ws, the screen's size on /config. It listens on
+/// 127.0.0.1 only and answers only requests that carry its token as `?t=`.
 final class StreamServer {
     let clientManager = StreamClientManager()
     private let server = HttpServer()
-    private let port: UInt16
+    private let token: [UInt8]
 
-    init(port: UInt16 = 3100) {
-        self.port = port
+    init(token: String) {
+        self.token = Array(token.utf8)
     }
 
-    func start() throws {
+    /// Starts listening on `port` (0: any free one) and returns the port it got.
+    func start(port: UInt16) throws -> Int {
+        // Every route, the WebSocket upgrade included, passes through here first.
+        server.middleware.append { [token] request in
+            let given = Array((request.queryParams.first { $0.0 == "t" }?.1 ?? "").utf8)
+            return constantTimeEqual(given, token) ? nil : .forbidden
+        }
+
         // MJPEG stream endpoint
         server["/stream.mjpeg"] = { [weak self] request in
             guard let self else { return .notFound }
@@ -24,7 +31,6 @@ final class StreamServer {
                 "Content-Type": "multipart/x-mixed-replace; boundary=frame",
                 "Cache-Control": "no-cache, no-store",
                 "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
             ]) { writer in
                 let semaphore = DispatchSemaphore(value: 0)
 
@@ -60,44 +66,26 @@ final class StreamServer {
             }
         )
 
-        // Config endpoint (explicit CORS so file:// viewer can fetch it)
         server["/config"] = { [weak self] _ in
             let w = self?.clientManager.screenWidth ?? 0
             let h = self?.clientManager.screenHeight ?? 0
-            let body = #"{"width":\#(w),"height":\#(h)}"#
-            let data = Array(body.utf8)
-            return .raw(200, "OK", [
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-store",
-            ]) { writer in
-                try? writer.write(data)
-            }
+            return .ok(.json(["width": w, "height": h] as AnyObject))
         }
 
-        // Health endpoint
-        server["/health"] = { _ in
-            return .ok(.json(["status": "ok"] as AnyObject))
-        }
-
-        // CORS preflight
-        server.middleware.append { request in
-            if request.method == "OPTIONS" {
-                return HttpResponse.raw(204, "No Content", [
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type",
-                ], { _ in })
-            }
-            return nil
-        }
-
-        try server.start(port, forceIPv4: false, priority: .userInteractive)
-        log("[server] Listening on http://0.0.0.0:\(port)")
+        server.listenAddressIPv4 = "127.0.0.1"
+        try server.start(port, forceIPv4: true, priority: .userInteractive)
+        let bound = try server.port()
+        log("[server] Listening on http://127.0.0.1:\(bound)")
+        return bound
     }
 
     func stop() {
         clientManager.stop()
         server.stop()
     }
+}
+
+private func constantTimeEqual(_ a: [UInt8], _ b: [UInt8]) -> Bool {
+    guard a.count == b.count else { return false }
+    return zip(a, b).reduce(0) { $0 | ($1.0 ^ $1.1) } == 0
 }
