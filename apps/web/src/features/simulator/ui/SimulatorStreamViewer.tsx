@@ -459,6 +459,22 @@ export function SimulatorStreamViewer({
 
   /** The keys this view sent down and not yet up. */
   const keysDown = useRef(new Set<number>());
+  // Key-ups the backend could not be told (the connection was down): sent
+  // again with the next key or release, so the simulator does not keep a
+  // key down that the person let go of.
+  const lostKeyUps = useRef(new Set<number>());
+  const keyUp = useCallback(
+    (keycode: number) => {
+      call(api.simKey, { workspaceId, keycode, direction: "up" }).then(
+        () => lostKeyUps.current.delete(keycode),
+        () => lostKeyUps.current.add(keycode)
+      );
+    },
+    [workspaceId]
+  );
+  const retryLostKeyUps = useCallback(() => {
+    for (const keycode of lostKeyUps.current) keyUp(keycode);
+  }, [keyUp]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -477,11 +493,12 @@ export function SimulatorStreamViewer({
       const keycode = HID_KEYCODES[e.code];
       if (keycode !== undefined) {
         e.preventDefault();
+        retryLostKeyUps();
         keysDown.current.add(keycode);
         call(api.simKey, { workspaceId, keycode, direction: "down" }).catch(() => {});
       }
     },
-    [isLive, workspaceId, hidAvailable, onScreenshot]
+    [isLive, workspaceId, hidAvailable, onScreenshot, retryLostKeyUps]
   );
 
   const handleKeyUp = useCallback(
@@ -491,20 +508,19 @@ export function SimulatorStreamViewer({
       if (keycode !== undefined) {
         e.preventDefault();
         keysDown.current.delete(keycode);
-        call(api.simKey, { workspaceId, keycode, direction: "up" }).catch(() => {});
+        keyUp(keycode);
       }
     },
-    [isLive, workspaceId, hidAvailable]
+    [isLive, hidAvailable, keyUp]
   );
 
   // A key still down when the view loses focus would never see its key-up:
   // release it there, on unmount and on a workspace switch.
   const releaseKeys = useCallback(() => {
-    for (const keycode of keysDown.current) {
-      call(api.simKey, { workspaceId, keycode, direction: "up" }).catch(() => {});
-    }
+    for (const keycode of keysDown.current) keyUp(keycode);
     keysDown.current.clear();
-  }, [workspaceId]);
+    retryLostKeyUps();
+  }, [keyUp, retryLostKeyUps]);
   useEffect(() => releaseKeys, [releaseKeys]);
 
   // -------------------------------------------------------------------------
