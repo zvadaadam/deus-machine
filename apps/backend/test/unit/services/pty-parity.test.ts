@@ -50,6 +50,12 @@ describe(`terminal parity (${engine})`, () => {
     expect(await open("/bin/sh", ["-c", "exit 3"]).exited).toBe(3);
   });
 
+  it("tells the program which terminal it is in", async () => {
+    // The environment given here has no TERM; a program still needs one.
+    const term = open("/bin/sh", ["-c", "echo term=$TERM; sleep 0.1"]);
+    await until(() => term.output().includes("term=xterm-256color"));
+  });
+
   it("carries what is typed to the program and its answer back", async () => {
     const cat = open("/bin/cat");
     cat.terminal.write([...Buffer.from("round-trip\r")]);

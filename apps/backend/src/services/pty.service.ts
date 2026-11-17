@@ -43,7 +43,8 @@ export function openTerminal(spec: TerminalSpec): Terminal {
     // loses nothing; node-pty loses nothing in either case.
     const proc = Bun.spawn([command, ...args], {
       cwd,
-      env,
+      // Bun's `name` does not export TERM, as node-pty's does.
+      env: { ...env, TERM: "xterm-256color" },
       terminal: { cols, rows, name: "xterm-256color", data: (_t, bytes) => spec.onData(bytes) },
     });
     void proc.exited.then((code) => {
